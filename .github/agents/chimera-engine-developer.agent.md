@@ -1,6 +1,6 @@
 ---
 name: Chimera Engine Developer
-description: 'Use when implementing, coding, or building any part of the Chimera game engine: simulation core, IPC bridge, multiplayer provider, asset system, AI layer, save/load system, renderer components, R3F scenes, Zustand stores, Electron main/preload, settings, debug tools, or any feature described in the architecture overview. Use for writing TypeScript, React, Three.js/R3F, Electron, and Node.js code. Use for bug fixes, refactors, and feature implementation tasks.'
+description: 'Use when implementing, coding, or building any part of the Chimera game engine: simulation core, IPC bridge, multiplayer provider, asset system, AI layer, save/load system, renderer components, R3F scenes, Zustand stores, Electron main/preload, settings, debug tools, or any feature described in the architecture overview. Use for writing TypeScript, React, Three.js/R3F, Electron, and Node.js code. Use for bug fixes, refactors, and feature implementation tasks. Also merges the completed branch into `main` via the git skillset → merge sub-skill once all pre-commit gates pass.'
 tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---
@@ -149,8 +149,8 @@ Follow this workflow **exactly** for every task:
     git commit --fixup <first-commit-sha>
     ```
     No free-form commit messages after the first. Fixup commits keep the history clean for eventual squash-merge.
-5. **Never merge to `main`**. Only push to the working branch. If the branch needs to be rebased, `git rebase --autosquash origin/main`.
-6. Push updates with: `git push origin <branch-name>`
+5. **Merging to `main`.** When the branch is complete and the full pre-commit gate is green, land it by loading and following the **git skillset → merge sub-skill** ([.github/skills/git/merge/SKILL.md](../.github/skills/git/merge/SKILL.md)). The skill validates branch name, commit structure (first commit has a body, subsequent commits are `fixup!`), rebases with autosquash onto `origin/main`, fast-forward merges, pushes, and cleans up the branch. Never bypass the skill — do not run `git merge` or `git push origin main` ad-hoc, and never `--no-verify`. If the merge skill reports problems, fix them on the branch and re-run; do not merge partially.
+6. Push in-progress updates with: `git push origin <branch-name>`. Only the merge sub-skill pushes to `main`.
 7. **After the merge script confirms success**, close the originating GitHub issue:
     ```bash
     gh issue close <ISSUE_NUMBER> --repo jindrichruzicka/Chimera --comment "Implemented in $(git rev-parse --short HEAD) on main."
@@ -235,5 +235,6 @@ Before marking any task done:
 - [ ] New public functions/types exported from the package's `index.ts`
 - [ ] Test doubles used instead of real FS/network in unit tests (`InMemorySaveRepository`, in-process ws, builder helpers)
 - [ ] README.md reviewed and updated if the developer-facing surface changed
-- [ ] `git push origin <branch-name>` executed; never `git push origin main`
+- [ ] `git push origin <branch-name>` executed for in-progress updates; `main` is only updated by the git skillset → merge sub-skill
+- [ ] Merge sub-skill (`.github/skills/git/merge/SKILL.md`) run and exited 0 before marking the task done
 - [ ] GitHub issue closed with `gh issue close <N> --repo jindrichruzicka/Chimera` after merge script exits 0
