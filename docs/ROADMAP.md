@@ -173,7 +173,9 @@ Write `fast-check` property tests asserting: (a) no `owner-only` or `hidden` fie
 
 ### F30 — Playwright Infrastructure `§13`
 
-Set up `e2e/playwright.config.ts`, `global-setup.ts`, `CHIMERA_E2E=1` flag, and `__e2eHooks` on `globalThis` in `simulation-host.ts`. Implement base `electron.fixture.ts` and multiplayer `lobby.fixture.ts`. Add CI workflow `e2e.yml` with Xvfb on Linux.
+**Earliest start: after F02 lands.** The boot-smoke fixture (`electron.fixture.ts`) requires a real preload bridge and at least one renderer page to load. The full multiplayer fixture (`lobby.fixture.ts`) additionally requires M2 (F09–F11).
+
+Set up `e2e/playwright.config.ts`, `global-setup.ts`, `CHIMERA_E2E=1` flag, and `__e2eHooks` on `globalThis` in `simulation-host.ts`. Implement base `electron.fixture.ts` (boot smoke: window opens, `window.__chimera` is defined) immediately after F02. Implement multiplayer `lobby.fixture.ts` after M2. Add CI workflow `e2e.yml` with Xvfb on Linux.
 
 ### F31 — Page Object Model `§13.6`
 
