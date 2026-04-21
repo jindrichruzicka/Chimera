@@ -35,6 +35,39 @@
             "autoAttachChildProcesses": true,
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
             "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "ESLint: lint workspace",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/eslint",
+            "runtimeArgs": ["."],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "ESLint: lint workspace (fix)",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/eslint",
+            "runtimeArgs": [".", "--fix"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "ESLint: lint current file",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/eslint",
+            "runtimeArgs": ["${relativeFile}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
         }
     ]
 }
