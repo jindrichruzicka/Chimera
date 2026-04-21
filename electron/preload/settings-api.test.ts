@@ -8,6 +8,7 @@ import {
     type SettingsApiIpcPort,
     type SettingsApiListener,
 } from './settings-api.js';
+import { PreloadIpcValidationError } from './schemas.js';
 import type { ResolvedSettings, UserSettings } from './api.js';
 
 /**
@@ -60,7 +61,15 @@ describe('createSettingsApi', () => {
             expect(stub.invocations).toEqual([
                 { channel: SETTINGS_GET_CHANNEL, args: ['sample-game'] },
             ]);
-            expect(result).toBe(expected);
+            expect(result).toStrictEqual(expected);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(SETTINGS_GET_CHANNEL, 'not-an-object');
+            const api = createSettingsApi(stub.port);
+
+            await expect(api.get('sample-game')).rejects.toBeInstanceOf(PreloadIpcValidationError);
         });
     });
 
@@ -77,7 +86,7 @@ describe('createSettingsApi', () => {
             expect(stub.invocations).toEqual([
                 { channel: SETTINGS_UPDATE_CHANNEL, args: ['sample-game', patch] },
             ]);
-            expect(result).toBe(expected);
+            expect(result).toStrictEqual(expected);
         });
     });
 
@@ -93,7 +102,7 @@ describe('createSettingsApi', () => {
             expect(stub.invocations).toEqual([
                 { channel: SETTINGS_RESET_CHANNEL, args: ['sample-game'] },
             ]);
-            expect(result).toBe(expected);
+            expect(result).toStrictEqual(expected);
         });
     });
 

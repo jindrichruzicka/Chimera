@@ -9,6 +9,7 @@ import {
     type SavesApiIpcPort,
     type SavesApiListener,
 } from './saves-api.js';
+import { PreloadIpcValidationError } from './schemas.js';
 import type { SaveRequest, SaveSlotMeta } from './api.js';
 
 /**
@@ -59,7 +60,15 @@ describe('createSavesApi', () => {
             const result = await api.list('sample-game');
 
             expect(stub.invocations).toEqual([{ channel: SAVES_LIST_CHANNEL, arg: 'sample-game' }]);
-            expect(result).toBe(expected);
+            expect(result).toStrictEqual(expected);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(SAVES_LIST_CHANNEL, 'not-an-array');
+            const api = createSavesApi(stub.port);
+
+            await expect(api.list('sample-game')).rejects.toBeInstanceOf(PreloadIpcValidationError);
         });
     });
 
@@ -74,7 +83,17 @@ describe('createSavesApi', () => {
             const result = await api.save(request);
 
             expect(stub.invocations).toEqual([{ channel: SAVES_SAVE_CHANNEL, arg: request }]);
-            expect(result).toBe(expected);
+            expect(result).toStrictEqual(expected);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(SAVES_SAVE_CHANNEL, { slotId: 'slot-a', gameId: 'sample-game' });
+            const api = createSavesApi(stub.port);
+
+            await expect(
+                api.save({ gameId: 'sample-game', label: 'autosave' }),
+            ).rejects.toBeInstanceOf(PreloadIpcValidationError);
         });
     });
 

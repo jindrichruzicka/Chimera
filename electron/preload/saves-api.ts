@@ -14,6 +14,7 @@
 // allowed to issue them.
 
 import type { SaveRequest, SaveSlotMeta, SavesAPI, Unsubscribe } from './api.js';
+import { SaveSlotListSchema, SaveSlotMetaSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SavesAPI.list}. */
 export const SAVES_LIST_CHANNEL = 'chimera:saves:list';
@@ -62,9 +63,24 @@ export interface SavesApiIpcPort {
 export function createSavesApi(ipc: SavesApiIpcPort): SavesAPI {
     return {
         list: (gameId: string): Promise<SaveSlotMeta[]> =>
-            ipc.invoke(SAVES_LIST_CHANNEL, gameId) as Promise<SaveSlotMeta[]>,
+            ipc.invoke(SAVES_LIST_CHANNEL, gameId).then(
+                (value) =>
+                    parseInvokeResponse(
+                        SaveSlotListSchema,
+                        SAVES_LIST_CHANNEL,
+                        value,
+                        // The declared contract is `Promise<SaveSlotMeta[]>` (mutable
+                        // array) whereas the schema returns `readonly SaveSlotMeta[]`.
+                        // Casting here is safe: the parsed array is a freshly-created
+                        // copy that no other caller holds a reference to.
+                    ) as SaveSlotMeta[],
+            ),
         save: (request: SaveRequest): Promise<SaveSlotMeta> =>
-            ipc.invoke(SAVES_SAVE_CHANNEL, request) as Promise<SaveSlotMeta>,
+            ipc
+                .invoke(SAVES_SAVE_CHANNEL, request)
+                .then((value) =>
+                    parseInvokeResponse(SaveSlotMetaSchema, SAVES_SAVE_CHANNEL, value),
+                ),
         load: async (slotId: string): Promise<void> => {
             await ipc.invoke(SAVES_LOAD_CHANNEL, slotId);
         },

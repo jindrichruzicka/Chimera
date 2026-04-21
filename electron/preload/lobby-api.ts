@@ -22,6 +22,7 @@ import type {
     LobbyState,
     Unsubscribe,
 } from './api.js';
+import { LobbyInfoSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.host}. */
 export const LOBBY_HOST_CHANNEL = 'chimera:lobby:host';
@@ -66,9 +67,13 @@ export interface LobbyApiIpcPort {
 export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
     return {
         host: (params: HostLobbyParams): Promise<LobbyInfo> =>
-            ipc.invoke(LOBBY_HOST_CHANNEL, params) as Promise<LobbyInfo>,
+            ipc
+                .invoke(LOBBY_HOST_CHANNEL, params)
+                .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_HOST_CHANNEL, value)),
         join: (params: JoinLobbyParams): Promise<LobbyInfo> =>
-            ipc.invoke(LOBBY_JOIN_CHANNEL, params) as Promise<LobbyInfo>,
+            ipc
+                .invoke(LOBBY_JOIN_CHANNEL, params)
+                .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
         leave: (): void => {
             ipc.send(LOBBY_LEAVE_CHANNEL);
         },

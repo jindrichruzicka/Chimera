@@ -10,6 +10,7 @@
 // guarantee the channel strings match on both sides (invariant 5).
 
 import type { ResolvedSettings, SettingsAPI, Unsubscribe, UserSettings } from './api.js';
+import { ResolvedSettingsSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SettingsAPI.get}. */
 export const SETTINGS_GET_CHANNEL = 'chimera:settings:get';
@@ -53,11 +54,23 @@ export interface SettingsApiIpcPort {
 export function createSettingsApi(ipc: SettingsApiIpcPort): SettingsAPI {
     return {
         get: (gameId: string): Promise<ResolvedSettings> =>
-            ipc.invoke(SETTINGS_GET_CHANNEL, gameId) as Promise<ResolvedSettings>,
+            ipc
+                .invoke(SETTINGS_GET_CHANNEL, gameId)
+                .then((value) =>
+                    parseInvokeResponse(ResolvedSettingsSchema, SETTINGS_GET_CHANNEL, value),
+                ),
         update: (gameId: string, patch: Partial<UserSettings>): Promise<ResolvedSettings> =>
-            ipc.invoke(SETTINGS_UPDATE_CHANNEL, gameId, patch) as Promise<ResolvedSettings>,
+            ipc
+                .invoke(SETTINGS_UPDATE_CHANNEL, gameId, patch)
+                .then((value) =>
+                    parseInvokeResponse(ResolvedSettingsSchema, SETTINGS_UPDATE_CHANNEL, value),
+                ),
         reset: (gameId: string): Promise<ResolvedSettings> =>
-            ipc.invoke(SETTINGS_RESET_CHANNEL, gameId) as Promise<ResolvedSettings>,
+            ipc
+                .invoke(SETTINGS_RESET_CHANNEL, gameId)
+                .then((value) =>
+                    parseInvokeResponse(ResolvedSettingsSchema, SETTINGS_RESET_CHANNEL, value),
+                ),
         onChange: (cb: (gameId: string, settings: ResolvedSettings) => void): Unsubscribe => {
             const listener: SettingsApiListener = (_event, ...args) => {
                 // Main emits via

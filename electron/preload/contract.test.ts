@@ -99,6 +99,24 @@ async function loadApi(): Promise<ChimeraAPI> {
     listeners.clear();
     invokeResults.clear();
 
+    // Seed the mocked `ipcRenderer.invoke` with payloads that satisfy the
+    // preload-side Zod schemas (see `electron/preload/schemas.ts`). Tests
+    // that care about a specific return value override these before calling;
+    // tests that only assert on channel names + arguments can ignore them.
+    invokeResults.set('chimera:system:platform', { os: 'linux', version: '33.0.0' });
+    invokeResults.set('chimera:lobby:host', { sessionId: '', hostId: '', gameId: '' });
+    invokeResults.set('chimera:lobby:join', { sessionId: '', hostId: '', gameId: '' });
+    invokeResults.set('chimera:saves:list', []);
+    invokeResults.set('chimera:saves:save', {
+        slotId: '',
+        gameId: '',
+        tick: 0,
+        savedAt: 0,
+    });
+    invokeResults.set('chimera:settings:get', {});
+    invokeResults.set('chimera:settings:update', {});
+    invokeResults.set('chimera:settings:reset', {});
+
     vi.resetModules();
     await import('./api.js');
 

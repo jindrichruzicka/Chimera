@@ -8,6 +8,7 @@ import {
     type SystemApiListener,
 } from './system-api.js';
 import type { ConnectionStatus } from './api.js';
+import { PreloadIpcValidationError } from './schemas.js';
 
 /**
  * Minimal recording stub that captures every `ipcRenderer` call the system
@@ -57,6 +58,15 @@ describe('createSystemApi', () => {
 
             expect(stub.invocations).toEqual([SYSTEM_PLATFORM_CHANNEL]);
             expect(result).toEqual({ os: 'linux', version: '33.0.0' });
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            // Missing `version` — violates PlatformInfoSchema.
+            stub.invokeResults.set(SYSTEM_PLATFORM_CHANNEL, { os: 'linux' });
+            const api = createSystemApi(stub.port);
+
+            await expect(api.platform()).rejects.toBeInstanceOf(PreloadIpcValidationError);
         });
     });
 

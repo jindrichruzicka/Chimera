@@ -10,6 +10,7 @@
 // channel strings match on both sides.
 
 import type { ConnectionStatus, SystemAPI, Unsubscribe } from './api.js';
+import { PlatformInfoSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SystemAPI.platform}. */
 export const SYSTEM_PLATFORM_CHANNEL = 'chimera:system:platform';
@@ -59,7 +60,12 @@ export interface SystemApiIpcPort {
  */
 export function createSystemApi(ipc: SystemApiIpcPort): SystemAPI {
     return {
-        platform: () => ipc.invoke(SYSTEM_PLATFORM_CHANNEL) as Promise<PlatformInfo>,
+        platform: () =>
+            ipc
+                .invoke(SYSTEM_PLATFORM_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(PlatformInfoSchema, SYSTEM_PLATFORM_CHANNEL, value),
+                ),
         quit: () => {
             ipc.send(SYSTEM_QUIT_CHANNEL);
         },

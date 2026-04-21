@@ -8,6 +8,7 @@ import {
     type LobbyApiIpcPort,
     type LobbyApiListener,
 } from './lobby-api.js';
+import { PreloadIpcValidationError } from './schemas.js';
 import type { HostLobbyParams, JoinLobbyParams, LobbyInfo, LobbyState } from './api.js';
 
 /**
@@ -75,7 +76,17 @@ describe('createLobbyApi', () => {
             const result = await api.host(params);
 
             expect(stub.invocations).toEqual([{ channel: LOBBY_HOST_CHANNEL, arg: params }]);
-            expect(result).toBe(expected);
+            expect(result).toStrictEqual(expected);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_HOST_CHANNEL, { sessionId: 'sess-1', hostId: 'p1' });
+            const api = createLobbyApi(stub.port);
+
+            await expect(api.host({ gameId: 'sample-game', maxPlayers: 4 })).rejects.toBeInstanceOf(
+                PreloadIpcValidationError,
+            );
         });
     });
 
@@ -90,7 +101,17 @@ describe('createLobbyApi', () => {
             const result = await api.join(params);
 
             expect(stub.invocations).toEqual([{ channel: LOBBY_JOIN_CHANNEL, arg: params }]);
-            expect(result).toBe(expected);
+            expect(result).toStrictEqual(expected);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_JOIN_CHANNEL, { sessionId: 42 });
+            const api = createLobbyApi(stub.port);
+
+            await expect(api.join({ address: 'ws://127.0.0.1:7777' })).rejects.toBeInstanceOf(
+                PreloadIpcValidationError,
+            );
         });
     });
 
