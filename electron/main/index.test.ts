@@ -35,6 +35,7 @@ const appQuit = vi.fn<() => void>();
 const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
 const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
+const ipcMainOn = vi.fn<(channel: string, handler: () => void) => void>();
 
 vi.mock('electron', () => ({
     app: {
@@ -46,6 +47,7 @@ vi.mock('electron', () => ({
     BrowserWindow: FakeBrowserWindow,
     ipcMain: {
         handle: ipcMainHandle,
+        on: ipcMainOn,
     },
 }));
 

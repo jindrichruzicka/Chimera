@@ -2,6 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '../../shared/constants.js';
+import { registerSystemHandlers } from './ipc-handlers.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME };
 
@@ -227,6 +228,16 @@ export function main(): void {
     const { wasCleanExit } = checkCleanExitFlag({ flagPath, fs });
     registerCleanExitIpc({ ipcMain, wasCleanExit });
     registerCleanExitHook({ app, flagPath, fs });
+
+    // Register the `chimera:system:*` channels (platform info, quit). Runs
+    // before the first window opens so the renderer never races the handler
+    // registration. Other preload namespaces land in later F02 tasks.
+    registerSystemHandlers({
+        ipcMain,
+        app,
+        platform: process.platform,
+        electronVersion: process.versions.electron ?? '',
+    });
 
     const createWindow = (): void => {
         createMainWindow({ preloadPath, rendererEntry, env });

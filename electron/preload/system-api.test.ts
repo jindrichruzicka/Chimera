@@ -1,0 +1,140 @@
+import { describe, expect, it, vi } from 'vitest';
+import {
+    SYSTEM_CONNECTION_STATUS_CHANNEL,
+    SYSTEM_PLATFORM_CHANNEL,
+    SYSTEM_QUIT_CHANNEL,
+    createSystemApi,
+    type SystemApiIpcPort,
+    type SystemApiListener,
+} from './system-api.js';
+import type { ConnectionStatus } from './api.js';
+
+/**
+ * Minimal recording stub that captures every `ipcRenderer` call the system
+ * API makes, so we can assert the channel/payload contract.
+ */
+function makeIpcStub(): {
+    readonly port: SystemApiIpcPort;
+    readonly invocations: string[];
+    readonly sends: string[];
+    readonly listeners: Map<string, Set<SystemApiListener>>;
+    readonly invokeResults: Map<string, unknown>;
+} {
+    const invocations: string[] = [];
+    const sends: string[] = [];
+    const listeners = new Map<string, Set<SystemApiListener>>();
+    const invokeResults = new Map<string, unknown>();
+
+    const port: SystemApiIpcPort = {
+        invoke: (channel) => {
+            invocations.push(channel);
+            return Promise.resolve(invokeResults.get(channel));
+        },
+        send: (channel) => {
+            sends.push(channel);
+        },
+        on: (channel, listener) => {
+            const set = listeners.get(channel) ?? new Set<SystemApiListener>();
+            set.add(listener);
+            listeners.set(channel, set);
+        },
+        removeListener: (channel, listener) => {
+            listeners.get(channel)?.delete(listener);
+        },
+    };
+
+    return { port, invocations, sends, listeners, invokeResults };
+}
+
+describe('createSystemApi', () => {
+    describe('platform()', () => {
+        it('invokes the chimera:system:platform channel', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(SYSTEM_PLATFORM_CHANNEL, { os: 'linux', version: '33.0.0' });
+            const api = createSystemApi(stub.port);
+
+            const result = await api.platform();
+
+            expect(stub.invocations).toEqual([SYSTEM_PLATFORM_CHANNEL]);
+            expect(result).toEqual({ os: 'linux', version: '33.0.0' });
+        });
+    });
+
+    describe('quit()', () => {
+        it('sends on the chimera:system:quit channel without awaiting', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+
+            api.quit();
+
+            expect(stub.sends).toEqual([SYSTEM_QUIT_CHANNEL]);
+        });
+    });
+
+    describe('onConnectionStatus()', () => {
+        it('registers a listener on chimera:system:connection-status and forwards the status', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const callback = vi.fn<(status: ConnectionStatus) => void>();
+
+            api.onConnectionStatus(callback);
+
+            const registered = stub.listeners.get(SYSTEM_CONNECTION_STATUS_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            // Main emits via `webContents.send(channel, ...args)`; the preload
+            // receives (event, ...args). Verify the API strips the event and
+            // forwards only the payload.
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, 'connected');
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith('connected');
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const callback = vi.fn<(status: ConnectionStatus) => void>();
+
+            const unsubscribe = api.onConnectionStatus(callback);
+            const beforeUnsub = stub.listeners.get(SYSTEM_CONNECTION_STATUS_CHANNEL)?.size;
+            unsubscribe();
+
+            expect(beforeUnsub).toBe(1);
+            expect(stub.listeners.get(SYSTEM_CONNECTION_STATUS_CHANNEL)?.size).toBe(0);
+        });
+
+        it('supports multiple independent subscriptions', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const cbA = vi.fn<(status: ConnectionStatus) => void>();
+            const cbB = vi.fn<(status: ConnectionStatus) => void>();
+
+            const unsubA = api.onConnectionStatus(cbA);
+            api.onConnectionStatus(cbB);
+
+            // Emit via every registered listener; both callbacks should fire.
+            const set = stub.listeners.get(SYSTEM_CONNECTION_STATUS_CHANNEL);
+            for (const listener of set ?? []) {
+                listener({}, 'disconnected');
+            }
+            expect(cbA).toHaveBeenCalledOnce();
+            expect(cbA).toHaveBeenCalledWith('disconnected');
+            expect(cbB).toHaveBeenCalledOnce();
+            expect(cbB).toHaveBeenCalledWith('disconnected');
+
+            // Unsubscribing A keeps B subscribed.
+            cbA.mockClear();
+            cbB.mockClear();
+            unsubA();
+            const remaining = stub.listeners.get(SYSTEM_CONNECTION_STATUS_CHANNEL);
+            for (const listener of remaining ?? []) {
+                listener({}, 'connecting');
+            }
+            expect(cbA).not.toHaveBeenCalled();
+            expect(cbB).toHaveBeenCalledOnce();
+            expect(cbB).toHaveBeenCalledWith('connecting');
+        });
+    });
+});
