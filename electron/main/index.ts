@@ -1,6 +1,9 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
+import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '../../shared/constants.js';
+
+export { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME };
 
 /**
  * Narrow slice of `Electron.App` required by `registerAppLifecycle`.
@@ -91,12 +94,6 @@ export interface RegisterCleanExitIpcOptions {
     readonly ipcMain: CleanExitIpcMain;
     readonly wasCleanExit: boolean;
 }
-
-/** IPC channel exposing the captured crash status to the renderer. */
-export const CLEAN_EXIT_IPC_CHANNEL = 'chimera:system:was-clean-exit';
-
-/** File name of the sentinel written on clean shutdown. */
-export const CLEAN_EXIT_FLAG_FILENAME = 'lastCleanExit.flag';
 
 /**
  * Inspect (and consume) the `lastCleanExit.flag` sentinel at startup.
