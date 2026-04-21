@@ -33,18 +33,30 @@ class FakeBrowserWindow {
 const appOn = vi.fn<(event: string, handler: AppEventHandler) => void>();
 const appQuit = vi.fn<() => void>();
 const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
+const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
+const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
 
 vi.mock('electron', () => ({
     app: {
         on: appOn,
         quit: appQuit,
         whenReady: appWhenReady,
-        getPath: vi.fn(() => '/tmp/chimera-userData-fake'),
+        getPath: appGetPath,
     },
     BrowserWindow: FakeBrowserWindow,
     ipcMain: {
-        handle: vi.fn(),
+        handle: ipcMainHandle,
     },
+}));
+
+const fsExistsSync = vi.fn<(path: string) => boolean>(() => false);
+const fsWriteFileSync = vi.fn<(path: string, data: string) => void>();
+const fsUnlinkSync = vi.fn<(path: string) => void>();
+
+vi.mock('node:fs', () => ({
+    existsSync: fsExistsSync,
+    writeFileSync: fsWriteFileSync,
+    unlinkSync: fsUnlinkSync,
 }));
 
 const {
@@ -55,6 +67,7 @@ const {
     writeCleanExitFlag,
     registerCleanExitHook,
     registerCleanExitIpc,
+    main,
 } = await import('./index.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
@@ -405,5 +418,95 @@ describe('registerCleanExitIpc', () => {
 
         const handler = handlers.get('chimera:system:was-clean-exit');
         await expect(Promise.resolve(handler?.())).resolves.toBe(false);
+    });
+});
+
+describe('main', () => {
+    beforeEach(() => {
+        browserWindowInstances.length = 0;
+        appOn.mockClear();
+        appQuit.mockClear();
+        appWhenReady.mockClear();
+        appWhenReady.mockImplementation(() => Promise.resolve());
+        appGetPath.mockClear();
+        appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
+        ipcMainHandle.mockClear();
+        fsExistsSync.mockClear();
+        fsExistsSync.mockImplementation(() => false);
+        fsWriteFileSync.mockClear();
+        fsUnlinkSync.mockClear();
+    });
+
+    it('consults the clean-exit flag under app.getPath("userData")', () => {
+        main();
+
+        expect(appGetPath).toHaveBeenCalledWith('userData');
+        expect(fsExistsSync).toHaveBeenCalledTimes(1);
+        const [checkedPath] = fsExistsSync.mock.calls[0] ?? [];
+        expect(checkedPath).toMatch(/lastCleanExit\.flag$/);
+    });
+
+    it('registers the clean-exit IPC handler before opening any window', () => {
+        main();
+
+        expect(ipcMainHandle).toHaveBeenCalledWith(
+            'chimera:system:was-clean-exit',
+            expect.any(Function),
+        );
+        // whenReady resolves asynchronously; at the synchronous end of main()
+        // no window must have been created yet.
+        expect(browserWindowInstances).toHaveLength(0);
+    });
+
+    it('registers the before-quit clean-exit hook', () => {
+        main();
+
+        expect(appOn).toHaveBeenCalledWith('before-quit', expect.any(Function));
+    });
+
+    it('registers the window-all-closed and activate lifecycle listeners', () => {
+        main();
+
+        const events = appOn.mock.calls.map(([event]) => event);
+        expect(events).toContain('window-all-closed');
+        expect(events).toContain('activate');
+    });
+
+    it('creates the main window when whenReady resolves', async () => {
+        let resolveReady: () => void = () => {
+            // assigned synchronously below
+        };
+        appWhenReady.mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    resolveReady = resolve;
+                }),
+        );
+
+        main();
+
+        expect(browserWindowInstances).toHaveLength(0);
+        resolveReady();
+        await Promise.resolve();
+
+        expect(browserWindowInstances).toHaveLength(1);
+        const [win] = browserWindowInstances;
+        expect(win?.options.webPreferences?.contextIsolation).toBe(true);
+        expect(win?.options.webPreferences?.nodeIntegration).toBe(false);
+    });
+
+    it('propagates wasCleanExit=true when the flag is present on disk', async () => {
+        fsExistsSync.mockImplementation(() => true);
+        const handlers = new Map<string, () => unknown>();
+        ipcMainHandle.mockImplementation((channel, handler) => {
+            handlers.set(channel, handler);
+        });
+
+        main();
+
+        expect(fsUnlinkSync).toHaveBeenCalledTimes(1);
+        const handler = handlers.get('chimera:system:was-clean-exit');
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.())).resolves.toBe(true);
     });
 });
