@@ -7,11 +7,17 @@ import {
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
+    SAVES_DELETE_CHANNEL,
+    SAVES_LIST_CHANNEL,
+    SAVES_LOAD_CHANNEL,
+    SAVES_SAVE_CHANNEL,
+    SAVES_SLOT_UPDATE_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     mapPlatform,
     registerGameHandlers,
     registerLobbyHandlers,
+    registerSavesHandlers,
     registerSystemHandlers,
     type GameHandlersIpcMain,
     type GameHandlerListener,
@@ -19,10 +25,17 @@ import {
     type LobbyHandlerListener,
     type LobbyHandlersIpcMain,
     type LobbyInvokeHandler,
+    type SavesHandlersIpcMain,
+    type SavesInvokeHandler,
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
-import type { EngineAction, HostLobbyParams, JoinLobbyParams } from '../preload/api.js';
+import type {
+    EngineAction,
+    HostLobbyParams,
+    JoinLobbyParams,
+    SaveRequest,
+} from '../preload/api.js';
 
 /**
  * Recording stub for the narrow `SystemHandlersIpcMain` slice used by the
@@ -266,5 +279,91 @@ describe('registerLobbyHandlers', () => {
         expect([...stub.listeners.keys()]).toEqual([LOBBY_LEAVE_CHANNEL]);
         expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
         expect(stub.listeners.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
+    });
+});
+
+/**
+ * Recording stub for the narrow `SavesHandlersIpcMain` slice. The saves
+ * namespace uses `handle` exclusively — every request/response is an
+ * invoke-style round-trip.
+ */
+function makeSavesIpcMainStub(): {
+    readonly ipcMain: SavesHandlersIpcMain;
+    readonly handled: Map<string, SavesInvokeHandler>;
+} {
+    const handled = new Map<string, SavesInvokeHandler>();
+
+    const ipcMain: SavesHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+    };
+
+    return { ipcMain, handled };
+}
+
+describe('registerSavesHandlers', () => {
+    it('registers chimera:saves:list as an invoke handler resolving to an empty array (stub)', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(SAVES_LIST_CHANNEL);
+        expect(handler).toBeDefined();
+
+        // Stub contract (F06/F18 replaces with real persistence): an empty
+        // array preserves the preload's `Promise<SaveSlotMeta[]>` shape
+        // without claiming slots that do not exist.
+        await expect(Promise.resolve(handler?.({}, 'sample-game'))).resolves.toEqual([]);
+    });
+
+    it('registers chimera:saves:save as an invoke handler accepting a SaveRequest (stub)', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const request: SaveRequest = { gameId: 'sample-game', label: 'autosave' };
+        // Stub must resolve (not reject) so the preload's `Promise<SaveSlotMeta>`
+        // signature is satisfied. Exact shape is asserted at the
+        // implementation boundary; here we only prove the handler accepts
+        // the payload without throwing.
+        const result = await Promise.resolve(handler?.({}, request));
+        expect(result).toBeDefined();
+    });
+
+    it('registers chimera:saves:load as an invoke handler resolving to undefined (stub)', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.({}, 'slot-a'))).resolves.toBeUndefined();
+    });
+
+    it('registers chimera:saves:delete as an invoke handler resolving to undefined (stub)', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.({}, 'slot-a'))).resolves.toBeUndefined();
+    });
+
+    it('registers exactly the saves request channels (slot-update is push-only, not registered here)', () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+
+        // `chimera:saves:slot-update` is a one-way push from main → renderer
+        // via `webContents.send`. It must NOT appear as an invoke handler.
+        expect([...stub.handled.keys()].sort()).toEqual(
+            [
+                SAVES_DELETE_CHANNEL,
+                SAVES_LIST_CHANNEL,
+                SAVES_LOAD_CHANNEL,
+                SAVES_SAVE_CHANNEL,
+            ].sort(),
+        );
+        expect(stub.handled.has(SAVES_SLOT_UPDATE_CHANNEL)).toBe(false);
     });
 });

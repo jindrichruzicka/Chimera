@@ -5,6 +5,7 @@ import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '../../shared/c
 import {
     registerGameHandlers,
     registerLobbyHandlers,
+    registerSavesHandlers,
     registerSystemHandlers,
 } from './ipc-handlers.js';
 
@@ -254,6 +255,12 @@ export function main(): void {
     // lets the preload bridge and renderer already speak the full lobby
     // protocol without unhandled-channel errors.
     registerLobbyHandlers({ ipcMain });
+
+    // Register the `chimera:saves:*` channels as stubs. Real save
+    // persistence (SaveRepository, slot indexing, autosave cadence)
+    // lands in F06/F18; wiring stubs here keeps the renderer's typed
+    // Promises from rejecting before persistence exists.
+    registerSavesHandlers({ ipcMain });
 
     const createWindow = (): void => {
         createMainWindow({ preloadPath, rendererEntry, env });

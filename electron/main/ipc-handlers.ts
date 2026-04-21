@@ -6,10 +6,11 @@
 // on the preload side (§4.1).
 //
 // Currently wired: `chimera:system:*` (see preload/system-api.ts),
-// `chimera:game:*` stubs (see preload/game-api.ts), and `chimera:lobby:*`
-// stubs (see preload/lobby-api.ts). The game/lobby handlers are stubs only
-// — actual game/simulation logic lands in F03–F15; real lobby logic lands
-// in F11.
+// `chimera:game:*` stubs (see preload/game-api.ts), `chimera:lobby:*` stubs
+// (see preload/lobby-api.ts), and `chimera:saves:*` stubs (see
+// preload/saves-api.ts). The game/lobby/saves handlers are stubs only —
+// actual game/simulation logic lands in F03–F15; real lobby logic lands in
+// F11; real save persistence lands in F06/F18.
 
 import {
     SYSTEM_PLATFORM_CHANNEL,
@@ -27,7 +28,14 @@ import {
     LOBBY_LEAVE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../preload/lobby-api.js';
-import type { LobbyInfo } from '../preload/api.js';
+import {
+    SAVES_DELETE_CHANNEL,
+    SAVES_LIST_CHANNEL,
+    SAVES_LOAD_CHANNEL,
+    SAVES_SAVE_CHANNEL,
+    SAVES_SLOT_UPDATE_CHANNEL,
+} from '../preload/saves-api.js';
+import type { LobbyInfo, SaveSlotMeta } from '../preload/api.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -39,6 +47,11 @@ export {
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
+    SAVES_DELETE_CHANNEL,
+    SAVES_LIST_CHANNEL,
+    SAVES_LOAD_CHANNEL,
+    SAVES_SAVE_CHANNEL,
+    SAVES_SLOT_UPDATE_CHANNEL,
 };
 
 /**
@@ -249,5 +262,87 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
         // Stub. Real leave logic (tear down session, notify peers) lands in
         // F11. Silently accepting the message keeps the renderer's write
         // path functional (no unhandled-channel errors).
+    });
+}
+
+/**
+ * Shape of a main-side `ipcMain.handle` handler for the saves namespace.
+ * Mirrors the other namespaces — permissive types keep tests free of
+ * Electron imports.
+ */
+export type SavesInvokeHandler = (event: unknown, ...args: unknown[]) => unknown;
+
+/**
+ * Narrow slice of `Electron.IpcMain` required to register the saves-namespace
+ * channels. The saves namespace never uses `on` — every request is an
+ * invoke-style round-trip so the renderer can surface failures.
+ */
+export interface SavesHandlersIpcMain {
+    handle(channel: string, handler: SavesInvokeHandler): unknown;
+}
+
+export interface RegisterSavesHandlersOptions {
+    readonly ipcMain: SavesHandlersIpcMain;
+}
+
+/**
+ * Placeholder `SaveSlotMeta` returned by the save stub. Real values are
+ * produced by the `SaveRepository` in F06/F18. The shape must match
+ * `SaveSlotMeta` from `preload/api.ts` so the preload's typed cast is
+ * honest.
+ */
+const STUB_SAVE_SLOT: SaveSlotMeta = {
+    slotId: '',
+    gameId: '',
+    tick: 0,
+    savedAt: 0,
+};
+
+/**
+ * Register every `chimera:saves:*` main-side channel. These are deliberate
+ * stubs — actual persistence (filesystem, metadata indexing, autosave
+ * cadence) lands in F06/F18.
+ *
+ * `chimera:saves:slot-update` is intentionally absent: it is a one-way
+ * push from main → renderer via `webContents.send` after every save /
+ * delete / autosave. There is no invoke handler for that channel.
+ *
+ * Host-only enforcement (§4.1: `SavesAPI` is host-only) is the
+ * responsibility of the real handlers in F06/F18 — the stubs merely keep
+ * the renderer's typed Promises from rejecting before persistence
+ * exists.
+ *
+ * Invariant 5: channel constants come from `preload/saves-api.ts`; there
+ * is no parallel list in this file to drift out of sync.
+ */
+export function registerSavesHandlers(options: RegisterSavesHandlersOptions): void {
+    const { ipcMain } = options;
+
+    ipcMain.handle(SAVES_LIST_CHANNEL, () => {
+        // Stub. Real listing (scan save directory + read metadata) lands
+        // in F06/F18. An empty array honours the preload's
+        // `Promise<SaveSlotMeta[]>` contract without claiming slots that
+        // do not exist.
+        return [] as SaveSlotMeta[];
+    });
+
+    ipcMain.handle(SAVES_SAVE_CHANNEL, () => {
+        // Stub. Real persistence lands in F06/F18. Returning a placeholder
+        // keeps the preload's `Promise<SaveSlotMeta>` contract honest.
+        return STUB_SAVE_SLOT;
+    });
+
+    ipcMain.handle(SAVES_LOAD_CHANNEL, () => {
+        // Stub. Real load (read slot, seed simulation, broadcast snapshot)
+        // lands in F06/F18. Returning `undefined` satisfies the preload's
+        // `Promise<void>` contract.
+        return undefined;
+    });
+
+    ipcMain.handle(SAVES_DELETE_CHANNEL, () => {
+        // Stub. Real delete (remove slot file, emit slot-update) lands in
+        // F06/F18. Returning `undefined` satisfies the preload's
+        // `Promise<void>` contract.
+        return undefined;
     });
 }
