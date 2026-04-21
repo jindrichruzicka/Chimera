@@ -63,6 +63,7 @@ The full milestone set below is canonical. Use it as-is when creating GitHub mil
     - `simulation`, `networking`, `renderer`, `electron`, `ai`, `testing`, `tooling` — module area
     - `invariant` — if the issue touches or enforces an Appendix B invariant
 7. **Do not create tasks for things already proven by existing passing tests.** If a checklist item in §12 is already green, skip it.
+8. **Every feature ends with a mandatory review task.** The last task of every feature must be titled `"Review all F<NN> changes and merge to main"` with labels `task`, `milestone:<name>`, and the module-area label. Its body must invoke the **Chimera Code Reviewer** agent and list every F<NN>-specific invariant to check. Create it last so it gets the highest issue number in the feature set. Add it as the final child in the feature issue's task list.
 
 ---
 
@@ -92,8 +93,10 @@ When asked to plan a milestone or create issues, follow this sequence exactly:
 6. **Create labels** (idempotent): one `gh label create` per label.
 7. **Create feature issues** first, record their numbers.
 8. **Create task issues** under each feature, cross-linking with `Part of #N`.
-9. **Assign milestone** to each issue at creation time.
-10. **Report a summary** table: milestone → feature count → task count → open URL.
+9. **Create the review task last** for each feature: title `"Review all F<NN> changes and merge to main"`, same milestone and module-area label as the feature. Record its issue number.
+10. **Update the feature issue** to append the review task as the final item in the `## Child tasks` checklist.
+11. **Assign milestone** to each issue at creation time.
+12. **Report a summary** table: milestone → feature count → task count (including review tasks) → open URL.
 
 ---
 
@@ -107,6 +110,7 @@ Before finalising any planning output, verify:
 - [ ] Invariants touched by a feature are listed on the feature issue.
 - [ ] Task accepts criteria are testable without manual steps.
 - [ ] No task duplicates a milestone checklist item from a different milestone.
+- [ ] Every feature has a final "Review all F<NN> changes and merge to main" task as its last child.
 
 ---
 
