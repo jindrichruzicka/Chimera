@@ -11,8 +11,18 @@ export interface AppLifecycleHost {
     quit(): void;
 }
 
+/**
+ * Runtime mode flag surfaced to the renderer via `--chimera-env=...` on
+ * `process.argv`. Anything outside this union falls back to `'production'`
+ * (see `resolveChimeraEnv`).
+ */
+export type ChimeraEnv = 'development' | 'production';
+
 export interface CreateMainWindowOptions {
     readonly preloadPath: string;
+    /** Absolute path to the Next.js static-export entry HTML file. */
+    readonly rendererEntry: string;
+    readonly env: ChimeraEnv;
 }
 
 export interface RegisterAppLifecycleOptions {
@@ -26,17 +36,30 @@ const DEFAULT_WINDOW_WIDTH = 1280;
 const DEFAULT_WINDOW_HEIGHT = 800;
 
 /**
- * Construct the primary renderer `BrowserWindow`.
+ * Resolve the `ChimeraEnv` runtime mode from the raw `CHIMERA_ENV` environment
+ * variable. Unknown or missing values default to `'production'` so that an
+ * unconfigured production build cannot accidentally expose developer-mode
+ * behaviour (e.g. DevTools).
+ */
+export function resolveChimeraEnv(raw: string | undefined): ChimeraEnv {
+    return raw === 'development' ? 'development' : 'production';
+}
+
+/**
+ * Construct the primary renderer `BrowserWindow` and load the Next.js static
+ * export (`renderer/out/index.html`).
  *
  * Security invariants (see architecture overview, Appendix B #3 and #4):
  *   - `nodeIntegration` MUST be `false`
  *   - `contextIsolation` MUST be `true`
  *
- * The preload script path is passed in rather than resolved here so the
- * caller controls filesystem layout and tests can assert the wiring.
+ * The preload script path and renderer entry are passed in rather than
+ * resolved here so the caller controls filesystem layout and tests can
+ * assert the wiring. The `--chimera-env=<env>` flag is injected via
+ * `additionalArguments` so the renderer can read it from `process.argv`.
  */
 export function createMainWindow(options: CreateMainWindowOptions): BrowserWindow {
-    return new BrowserWindow({
+    const window = new BrowserWindow({
         width: DEFAULT_WINDOW_WIDTH,
         height: DEFAULT_WINDOW_HEIGHT,
         show: true,
@@ -45,8 +68,17 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
             contextIsolation: true,
             sandbox: true,
             preload: options.preloadPath,
+            additionalArguments: [`--chimera-env=${options.env}`],
         },
     });
+
+    void window.loadFile(options.rendererEntry);
+
+    if (options.env === 'development') {
+        window.webContents.openDevTools();
+    }
+
+    return window;
 }
 
 /**
@@ -79,12 +111,17 @@ export function registerAppLifecycle(options: RegisterAppLifecycleOptions): void
  *
  * Preload path follows the convention declared in issue #2:
  *   `path.join(__dirname, '../preload/api.js')`
+ *
+ * Renderer entry follows issue #3:
+ *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
 export function main(): void {
     const preloadPath = path.join(__dirname, '..', 'preload', 'api.js');
+    const rendererEntry = path.join(__dirname, '..', '..', 'renderer', 'out', 'index.html');
+    const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
 
     const createWindow = (): void => {
-        createMainWindow({ preloadPath });
+        createMainWindow({ preloadPath, rendererEntry, env });
     };
 
     void app.whenReady().then(createWindow);

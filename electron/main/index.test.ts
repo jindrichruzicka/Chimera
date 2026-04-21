@@ -6,6 +6,7 @@ interface FakeWebPreferences {
     readonly nodeIntegration?: boolean;
     readonly contextIsolation?: boolean;
     readonly preload?: string;
+    readonly additionalArguments?: readonly string[];
 }
 
 interface FakeBrowserWindowOptions {
@@ -14,8 +15,14 @@ interface FakeBrowserWindowOptions {
 
 const browserWindowInstances: FakeBrowserWindow[] = [];
 
+class FakeWebContents {
+    public readonly openDevTools = vi.fn();
+}
+
 class FakeBrowserWindow {
     public readonly options: FakeBrowserWindowOptions;
+    public readonly loadFile = vi.fn();
+    public readonly webContents = new FakeWebContents();
     constructor(options: FakeBrowserWindowOptions) {
         this.options = options;
         browserWindowInstances.push(this);
@@ -36,9 +43,10 @@ vi.mock('electron', () => ({
     BrowserWindow: FakeBrowserWindow,
 }));
 
-const { createMainWindow, registerAppLifecycle } = await import('./index.js');
+const { createMainWindow, registerAppLifecycle, resolveChimeraEnv } = await import('./index.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
+const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
 
 describe('createMainWindow', () => {
     beforeEach(() => {
@@ -46,7 +54,11 @@ describe('createMainWindow', () => {
     });
 
     it('constructs a BrowserWindow with contextIsolation: true', () => {
-        createMainWindow({ preloadPath: PRELOAD });
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
 
         expect(browserWindowInstances).toHaveLength(1);
         const [win] = browserWindowInstances;
@@ -54,23 +66,110 @@ describe('createMainWindow', () => {
     });
 
     it('constructs a BrowserWindow with nodeIntegration: false', () => {
-        createMainWindow({ preloadPath: PRELOAD });
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
 
         const [win] = browserWindowInstances;
         expect(win?.options.webPreferences?.nodeIntegration).toBe(false);
     });
 
     it('wires the supplied preload path into webPreferences', () => {
-        createMainWindow({ preloadPath: PRELOAD });
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
 
         const [win] = browserWindowInstances;
         expect(win?.options.webPreferences?.preload).toBe(PRELOAD);
     });
 
     it('returns the constructed BrowserWindow', () => {
-        const win = createMainWindow({ preloadPath: PRELOAD });
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
 
         expect(win).toBeInstanceOf(FakeBrowserWindow);
+    });
+
+    it('injects --chimera-env=development into additionalArguments when env is development', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'development',
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.webPreferences?.additionalArguments).toContain(
+            '--chimera-env=development',
+        );
+    });
+
+    it('injects --chimera-env=production into additionalArguments when env is production', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.webPreferences?.additionalArguments).toContain(
+            '--chimera-env=production',
+        );
+    });
+
+    it('loads the renderer entry HTML file via loadFile', () => {
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
+
+        expect(win.loadFile).toHaveBeenCalledTimes(1);
+        expect(win.loadFile).toHaveBeenCalledWith(RENDERER_ENTRY);
+    });
+
+    it('opens DevTools when env is development', () => {
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'development',
+        });
+
+        expect(win.webContents.openDevTools).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not open DevTools when env is production', () => {
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
+
+        expect(win.webContents.openDevTools).not.toHaveBeenCalled();
+    });
+});
+
+describe('resolveChimeraEnv', () => {
+    it('returns "development" when CHIMERA_ENV=development', () => {
+        expect(resolveChimeraEnv('development')).toBe('development');
+    });
+
+    it('returns "production" when CHIMERA_ENV=production', () => {
+        expect(resolveChimeraEnv('production')).toBe('production');
+    });
+
+    it('defaults to "production" when CHIMERA_ENV is undefined', () => {
+        expect(resolveChimeraEnv(undefined)).toBe('production');
+    });
+
+    it('defaults to "production" for an unrecognised value', () => {
+        expect(resolveChimeraEnv('staging')).toBe('production');
     });
 });
 

@@ -148,6 +148,9 @@ export default tseslint.config(
             '@typescript-eslint/no-unsafe-call': 'off',
             '@typescript-eslint/no-unsafe-argument': 'off',
             '@typescript-eslint/no-unsafe-return': 'off',
+            // vitest's `expect(mockFn)` pattern intentionally passes method
+            // references around; unbound-method is pure noise in test code.
+            '@typescript-eslint/unbound-method': 'off',
         },
     },
 
