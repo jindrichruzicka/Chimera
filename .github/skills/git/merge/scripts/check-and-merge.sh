@@ -71,7 +71,9 @@ fi
 
 # ─── 7. Check: no commits after the first are non-fixup ──────────────────────
 # All commits after the first should be fixup! commits.
-COMMIT_LIST=$(git log --ancestry-path "${MERGE_BASE}..HEAD" --format="%H %s" | tail -n +2)
+# `git log` lists commits newest-first; the oldest (= first commit on the
+# branch) is the LAST line, so drop it with `sed '$d'`, not `tail -n +2`.
+COMMIT_LIST=$(git log --ancestry-path "${MERGE_BASE}..HEAD" --format="%H %s" | sed '$d')
 NON_FIXUP=()
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
