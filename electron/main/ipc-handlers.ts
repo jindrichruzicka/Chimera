@@ -44,6 +44,17 @@ import {
     SETTINGS_UPDATE_CHANNEL,
 } from '../preload/settings-api.js';
 import type { LobbyInfo, ResolvedSettings, SaveSlotMeta } from '../preload/api.js';
+import {
+    EngineActionSchema,
+    GameIdSchema,
+    HostLobbyParamsSchema,
+    JoinLobbyParamsSchema,
+    PlayerIdSchema,
+    SaveRequestSchema,
+    SlotIdSchema,
+    UserSettingsPatchSchema,
+    parseInvokeRequest,
+} from './ipc-schemas.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -186,13 +197,17 @@ export interface RegisterGameHandlersOptions {
 export function registerGameHandlers(options: RegisterGameHandlersOptions): void {
     const { ipcMain } = options;
 
-    ipcMain.on(GAME_SEND_ACTION_CHANNEL, () => {
-        // Stub. ActionPipeline integration lands in F03–F15. Silently
-        // accepting the payload keeps the renderer's write path functional
-        // (no unhandled-channel errors) before the engine wiring exists.
+    ipcMain.on(GAME_SEND_ACTION_CHANNEL, (_event, action) => {
+        // Validate the envelope before handing off to the (future)
+        // ActionPipeline. Per §4.7 the action-type-specific payload
+        // schema lives in the simulation layer; here we only guard the
+        // outer envelope so malformed requests never reach the pipeline.
+        parseInvokeRequest(EngineActionSchema, GAME_SEND_ACTION_CHANNEL, action);
+        // Stub. ActionPipeline integration lands in F03–F15.
     });
 
-    ipcMain.handle(GAME_SWITCH_SEAT_CHANNEL, () => {
+    ipcMain.handle(GAME_SWITCH_SEAT_CHANNEL, (_event, playerId) => {
+        parseInvokeRequest(PlayerIdSchema, GAME_SWITCH_SEAT_CHANNEL, playerId);
         // Stub. Real seat-switch logic lands alongside the session/local
         // multi-seat work. Returning `undefined` satisfies the
         // `Promise<void>` contract declared by `GameAPI.switchActiveSeat`.
@@ -256,7 +271,8 @@ const STUB_LOBBY_INFO: LobbyInfo = {
 export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): void {
     const { ipcMain } = options;
 
-    ipcMain.handle(LOBBY_HOST_CHANNEL, () => {
+    ipcMain.handle(LOBBY_HOST_CHANNEL, (_event, params) => {
+        parseInvokeRequest(HostLobbyParamsSchema, LOBBY_HOST_CHANNEL, params);
         // Stub. Real host logic (MultiplayerProvider + session wiring) lands
         // in F11. Returning a placeholder `LobbyInfo` keeps the preload's
         // `Promise<LobbyInfo>` contract honest before the engine wiring
@@ -265,7 +281,8 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
         return STUB_LOBBY_INFO;
     });
 
-    ipcMain.handle(LOBBY_JOIN_CHANNEL, () => {
+    ipcMain.handle(LOBBY_JOIN_CHANNEL, (_event, params) => {
+        parseInvokeRequest(JoinLobbyParamsSchema, LOBBY_JOIN_CHANNEL, params);
         // Stub. Real join logic lands in F11.
         return STUB_LOBBY_INFO;
     });
@@ -330,7 +347,8 @@ const STUB_SAVE_SLOT: SaveSlotMeta = {
 export function registerSavesHandlers(options: RegisterSavesHandlersOptions): void {
     const { ipcMain } = options;
 
-    ipcMain.handle(SAVES_LIST_CHANNEL, () => {
+    ipcMain.handle(SAVES_LIST_CHANNEL, (_event, gameId) => {
+        parseInvokeRequest(GameIdSchema, SAVES_LIST_CHANNEL, gameId);
         // Stub. Real listing (scan save directory + read metadata) lands
         // in F06/F18. An empty array honours the preload's
         // `Promise<SaveSlotMeta[]>` contract without claiming slots that
@@ -338,20 +356,23 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
         return [] as SaveSlotMeta[];
     });
 
-    ipcMain.handle(SAVES_SAVE_CHANNEL, () => {
+    ipcMain.handle(SAVES_SAVE_CHANNEL, (_event, request) => {
+        parseInvokeRequest(SaveRequestSchema, SAVES_SAVE_CHANNEL, request);
         // Stub. Real persistence lands in F06/F18. Returning a placeholder
         // keeps the preload's `Promise<SaveSlotMeta>` contract honest.
         return STUB_SAVE_SLOT;
     });
 
-    ipcMain.handle(SAVES_LOAD_CHANNEL, () => {
+    ipcMain.handle(SAVES_LOAD_CHANNEL, (_event, slotId) => {
+        parseInvokeRequest(SlotIdSchema, SAVES_LOAD_CHANNEL, slotId);
         // Stub. Real load (read slot, seed simulation, broadcast snapshot)
         // lands in F06/F18. Returning `undefined` satisfies the preload's
         // `Promise<void>` contract.
         return undefined;
     });
 
-    ipcMain.handle(SAVES_DELETE_CHANNEL, () => {
+    ipcMain.handle(SAVES_DELETE_CHANNEL, (_event, slotId) => {
+        parseInvokeRequest(SlotIdSchema, SAVES_DELETE_CHANNEL, slotId);
         // Stub. Real delete (remove slot file, emit slot-update) lands in
         // F06/F18. Returning `undefined` satisfies the preload's
         // `Promise<void>` contract.
@@ -404,7 +425,8 @@ const STUB_RESOLVED_SETTINGS: ResolvedSettings = Object.freeze({});
 export function registerSettingsHandlers(options: RegisterSettingsHandlersOptions): void {
     const { ipcMain } = options;
 
-    ipcMain.handle(SETTINGS_GET_CHANNEL, () => {
+    ipcMain.handle(SETTINGS_GET_CHANNEL, (_event, gameId) => {
+        parseInvokeRequest(GameIdSchema, SETTINGS_GET_CHANNEL, gameId);
         // Stub. Real merge (engine defaults + game defaults + user
         // overrides) lands in F07/F19. An empty object honours the
         // preload's `Promise<ResolvedSettings>` contract without claiming
@@ -412,13 +434,16 @@ export function registerSettingsHandlers(options: RegisterSettingsHandlersOption
         return STUB_RESOLVED_SETTINGS;
     });
 
-    ipcMain.handle(SETTINGS_UPDATE_CHANNEL, () => {
+    ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (_event, gameId, patch) => {
+        parseInvokeRequest(GameIdSchema, SETTINGS_UPDATE_CHANNEL, gameId);
+        parseInvokeRequest(UserSettingsPatchSchema, SETTINGS_UPDATE_CHANNEL, patch);
         // Stub. Real persistence lands in F07/F19. Returning a placeholder
         // keeps the preload's `Promise<ResolvedSettings>` contract honest.
         return STUB_RESOLVED_SETTINGS;
     });
 
-    ipcMain.handle(SETTINGS_RESET_CHANNEL, () => {
+    ipcMain.handle(SETTINGS_RESET_CHANNEL, (_event, gameId) => {
+        parseInvokeRequest(GameIdSchema, SETTINGS_RESET_CHANNEL, gameId);
         // Stub. Real reset (clear user overrides, re-merge) lands in
         // F07/F19.
         return STUB_RESOLVED_SETTINGS;

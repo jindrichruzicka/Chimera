@@ -37,6 +37,7 @@ import {
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
+import { IpcRequestValidationError } from './ipc-schemas.js';
 import type {
     EngineAction,
     HostLobbyParams,
@@ -444,5 +445,150 @@ describe('registerSettingsHandlers', () => {
             [SETTINGS_GET_CHANNEL, SETTINGS_RESET_CHANNEL, SETTINGS_UPDATE_CHANNEL].sort(),
         );
         expect(stub.handled.has(SETTINGS_CHANGE_CHANNEL)).toBe(false);
+    });
+});
+
+/**
+ * Negative-path tests: every handler that accepts a structured payload must
+ * reject malformed input with {@link IpcRequestValidationError} BEFORE any
+ * stub side effect. Electron surfaces a thrown error inside an
+ * `ipcMain.handle` callback as a rejected promise on the renderer side, and
+ * inside an `ipcMain.on` callback as a synchronous throw — both behaviours
+ * are tested here.
+ */
+describe('inbound IPC request validation', () => {
+    it('chimera:game:send-action throws IpcRequestValidationError on a malformed envelope', () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+
+        expect(() => handler?.({}, { type: 'noop' })).toThrow(IpcRequestValidationError);
+        expect(() => handler?.({}, null)).toThrow(IpcRequestValidationError);
+        expect(() => handler?.({}, { type: '', playerId: 'p1', tick: 0, payload: {} })).toThrow(
+            IpcRequestValidationError,
+        );
+    });
+
+    it('chimera:game:switch-seat rejects a non-string or empty playerId', async () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.handled.get(GAME_SWITCH_SEAT_CHANNEL);
+
+        await expect(Promise.resolve().then(() => handler?.({}, ''))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+        await expect(Promise.resolve().then(() => handler?.({}, 42))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+    });
+
+    it('chimera:lobby:host rejects a malformed HostLobbyParams', async () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
+
+        await expect(
+            Promise.resolve().then(() => handler?.({}, { gameId: 'x' })),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
+        await expect(
+            Promise.resolve().then(() => handler?.({}, { gameId: 'x', maxPlayers: 0 })),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
+    });
+
+    it('chimera:lobby:join rejects a malformed JoinLobbyParams', async () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
+
+        await expect(Promise.resolve().then(() => handler?.({}, {}))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+        await expect(
+            Promise.resolve().then(() => handler?.({}, { address: '' })),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
+    });
+
+    it('chimera:saves:list rejects a non-string or empty gameId', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.handled.get(SAVES_LIST_CHANNEL);
+
+        await expect(Promise.resolve().then(() => handler?.({}, ''))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+        await expect(Promise.resolve().then(() => handler?.({}, undefined))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+    });
+
+    it('chimera:saves:save rejects a malformed SaveRequest', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
+
+        await expect(Promise.resolve().then(() => handler?.({}, {}))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+        await expect(
+            Promise.resolve().then(() => handler?.({}, { gameId: 'x', label: 42 })),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
+    });
+
+    it('chimera:saves:load and chimera:saves:delete reject an empty slotId', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        const loadHandler = stub.handled.get(SAVES_LOAD_CHANNEL);
+        const deleteHandler = stub.handled.get(SAVES_DELETE_CHANNEL);
+
+        await expect(Promise.resolve().then(() => loadHandler?.({}, ''))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+        await expect(Promise.resolve().then(() => deleteHandler?.({}, ''))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+    });
+
+    it('chimera:settings:get and chimera:settings:reset reject an empty gameId', async () => {
+        const stub = makeSettingsIpcMainStub();
+        registerSettingsHandlers({ ipcMain: stub.ipcMain });
+        const getHandler = stub.handled.get(SETTINGS_GET_CHANNEL);
+        const resetHandler = stub.handled.get(SETTINGS_RESET_CHANNEL);
+
+        await expect(Promise.resolve().then(() => getHandler?.({}, ''))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+        await expect(Promise.resolve().then(() => resetHandler?.({}, ''))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+    });
+
+    it('chimera:settings:update rejects a malformed gameId or non-object patch', async () => {
+        const stub = makeSettingsIpcMainStub();
+        registerSettingsHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.handled.get(SETTINGS_UPDATE_CHANNEL);
+
+        await expect(Promise.resolve().then(() => handler?.({}, '', {}))).rejects.toBeInstanceOf(
+            IpcRequestValidationError,
+        );
+        await expect(
+            Promise.resolve().then(() => handler?.({}, 'sample-game', [])),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
+        await expect(
+            Promise.resolve().then(() => handler?.({}, 'sample-game', null)),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
+    });
+
+    it('IpcRequestValidationError carries the channel that rejected the payload', () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+
+        try {
+            handler?.({}, { garbage: true });
+            throw new Error('expected IpcRequestValidationError');
+        } catch (err) {
+            expect(err).toBeInstanceOf(IpcRequestValidationError);
+            expect((err as IpcRequestValidationError).channel).toBe(GAME_SEND_ACTION_CHANNEL);
+        }
     });
 });
