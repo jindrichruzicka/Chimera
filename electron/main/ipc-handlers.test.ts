@@ -3,18 +3,26 @@ import {
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
+    LOBBY_HOST_CHANNEL,
+    LOBBY_JOIN_CHANNEL,
+    LOBBY_LEAVE_CHANNEL,
+    LOBBY_UPDATE_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     mapPlatform,
     registerGameHandlers,
+    registerLobbyHandlers,
     registerSystemHandlers,
     type GameHandlersIpcMain,
     type GameHandlerListener,
     type GameInvokeHandler,
+    type LobbyHandlerListener,
+    type LobbyHandlersIpcMain,
+    type LobbyInvokeHandler,
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
-import type { EngineAction } from '../preload/api.js';
+import type { EngineAction, HostLobbyParams, JoinLobbyParams } from '../preload/api.js';
 
 /**
  * Recording stub for the narrow `SystemHandlersIpcMain` slice used by the
@@ -179,5 +187,84 @@ describe('registerGameHandlers', () => {
         expect([...stub.listeners.keys()]).toEqual([GAME_SEND_ACTION_CHANNEL]);
         expect(stub.handled.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
         expect(stub.listeners.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
+    });
+});
+
+/**
+ * Recording stub for the narrow `LobbyHandlersIpcMain` slice. Mirrors the
+ * game stub — `handle` captures invoke handlers, `on` captures fire-and-
+ * forget listeners.
+ */
+function makeLobbyIpcMainStub(): {
+    readonly ipcMain: LobbyHandlersIpcMain;
+    readonly handled: Map<string, LobbyInvokeHandler>;
+    readonly listeners: Map<string, LobbyHandlerListener>;
+} {
+    const handled = new Map<string, LobbyInvokeHandler>();
+    const listeners = new Map<string, LobbyHandlerListener>();
+
+    const ipcMain: LobbyHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+        on: (channel, handler) => {
+            listeners.set(channel, handler);
+        },
+    };
+
+    return { ipcMain, handled, listeners };
+}
+
+describe('registerLobbyHandlers', () => {
+    it('registers chimera:lobby:host as an invoke handler accepting HostLobbyParams (stub: resolves to a LobbyInfo-shaped value)', async () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const params: HostLobbyParams = { gameId: 'sample-game', maxPlayers: 4 };
+        const result = await Promise.resolve(handler?.({}, params));
+        // Stub contract (F11 replaces with real logic): resolves to any
+        // object so the preload's `Promise<LobbyInfo>` signature is
+        // satisfied without throwing. We only assert the handler does not
+        // reject and returns something defined.
+        expect(result).toBeDefined();
+    });
+
+    it('registers chimera:lobby:join as an invoke handler accepting JoinLobbyParams (stub)', async () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const params: JoinLobbyParams = { address: 'ws://127.0.0.1:7777' };
+        const result = await Promise.resolve(handler?.({}, params));
+        expect(result).toBeDefined();
+    });
+
+    it('registers chimera:lobby:leave as a send listener (stub: no-op)', () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.listeners.get(LOBBY_LEAVE_CHANNEL);
+        expect(handler).toBeDefined();
+        expect(() => handler?.({})).not.toThrow();
+    });
+
+    it('registers exactly the lobby request channels (update is push-only, not registered here)', () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+
+        // `chimera:lobby:update` is a one-way push from main → renderer via
+        // `webContents.send`. It must NOT appear as a main-side listener or
+        // invoke handler.
+        expect([...stub.handled.keys()].sort()).toEqual(
+            [LOBBY_HOST_CHANNEL, LOBBY_JOIN_CHANNEL].sort(),
+        );
+        expect([...stub.listeners.keys()]).toEqual([LOBBY_LEAVE_CHANNEL]);
+        expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
+        expect(stub.listeners.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
     });
 });

@@ -2,7 +2,11 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '../../shared/constants.js';
-import { registerGameHandlers, registerSystemHandlers } from './ipc-handlers.js';
+import {
+    registerGameHandlers,
+    registerLobbyHandlers,
+    registerSystemHandlers,
+} from './ipc-handlers.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME };
 
@@ -244,6 +248,12 @@ export function main(): void {
     // here lets the preload bridge already speak the full protocol without
     // racing the engine work.
     registerGameHandlers({ ipcMain });
+
+    // Register the `chimera:lobby:*` channels as stubs. Real lobby logic
+    // (host/join/leave/state broadcast) lands in F11; wiring stubs here
+    // lets the preload bridge and renderer already speak the full lobby
+    // protocol without unhandled-channel errors.
+    registerLobbyHandlers({ ipcMain });
 
     const createWindow = (): void => {
         createMainWindow({ preloadPath, rendererEntry, env });
