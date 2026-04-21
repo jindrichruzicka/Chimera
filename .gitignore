@@ -13,3 +13,4 @@ out/
 !.vscode/extensions.json
 !.vscode/launch.json
 .idea/
+coverage/

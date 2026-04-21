@@ -8,5 +8,19 @@ export default defineConfig({
         globals: false,
         restoreMocks: true,
         clearMocks: true,
+        coverage: {
+            provider: 'v8',
+            reporter: ['text', 'html', 'lcov'],
+            include: [
+                'electron/**/*.ts',
+                'simulation/**/*.ts',
+                'ai/**/*.ts',
+                'renderer/**/*.ts',
+                'shared/**/*.ts',
+                'games/**/*.ts',
+                'networking/**/*.ts',
+            ],
+            exclude: ['**/*.test.ts', '**/*.test.tsx', '**/node_modules/**', '**/out/**'],
+        },
     },
 });
