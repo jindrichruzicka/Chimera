@@ -10,7 +10,31 @@ Architecture reference: [`docs/architecture-overview.md`](docs/architecture-over
 
 ## Status
 
-Pre-implementation. The architecture document is the authoritative baseline; source code will land here once scaffolding begins.
+Early scaffolding. The architecture document is the authoritative baseline; the first implementation milestone (M1 — Skeleton) is in progress.
+
+## Getting started
+
+Prerequisites:
+
+- Node.js **≥ 20** (tested on 25.x)
+- [pnpm](https://pnpm.io) **≥ 10**
+
+Install dependencies and run the test suite:
+
+```sh
+pnpm install
+pnpm test       # vitest run
+pnpm typecheck  # tsc --noEmit
+```
+
+Project layout (landed so far):
+
+```
+electron/
+└── main/
+    ├── index.ts        # App entry: BrowserWindow creation + lifecycle (§3)
+    └── index.test.ts   # Unit tests (vitest)
+```
 
 ## Features
 

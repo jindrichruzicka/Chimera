@@ -1,0 +1,26 @@
+{
+    "name": "chimera",
+    "version": "0.0.0",
+    "private": true,
+    "description": "Host-authoritative, multiplatform multiplayer game engine built on Electron + React Three Fiber.",
+    "license": "UNLICENSED",
+    "packageManager": "pnpm@10.33.0",
+    "engines": {
+        "node": ">=20.0.0"
+    },
+    "main": "electron/main/index.js",
+    "scripts": {
+        "typecheck": "tsc --noEmit",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "format": "prettier --write .",
+        "format:check": "prettier --check ."
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.0",
+        "electron": "^33.2.0",
+        "prettier": "^3.3.3",
+        "typescript": "^5.7.2",
+        "vitest": "^2.1.8"
+    }
+}
