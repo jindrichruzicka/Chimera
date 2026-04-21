@@ -39,11 +39,23 @@ vi.mock('electron', () => ({
         on: appOn,
         quit: appQuit,
         whenReady: appWhenReady,
+        getPath: vi.fn(() => '/tmp/chimera-userData-fake'),
     },
     BrowserWindow: FakeBrowserWindow,
+    ipcMain: {
+        handle: vi.fn(),
+    },
 }));
 
-const { createMainWindow, registerAppLifecycle, resolveChimeraEnv } = await import('./index.js');
+const {
+    createMainWindow,
+    registerAppLifecycle,
+    resolveChimeraEnv,
+    checkCleanExitFlag,
+    writeCleanExitFlag,
+    registerCleanExitHook,
+    registerCleanExitIpc,
+} = await import('./index.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
@@ -260,5 +272,138 @@ describe('registerAppLifecycle', () => {
 
         const registeredEvents = appOn.mock.calls.map(([event]) => event);
         expect(registeredEvents).toEqual(expect.arrayContaining(['window-all-closed', 'activate']));
+    });
+});
+
+interface FakeFs {
+    readonly files: Map<string, string>;
+    existsSync: (p: string) => boolean;
+    writeFileSync: (p: string, data: string) => void;
+    unlinkSync: (p: string) => void;
+}
+
+function makeFakeFs(initial: readonly string[] = []): FakeFs {
+    const files = new Map<string, string>();
+    for (const p of initial) files.set(p, '');
+    return {
+        files,
+        existsSync: (p) => files.has(p),
+        writeFileSync: (p, data) => {
+            files.set(p, data);
+        },
+        unlinkSync: (p) => {
+            files.delete(p);
+        },
+    };
+}
+
+const FLAG_PATH = '/abs/path/userData/lastCleanExit.flag';
+
+describe('checkCleanExitFlag', () => {
+    it('returns wasCleanExit: true when the flag file exists', () => {
+        const fs = makeFakeFs([FLAG_PATH]);
+
+        const result = checkCleanExitFlag({ flagPath: FLAG_PATH, fs });
+
+        expect(result.wasCleanExit).toBe(true);
+    });
+
+    it('returns wasCleanExit: false when the flag file is absent', () => {
+        const fs = makeFakeFs();
+
+        const result = checkCleanExitFlag({ flagPath: FLAG_PATH, fs });
+
+        expect(result.wasCleanExit).toBe(false);
+    });
+
+    it('deletes the flag file after reading so the next launch starts clean', () => {
+        const fs = makeFakeFs([FLAG_PATH]);
+
+        checkCleanExitFlag({ flagPath: FLAG_PATH, fs });
+
+        expect(fs.files.has(FLAG_PATH)).toBe(false);
+    });
+
+    it('does not throw when the flag is absent and no delete is needed', () => {
+        const fs = makeFakeFs();
+
+        expect(() => checkCleanExitFlag({ flagPath: FLAG_PATH, fs })).not.toThrow();
+    });
+});
+
+describe('writeCleanExitFlag', () => {
+    it('writes the flag file at the configured path', () => {
+        const fs = makeFakeFs();
+
+        writeCleanExitFlag({ flagPath: FLAG_PATH, fs });
+
+        expect(fs.files.has(FLAG_PATH)).toBe(true);
+    });
+
+    it('is idempotent: writing twice leaves a single flag', () => {
+        const fs = makeFakeFs();
+
+        writeCleanExitFlag({ flagPath: FLAG_PATH, fs });
+        writeCleanExitFlag({ flagPath: FLAG_PATH, fs });
+
+        expect(fs.files.has(FLAG_PATH)).toBe(true);
+    });
+});
+
+describe('registerCleanExitHook', () => {
+    it('writes the flag when before-quit fires', () => {
+        const fs = makeFakeFs();
+        const beforeQuitHandlers: (() => void)[] = [];
+        const host = {
+            on: vi.fn((event: string, handler: () => void) => {
+                if (event === 'before-quit') beforeQuitHandlers.push(handler);
+            }),
+        };
+
+        registerCleanExitHook({ app: host, flagPath: FLAG_PATH, fs });
+        beforeQuitHandlers.forEach((h) => h());
+
+        expect(fs.files.has(FLAG_PATH)).toBe(true);
+    });
+
+    it('registers the before-quit listener exactly once', () => {
+        const fs = makeFakeFs();
+        const host = { on: vi.fn() };
+
+        registerCleanExitHook({ app: host, flagPath: FLAG_PATH, fs });
+
+        const events = host.on.mock.calls.map(([event]) => event);
+        expect(events.filter((e) => e === 'before-quit')).toHaveLength(1);
+    });
+});
+
+describe('registerCleanExitIpc', () => {
+    it('registers chimera:system:was-clean-exit handler returning the captured flag', async () => {
+        const handlers = new Map<string, () => unknown>();
+        const ipcMain = {
+            handle: vi.fn((channel: string, handler: () => unknown) => {
+                handlers.set(channel, handler);
+            }),
+        };
+
+        registerCleanExitIpc({ ipcMain, wasCleanExit: true });
+
+        const handler = handlers.get('chimera:system:was-clean-exit');
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.())).resolves.toBe(true);
+    });
+
+    it('returns false when startup observed a missing flag', async () => {
+        const handlers = new Map<string, () => unknown>();
+        const ipcMain = {
+            handle: vi.fn((channel: string, handler: () => unknown) => {
+                handlers.set(channel, handler);
+            }),
+        };
+
+        registerCleanExitIpc({ ipcMain, wasCleanExit: false });
+
+        const handler = handlers.get('chimera:system:was-clean-exit');
+        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
     });
 });
