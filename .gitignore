@@ -8,5 +8,7 @@ out/
 .env
 .env.*
 !.env.example
-.vscode/
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
 .idea/
