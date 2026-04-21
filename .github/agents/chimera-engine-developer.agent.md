@@ -129,6 +129,7 @@ Follow this workflow **exactly** for every task:
    ```bash
    pnpm format         # prettier --write on the tracked tree
    pnpm format:check   # must exit 0 — if it fails, do NOT commit
+   pnpm lint           # must exit 0 — if it fails, do NOT commit
    pnpm test           # must exit 0 — if it fails, do NOT commit
    pnpm typecheck      # must exit 0 — if it fails, do NOT commit
    ```
@@ -203,6 +204,7 @@ Before marking any task done:
 - [ ] **Tests written before implementation** — test file existed and was red before source file was created
 - [ ] **All tests are green** — `pnpm test` passes with zero failures
 - [ ] **Formatter is clean** — `pnpm format:check` exits 0 against the working tree; run `pnpm format` first if not
+- [ ] **Linter is clean** — `pnpm lint` exits 0; fix violations or run `pnpm lint:fix` where safe
 - [ ] **Typecheck is clean** — `pnpm typecheck` exits 0
 - [ ] **No untested behaviour** — every public method, every documented error type, and every branch in `validate()`/`reduce()` is covered by at least one test
 - [ ] **No mocks inside `simulation/` tests** — pure function calls only; if a mock was needed, the implementation has an undocumented dependency
