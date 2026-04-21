@@ -1,12 +1,20 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    GAME_SEND_ACTION_CHANNEL,
+    GAME_SNAPSHOT_CHANNEL,
+    GAME_SWITCH_SEAT_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     mapPlatform,
+    registerGameHandlers,
     registerSystemHandlers,
+    type GameHandlersIpcMain,
+    type GameHandlerListener,
+    type GameInvokeHandler,
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
+import type { EngineAction } from '../preload/api.js';
 
 /**
  * Recording stub for the narrow `SystemHandlersIpcMain` slice used by the
@@ -99,5 +107,77 @@ describe('registerSystemHandlers', () => {
 
         expect([...stub.handled.keys()]).toEqual([SYSTEM_PLATFORM_CHANNEL]);
         expect([...stub.listeners.keys()]).toEqual([SYSTEM_QUIT_CHANNEL]);
+    });
+});
+
+/**
+ * Recording stub for the narrow `GameHandlersIpcMain` slice. Unlike the
+ * system stub, `handle` and `on` callbacks receive payload arguments, so the
+ * stub captures the full handler signature.
+ */
+function makeGameIpcMainStub(): {
+    readonly ipcMain: GameHandlersIpcMain;
+    readonly handled: Map<string, GameInvokeHandler>;
+    readonly listeners: Map<string, GameHandlerListener>;
+} {
+    const handled = new Map<string, GameInvokeHandler>();
+    const listeners = new Map<string, GameHandlerListener>();
+
+    const ipcMain: GameHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+        on: (channel, handler) => {
+            listeners.set(channel, handler);
+        },
+    };
+
+    return { ipcMain, handled, listeners };
+}
+
+describe('registerGameHandlers', () => {
+    it('registers chimera:game:send-action as a send listener (stub: no-op)', () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const action: EngineAction = {
+            type: 'noop',
+            playerId: 'p1',
+            tick: 0,
+            payload: {},
+        };
+        // Actual reducer wiring lands in F03–F15; this task only proves the
+        // channel is registered and the stub accepts the payload without
+        // throwing.
+        expect(() => handler?.({}, action)).not.toThrow();
+    });
+
+    it('registers chimera:game:switch-seat as an invoke handler resolving to undefined (stub)', async () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(GAME_SWITCH_SEAT_CHANNEL);
+        expect(handler).toBeDefined();
+        // `ipcMain.handle` auto-wraps a sync return into a Promise in real
+        // Electron. At the registration level the handler may return either
+        // `undefined` or `Promise<undefined>`; both satisfy the declared
+        // `Promise<void>` contract on `GameAPI.switchActiveSeat`.
+        await expect(Promise.resolve(handler?.({}, 'p2'))).resolves.toBeUndefined();
+    });
+
+    it('registers exactly the game request channels (snapshot is push-only, not registered here)', () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+
+        // `chimera:game:snapshot` is a one-way push from main → renderer via
+        // `webContents.send`. It must NOT appear as a main-side listener or
+        // invoke handler.
+        expect([...stub.handled.keys()]).toEqual([GAME_SWITCH_SEAT_CHANNEL]);
+        expect([...stub.listeners.keys()]).toEqual([GAME_SEND_ACTION_CHANNEL]);
+        expect(stub.handled.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
+        expect(stub.listeners.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
     });
 });

@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
 import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '../../shared/constants.js';
-import { registerSystemHandlers } from './ipc-handlers.js';
+import { registerGameHandlers, registerSystemHandlers } from './ipc-handlers.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME };
 
@@ -238,6 +238,12 @@ export function main(): void {
         platform: process.platform,
         electronVersion: process.versions.electron ?? '',
     });
+
+    // Register the `chimera:game:*` channels as stubs. Actual ActionPipeline
+    // dispatch and seat-switch logic land in F03–F15; wiring the handlers
+    // here lets the preload bridge already speak the full protocol without
+    // racing the engine work.
+    registerGameHandlers({ ipcMain });
 
     const createWindow = (): void => {
         createMainWindow({ preloadPath, rendererEntry, env });
