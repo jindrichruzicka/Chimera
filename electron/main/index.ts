@@ -6,6 +6,7 @@ import {
     registerGameHandlers,
     registerLobbyHandlers,
     registerSavesHandlers,
+    registerSettingsHandlers,
     registerSystemHandlers,
 } from './ipc-handlers.js';
 
@@ -261,6 +262,12 @@ export function main(): void {
     // lands in F06/F18; wiring stubs here keeps the renderer's typed
     // Promises from rejecting before persistence exists.
     registerSavesHandlers({ ipcMain });
+
+    // Register the `chimera:settings:*` channels as stubs. Real schema
+    // validation, three-layer merge, and persisted user overrides land
+    // in F07/F19; wiring stubs here lets the renderer speak the full
+    // settings protocol without unhandled-channel errors.
+    registerSettingsHandlers({ ipcMain });
 
     const createWindow = (): void => {
         createMainWindow({ preloadPath, rendererEntry, env });

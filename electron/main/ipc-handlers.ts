@@ -7,10 +7,12 @@
 //
 // Currently wired: `chimera:system:*` (see preload/system-api.ts),
 // `chimera:game:*` stubs (see preload/game-api.ts), `chimera:lobby:*` stubs
-// (see preload/lobby-api.ts), and `chimera:saves:*` stubs (see
-// preload/saves-api.ts). The game/lobby/saves handlers are stubs only —
-// actual game/simulation logic lands in F03–F15; real lobby logic lands in
-// F11; real save persistence lands in F06/F18.
+// (see preload/lobby-api.ts), `chimera:saves:*` stubs (see
+// preload/saves-api.ts), and `chimera:settings:*` stubs (see
+// preload/settings-api.ts). The game/lobby/saves/settings handlers are stubs
+// only — actual game/simulation logic lands in F03–F15; real lobby logic
+// lands in F11; real save persistence lands in F06/F18; real settings
+// merging and persistence land in F07/F19.
 
 import {
     SYSTEM_PLATFORM_CHANNEL,
@@ -35,7 +37,13 @@ import {
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
 } from '../preload/saves-api.js';
-import type { LobbyInfo, SaveSlotMeta } from '../preload/api.js';
+import {
+    SETTINGS_CHANGE_CHANNEL,
+    SETTINGS_GET_CHANNEL,
+    SETTINGS_RESET_CHANNEL,
+    SETTINGS_UPDATE_CHANNEL,
+} from '../preload/settings-api.js';
+import type { LobbyInfo, ResolvedSettings, SaveSlotMeta } from '../preload/api.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -52,6 +60,10 @@ export {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
+    SETTINGS_CHANGE_CHANNEL,
+    SETTINGS_GET_CHANNEL,
+    SETTINGS_RESET_CHANNEL,
+    SETTINGS_UPDATE_CHANNEL,
 };
 
 /**
@@ -344,5 +356,71 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
         // F06/F18. Returning `undefined` satisfies the preload's
         // `Promise<void>` contract.
         return undefined;
+    });
+}
+
+/**
+ * Shape of a main-side `ipcMain.handle` handler for the settings namespace.
+ * Mirrors the other namespaces — permissive types keep tests free of
+ * Electron imports.
+ */
+export type SettingsInvokeHandler = (event: unknown, ...args: unknown[]) => unknown;
+
+/**
+ * Narrow slice of `Electron.IpcMain` required to register the settings-
+ * namespace channels. The settings namespace never uses `on` — every
+ * read/mutation is an invoke-style round-trip so the renderer receives the
+ * freshly-resolved settings tree.
+ */
+export interface SettingsHandlersIpcMain {
+    handle(channel: string, handler: SettingsInvokeHandler): unknown;
+}
+
+export interface RegisterSettingsHandlersOptions {
+    readonly ipcMain: SettingsHandlersIpcMain;
+}
+
+/**
+ * Placeholder `ResolvedSettings` returned by the get/update/reset stubs.
+ * Real values come from the `SettingsManager` in F07/F19. An empty object
+ * satisfies the `ResolvedSettings = Record<string, unknown>` contract
+ * without asserting any engine-wide or game-specific default values.
+ */
+const STUB_RESOLVED_SETTINGS: ResolvedSettings = Object.freeze({});
+
+/**
+ * Register every `chimera:settings:*` main-side channel. These are
+ * deliberate stubs — actual schema validation, three-layer merging, and
+ * persisted user overrides land in F07/F19.
+ *
+ * `chimera:settings:change` is intentionally absent: it is a one-way push
+ * from main → renderer via `webContents.send` whenever settings change
+ * (external update, reset, or migration). There is no invoke handler for
+ * that channel.
+ *
+ * Invariant 5: channel constants come from `preload/settings-api.ts`;
+ * there is no parallel list in this file to drift out of sync.
+ */
+export function registerSettingsHandlers(options: RegisterSettingsHandlersOptions): void {
+    const { ipcMain } = options;
+
+    ipcMain.handle(SETTINGS_GET_CHANNEL, () => {
+        // Stub. Real merge (engine defaults + game defaults + user
+        // overrides) lands in F07/F19. An empty object honours the
+        // preload's `Promise<ResolvedSettings>` contract without claiming
+        // any particular default value.
+        return STUB_RESOLVED_SETTINGS;
+    });
+
+    ipcMain.handle(SETTINGS_UPDATE_CHANNEL, () => {
+        // Stub. Real persistence lands in F07/F19. Returning a placeholder
+        // keeps the preload's `Promise<ResolvedSettings>` contract honest.
+        return STUB_RESOLVED_SETTINGS;
+    });
+
+    ipcMain.handle(SETTINGS_RESET_CHANNEL, () => {
+        // Stub. Real reset (clear user overrides, re-merge) lands in
+        // F07/F19.
+        return STUB_RESOLVED_SETTINGS;
     });
 }

@@ -12,12 +12,17 @@ import {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
+    SETTINGS_CHANGE_CHANNEL,
+    SETTINGS_GET_CHANNEL,
+    SETTINGS_RESET_CHANNEL,
+    SETTINGS_UPDATE_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     mapPlatform,
     registerGameHandlers,
     registerLobbyHandlers,
     registerSavesHandlers,
+    registerSettingsHandlers,
     registerSystemHandlers,
     type GameHandlersIpcMain,
     type GameHandlerListener,
@@ -27,6 +32,8 @@ import {
     type LobbyInvokeHandler,
     type SavesHandlersIpcMain,
     type SavesInvokeHandler,
+    type SettingsHandlersIpcMain,
+    type SettingsInvokeHandler,
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
@@ -35,6 +42,7 @@ import type {
     HostLobbyParams,
     JoinLobbyParams,
     SaveRequest,
+    UserSettings,
 } from '../preload/api.js';
 
 /**
@@ -365,5 +373,76 @@ describe('registerSavesHandlers', () => {
             ].sort(),
         );
         expect(stub.handled.has(SAVES_SLOT_UPDATE_CHANNEL)).toBe(false);
+    });
+});
+
+/**
+ * Recording stub for the narrow `SettingsHandlersIpcMain` slice. The settings
+ * namespace uses `handle` exclusively — every read/mutation is an
+ * invoke-style round-trip.
+ */
+function makeSettingsIpcMainStub(): {
+    readonly ipcMain: SettingsHandlersIpcMain;
+    readonly handled: Map<string, SettingsInvokeHandler>;
+} {
+    const handled = new Map<string, SettingsInvokeHandler>();
+
+    const ipcMain: SettingsHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+    };
+
+    return { ipcMain, handled };
+}
+
+describe('registerSettingsHandlers', () => {
+    it('registers chimera:settings:get as an invoke handler resolving to ResolvedSettings (stub)', async () => {
+        const stub = makeSettingsIpcMainStub();
+        registerSettingsHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(SETTINGS_GET_CHANNEL);
+        expect(handler).toBeDefined();
+
+        // Stub contract (F07/F19 replaces with real three-layer merge):
+        // resolves to an object so the preload's `Promise<ResolvedSettings>`
+        // signature is satisfied without claiming any particular default.
+        const result = await Promise.resolve(handler?.({}, 'sample-game'));
+        expect(result).toBeDefined();
+        expect(typeof result).toBe('object');
+    });
+
+    it('registers chimera:settings:update as an invoke handler accepting (gameId, patch) (stub)', async () => {
+        const stub = makeSettingsIpcMainStub();
+        registerSettingsHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(SETTINGS_UPDATE_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const patch: Partial<UserSettings> = { masterVolume: 0.5 };
+        const result = await Promise.resolve(handler?.({}, 'sample-game', patch));
+        expect(result).toBeDefined();
+    });
+
+    it('registers chimera:settings:reset as an invoke handler accepting a gameId (stub)', async () => {
+        const stub = makeSettingsIpcMainStub();
+        registerSettingsHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(SETTINGS_RESET_CHANNEL);
+        expect(handler).toBeDefined();
+        const result = await Promise.resolve(handler?.({}, 'sample-game'));
+        expect(result).toBeDefined();
+    });
+
+    it('registers exactly the settings request channels (change is push-only, not registered here)', () => {
+        const stub = makeSettingsIpcMainStub();
+        registerSettingsHandlers({ ipcMain: stub.ipcMain });
+
+        // `chimera:settings:change` is a one-way push from main → renderer
+        // via `webContents.send`. It must NOT appear as an invoke handler.
+        expect([...stub.handled.keys()].sort()).toEqual(
+            [SETTINGS_GET_CHANNEL, SETTINGS_RESET_CHANNEL, SETTINGS_UPDATE_CHANNEL].sort(),
+        );
+        expect(stub.handled.has(SETTINGS_CHANGE_CHANNEL)).toBe(false);
     });
 });
