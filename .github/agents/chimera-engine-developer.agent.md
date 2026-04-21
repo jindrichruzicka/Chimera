@@ -151,6 +151,11 @@ Follow this workflow **exactly** for every task:
     No free-form commit messages after the first. Fixup commits keep the history clean for eventual squash-merge.
 5. **Never merge to `main`**. Only push to the working branch. If the branch needs to be rebased, `git rebase --autosquash origin/main`.
 6. Push updates with: `git push origin <branch-name>`
+7. **After the merge script confirms success**, close the originating GitHub issue:
+    ```bash
+    gh issue close <ISSUE_NUMBER> --repo jindrichruzicka/Chimera --comment "Implemented in $(git rev-parse --short HEAD) on main."
+    ```
+    Only close the issue after `check-and-merge.sh` exits 0 and the push to `origin/main` is confirmed. If this task belongs to a feature issue (i.e. it is a task child of a parent feature issue), do **not** close the parent feature issue here — the parent is closed by the review task (#N — "Review all F<NN> changes and merge to main").
 
 If you do not yet know the first commit SHA when making a fixup, run `git log --oneline -5` to find it.
 
@@ -231,3 +236,4 @@ Before marking any task done:
 - [ ] Test doubles used instead of real FS/network in unit tests (`InMemorySaveRepository`, in-process ws, builder helpers)
 - [ ] README.md reviewed and updated if the developer-facing surface changed
 - [ ] `git push origin <branch-name>` executed; never `git push origin main`
+- [ ] GitHub issue closed with `gh issue close <N> --repo jindrichruzicka/Chimera` after merge script exits 0
