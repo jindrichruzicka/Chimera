@@ -1,6 +1,6 @@
 ---
 name: Chimera Engine Developer
-description: "Use when implementing, coding, or building any part of the Chimera game engine: simulation core, IPC bridge, multiplayer provider, asset system, AI layer, save/load system, renderer components, R3F scenes, Zustand stores, Electron main/preload, settings, debug tools, or any feature described in the architecture overview. Use for writing TypeScript, React, Three.js/R3F, Electron, and Node.js code. Use for bug fixes, refactors, and feature implementation tasks."
+description: 'Use when implementing, coding, or building any part of the Chimera game engine: simulation core, IPC bridge, multiplayer provider, asset system, AI layer, save/load system, renderer components, R3F scenes, Zustand stores, Electron main/preload, settings, debug tools, or any feature described in the architecture overview. Use for writing TypeScript, React, Three.js/R3F, Electron, and Node.js code. Use for bug fixes, refactors, and feature implementation tasks.'
 tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---
@@ -22,6 +22,7 @@ Interfaces, type names, file locations, and IPC channel names in the architectur
 ## Non-Negotiable Coding Standards
 
 ### SOLID
+
 - **SRP**: Every class, module, and function has exactly one reason to change. Orchestrators wire collaborators; they do not contain domain logic themselves.
 - **OCP**: Engine core is closed to modification. New game behaviour is added by registering `ActionDefinition` implementations — never by editing engine files.
 - **LSP**: Every implementation of an interface must honour the full contract documented for that interface, including error types, return shapes, and lifecycle invariants. Substituting one implementation for another must be invisible to callers.
@@ -29,6 +30,7 @@ Interfaces, type names, file locations, and IPC channel names in the architectur
 - **DIP**: High-level modules depend on abstractions. Engine packages (`simulation/`, `ai/`) never import from `games/*`, `renderer/`, or `electron/`. Dependencies are injected at the wiring point (`electron/main/index.ts`).
 
 ### TypeScript
+
 - **Strict mode** — always. `tsconfig` must have `strict: true`. No `any`, no `@ts-ignore`, no `as unknown as X` escape hatches unless the comment explains exactly why it is safe.
 - Prefer `readonly` everywhere in data types. Mutation is only permitted inside reducers, and even then only on freshly-created objects before they are returned.
 - Use **branded / phantom types** (`AssetRef<T>`, `DataRef<T>`) to prevent string-shaped values from being mixed up.
@@ -38,6 +40,7 @@ Interfaces, type names, file locations, and IPC channel names in the architectur
 - Use `satisfies` and `as const` for configuration objects.
 
 ### React
+
 - Components are **pure** with respect to game state. They read from Zustand stores through narrow typed selectors — never subscribe to the whole store.
 - No component ever dispatches an `EngineAction` directly. It calls `window.__chimera.game.sendAction()` through a typed hook.
 - R3F components receive only the data they render. Never pass a whole `PlayerSnapshot` when a component needs three fields.
@@ -54,10 +57,10 @@ Every implementation task follows a strict **red → green → refactor** cycle.
 
 1. **Understand the contract first.** Read the relevant interface(s) from `docs/architecture-overview.md`. The interface is the specification — tests express that specification in executable form.
 2. **Write failing tests before any implementation.** For each piece of behaviour being added:
-   - Create the test file (`<Module>.test.ts` co-located with the future source file).
-   - Import the module path that will exist once implemented (it will fail to resolve — that is expected).
-   - Write `describe` / `it` blocks that express the behaviour in plain language.
-   - Run `vitest` and confirm every new test is **red** (fails with "cannot find module" or a clear assertion failure, never green by accident).
+    - Create the test file (`<Module>.test.ts` co-located with the future source file).
+    - Import the module path that will exist once implemented (it will fail to resolve — that is expected).
+    - Write `describe` / `it` blocks that express the behaviour in plain language.
+    - Run `vitest` and confirm every new test is **red** (fails with "cannot find module" or a clear assertion failure, never green by accident).
 3. **Implement the minimum code to turn each test green.** No gold-plating. Write just enough to make the currently-failing test pass, then move to the next test. Do not write code that no test exercises yet.
 4. **Refactor under green.** Once all tests pass, clean up: extract helpers, rename for clarity, remove duplication. Re-run tests after every refactor step to confirm they stay green.
 5. **Do not skip steps.** Committing implementation code before a test exists for it is a workflow violation.
@@ -65,6 +68,7 @@ Every implementation task follows a strict **red → green → refactor** cycle.
 #### Test File Location and Toolchain
 
 Follow the conventions in `docs/architecture-overview.md §10.0`:
+
 - Unit tests: `<Module>.test.ts` or `<Module>.test.tsx` co-located with the source file.
 - Integration tests spanning multiple modules: `<package>/__tests__/<name>.test.ts`.
 - Runner: **Vitest** (`vitest.config.ts` at repo root). Run locally with `pnpm test:watch`.
@@ -74,14 +78,14 @@ Follow the conventions in `docs/architecture-overview.md §10.0`:
 
 #### What to Test
 
-| Situation | What to cover |
-|-----------|---------------|
-| New `ActionDefinition` | `validate()` rejects every illegal payload variant; `reduce()` produces the exact expected next state; `reduce()` does not mutate the input snapshot. |
-| New `simulation/` module | Constructor/factory contract; happy path; every documented error type thrown under the right conditions; boundary values. |
-| New renderer component | Renders loading state while `useAsset` returns `null`; renders correctly with resolved data; dispatches the right `sendAction` call on user interaction. |
-| New Zustand store | Initialises with documented default values; each mutation method produces the correct state; selectors return the right derived value. |
-| New IPC handler | Integration test: call handler with valid input → assert correct IPC response; call with invalid input → assert rejection shape matches documented error type. |
-| Bug fix | Write a test that reproduces the bug **first**, confirm it is red, then fix the code. |
+| Situation                | What to cover                                                                                                                                                  |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New `ActionDefinition`   | `validate()` rejects every illegal payload variant; `reduce()` produces the exact expected next state; `reduce()` does not mutate the input snapshot.          |
+| New `simulation/` module | Constructor/factory contract; happy path; every documented error type thrown under the right conditions; boundary values.                                      |
+| New renderer component   | Renders loading state while `useAsset` returns `null`; renders correctly with resolved data; dispatches the right `sendAction` call on user interaction.       |
+| New Zustand store        | Initialises with documented default values; each mutation method produces the correct state; selectors return the right derived value.                         |
+| New IPC handler          | Integration test: call handler with valid input → assert correct IPC response; call with invalid input → assert rejection shape matches documented error type. |
+| Bug fix                  | Write a test that reproduces the bug **first**, confirm it is red, then fix the code.                                                                          |
 
 #### Simulation Unit Tests are Pure Functions — No Mocks Needed
 
@@ -98,47 +102,53 @@ If you feel the need to mock something inside `simulation/`, that is a signal th
 ---
 
 ### Git Workflow
+
 Follow this workflow **exactly** for every task:
 
 1. **Read the task** and break it into subtasks using the todo list.
 2. **Set up the branch** before touching any file. When working from a GitHub issue:
-   - Check whether a branch for this issue already exists locally or on origin:
-     ```bash
-     git branch --list "*-<ISSUE_NUMBER>"
-     git ls-remote --heads origin "*-<ISSUE_NUMBER>"
-     ```
-   - If a matching branch exists → check it out: `git checkout <branch-name>`
-   - If no branch exists → load and follow the **git skillset → create-branch sub-skill** ([.github/skills/git/create-branch/SKILL.md](../.github/skills/git/create-branch/SKILL.md)) to create it from the issue. The skill validates the issue, updates main, and creates the correctly-named branch.
-   - When **not** working from a GitHub issue, create the branch manually:
-     - New feature → `feature/<short-kebab-description>`
-     - Bug fix → `fix/<short-kebab-description>`
-     - Refactor → `refactor/<short-kebab-description>`
+    - Check whether a branch for this issue already exists locally or on origin:
+        ```bash
+        git branch --list "*-<ISSUE_NUMBER>"
+        git ls-remote --heads origin "*-<ISSUE_NUMBER>"
+        ```
+    - If a matching branch exists → check it out: `git checkout <branch-name>`
+    - If no branch exists → load and follow the **git skillset → create-branch sub-skill** ([.github/skills/git/create-branch/SKILL.md](../.github/skills/git/create-branch/SKILL.md)) to create it from the issue. The skill validates the issue, updates main, and creates the correctly-named branch.
+    - When **not** working from a GitHub issue, create the branch manually:
+        - New feature → `feature/<short-kebab-description>`
+        - Bug fix → `fix/<short-kebab-description>`
+        - Refactor → `refactor/<short-kebab-description>`
 3. **First commit** — after completing the core of the work — uses a conventional commit message with a body:
-   ```
-   feat(simulation): decompose ActionPipeline into stage methods
 
-   - Tests written first (red); resolve(), parse(), intercept(),
-     validate(), reduce(), record(), broadcast() stage methods
-     implemented to turn each test green
-   - Each stage receives only the narrow context it needs
-   - All tests pass; coverage: 100% lines, 100% branches
-   ```
-   Commit body must describe WHAT was done and WHY. Never leave the body empty on the first commit.
+    ```
+    feat(simulation): decompose ActionPipeline into stage methods
 
-   **Before running `git commit` — mandatory pre-commit gate:**
-   ```bash
-   pnpm format         # prettier --write on the tracked tree
-   pnpm format:check   # must exit 0 — if it fails, do NOT commit
-   pnpm lint           # must exit 0 — if it fails, do NOT commit
-   pnpm test           # must exit 0 — if it fails, do NOT commit
-   pnpm typecheck      # must exit 0 — if it fails, do NOT commit
-   ```
-   If any of these fail, fix the underlying issue and re-run the full gate. Never `git commit --no-verify`, never bypass the formatter, never commit with a failing check. This applies to the first commit **and every fixup commit**.
+    - Tests written first (red); resolve(), parse(), intercept(),
+      validate(), reduce(), record(), broadcast() stage methods
+      implemented to turn each test green
+    - Each stage receives only the narrow context it needs
+    - All tests pass; coverage: 100% lines, 100% branches
+    ```
+
+    Commit body must describe WHAT was done and WHY. Never leave the body empty on the first commit.
+
+    **Before running `git commit` — mandatory pre-commit gate:**
+
+    ```bash
+    pnpm format         # prettier --write on the tracked tree
+    pnpm format:check   # must exit 0 — if it fails, do NOT commit
+    pnpm lint           # must exit 0 — if it fails, do NOT commit
+    pnpm test           # must exit 0 — if it fails, do NOT commit
+    pnpm typecheck      # must exit 0 — if it fails, do NOT commit
+    ```
+
+    If any of these fail, fix the underlying issue and re-run the full gate. Never `git commit --no-verify`, never bypass the formatter, never commit with a failing check. This applies to the first commit **and every fixup commit**.
+
 4. **All subsequent commits** on the same branch are `--fixup` commits targeting the first commit SHA:
-   ```
-   git commit --fixup <first-commit-sha>
-   ```
-   No free-form commit messages after the first. Fixup commits keep the history clean for eventual squash-merge.
+    ```
+    git commit --fixup <first-commit-sha>
+    ```
+    No free-form commit messages after the first. Fixup commits keep the history clean for eventual squash-merge.
 5. **Never merge to `main`**. Only push to the working branch. If the branch needs to be rebased, `git rebase --autosquash origin/main`.
 6. Push updates with: `git push origin <branch-name>`
 
@@ -163,20 +173,21 @@ The architecture document lists 78 invariants in Appendix B. These are hard rule
 
 ## Module Boundaries (memorise these)
 
-| Package | May import from | Must NOT import from |
-|---------|----------------|----------------------|
-| `simulation/` | `shared/` | `renderer/`, `electron/`, `games/*`, DOM |
-| `ai/` | `simulation/`, `shared/` | `renderer/`, `electron/`, `games/*`, DOM |
-| `renderer/` | `simulation/content` (types only), `shared/`, `renderer/` internals | `electron/main/`, `ai/engine/` (except via IPC types), `games/*/data` |
-| `games/<name>/` | `simulation/`, `ai/`, `shared/`, own files | Other `games/` directories |
-| `electron/main/` | All packages | DOM APIs |
-| `networking/provider/local/` internal | Only within `local/` | Engine or renderer internals |
+| Package                               | May import from                                                     | Must NOT import from                                                  |
+| ------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| `simulation/`                         | `shared/`                                                           | `renderer/`, `electron/`, `games/*`, DOM                              |
+| `ai/`                                 | `simulation/`, `shared/`                                            | `renderer/`, `electron/`, `games/*`, DOM                              |
+| `renderer/`                           | `simulation/content` (types only), `shared/`, `renderer/` internals | `electron/main/`, `ai/engine/` (except via IPC types), `games/*/data` |
+| `games/<name>/`                       | `simulation/`, `ai/`, `shared/`, own files                          | Other `games/` directories                                            |
+| `electron/main/`                      | All packages                                                        | DOM APIs                                                              |
+| `networking/provider/local/` internal | Only within `local/`                                                | Engine or renderer internals                                          |
 
 ---
 
 ## File Naming Conventions
 
 Follow the architecture module tree exactly:
+
 - Interfaces named `PascalCase` matching the section name in the architecture doc (e.g. `ActionDefinition`, `SaveRepository`)
 - One interface / one concern per file; bundle only trivially related helpers
 - Test files sit next to source: `ActionPipeline.test.ts` beside `ActionPipeline.ts`
@@ -200,6 +211,7 @@ If the answer to **any** of those questions is yes, update `README.md` to reflec
 ## Task Completion Checklist
 
 Before marking any task done:
+
 - [ ] Branch created with correct `feature/`, `fix/`, or `refactor/` prefix
 - [ ] **Tests written before implementation** — test file existed and was red before source file was created
 - [ ] **All tests are green** — `pnpm test` passes with zero failures

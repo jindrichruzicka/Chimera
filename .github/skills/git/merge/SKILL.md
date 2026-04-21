@@ -1,7 +1,7 @@
 ---
 name: merge
 description: "Merge a feature/fix/refactor branch into main following Chimera's branch standards. Use when ready to land a branch: validates branch name, checks for downmerged main commits, verifies commit structure (first commit has body, subsequent commits are fixup!), rebases with autosquash onto main, resolves conflicts, then fast-forward merges. If any check fails, reports all problems and does NOT merge. Use for: merging feature branches, fix branches, refactor branches, landing completed work."
-argument-hint: "branch name (defaults to current branch) — optionally add --dry-run"
+argument-hint: 'branch name (defaults to current branch) — optionally add --dry-run'
 ---
 
 # Merge Skill
@@ -41,6 +41,7 @@ GIT_SEQUENCE_EDITOR=true git rebase --interactive --autosquash origin/main
 `autosquash` collapses all `fixup!` commits into their targets non-interactively. The branch history is reduced to the single canonical commit per task (or explicitly authored commits for multi-commit features).
 
 If the rebase surfaces **conflicts**:
+
 1. Open each conflicted file, resolve by preferring the branch's intent while preserving the invariants from `docs/architecture-overview.md`.
 2. Stage resolved files: `git add <file>`
 3. Continue: `git rebase --continue`

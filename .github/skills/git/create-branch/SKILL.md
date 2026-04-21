@@ -1,7 +1,7 @@
 ---
 name: create-branch
-description: "Create a correctly-named feature or fix branch from a GitHub issue on jindrichruzicka/Chimera. Validates the issue exists, is a task or bug (not a feature/milestone), checks out the latest main, and creates the branch locally. Use when: starting work on a task issue, starting work on a bug issue, spinning up a branch before implementing a GitHub issue."
-argument-hint: "GitHub issue number (e.g. 42)"
+description: 'Create a correctly-named feature or fix branch from a GitHub issue on jindrichruzicka/Chimera. Validates the issue exists, is a task or bug (not a feature/milestone), checks out the latest main, and creates the branch locally. Use when: starting work on a task issue, starting work on a bug issue, spinning up a branch before implementing a GitHub issue.'
+argument-hint: 'GitHub issue number (e.g. 42)'
 ---
 
 # Create Branch Skill
@@ -26,12 +26,12 @@ gh issue view <NUMBER> --repo $GH_REPO --json number,title,labels,state,mileston
 
 **Validate all of the following before continuing. Stop and report any failure.**
 
-| Check | Pass condition |
-|-------|---------------|
-| Issue exists | Command exits 0; issue returned |
-| Issue is open | `state == "OPEN"` |
-| Issue type is workable | Labels contain `task` **or** `bug`; must NOT be labelled `feature` only |
-| Issue is not a milestone stub | `milestone` field may be set (that is fine); but if the *only* label is a `milestone:*` label with no `task`/`bug`, reject it |
+| Check                         | Pass condition                                                                                                                |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Issue exists                  | Command exits 0; issue returned                                                                                               |
+| Issue is open                 | `state == "OPEN"`                                                                                                             |
+| Issue type is workable        | Labels contain `task` **or** `bug`; must NOT be labelled `feature` only                                                       |
+| Issue is not a milestone stub | `milestone` field may be set (that is fine); but if the _only_ label is a `milestone:*` label with no `task`/`bug`, reject it |
 
 If any check fails, print a clear error and **do not create a branch**.
 
@@ -39,12 +39,13 @@ If any check fails, print a clear error and **do not create a branch**.
 
 Branch name format follows the merge skill convention: `<prefix>/<slug>`
 
-| Issue label | Prefix |
-|-------------|--------|
-| `task` | `feature` |
-| `bug` | `fix` |
+| Issue label | Prefix    |
+| ----------- | --------- |
+| `task`      | `feature` |
+| `bug`       | `fix`     |
 
 Derive `<slug>` from the issue title:
+
 1. Strip the `(§X.Y)` architecture reference suffix if present
 2. Lowercase the whole string
 3. Replace any character that is not `a-z`, `0-9`, or `-` with `-`
@@ -108,12 +109,12 @@ Next steps:
 
 ## Error Cases
 
-| Situation | Action |
-|-----------|--------|
-| Issue not found (404) | Abort — "Issue #N does not exist in jindrichruzicka/Chimera." |
-| Issue is closed | Abort — "Issue #N is closed. Reopen it before starting work." |
-| Issue labelled `feature` (not `task`/`bug`) | Abort — "Issue #N is a feature issue. Break it into task issues first." |
-| Issue has no `task` or `bug` label | Abort — "Issue #N has no workable label (task or bug). Add one before branching." |
-| Branch already exists locally | Ask — "Branch already exists locally. Check it out instead? (y/n)" |
-| `git pull --ff-only` fails | Abort — "Local main has diverged from origin. Resolve manually before branching." |
-| Working tree is dirty on main | Abort — "Working tree is not clean. Commit or stash changes before switching branches." |
+| Situation                                   | Action                                                                                  |
+| ------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Issue not found (404)                       | Abort — "Issue #N does not exist in jindrichruzicka/Chimera."                           |
+| Issue is closed                             | Abort — "Issue #N is closed. Reopen it before starting work."                           |
+| Issue labelled `feature` (not `task`/`bug`) | Abort — "Issue #N is a feature issue. Break it into task issues first."                 |
+| Issue has no `task` or `bug` label          | Abort — "Issue #N has no workable label (task or bug). Add one before branching."       |
+| Branch already exists locally               | Ask — "Branch already exists locally. Check it out instead? (y/n)"                      |
+| `git pull --ff-only` fails                  | Abort — "Local main has diverged from origin. Resolve manually before branching."       |
+| Working tree is dirty on main               | Abort — "Working tree is not clean. Commit or stash changes before switching branches." |

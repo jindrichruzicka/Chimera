@@ -7,14 +7,17 @@
 ## Scope
 
 **In scope:**
+
 - <What this feature covers>
 
 **Out of scope (explicit non-goals):**
+
 - <What is deferred — reference the milestone or Appendix E item it belongs to>
 
 ## Child tasks
 
 <!-- Populated after feature issue is created. List task issue numbers here. -->
+
 - [ ] #<task-issue>
 
 ## Acceptance Criteria

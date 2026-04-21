@@ -37,15 +37,15 @@
 
 ### 1.2 Forbidden patterns
 
-| Pattern | Why forbidden | Allowed alternative |
-|---------|---------------|---------------------|
-| `any` (explicit or inferred) | Destroys type safety end-to-end | Use `unknown` and narrow at runtime |
-| `@ts-ignore` | Silently hides errors | Fix the type; if impossible add `@ts-expect-error` with a mandatory comment |
-| `@ts-expect-error` without comment | Hides the rationale | `// @ts-expect-error: <reason why this specific cast is safe>` |
-| `as unknown as X` without comment | Unsafe double-cast | Fix the type; if bridging generated code, comment with `@chimera-review: <reason>` |
-| `Object.assign(existingObject, ...)` in simulation | Mutates state | Return a new object: `{ ...existing, field: newValue }` |
-| `Math.random()` anywhere in `simulation/` or `games/*/actions/` | Breaks determinism | Use `ctx.rng` from `ReduceContext` |
-| `Date.now()` / `performance.now()` in `simulation/` | Breaks determinism | Use `snapshot.tick` for all simulation time |
+| Pattern                                                         | Why forbidden                   | Allowed alternative                                                                |
+| --------------------------------------------------------------- | ------------------------------- | ---------------------------------------------------------------------------------- |
+| `any` (explicit or inferred)                                    | Destroys type safety end-to-end | Use `unknown` and narrow at runtime                                                |
+| `@ts-ignore`                                                    | Silently hides errors           | Fix the type; if impossible add `@ts-expect-error` with a mandatory comment        |
+| `@ts-expect-error` without comment                              | Hides the rationale             | `// @ts-expect-error: <reason why this specific cast is safe>`                     |
+| `as unknown as X` without comment                               | Unsafe double-cast              | Fix the type; if bridging generated code, comment with `@chimera-review: <reason>` |
+| `Object.assign(existingObject, ...)` in simulation              | Mutates state                   | Return a new object: `{ ...existing, field: newValue }`                            |
+| `Math.random()` anywhere in `simulation/` or `games/*/actions/` | Breaks determinism              | Use `ctx.rng` from `ReduceContext`                                                 |
+| `Date.now()` / `performance.now()` in `simulation/`             | Breaks determinism              | Use `snapshot.tick` for all simulation time                                        |
 
 ### 1.3 Data types
 
@@ -128,14 +128,14 @@ High-level modules depend on abstractions; concrete classes are wired at one sit
 
 These boundaries are hard constraints. Violations are **BLOCK** findings at review.
 
-| Package | May import from | Must NOT import from |
-|---------|----------------|----------------------|
-| `simulation/` | `shared/` | `renderer/`, `electron/`, `games/*`, any DOM API |
-| `ai/` | `simulation/`, `shared/` | `renderer/`, `electron/`, `games/*`, any DOM API |
-| `renderer/` | `simulation/content` (types only), `shared/`, `renderer/` internals | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data` |
-| `games/<name>/` | `simulation/`, `ai/`, `shared/`, own files | Other `games/` directories |
-| `electron/main/` | All packages | DOM APIs |
-| `networking/provider/local/` | Only within `local/` | Engine or renderer internals |
+| Package                      | May import from                                                     | Must NOT import from                                              |
+| ---------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `simulation/`                | `shared/`                                                           | `renderer/`, `electron/`, `games/*`, any DOM API                  |
+| `ai/`                        | `simulation/`, `shared/`                                            | `renderer/`, `electron/`, `games/*`, any DOM API                  |
+| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data` |
+| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own files                          | Other `games/` directories                                        |
+| `electron/main/`             | All packages                                                        | DOM APIs                                                          |
+| `networking/provider/local/` | Only within `local/`                                                | Engine or renderer internals                                      |
 
 **ESLint enforcement**
 
@@ -152,10 +152,10 @@ Any `// eslint-disable` bypass requires a `@chimera-review: <reason>` comment on
 
 ### 4.1 File naming
 
-| Convention | When to use | Example |
-|------------|-------------|---------|
-| **PascalCase** | Exports a class or interface with the same name | `ActionPipeline.ts`, `SaveFile.ts` |
-| **camelCase** | Exports a Zustand store, React hook, or renderer utility | `gameStore.ts`, `useAsset.ts` |
+| Convention     | When to use                                                                            | Example                                  |
+| -------------- | -------------------------------------------------------------------------------------- | ---------------------------------------- |
+| **PascalCase** | Exports a class or interface with the same name                                        | `ActionPipeline.ts`, `SaveFile.ts`       |
+| **camelCase**  | Exports a Zustand store, React hook, or renderer utility                               | `gameStore.ts`, `useAsset.ts`            |
 | **kebab-case** | Node.js-style module with no single dominant export (Electron main, tooling, fixtures) | `lobby-manager.ts`, `check-and-merge.sh` |
 
 Test files mirror their source: `ActionPipeline.test.ts` alongside `ActionPipeline.ts`.
@@ -183,7 +183,7 @@ Test files mirror their source: `ActionPipeline.test.ts` alongside `ActionPipeli
 
 ```typescript
 // ✅ Narrow selector — component only re-renders when tick changes
-const tick = useGameStore(s => s.snapshot?.tick);
+const tick = useGameStore((s) => s.snapshot?.tick);
 
 // ❌ BLOCK — subscribes to the whole store; re-renders on every state change
 const state = useGameStore();
@@ -204,11 +204,11 @@ window.__chimera.game.sendAction({ type: 'tactics:move_unit', payload: { ... } }
 
 ```typescript
 // ✅ Derive in selector
-const canUndo = useGameStore(s => s.snapshot?.undoMeta.canUndo ?? false);
+const canUndo = useGameStore((s) => s.snapshot?.undoMeta.canUndo ?? false);
 
 // ❌ WARNING — useEffect for state derivation
 useEffect(() => {
-  setCanUndo(snapshot?.undoMeta.canUndo ?? false);
+    setCanUndo(snapshot?.undoMeta.canUndo ?? false);
 }, [snapshot]);
 ```
 
@@ -401,13 +401,13 @@ Committing implementation code without a corresponding test is a workflow violat
 
 ### 12.2 Toolchain
 
-| Tool | Purpose |
-|------|---------|
-| **Vitest** | Unit and integration tests for all TypeScript packages |
-| **React Testing Library** | Component and store tests in `jsdom` |
-| `@react-three/test-renderer` | R3F scene tests (no WebGL required) |
-| **fast-check** | Property-based tests for projection, determinism, and commitment invariants |
-| **Playwright** | End-to-end tests only — real Electron instances, `CHIMERA_E2E=1` flag |
+| Tool                         | Purpose                                                                     |
+| ---------------------------- | --------------------------------------------------------------------------- |
+| **Vitest**                   | Unit and integration tests for all TypeScript packages                      |
+| **React Testing Library**    | Component and store tests in `jsdom`                                        |
+| `@react-three/test-renderer` | R3F scene tests (no WebGL required)                                         |
+| **fast-check**               | Property-based tests for projection, determinism, and commitment invariants |
+| **Playwright**               | End-to-end tests only — real Electron instances, `CHIMERA_E2E=1` flag       |
 
 ### 12.3 File conventions
 
@@ -418,22 +418,22 @@ Committing implementation code without a corresponding test is a workflow violat
 
 ### 12.4 Coverage gates (CI)
 
-| Metric | Minimum |
-|--------|---------|
-| Lines | 80% |
-| Functions | 80% |
-| Branches | 75% |
+| Metric    | Minimum |
+| --------- | ------- |
+| Lines     | 80%     |
+| Functions | 80%     |
+| Branches  | 75%     |
 
 ### 12.5 What to test
 
-| New code | Required coverage |
-|----------|-------------------|
-| `ActionDefinition` | `validate()` rejects every illegal payload variant; `reduce()` returns exact expected state; `reduce()` does not mutate input |
-| `simulation/` module | Constructor contract; happy path; every documented error type; boundary values |
-| Renderer component | Loading state; resolved-data render; correct `sendAction` call on interaction |
-| Zustand store | Default values; each mutation; each selector |
-| IPC handler | Valid input → correct response; invalid input → rejection matches documented error type |
-| Bug fix | Reproducing test written **first**, confirmed red, then fixed |
+| New code             | Required coverage                                                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `ActionDefinition`   | `validate()` rejects every illegal payload variant; `reduce()` returns exact expected state; `reduce()` does not mutate input |
+| `simulation/` module | Constructor contract; happy path; every documented error type; boundary values                                                |
+| Renderer component   | Loading state; resolved-data render; correct `sendAction` call on interaction                                                 |
+| Zustand store        | Default values; each mutation; each selector                                                                                  |
+| IPC handler          | Valid input → correct response; invalid input → rejection matches documented error type                                       |
+| Bug fix              | Reproducing test written **first**, confirmed red, then fixed                                                                 |
 
 ### 12.6 No mocks in simulation tests
 
@@ -476,10 +476,10 @@ Unit tests must never touch the real filesystem, real network, or real Electron 
 
 ### 13.4 Memory baseline (production target)
 
-| Metric | Target |
-|--------|--------|
+| Metric            | Target                      |
+| ----------------- | --------------------------- |
 | Main process heap | ≤ 32 MB during active match |
-| Renderer heap | ≤ 32 MB during active match |
+| Renderer heap     | ≤ 32 MB during active match |
 
 ---
 
@@ -487,11 +487,11 @@ Unit tests must never touch the real filesystem, real network, or real Electron 
 
 ### 14.1 Branch naming
 
-| Work type | Prefix | Example |
-|-----------|--------|---------|
-| Feature / task issue | `feature/` | `feature/action-pipeline-stages-12` |
-| Bug fix | `fix/` | `fix/snapshot-tick-overflow-7` |
-| Refactor | `refactor/` | `refactor/lobby-manager-ipc` |
+| Work type            | Prefix      | Example                             |
+| -------------------- | ----------- | ----------------------------------- |
+| Feature / task issue | `feature/`  | `feature/action-pipeline-stages-12` |
+| Bug fix              | `fix/`      | `fix/snapshot-tick-overflow-7`      |
+| Refactor             | `refactor/` | `refactor/lobby-manager-ipc`        |
 
 Branch names are lowercase kebab-case only. When branching from a GitHub issue, the branch slug ends with `-<issue-number>`.  
 Use the **git skillset → create-branch sub-skill** to create branches from issues.
@@ -499,18 +499,20 @@ Use the **git skillset → create-branch sub-skill** to create branches from iss
 ### 14.2 Commit structure
 
 - The **first commit** on a branch must have a non-empty body describing what was done and why:
-  ```
-  feat(simulation): decompose ActionPipeline into stage methods
 
-  - Tests written first (red); resolve(), parse(), intercept(),
-    validate(), reduce(), record(), broadcast() stage methods
-    implemented to turn each test green
-  - Each stage receives only the narrow context it needs
-  ```
+    ```
+    feat(simulation): decompose ActionPipeline into stage methods
+
+    - Tests written first (red); resolve(), parse(), intercept(),
+      validate(), reduce(), record(), broadcast() stage methods
+      implemented to turn each test green
+    - Each stage receives only the narrow context it needs
+    ```
+
 - All subsequent commits must be `fixup!` commits targeting the first:
-  ```
-  git commit --fixup <first-commit-sha>
-  ```
+    ```
+    git commit --fixup <first-commit-sha>
+    ```
 - Plain free-form commit messages beyond the first are not permitted.
 
 ### 14.3 Merge policy
@@ -550,9 +552,9 @@ All `@chimera/*` path aliases are declared in the root `tsconfig.json` and resol
 ```typescript
 // vitest.config.ts (root)
 environmentMatchGlobs: [
-  ['renderer/**/*.test.tsx', 'jsdom'],
-  ['renderer/**/*.test.ts',  'jsdom'],
-]
+    ['renderer/**/*.test.tsx', 'jsdom'],
+    ['renderer/**/*.test.ts', 'jsdom'],
+];
 // Default: 'node' — simulation and ai tests run without DOM
 ```
 
@@ -560,4 +562,4 @@ Override per file with `// @vitest-environment jsdom` when a single file in a no
 
 ---
 
-*Last updated: 2026-04-21. Maintained alongside `docs/architecture-overview.md`.*
+_Last updated: 2026-04-21. Maintained alongside `docs/architecture-overview.md`._

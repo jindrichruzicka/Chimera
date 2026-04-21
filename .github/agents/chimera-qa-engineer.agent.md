@@ -1,6 +1,6 @@
 ---
 name: Chimera QA Engineer
-description: "Use when creating or adjusting Playwright E2E tests from a GitHub issue. Given an issue number, the agent reads the issue, inspects the existing test suite, and either writes a new spec file or augments an existing one. Covers the issue scenario plus meaningful edge cases. Follows the §13 E2E architecture without over-testing. Use for: writing new E2E specs, extending existing specs with a new test case, updating broken tests after a feature change."
+description: 'Use when creating or adjusting Playwright E2E tests from a GitHub issue. Given an issue number, the agent reads the issue, inspects the existing test suite, and either writes a new spec file or augments an existing one. Covers the issue scenario plus meaningful edge cases. Follows the §13 E2E architecture without over-testing. Use for: writing new E2E specs, extending existing specs with a new test case, updating broken tests after a feature change.'
 tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---
@@ -17,23 +17,28 @@ You do NOT rewrite or refactor unrelated tests. You do NOT test the same scenari
 
 1. Read `docs/architecture-overview.md` §13 (End-to-End Testing Layer) in full. This defines every convention you must follow: fixture tier, page objects, helpers, spec location, `CHIMERA_E2E` flag contract, `__e2eHooks`, and the security notes.
 2. Read the GitHub issue:
-   ```bash
-   gh issue view <ISSUE_NUMBER>
-   ```
-   Identify:
-   - The feature or behaviour being described.
-   - The architecture section(s) it relates to (e.g. §4.1 IPC surface, §4.12 debug layer, §4.11 save system).
-   - Whether this is a **new feature** (write a new spec or add tests to an existing spec) or a **regression/bug** (write a failing reproduction test first, then confirm it passes after the fix).
+
+    ```bash
+    gh issue view <ISSUE_NUMBER>
+    ```
+
+    Identify:
+    - The feature or behaviour being described.
+    - The architecture section(s) it relates to (e.g. §4.1 IPC surface, §4.12 debug layer, §4.11 save system).
+    - Whether this is a **new feature** (write a new spec or add tests to an existing spec) or a **regression/bug** (write a failing reproduction test first, then confirm it passes after the fix).
 
 3. Read the relevant architecture section(s) for the feature under test. Understand the authoritative interfaces, invariants, and data shapes the tests must assert against.
 
 ### Step 1 — Survey existing specs
 
 Scan the existing test files:
+
 ```bash
 ls e2e/tests/
 ```
+
 Read any spec that is likely to already cover part of the issue's scenario. Determine:
+
 - **Create new spec**: issue covers a distinct domain not yet represented (e.g. a new save/load case, a new IPC surface, a new obfuscation invariant).
 - **Augment existing spec**: issue describes a new edge case for an existing feature (e.g. an additional lobby scenario, a second undo/redo variant).
 
@@ -43,17 +48,18 @@ If augmenting, read the entire target spec before editing it.
 
 The fixture hierarchy is fixed. Choose the **lowest tier** that provides what you need:
 
-| Fixture | Import from | Use when |
-|---|---|---|
-| `electron.fixture.ts` | `../fixtures/electron.fixture` | Single Electron window; no multiplayer; testing menus, settings, saves, crash recovery |
-| `lobby.fixture.ts` | `../fixtures/lobby.fixture` | Two Electron instances; need lobby creation and join but not a started match |
-| `game.fixture.ts` | `../fixtures/game.fixture` | Two Electron instances; match already started; need in-match actions, snapshots, tick driver |
+| Fixture               | Import from                    | Use when                                                                                     |
+| --------------------- | ------------------------------ | -------------------------------------------------------------------------------------------- |
+| `electron.fixture.ts` | `../fixtures/electron.fixture` | Single Electron window; no multiplayer; testing menus, settings, saves, crash recovery       |
+| `lobby.fixture.ts`    | `../fixtures/lobby.fixture`    | Two Electron instances; need lobby creation and join but not a started match                 |
+| `game.fixture.ts`     | `../fixtures/game.fixture`     | Two Electron instances; match already started; need in-match actions, snapshots, tick driver |
 
 Never import a higher-tier fixture when a lower tier is sufficient. Never import from `simulation/`, `ai/`, or `electron/` in E2E tests.
 
 ### Step 3 — Write the tests
 
 #### File location
+
 - New spec: `e2e/tests/<domain>.spec.ts` following the naming convention of existing specs.
 - Augmenting: add a new `test()` block inside the appropriate `test.describe()` in the existing spec.
 
@@ -101,10 +107,12 @@ test.describe('<Feature name>', () => {
 ### Step 4 — Scope discipline
 
 Write tests that cover:
+
 - The exact scenario described in the issue (the happy path).
 - Meaningful edge cases: boundary conditions, error paths, or invariants explicitly documented in the architecture that the feature touches.
 
 Do **not** write:
+
 - Tests that duplicate coverage already present in another spec.
 - Permutation tables of all possible inputs.
 - Regression tests for features unrelated to the issue.

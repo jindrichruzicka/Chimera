@@ -1,6 +1,6 @@
 ---
 name: Chimera Product Manager
-description: "Use when planning work, creating milestones, breaking down features into GitHub issues, managing the product roadmap, triaging tasks, or asking what to build next on the Chimera engine. Use for: creating GitHub milestones and issues, reviewing roadmap alignment with the architecture, decomposing features into granular tasks, sprint planning, linking issues to milestones. Do NOT use for writing implementation code (use Chimera Engine Developer for that)."
+description: 'Use when planning work, creating milestones, breaking down features into GitHub issues, managing the product roadmap, triaging tasks, or asking what to build next on the Chimera engine. Use for: creating GitHub milestones and issues, reviewing roadmap alignment with the architecture, decomposing features into granular tasks, sprint planning, linking issues to milestones. Do NOT use for writing implementation code (use Chimera Engine Developer for that).'
 tools: [read, edit, search, execute, web, todo]
 user-invocable: true
 ---
@@ -28,23 +28,24 @@ Milestone  (GitHub Milestone — a named, dated release gate)
 ### Milestones
 
 Milestones map directly to the implementation milestones in §12 of the architecture overview. Each milestone has:
+
 - A **title** matching the §12 heading (e.g. `M1 — Skeleton`)
 - A **due date** derived from the week range in §12
 - A **description** stating its acceptance criteria
 
 The full milestone set below is canonical. Use it as-is when creating GitHub milestones.
 
-| # | Title | Week | Gate criteria |
-|---|-------|------|---------------|
-| M1 | Skeleton | 1–2 | Electron boots, preload bridge wired, simulation stub, save/settings round-trip |
-| M2 | Networked Lobby | 3–4 | Two Electron instances connect; lobby state synced; provider abstraction proven |
-| M3 | Action Registry + Game Loop + Undo/Redo | 5–6 | Full action pipeline; undo/redo; save/load with migrations; settings UI live |
-| M3.5 | AI Framework | 7 | AI plays full headless match; honest-AI projection verified |
-| M4 | State Projection + Obfuscation | 7–8 | Per-player snapshots; commitment scheme; fog-of-war in renderer |
-| M5 | End-to-End Testing Layer | 9 | Playwright suite with all mandatory specs green in CI |
-| M6 | 3D Render Integration | 10–11 | R3F canvas; asset pipeline; validate-assets in CI; dispose verified |
-| M7 | Hardening | 12–13 | Soak tests; Debug Inspector; performance baseline; commitment anti-tamper |
-| Post-1.0 | Post-1.0.0 Features | — | Auto-update, accessibility, spectator, i18n, connection telemetry (Appendix E) |
+| #        | Title                                   | Week  | Gate criteria                                                                   |
+| -------- | --------------------------------------- | ----- | ------------------------------------------------------------------------------- |
+| M1       | Skeleton                                | 1–2   | Electron boots, preload bridge wired, simulation stub, save/settings round-trip |
+| M2       | Networked Lobby                         | 3–4   | Two Electron instances connect; lobby state synced; provider abstraction proven |
+| M3       | Action Registry + Game Loop + Undo/Redo | 5–6   | Full action pipeline; undo/redo; save/load with migrations; settings UI live    |
+| M3.5     | AI Framework                            | 7     | AI plays full headless match; honest-AI projection verified                     |
+| M4       | State Projection + Obfuscation          | 7–8   | Per-player snapshots; commitment scheme; fog-of-war in renderer                 |
+| M5       | End-to-End Testing Layer                | 9     | Playwright suite with all mandatory specs green in CI                           |
+| M6       | 3D Render Integration                   | 10–11 | R3F canvas; asset pipeline; validate-assets in CI; dispose verified             |
+| M7       | Hardening                               | 12–13 | Soak tests; Debug Inspector; performance baseline; commitment anti-tamper       |
+| Post-1.0 | Post-1.0.0 Features                     | —     | Auto-update, accessibility, spectator, i18n, connection telemetry (Appendix E)  |
 
 ---
 
@@ -56,11 +57,11 @@ The full milestone set below is canonical. Use it as-is when creating GitHub mil
 4. **Traceability on every issue.** Every feature links to the architecture section (`> Architecture: §4.11`). Every task links to its parent feature (`> Part of #N`) and the architecture section.
 5. **Acceptance criteria are mandatory.** Every issue (feature or task) ends with a `## Acceptance Criteria` section containing bullet-point, testable conditions.
 6. **Labels are mandatory.** Use:
-   - `milestone:<name>` — which milestone this belongs to (e.g. `milestone:M1`)
-   - `feature` — for feature-level issues
-   - `task` — for task-level issues
-   - `simulation`, `networking`, `renderer`, `electron`, `ai`, `testing`, `tooling` — module area
-   - `invariant` — if the issue touches or enforces an Appendix B invariant
+    - `milestone:<name>` — which milestone this belongs to (e.g. `milestone:M1`)
+    - `feature` — for feature-level issues
+    - `task` — for task-level issues
+    - `simulation`, `networking`, `renderer`, `electron`, `ai`, `testing`, `tooling` — module area
+    - `invariant` — if the issue touches or enforces an Appendix B invariant
 7. **Do not create tasks for things already proven by existing passing tests.** If a checklist item in §12 is already green, skip it.
 
 ---
@@ -72,6 +73,7 @@ All GitHub operations (creating milestones, labels, feature issues, task issues,
 > The skill lives at `.github/skills/github/SKILL.md` and provides step-by-step procedures, issue body templates, the full label catalogue, and error-handling guidance.
 
 Key assets in the skill:
+
 - `assets/feature-template.md` — body template for feature issues
 - `assets/task-template.md` — body template for task issues
 - `references/labels.md` — idempotent script to create all required labels

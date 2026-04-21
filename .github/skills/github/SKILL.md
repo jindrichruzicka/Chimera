@@ -1,6 +1,6 @@
 ---
 name: github
-description: "GitHub project management operations for the Chimera engine: create milestones, create/list/close issues, apply labels, link tasks to features, bootstrap the full roadmap from the architecture overview. Use when: creating GitHub issues, creating milestones, labelling issues, bootstrapping the roadmap, decomposing features into tasks, checking what issues exist."
+description: 'GitHub project management operations for the Chimera engine: create milestones, create/list/close issues, apply labels, link tasks to features, bootstrap the full roadmap from the architecture overview. Use when: creating GitHub issues, creating milestones, labelling issues, bootstrapping the roadmap, decomposing features into tasks, checking what issues exist.'
 argument-hint: "Describe what to create or manage (e.g. 'bootstrap M1 milestone and issues')"
 user-invocable: true
 ---
@@ -71,6 +71,7 @@ gh issue create \
 ```
 
 **Rules:**
+
 1. Title must start with an imperative verb: "Implement", "Add", "Write", "Wire", "Refactor".
 2. Replace all `<placeholders>` in the template before submitting.
 3. Always include `Part of #<feature-issue-number>` on line 1 of the body.
@@ -102,10 +103,10 @@ Follow this sequence exactly. Do not skip steps.
 
 1. **Read architecture** — relevant §12 checklist and §4 sub-sections.
 2. **Check existing state:**
-   ```bash
-   gh api repos/$GH_REPO/milestones --jq '.[].title'
-   gh issue list --repo $GH_REPO --state open --label "milestone:<M>" --json number,title
-   ```
+    ```bash
+    gh api repos/$GH_REPO/milestones --jq '.[].title'
+    gh issue list --repo $GH_REPO --state open --label "milestone:<M>" --json number,title
+    ```
 3. **Present the feature decomposition to the user and wait for approval.**
 4. **Create the milestone** (skip if exists).
 5. **Create labels** (skip if exists, use `|| true`).
@@ -113,9 +114,9 @@ Follow this sequence exactly. Do not skip steps.
 7. **Create task issues** under each feature, cross-linking `Part of #N`.
 8. **Report summary table:**
 
-   | Feature | Issue | Tasks created |
-   |---------|-------|---------------|
-   | Save/Load §4.11 | #12 | 5 |
+    | Feature         | Issue | Tasks created |
+    | --------------- | ----- | ------------- |
+    | Save/Load §4.11 | #12   | 5             |
 
 ---
 
@@ -142,10 +143,10 @@ gh issue close <number> --repo $GH_REPO --comment "Completed in PR #<pr>"
 
 ## Error Handling
 
-| Error | Cause | Resolution |
-|---|---|---|
-| `gh: command not found` | gh CLI not installed | `brew install gh && gh auth login` |
-| `422 Unprocessable Entity` (milestone) | Milestone already exists | Skip creation, use existing |
-| `422 Unprocessable Entity` (label) | Label already exists | Add `\|\| true` or use `--force` |
-| `Resource not accessible by integration` | Token lacks `issues` scope | Re-auth: `gh auth refresh -s issues` |
-| Milestone not found on issue create | Milestone title mismatch | Use exact title from `gh api .../milestones` |
+| Error                                    | Cause                      | Resolution                                   |
+| ---------------------------------------- | -------------------------- | -------------------------------------------- |
+| `gh: command not found`                  | gh CLI not installed       | `brew install gh && gh auth login`           |
+| `422 Unprocessable Entity` (milestone)   | Milestone already exists   | Skip creation, use existing                  |
+| `422 Unprocessable Entity` (label)       | Label already exists       | Add `\|\| true` or use `--force`             |
+| `Resource not accessible by integration` | Token lacks `issues` scope | Re-auth: `gh auth refresh -s issues`         |
+| Milestone not found on issue create      | Milestone title mismatch   | Use exact title from `gh api .../milestones` |
