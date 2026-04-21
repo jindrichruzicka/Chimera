@@ -1,11 +1,21 @@
 // electron/preload/api.ts
 //
-// Declares the full window.__chimera surface type for the renderer.
-// Pure type declarations — zero runtime imports.
+// Dual role:
 //
-// Interfaces match §4.1 exactly. Stub types for simulation / networking domain
-// objects will be superseded by canonical shared/ declarations as the engine
-// modules land (F03–F07, F09–F11).
+// 1. **Type surface.** Declares the full `window.__chimera` contract
+//    (`ChimeraAPI` and every nested namespace interface) consumed by the
+//    renderer through `renderer/types/chimera.d.ts` and by every namespace
+//    factory under `electron/preload/*-api.ts`.
+// 2. **Preload runtime entry.** At the bottom of this file, composes the
+//    five namespace factories and calls
+//    `contextBridge.exposeInMainWorld('__chimera', api)` exactly once — the
+//    sole side effect Electron executes when loading this module as the
+//    BrowserWindow preload script.
+//
+// The runtime code is an import-time side effect; nothing else imports
+// `api.ts` for its values (every sibling module uses `import type` so the
+// types are erased). Invariant 28: this file must NEVER expose a
+// `__chimeraDebug` surface — the Debug Inspector preload lives elsewhere.
 
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
@@ -265,3 +275,82 @@ export interface SystemAPI {
     platform(): Promise<{ os: 'macos' | 'windows' | 'linux'; version: string }>;
     quit(): void;
 }
+
+// ─── Preload runtime entry point ──────────────────────────────────────────────
+//
+// Electron loads this file (after compilation to `electron/preload/api.js`)
+// as the `BrowserWindow` preload script. The side effect below is the one
+// and only call to `contextBridge.exposeInMainWorld` for the game renderer.
+// Invariant 28: no `__chimeraDebug` key is exposed here.
+//
+// Every namespace factory accepts a narrow port interface so they remain
+// unit-testable without a real Electron module. Electron's real
+// `ipcRenderer` has a wider, historically-typed signature (event arg,
+// `any[]` rest) than our ports declare. We adapt it once, here, via a
+// small universal `IpcRendererPort` shape that is structurally assignable
+// to each namespace's port type.
+
+import { contextBridge, ipcRenderer } from 'electron';
+import { createGameApi } from './game-api.js';
+import { createLobbyApi } from './lobby-api.js';
+import { createSavesApi } from './saves-api.js';
+import { createSettingsApi } from './settings-api.js';
+import { createSystemApi } from './system-api.js';
+
+/**
+ * Shape of an `ipcRenderer` listener as seen by our narrow port interfaces.
+ * Electron's real listener signature uses `IpcRendererEvent` for the first
+ * argument; `unknown` is broader, so a listener declared against this type
+ * is safely callable with any event payload.
+ */
+type IpcRendererListener = (event: unknown, ...args: unknown[]) => void;
+
+/**
+ * Universal renderer-side IPC port. Structurally assignable to every
+ * `*ApiIpcPort` in the namespace modules — each of them asks for a subset
+ * of these four methods. Declared locally so the adapter is the only place
+ * the real `ipcRenderer` leaks into the namespace composition.
+ */
+interface IpcRendererPort {
+    invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+    send(channel: string, ...args: unknown[]): void;
+    on(channel: string, listener: IpcRendererListener): void;
+    removeListener(channel: string, listener: IpcRendererListener): void;
+}
+
+const port: IpcRendererPort = {
+    invoke: (channel, ...args) => ipcRenderer.invoke(channel, ...args),
+    send: (channel, ...args) => {
+        ipcRenderer.send(channel, ...args);
+    },
+    on: (channel, listener) => {
+        ipcRenderer.on(channel, listener);
+    },
+    removeListener: (channel, listener) => {
+        ipcRenderer.removeListener(channel, listener);
+    },
+};
+
+/**
+ * Compose the full {@link ChimeraAPI} from the five namespace factories. Each
+ * factory owns its own channel constants (invariant 5); this file's only job
+ * is to wire them onto the single shared port and hand the result to
+ * `contextBridge`.
+ */
+const api: ChimeraAPI = {
+    game: createGameApi(port),
+    lobby: createLobbyApi(port),
+    saves: createSavesApi(port),
+    settings: createSettingsApi(port),
+    system: createSystemApi(port),
+    // Deferred namespaces — the interfaces are empty stubs today (see the
+    // `*API` declarations above) and will gain concrete methods in their
+    // respective milestones (F14, F44, F45, F43). Exposing empty objects now
+    // keeps `window.__chimera` shape-stable for the renderer.
+    profile: {},
+    replay: {},
+    chat: {},
+    logs: {},
+};
+
+contextBridge.exposeInMainWorld('__chimera', api);

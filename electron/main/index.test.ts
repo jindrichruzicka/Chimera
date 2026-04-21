@@ -511,4 +511,27 @@ describe('main', () => {
         expect(handler).toBeDefined();
         await expect(Promise.resolve(handler?.())).resolves.toBe(true);
     });
+
+    it('wires the BrowserWindow preload script to electron/preload/api.js', async () => {
+        let resolveReady: () => void = () => {
+            // assigned synchronously below
+        };
+        appWhenReady.mockImplementation(
+            () =>
+                new Promise<void>((resolve) => {
+                    resolveReady = resolve;
+                }),
+        );
+
+        main();
+        resolveReady();
+        await Promise.resolve();
+
+        const [win] = browserWindowInstances;
+        // Invariant: the preload entry is the composed bridge in
+        // `electron/preload/api.ts` (compiled to `api.js`). Accepting any
+        // other filename would mean the renderer is wired to a bridge that
+        // is not the one guarded by the typed ChimeraAPI surface.
+        expect(win?.options.webPreferences?.preload).toMatch(/[/\\]preload[/\\]api\.js$/);
+    });
 });
