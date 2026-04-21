@@ -22,7 +22,7 @@
 // elsewhere.
 
 import { z } from 'zod';
-import type { LobbyInfo, ResolvedSettings, SaveSlotMeta } from './api.js';
+import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from './api.js';
 import type { PlatformInfo } from './system-api.js';
 
 /**
@@ -123,3 +123,16 @@ export const ResolvedSettingsSchema = z.record(
     z.string(),
     z.unknown(),
 ) satisfies z.ZodType<ResolvedSettings>;
+
+/**
+ * Schema for {@link ActionRejection} pushed on `chimera:game:action-rejected`.
+ * Typed via a `z.ZodType<ActionRejection>` cast because `actionType` is
+ * optional (same `exactOptionalPropertyTypes` + `.optional()` interaction as
+ * {@link SaveSlotMetaSchema}). `tick` allows `-1` to flag a rejection where
+ * the envelope was too malformed for the tick to be recovered.
+ */
+export const ActionRejectionSchema: z.ZodType<ActionRejection> = z.object({
+    reason: z.string().min(1),
+    tick: z.number().int(),
+    actionType: z.string().optional(),
+}) as z.ZodType<ActionRejection>;

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
@@ -25,6 +26,7 @@ import {
     registerSettingsHandlers,
     registerSystemHandlers,
     type GameHandlersIpcMain,
+    type GameHandlerEvent,
     type GameHandlerListener,
     type GameInvokeHandler,
     type LobbyHandlerListener,
@@ -39,6 +41,7 @@ import {
 } from './ipc-handlers.js';
 import { IpcRequestValidationError } from './ipc-schemas.js';
 import type {
+    ActionRejection,
     EngineAction,
     HostLobbyParams,
     JoinLobbyParams,
@@ -165,6 +168,27 @@ function makeGameIpcMainStub(): {
     return { ipcMain, handled, listeners };
 }
 
+/**
+ * Build a fake `GameHandlerEvent` whose `sender.send` captures every REJECT
+ * push the handler emits. Mirrors the real `Electron.IpcMainEvent.sender`
+ * surface narrowly enough to satisfy {@link GameHandlerEvent} without
+ * pulling in Electron types.
+ */
+function makeGameEvent(): {
+    readonly event: GameHandlerEvent;
+    readonly sends: { channel: string; args: unknown[] }[];
+} {
+    const sends: { channel: string; args: unknown[] }[] = [];
+    const event: GameHandlerEvent = {
+        sender: {
+            send: (channel, ...args) => {
+                sends.push({ channel, args });
+            },
+        },
+    };
+    return { event, sends };
+}
+
 describe('registerGameHandlers', () => {
     it('registers chimera:game:send-action as a send listener (stub: no-op)', () => {
         const stub = makeGameIpcMainStub();
@@ -182,7 +206,10 @@ describe('registerGameHandlers', () => {
         // Actual reducer wiring lands in F03–F15; this task only proves the
         // channel is registered and the stub accepts the payload without
         // throwing.
-        expect(() => handler?.({}, action)).not.toThrow();
+        const { event, sends } = makeGameEvent();
+        expect(() => handler?.(event, action)).not.toThrow();
+        // Happy path: no REJECT push is emitted when the envelope is valid.
+        expect(sends).toEqual([]);
     });
 
     it('registers chimera:game:switch-seat as an invoke handler resolving to undefined (stub)', async () => {
@@ -457,16 +484,67 @@ describe('registerSettingsHandlers', () => {
  * are tested here.
  */
 describe('inbound IPC request validation', () => {
-    it('chimera:game:send-action throws IpcRequestValidationError on a malformed envelope', () => {
+    it('chimera:game:send-action does NOT throw on a malformed envelope — it pushes REJECT to the sender', () => {
         const stub = makeGameIpcMainStub();
         registerGameHandlers({ ipcMain: stub.ipcMain });
         const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+        const { event, sends } = makeGameEvent();
 
-        expect(() => handler?.({}, { type: 'noop' })).toThrow(IpcRequestValidationError);
-        expect(() => handler?.({}, null)).toThrow(IpcRequestValidationError);
-        expect(() => handler?.({}, { type: '', playerId: 'p1', tick: 0, payload: {} })).toThrow(
-            IpcRequestValidationError,
-        );
+        // `chimera:game:send-action` is an `ipcMain.on` send. Throwing out of
+        // the callback is silently dropped by Electron, so the renderer would
+        // never learn the action was rejected. The handler must instead
+        // emit a REJECT push on `chimera:game:action-rejected` (wire-shape
+        // mirror of the §4.3 WebSocket REJECT frame).
+        expect(() => handler?.(event, { type: 'noop' })).not.toThrow();
+        expect(() => handler?.(event, null)).not.toThrow();
+        expect(() =>
+            handler?.(event, { type: '', playerId: 'p1', tick: 0, payload: {} }),
+        ).not.toThrow();
+
+        // Exactly one REJECT push per invocation, each on the dedicated
+        // channel; each payload carries the originating channel in the reason.
+        expect(sends.length).toBe(3);
+        for (const { channel, args } of sends) {
+            expect(channel).toBe(GAME_ACTION_REJECTED_CHANNEL);
+            const payload = args[0] as ActionRejection;
+            expect(payload.reason.startsWith(`ipc-validation:${GAME_SEND_ACTION_CHANNEL}`)).toBe(
+                true,
+            );
+        }
+    });
+
+    it('chimera:game:send-action REJECT payload recovers tick + actionType when the envelope carries them', () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+        const { event, sends } = makeGameEvent();
+
+        // Envelope has a usable `type` and `tick` but a broken `payload`
+        // (must be a plain object). Reconstruction should carry both fields
+        // into the REJECT so the renderer can correlate.
+        handler?.(event, { type: 'noop', playerId: 'p1', tick: 7, payload: 'not-an-object' });
+
+        expect(sends.length).toBe(1);
+        const payload = sends[0]?.args[0] as ActionRejection;
+        expect(payload.tick).toBe(7);
+        expect(payload.actionType).toBe('noop');
+    });
+
+    it('chimera:game:send-action REJECT uses tick:-1 when the envelope is unrecoverable', () => {
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+        const { event, sends } = makeGameEvent();
+
+        handler?.(event, null);
+        handler?.(event, 'not-an-object');
+
+        expect(sends.length).toBe(2);
+        for (const { args } of sends) {
+            const payload = args[0] as ActionRejection;
+            expect(payload.tick).toBe(-1);
+            expect(payload.actionType).toBeUndefined();
+        }
     });
 
     it('chimera:game:switch-seat rejects a non-string or empty playerId', async () => {
@@ -578,17 +656,20 @@ describe('inbound IPC request validation', () => {
         ).rejects.toBeInstanceOf(IpcRequestValidationError);
     });
 
-    it('IpcRequestValidationError carries the channel that rejected the payload', () => {
-        const stub = makeGameIpcMainStub();
-        registerGameHandlers({ ipcMain: stub.ipcMain });
-        const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+    it('IpcRequestValidationError carries the channel that rejected the payload (invoke handlers)', async () => {
+        // send-action no longer throws — it emits a REJECT push — so this
+        // test exercises an `ipcMain.handle`-style channel where the throw
+        // still surfaces as a renderer-side promise rejection.
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
 
         try {
-            handler?.({}, { garbage: true });
+            await Promise.resolve().then(() => handler?.({}, { garbage: true }));
             throw new Error('expected IpcRequestValidationError');
         } catch (err) {
             expect(err).toBeInstanceOf(IpcRequestValidationError);
-            expect((err as IpcRequestValidationError).channel).toBe(GAME_SEND_ACTION_CHANNEL);
+            expect((err as IpcRequestValidationError).channel).toBe(LOBBY_HOST_CHANNEL);
         }
     });
 });

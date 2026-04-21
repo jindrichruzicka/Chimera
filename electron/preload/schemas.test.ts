@@ -9,6 +9,7 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+    ActionRejectionSchema,
     LobbyInfoSchema,
     PlatformInfoSchema,
     PreloadIpcValidationError,
@@ -151,5 +152,44 @@ describe('ResolvedSettingsSchema', () => {
 
     it('rejects a primitive', () => {
         expect(() => ResolvedSettingsSchema.parse('settings')).toThrow();
+    });
+});
+
+describe('ActionRejectionSchema', () => {
+    it('accepts a well-formed rejection with actionType', () => {
+        const rejection = {
+            reason: 'ipc-validation:chimera:game:send-action',
+            tick: 7,
+            actionType: 'noop',
+        };
+        expect(ActionRejectionSchema.parse(rejection)).toEqual(rejection);
+    });
+
+    it('accepts a rejection without the optional actionType', () => {
+        const rejection = { reason: 'pipeline:rejected', tick: 0 };
+        expect(ActionRejectionSchema.parse(rejection)).toEqual(rejection);
+    });
+
+    it('accepts tick: -1 (unknown-tick sentinel, §4.3 REJECT parity)', () => {
+        const rejection = { reason: 'ipc-validation:x', tick: -1 };
+        expect(ActionRejectionSchema.parse(rejection)).toEqual(rejection);
+    });
+
+    it('rejects an empty reason', () => {
+        expect(() => ActionRejectionSchema.parse({ reason: '', tick: 0 })).toThrow();
+    });
+
+    it('rejects a non-integer tick', () => {
+        expect(() => ActionRejectionSchema.parse({ reason: 'x', tick: 1.5 })).toThrow();
+    });
+
+    it('rejects a non-string actionType', () => {
+        expect(() =>
+            ActionRejectionSchema.parse({ reason: 'x', tick: 0, actionType: 42 }),
+        ).toThrow();
+    });
+
+    it('rejects a null payload', () => {
+        expect(() => ActionRejectionSchema.parse(null)).toThrow();
     });
 });

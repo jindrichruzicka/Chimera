@@ -16,7 +16,15 @@
 // Invariant 4: The renderer reads state; it never writes state directly.
 // `sendAction` is the only write path the renderer has.
 
-import type { EngineAction, GameAPI, PlayerId, PlayerSnapshot, Unsubscribe } from './api.js';
+import type {
+    ActionRejection,
+    EngineAction,
+    GameAPI,
+    PlayerId,
+    PlayerSnapshot,
+    Unsubscribe,
+} from './api.js';
+import { ActionRejectionSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.send` target for {@link GameAPI.sendAction}. */
 export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
@@ -27,6 +35,17 @@ export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
  * `webContents.send` on this channel.
  */
 export const GAME_SNAPSHOT_CHANNEL = 'chimera:game:snapshot';
+
+/**
+ * `ipcRenderer.on` target for {@link GameAPI.onActionRejected}. Main pushes
+ * a typed {@link ActionRejection} via `event.sender.send` whenever an
+ * action submitted through {@link GAME_SEND_ACTION_CHANNEL} is refused —
+ * today at the IPC boundary (envelope validation), and once F03–F15 land,
+ * at Stage 3 of the ActionPipeline.
+ *
+ * Wire-shape analogue of the §4.3 WebSocket `ServerMessage` REJECT frame.
+ */
+export const GAME_ACTION_REJECTED_CHANNEL = 'chimera:game:action-rejected';
 
 /** `ipcRenderer.invoke` target for {@link GameAPI.switchActiveSeat}. */
 export const GAME_SWITCH_SEAT_CHANNEL = 'chimera:game:switch-seat';
@@ -71,6 +90,25 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
             ipc.on(GAME_SNAPSHOT_CHANNEL, listener);
             return () => {
                 ipc.removeListener(GAME_SNAPSHOT_CHANNEL, listener);
+            };
+        },
+        onActionRejected: (cb: (rejection: ActionRejection) => void): Unsubscribe => {
+            const listener: GameApiListener = (_event, ...args) => {
+                // Validate the inbound REJECT push before invoking the
+                // callback. A malformed push means main drifted from the
+                // declared wire shape — throwing `PreloadIpcValidationError`
+                // surfaces the drift with the channel name attached rather
+                // than letting garbage reach the renderer's error boundary.
+                const rejection = parseInvokeResponse(
+                    ActionRejectionSchema,
+                    GAME_ACTION_REJECTED_CHANNEL,
+                    args[0],
+                );
+                cb(rejection);
+            };
+            ipc.on(GAME_ACTION_REJECTED_CHANNEL, listener);
+            return () => {
+                ipc.removeListener(GAME_ACTION_REJECTED_CHANNEL, listener);
             };
         },
         switchActiveSeat: async (playerId: PlayerId): Promise<void> => {

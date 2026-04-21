@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
@@ -7,7 +8,8 @@ import {
     type GameApiIpcPort,
     type GameApiListener,
 } from './game-api.js';
-import type { EngineAction, PlayerSnapshot } from './api.js';
+import { PreloadIpcValidationError } from './schemas.js';
+import type { ActionRejection, EngineAction, PlayerSnapshot } from './api.js';
 
 /**
  * Recording stub for the narrow `GameApiIpcPort` slice. Captures every call
@@ -170,6 +172,105 @@ describe('createGameApi', () => {
             unsubA();
             for (const listener of stub.listeners.get(GAME_SNAPSHOT_CHANNEL) ?? []) {
                 listener({}, snap);
+            }
+            expect(cbA).not.toHaveBeenCalled();
+            expect(cbB).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('onActionRejected()', () => {
+        const validRejection: ActionRejection = {
+            reason: 'ipc-validation:chimera:game:send-action',
+            tick: 7,
+            actionType: 'noop',
+        };
+
+        it('registers a listener on chimera:game:action-rejected and forwards the validated payload', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(rejection: ActionRejection) => void>();
+
+            api.onActionRejected(callback);
+
+            const registered = stub.listeners.get(GAME_ACTION_REJECTED_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, validRejection);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(validRejection);
+        });
+
+        it('accepts a rejection without the optional actionType field', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(rejection: ActionRejection) => void>();
+
+            api.onActionRejected(callback);
+            const listener = [...(stub.listeners.get(GAME_ACTION_REJECTED_CHANNEL) ?? [])][0];
+            listener?.({}, { reason: 'pipeline:rejected', tick: -1 });
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith({ reason: 'pipeline:rejected', tick: -1 });
+        });
+
+        it('throws PreloadIpcValidationError if main pushes a malformed rejection payload', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(rejection: ActionRejection) => void>();
+
+            api.onActionRejected(callback);
+            const listener = [...(stub.listeners.get(GAME_ACTION_REJECTED_CHANNEL) ?? [])][0];
+
+            // Missing required `reason`.
+            expect(() => listener?.({}, { tick: 0 })).toThrow(PreloadIpcValidationError);
+            // Empty `reason` is rejected (schema enforces non-empty).
+            expect(() => listener?.({}, { reason: '', tick: 0 })).toThrow(
+                PreloadIpcValidationError,
+            );
+            // Non-integer tick is rejected.
+            expect(() => listener?.({}, { reason: 'x', tick: 1.5 })).toThrow(
+                PreloadIpcValidationError,
+            );
+            // Payload is not an object.
+            expect(() => listener?.({}, null)).toThrow(PreloadIpcValidationError);
+
+            // None of the malformed pushes reached the consumer.
+            expect(callback).not.toHaveBeenCalled();
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(rejection: ActionRejection) => void>();
+
+            const unsubscribe = api.onActionRejected(callback);
+            expect(stub.listeners.get(GAME_ACTION_REJECTED_CHANNEL)?.size).toBe(1);
+            unsubscribe();
+            expect(stub.listeners.get(GAME_ACTION_REJECTED_CHANNEL)?.size).toBe(0);
+        });
+
+        it('supports multiple independent subscriptions', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const cbA = vi.fn<(rejection: ActionRejection) => void>();
+            const cbB = vi.fn<(rejection: ActionRejection) => void>();
+
+            const unsubA = api.onActionRejected(cbA);
+            api.onActionRejected(cbB);
+
+            for (const listener of stub.listeners.get(GAME_ACTION_REJECTED_CHANNEL) ?? []) {
+                listener({}, validRejection);
+            }
+            expect(cbA).toHaveBeenCalledOnce();
+            expect(cbB).toHaveBeenCalledOnce();
+
+            cbA.mockClear();
+            cbB.mockClear();
+            unsubA();
+            for (const listener of stub.listeners.get(GAME_ACTION_REJECTED_CHANNEL) ?? []) {
+                listener({}, validRejection);
             }
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();

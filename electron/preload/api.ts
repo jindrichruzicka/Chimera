@@ -85,6 +85,33 @@ export interface EngineAction<
     readonly payload: Readonly<TPayload>;
 }
 
+/**
+ * Main → renderer rejection of a previously dispatched {@link EngineAction}.
+ *
+ * Wire-shape mirror of the WebSocket `ServerMessage` REJECT frame (§4.3):
+ * `{ type: 'REJECT'; reason: string; tick: number }`. The IPC variant adds
+ * an optional `actionType` because the sender may not remember the exact
+ * envelope that was rejected (e.g. when the rejection comes from the
+ * ActionPipeline several ticks later).
+ *
+ * Today's sole trigger is IPC-layer envelope validation failure
+ * (`IpcRequestValidationError`, introduced in issue #17). The same channel
+ * and shape will be reused once F03–F15 wire the full `ActionPipeline` —
+ * Stage 3 validation failures and unknown-action-type rejections also push
+ * on this channel, so the renderer's listener contract does not churn.
+ *
+ * `tick` is `-1` when the request was so malformed that the tick could
+ * not be recovered from the envelope.
+ */
+export interface ActionRejection {
+    /** Human-readable reason, namespaced by source (e.g. `ipc-validation:<channel>`). */
+    readonly reason: string;
+    /** Tick the rejected action was aimed at, or `-1` when not recoverable. */
+    readonly tick: number;
+    /** Action type if it was recoverable from the envelope. */
+    readonly actionType?: string;
+}
+
 // ─── Lobby domain stubs ───────────────────────────────────────────────────────
 // Superseded by networking/ (F09–F11).
 
@@ -220,6 +247,14 @@ export interface GameAPI {
     sendAction(action: EngineAction): void;
     /** Stream of projected PlayerSnapshot for the active viewer. */
     onSnapshot(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
+    /**
+     * Stream of {@link ActionRejection}s for actions dispatched from this
+     * renderer that main refused to apply. Mirror of the §4.3 WebSocket
+     * REJECT frame. The push is the ONLY way the renderer learns that a
+     * `sendAction()` write was discarded — `sendAction` itself is
+     * fire-and-forget (returns `void`).
+     */
+    onActionRejected(cb: (rejection: ActionRejection) => void): Unsubscribe;
     /** Local multi-seat (pass-and-play): switch the active viewer for the current renderer. */
     switchActiveSeat(playerId: PlayerId): Promise<void>;
 }

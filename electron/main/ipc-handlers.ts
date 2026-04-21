@@ -20,6 +20,7 @@ import {
     type PlatformInfo,
 } from '../preload/system-api.js';
 import {
+    GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
@@ -43,11 +44,12 @@ import {
     SETTINGS_RESET_CHANNEL,
     SETTINGS_UPDATE_CHANNEL,
 } from '../preload/settings-api.js';
-import type { LobbyInfo, ResolvedSettings, SaveSlotMeta } from '../preload/api.js';
+import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from '../preload/api.js';
 import {
     EngineActionSchema,
     GameIdSchema,
     HostLobbyParamsSchema,
+    IpcRequestValidationError,
     JoinLobbyParamsSchema,
     PlayerIdSchema,
     SaveRequestSchema,
@@ -59,6 +61,7 @@ import {
 export {
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
+    GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
@@ -148,10 +151,16 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
 
 /**
  * Shape of a main-side `ipcMain.on` listener for the game namespace. The real
- * Electron signature is `(event: IpcMainEvent, ...args: unknown[]) => void`;
- * a permissive union here keeps tests free of Electron types.
+ * Electron signature is `(event: IpcMainEvent, ...args: unknown[]) => void`.
+ * The narrow type below exposes exactly the `sender.send` surface needed to
+ * push a REJECT back to the renderer that sent the message — any widening
+ * would be an architectural change and must be justified.
  */
-export type GameHandlerListener = (event: unknown, ...args: unknown[]) => void;
+export interface GameHandlerEvent {
+    readonly sender: { send(channel: string, ...args: unknown[]): void };
+}
+
+export type GameHandlerListener = (event: GameHandlerEvent, ...args: unknown[]) => void;
 
 /**
  * Shape of a main-side `ipcMain.handle` handler for the game namespace. The
@@ -172,6 +181,38 @@ export interface GameHandlersIpcMain {
 
 export interface RegisterGameHandlersOptions {
     readonly ipcMain: GameHandlersIpcMain;
+}
+
+/**
+ * Best-effort reconstruction of an {@link ActionRejection} from a payload
+ * that failed {@link parseInvokeRequest}. The payload is `unknown` (that's
+ * exactly why it was rejected), so `tick` and `actionType` are recovered
+ * only when the respective field is present and the right primitive type.
+ * Missing or wrong-typed fields fall back to `-1` / omitted — matching the
+ * §4.3 REJECT frame's "unknown tick" convention.
+ */
+function buildIpcValidationRejection(
+    err: IpcRequestValidationError,
+    action: unknown,
+): ActionRejection {
+    const envelope =
+        typeof action === 'object' && action !== null ? (action as Record<string, unknown>) : {};
+    const rawTick = envelope['tick'];
+    const rawType = envelope['type'];
+    const tick = typeof rawTick === 'number' && Number.isInteger(rawTick) ? rawTick : -1;
+    const actionType = typeof rawType === 'string' && rawType.length > 0 ? rawType : undefined;
+
+    const base = `ipc-validation:${err.channel}`;
+    const reason =
+        err.issues.length > 0
+            ? `${base}:${err.issues
+                  .map((issue) => (issue.path.length > 0 ? issue.path.join('.') : '<root>'))
+                  .join(',')}`
+            : base;
+
+    // Build the object via a conditional spread so `actionType` is absent
+    // (not `undefined`) when unknown — matches `exactOptionalPropertyTypes`.
+    return { reason, tick, ...(actionType !== undefined ? { actionType } : {}) };
 }
 
 /**
@@ -197,12 +238,33 @@ export interface RegisterGameHandlersOptions {
 export function registerGameHandlers(options: RegisterGameHandlersOptions): void {
     const { ipcMain } = options;
 
-    ipcMain.on(GAME_SEND_ACTION_CHANNEL, (_event, action) => {
+    ipcMain.on(GAME_SEND_ACTION_CHANNEL, (event, action) => {
         // Validate the envelope before handing off to the (future)
         // ActionPipeline. Per §4.7 the action-type-specific payload
         // schema lives in the simulation layer; here we only guard the
         // outer envelope so malformed requests never reach the pipeline.
-        parseInvokeRequest(EngineActionSchema, GAME_SEND_ACTION_CHANNEL, action);
+        //
+        // `chimera:game:send-action` is an `ipcMain.on` send — throwing
+        // out of an `on` callback is silently dropped by Electron, so
+        // validation failure is reported back to the sender via the
+        // `chimera:game:action-rejected` push channel (wire-shape mirror
+        // of the §4.3 WebSocket REJECT frame). The same channel will
+        // carry ActionPipeline Stage-3 rejections once F03–F15 wire the
+        // real pipeline — the renderer's listener contract does not
+        // churn.
+        try {
+            parseInvokeRequest(EngineActionSchema, GAME_SEND_ACTION_CHANNEL, action);
+        } catch (err) {
+            if (err instanceof IpcRequestValidationError) {
+                const rejection: ActionRejection = buildIpcValidationRejection(err, action);
+                event.sender.send(GAME_ACTION_REJECTED_CHANNEL, rejection);
+                return;
+            }
+            // Unknown error class — re-throw so the main-process crash
+            // reporter (F43) records it. Silently swallowing would hide a
+            // genuine bug behind the REJECT channel.
+            throw err;
+        }
         // Stub. ActionPipeline integration lands in F03–F15.
     });
 

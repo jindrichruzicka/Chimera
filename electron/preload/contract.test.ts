@@ -16,7 +16,7 @@
 // the `__chimera` key and never a `__chimeraDebug` key.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ChimeraAPI, EngineAction, PlayerSnapshot } from './api.js';
+import type { ActionRejection, ChimeraAPI, EngineAction, PlayerSnapshot } from './api.js';
 
 // ─── Electron module mock ────────────────────────────────────────────────────
 
@@ -206,6 +206,28 @@ describe('window.__chimera.game — contract', () => {
         unsubscribe();
         expect(listeners.get('chimera:game:snapshot')?.size).toBe(0);
         emit('chimera:game:snapshot', snapshot);
+        expect(seen).toHaveLength(1);
+    });
+
+    it('onActionRejected() registers on chimera:game:action-rejected; payload forwarded verbatim; Unsubscribe removes the listener', () => {
+        const seen: ActionRejection[] = [];
+        const unsubscribe = api.game.onActionRejected((rejection) => {
+            seen.push(rejection);
+        });
+
+        expect(listeners.get('chimera:game:action-rejected')?.size).toBe(1);
+
+        const rejection: ActionRejection = {
+            reason: 'ipc-validation:chimera:game:send-action',
+            tick: 7,
+            actionType: 'noop',
+        };
+        emit('chimera:game:action-rejected', rejection);
+        expect(seen).toEqual([rejection]);
+
+        unsubscribe();
+        expect(listeners.get('chimera:game:action-rejected')?.size).toBe(0);
+        emit('chimera:game:action-rejected', rejection);
         expect(seen).toHaveLength(1);
     });
 });
