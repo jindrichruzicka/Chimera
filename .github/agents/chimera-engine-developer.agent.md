@@ -13,6 +13,10 @@ Before writing any code, read `docs/architecture-overview.md`. It is the single 
 
 Interfaces, type names, file locations, and IPC channel names in the architecture document are **authoritative**. If the document and a proposed implementation conflict, fix the implementation.
 
+## Coding Standards Reference
+
+`docs/coding-standards.md` is the authoritative reference for TypeScript rules, SOLID application, module-boundary enforcement, naming, React/Zustand/R3F conventions, Electron/IPC security, testing discipline, performance baselines, git workflow, and formatting (including the mandatory **four-space indentation** rule). Read it before your first commit on any task and re-consult it whenever a rule is in doubt. The section summaries below are a condensed checklist — `docs/coding-standards.md` is the source of truth and overrides this file on any conflict.
+
 ---
 
 ## Non-Negotiable Coding Standards
@@ -120,6 +124,15 @@ Follow this workflow **exactly** for every task:
    - All tests pass; coverage: 100% lines, 100% branches
    ```
    Commit body must describe WHAT was done and WHY. Never leave the body empty on the first commit.
+
+   **Before running `git commit` — mandatory pre-commit gate:**
+   ```bash
+   pnpm format         # prettier --write on the tracked tree
+   pnpm format:check   # must exit 0 — if it fails, do NOT commit
+   pnpm test           # must exit 0 — if it fails, do NOT commit
+   pnpm typecheck      # must exit 0 — if it fails, do NOT commit
+   ```
+   If any of these fail, fix the underlying issue and re-run the full gate. Never `git commit --no-verify`, never bypass the formatter, never commit with a failing check. This applies to the first commit **and every fixup commit**.
 4. **All subsequent commits** on the same branch are `--fixup` commits targeting the first commit SHA:
    ```
    git commit --fixup <first-commit-sha>
@@ -189,12 +202,15 @@ Before marking any task done:
 - [ ] Branch created with correct `feature/`, `fix/`, or `refactor/` prefix
 - [ ] **Tests written before implementation** — test file existed and was red before source file was created
 - [ ] **All tests are green** — `pnpm test` passes with zero failures
+- [ ] **Formatter is clean** — `pnpm format:check` exits 0 against the working tree; run `pnpm format` first if not
+- [ ] **Typecheck is clean** — `pnpm typecheck` exits 0
 - [ ] **No untested behaviour** — every public method, every documented error type, and every branch in `validate()`/`reduce()` is covered by at least one test
 - [ ] **No mocks inside `simulation/` tests** — pure function calls only; if a mock was needed, the implementation has an undocumented dependency
 - [ ] First commit has a full conventional-commit body (mentions tests written first)
 - [ ] All subsequent commits are `--fixup` to the first commit
 - [ ] No `any` types, no `@ts-ignore`
 - [ ] No import from a forbidden package boundary
+- [ ] Indentation is four spaces throughout every touched file (`docs/coding-standards.md` §1.6)
 - [ ] Relevant invariants from Appendix B checked
 - [ ] Interfaces match the architecture document exactly (field names, types, optionality)
 - [ ] New public functions/types exported from the package's `index.ts`

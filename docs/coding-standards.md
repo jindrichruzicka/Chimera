@@ -69,6 +69,14 @@
 - Sort imports: external packages → `@chimera/*` path aliases → relative paths. Within each group, alphabetical order.
 - Never import a type with a value import when only the type is needed. Use `import type { Foo }`.
 
+### 1.6 Formatting and indentation
+
+- **Indentation is four spaces.** No tabs, no two-space indentation. This applies uniformly to all TypeScript, JavaScript, JSON, JSX/TSX, and Markdown files in the repository. YAML keeps its ecosystem-standard two-space indentation (enforced by a Prettier override).
+- Continuation lines and JSX attribute wraps also indent by four spaces per level.
+- The formatter and editor baseline are the source of truth: [`.editorconfig`](../.editorconfig) and [`.prettierrc.json`](../.prettierrc.json) at the repository root. Do not override them per-file.
+- Run `pnpm format` before committing; CI runs `pnpm format:check` and fails on diffs.
+- Mixed indentation in a single file is a **BLOCK** finding at review.
+
 ---
 
 ## 2. SOLID Principles
@@ -527,6 +535,8 @@ pnpm test:watch        # vitest — interactive watch mode
 pnpm test:coverage     # vitest run --coverage
 pnpm test:e2e          # CHIMERA_E2E=1 playwright test
 pnpm lint              # eslint with all chimera/* rules
+pnpm format            # prettier --write on the tracked tree
+pnpm format:check      # prettier --check — CI-gated, must pass
 pnpm dev               # electron dev with hot-reload harness
 pnpm dev:mp 3          # 1 host + 2 auto-joining clients (multiplayer dev)
 ```
