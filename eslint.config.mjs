@@ -27,6 +27,7 @@ export default tseslint.config(
             'build/**',
             'coverage/**',
             'renderer/out/**',
+            'renderer/.next/**',
             '**/*.d.ts',
         ],
     },

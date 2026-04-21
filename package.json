@@ -10,14 +10,15 @@
     },
     "main": "electron/main/index.js",
     "scripts": {
-        "typecheck": "tsc --noEmit",
+        "typecheck": "tsc --noEmit && tsc --noEmit -p renderer",
         "test": "vitest run",
         "test:watch": "vitest",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
-        "coverage": "vitest run --coverage"
+        "coverage": "vitest run --coverage",
+        "build:renderer": "next build renderer"
     },
     "devDependencies": {
         "@eslint/js": "^9.39.4",

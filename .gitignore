@@ -4,6 +4,7 @@ dist/
 build/
 out/
 .next/
+*.tsbuildinfo
 *.log
 .env
 .env.*

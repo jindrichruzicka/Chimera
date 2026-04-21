@@ -23,17 +23,30 @@ Install dependencies and run the test suite:
 
 ```sh
 pnpm install
-pnpm test       # vitest run
-pnpm typecheck  # tsc --noEmit
+pnpm test            # vitest run
+pnpm typecheck       # tsc --noEmit (root + renderer)
+pnpm build:renderer  # next build renderer → renderer/out/index.html
 ```
 
 Project layout (landed so far):
 
 ```
 electron/
-└── main/
-    ├── index.ts        # App entry: BrowserWindow creation + lifecycle (§3)
-    └── index.test.ts   # Unit tests (vitest)
+├── main/
+│   ├── index.ts        # App entry: BrowserWindow creation + lifecycle (§3)
+│   ├── ipc-handlers.ts # chimera:system|game|lobby|saves|settings:* IPC handlers
+│   └── index.test.ts   # Unit tests (vitest)
+└── preload/
+    ├── api.ts          # contextBridge.exposeInMainWorld('__chimera', …)
+    ├── {system,game,lobby,saves,settings}-api.ts
+    └── *.test.ts
+renderer/
+├── app/
+│   ├── layout.tsx      # Next.js App Router root layout
+│   ├── page.tsx        # Main-menu shell; M1 boot-smoke of preload bridge
+│   └── bootSmoke.ts    # Pure helper: logs window.__chimera.system.platform()
+├── next.config.ts      # Static export (renderer/out)
+└── tsconfig.json       # Extends root; jsx: preserve + DOM lib
 ```
 
 ## Features
