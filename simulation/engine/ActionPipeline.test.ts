@@ -21,7 +21,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
     ActionPipeline,
-    StateReducer,
     StaleActionError,
     ActionSchemaError,
     ActionUnauthorizedError,
@@ -29,13 +28,7 @@ import {
     MAX_NESTED_DISPATCH,
 } from './ActionPipeline.js';
 import { ActionRegistry, UnknownActionTypeError } from './ActionRegistry.js';
-import type {
-    BaseGameSnapshot,
-    ActionEnvelope,
-    PlayerId,
-    ActionDefinition,
-    ReduceContext,
-} from './types.js';
+import type { BaseGameSnapshot, ActionEnvelope, PlayerId, ActionDefinition } from './types.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -410,74 +403,6 @@ describe('ActionPipeline — re-entrant dispatch depth guard', () => {
         const action = makeEnvelope(0, 'game:counter');
         // Exactly MAX_NESTED_DISPATCH dispatches — should not throw.
         expect(() => pipeline.process(snapshot, action)).not.toThrow(RecursiveDispatchError);
-    });
-});
-
-// ─── StateReducer ──────────────────────────────────────────────────────────────
-
-describe('StateReducer', () => {
-    it('calls registry.resolve and invokes def.reduce', () => {
-        const reduceSpy = vi.fn((state: Readonly<BaseGameSnapshot>) => state);
-        const spyDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:reducer-spy',
-            parsePayload: () => ({}),
-            validate: () => ({ ok: true }),
-            reduce: reduceSpy,
-        };
-        registry.register(spyDef);
-
-        const reducer = new StateReducer(registry);
-        const snapshot = makeSnapshot(0);
-        const action = makeEnvelope(0, 'game:reducer-spy');
-        const ctx: ReduceContext = { rng: () => 0 };
-
-        reducer.apply(snapshot, action, ctx);
-
-        expect(reduceSpy).toHaveBeenCalledOnce();
-        expect(reduceSpy).toHaveBeenCalledWith(snapshot, {}, PID, ctx);
-    });
-
-    it('returns the value produced by def.reduce', () => {
-        const modified: BaseGameSnapshot = { ...makeSnapshot(0), seed: 99 };
-        const resultDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:result',
-            parsePayload: () => ({}),
-            validate: () => ({ ok: true }),
-            reduce: () => modified,
-        };
-        registry.register(resultDef);
-
-        const reducer = new StateReducer(registry);
-        const result = reducer.apply(makeSnapshot(0), makeEnvelope(0, 'game:result'), {
-            rng: () => 0,
-        });
-        expect(result).toBe(modified);
-    });
-
-    it('throws UnknownActionTypeError for unregistered action type', () => {
-        const reducer = new StateReducer(registry);
-        const ctx: ReduceContext = { rng: () => 0 };
-        expect(() =>
-            reducer.apply(makeSnapshot(0), makeEnvelope(0, 'game:unregistered'), ctx),
-        ).toThrow(UnknownActionTypeError);
-    });
-
-    it('throws ActionSchemaError when parsePayload fails', () => {
-        const badSchemaDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:bad-sr-schema',
-            parsePayload: () => {
-                throw new TypeError('bad');
-            },
-            validate: () => ({ ok: true }),
-            reduce: (state) => state,
-        };
-        registry.register(badSchemaDef);
-
-        const reducer = new StateReducer(registry);
-        const ctx: ReduceContext = { rng: () => 0 };
-        expect(() =>
-            reducer.apply(makeSnapshot(0), makeEnvelope(0, 'game:bad-sr-schema'), ctx),
-        ).toThrow(ActionSchemaError);
     });
 });
 
