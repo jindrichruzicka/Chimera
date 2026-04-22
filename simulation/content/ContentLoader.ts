@@ -170,6 +170,7 @@ async function loadDirectory(
     options: ContentLoadOptions,
 ): Promise<void> {
     const entries = await fs.readdir(dirPath, { withFileTypes: true });
+    entries.sort((a, b) => a.name.localeCompare(b.name));
 
     for (const entry of entries) {
         if (entry.isDirectory()) {
@@ -179,6 +180,7 @@ async function loadDirectory(
             const files = await fs.readdir(collectionDir, {
                 withFileTypes: true,
             });
+            files.sort((a, b) => a.name.localeCompare(b.name));
 
             const items: (DataObject & Record<string, unknown>)[] = [];
             for (const file of files) {

@@ -433,6 +433,47 @@ describe('ContentLoader — schema validation on directory source', () => {
     });
 });
 
+describe('ContentLoader — deterministic load order (H6)', () => {
+    it('loads subdirectory items in alphabetical order regardless of filesystem order', async () => {
+        const dtDir = path.join(tmpDir, 'damage-types');
+        await fs.mkdir(dtDir);
+        // Write in reverse alphabetical order
+        await fs.writeFile(
+            path.join(dtDir, 'physical.json'),
+            JSON.stringify({ id: 'physical', name: 'Physical' }),
+        );
+        await fs.writeFile(
+            path.join(dtDir, 'fire.json'),
+            JSON.stringify({ id: 'fire', name: 'Fire' }),
+        );
+        await fs.writeFile(
+            path.join(dtDir, 'cold.json'),
+            JSON.stringify({ id: 'cold', name: 'Cold' }),
+        );
+
+        const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
+        expect(db.getAllIds('damage-types')).toEqual(['cold', 'fire', 'physical']);
+    });
+
+    it('loads subdirectories (collections) in alphabetical order', async () => {
+        const zdDir = path.join(tmpDir, 'zones');
+        const adDir = path.join(tmpDir, 'abilities');
+        await fs.mkdir(zdDir);
+        await fs.mkdir(adDir);
+        await fs.writeFile(
+            path.join(zdDir, 'z1.json'),
+            JSON.stringify({ id: 'z1', name: 'Zone 1' }),
+        );
+        await fs.writeFile(
+            path.join(adDir, 'a1.json'),
+            JSON.stringify({ id: 'a1', name: 'Ability 1' }),
+        );
+
+        const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
+        expect(db.collectionTypes()).toEqual(['abilities', 'zones']);
+    });
+});
+
 // ─── validateRefs false-positive prevention ───────────────────────────────────
 
 describe('ContentLoader — validateRefs false-positive prevention (H5)', () => {
