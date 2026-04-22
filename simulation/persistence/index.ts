@@ -23,3 +23,5 @@ export {
     SaveSchemaTooNewError,
 } from './SaveMigrator.js';
 export type { SaveMigration } from './SaveMigrator.js';
+export type { SaveSlotMeta, SaveRepository } from './SaveRepository.js';
+export { InMemorySaveRepository } from './InMemorySaveRepository.js';
