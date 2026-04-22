@@ -182,34 +182,35 @@ async function loadDirectory(
             });
             files.sort((a, b) => a.name.localeCompare(b.name));
 
-            const items: (DataObject & Record<string, unknown>)[] = [];
-            for (const file of files) {
-                if (!file.isFile() || !file.name.endsWith('.json')) continue;
-                const filePath = path.join(collectionDir, file.name);
-                const raw = await fs.readFile(filePath, 'utf-8');
-                let parsed: DataObject & Record<string, unknown>;
-                try {
-                    parsed = JSON.parse(raw) as DataObject & Record<string, unknown>;
-                } catch (err) {
-                    throw new Error(
-                        `Failed to parse JSON in ${filePath}: ${
-                            err instanceof Error ? err.message : String(err)
-                        }`,
-                        { cause: err },
-                    );
-                }
-                const expectedId = path.parse(file.name).name;
-                if (parsed.id !== expectedId) {
-                    throw new ContentSchemaError(
-                        collectionType,
-                        expectedId,
-                        new Error(
-                            `Item id '${parsed.id}' does not match filename '${file.name}' (expected id '${expectedId}')`,
-                        ),
-                    );
-                }
-                items.push(parsed);
-            }
+            const jsonFiles = files.filter((f) => f.isFile() && f.name.endsWith('.json'));
+            const items = await Promise.all(
+                jsonFiles.map(async (file) => {
+                    const filePath = path.join(collectionDir, file.name);
+                    const raw = await fs.readFile(filePath, 'utf-8');
+                    let parsed: DataObject & Record<string, unknown>;
+                    try {
+                        parsed = JSON.parse(raw) as DataObject & Record<string, unknown>;
+                    } catch (err) {
+                        throw new Error(
+                            `Failed to parse JSON in ${filePath}: ${
+                                err instanceof Error ? err.message : String(err)
+                            }`,
+                            { cause: err },
+                        );
+                    }
+                    const expectedId = path.parse(file.name).name;
+                    if (parsed.id !== expectedId) {
+                        throw new ContentSchemaError(
+                            collectionType,
+                            expectedId,
+                            new Error(
+                                `Item id '${parsed.id}' does not match filename '${file.name}' (expected id '${expectedId}')`,
+                            ),
+                        );
+                    }
+                    return parsed;
+                }),
+            );
 
             mergeItems(collections, collectionType, items, options);
         } else if (entry.isFile() && entry.name.endsWith('.json')) {
