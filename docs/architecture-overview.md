@@ -746,15 +746,35 @@ Floats are permitted inside the renderer (camera, animation interpolation, UI tr
 
 #### ActionHistory Bounding
 
-`ActionHistory` grows one entry per applied action. A long 4X match produces tens of thousands of entries; an unbounded log is both a memory and a save-file problem. The log is bounded by `TurnMemento`: after each turn-start memento is written, the history is pruned to actions applied on or after that memento. The full event log is reconstructible by replaying from the memento — nothing is lost for forensic purposes. Mementoes older than the configured `TURN_MEMENTO_RETENTION` (default: 4 turns back) are also evicted, giving undo a bounded reach.
+`ActionHistory` grows one entry per applied action. A long 4X match produces tens of thousands of entries; an unbounded log is both a memory and a save-file problem. The log is bounded by `TurnMemento`: after each turn-start memento is written, the history is pruned to actions applied on or after that memento. The full event log is reconstructible by replaying from the memento — nothing is lost for forensic purposes. Mementoes older than `TURN_MEMENTO_RETENTION` are also evicted, giving undo a bounded reach.
+
+Two engine constants pin the policy:
+
+| Constant                     | Value    | Role                                                                                                         |
+| ---------------------------- | -------- | ------------------------------------------------------------------------------------------------------------ |
+| `TURN_MEMENTO_RETENTION`     | `4`      | How many turns back mementoes are kept. Bounds undo reach and the normal `ActionHistory` window.             |
+| `MAX_ACTION_HISTORY_ENTRIES` | `10_000` | Hard safety-net cap on total entries. Exceeding it means memento rotation is broken — see overflow handling. |
+
+**Overflow handling.** If `append()` would push total entries past `MAX_ACTION_HISTORY_ENTRIES`, `ActionHistory` evicts the oldest entries to bring the count back under the cap AND emits a `warn`-level log tagged `action-history:overflow` with the current entry count and the most recent memento's turn number. Hitting the cap is never a normal condition — it always signals a bug in memento rotation or `pruneTo` wiring, and forensic reconstruction may be impossible for the evicted range. The cap exists strictly as a defence-in-depth memory guard.
 
 ```typescript
 interface ActionHistory {
+    /**
+     * Append a single entry to the log. If the resulting size would exceed
+     * `MAX_ACTION_HISTORY_ENTRIES`, the oldest entries are evicted until
+     * the size is within the cap and an `action-history:overflow` warn log
+     * is emitted (see Overflow handling above).
+     */
     append(entry: ActionHistoryEntry): void;
     /** Entries since the most recent TurnMemento — used by UndoManager. */
     sinceLastMemento(): readonly ActionHistoryEntry[];
-    /** Called by TurnMemento after a memento is successfully written. */
-    pruneTo(turnNumber: number): void;
+    /**
+     * Remove every `ActionHistoryEntry` whose `turnNumber < cutoff`.
+     * Idempotent: pruning to a turn already fully pruned is a no-op.
+     * Called by `TurnMemento` after a memento is successfully written,
+     * with `cutoff = currentTurn - TURN_MEMENTO_RETENTION`.
+     */
+    pruneTo(cutoff: number): void;
 }
 ```
 
@@ -7233,7 +7253,7 @@ The 78 invariants are numbered stably; this index is purely navigational. A sing
 42. **The simulation is action-driven. `GameSnapshot.tick` is incremented by exactly 1 per action applied by `ActionPipeline.process()`. It is never derived from `Date.now()`, `performance.now()`, or any wall-clock source.**
 43. **`validate()` and `reduce()` must be pure given `(state, payload, playerId, ctx)`. They must not call `Math.random`, `Date.now`, `performance.now`, read environment variables, or access any I/O. The only permitted source of randomness is `ctx.rng`.**
 44. **All numeric fields of `GameSnapshot` that participate in arithmetic, comparison, or checksums must be integers (including fixed-point representations of money, percentages, and fine-grained positions). Floating-point is forbidden in simulation state.**
-45. **`ActionHistory` is bounded by `TurnMemento`. After a memento is written, entries older than the memento are pruned. The canonical way to reconstruct an older state is to load the appropriate memento and replay forward.**
+45. **`ActionHistory` is bounded by `TurnMemento`. Retention is `TURN_MEMENTO_RETENTION = 4` turns (entries with `turnNumber < currentTurn - TURN_MEMENTO_RETENTION` are evicted by `pruneTo`). A `MAX_ACTION_HISTORY_ENTRIES = 10_000` safety-net cap guards against pruning bugs: on overflow, `append()` evicts oldest entries AND emits an `action-history:overflow` warn log. The canonical way to reconstruct an older state is to load the appropriate memento and replay forward. (See §4.2.1.)**
 46. **`ContentDatabase` is optional. Games that declare no content (e.g. Tic Tac Toe) pass no `db` to `PipelineContext`, and `ReduceContext.db` is `undefined` for them. `validate()` and `reduce()` must tolerate `ctx.db` being `undefined` if the game opts out.**
 47. **`StateBroadcaster`, `MessageRouter`, `LobbyManager`, `SaveManager` and all other main-process orchestration modules must not import from `networking/provider/local/` or any other provider-specific subdirectory. Cross-module communication goes exclusively through `MultiplayerProvider`, `HostTransport`, and `ClientTransport`.**
 48. **Game UI beyond engine chrome (menus, HUD, dialog boxes) lives in `games/<name>/screens/` and is registered via `GameScreenRegistry`. `MatchShell.tsx` is game-agnostic — it never imports from any specific game package.**
