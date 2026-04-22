@@ -103,6 +103,61 @@ export interface RegisterCleanExitIpcOptions {
     readonly wasCleanExit: boolean;
 }
 
+// ─── SaveManager lifecycle wiring ─────────────────────────────────────────────
+
+import type { SaveSlotMeta } from '@chimera/simulation/persistence/SaveRepository.js';
+
+/**
+ * Narrow slice of `Electron.App` required by the SaveManager lifecycle hook.
+ */
+export interface SaveManagerLifecycleAppHost {
+    on(event: 'before-quit', handler: () => void): unknown;
+}
+
+export interface RegisterSaveManagerLifecycleOptions {
+    readonly app: SaveManagerLifecycleAppHost;
+    readonly saveManager: {
+        clearCleanExitFlag(): Promise<void>;
+        markCleanExit(): Promise<void>;
+        checkCrashRecovery(knownGameIds: readonly string[]): Promise<SaveSlotMeta | null>;
+    };
+    readonly knownGameIds: readonly string[];
+}
+
+export interface SaveManagerLifecycleResult {
+    /** The autosave slot meta if the previous session crashed and a save was found; null otherwise. */
+    readonly autosaveMeta: SaveSlotMeta | null;
+}
+
+/**
+ * Wire `SaveManager` into the application lifecycle:
+ *   1. Clear the clean-exit flag at startup so the next launch detects a crash.
+ *   2. Register `markCleanExit()` on `before-quit` for graceful shutdown.
+ *   3. Run `checkCrashRecovery()` to detect an unclean previous exit.
+ *
+ * Returns `{ autosaveMeta }` — non-null when the previous session crashed and
+ * an autosave was found. The caller can surface the "Resume last session" prompt
+ * based on this value.
+ */
+export async function registerSaveManagerLifecycle(
+    options: RegisterSaveManagerLifecycleOptions,
+): Promise<SaveManagerLifecycleResult> {
+    const { app: appHost, saveManager, knownGameIds } = options;
+
+    // 1. Clear the flag so a subsequent crash is detectable.
+    await saveManager.clearCleanExitFlag();
+
+    // 2. Write the flag on graceful shutdown.
+    appHost.on('before-quit', () => {
+        void saveManager.markCleanExit();
+    });
+
+    // 3. Check if the previous session crashed.
+    const autosaveMeta = await saveManager.checkCrashRecovery(knownGameIds);
+
+    return { autosaveMeta };
+}
+
 /**
  * Inspect (and consume) the `lastCleanExit.flag` sentinel at startup.
  *

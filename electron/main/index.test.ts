@@ -69,6 +69,7 @@ const {
     writeCleanExitFlag,
     registerCleanExitHook,
     registerCleanExitIpc,
+    registerSaveManagerLifecycle,
     main,
 } = await import('./index.js');
 
@@ -533,5 +534,113 @@ describe('main', () => {
         // other filename would mean the renderer is wired to a bridge that
         // is not the one guarded by the typed ChimeraAPI surface.
         expect(win?.options.webPreferences?.preload).toMatch(/[/\\]preload[/\\]api\.js$/);
+    });
+});
+
+// ─── registerSaveManagerLifecycle ────────────────────────────────────────────
+
+describe('registerSaveManagerLifecycle', () => {
+    it('calls clearCleanExitFlag() once at startup', async () => {
+        const saveManager = {
+            clearCleanExitFlag: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+            markCleanExit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+            checkCrashRecovery: vi.fn<(gameIds: readonly string[]) => Promise<null>>(() =>
+                Promise.resolve(null),
+            ),
+        };
+        const fakeApp = { on: vi.fn() };
+
+        await registerSaveManagerLifecycle({
+            app: fakeApp,
+            saveManager,
+            knownGameIds: [],
+        });
+
+        expect(saveManager.clearCleanExitFlag).toHaveBeenCalledTimes(1);
+    });
+
+    it('registers markCleanExit on before-quit', async () => {
+        const markCleanExit = vi.fn<() => Promise<void>>(() => Promise.resolve());
+        const beforeQuitHandlers: (() => void)[] = [];
+        const fakeApp = {
+            on: vi.fn((event: string, handler: () => void) => {
+                if (event === 'before-quit') beforeQuitHandlers.push(handler);
+            }),
+        };
+
+        await registerSaveManagerLifecycle({
+            app: fakeApp,
+            saveManager: {
+                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                markCleanExit,
+                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
+            },
+            knownGameIds: [],
+        });
+
+        expect(beforeQuitHandlers).toHaveLength(1);
+        beforeQuitHandlers[0]?.();
+        await Promise.resolve();
+        expect(markCleanExit).toHaveBeenCalledTimes(1);
+    });
+
+    it('calls checkCrashRecovery with the supplied knownGameIds', async () => {
+        const checkCrashRecovery = vi.fn<(ids: readonly string[]) => Promise<null>>(() =>
+            Promise.resolve(null),
+        );
+        const fakeApp = { on: vi.fn() };
+
+        await registerSaveManagerLifecycle({
+            app: fakeApp,
+            saveManager: {
+                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                markCleanExit: vi.fn(() => Promise.resolve()),
+                checkCrashRecovery,
+            },
+            knownGameIds: ['tactics', 'chess'],
+        });
+
+        expect(checkCrashRecovery).toHaveBeenCalledWith(['tactics', 'chess']);
+    });
+
+    it('returns autosaveMeta: null when checkCrashRecovery returns null', async () => {
+        const fakeApp = { on: vi.fn() };
+
+        const result = await registerSaveManagerLifecycle({
+            app: fakeApp,
+            saveManager: {
+                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                markCleanExit: vi.fn(() => Promise.resolve()),
+                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
+            },
+            knownGameIds: [],
+        });
+
+        expect(result.autosaveMeta).toBeNull();
+    });
+
+    it('returns autosaveMeta with the slot info when an autosave is detected', async () => {
+        const meta = {
+            slotId: 'tactics/autosave',
+            gameId: 'tactics',
+            savedAt: 1_000_000,
+            turnNumber: 3,
+            playerNames: ['Alice', 'Bob'] as readonly string[],
+            schemaVersion: 1,
+            sizeBytes: 512,
+        };
+        const fakeApp = { on: vi.fn() };
+
+        const result = await registerSaveManagerLifecycle({
+            app: fakeApp,
+            saveManager: {
+                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                markCleanExit: vi.fn(() => Promise.resolve()),
+                checkCrashRecovery: vi.fn(() => Promise.resolve(meta)),
+            },
+            knownGameIds: ['tactics'],
+        });
+
+        expect(result.autosaveMeta).toStrictEqual(meta);
     });
 });
