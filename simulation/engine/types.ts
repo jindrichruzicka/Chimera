@@ -92,6 +92,12 @@ export interface BaseGameSnapshot {
     readonly phase: GamePhase;
     readonly events: readonly GameEvent[];
     readonly turnClock?: { readonly activePlayerId: PlayerId; readonly deadlineMs: number };
+    /**
+     * The player ID of the session host.
+     * Required for engine:save and engine:load host-only validation (invariant #25).
+     * Optional here because single-player and test fixtures may omit it.
+     */
+    readonly hostPlayerId?: PlayerId;
 }
 
 // ─── PipelineContext ─────────────────────────────────────────────────────────

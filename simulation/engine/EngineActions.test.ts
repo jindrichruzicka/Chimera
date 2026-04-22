@@ -22,17 +22,19 @@ import type { BaseGameSnapshot, PlayerId } from './types.js';
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
 
-const makeSnapshot = (): BaseGameSnapshot => ({
+const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
     tick: 0,
     seed: 42,
     players: {},
     entities: {},
     phase: 'waiting' as BaseGameSnapshot['phase'],
     events: [],
+    ...(hostPlayerId !== undefined && { hostPlayerId }),
 });
 
 const stubCtx = { rng: makeStubRng(0.5) };
 const hostId = 'p1' as PlayerId;
+const guestId = 'p2' as PlayerId;
 
 // ─── EngineActions array ──────────────────────────────────────────────────────
 
@@ -42,8 +44,8 @@ describe('EngineActions array', () => {
         expect(EngineActions.length).toBeGreaterThan(0);
     });
 
-    it('contains exactly two definitions', () => {
-        expect(EngineActions).toHaveLength(2);
+    it('contains exactly four definitions', () => {
+        expect(EngineActions).toHaveLength(4);
     });
 
     it('contains an engine:tick definition', () => {
@@ -53,6 +55,16 @@ describe('EngineActions array', () => {
 
     it('contains an engine:end_turn definition', () => {
         const definition = EngineActions.find((d) => d.type === 'engine:end_turn');
+        expect(definition).toBeDefined();
+    });
+
+    it('contains an engine:save definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:save');
+        expect(definition).toBeDefined();
+    });
+
+    it('contains an engine:load definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:load');
         expect(definition).toBeDefined();
     });
 });
@@ -236,5 +248,178 @@ describe('registerEngineActions', () => {
                 reduce: (s) => s,
             }),
         ).toThrow('NamespaceCollisionError');
+    });
+
+    it('registers engine:save without throwing', () => {
+        registerEngineActions(registry);
+        expect(registry.has('engine:save')).toBe(true);
+    });
+
+    it('registers engine:load without throwing', () => {
+        registerEngineActions(registry);
+        expect(registry.has('engine:load')).toBe(true);
+    });
+
+    it('all four engine: types appear in registeredTypes()', () => {
+        registerEngineActions(registry);
+        const types = registry.registeredTypes();
+        expect(types).toContain('engine:save');
+        expect(types).toContain('engine:load');
+    });
+});
+
+// ─── engine:save definition ───────────────────────────────────────────────────
+
+describe('engine:save definition', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:save');
+        if (!d) throw new Error('engine:save not found');
+        return d;
+    };
+
+    it('has type string "engine:save"', () => {
+        expect(definition().type).toBe('engine:save');
+    });
+
+    it('parsePayload accepts a valid { slotId: string } payload', () => {
+        expect(() => definition().parsePayload({ slotId: 'tactics/autosave' })).not.toThrow();
+    });
+
+    it('parsePayload returns the slotId unchanged', () => {
+        const parsed = definition().parsePayload({ slotId: 'tactics/slot-1' });
+        expect(parsed).toEqual({ slotId: 'tactics/slot-1' });
+    });
+
+    it('parsePayload throws when slotId is missing', () => {
+        expect(() => definition().parsePayload({})).toThrow(TypeError);
+    });
+
+    it('parsePayload throws when slotId is not a string', () => {
+        expect(() => definition().parsePayload({ slotId: 42 })).toThrow(TypeError);
+    });
+
+    it('validate returns ok: true when playerId === hostPlayerId', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate(
+            { slotId: 'tactics/autosave' },
+            snapshot,
+            hostId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    it('validate returns ok: false when playerId !== hostPlayerId (invariant #25)', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate(
+            { slotId: 'tactics/autosave' },
+            snapshot,
+            guestId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(false);
+    });
+
+    it('validate returns ok: false when hostPlayerId is absent', () => {
+        const snapshot = makeSnapshot(); // no hostPlayerId
+        const result = definition().validate(
+            { slotId: 'tactics/autosave' },
+            snapshot,
+            hostId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(false);
+    });
+
+    it('reduce returns snapshot unchanged (stub — save logic is in SaveManager)', () => {
+        const snapshot = makeSnapshot(hostId);
+        const next = definition().reduce(snapshot, { slotId: 'tactics/autosave' }, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
+
+    it('reduce does not mutate the input snapshot', () => {
+        const snapshot = makeSnapshot(hostId);
+        const frozen = Object.freeze({ ...snapshot });
+        expect(() =>
+            definition().reduce(frozen, { slotId: 'tactics/autosave' }, hostId, stubCtx),
+        ).not.toThrow();
+    });
+});
+
+// ─── engine:load definition ───────────────────────────────────────────────────
+
+describe('engine:load definition', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:load');
+        if (!d) throw new Error('engine:load not found');
+        return d;
+    };
+
+    it('has type string "engine:load"', () => {
+        expect(definition().type).toBe('engine:load');
+    });
+
+    it('parsePayload accepts a valid { slotId: string } payload', () => {
+        expect(() => definition().parsePayload({ slotId: 'tactics/slot-1' })).not.toThrow();
+    });
+
+    it('parsePayload returns the slotId unchanged', () => {
+        const parsed = definition().parsePayload({ slotId: 'tactics/slot-1' });
+        expect(parsed).toEqual({ slotId: 'tactics/slot-1' });
+    });
+
+    it('parsePayload throws when slotId is missing', () => {
+        expect(() => definition().parsePayload({})).toThrow(TypeError);
+    });
+
+    it('parsePayload throws when slotId is not a string', () => {
+        expect(() => definition().parsePayload({ slotId: false })).toThrow(TypeError);
+    });
+
+    it('validate returns ok: true when playerId === hostPlayerId', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate(
+            { slotId: 'tactics/slot-1' },
+            snapshot,
+            hostId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    it('validate returns ok: false when playerId !== hostPlayerId (invariant #25)', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate(
+            { slotId: 'tactics/slot-1' },
+            snapshot,
+            guestId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(false);
+    });
+
+    it('validate returns ok: false when hostPlayerId is absent', () => {
+        const snapshot = makeSnapshot(); // no hostPlayerId
+        const result = definition().validate(
+            { slotId: 'tactics/slot-1' },
+            snapshot,
+            hostId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(false);
+    });
+
+    it('reduce returns snapshot unchanged (stub — load logic is in SaveManager)', () => {
+        const snapshot = makeSnapshot(hostId);
+        const next = definition().reduce(snapshot, { slotId: 'tactics/slot-1' }, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
+
+    it('reduce does not mutate the input snapshot', () => {
+        const snapshot = makeSnapshot(hostId);
+        const frozen = Object.freeze({ ...snapshot });
+        expect(() =>
+            definition().reduce(frozen, { slotId: 'tactics/slot-1' }, hostId, stubCtx),
+        ).not.toThrow();
     });
 });

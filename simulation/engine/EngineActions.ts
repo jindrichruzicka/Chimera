@@ -3,9 +3,10 @@
  *
  * Reserved engine action definitions for the Chimera simulation core.
  *
- * Defines `ActionDefinition` entries for the two M1-required engine-reserved
- * action types: `engine:tick` and `engine:end_turn`. These are the only callers
- * of the engine-internal `registerEngineAction()` bypass on `ActionRegistry`.
+ * Defines `ActionDefinition` entries for the four M1-required engine-reserved
+ * action types: `engine:tick`, `engine:end_turn`, `engine:save`, and
+ * `engine:load`. These are the only callers of the engine-internal
+ * `registerEngineAction()` bypass on `ActionRegistry`.
  *
  * Architecture reference: §4.2, §4.7
  * Task: F03 / T4 (issue #27)
@@ -41,6 +42,14 @@ export type EngineTickPayload = Record<string, unknown> & {
  * No payload fields required — the acting player is identified by the envelope.
  */
 export type EngineEndTurnPayload = Record<string, never>;
+
+/**
+ * Payload for `engine:save` and `engine:load`.
+ * `slotId` is the qualified slot identifier `'<gameId>/<slotName>'`.
+ */
+export type EngineSaveLoadPayload = Record<string, unknown> & {
+    readonly slotId: string;
+};
 
 // ─── engine:tick ──────────────────────────────────────────────────────────────
 
@@ -105,6 +114,94 @@ const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
     },
 } satisfies ActionDefinition<EngineEndTurnPayload>;
 
+// ─── engine:save ─────────────────────────────────────────────────────────────
+
+/**
+ * Stub `ActionDefinition` for `engine:save`.
+ *
+ * Signals the host to write the current simulation state to a save slot.
+ * Only the host player may dispatch this action (invariant #25).
+ * The reducer is a no-op stub — actual persistence is handled by SaveManager
+ * in the main process after the action clears the pipeline.
+ */
+const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
+    type: 'engine:save',
+
+    parsePayload(raw: Readonly<Record<string, unknown>>): EngineSaveLoadPayload {
+        if (typeof raw['slotId'] !== 'string') {
+            throw new TypeError(
+                'engine:save payload must have a string "slotId" field; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+        return { slotId: raw['slotId'] };
+    },
+
+    validate(
+        _payload: EngineSaveLoadPayload,
+        state: Readonly<BaseGameSnapshot>,
+        playerId: string,
+        _ctx,
+    ): ValidationResult {
+        if (state.hostPlayerId === undefined || playerId !== state.hostPlayerId) {
+            return {
+                ok: false,
+                reason: 'engine:save may only be dispatched by the host player (invariant #25)',
+            };
+        }
+        return { ok: true };
+    },
+
+    reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineSaveLoadPayload): BaseGameSnapshot {
+        // Stub: returns snapshot unchanged. Actual save is performed by SaveManager.
+        return state;
+    },
+} satisfies ActionDefinition<EngineSaveLoadPayload>;
+
+// ─── engine:load ──────────────────────────────────────────────────────────────
+
+/**
+ * Stub `ActionDefinition` for `engine:load`.
+ *
+ * Signals the host to replace the current simulation state from a save slot.
+ * Only the host player may dispatch this action (invariant #25).
+ * The reducer is a no-op stub — actual state replacement is handled by
+ * SaveManager.restoreFromSave() in the main process.
+ */
+const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
+    type: 'engine:load',
+
+    parsePayload(raw: Readonly<Record<string, unknown>>): EngineSaveLoadPayload {
+        if (typeof raw['slotId'] !== 'string') {
+            throw new TypeError(
+                'engine:load payload must have a string "slotId" field; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+        return { slotId: raw['slotId'] };
+    },
+
+    validate(
+        _payload: EngineSaveLoadPayload,
+        state: Readonly<BaseGameSnapshot>,
+        playerId: string,
+        _ctx,
+    ): ValidationResult {
+        if (state.hostPlayerId === undefined || playerId !== state.hostPlayerId) {
+            return {
+                ok: false,
+                reason: 'engine:load may only be dispatched by the host player (invariant #25)',
+            };
+        }
+        return { ok: true };
+    },
+
+    reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineSaveLoadPayload): BaseGameSnapshot {
+        // Stub: returns snapshot unchanged. Actual load is performed by SaveManager.
+        return state;
+    },
+} satisfies ActionDefinition<EngineSaveLoadPayload>;
+
 // ─── EngineActions ────────────────────────────────────────────────────────────
 
 /**
@@ -121,6 +218,8 @@ const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
 export const EngineActions: readonly ActionDefinition<Record<string, unknown>>[] = [
     engineTickDefinition,
     engineEndTurnDefinition,
+    engineSaveDefinition,
+    engineLoadDefinition,
 ] as const;
 
 // ─── registerEngineActions ────────────────────────────────────────────────────
