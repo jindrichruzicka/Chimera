@@ -135,9 +135,13 @@ gh issue list \
 
 ## Procedure: Close a Task Issue
 
+Only close a task issue **after** the merge script (`check-and-merge.sh`) exits 0 and the push to `origin/main` is confirmed.
+
 ```bash
-gh issue close <number> --repo $GH_REPO --comment "Completed in PR #<pr>"
+gh issue close <ISSUE_NUMBER> --repo $GH_REPO --comment "Implemented in $(git rev-parse --short HEAD) on main."
 ```
+
+**Parent-feature-issue exception:** If this task belongs to a feature issue (i.e. it is a child task of a parent `feature`-labelled issue), do **not** close the parent here. The parent is closed only by the review task ("Review all F<NN> changes and merge to main") after all child tasks are merged.
 
 ---
 
