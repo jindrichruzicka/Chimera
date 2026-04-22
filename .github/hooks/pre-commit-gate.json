@@ -1,6 +1,16 @@
 {
     "hooks": [
         {
+            "name": "pre-commit-gate-no-verify-block",
+            "type": "PreToolUse",
+            "tool": "Bash",
+            "match": {
+                "command_pattern": "^git commit\\b.*--no-verify"
+            },
+            "block": true,
+            "on_match": "[hook:pre-commit-gate] --no-verify is prohibited on the Chimera project."
+        },
+        {
             "name": "pre-commit-gate",
             "type": "PreToolUse",
             "tool": "Bash",
