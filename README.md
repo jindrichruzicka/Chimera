@@ -121,3 +121,23 @@ renderer/
 - Vitest + fast-check + React Testing Library unit/integration tests; Playwright E2E.
 - Custom ESLint rules (`chimera/no-fromfloat-in-simulation`, `no-context-null-bang`).
 - Debug mode (`CHIMERA_DEBUG=1`) guarded against production builds.
+
+## Agents & skills
+
+AI agents and reusable skills live in [`.github/agents/`](.github/agents/) and [`.github/skills/`](.github/skills/). Invoke agents via the VS Code Copilot agent panel (click the agent icon or type `@`).
+
+| Agent                        | When to use                                                                           |
+| ---------------------------- | ------------------------------------------------------------------------------------- |
+| **Chimera Architect**        | System design, module boundary questions, IPC contracts, invariant questions          |
+| **Chimera Engine Developer** | Writing code, fixing bugs, implementing issues, running TDD cycle, merging branches   |
+| **Chimera Code Reviewer**    | Pre-merge quality gate: architecture, SOLID, TypeScript, security, determinism checks |
+| **Chimera Product Manager**  | Planning milestones, creating GitHub issues, roadmap decisions, sprint planning       |
+| **Chimera QA Engineer**      | Writing Playwright E2E specs, adding test coverage, regression tests                  |
+
+Skills are on-demand workflows invoked by the agents. Key skills:
+
+- [`git/create-branch`](.github/skills/git/create-branch/SKILL.md) — create a correctly-named branch from a GitHub issue
+- [`git/merge`](.github/skills/git/merge/SKILL.md) — validate and merge a branch to `main`
+- [`tdd`](.github/skills/tdd/SKILL.md) — red-green-refactor cycle with exact `vitest` commands
+- [`invariants`](.github/skills/invariants/SKILL.md) — mechanical Appendix B invariant checker
+- [`github`](.github/skills/github/SKILL.md) — create milestones, issues, close tasks
