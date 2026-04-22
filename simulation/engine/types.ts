@@ -15,6 +15,8 @@
  *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
  */
 
+import type { DeterministicRng } from './DeterministicRng.js';
+
 // ─── Primitive branded identifiers ───────────────────────────────────────────
 
 /**
@@ -169,10 +171,10 @@ export interface ValidationResult {
  * change requiring a dedicated Appendix B invariant. Do NOT plumb manager
  * references, loggers, wall-clock time, or network state through here.
  *
- * `rng` — seeded deterministic function; typed as `() => number` (returns values
- *          in [0, 1)) until F04 lands the full `DeterministicRng` interface (§4.2.1).
- *          Game code MUST use `ctx.rng()` for all randomness; `Math.random()` is
- *          blocked by the `chimera/no-restricted-globals` ESLint rule (F04).
+ * `rng` — seeded `DeterministicRng` instance derived from `(snapshot.seed, snapshot.tick)`
+ *          by `ActionPipeline.#buildReduceContext`. Game code MUST use `ctx.rng.*` for all
+ *          randomness; `Math.random()` is blocked by the `chimera/no-restricted-globals`
+ *          ESLint rule (F04).
  *
  * `db`  — optional content database placeholder until F05 wires `ContentDatabase`.
  *          Games that declare no content never receive a `db`.
@@ -185,7 +187,7 @@ export interface ValidationResult {
  *              at Stage 5 (F03/T5).
  */
 export interface ReduceContext {
-    readonly rng: () => number;
+    readonly rng: DeterministicRng;
     readonly db?: ContentDatabase;
     readonly dispatch?: (
         state: Readonly<BaseGameSnapshot>,

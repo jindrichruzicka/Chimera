@@ -17,6 +17,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ActionRegistry } from './ActionRegistry.js';
 import { EngineActions, registerEngineActions } from './EngineActions.js';
+import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId } from './types.js';
 
 // ─── Test fixtures ────────────────────────────────────────────────────────────
@@ -30,7 +31,7 @@ const makeSnapshot = (): BaseGameSnapshot => ({
     events: [],
 });
 
-const stubCtx = { rng: () => 0.5 };
+const stubCtx = { rng: makeStubRng(0.5) };
 const hostId = 'p1' as PlayerId;
 
 // ─── EngineActions array ──────────────────────────────────────────────────────

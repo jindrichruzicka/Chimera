@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { makeStubRng } from './__test-support__/stubs.js';
 
 import type {
     PlayerId,
@@ -198,19 +199,19 @@ describe('ValidationResult', () => {
 
 describe('ReduceContext', () => {
     it('can be constructed with only rng (db is optional)', () => {
-        const ctx: ReduceContext = { rng: () => 0.5 };
-        expect(ctx.rng()).toBe(0.5);
+        const ctx: ReduceContext = { rng: makeStubRng(0.5) };
+        expect(ctx.rng.float()).toBe(0.5);
     });
 
     it('can be constructed with both rng and db', () => {
         const db = {} as ContentDatabase;
-        const ctx: ReduceContext = { rng: () => 0.1, db };
+        const ctx: ReduceContext = { rng: makeStubRng(0.1), db };
         expect(ctx.db).toBeDefined();
     });
 
-    it('rng returns a number', () => {
-        const ctx: ReduceContext = { rng: () => 42 };
-        const result: number = ctx.rng();
+    it('rng.float() returns a number', () => {
+        const ctx: ReduceContext = { rng: makeStubRng(0.7) };
+        const result: number = ctx.rng.float();
         expect(typeof result).toBe('number');
     });
 });
@@ -277,7 +278,7 @@ describe('ActionDefinition', () => {
             events: [],
         };
 
-        const ctx: ReduceContext = { rng: () => 0 };
+        const ctx: ReduceContext = { rng: makeStubRng(0) };
         const next = def.reduce(initial, {}, makePlayerId('p1'), ctx);
 
         expect(next).not.toBe(initial);

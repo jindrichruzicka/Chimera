@@ -15,6 +15,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StateReducer, ActionSchemaError } from './StateReducer.js';
 import { ActionRegistry, UnknownActionTypeError } from './ActionRegistry.js';
+import { makeStubRng } from './__test-support__/stubs.js';
 import type {
     BaseGameSnapshot,
     ActionEnvelope,
@@ -78,7 +79,7 @@ describe('StateReducer', () => {
         const reducer = new StateReducer(registry);
         const snapshot = makeSnapshot(0);
         const action = makeEnvelope(0, 'game:reducer-spy');
-        const ctx: ReduceContext = { rng: () => 0 };
+        const ctx: ReduceContext = { rng: makeStubRng(0) };
 
         reducer.apply(snapshot, action, ctx);
 
@@ -98,14 +99,14 @@ describe('StateReducer', () => {
 
         const reducer = new StateReducer(registry);
         const result = reducer.apply(makeSnapshot(0), makeEnvelope(0, 'game:result'), {
-            rng: () => 0,
+            rng: makeStubRng(0),
         });
         expect(result).toBe(modified);
     });
 
     it('throws UnknownActionTypeError for unregistered action type', () => {
         const reducer = new StateReducer(registry);
-        const ctx: ReduceContext = { rng: () => 0 };
+        const ctx: ReduceContext = { rng: makeStubRng(0) };
         expect(() =>
             reducer.apply(makeSnapshot(0), makeEnvelope(0, 'game:unregistered'), ctx),
         ).toThrow(UnknownActionTypeError);
@@ -123,7 +124,7 @@ describe('StateReducer', () => {
         registry.register(badSchemaDef);
 
         const reducer = new StateReducer(registry);
-        const ctx: ReduceContext = { rng: () => 0 };
+        const ctx: ReduceContext = { rng: makeStubRng(0) };
         expect(() =>
             reducer.apply(makeSnapshot(0), makeEnvelope(0, 'game:bad-sr-schema'), ctx),
         ).toThrow(ActionSchemaError);

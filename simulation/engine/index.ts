@@ -31,6 +31,13 @@ export type {
     SimulationClientRole,
 } from './types.js';
 
+export type { DeterministicRng } from './DeterministicRng.js';
+export { createRng } from './DeterministicRng.js';
+
+export { simulationClock } from './SimulationClock.js';
+export { RealtimeTicker } from './SimulationClock.js';
+export type { SimulationClock, RealtimeTickerInterface } from './SimulationClock.js';
+
 export {
     ActionRegistry,
     NamespaceCollisionError,

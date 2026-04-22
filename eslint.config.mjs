@@ -29,6 +29,8 @@ export default tseslint.config(
             'renderer/out/**',
             'renderer/.next/**',
             '**/*.d.ts',
+            // Fixture files used by ESLint smoke tests; they intentionally violate lint rules.
+            'simulation/engine/__tests__/fixtures/**',
         ],
     },
 
@@ -45,7 +47,12 @@ export default tseslint.config(
         languageOptions: {
             parserOptions: {
                 projectService: {
-                    allowDefaultProject: ['*.ts', '*.mts', '*.cts'],
+                    allowDefaultProject: [
+                        '*.ts',
+                        '*.mts',
+                        '*.cts',
+                        'simulation/engine/__tests__/fixtures/*.ts',
+                    ],
                 },
                 tsconfigRootDir: import.meta.dirname,
             },

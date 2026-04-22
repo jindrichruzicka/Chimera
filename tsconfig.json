@@ -38,5 +38,12 @@
         "renderer/**/*.ts",
         "shared/**/*.ts"
     ],
-    "exclude": ["node_modules", "dist", "build", "out", "**/out/**"]
+    "exclude": [
+        "node_modules",
+        "dist",
+        "build",
+        "out",
+        "**/out/**",
+        "simulation/engine/__tests__/fixtures/**"
+    ]
 }

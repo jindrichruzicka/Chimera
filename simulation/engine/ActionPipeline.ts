@@ -20,6 +20,7 @@
 import type { Logger } from '@chimera/shared/logging.js';
 import type { ActionEnvelope, BaseGameSnapshot, ReduceContext } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
+import { createRng } from './DeterministicRng.js';
 import { ActionSchemaError } from './StateReducer.js';
 export { ActionSchemaError, StateReducer } from './StateReducer.js';
 
@@ -220,8 +221,9 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
     /**
      * Build the `ReduceContext` for a single `process()` invocation.
      *
-     * `rng` is a noop returning `0` — replaced in F04 with a seeded
-     * `DeterministicRng` derived from `(snapshot.seed, snapshot.tick)`.
+     * `rng` is a seeded `DeterministicRng` derived from `(snapshot.seed, snapshot.tick)`
+     * via `createRng`. Each `process()` call gets a fresh RNG seeded from the canonical
+     * (seed, tick) pair — ensuring deterministic, reproducible draws for every action.
      *
      * `dispatch` is the re-entrant pipeline entry point. Depth is tracked on
      * the pipeline instance (synchronous only). Exceeding `MAX_NESTED_DISPATCH`
@@ -231,9 +233,8 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      *       Game reducers must NOT call it.
      */
     #buildReduceContext(snapshot: Readonly<BaseGameSnapshot>): ReduceContext {
-        void snapshot; // will be used by DeterministicRng seeding in F04
         return {
-            rng: () => 0, // noop — replaced in F04
+            rng: createRng(snapshot.seed, snapshot.tick),
             dispatch: (dispatchState, dispatchAction) => {
                 if (this.#depth >= MAX_NESTED_DISPATCH) {
                     throw new RecursiveDispatchError(this.#depth);

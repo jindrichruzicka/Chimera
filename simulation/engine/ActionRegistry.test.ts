@@ -22,6 +22,7 @@ import {
     NamespaceCollisionError,
     UnknownActionTypeError,
 } from './ActionRegistry.js';
+import { makeStubRng } from './__test-support__/stubs.js';
 import type { ActionDefinition, BaseGameSnapshot, PlayerId } from './types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -319,7 +320,7 @@ describe('ActionRegistry integration', () => {
         const resolved = registry.resolve('game:score');
         const payload = resolved.parsePayload({ amount: 5 });
         const result = resolved.validate(payload, {} as BaseGameSnapshot, pid, {
-            rng: () => 0.5,
+            rng: makeStubRng(0.5),
         });
         expect(result.ok).toBe(true);
     });
