@@ -28,3 +28,10 @@ export {
     UnknownDataRefError,
     createContentDatabase,
 } from './ContentDatabase';
+
+export {
+    type ContentSource,
+    type ContentLoadOptions,
+    type ContentLoader,
+    createContentLoader,
+} from './ContentLoader';
