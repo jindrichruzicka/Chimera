@@ -19,3 +19,12 @@ export {
     buildAssetRef,
     parseAssetRef,
 } from './AssetRef';
+
+export {
+    type ContentDatabase,
+    type ContentCollection,
+    ContentConflictError,
+    ContentSchemaError,
+    UnknownDataRefError,
+    createContentDatabase,
+} from './ContentDatabase';
