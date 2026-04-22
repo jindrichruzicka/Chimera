@@ -22,6 +22,7 @@ export default defineConfig({
                 'shared/**/*.ts',
                 'games/**/*.ts',
                 'networking/**/*.ts',
+                'tools/**/*.ts',
             ],
             exclude: ['**/*.test.ts', '**/*.test.tsx', '**/node_modules/**', '**/out/**'],
         },
