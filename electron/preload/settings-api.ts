@@ -10,6 +10,7 @@
 // guarantee the channel strings match on both sides (invariant 5).
 
 import type { ResolvedSettings, SettingsAPI, Unsubscribe, UserSettings } from './api.js';
+import type { IpcListener, PushListenerPort } from './listener.js';
 import { ResolvedSettingsSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SettingsAPI.get}. */
@@ -29,21 +30,20 @@ export const SETTINGS_RESET_CHANNEL = 'chimera:settings:reset';
 export const SETTINGS_CHANGE_CHANNEL = 'chimera:settings:change';
 
 /**
- * Shape of an `ipcRenderer` listener. Electron's real signature is
- * `(event: IpcRendererEvent, ...args: unknown[]) => void`; permissive here
- * so a test stub can invoke it with any payload.
+ * Back-compat alias for {@link IpcListener}. Retained so test files that
+ * imported `SettingsApiListener` continue to compile. New code should use
+ * {@link IpcListener} directly.
  */
-export type SettingsApiListener = (event: unknown, ...args: unknown[]) => void;
+export type SettingsApiListener = IpcListener;
 
 /**
- * Narrow port over `ipcRenderer`. The settings namespace never `send`s —
- * every mutation is a round-trip invoke so the renderer can surface
- * failures and receive the newly-resolved settings tree.
+ * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
+ * on/removeListener slice and adds `invoke`. The settings namespace never
+ * `send`s — every mutation is a round-trip invoke so the renderer can
+ * surface failures and receive the newly-resolved settings tree.
  */
-export interface SettingsApiIpcPort {
+export interface SettingsApiIpcPort extends PushListenerPort {
     invoke(channel: string, ...args: unknown[]): Promise<unknown>;
-    on(channel: string, listener: SettingsApiListener): void;
-    removeListener(channel: string, listener: SettingsApiListener): void;
 }
 
 /**
@@ -72,11 +72,12 @@ export function createSettingsApi(ipc: SettingsApiIpcPort): SettingsAPI {
                     parseInvokeResponse(ResolvedSettingsSchema, SETTINGS_RESET_CHANNEL, value),
                 ),
         onChange: (cb: (gameId: string, settings: ResolvedSettings) => void): Unsubscribe => {
-            const listener: SettingsApiListener = (_event, ...args) => {
-                // Main emits via
-                //   webContents.send(channel, gameId, settings)
-                // so after the Electron event the positional arguments are
-                // `gameId` (string) then `settings` (ResolvedSettings).
+            // Two-argument push channel (`gameId`, `settings`) — the shared
+            // `subscribePush<T>` helper only covers the single-payload case,
+            // so this namespace keeps a minimal bespoke listener. The
+            // `IpcListener` type is the same one used by every other
+            // namespace (see electron/preload/listener.ts).
+            const listener: IpcListener = (_event, ...args) => {
                 cb(args[0] as string, args[1] as ResolvedSettings);
             };
             ipc.on(SETTINGS_CHANGE_CHANNEL, listener);

@@ -10,6 +10,8 @@
 // channel strings match on both sides.
 
 import type { ConnectionStatus, SystemAPI, Unsubscribe } from './api.js';
+import type { IpcListener, PushListenerPort } from './listener.js';
+import { subscribePush } from './listener.js';
 import { PlatformInfoSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SystemAPI.platform}. */
@@ -31,22 +33,22 @@ export const SYSTEM_CONNECTION_STATUS_CHANNEL = 'chimera:system:connection-statu
 export type PlatformInfo = Awaited<ReturnType<SystemAPI['platform']>>;
 
 /**
- * Shape of an `ipcRenderer` listener. Electron's real signature is
- * `(event: IpcRendererEvent, ...args: unknown[]) => void`; we keep it
- * permissively typed here so a test stub can invoke it with any payload.
+ * Back-compat alias for {@link IpcListener}. Retained so test files that
+ * imported `SystemApiListener` continue to compile. New code should use
+ * {@link IpcListener} directly.
  */
-export type SystemApiListener = (event: unknown, ...args: unknown[]) => void;
+export type SystemApiListener = IpcListener;
 
 /**
- * Narrow port over `ipcRenderer`. Exposing only the four methods the system
- * namespace uses keeps the API surface auditable and lets unit tests inject a
- * pure in-memory stub instead of mocking the real Electron module.
+ * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
+ * on/removeListener slice and adds the `invoke` / `send` methods that the
+ * system namespace uses. Keeps the API surface auditable and lets unit
+ * tests inject a pure in-memory stub instead of mocking the real Electron
+ * module.
  */
-export interface SystemApiIpcPort {
+export interface SystemApiIpcPort extends PushListenerPort {
     invoke(channel: string): Promise<unknown>;
     send(channel: string): void;
-    on(channel: string, listener: SystemApiListener): void;
-    removeListener(channel: string, listener: SystemApiListener): void;
 }
 
 /**
@@ -69,17 +71,7 @@ export function createSystemApi(ipc: SystemApiIpcPort): SystemAPI {
         quit: () => {
             ipc.send(SYSTEM_QUIT_CHANNEL);
         },
-        onConnectionStatus: (cb: (status: ConnectionStatus) => void): Unsubscribe => {
-            const listener: SystemApiListener = (_event, ...args) => {
-                // Main emits via `webContents.send(channel, status)`; the
-                // first positional argument (after the Electron event) is the
-                // payload. Coerce via the declared ConnectionStatus type.
-                cb(args[0] as ConnectionStatus);
-            };
-            ipc.on(SYSTEM_CONNECTION_STATUS_CHANNEL, listener);
-            return () => {
-                ipc.removeListener(SYSTEM_CONNECTION_STATUS_CHANNEL, listener);
-            };
-        },
+        onConnectionStatus: (cb: (status: ConnectionStatus) => void): Unsubscribe =>
+            subscribePush<ConnectionStatus>(ipc, SYSTEM_CONNECTION_STATUS_CHANNEL, cb),
     };
 }

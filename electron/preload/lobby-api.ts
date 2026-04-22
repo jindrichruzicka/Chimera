@@ -22,6 +22,8 @@ import type {
     LobbyState,
     Unsubscribe,
 } from './api.js';
+import type { IpcListener, PushListenerPort } from './listener.js';
+import { subscribePush } from './listener.js';
 import { LobbyInfoSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.host}. */
@@ -41,22 +43,20 @@ export const LOBBY_LEAVE_CHANNEL = 'chimera:lobby:leave';
 export const LOBBY_UPDATE_CHANNEL = 'chimera:lobby:update';
 
 /**
- * Shape of an `ipcRenderer` listener. Electron's real signature is
- * `(event: IpcRendererEvent, ...args: unknown[]) => void`; permissive here
- * so a test stub can invoke it with any payload.
+ * Back-compat alias for {@link IpcListener}. Retained so test files that
+ * imported `LobbyApiListener` continue to compile. New code should use
+ * {@link IpcListener} directly.
  */
-export type LobbyApiListener = (event: unknown, ...args: unknown[]) => void;
+export type LobbyApiListener = IpcListener;
 
 /**
- * Narrow port over `ipcRenderer`. Exposing only the four methods the lobby
- * namespace uses keeps the API surface auditable and lets unit tests inject
- * a pure in-memory stub instead of mocking the real Electron module.
+ * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
+ * on/removeListener slice and adds the `invoke` / `send` methods that the
+ * lobby namespace uses.
  */
-export interface LobbyApiIpcPort {
+export interface LobbyApiIpcPort extends PushListenerPort {
     invoke(channel: string, arg?: unknown): Promise<unknown>;
     send(channel: string): void;
-    on(channel: string, listener: LobbyApiListener): void;
-    removeListener(channel: string, listener: LobbyApiListener): void;
 }
 
 /**
@@ -77,17 +77,7 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
         leave: (): void => {
             ipc.send(LOBBY_LEAVE_CHANNEL);
         },
-        onUpdate: (cb: (lobby: LobbyState) => void): Unsubscribe => {
-            const listener: LobbyApiListener = (_event, ...args) => {
-                // Main emits via `webContents.send(channel, state)`; the
-                // first positional argument (after the Electron event) is
-                // the payload. Coerce via the declared LobbyState type.
-                cb(args[0] as LobbyState);
-            };
-            ipc.on(LOBBY_UPDATE_CHANNEL, listener);
-            return () => {
-                ipc.removeListener(LOBBY_UPDATE_CHANNEL, listener);
-            };
-        },
+        onUpdate: (cb: (lobby: LobbyState) => void): Unsubscribe =>
+            subscribePush<LobbyState>(ipc, LOBBY_UPDATE_CHANNEL, cb),
     };
 }

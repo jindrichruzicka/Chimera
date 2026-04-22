@@ -24,7 +24,9 @@ import type {
     PlayerSnapshot,
     Unsubscribe,
 } from './api.js';
-import { ActionRejectionSchema, parseInvokeResponse } from './schemas.js';
+import type { IpcListener, PushListenerPort } from './listener.js';
+import { subscribePush, subscribeValidatedPush } from './listener.js';
+import { ActionRejectionSchema } from './schemas.js';
 
 /** `ipcRenderer.send` target for {@link GameAPI.sendAction}. */
 export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
@@ -51,22 +53,20 @@ export const GAME_ACTION_REJECTED_CHANNEL = 'chimera:game:action-rejected';
 export const GAME_SWITCH_SEAT_CHANNEL = 'chimera:game:switch-seat';
 
 /**
- * Shape of an `ipcRenderer` listener. Electron's real signature is
- * `(event: IpcRendererEvent, ...args: unknown[]) => void`; we keep it
- * permissively typed here so a test stub can invoke it with any payload.
+ * Back-compat alias for {@link IpcListener}. Retained so test files that
+ * imported `GameApiListener` continue to compile. New code should use
+ * {@link IpcListener} directly.
  */
-export type GameApiListener = (event: unknown, ...args: unknown[]) => void;
+export type GameApiListener = IpcListener;
 
 /**
- * Narrow port over `ipcRenderer`. Exposing only the four methods the game
- * namespace uses keeps the API surface auditable and lets unit tests inject a
- * pure in-memory stub instead of mocking the real Electron module.
+ * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
+ * on/removeListener slice and adds `invoke` / `send` for the round-trip
+ * and fire-and-forget channels the game namespace uses.
  */
-export interface GameApiIpcPort {
+export interface GameApiIpcPort extends PushListenerPort {
     invoke(channel: string, arg?: unknown): Promise<unknown>;
     send(channel: string, payload?: unknown): void;
-    on(channel: string, listener: GameApiListener): void;
-    removeListener(channel: string, listener: GameApiListener): void;
 }
 
 /**
@@ -79,38 +79,22 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
         sendAction: (action: EngineAction): void => {
             ipc.send(GAME_SEND_ACTION_CHANNEL, action);
         },
-        onSnapshot: (cb: (snapshot: PlayerSnapshot) => void): Unsubscribe => {
-            const listener: GameApiListener = (_event, ...args) => {
-                // Main emits via `webContents.send(channel, snapshot)`; the
-                // first positional argument (after the Electron event) is the
-                // payload. Coerce via the declared PlayerSnapshot type —
-                // invariant 1 guarantees main never sends a full GameSnapshot.
-                cb(args[0] as PlayerSnapshot);
-            };
-            ipc.on(GAME_SNAPSHOT_CHANNEL, listener);
-            return () => {
-                ipc.removeListener(GAME_SNAPSHOT_CHANNEL, listener);
-            };
-        },
-        onActionRejected: (cb: (rejection: ActionRejection) => void): Unsubscribe => {
-            const listener: GameApiListener = (_event, ...args) => {
-                // Validate the inbound REJECT push before invoking the
-                // callback. A malformed push means main drifted from the
-                // declared wire shape — throwing `PreloadIpcValidationError`
-                // surfaces the drift with the channel name attached rather
-                // than letting garbage reach the renderer's error boundary.
-                const rejection = parseInvokeResponse(
-                    ActionRejectionSchema,
-                    GAME_ACTION_REJECTED_CHANNEL,
-                    args[0],
-                );
-                cb(rejection);
-            };
-            ipc.on(GAME_ACTION_REJECTED_CHANNEL, listener);
-            return () => {
-                ipc.removeListener(GAME_ACTION_REJECTED_CHANNEL, listener);
-            };
-        },
+        // invariant 1: main never sends a full GameSnapshot on this channel;
+        // the `subscribePush` cast is the same trust boundary the namespace
+        // declared before the shared helper existed.
+        onSnapshot: (cb: (snapshot: PlayerSnapshot) => void): Unsubscribe =>
+            subscribePush<PlayerSnapshot>(ipc, GAME_SNAPSHOT_CHANNEL, cb),
+        // Schema-validated because a malformed REJECT would otherwise
+        // propagate as garbage into the renderer error boundary — the
+        // channel-name-aware `PreloadIpcValidationError` thrown by
+        // `subscribeValidatedPush` pins the drift to this exact channel.
+        onActionRejected: (cb: (rejection: ActionRejection) => void): Unsubscribe =>
+            subscribeValidatedPush<ActionRejection>(
+                ipc,
+                GAME_ACTION_REJECTED_CHANNEL,
+                ActionRejectionSchema,
+                cb,
+            ),
         switchActiveSeat: async (playerId: PlayerId): Promise<void> => {
             await ipc.invoke(GAME_SWITCH_SEAT_CHANNEL, playerId);
         },

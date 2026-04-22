@@ -14,6 +14,8 @@
 // allowed to issue them.
 
 import type { SaveRequest, SaveSlotMeta, SavesAPI, Unsubscribe } from './api.js';
+import type { IpcListener, PushListenerPort } from './listener.js';
+import { subscribePush } from './listener.js';
 import { SaveSlotListSchema, SaveSlotMetaSchema, parseInvokeResponse } from './schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SavesAPI.list}. */
@@ -35,20 +37,20 @@ export const SAVES_DELETE_CHANNEL = 'chimera:saves:delete';
 export const SAVES_SLOT_UPDATE_CHANNEL = 'chimera:saves:slot-update';
 
 /**
- * Shape of an `ipcRenderer` listener. Electron's real signature is
- * `(event: IpcRendererEvent, ...args: unknown[]) => void`; permissive here
- * so a test stub can invoke it with any payload.
+ * Back-compat alias for {@link IpcListener}. Retained so test files that
+ * imported `SavesApiListener` continue to compile. New code should use
+ * {@link IpcListener} directly.
  */
-export type SavesApiListener = (event: unknown, ...args: unknown[]) => void;
+export type SavesApiListener = IpcListener;
 
 /**
- * Narrow port over `ipcRenderer`. The saves namespace never `send`s — every
- * write is a round-trip invoke so the renderer can surface failures.
+ * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
+ * on/removeListener slice and adds `invoke`. The saves namespace never
+ * `send`s — every write is a round-trip invoke so the renderer can
+ * surface failures.
  */
-export interface SavesApiIpcPort {
+export interface SavesApiIpcPort extends PushListenerPort {
     invoke(channel: string, arg?: unknown): Promise<unknown>;
-    on(channel: string, listener: SavesApiListener): void;
-    removeListener(channel: string, listener: SavesApiListener): void;
 }
 
 /**
@@ -87,17 +89,7 @@ export function createSavesApi(ipc: SavesApiIpcPort): SavesAPI {
         delete: async (slotId: string): Promise<void> => {
             await ipc.invoke(SAVES_DELETE_CHANNEL, slotId);
         },
-        onSlotUpdate: (cb: (slots: SaveSlotMeta[]) => void): Unsubscribe => {
-            const listener: SavesApiListener = (_event, ...args) => {
-                // Main emits via `webContents.send(channel, slots)`; the
-                // first positional argument (after the Electron event) is
-                // the payload. Coerce via the declared type.
-                cb(args[0] as SaveSlotMeta[]);
-            };
-            ipc.on(SAVES_SLOT_UPDATE_CHANNEL, listener);
-            return () => {
-                ipc.removeListener(SAVES_SLOT_UPDATE_CHANNEL, listener);
-            };
-        },
+        onSlotUpdate: (cb: (slots: SaveSlotMeta[]) => void): Unsubscribe =>
+            subscribePush<SaveSlotMeta[]>(ipc, SAVES_SLOT_UPDATE_CHANNEL, cb),
     };
 }
