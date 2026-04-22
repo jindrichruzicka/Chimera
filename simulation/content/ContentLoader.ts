@@ -206,18 +206,19 @@ async function loadDirectory(
  * Walk every item in every collection and check that all `DataRef`-shaped
  * string values (`"collectionType:id"`) resolve to a known item.
  *
- * Detection heuristic: any string value that contains `:` with a non-empty
- * left side is treated as a `DataRef` candidate.  When `validateRefs` is
- * enabled, callers should ensure non-ref strings with colons (e.g. timestamps)
- * are not present in content data, or use schema-declared field types.
+ * Detection: a string is treated as a DataRef candidate only when its left
+ * side of the first `:` exactly matches a collection type that exists in the
+ * database.  Other colon-containing strings (timestamps, URLs, etc.) are
+ * silently skipped.
  *
- * @throws {UnknownDataRefError} When a ref points to a non-existent item or
- *   an entirely unknown collection.
+ * @throws {UnknownDataRefError} When a ref points to a non-existent item in
+ *   a known collection.
  */
 function checkRefs(db: ContentDatabase): void {
+    const knownCollections = new Set(db.collectionTypes());
     for (const collectionType of db.collectionTypes()) {
         for (const item of db.getAll(collectionType)) {
-            walkForRefs(item, db);
+            walkForRefs(item, db, knownCollections);
         }
     }
 }
@@ -225,15 +226,16 @@ function checkRefs(db: ContentDatabase): void {
 /**
  * Recursively walk a plain object / array looking for DataRef-shaped strings.
  */
-function walkForRefs(value: unknown, db: ContentDatabase): void {
+function walkForRefs(value: unknown, db: ContentDatabase, knownCollections: Set<string>): void {
     if (typeof value === 'string') {
         const colon = value.indexOf(':');
         if (colon > 0) {
-            // Treat any "non-empty-left:rest" string as a DataRef candidate.
             const collectionType = value.slice(0, colon);
-            const id = value.slice(colon + 1);
-            if (!db.has(collectionType, id)) {
-                throw new UnknownDataRefError(value);
+            if (knownCollections.has(collectionType)) {
+                const id = value.slice(colon + 1);
+                if (!db.has(collectionType, id)) {
+                    throw new UnknownDataRefError(value);
+                }
             }
         }
         return;
@@ -241,14 +243,14 @@ function walkForRefs(value: unknown, db: ContentDatabase): void {
 
     if (Array.isArray(value)) {
         for (const element of value) {
-            walkForRefs(element, db);
+            walkForRefs(element, db, knownCollections);
         }
         return;
     }
 
     if (value !== null && typeof value === 'object') {
         for (const v of Object.values(value as Record<string, unknown>)) {
-            walkForRefs(v, db);
+            walkForRefs(v, db, knownCollections);
         }
     }
 }

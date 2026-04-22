@@ -219,12 +219,17 @@ describe('ContentLoader — ref-integrity validation', () => {
         expect(db.has('abilities', 'taunt')).toBe(true);
     });
 
-    it('validateRefs: true throws UnknownDataRefError for a dangling DataRef', async () => {
+    it('validateRefs: true throws UnknownDataRefError for a dangling DataRef when collection is known', async () => {
         const loader = createContentLoader();
-        // 'damage-types:poison' does not exist in the db
+        // 'damage-types' is a known collection but 'poison' does not exist in it
         await expect(
             loader.load(
                 [
+                    {
+                        type: 'inline',
+                        collectionType: 'damage-types',
+                        items: [{ id: 'fire', name: 'Fire' }],
+                    },
                     {
                         type: 'inline',
                         collectionType: 'abilities',
@@ -256,11 +261,17 @@ describe('ContentLoader — ref-integrity validation', () => {
         expect(db.has('abilities', 'fire-strike')).toBe(true);
     });
 
-    it('validateRefs: true checks refs nested in arrays', async () => {
+    it('validateRefs: true checks refs nested in arrays when collection is known', async () => {
         const loader = createContentLoader();
+        // 'damage-types' is a known collection but 'cold' does not exist
         await expect(
             loader.load(
                 [
+                    {
+                        type: 'inline',
+                        collectionType: 'damage-types',
+                        items: [{ id: 'fire', name: 'Fire' }],
+                    },
                     {
                         type: 'inline',
                         collectionType: 'units',
@@ -419,5 +430,60 @@ describe('ContentLoader — schema validation on directory source', () => {
                 schemas: { 'damage-types': DamageTypeSchema },
             }),
         ).rejects.toThrow(ContentSchemaError);
+    });
+});
+
+// ─── validateRefs false-positive prevention ───────────────────────────────────
+
+describe('ContentLoader — validateRefs false-positive prevention (H5)', () => {
+    it('does not throw on a timestamp string (ISO 8601 contains colons)', async () => {
+        const loader = createContentLoader();
+        const db = await loader.load(
+            [
+                {
+                    type: 'inline',
+                    collectionType: 'events',
+                    items: [{ id: 'evt1', createdAt: '2024-01-01T00:00:00Z' }],
+                },
+            ],
+            { validateRefs: true },
+        );
+        expect(db.has('events', 'evt1')).toBe(true);
+    });
+
+    it('does not throw on a URL string (contains colon)', async () => {
+        const loader = createContentLoader();
+        const db = await loader.load(
+            [
+                {
+                    type: 'inline',
+                    collectionType: 'events',
+                    items: [{ id: 'evt1', link: 'https://example.com/path' }],
+                },
+            ],
+            { validateRefs: true },
+        );
+        expect(db.has('events', 'evt1')).toBe(true);
+    });
+
+    it('still throws UnknownDataRefError for a string whose left side is a known collection', async () => {
+        const loader = createContentLoader();
+        await expect(
+            loader.load(
+                [
+                    {
+                        type: 'inline',
+                        collectionType: 'damage-types',
+                        items: [{ id: 'fire', name: 'Fire' }],
+                    },
+                    {
+                        type: 'inline',
+                        collectionType: 'abilities',
+                        items: [{ id: 'strike', damageType: 'damage-types:poison' }],
+                    },
+                ],
+                { validateRefs: true },
+            ),
+        ).rejects.toThrow(UnknownDataRefError);
     });
 });
