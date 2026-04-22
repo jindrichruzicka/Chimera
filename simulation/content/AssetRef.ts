@@ -88,7 +88,11 @@ export function buildAssetRef<T extends AssetKind>(
     gameId: string,
     relativePath: string,
 ): AssetRef<T> {
-    return `${gameId}/${relativePath}` as AssetRef<T>;
+    const ref = `${gameId}/${relativePath}`;
+    if (isTraversalUnsafe(gameId, relativePath)) {
+        throw new MalformedAssetRefError(ref);
+    }
+    return ref as AssetRef<T>;
 }
 
 // ---------------------------------------------------------------------------
@@ -107,10 +111,36 @@ export function parseAssetRef(ref: AssetRef): {
 } {
     const slash = ref.indexOf('/');
     if (slash < 1) throw new MalformedAssetRefError(ref);
-    return {
-        gameId: ref.slice(0, slash),
-        relativePath: ref.slice(slash + 1),
-    };
+    const gameId = ref.slice(0, slash);
+    const relativePath = ref.slice(slash + 1);
+    if (isTraversalUnsafe(gameId, relativePath)) {
+        throw new MalformedAssetRefError(ref);
+    }
+    return { gameId, relativePath };
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Returns true when the gameId or relativePath contain path-traversal
+ * components that would allow escaping the assets root when resolved by
+ * the AssetManager (F10). Pure string check — no filesystem access.
+ *
+ * Rejects:
+ *   - gameId containing `/` (would embed a directory separator)
+ *   - relativePath starting with `/` (absolute path injection)
+ *   - relativePath containing `..` as a path segment (directory traversal)
+ *   - NUL bytes in either argument (filesystem escape on some OS)
+ */
+function isTraversalUnsafe(gameId: string, relativePath: string): boolean {
+    if (gameId.includes('/') || gameId.includes('\0')) return true;
+    if (relativePath.startsWith('/')) return true;
+    if (relativePath.includes('\0')) return true;
+    // Check each segment for '..'
+    const segments = relativePath.split('/');
+    return segments.some((s) => s === '..');
 }
 
 // ---------------------------------------------------------------------------

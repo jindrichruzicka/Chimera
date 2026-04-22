@@ -76,6 +76,47 @@ describe('parseAssetRef', () => {
     });
 });
 
+describe('buildAssetRef — path-traversal rejection', () => {
+    it('throws MalformedAssetRefError when relativePath contains a .. segment', () => {
+        expect(() => buildAssetRef('tactics', '../etc/shadow')).toThrow(MalformedAssetRefError);
+    });
+
+    it('throws MalformedAssetRefError when relativePath starts with /', () => {
+        expect(() => buildAssetRef('tactics', '/absolute/path.png')).toThrow(
+            MalformedAssetRefError,
+        );
+    });
+
+    it('throws MalformedAssetRefError when relativePath contains a NUL byte', () => {
+        expect(() => buildAssetRef('tactics', 'ok\0evil')).toThrow(MalformedAssetRefError);
+    });
+
+    it('throws MalformedAssetRefError when gameId contains a slash', () => {
+        expect(() => buildAssetRef('tac/tics', 'textures/grass.webp')).toThrow(
+            MalformedAssetRefError,
+        );
+    });
+
+    it('throws MalformedAssetRefError when relativePath has .. in a nested segment', () => {
+        expect(() => buildAssetRef('tactics', 'textures/../../etc/shadow')).toThrow(
+            MalformedAssetRefError,
+        );
+    });
+});
+
+describe('parseAssetRef — path-traversal rejection', () => {
+    it('throws MalformedAssetRefError when relativePath contains ..', () => {
+        const bad = 'tactics/../etc/shadow' as AssetRef;
+        expect(() => parseAssetRef(bad)).toThrow(MalformedAssetRefError);
+    });
+
+    it('throws MalformedAssetRefError when relativePath starts with /', () => {
+        // constructed directly to bypass buildAssetRef validation
+        const bad = 'tactics//absolute' as AssetRef;
+        expect(() => parseAssetRef(bad)).toThrow(MalformedAssetRefError);
+    });
+});
+
 describe('MalformedAssetRefError', () => {
     it('is an instance of Error', () => {
         const err = new MalformedAssetRefError('bad-ref');
