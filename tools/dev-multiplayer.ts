@@ -313,14 +313,31 @@ function prefixLines(prefix: string, text: string): string {
     return text.replace(/^(?!$)/gm, prefix);
 }
 
-function installSignalForwarding(children: readonly ChildProcess[]): void {
-    const forward = (signal: NodeJS.Signals): void => {
-        for (const child of children) {
-            if (!child.killed) child.kill(signal);
-        }
+/**
+ * Register SIGINT/SIGTERM forwarders that relay the signal to every live
+ * child. Returns a disposer that removes both listeners; calling it more than
+ * once is safe (the second call is a no-op). Callers should invoke the
+ * disposer in a `finally` block so listener counts do not accumulate when
+ * `main()` is driven by tests in-process.
+ */
+export function installSignalForwarding(children: readonly ChildProcess[]): () => void {
+    const onSigint = (): void => forwardSignal(children, 'SIGINT');
+    const onSigterm = (): void => forwardSignal(children, 'SIGTERM');
+    process.on('SIGINT', onSigint);
+    process.on('SIGTERM', onSigterm);
+    let disposed = false;
+    return (): void => {
+        if (disposed) return;
+        disposed = true;
+        process.off('SIGINT', onSigint);
+        process.off('SIGTERM', onSigterm);
     };
-    process.on('SIGINT', () => forward('SIGINT'));
-    process.on('SIGTERM', () => forward('SIGTERM'));
+}
+
+function forwardSignal(children: readonly ChildProcess[], signal: NodeJS.Signals): void {
+    for (const child of children) {
+        if (!child.killed) child.kill(signal);
+    }
 }
 
 /**
@@ -393,8 +410,12 @@ async function main(): Promise<number> {
         children.push(spawnInstance(binary, buildClientSpawnConfig(opts, port, i)));
     }
 
-    installSignalForwarding(children);
-    return waitForAnyChildExit(children, 5_000);
+    const disposeSignals = installSignalForwarding(children);
+    try {
+        return await waitForAnyChildExit(children, 5_000);
+    } finally {
+        disposeSignals();
+    }
 }
 
 // Execute when invoked as a script (not when imported by the test suite).

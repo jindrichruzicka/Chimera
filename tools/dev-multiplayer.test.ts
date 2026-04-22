@@ -27,6 +27,7 @@ import {
     waitForPortListening,
     waitForAnyChildExit,
     isDirectInvocation,
+    installSignalForwarding,
     HarnessArgsError,
     HarnessGuardError,
     HarnessTimeoutError,
@@ -423,5 +424,61 @@ describe('isDirectInvocation()', () => {
         expect(isDirectInvocation('data:text/plain,foo', '/repo/tools/dev-multiplayer.ts')).toBe(
             false,
         );
+    });
+});
+
+// ─── installSignalForwarding ─────────────────────────────────────────────────
+
+describe('installSignalForwarding()', () => {
+    it('returns a disposer that removes the registered listeners', () => {
+        const before = {
+            sigint: process.listenerCount('SIGINT'),
+            sigterm: process.listenerCount('SIGTERM'),
+        };
+
+        const dispose = installSignalForwarding([]);
+
+        expect(process.listenerCount('SIGINT')).toBe(before.sigint + 1);
+        expect(process.listenerCount('SIGTERM')).toBe(before.sigterm + 1);
+
+        dispose();
+
+        expect(process.listenerCount('SIGINT')).toBe(before.sigint);
+        expect(process.listenerCount('SIGTERM')).toBe(before.sigterm);
+    });
+
+    it('forwards the received signal to every live child', () => {
+        const a = makeFakeChild();
+        const b = makeFakeChild();
+        const dispose = installSignalForwarding(asChildren([a, b]));
+        try {
+            process.emit('SIGINT');
+            expect(a.kills).toEqual(['SIGINT']);
+            expect(b.kills).toEqual(['SIGINT']);
+        } finally {
+            dispose();
+        }
+    });
+
+    it('skips children that are already killed', () => {
+        const a = makeFakeChild();
+        a.killed = true;
+        const b = makeFakeChild();
+        const dispose = installSignalForwarding(asChildren([a, b]));
+        try {
+            process.emit('SIGTERM');
+            expect(a.kills).toEqual([]);
+            expect(b.kills).toEqual(['SIGTERM']);
+        } finally {
+            dispose();
+        }
+    });
+
+    it('calling dispose() multiple times is safe (idempotent)', () => {
+        const before = process.listenerCount('SIGINT');
+        const dispose = installSignalForwarding([]);
+        dispose();
+        dispose();
+        expect(process.listenerCount('SIGINT')).toBe(before);
     });
 });
