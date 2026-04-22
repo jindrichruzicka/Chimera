@@ -5725,15 +5725,20 @@ Each spawned instance boots, consumes its CLI flags, and automatically hosts or 
 
 #### CLI Contract
 
-The harness adds three new flags to `electron/main/index.ts`, all gated by a single env guard:
+The harness adds six flags to `electron/main/index.ts`, all gated by a single env guard. All harness flags use the **equals-separator form** (`--flag=value`) so the same vector can be forwarded to Electron without shell-quoting ambiguity:
 
-| Flag                          | Accepted values       | Effect at startup                                                                                              |
-| ----------------------------- | --------------------- | -------------------------------------------------------------------------------------------------------------- |
-| `--dev-auto-host`             | boolean presence      | Skips the main menu; calls `LobbyManager.hostLobby({ port })` on the provided port.                            |
-| `--dev-auto-join <host:port>` | `127.0.0.1:7777`      | Skips the main menu; calls `LobbyManager.joinLobby({ address })`.                                              |
-| `--dev-profile-id <id>`       | `dev-p1`, `dev-p2`, … | Selects a seed profile from `tools/dev-profiles/` to attest at join time. Overrides any existing profile slot. |
+| Flag                          | Accepted values                   | Effect at startup                                                                                              |
+| ----------------------------- | --------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `--dev-auto-host`             | boolean presence                  | Skips the main menu; calls `LobbyManager.hostLobby({ port })` on the provided port.                            |
+| `--dev-auto-join=<host:port>` | `127.0.0.1:7777`                  | Skips the main menu; calls `LobbyManager.joinLobby({ address })`.                                              |
+| `--dev-port=<n>`              | integer in `[1, 65535]`           | Port the auto-hosting instance listens on (paired with `--dev-auto-host`).                                     |
+| `--dev-profile-id=<id>`       | `dev-p1`, `dev-p2`, …             | Selects a seed profile from `tools/dev-profiles/` to attest at join time. Overrides any existing profile slot. |
+| `--dev-game=<id>`             | content-database game id          | Pre-selects the game to launch into, skipping the game picker.                                                 |
+| `--dev-scenario=<name>`       | scenario identifier from the game | Pre-selects the scenario within the chosen game.                                                               |
 
-The environment variable `CHIMERA_DEV_HARNESS=1` must be present for any of these flags to take effect. In its absence the flags are ignored with a warning. The guard mirrors the `CHIMERA_DEBUG` / `CHIMERA_E2E` pattern (§4.12, §13.10).
+Each spawned instance also receives Electron's built-in `--user-data-dir=.dev-userdata/p<i>` so profiles, saves, settings, logs, and crash dumps stay isolated per-instance (invariant #78). That flag is handled by Electron itself, not by the harness contract.
+
+The environment variable `CHIMERA_DEV_HARNESS=1` must be present for any harness flag to take effect. In its absence the flags are ignored with a warning. The guard mirrors the `CHIMERA_DEBUG` / `CHIMERA_E2E` pattern (§4.12, §13.10).
 
 #### Launcher Script (`tools/dev-multiplayer.ts`)
 
@@ -5867,7 +5872,7 @@ Running N Electron instances on one machine exercises correctness — sync, proj
 
 #### Invariants
 
-77. **The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and the `--dev-auto-host` / `--dev-auto-join` / `--dev-profile-id` flags must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent.**
+77. **The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and every harness flag (`--dev-auto-host`, `--dev-auto-join`, `--dev-port`, `--dev-profile-id`, `--dev-game`, `--dev-scenario`) must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent.**
 78. **Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines.**
 
 #### What This Is Not
@@ -7285,7 +7290,7 @@ The 78 invariants are numbered stably; this index is purely navigational. A sing
 74. **`toastStore` is renderer-only state. Toast contents must never be derived from `GameSnapshot`, `PlayerSnapshot`, or `SaveFile`. Toasts are transient UI surfaces for the local viewer; other players do not see another player's toasts. (See §4.30.)**
 75. **`FixedPoint` is the ONLY allowed fractional representation in `GameSnapshot` and `EngineAction.payload`. A game that stores `number` for a fractional gameplay quantity violates invariant 44 even if it rounds consistently — determinism requires the shared `bigint` Q32.32 representation. (See §4.31.)**
 76. **`fromFloat()` is permitted only at content-load time for hard-coded constants. It must not be called inside `validate()`, `reduce()`, or any hot simulation path. Linting is enforced by a dedicated ESLint rule in CI. (See §4.31.)**
-77. **The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and the `--dev-auto-host` / `--dev-auto-join` / `--dev-profile-id` flags must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent. (See §4.32.)**
+77. **The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and every harness flag (`--dev-auto-host`, `--dev-auto-join`, `--dev-port`, `--dev-profile-id`, `--dev-game`, `--dev-scenario`) must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent. (See §4.32.)**
 78. **Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines. (See §4.32.)**
 
 ---
