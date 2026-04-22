@@ -151,11 +151,8 @@ Follow this workflow **exactly** for every task:
     No free-form commit messages after the first. Fixup commits keep the history clean for eventual squash-merge.
 5. **Merging to `main`.** When the branch is complete and the full pre-commit gate is green, land it by loading and following the **git skillset → merge sub-skill** ([.github/skills/git/merge/SKILL.md](../.github/skills/git/merge/SKILL.md)). The skill validates branch name, commit structure (first commit has a body, subsequent commits are `fixup!`), rebases with autosquash onto `origin/main`, fast-forward merges, pushes, and cleans up the branch. Never bypass the skill — do not run `git merge` or `git push origin main` ad-hoc, and never `--no-verify`. If the merge skill reports problems, fix them on the branch and re-run; do not merge partially.
 6. Push in-progress updates with: `git push origin <branch-name>`. Only the merge sub-skill pushes to `main`.
-7. **After the merge script confirms success**, close the originating GitHub issue:
-    ```bash
-    gh issue close <ISSUE_NUMBER> --repo jindrichruzicka/Chimera --comment "Implemented in $(git rev-parse --short HEAD) on main."
-    ```
-    Only close the issue after `check-and-merge.sh` exits 0 and the push to `origin/main` is confirmed. If this task belongs to a feature issue (i.e. it is a task child of a parent feature issue), do **not** close the parent feature issue here — the parent is closed by the review task (#N — "Review all F<NN> changes and merge to main").
+7. **After the merge script confirms success**, close the originating GitHub issue by following the **github skill close-issue procedure** ([.github/skills/github/SKILL.md](../.github/skills/github/SKILL.md)).
+   Only close the issue after `check-and-merge.sh` exits 0 and the push to `origin/main` is confirmed. If this task belongs to a feature issue (i.e. it is a task child of a parent feature issue), do **not** close the parent feature issue here — the parent is closed by the review task (#N — "Review all F<NN> changes and merge to main").
 
 If you do not yet know the first commit SHA when making a fixup, run `git log --oneline -5` to find it.
 
