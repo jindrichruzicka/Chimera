@@ -238,6 +238,55 @@ describe('createContentDatabase', () => {
             speed: 3,
         });
     });
+
+    it('throws ContentConflictError on duplicate id within a single items array', () => {
+        expect(() =>
+            createContentDatabase([
+                {
+                    collectionType: 'damage-types',
+                    items: [
+                        { id: 'fire', name: 'Fire' },
+                        { id: 'fire', name: 'Fire (dup)' },
+                    ],
+                },
+            ]),
+        ).toThrow(ContentConflictError);
+    });
+
+    it('throws ContentConflictError when two ContentCollection entries share a collectionType and duplicate id', () => {
+        expect(() =>
+            createContentDatabase([
+                {
+                    collectionType: 'damage-types',
+                    items: [{ id: 'fire', name: 'Fire' }],
+                },
+                {
+                    collectionType: 'damage-types',
+                    items: [{ id: 'fire', name: 'Fire (dup)' }],
+                },
+            ]),
+        ).toThrow(ContentConflictError);
+    });
+
+    it('ContentConflictError from createContentDatabase includes collectionType and id', () => {
+        try {
+            createContentDatabase([
+                {
+                    collectionType: 'damage-types',
+                    items: [
+                        { id: 'fire', name: 'Fire' },
+                        { id: 'fire', name: 'Dup' },
+                    ],
+                },
+            ]);
+            expect.fail('should have thrown');
+        } catch (err) {
+            expect(err).toBeInstanceOf(ContentConflictError);
+            const e = err as ContentConflictError;
+            expect(e.collectionType).toBe('damage-types');
+            expect(e.id).toBe('fire');
+        }
+    });
 });
 
 // ---------------------------------------------------------------------------

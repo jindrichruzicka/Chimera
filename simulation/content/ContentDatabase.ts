@@ -124,6 +124,9 @@ export function createContentDatabase(collections: readonly ContentCollection[])
     for (const { collectionType, items } of collections) {
         const col = store.get(collectionType) ?? new Map<string, DataObject>();
         for (const item of items) {
+            if (col.has(item.id)) {
+                throw new ContentConflictError(collectionType, item.id);
+            }
             col.set(item.id, item);
         }
         store.set(collectionType, col);
