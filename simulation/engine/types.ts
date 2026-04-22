@@ -16,6 +16,8 @@
  */
 
 import type { DeterministicRng } from './DeterministicRng.js';
+import type { ContentDatabase } from '../content/index.js';
+export type { ContentDatabase } from '../content/index.js';
 
 // ─── Primitive branded identifiers ───────────────────────────────────────────
 
@@ -92,19 +94,23 @@ export interface BaseGameSnapshot {
     readonly turnClock?: { readonly activePlayerId: PlayerId; readonly deadlineMs: number };
 }
 
-// ─── Content database placeholder ────────────────────────────────────────────
+// ─── PipelineContext ─────────────────────────────────────────────────────────
 
 /**
- * Placeholder type alias for `ContentDatabase` (§4.8, F05).
+ * Stub of the orchestrator-level pipeline context (§4.7).
  *
- * The full `ContentDatabase` interface with its query methods is defined when
- * F05 lands. Until then, `ReduceContext.db` carries this opaque alias so that
- * game code can accept a `db` via context without committing to the not-yet-
- * implemented shape.
+ * The full `PipelineContext` extends `UndoContext`, `HistoryContext`,
+ * `BroadcastContext`, and `DebugContext` — those fields land with F15/F16.
+ * This stub carries only the fields available now so that `ActionPipeline`
+ * can forward `db` into `ReduceContext` per-call (invariant #46).
  *
- * NEVER add methods or properties here — wait for F05.
+ * Game code NEVER receives `PipelineContext` directly — it receives the
+ * narrower `ReduceContext` from which game-agnostic fields are stripped.
  */
-export type ContentDatabase = unknown;
+export interface PipelineContext {
+    /** Optional content database; absent for games that declare no content. */
+    readonly db?: ContentDatabase;
+}
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
 

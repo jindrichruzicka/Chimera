@@ -18,7 +18,7 @@
  */
 
 import type { Logger } from '@chimera/shared/logging.js';
-import type { ActionEnvelope, BaseGameSnapshot, ReduceContext } from './types.js';
+import type { ActionEnvelope, BaseGameSnapshot, ContentDatabase, ReduceContext } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { createRng } from './DeterministicRng.js';
 import { ActionSchemaError } from './StateReducer.js';
@@ -137,6 +137,7 @@ export class RecursiveDispatchError extends Error {
 export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #registry: ActionRegistry<TState>;
     readonly #logger: Logger;
+    readonly #db: ContentDatabase | undefined;
     /**
      * Tracks current re-entrant dispatch depth. Starts at 0 (top-level call);
      * incremented by the dispatch closure before each nested process() call and
@@ -145,9 +146,13 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      */
     #depth = 0;
 
-    constructor(registry: ActionRegistry<TState>, options?: { logger?: Logger }) {
+    constructor(
+        registry: ActionRegistry<TState>,
+        options?: { logger?: Logger; db?: ContentDatabase },
+    ) {
         this.#registry = registry;
         this.#logger = options?.logger ?? NOOP_LOGGER;
+        this.#db = options?.db;
     }
 
     /**
@@ -233,7 +238,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      *       Game reducers must NOT call it.
      */
     #buildReduceContext(snapshot: Readonly<BaseGameSnapshot>): ReduceContext {
-        return {
+        const ctx: ReduceContext = {
             rng: createRng(snapshot.seed, snapshot.tick),
             dispatch: (dispatchState, dispatchAction) => {
                 if (this.#depth >= MAX_NESTED_DISPATCH) {
@@ -247,6 +252,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 }
             },
         };
+        // Only set db when provided — required by exactOptionalPropertyTypes.
+        if (this.#db !== undefined) {
+            return { ...ctx, db: this.#db };
+        }
+        return ctx;
     }
 }
 

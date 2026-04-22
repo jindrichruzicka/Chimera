@@ -28,7 +28,14 @@ import {
     MAX_NESTED_DISPATCH,
 } from './ActionPipeline.js';
 import { ActionRegistry, UnknownActionTypeError } from './ActionRegistry.js';
-import type { BaseGameSnapshot, ActionEnvelope, PlayerId, ActionDefinition } from './types.js';
+import type {
+    BaseGameSnapshot,
+    ActionEnvelope,
+    PlayerId,
+    ActionDefinition,
+    ReduceContext,
+} from './types.js';
+import { createContentDatabase } from '../content/index.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────
 
@@ -424,5 +431,106 @@ describe('ActionPipeline constructor', () => {
             child: vi.fn(),
         };
         expect(() => new ActionPipeline(registry, { logger: noopLogger })).not.toThrow();
+    });
+});
+
+// ─── ContentDatabase forwarding ────────────────────────────────────────────────
+
+describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
+    it('ctx.db is undefined in validate() when no db is provided to the constructor', () => {
+        const capturedCtxValues: ReduceContext['db'][] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:spy-db',
+            parsePayload: () => ({}),
+            validate: (_payload, _state, _playerId, ctx) => {
+                capturedCtxValues.push(ctx.db);
+                return { ok: true };
+            },
+            reduce: (state) => state,
+        };
+        registry.register(spyDef);
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:spy-db'));
+        expect(capturedCtxValues[0]).toBeUndefined();
+    });
+
+    it('ctx.db is undefined in reduce() when no db is provided to the constructor', () => {
+        const capturedCtxValues: ReduceContext['db'][] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:spy-db-reduce',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                capturedCtxValues.push(ctx.db);
+                return state;
+            },
+        };
+        registry.register(spyDef);
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:spy-db-reduce'));
+        expect(capturedCtxValues[0]).toBeUndefined();
+    });
+
+    it('ctx.db in validate() is the ContentDatabase passed to the constructor', () => {
+        const db = createContentDatabase([
+            { collectionType: 'damage-types', items: [{ id: 'fire', name: 'Fire' }] },
+        ]);
+        const capturedCtxValues: ReduceContext['db'][] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:spy-db-validate-wired',
+            parsePayload: () => ({}),
+            validate: (_payload, _state, _playerId, ctx) => {
+                capturedCtxValues.push(ctx.db);
+                return { ok: true };
+            },
+            reduce: (state) => state,
+        };
+        const dbRegistry = new ActionRegistry();
+        dbRegistry.register(spyDef);
+        const dbPipeline = new ActionPipeline(dbRegistry, { db });
+        dbPipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:spy-db-validate-wired'));
+        expect(capturedCtxValues[0]).toBe(db);
+    });
+
+    it('ctx.db in reduce() is the ContentDatabase passed to the constructor', () => {
+        const db = createContentDatabase([
+            { collectionType: 'damage-types', items: [{ id: 'fire', name: 'Fire' }] },
+        ]);
+        const capturedCtxValues: ReduceContext['db'][] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:spy-db-reduce-wired',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                capturedCtxValues.push(ctx.db);
+                return state;
+            },
+        };
+        const dbRegistry = new ActionRegistry();
+        dbRegistry.register(spyDef);
+        const dbPipeline = new ActionPipeline(dbRegistry, { db });
+        dbPipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:spy-db-reduce-wired'));
+        expect(capturedCtxValues[0]).toBe(db);
+    });
+
+    it('db can be queried inside validate() to read content items', () => {
+        const db = createContentDatabase([
+            { collectionType: 'damage-types', items: [{ id: 'fire', name: 'Fire' }] },
+        ]);
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:query-db',
+            parsePayload: () => ({}),
+            validate: (_payload, _state, _playerId, ctx) => {
+                if (ctx.db?.has('damage-types', 'fire')) {
+                    return { ok: true };
+                }
+                return { ok: false, reason: 'no_fire' };
+            },
+            reduce: (state) => state,
+        };
+        const dbRegistry = new ActionRegistry();
+        dbRegistry.register(spyDef);
+        const dbPipeline = new ActionPipeline(dbRegistry, { db });
+        expect(() =>
+            dbPipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:query-db')),
+        ).not.toThrow();
     });
 });
