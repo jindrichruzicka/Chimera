@@ -47,7 +47,7 @@ import type {
     JoinLobbyParams,
     SaveRequest,
     UserSettings,
-} from '../preload/api.js';
+} from '../preload/api-types.js';
 
 /**
  * Recording stub for the narrow `SystemHandlersIpcMain` slice used by the

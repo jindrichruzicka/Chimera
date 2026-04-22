@@ -22,7 +22,7 @@
 // elsewhere.
 
 import { z } from 'zod';
-import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from './api.js';
+import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from './api-types.js';
 import type { PlatformInfo } from './system-api.js';
 
 /**

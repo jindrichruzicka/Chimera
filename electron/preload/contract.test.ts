@@ -16,7 +16,7 @@
 // the `__chimera` key and never a `__chimeraDebug` key.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ActionRejection, ChimeraAPI, EngineAction, PlayerSnapshot } from './api.js';
+import type { ActionRejection, ChimeraAPI, EngineAction, PlayerSnapshot } from './api-types.js';
 
 // ─── Electron module mock ────────────────────────────────────────────────────
 

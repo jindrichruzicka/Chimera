@@ -44,7 +44,12 @@ import {
     SETTINGS_RESET_CHANNEL,
     SETTINGS_UPDATE_CHANNEL,
 } from '../preload/settings-api.js';
-import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from '../preload/api.js';
+import type {
+    ActionRejection,
+    LobbyInfo,
+    ResolvedSettings,
+    SaveSlotMeta,
+} from '../preload/api-types.js';
 import {
     EngineActionSchema,
     GameIdSchema,

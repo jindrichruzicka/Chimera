@@ -9,7 +9,7 @@
 // main-process handler module imports these same constants to guarantee the
 // channel strings match on both sides.
 
-import type { ConnectionStatus, SystemAPI, Unsubscribe } from './api.js';
+import type { ConnectionStatus, SystemAPI, Unsubscribe } from './api-types.js';
 import type { IpcListener, PushListenerPort } from './listener.js';
 import { subscribePush } from './listener.js';
 import { PlatformInfoSchema, parseInvokeResponse } from './schemas.js';

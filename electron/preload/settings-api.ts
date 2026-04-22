@@ -9,7 +9,7 @@
 // the main-process handler module imports these same constants to
 // guarantee the channel strings match on both sides (invariant 5).
 
-import type { ResolvedSettings, SettingsAPI, Unsubscribe, UserSettings } from './api.js';
+import type { ResolvedSettings, SettingsAPI, Unsubscribe, UserSettings } from './api-types.js';
 import type { IpcListener, PushListenerPort } from './listener.js';
 import { ResolvedSettingsSchema, parseInvokeResponse } from './schemas.js';
 

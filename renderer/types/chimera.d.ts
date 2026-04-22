@@ -5,11 +5,11 @@
 // any Electron module — the renderer must not depend on Electron runtime
 // types (architecture §4.1).
 //
-// The `ChimeraAPI` type itself lives in `electron/preload/api.ts`; re-using
-// it here guarantees the renderer's view and the preload's exposure stay in
-// lockstep.
+// The `ChimeraAPI` type itself lives in `electron/preload/api-types.ts`;
+// re-using it here guarantees the renderer's view and the preload's
+// exposure stay in lockstep.
 
-import type { ChimeraAPI } from '../../electron/preload/api.js';
+import type { ChimeraAPI } from '../../electron/preload/api-types.js';
 
 declare global {
     interface Window {

@@ -9,7 +9,7 @@ import {
     type LobbyApiListener,
 } from './lobby-api.js';
 import { PreloadIpcValidationError } from './schemas.js';
-import type { HostLobbyParams, JoinLobbyParams, LobbyInfo, LobbyState } from './api.js';
+import type { HostLobbyParams, JoinLobbyParams, LobbyInfo, LobbyState } from './api-types.js';
 
 /**
  * Recording stub for the narrow `LobbyApiIpcPort` slice. Captures every call

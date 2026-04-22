@@ -7,7 +7,7 @@ import {
     type SystemApiIpcPort,
     type SystemApiListener,
 } from './system-api.js';
-import type { ConnectionStatus } from './api.js';
+import type { ConnectionStatus } from './api-types.js';
 import { PreloadIpcValidationError } from './schemas.js';
 
 /**

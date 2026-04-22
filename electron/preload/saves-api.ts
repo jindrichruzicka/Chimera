@@ -13,7 +13,7 @@
 // the preload bridge simply forwards calls and has no opinion about who is
 // allowed to issue them.
 
-import type { SaveRequest, SaveSlotMeta, SavesAPI, Unsubscribe } from './api.js';
+import type { SaveRequest, SaveSlotMeta, SavesAPI, Unsubscribe } from './api-types.js';
 import type { IpcListener, PushListenerPort } from './listener.js';
 import { subscribePush } from './listener.js';
 import { SaveSlotListSchema, SaveSlotMetaSchema, parseInvokeResponse } from './schemas.js';

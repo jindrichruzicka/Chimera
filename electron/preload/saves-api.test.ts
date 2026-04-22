@@ -10,7 +10,7 @@ import {
     type SavesApiListener,
 } from './saves-api.js';
 import { PreloadIpcValidationError } from './schemas.js';
-import type { SaveRequest, SaveSlotMeta } from './api.js';
+import type { SaveRequest, SaveSlotMeta } from './api-types.js';
 
 /**
  * Recording stub for the narrow `SavesApiIpcPort` slice. Captures every call

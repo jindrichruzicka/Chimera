@@ -21,7 +21,7 @@ import type {
     LobbyInfo,
     LobbyState,
     Unsubscribe,
-} from './api.js';
+} from './api-types.js';
 import type { IpcListener, PushListenerPort } from './listener.js';
 import { subscribePush } from './listener.js';
 import { LobbyInfoSchema, parseInvokeResponse } from './schemas.js';

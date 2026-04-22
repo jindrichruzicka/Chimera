@@ -23,7 +23,7 @@ import type {
     PlayerId,
     PlayerSnapshot,
     Unsubscribe,
-} from './api.js';
+} from './api-types.js';
 import type { IpcListener, PushListenerPort } from './listener.js';
 import { subscribePush, subscribeValidatedPush } from './listener.js';
 import { ActionRejectionSchema } from './schemas.js';
