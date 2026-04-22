@@ -36,12 +36,45 @@ import { SaveNotFoundError } from '@chimera/simulation/persistence/SaveMigrator.
 const FILE_EXT = '.chimera';
 
 /**
+ * Thrown when a slot-ID component (gameId or slotName) fails the allowlist
+ * validation that prevents path traversal (OWASP A01, invariant #128-fix).
+ *
+ * Allowed pattern: `^[a-z0-9][a-z0-9_-]{0,63}$`
+ * — starts with a lowercase letter or digit
+ * — followed by up to 63 lowercase letters, digits, underscores, or hyphens
+ */
+export class InvalidSlotIdError extends Error {
+    constructor(field: string, value: string) {
+        super(`Invalid ${field} ${JSON.stringify(value)}: must match ^[a-z0-9][a-z0-9_-]{0,63}$`);
+        this.name = 'InvalidSlotIdError';
+    }
+}
+
+/** Allowlist pattern for every path component used in save-file paths. */
+const SLOT_COMPONENT_RE = /^[a-z0-9][a-z0-9_-]{0,63}$/;
+
+/**
+ * Validate a single path component (gameId or slotName).
+ * Throws `InvalidSlotIdError` if the value does not match the allowlist.
+ */
+function validateSlotComponent(value: string, field: string): void {
+    if (!SLOT_COMPONENT_RE.test(value)) {
+        throw new InvalidSlotIdError(field, value);
+    }
+}
+
+/**
  * Parse the qualified slot ID `'<gameId>/<slotName>'` into its two components.
- * Returns `[gameId, slotName]`. Assumes exactly one separator character '/'.
+ * Validates both components against the allowlist before returning them.
+ * Throws `InvalidSlotIdError` if any component is invalid.
  */
 function parseSlotId(slotId: string): [gameId: string, slotName: string] {
     const idx = slotId.indexOf('/');
-    return [slotId.slice(0, idx), slotId.slice(idx + 1)];
+    const gameId = slotId.slice(0, idx);
+    const slotName = slotId.slice(idx + 1);
+    validateSlotComponent(gameId, 'gameId');
+    validateSlotComponent(slotName, 'slotName');
+    return [gameId, slotName];
 }
 
 /**
@@ -121,6 +154,9 @@ export class FileSaveRepository implements SaveRepository {
     }
 
     async save(file: SaveFile): Promise<void> {
+        validateSlotComponent(file.header.gameId, 'gameId');
+        validateSlotComponent(file.header.slotId, 'slotName');
+
         const dir = path.join(this.baseDir, file.header.gameId);
         await fs.mkdir(dir, { recursive: true });
 

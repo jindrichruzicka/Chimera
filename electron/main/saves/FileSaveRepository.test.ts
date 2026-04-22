@@ -21,7 +21,7 @@ import {
     runSaveRepositoryContractTests,
     makeFile,
 } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
-import { FileSaveRepository } from './FileSaveRepository.js';
+import { FileSaveRepository, InvalidSlotIdError } from './FileSaveRepository.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -116,5 +116,82 @@ describe('FileSaveRepository — integration', () => {
         const repo = makeRepo(tmpDir);
 
         await expect(repo.delete('tactics/missing')).rejects.toBeInstanceOf(SaveNotFoundError);
+    });
+});
+
+// ── Path traversal hardening tests (BLOCK-1 / issue #128) ────────────────────
+
+describe('FileSaveRepository — path traversal hardening', () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+        tmpDir = await makeTmpDir();
+    });
+
+    afterEach(async () => {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    const TRAVERSAL_SLOT_IDS = [
+        '../etc/passwd/autosave',
+        '../../etc/autosave',
+        'tactics/../../etc/passwd',
+        '/absolute/autosave',
+        'tactics//autosave',
+        'UPPERCASE/autosave',
+        'tactics/UPPERCASE',
+        'slot with spaces/autosave',
+        'tactics/slot with spaces',
+        '\0null/autosave',
+        'tactics/\0null',
+        '../autosave',
+        'tactics/..',
+        './autosave',
+        'tactics/.',
+        'a b/autosave',
+    ];
+
+    for (const slotId of TRAVERSAL_SLOT_IDS) {
+        it(`load throws InvalidSlotIdError for slotId ${JSON.stringify(slotId)}`, async () => {
+            const repo = makeRepo(tmpDir);
+            await expect(repo.load(slotId)).rejects.toBeInstanceOf(InvalidSlotIdError);
+        });
+
+        it(`delete throws InvalidSlotIdError for slotId ${JSON.stringify(slotId)}`, async () => {
+            const repo = makeRepo(tmpDir);
+            await expect(repo.delete(slotId)).rejects.toBeInstanceOf(InvalidSlotIdError);
+        });
+    }
+
+    it('save throws InvalidSlotIdError when file.header.gameId contains traversal', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('../evil', 'autosave');
+        await expect(repo.save(file)).rejects.toBeInstanceOf(InvalidSlotIdError);
+    });
+
+    it('save throws InvalidSlotIdError when file.header.slotId contains traversal', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', '../evil');
+        await expect(repo.save(file)).rejects.toBeInstanceOf(InvalidSlotIdError);
+    });
+
+    it('save accepts a valid gameId and slotId', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'slot-1');
+        await expect(repo.save(file)).resolves.toBeUndefined();
+    });
+
+    it('load accepts a valid slotId', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'slot-1');
+        await repo.save(file);
+        await expect(repo.load('tactics/slot-1')).resolves.toStrictEqual(file);
+    });
+
+    it('slotId with underscore is accepted', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('my-game', 'save_slot');
+        await repo.save(file);
+        await expect(repo.load('my-game/save_slot')).resolves.toStrictEqual(file);
     });
 });
