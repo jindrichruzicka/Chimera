@@ -1,6 +1,6 @@
 ---
 name: Chimera Architect
-description: 'Use when designing the Chimera game engine architecture, multiplatform desktop strategy, networking model, multiplayer lobbies, Electron/Next.js integration, React Three Fiber scene structure, or system-level technical decisions.'
+description: "Use when designing the Chimera game engine architecture, multiplatform desktop strategy, networking model, multiplayer lobbies, Electron/Next.js integration, React Three Fiber scene structure, or system-level technical decisions. Use for: design decision, interface shape, module boundary question, system design, IPC contract, invariant question, architecture review, data flow design, module ownership, type contract."
 tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---

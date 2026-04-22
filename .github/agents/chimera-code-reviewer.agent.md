@@ -1,6 +1,6 @@
 ---
 name: Chimera Code Reviewer
-description: 'Use when reviewing code changes on a Chimera branch: checks alignment with the architecture overview, verifies SOLID principles, best coding practices, TypeScript and React standards, module boundary rules, security, and performance. Produces a structured review report. If the review passes, uses the git skillset to merge the branch to main. Use for: code review before merging, pre-merge quality gate, reviewing feature branches, fix branches, refactor branches.'
+description: 'Use when reviewing code changes on a Chimera branch: checks alignment with the architecture overview, verifies SOLID principles, best coding practices, TypeScript and React standards, module boundary rules, security, and performance. Produces a structured review report. If the review passes, uses the git skillset to merge the branch to main. Use for: code review before merging, pre-merge quality gate, reviewing feature branches, fix branches, refactor branches, review my changes, is this ready to merge, check my code, pre-merge review, invariant check, approve and merge.'
 tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---

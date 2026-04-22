@@ -1,6 +1,6 @@
 ---
 name: Chimera QA Engineer
-description: 'Use when creating or adjusting Playwright E2E tests from a GitHub issue. Given an issue number, the agent reads the issue, inspects the existing test suite, and either writes a new spec file or augments an existing one. Covers the issue scenario plus meaningful edge cases. Follows the §13 E2E architecture without over-testing. Use for: writing new E2E specs, extending existing specs with a new test case, updating broken tests after a feature change.'
+description: 'Use when creating or adjusting Playwright E2E tests from a GitHub issue. Given an issue number, the agent reads the issue, inspects the existing test suite, and either writes a new spec file or augments an existing one. Covers the issue scenario plus meaningful edge cases. Follows the §13 E2E architecture without over-testing. Use for: writing new E2E specs, extending existing specs with a new test case, updating broken tests after a feature change, write a test, E2E test, Playwright, add test coverage, regression test, verify behaviour, end to end.'
 tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---

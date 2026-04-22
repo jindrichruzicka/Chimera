@@ -1,6 +1,6 @@
 ---
 name: Chimera Product Manager
-description: 'Use when planning work, creating milestones, breaking down features into GitHub issues, managing the product roadmap, triaging tasks, or asking what to build next on the Chimera engine. Use for: creating GitHub milestones and issues, reviewing roadmap alignment with the architecture, decomposing features into granular tasks, sprint planning, linking issues to milestones. Do NOT use for writing implementation code (use Chimera Engine Developer for that).'
+description: 'Use when planning work, creating milestones, breaking down features into GitHub issues, managing the product roadmap, triaging tasks, or asking what to build next on the Chimera engine. Use for: creating GitHub milestones and issues, reviewing roadmap alignment with the architecture, decomposing features into granular tasks, sprint planning, linking issues to milestones. Do NOT use for writing implementation code. Use for: what should we build next, plan sprint, create issue, write ticket, roadmap, bootstrap milestone, triage, what is next, prioritize.'
 tools: [read, edit, search, execute, web, todo]
 user-invocable: true
 ---

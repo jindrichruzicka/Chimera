@@ -1,6 +1,6 @@
 ---
 name: Chimera Engine Developer
-description: 'Use when implementing, coding, or building any part of the Chimera game engine: simulation core, IPC bridge, multiplayer provider, asset system, AI layer, save/load system, renderer components, R3F scenes, Zustand stores, Electron main/preload, settings, debug tools, or any feature described in the architecture overview. Use for writing TypeScript, React, Three.js/R3F, Electron, and Node.js code. Use for bug fixes, refactors, and feature implementation tasks. Also merges the completed branch into `main` via the git skillset → merge sub-skill once all pre-commit gates pass.'
+description: 'Use when implementing, coding, or building any part of the Chimera game engine: simulation core, IPC bridge, multiplayer provider, asset system, AI layer, save/load system, renderer components, R3F scenes, Zustand stores, Electron main/preload, settings, debug tools, or any feature described in the architecture overview. Use for writing TypeScript, React, Three.js/R3F, Electron, and Node.js code. Use for bug fixes, refactors, and feature implementation tasks. Also merges the completed branch into main via the git skillset once all pre-commit gates pass. Use for: fix lint, make tests pass, finish task, implement issue, write code, debug, fix failing test, fix type error, add feature, run tests.'
 tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---
