@@ -383,4 +383,14 @@ describe('ContentSchemaError', () => {
         const err = new ContentSchemaError('damage-types', 'fire', cause);
         expect(err.cause).toBe(cause);
     });
+
+    it('cause is set via super() options and is non-enumerable (M1)', () => {
+        const cause = new Error('bad schema');
+        const err = new ContentSchemaError('damage-types', 'fire', cause);
+        // When cause is passed through super(msg, { cause }), it is a non-enumerable
+        // own property set by the Error constructor — not visible in Object.keys().
+        expect(Object.keys(err)).not.toContain('cause');
+        // But it must still be accessible.
+        expect(err.cause).toBe(cause);
+    });
 });

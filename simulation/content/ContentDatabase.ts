@@ -88,11 +88,10 @@ export class ContentSchemaError extends Error {
     public readonly id: string;
 
     constructor(collectionType: string, id: string, cause: unknown) {
-        super(`Schema validation failed for '${collectionType}:${id}'`);
+        super(`Schema validation failed for '${collectionType}:${id}'`, { cause });
         this.name = 'ContentSchemaError';
         this.collectionType = collectionType;
         this.id = id;
-        this.cause = cause;
         Object.setPrototypeOf(this, new.target.prototype);
     }
 }
