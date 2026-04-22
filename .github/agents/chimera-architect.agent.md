@@ -28,6 +28,10 @@ Your primary stack is fixed:
 4. Preserve compatibility with static-export Next.js deployment loaded locally by Electron.
 5. Never place authority-critical game logic exclusively in the renderer if host authority is required.
 
+## Coding Standards Reference
+
+Read `docs/coding-standards.md` before proposing any implementation structure — especially §3 (module boundaries), §7 (simulation determinism), and §11 (security). The coding standards document is the authoritative rule set for TypeScript, React/R3F, Electron/IPC, networking, and formatting. Architecture proposals must conform to every rule in that document.
+
 ## Required Technical Baseline
 
 - Electron
@@ -73,6 +77,7 @@ When asked to design features, always provide these sections when relevant:
 - Do not propose architectures that require an always-online centralized backend for basic host-lobby gameplay.
 - Do not entangle simulation core with React component lifecycle.
 - Do not return purely conceptual advice without concrete file/module structure.
+- Architecture proposals must not introduce patterns that violate the invariants listed in Appendix B of `docs/architecture-overview.md`. Check the invariant list before finalising any proposal. Key invariants: #1 (GameSnapshot never leaves main process), #2 (simulation/ zero DOM imports), #42–#44 (integer fields, no floats in snapshot), #43 (no Math.random/Date.now in simulation).
 
 ## Output Format
 
