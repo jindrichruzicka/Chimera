@@ -17,7 +17,21 @@ Given a GitHub issue number, validates the issue is workable (exists, is a `task
 
 ## Procedure
 
-### Step 1 — Resolve the issue
+### Automated path (preferred)
+
+Run the script to execute all steps automatically:
+
+```bash
+bash .github/skills/git/create-branch/scripts/create-branch.sh <issue-number>
+```
+
+The script performs all validation and branch creation steps below. The manual steps that follow are reference documentation explaining what the script does.
+
+---
+
+### Manual steps (reference)
+
+#### Step 1 — Resolve the issue
 
 ```bash
 export GH_REPO=jindrichruzicka/Chimera
@@ -35,7 +49,7 @@ gh issue view <NUMBER> --repo $GH_REPO --json number,title,labels,state,mileston
 
 If any check fails, print a clear error and **do not create a branch**.
 
-### Step 2 — Derive the branch name
+#### Step 2 — Derive the branch name
 
 Branch name format follows the merge skill convention: `<prefix>/<slug>`
 
@@ -57,7 +71,7 @@ Derive `<slug>` from the issue title:
 **Example:**  
 Issue #2 "Implement `BrowserWindow` creation and app lifecycle" → `feature/implement-browserwindow-creation-and-app-lifecycle-2`
 
-### Step 3 — Check for existing local/remote branch
+#### Step 3 — Check for existing local/remote branch
 
 ```bash
 git branch --list "<branch-name>"
@@ -66,7 +80,7 @@ git ls-remote --heads origin "<branch-name>"
 
 If the branch already exists locally or remotely, report it and ask the user whether to check it out instead of creating a new one. **Do not overwrite an existing branch.**
 
-### Step 4 — Update main
+#### Step 4 — Update main
 
 ```bash
 git checkout main
@@ -75,7 +89,7 @@ git pull --ff-only origin main
 
 If `pull --ff-only` fails (local main has diverged), abort and instruct the user to resolve the divergence manually. **Do not force-reset main.**
 
-### Step 5 — Create the branch
+#### Step 5 — Create the branch
 
 ```bash
 git checkout -b "<branch-name>"
@@ -87,7 +101,7 @@ Confirm the branch was created:
 git rev-parse --abbrev-ref HEAD
 ```
 
-### Step 6 — Report
+#### Step 6 — Report
 
 Print a confirmation block:
 

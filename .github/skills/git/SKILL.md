@@ -9,10 +9,10 @@ A collection of git workflow skills for the Chimera project. Each sub-skill cove
 
 ## Available Sub-skills
 
-| Sub-skill         | When to use                                                                               | File                                                   |
-| ----------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------ |
-| **create-branch** | Create a correctly-named branch from a GitHub issue number before starting implementation | [git/create-branch/SKILL.md](./create-branch/SKILL.md) |
-| **merge**         | Validate and land a `feature/*`, `fix/*`, or `refactor/*` branch onto `main`              | [git/merge/SKILL.md](./merge/SKILL.md)                 |
+| Sub-skill         | When to use                                                                               | Script                                                               | File                                                   |
+| ----------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------ |
+| **create-branch** | Create a correctly-named branch from a GitHub issue number before starting implementation | `bash .github/skills/git/create-branch/scripts/create-branch.sh <N>` | [git/create-branch/SKILL.md](./create-branch/SKILL.md) |
+| **merge**         | Validate and land a `feature/*`, `fix/*`, or `refactor/*` branch onto `main`              | `bash .github/skills/git/merge/scripts/check-and-merge.sh`           | [git/merge/SKILL.md](./merge/SKILL.md)                 |
 
 ---
 
