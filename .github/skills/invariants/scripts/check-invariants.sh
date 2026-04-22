@@ -33,8 +33,18 @@ violation() {
 }
 
 # Run grep and emit violations for each matching line.
-# Comment lines (trimmed start = // or *) are excluded to avoid false-positives
-# from jsdoc blocks that cite forbidden APIs as examples of what NOT to use.
+#
+# False-positive suppression:
+#   * Comment lines (trimmed start = // or *) are excluded — jsdoc blocks may
+#     cite forbidden APIs as examples of what NOT to use.
+#   * Test files (*.test.ts / *.test.tsx) are excluded — their string-literal
+#     titles legitimately contain forbidden API names (e.g. "flags Math.random()").
+#     Production determinism is enforced by ESLint (no-restricted-syntax), and
+#     the surrounding test suites assert it; the invariant script is a
+#     cross-check against production code, not against the tests themselves.
+#   * Fixture files under __tests__/fixtures/ are excluded — they are
+#     intentionally-bad inputs for ESLint smoke tests.
+#
 # Usage: check_grep <invariant-number> <grep-pattern> <directory...>
 check_grep() {
     local inv="$1"
@@ -52,7 +62,10 @@ check_grep() {
     while IFS= read -r match; do
         violation "${inv}" "${match}"
     done < <(
-        grep -rn --include="*.ts" --include="*.tsx" --include="*.js" \
+        grep -rn \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" \
             -E "${pattern}" "${existing_dirs[@]}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         || true

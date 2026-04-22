@@ -234,6 +234,69 @@ test_comment_mention_not_flagged() {
     fi
 }
 
+# Test 8: string-literal mention in a *.test.ts title → NOT flagged
+test_test_title_string_not_flagged() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/Reducer.test.ts" \
+        "it('flags Math.random() in bad fixture', () => { expect(true).toBe(true); });"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "test-title string in *.test.ts not flagged (no false positive)"
+    else
+        fail "test-title string in *.test.ts wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 9: ESLint fixture under __tests__/fixtures/ → NOT flagged
+test_eslint_fixture_not_flagged() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/__tests__/fixtures/bad-random.fixture.ts" \
+        "export function bad() { return Math.random(); }"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "__tests__/fixtures/*.fixture.ts not flagged (no false positive)"
+    else
+        fail "__tests__/fixtures/*.fixture.ts wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 10: real violation in a production .ts file still flagged when a
+#          *.test.ts file nearby contains the same string in a title
+test_production_still_flagged_alongside_test_mention() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "simulation/engine/Reducer.test.ts" \
+        "it('flags Math.random() in bad fixture', () => {});"
+    plant_file "${tmp}" "simulation/engine/Reducer.ts" \
+        "export function reduce() { return Math.random(); }"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]] && echo "${out}" | grep -q 'Reducer.ts.*Math.random'; then
+        pass "production Math.random() still flagged when nearby test title mentions it"
+    else
+        fail "production Math.random() not flagged, or false-positive suppressed real hit:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -244,6 +307,9 @@ test_renderer_import_in_simulation_detected
 test_games_import_in_simulation_detected
 test_game_snapshot_in_preload_detected
 test_comment_mention_not_flagged
+test_test_title_string_not_flagged
+test_eslint_fixture_not_flagged
+test_production_still_flagged_alongside_test_mention
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then
