@@ -6528,7 +6528,7 @@ E2E (playwright — separate job, gated on unit test pass)
 
 - [ ] Electron app boots, loads Next.js static export from `renderer/out/`
 - [ ] Preload bridge wired: `window.__chimera` typed and tested
-- [ ] `simulation/` package with stub `BaseGameSnapshot` and `ActionPipeline` (no game rules yet)
+- [x] `simulation/` package with stub `BaseGameSnapshot` and `ActionPipeline` (no game rules yet)
 - [ ] `ContentLoader` + `ContentDatabase` implemented with flat directory scan
 - [ ] Example game loads a `damage-types/` directory; `db.getByIdOrThrow()` round-trips in unit tests
 - [ ] `SaveFile`, `JsonSaveSerializer`, and `FileSaveRepository` implemented; round-trip unit tests passing
