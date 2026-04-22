@@ -88,6 +88,35 @@ describe('engine:tick definition', () => {
         expect(() => definition().parsePayload({ seed: 'bad' })).toThrow();
     });
 
+    it('parsePayload throws when seed is NaN (invariant #42)', () => {
+        expect(() => definition().parsePayload({ seed: Number.NaN })).toThrow(TypeError);
+    });
+
+    it('parsePayload throws when seed is +Infinity (invariant #42)', () => {
+        expect(() => definition().parsePayload({ seed: Number.POSITIVE_INFINITY })).toThrow(
+            TypeError,
+        );
+    });
+
+    it('parsePayload throws when seed is -Infinity (invariant #42)', () => {
+        expect(() => definition().parsePayload({ seed: Number.NEGATIVE_INFINITY })).toThrow(
+            TypeError,
+        );
+    });
+
+    it('parsePayload throws when seed is a non-integer float (invariant #42)', () => {
+        expect(() => definition().parsePayload({ seed: 3.14 })).toThrow(TypeError);
+    });
+
+    it('parsePayload accepts negative-zero seed (Number.isInteger(-0) === true)', () => {
+        expect(() => definition().parsePayload({ seed: -0 })).not.toThrow();
+    });
+
+    it('parsePayload accepts negative integer seed', () => {
+        const parsed = definition().parsePayload({ seed: -42 });
+        expect(parsed).toEqual({ seed: -42 });
+    });
+
     it('validate returns ok: true', () => {
         const snapshot = makeSnapshot();
         const result = definition().validate({ seed: 1 }, snapshot, hostId, stubCtx);

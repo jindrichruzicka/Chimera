@@ -55,13 +55,19 @@ const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
     type: 'engine:tick',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineTickPayload {
-        if (typeof raw['seed'] !== 'number') {
+        // Invariant #42: all arithmetic state fields must be integers. The seed
+        // is the base for F04's DeterministicRng, so non-integer, NaN, Infinity,
+        // and -Infinity values must be rejected at the boundary. Number.isInteger
+        // returns false for all of them (and false for non-numbers generally).
+        // -0 is accepted as an integer (Number.isInteger(-0) === true); it is
+        // indistinguishable from 0 for downstream seeding purposes.
+        if (!Number.isInteger(raw['seed'])) {
             throw new TypeError(
-                'engine:tick payload must have a numeric "seed" field; ' +
+                'engine:tick payload must have an integer "seed" field; ' +
                     `received ${JSON.stringify(raw)}.`,
             );
         }
-        return { seed: raw['seed'] };
+        return { seed: raw['seed'] as number };
     },
 
     validate(_payload, _state, _playerId, _ctx): ValidationResult {
