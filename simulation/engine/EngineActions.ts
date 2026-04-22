@@ -78,7 +78,7 @@ const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
         // Stub: returns snapshot unchanged. Full tick logic lands in F04 / F21.
         return state;
     },
-};
+} satisfies ActionDefinition<EngineTickPayload>;
 
 // ─── engine:end_turn ──────────────────────────────────────────────────────────
 
