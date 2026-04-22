@@ -4,6 +4,7 @@ import tsconfigPaths from 'vite-tsconfig-paths';
 export default defineConfig({
     plugins: [tsconfigPaths()],
     test: {
+        name: 'chimera',
         environment: 'node',
         include: ['**/*.test.ts', '**/*.test.tsx'],
         exclude: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/build/**'],
