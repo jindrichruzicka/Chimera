@@ -19,7 +19,7 @@
  *          Date.now() calls.
  */
 
-import type { ActionDefinition, BaseGameSnapshot } from './types.js';
+import type { ActionDefinition, BaseGameSnapshot, ValidationResult } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 
 // ─── Payload types ────────────────────────────────────────────────────────────
@@ -64,7 +64,7 @@ const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
         return { seed: raw['seed'] };
     },
 
-    validate(_payload, _state, _playerId, _ctx) {
+    validate(_payload, _state, _playerId, _ctx): ValidationResult {
         return { ok: true };
     },
 
@@ -89,7 +89,7 @@ const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
         return {};
     },
 
-    validate(_payload, _state, _playerId, _ctx) {
+    validate(_payload, _state, _playerId, _ctx): ValidationResult {
         return { ok: true };
     },
 
