@@ -126,6 +126,9 @@ export function createRng(seed: number, tick: number): DeterministicRng {
     }
 
     function pick<T>(items: readonly T[]): T {
+        if (items.length === 0) {
+            throw new RangeError('DeterministicRng.pick(): items array must be non-empty.');
+        }
         return items[int(0, items.length - 1)] as T;
     }
 

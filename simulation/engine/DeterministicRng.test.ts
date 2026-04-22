@@ -161,4 +161,9 @@ describe('DeterministicRng pick()', () => {
             expect(freq).toBeLessThanOrEqual(0.255);
         }
     });
+
+    it('throws RangeError when called on an empty array', () => {
+        const rng = createRng(0, 0);
+        expect(() => rng.pick([])).toThrow(RangeError);
+    });
 });
