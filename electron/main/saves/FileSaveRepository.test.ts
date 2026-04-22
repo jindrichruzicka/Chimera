@@ -1,0 +1,120 @@
+/**
+ * electron/main/saves/FileSaveRepository.test.ts
+ *
+ * Integration tests for FileSaveRepository (§4.11, invariant #23).
+ *
+ * Uses a temporary directory with a unique suffix so tests never share state.
+ * Runs the shared SaveRepository contract test suite to guarantee interface
+ * parity with InMemorySaveRepository (invariant #41).
+ */
+
+import * as fs from 'fs/promises';
+import * as os from 'os';
+import * as path from 'path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+    JsonSaveSerializer,
+    SaveMigrator,
+    SaveNotFoundError,
+} from '@chimera/simulation/persistence/index.js';
+import {
+    runSaveRepositoryContractTests,
+    makeFile,
+} from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
+import { FileSaveRepository } from './FileSaveRepository.js';
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+async function makeTmpDir(): Promise<string> {
+    return fs.mkdtemp(path.join(os.tmpdir(), 'chimera-filesaverepository-test-'));
+}
+
+function makeRepo(baseDir: string): FileSaveRepository {
+    return new FileSaveRepository(new JsonSaveSerializer(), new SaveMigrator(), baseDir);
+}
+
+// ── Shared contract tests ────────────────────────────────────────────────────
+
+runSaveRepositoryContractTests('FileSaveRepository', () => {
+    // Each factory call gets its own temp dir — vitest will not clean them
+    // automatically but OS temp cleanup handles them eventually.
+    // For isolation, create synchronously-safe names; the actual dir is created
+    // lazily by FileSaveRepository.save() via fs.mkdir({ recursive: true }).
+    const tmpBase = path.join(
+        os.tmpdir(),
+        `chimera-contract-${Math.random().toString(36).slice(2)}`,
+    );
+    return makeRepo(tmpBase);
+});
+
+// ── FileSaveRepository-specific integration tests ────────────────────────────
+
+describe('FileSaveRepository — integration', () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+        tmpDir = await makeTmpDir();
+    });
+
+    afterEach(async () => {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it('list returns [] when the gameId subdirectory does not exist', async () => {
+        const repo = makeRepo(tmpDir);
+
+        expect(await repo.list('no-such-game')).toStrictEqual([]);
+    });
+
+    it('save writes a .chimera file and does not leave a .tmp file', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave');
+
+        await repo.save(file);
+
+        const dir = path.join(tmpDir, 'tactics');
+        const entries = await fs.readdir(dir);
+        expect(entries).toContain('autosave.chimera');
+        expect(entries.filter((e) => e.endsWith('.tmp'))).toHaveLength(0);
+    });
+
+    it('list excludes stale .tmp files left by a crashed write', async () => {
+        const repo = makeRepo(tmpDir);
+        // Simulate a crash mid-write: a .tmp file exists but the .chimera file does not.
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'autosave.chimera.tmp'), 'corrupt-partial');
+
+        const slots = await repo.list('tactics');
+
+        expect(slots).toHaveLength(0);
+    });
+
+    it('load round-trips the full SaveFile through serialisation', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave', 2_000_000_000_000);
+
+        await repo.save(file);
+        const loaded = await repo.load('tactics/autosave');
+
+        expect(loaded).toStrictEqual(file);
+    });
+
+    it('list entry has sizeBytes > 0 matching the file on disk', async () => {
+        const repo = makeRepo(tmpDir);
+        await repo.save(makeFile('tactics', 'autosave'));
+
+        const slots = await repo.list('tactics');
+        expect(slots[0]?.sizeBytes).toBeGreaterThan(0);
+
+        const filePath = path.join(tmpDir, 'tactics', 'autosave.chimera');
+        const stat = await fs.stat(filePath);
+        expect(slots[0]?.sizeBytes).toBe(stat.size);
+    });
+
+    it('delete throws SaveNotFoundError when the file is absent', async () => {
+        const repo = makeRepo(tmpDir);
+
+        await expect(repo.delete('tactics/missing')).rejects.toBeInstanceOf(SaveNotFoundError);
+    });
+});
