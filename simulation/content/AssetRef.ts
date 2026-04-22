@@ -1,0 +1,152 @@
+// simulation/content/AssetRef.ts
+// §4.8 / §4.10 — Typed asset reference primitives.
+//
+// AssetRef<T> is a phantom-typed branded string of the form
+// "<game-id>/<relative-path-under-assets/>".
+// Examples:
+//   "tactics/textures/units/warrior-portrait.webp"
+//   "tactics/models/units/warrior.glb"
+//   "tactics/audio/sfx/sword-hit.ogg"
+//
+// The simulation stores and passes these strings but NEVER resolves them.
+// Only the renderer's AssetManager converts an AssetRef into a loaded asset.
+//
+// Invariants: #1 (no renderer / DOM / Three.js deps), #20 (simulation never
+// resolves AssetRef values — they remain opaque strings to the engine).
+
+// ---------------------------------------------------------------------------
+// Phantom asset-kind types — compile-time documentation only; no runtime
+// representation. The renderer maps these to actual loader output types.
+// ---------------------------------------------------------------------------
+
+/** → THREE.Texture */
+export type TextureAsset = Record<string, never>;
+/** → AudioBuffer (Web Audio API) */
+export type AudioClipAsset = Record<string, never>;
+/** → GLTF (drei or three/examples/jsm) */
+export type GLTFModelAsset = Record<string, never>;
+/** → THREE.Texture + SpriteAtlas frame map */
+export type SpriteSheetAsset = Record<string, never>;
+/** → plain JSON (no Three.js dependency at all) */
+export type ParticleConfigAsset = Record<string, never>;
+
+/** Union of all recognised asset kinds. */
+export type AssetKind =
+    | TextureAsset
+    | AudioClipAsset
+    | GLTFModelAsset
+    | SpriteSheetAsset
+    | ParticleConfigAsset;
+
+// ---------------------------------------------------------------------------
+// AssetRef<T> — branded phantom type
+// ---------------------------------------------------------------------------
+
+/**
+ * A branded string that represents a typed reference to a game asset.
+ * Format: `"<game-id>/<relative-path-under-assets/>"`.
+ *
+ * The `_T` parameter is a phantom — it carries type information for callers
+ * but has no runtime representation. Passing a raw `string` where an
+ * `AssetRef<TextureAsset>` is required is a TypeScript compile error.
+ *
+ * The game-id prefix prevents cross-game ref collisions and makes paths
+ * self-describing.
+ */
+export type AssetRef<_T extends AssetKind = AssetKind> = string & {
+    readonly __assetRef: void;
+};
+
+// ---------------------------------------------------------------------------
+// buildAssetRef — safe factory
+// ---------------------------------------------------------------------------
+
+/**
+ * Construct an `AssetRef<T>` from its constituent parts.
+ *
+ * @param gameId        The game identifier, e.g. `"tactics"`.
+ * @param relativePath  The path relative to the game's `assets/` directory,
+ *                      e.g. `"textures/units/warrior-portrait.webp"`.
+ */
+export function buildAssetRef<T extends AssetKind>(
+    gameId: string,
+    relativePath: string,
+): AssetRef<T> {
+    return `${gameId}/${relativePath}` as AssetRef<T>;
+}
+
+// ---------------------------------------------------------------------------
+// parseAssetRef — decompose an AssetRef
+// ---------------------------------------------------------------------------
+
+/**
+ * Decompose an `AssetRef` into its `gameId` and `relativePath` parts.
+ *
+ * @throws {MalformedAssetRefError} When the ref does not contain a `/`, or
+ *   when the slash appears at position 0 (empty game id).
+ */
+export function parseAssetRef(ref: AssetRef): {
+    readonly gameId: string;
+    readonly relativePath: string;
+} {
+    const slash = ref.indexOf('/');
+    if (slash < 1) throw new MalformedAssetRefError(ref);
+    return {
+        gameId: ref.slice(0, slash),
+        relativePath: ref.slice(slash + 1),
+    };
+}
+
+// ---------------------------------------------------------------------------
+// MalformedAssetRefError
+// ---------------------------------------------------------------------------
+
+/**
+ * Thrown by `parseAssetRef` when a string does not conform to the
+ * `"<game-id>/<relative/path.ext>"` format.
+ */
+export class MalformedAssetRefError extends Error {
+    /** The raw string that could not be parsed. */
+    public readonly ref: string;
+
+    constructor(ref: string) {
+        super(`AssetRef '${ref}' is malformed — expected format: 'game-id/relative/path.ext'`);
+        this.name = 'MalformedAssetRefError';
+        this.ref = ref;
+        // Maintain proper prototype chain in environments that transpile classes.
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// AssetManifest types — simulation-side, zero Three.js / DOM dependency
+// ---------------------------------------------------------------------------
+
+/**
+ * Load priority for a manifest entry.
+ *
+ * - `critical`  — preloaded before match starts; game will not begin until loaded.
+ * - `deferred`  — lazy-loaded on first use; a fallback asset is shown while loading.
+ */
+export type AssetPriority = 'critical' | 'deferred';
+
+/** A single entry in an `AssetManifest`. */
+export interface AssetManifestEntry<T extends AssetKind = AssetKind> {
+    readonly ref: AssetRef<T>;
+    readonly priority: AssetPriority;
+}
+
+/**
+ * Complete asset inventory for a game.
+ *
+ * Defined in `games/<name>/asset-manifest.ts` as a VALUE of this type.
+ * The type itself is owned by `simulation/content/` — no Three.js or
+ * renderer dependency is permitted here.
+ *
+ * Injected into the renderer via `AssetManagerContext` at session start
+ * (dependency injection, not import) — see Invariant #47.
+ */
+export interface AssetManifest {
+    readonly gameId: string;
+    readonly entries: readonly AssetManifestEntry[];
+}
