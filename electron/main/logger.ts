@@ -22,7 +22,13 @@
 // Invariant 67: no module emits logs via raw `console.*`; all structured
 // logging flows through the injected `Logger`.
 
-import type { LogEntry, LogErrorInfo, LogLevel, LogSource, Logger } from '../../shared/logging.js';
+import type {
+    LogEntry,
+    LogErrorInfo,
+    LogLevel,
+    LogSource,
+    Logger,
+} from '@chimera/shared/logging.js';
 
 // `Logger` is declared in `shared/logging.ts` so that `simulation/` and `ai/`
 // can accept an injected Logger without importing from `electron/`. Re-exported

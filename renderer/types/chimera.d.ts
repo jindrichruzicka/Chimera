@@ -9,7 +9,7 @@
 // re-using it here guarantees the renderer's view and the preload's
 // exposure stay in lockstep.
 
-import type { ChimeraAPI } from '../../electron/preload/api-types.js';
+import type { ChimeraAPI } from '@chimera/electron/preload/api-types.js';
 
 declare global {
     interface Window {

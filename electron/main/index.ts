@@ -1,7 +1,7 @@
 import * as path from 'node:path';
 import * as fs from 'node:fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '../../shared/constants.js';
+import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '@chimera/shared/constants.js';
 import {
     registerGameHandlers,
     registerLobbyHandlers,

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createLogger, createMemorySink, createNoopLogger } from './logger.js';
-import type { LogSource } from '../../shared/logging.js';
+import type { LogSource } from '@chimera/shared/logging.js';
 
 const TEST_SOURCE: LogSource = { process: 'main', module: 'test' };
 

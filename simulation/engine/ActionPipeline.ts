@@ -17,7 +17,7 @@
  *   #43 — validate() and reduce() use only ReduceContext. No Math.random() or Date.now().
  */
 
-import type { Logger } from '../../shared/logging.js';
+import type { Logger } from '@chimera/shared/logging.js';
 import type { ActionEnvelope, BaseGameSnapshot, ReduceContext } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { ActionSchemaError } from './StateReducer.js';
