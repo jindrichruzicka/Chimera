@@ -187,7 +187,17 @@ async function loadDirectory(
                 if (!file.isFile() || !file.name.endsWith('.json')) continue;
                 const filePath = path.join(collectionDir, file.name);
                 const raw = await fs.readFile(filePath, 'utf-8');
-                const parsed = JSON.parse(raw) as DataObject & Record<string, unknown>;
+                let parsed: DataObject & Record<string, unknown>;
+                try {
+                    parsed = JSON.parse(raw) as DataObject & Record<string, unknown>;
+                } catch (err) {
+                    throw new Error(
+                        `Failed to parse JSON in ${filePath}: ${
+                            err instanceof Error ? err.message : String(err)
+                        }`,
+                        { cause: err },
+                    );
+                }
                 items.push(parsed);
             }
 
@@ -197,7 +207,17 @@ async function loadDirectory(
             const collectionType = entry.name.slice(0, -'.json'.length);
             const filePath = path.join(dirPath, entry.name);
             const raw = await fs.readFile(filePath, 'utf-8');
-            const parsed = JSON.parse(raw) as (DataObject & Record<string, unknown>)[];
+            let parsed: (DataObject & Record<string, unknown>)[];
+            try {
+                parsed = JSON.parse(raw) as (DataObject & Record<string, unknown>)[];
+            } catch (err) {
+                throw new Error(
+                    `Failed to parse JSON in ${filePath}: ${
+                        err instanceof Error ? err.message : String(err)
+                    }`,
+                    { cause: err },
+                );
+            }
             mergeItems(collections, collectionType, parsed, options);
         }
         // All other entry types (symlinks, etc.) are silently ignored.

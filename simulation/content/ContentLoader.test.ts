@@ -433,6 +433,26 @@ describe('ContentLoader — schema validation on directory source', () => {
     });
 });
 
+describe('ContentLoader — JSON.parse error context (H7)', () => {
+    it('includes the file path in the error when a one-per-item .json file is malformed', async () => {
+        const dtDir = path.join(tmpDir, 'damage-types');
+        await fs.mkdir(dtDir);
+        await fs.writeFile(path.join(dtDir, 'fire.json'), '{ invalid json }');
+
+        await expect(
+            createContentLoader().load([{ type: 'directory', path: tmpDir }]),
+        ).rejects.toThrow(/fire\.json/);
+    });
+
+    it('includes the file path in the error when a flat-array .json file is malformed', async () => {
+        await fs.writeFile(path.join(tmpDir, 'abilities.json'), '[ broken');
+
+        await expect(
+            createContentLoader().load([{ type: 'directory', path: tmpDir }]),
+        ).rejects.toThrow(/abilities\.json/);
+    });
+});
+
 describe('ContentLoader — deterministic load order (H6)', () => {
     it('loads subdirectory items in alphabetical order regardless of filesystem order', async () => {
         const dtDir = path.join(tmpDir, 'damage-types');
