@@ -136,7 +136,7 @@ chimera/
 │   │   ├── ActionHistory.ts         # Append-only log, pruned to the most recent TurnMemento window
 │   │   ├── TurnMemento.ts           # Saves full snapshots at each player's turn-start
 │   │   ├── UndoManager.ts           # Undo/redo stack via memento + event log replay
-│   │   ├── SimulationClock.ts       # Advances `tick` per applied action; optional RealtimeTicker wrapper for timed games
+│   │   ├── SimulationClock.ts       # Advances `tick` per applied action (pure snapshot.tick reader — host-side RealtimeTicker lives in electron/main/)
 │   │   ├── StateBroadcaster.ts      # Projects snapshot per player; calls HostTransport.sendSnapshot() (provider-agnostic)
 │   │   ├── DeterministicRng.ts      # Seeded PRNG derived from (snapshot.seed, tick); passed via ReduceContext
 │   │   ├── GameTimer.ts             # Tick-based deterministic timer registry; TimerManager helper; see §4.20
@@ -704,7 +704,7 @@ Three rules make the simulation bit-identical across all machines that apply the
 
 `GameSnapshot.tick` is incremented by exactly **1 per action applied** by `ActionPipeline.process()`. It is a logical counter, not a timestamp. Idle time between player inputs does not advance it. `SimulationClock.now()` returns `snapshot.tick`; it is never read from `Date.now()` or `performance.now()`.
 
-Real-time games (if any) wrap `RealtimeTicker` around the pipeline — it dispatches a reserved `engine:tick` action at a fixed wall-clock cadence. Each `engine:tick` is a normal action and advances the counter by 1.
+Real-time games (if any) wrap the host-side `RealtimeTicker` (defined in `electron/main/RealtimeTicker.ts` — outside the deterministic core because `setInterval` is host I/O) around the pipeline. The ticker invokes a caller-supplied `getEnvelope()` factory and dispatches the resulting `engine:tick` action at a fixed wall-clock cadence. Each `engine:tick` is a normal action and advances the counter by 1.
 
 #### Rule 2: Deterministic RNG Only
 
