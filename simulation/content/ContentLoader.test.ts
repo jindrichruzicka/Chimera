@@ -417,6 +417,33 @@ describe('ContentLoader — conflict detection across sources', () => {
     });
 });
 
+describe('ContentLoader — items are frozen (M7)', () => {
+    it('items loaded from a directory source are frozen in the resulting db', async () => {
+        const dtDir = path.join(tmpDir, 'damage-types');
+        await fs.mkdir(dtDir);
+        await fs.writeFile(
+            path.join(dtDir, 'fire.json'),
+            JSON.stringify({ id: 'fire', name: 'Fire' }),
+        );
+
+        const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
+        const item = db.getById('damage-types', 'fire');
+        expect(Object.isFrozen(item)).toBe(true);
+    });
+
+    it('items loaded from an inline source are frozen in the resulting db', async () => {
+        const db = await createContentLoader().load([
+            {
+                type: 'inline',
+                collectionType: 'damage-types',
+                items: [{ id: 'fire', name: 'Fire' }],
+            },
+        ]);
+        const item = db.getById('damage-types', 'fire');
+        expect(Object.isFrozen(item)).toBe(true);
+    });
+});
+
 describe('ContentLoader — schema validation on directory source', () => {
     it('throws ContentSchemaError when a directory-loaded item fails schema', async () => {
         const dtDir = path.join(tmpDir, 'damage-types');
