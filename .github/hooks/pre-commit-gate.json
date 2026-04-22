@@ -1,0 +1,14 @@
+{
+    "hooks": [
+        {
+            "name": "pre-commit-gate",
+            "type": "PreToolUse",
+            "tool": "Bash",
+            "match": {
+                "command_pattern": "^git (commit|push)\\b"
+            },
+            "run": "pnpm format:check && pnpm lint && pnpm typecheck && pnpm test",
+            "on_failure": "[hook:pre-commit-gate] Gate failed. Fix the above errors and retry."
+        }
+    ]
+}
