@@ -35,3 +35,7 @@ export {
     NamespaceCollisionError,
     UnknownActionTypeError,
 } from './ActionRegistry.js';
+
+export type { EngineTickPayload, EngineEndTurnPayload } from './EngineActions.js';
+
+export { EngineActions, registerEngineActions } from './EngineActions.js';
