@@ -28,6 +28,10 @@ describe('buildRef', () => {
         expect(parsed.collectionType).toBe('damage-types');
         expect(parsed.id).toBe('cold');
     });
+
+    it('throws MalformedRefError when collectionType contains a colon (M4)', () => {
+        expect(() => buildRef('col:tion', 'fire')).toThrow(MalformedRefError);
+    });
 });
 
 describe('parseRef', () => {

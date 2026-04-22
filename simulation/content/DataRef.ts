@@ -47,6 +47,9 @@ export type DataRef<_T extends DataObject = DataObject> = string & {
  * @param id              The item ID within that collection, e.g. `"fire"`.
  */
 export function buildRef<T extends DataObject>(collectionType: string, id: string): DataRef<T> {
+    if (collectionType.includes(':')) {
+        throw new MalformedRefError(`${collectionType}:${id}`);
+    }
     return `${collectionType}:${id}` as DataRef<T>;
 }
 
