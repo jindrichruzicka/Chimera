@@ -127,7 +127,7 @@ export function createContentDatabase(collections: readonly ContentCollection[])
             if (col.has(item.id)) {
                 throw new ContentConflictError(collectionType, item.id);
             }
-            col.set(item.id, item);
+            col.set(item.id, Object.freeze(item));
         }
         store.set(collectionType, col);
     }

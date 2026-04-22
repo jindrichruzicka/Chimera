@@ -213,6 +213,32 @@ describe('ContentDatabase immutability', () => {
         expect(dbAsRecord['delete']).toBeUndefined();
         expect(dbAsRecord['clear']).toBeUndefined();
     });
+
+    it('the db object itself is frozen (Object.isFrozen)', () => {
+        const db = makeDb();
+        expect(Object.isFrozen(db)).toBe(true);
+    });
+
+    it('items retrieved via getById are frozen (invariant #13)', () => {
+        const db = makeDb();
+        const item = db.getById('damage-types', 'fire');
+        expect(Object.isFrozen(item)).toBe(true);
+    });
+
+    it('items retrieved via getAll are frozen', () => {
+        const db = makeDb();
+        const items = db.getAll('abilities');
+        for (const item of items) {
+            expect(Object.isFrozen(item)).toBe(true);
+        }
+    });
+
+    it('items retrieved via resolveRef are frozen', () => {
+        const db = makeDb();
+        const ref = buildRef('damage-types', 'fire');
+        const item = db.resolveRef(ref);
+        expect(Object.isFrozen(item)).toBe(true);
+    });
 });
 
 // ---------------------------------------------------------------------------
