@@ -198,6 +198,16 @@ async function loadDirectory(
                         { cause: err },
                     );
                 }
+                const expectedId = path.parse(file.name).name;
+                if (parsed.id !== expectedId) {
+                    throw new ContentSchemaError(
+                        collectionType,
+                        expectedId,
+                        new Error(
+                            `Item id '${parsed.id}' does not match filename '${file.name}' (expected id '${expectedId}')`,
+                        ),
+                    );
+                }
                 items.push(parsed);
             }
 

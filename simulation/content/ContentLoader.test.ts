@@ -453,6 +453,53 @@ describe('ContentLoader — JSON.parse error context (H7)', () => {
     });
 });
 
+describe('ContentLoader — filename equals item id (H8)', () => {
+    it('throws ContentSchemaError when filename stem does not match item.id', async () => {
+        const dtDir = path.join(tmpDir, 'damage-types');
+        await fs.mkdir(dtDir);
+        // file is fire.json but id inside is "ice"
+        await fs.writeFile(
+            path.join(dtDir, 'fire.json'),
+            JSON.stringify({ id: 'ice', name: 'Ice' }),
+        );
+
+        await expect(
+            createContentLoader().load([{ type: 'directory', path: tmpDir }]),
+        ).rejects.toThrow(ContentSchemaError);
+    });
+
+    it('ContentSchemaError from id mismatch includes collectionType and expected id', async () => {
+        const dtDir = path.join(tmpDir, 'damage-types');
+        await fs.mkdir(dtDir);
+        await fs.writeFile(
+            path.join(dtDir, 'fire.json'),
+            JSON.stringify({ id: 'ice', name: 'Ice' }),
+        );
+
+        try {
+            await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
+            expect.fail('should have thrown');
+        } catch (err) {
+            expect(err).toBeInstanceOf(ContentSchemaError);
+            const e = err as ContentSchemaError;
+            expect(e.collectionType).toBe('damage-types');
+            expect(e.id).toBe('fire');
+        }
+    });
+
+    it('does not throw when filename stem matches item.id', async () => {
+        const dtDir = path.join(tmpDir, 'damage-types');
+        await fs.mkdir(dtDir);
+        await fs.writeFile(
+            path.join(dtDir, 'fire.json'),
+            JSON.stringify({ id: 'fire', name: 'Fire' }),
+        );
+
+        const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
+        expect(db.has('damage-types', 'fire')).toBe(true);
+    });
+});
+
 describe('ContentLoader — deterministic load order (H6)', () => {
     it('loads subdirectory items in alphabetical order regardless of filesystem order', async () => {
         const dtDir = path.join(tmpDir, 'damage-types');
