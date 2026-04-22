@@ -1,0 +1,5 @@
+{
+    "localProfileId": "dev-p2",
+    "displayName": "Dev Player 2",
+    "avatar": { "kind": "builtin", "ref": "avatars/blue.png" }
+}

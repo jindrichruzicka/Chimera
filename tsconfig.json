@@ -36,7 +36,8 @@
         "simulation/**/*.ts",
         "ai/**/*.ts",
         "renderer/**/*.ts",
-        "shared/**/*.ts"
+        "shared/**/*.ts",
+        "tools/**/*.ts"
     ],
     "exclude": [
         "node_modules",

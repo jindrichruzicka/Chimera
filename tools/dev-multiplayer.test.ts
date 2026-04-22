@@ -1,0 +1,225 @@
+/**
+ * tools/dev-multiplayer.test.ts
+ *
+ * Unit tests for the pure pieces of `dev-multiplayer.ts`:
+ *   - CLI argument parsing and validation
+ *   - Environment-variable guards (CHIMERA_DEV_HARNESS / NODE_ENV)
+ *   - Spawn-config builders (Electron CLI vector per instance)
+ *
+ * Process-spawning and port-listening are exercised manually via `pnpm dev:mp`
+ * and by the future Playwright E2E suite (§13); they are not unit-tested here.
+ *
+ * Architecture reference: §4.32 — Development Multiplayer Harness
+ * Issue: #84
+ */
+
+import { describe, it, expect } from 'vitest';
+import {
+    MIN_PLAYERS,
+    MAX_PLAYERS,
+    parseArgs,
+    assertHarnessEnv,
+    buildHostSpawnConfig,
+    buildClientSpawnConfig,
+    HarnessArgsError,
+    HarnessGuardError,
+    type HarnessOptions,
+} from './dev-multiplayer.js';
+
+// ─── parseArgs ───────────────────────────────────────────────────────────────
+
+describe('parseArgs()', () => {
+    it('parses the player count as the first positional arg', () => {
+        expect(parseArgs(['3'])).toMatchObject({ players: 3 });
+    });
+
+    it('defaults game/scenario/port to undefined when not provided', () => {
+        const opts = parseArgs(['2']);
+        expect(opts.game).toBeUndefined();
+        expect(opts.scenario).toBeUndefined();
+        expect(opts.port).toBeUndefined();
+    });
+
+    it('parses --game <id>', () => {
+        expect(parseArgs(['3', '--game', 'tactics'])).toMatchObject({
+            players: 3,
+            game: 'tactics',
+        });
+    });
+
+    it('parses --scenario <name>', () => {
+        expect(parseArgs(['3', '--scenario', 'skirmish'])).toMatchObject({
+            scenario: 'skirmish',
+        });
+    });
+
+    it('parses --port <n> as an integer', () => {
+        expect(parseArgs(['2', '--port', '7777'])).toMatchObject({ port: 7777 });
+    });
+
+    it('accepts flags in any order after the player count', () => {
+        expect(parseArgs(['4', '--scenario', 's', '--port', '9000', '--game', 'g'])).toMatchObject({
+            players: 4,
+            game: 'g',
+            scenario: 's',
+            port: 9000,
+        });
+    });
+
+    it('throws HarnessArgsError when no player count is given', () => {
+        expect(() => parseArgs([])).toThrow(HarnessArgsError);
+    });
+
+    it('throws HarnessArgsError when player count is below MIN_PLAYERS', () => {
+        expect(() => parseArgs(['1'])).toThrow(HarnessArgsError);
+        expect(() => parseArgs(['0'])).toThrow(HarnessArgsError);
+    });
+
+    it('throws HarnessArgsError when player count is above MAX_PLAYERS', () => {
+        expect(() => parseArgs([String(MAX_PLAYERS + 1)])).toThrow(HarnessArgsError);
+    });
+
+    it('throws HarnessArgsError when player count is not an integer', () => {
+        expect(() => parseArgs(['abc'])).toThrow(HarnessArgsError);
+        expect(() => parseArgs(['2.5'])).toThrow(HarnessArgsError);
+    });
+
+    it('throws HarnessArgsError when --port is not an integer in [1, 65535]', () => {
+        expect(() => parseArgs(['2', '--port', 'abc'])).toThrow(HarnessArgsError);
+        expect(() => parseArgs(['2', '--port', '0'])).toThrow(HarnessArgsError);
+        expect(() => parseArgs(['2', '--port', '70000'])).toThrow(HarnessArgsError);
+    });
+
+    it('throws HarnessArgsError on unknown flags', () => {
+        expect(() => parseArgs(['2', '--wat'])).toThrow(HarnessArgsError);
+    });
+
+    it('throws HarnessArgsError when a flag is missing its value', () => {
+        expect(() => parseArgs(['2', '--game'])).toThrow(HarnessArgsError);
+        expect(() => parseArgs(['2', '--port'])).toThrow(HarnessArgsError);
+    });
+
+    it('accepts MIN_PLAYERS and MAX_PLAYERS at the boundaries', () => {
+        expect(parseArgs([String(MIN_PLAYERS)]).players).toBe(MIN_PLAYERS);
+        expect(parseArgs([String(MAX_PLAYERS)]).players).toBe(MAX_PLAYERS);
+    });
+});
+
+// ─── assertHarnessEnv ────────────────────────────────────────────────────────
+
+describe('assertHarnessEnv()', () => {
+    it('throws HarnessGuardError when CHIMERA_DEV_HARNESS is unset', () => {
+        expect(() => assertHarnessEnv({})).toThrow(HarnessGuardError);
+    });
+
+    it('throws HarnessGuardError when CHIMERA_DEV_HARNESS is not exactly "1"', () => {
+        expect(() => assertHarnessEnv({ CHIMERA_DEV_HARNESS: 'true' })).toThrow(HarnessGuardError);
+        expect(() => assertHarnessEnv({ CHIMERA_DEV_HARNESS: '' })).toThrow(HarnessGuardError);
+        expect(() => assertHarnessEnv({ CHIMERA_DEV_HARNESS: '0' })).toThrow(HarnessGuardError);
+    });
+
+    it('throws HarnessGuardError when NODE_ENV is production', () => {
+        expect(() =>
+            assertHarnessEnv({ CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'production' }),
+        ).toThrow(HarnessGuardError);
+    });
+
+    it('does not throw when CHIMERA_DEV_HARNESS=1 and NODE_ENV is undefined', () => {
+        expect(() => assertHarnessEnv({ CHIMERA_DEV_HARNESS: '1' })).not.toThrow();
+    });
+
+    it('does not throw when CHIMERA_DEV_HARNESS=1 and NODE_ENV=development', () => {
+        expect(() =>
+            assertHarnessEnv({ CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'development' }),
+        ).not.toThrow();
+    });
+});
+
+// ─── buildHostSpawnConfig ────────────────────────────────────────────────────
+
+describe('buildHostSpawnConfig()', () => {
+    const baseOpts: HarnessOptions = { players: 2 };
+
+    it('includes --user-data-dir pointing at .dev-userdata/p1', () => {
+        const cfg = buildHostSpawnConfig(baseOpts, 7812);
+        expect(cfg.args).toContain('--user-data-dir=.dev-userdata/p1');
+    });
+
+    it('includes --dev-auto-host flag', () => {
+        const cfg = buildHostSpawnConfig(baseOpts, 7812);
+        expect(cfg.args).toContain('--dev-auto-host');
+    });
+
+    it('includes --dev-profile-id=dev-p1', () => {
+        const cfg = buildHostSpawnConfig(baseOpts, 7812);
+        expect(cfg.args).toContain('--dev-profile-id=dev-p1');
+    });
+
+    it('includes --dev-port=<port>', () => {
+        const cfg = buildHostSpawnConfig(baseOpts, 7812);
+        expect(cfg.args).toContain('--dev-port=7812');
+    });
+
+    it('forwards --game when provided', () => {
+        const cfg = buildHostSpawnConfig({ players: 2, game: 'tactics' }, 7812);
+        expect(cfg.args).toContain('--dev-game=tactics');
+    });
+
+    it('forwards --scenario when provided', () => {
+        const cfg = buildHostSpawnConfig({ players: 2, scenario: 'skirmish' }, 7812);
+        expect(cfg.args).toContain('--dev-scenario=skirmish');
+    });
+
+    it('sets CHIMERA_DEV_HARNESS=1 in the child env', () => {
+        const cfg = buildHostSpawnConfig(baseOpts, 7812);
+        expect(cfg.env['CHIMERA_DEV_HARNESS']).toBe('1');
+    });
+
+    it('exposes a human label for log prefixes', () => {
+        const cfg = buildHostSpawnConfig(baseOpts, 7812);
+        expect(cfg.label).toBe('p1');
+    });
+});
+
+// ─── buildClientSpawnConfig ──────────────────────────────────────────────────
+
+describe('buildClientSpawnConfig()', () => {
+    const baseOpts: HarnessOptions = { players: 3 };
+
+    it('includes --user-data-dir pointing at .dev-userdata/p<index>', () => {
+        expect(buildClientSpawnConfig(baseOpts, 7812, 2).args).toContain(
+            '--user-data-dir=.dev-userdata/p2',
+        );
+        expect(buildClientSpawnConfig(baseOpts, 7812, 3).args).toContain(
+            '--user-data-dir=.dev-userdata/p3',
+        );
+    });
+
+    it('includes --dev-auto-join=<host:port>', () => {
+        expect(buildClientSpawnConfig(baseOpts, 7812, 2).args).toContain(
+            '--dev-auto-join=127.0.0.1:7812',
+        );
+    });
+
+    it('includes --dev-profile-id=dev-p<index>', () => {
+        expect(buildClientSpawnConfig(baseOpts, 7812, 2).args).toContain('--dev-profile-id=dev-p2');
+        expect(buildClientSpawnConfig(baseOpts, 7812, 3).args).toContain('--dev-profile-id=dev-p3');
+    });
+
+    it('rejects an index equal to the host (1)', () => {
+        expect(() => buildClientSpawnConfig(baseOpts, 7812, 1)).toThrow(HarnessArgsError);
+    });
+
+    it('rejects an index outside the player range', () => {
+        expect(() => buildClientSpawnConfig(baseOpts, 7812, 4)).toThrow(HarnessArgsError);
+        expect(() => buildClientSpawnConfig(baseOpts, 7812, 0)).toThrow(HarnessArgsError);
+    });
+
+    it('sets CHIMERA_DEV_HARNESS=1 in the child env', () => {
+        expect(buildClientSpawnConfig(baseOpts, 7812, 2).env['CHIMERA_DEV_HARNESS']).toBe('1');
+    });
+
+    it('exposes a human label for log prefixes', () => {
+        expect(buildClientSpawnConfig(baseOpts, 7812, 2).label).toBe('p2');
+    });
+});
