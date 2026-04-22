@@ -26,6 +26,7 @@ import {
     buildClientSpawnConfig,
     waitForPortListening,
     waitForAnyChildExit,
+    isDirectInvocation,
     HarnessArgsError,
     HarnessGuardError,
     HarnessTimeoutError,
@@ -388,5 +389,39 @@ describe('waitForAnyChildExit()', () => {
         a.emitExit(null, 'SIGTERM');
         b.emitExit(0);
         expect(await promise).toBe(0);
+    });
+});
+
+// ─── isDirectInvocation ──────────────────────────────────────────────────────
+
+describe('isDirectInvocation()', () => {
+    it('returns true when argv[1] is the absolute path of the module URL', () => {
+        const url = 'file:///repo/tools/dev-multiplayer.ts';
+        expect(isDirectInvocation(url, '/repo/tools/dev-multiplayer.ts')).toBe(true);
+    });
+
+    it('returns false when argv[1] is undefined (import via REPL, test runner)', () => {
+        const url = 'file:///repo/tools/dev-multiplayer.ts';
+        expect(isDirectInvocation(url, undefined)).toBe(false);
+    });
+
+    it('returns false when argv[1] points at a different file', () => {
+        const url = 'file:///repo/tools/dev-multiplayer.ts';
+        expect(isDirectInvocation(url, '/repo/tools/other.ts')).toBe(false);
+    });
+
+    it('does not treat a suffix-match as a direct invocation', () => {
+        // This is the bug the ticket fixes: the old guard used endsWith(),
+        // which would falsely return true for "/a/dev-multiplayer.ts" when
+        // the script URL was "file:///b/dev-multiplayer.ts".
+        const url = 'file:///home/alice/project/tools/dev-multiplayer.ts';
+        const argv1 = '/different/root/tools/dev-multiplayer.ts';
+        expect(isDirectInvocation(url, argv1)).toBe(false);
+    });
+
+    it('returns false when the URL is not a file:// URL', () => {
+        expect(isDirectInvocation('data:text/plain,foo', '/repo/tools/dev-multiplayer.ts')).toBe(
+            false,
+        );
     });
 });

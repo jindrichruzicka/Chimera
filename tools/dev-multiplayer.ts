@@ -27,6 +27,7 @@ import { createConnection, createServer, type AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 // ─── Public types ─────────────────────────────────────────────────────────────
 
@@ -397,7 +398,7 @@ async function main(): Promise<number> {
 }
 
 // Execute when invoked as a script (not when imported by the test suite).
-const invokedDirectly = process.argv[1] !== undefined && import.meta.url.endsWith(process.argv[1]);
+const invokedDirectly = isDirectInvocation(import.meta.url, process.argv[1]);
 if (invokedDirectly) {
     main()
         .then((exitCode) => process.exit(exitCode))
@@ -406,4 +407,22 @@ if (invokedDirectly) {
             process.stderr.write(`[dev-multiplayer] ${message}\n`);
             process.exit(1);
         });
+}
+
+/**
+ * True when this module was launched directly as a CLI (e.g. `node foo.ts`)
+ * rather than imported by another module (test runner, REPL).
+ *
+ * Compares canonical absolute paths: `fileURLToPath(importMetaUrl)` against
+ * the resolved `argv[1]`. This replaces the old `endsWith` substring match,
+ * which could falsely match whenever two repos contained same-named files.
+ */
+export function isDirectInvocation(importMetaUrl: string, argv1: string | undefined): boolean {
+    if (argv1 === undefined) return false;
+    if (!importMetaUrl.startsWith('file://')) return false;
+    try {
+        return fileURLToPath(importMetaUrl) === resolve(argv1);
+    } catch {
+        return false;
+    }
 }
