@@ -1,5 +1,5 @@
 /**
- * electron/main/save-manager.test.ts
+ * electron/main/SaveManager.test.ts
  *
  * Unit tests for SaveManager (§4.11, invariant #37).
  *
@@ -18,7 +18,7 @@ import {
 } from '@chimera/simulation/persistence/index.js';
 import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
 import { createNoopLogger } from './logger.js';
-import { SaveManager } from './save-manager.js';
+import { SaveManager } from './SaveManager.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 

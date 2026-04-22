@@ -1,5 +1,5 @@
 /**
- * electron/main/save-manager.ts
+ * electron/main/SaveManager.ts
  *
  * Orchestrates all save / load persistence operations for the main process.
  * Delegates I/O to an injected `SaveRepository` — no concrete repository
