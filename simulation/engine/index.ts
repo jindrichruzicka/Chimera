@@ -11,5 +11,21 @@
  *                ActionSchemaError, ActionUnauthorizedError
  */
 
-// placeholder — populated by T2–T5
-export {};
+export type {
+    PlayerId,
+    EntityId,
+    GamePhase,
+    BasePlayerState,
+    BaseEntityState,
+    GameEvent,
+    BaseGameSnapshot,
+    ContentDatabase,
+    EngineAction,
+    TypedAction,
+    ActionEnvelope,
+    ValidationResult,
+    ReduceContext,
+    ActionDefinition,
+    SimulationHostRole,
+    SimulationClientRole,
+} from './types.js';
