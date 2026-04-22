@@ -13,6 +13,34 @@
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
 /**
+ * Structured logger interface consumed by every main-process manager and by the
+ * simulation layer (which imports it via `shared/` to respect module boundaries).
+ *
+ * Intentionally kept in `shared/` so `simulation/` and `ai/` can accept an
+ * injected `Logger` without importing from `electron/`.
+ *
+ * Production implementations live in `electron/main/logger.ts` (F02/F08).
+ * `error` and `fatal` accept an optional `Error` because these levels are almost
+ * always paired with an exception; trace/debug/info/warn take only a message and
+ * a context object.
+ */
+export interface Logger {
+    trace(msg: string, ctx?: Record<string, unknown>): void;
+    debug(msg: string, ctx?: Record<string, unknown>): void;
+    info(msg: string, ctx?: Record<string, unknown>): void;
+    warn(msg: string, ctx?: Record<string, unknown>): void;
+    error(msg: string, err?: Error, ctx?: Record<string, unknown>): void;
+    fatal(msg: string, err?: Error, ctx?: Record<string, unknown>): void;
+    /**
+     * Return a child logger whose bound context is merged into every entry.
+     * Repeated `.child()` calls deep-merge (shallow spread) into the parent
+     * context so `logger.child({ module: 'saves' }).child({ slotId })`
+     * produces entries with both keys bound.
+     */
+    child(ctx: Record<string, unknown>): Logger;
+}
+
+/**
  * Origin of a log entry. The `process` tag identifies which half of the
  * application emitted the record; the `module` string is a short,
  * namespace-style name used to route and filter entries (e.g. `'game'`,

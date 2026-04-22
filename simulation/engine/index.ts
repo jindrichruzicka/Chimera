@@ -8,7 +8,8 @@
  *   - T3 (§4.7): ActionRegistry, UnknownActionTypeError, NamespaceCollisionError
  *   - T4 (§4.7): EngineActions, registerEngineActions
  *   - T5 (§4.7): ActionPipeline, StateReducer, StaleActionError,
- *                ActionSchemaError, ActionUnauthorizedError
+ *                ActionSchemaError, ActionUnauthorizedError, RecursiveDispatchError,
+ *                MAX_NESTED_DISPATCH
  */
 
 export type {
@@ -39,3 +40,13 @@ export {
 export type { EngineTickPayload, EngineEndTurnPayload } from './EngineActions.js';
 
 export { EngineActions, registerEngineActions } from './EngineActions.js';
+
+export {
+    ActionPipeline,
+    StateReducer,
+    StaleActionError,
+    ActionSchemaError,
+    ActionUnauthorizedError,
+    RecursiveDispatchError,
+    MAX_NESTED_DISPATCH,
+} from './ActionPipeline.js';

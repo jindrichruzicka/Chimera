@@ -22,33 +22,12 @@
 // Invariant 67: no module emits logs via raw `console.*`; all structured
 // logging flows through the injected `Logger`.
 
-import type { LogEntry, LogErrorInfo, LogLevel, LogSource } from '../../shared/logging.js';
+import type { LogEntry, LogErrorInfo, LogLevel, LogSource, Logger } from '../../shared/logging.js';
 
-/**
- * The narrow surface every main-process manager depends on. Matches
- * architecture §4.27 character-for-character.
- *
- * `error` and `fatal` accept an optional `Error` because these levels are
- * almost always paired with an exception; `trace` / `debug` / `info` /
- * `warn` take only a message and a context object because attaching a raw
- * `Error` to an info-level entry is usually a sign that the level is
- * wrong.
- */
-export interface Logger {
-    trace(msg: string, ctx?: Record<string, unknown>): void;
-    debug(msg: string, ctx?: Record<string, unknown>): void;
-    info(msg: string, ctx?: Record<string, unknown>): void;
-    warn(msg: string, ctx?: Record<string, unknown>): void;
-    error(msg: string, err?: Error, ctx?: Record<string, unknown>): void;
-    fatal(msg: string, err?: Error, ctx?: Record<string, unknown>): void;
-    /**
-     * Return a child logger whose bound context is merged into every entry.
-     * Repeated `.child()` calls deep-merge (shallow spread) into the parent
-     * context so `logger.child({ module: 'saves' }).child({ slotId })`
-     * produces entries with both keys bound.
-     */
-    child(ctx: Record<string, unknown>): Logger;
-}
+// `Logger` is declared in `shared/logging.ts` so that `simulation/` and `ai/`
+// can accept an injected Logger without importing from `electron/`. Re-exported
+// here so existing callers of `electron/main/logger.ts` see no breakage.
+export type { Logger };
 
 /**
  * Output port for a `Logger`. The root logger owns level routing and

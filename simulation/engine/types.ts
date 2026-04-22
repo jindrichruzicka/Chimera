@@ -176,10 +176,21 @@ export interface ValidationResult {
  *
  * `db`  — optional content database placeholder until F05 wires `ContentDatabase`.
  *          Games that declare no content never receive a `db`.
+ *
+ * `dispatch` — optional re-entrant dispatch function. ONLY `engine:tick` may call
+ *              this (§4.20, F21) to fire timer-triggered sub-actions from inside a
+ *              reducer. Game reducers MUST NOT call it. The pipeline bounds nesting
+ *              depth to `MAX_NESTED_DISPATCH = 16`; exceeding it throws
+ *              `RecursiveDispatchError`. Absent until `ActionPipeline` provides it
+ *              at Stage 5 (F03/T5).
  */
 export interface ReduceContext {
     readonly rng: () => number;
     readonly db?: ContentDatabase;
+    readonly dispatch?: (
+        state: Readonly<BaseGameSnapshot>,
+        action: ActionEnvelope,
+    ) => BaseGameSnapshot;
 }
 
 // ─── ActionDefinition ─────────────────────────────────────────────────────────
