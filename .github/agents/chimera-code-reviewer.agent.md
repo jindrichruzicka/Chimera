@@ -130,6 +130,14 @@ For any changed `.tsx` files:
 
 Reference: `docs/coding-standards.md §7`.
 
+**First, run the mechanical invariant checker and include its full output in the findings report:**
+
+```bash
+bash .github/skills/invariants/scripts/check-invariants.sh
+```
+
+Any non-zero exit is a **BLOCK** finding. Zero exit means all mechanical checks passed; the manual checklist below still applies.
+
 For any changes touching `simulation/`, `ai/`, or `games/*/actions/`:
 
 - [ ] `Math.random()` called inside `validate()` or `reduce()` — **BLOCK** (invariant #43)
@@ -142,11 +150,13 @@ For any changes touching `simulation/`, `ai/`, or `games/*/actions/`:
 
 Reference: `docs/coding-standards.md §11`.
 
+Note: the `check-invariants.sh` script run in Step 6 also covers the **Snapshot leakage** check (invariant #3 — `GameSnapshot` imported in `electron/preload/` or `renderer/`). Any violation it reports for `[invariant-3]` is a BLOCK finding here too.
+
 Review the diff for OWASP-style risks in the IPC and networking surface:
 
 - **Prototype pollution** — Is any `JSON.parse` result spread (`...`) or directly assigned to an object without schema validation? Flag if Zod / manual validation is absent.
 - **Unvalidated IPC input** — Does any new `ipcMain.handle` accept data that is not validated before being passed to the simulation?
-- **Snapshot leakage** — Does any handler send a full `GameSnapshot` instead of a projected `PlayerSnapshot`?
+- **Snapshot leakage** — Does any handler send a full `GameSnapshot` instead of a projected `PlayerSnapshot`? (Also enforced mechanically by `check-invariants.sh` — see Step 6 output.)
 - **Path traversal** — Does any new file-system code accept user-supplied paths without sanitising them?
 - **Electron nodeIntegration** — Does any new `BrowserWindow` creation enable `nodeIntegration: true` or disable `contextIsolation`?
 - **Hardcoded secrets** — Any token, key, or password literal in source?
