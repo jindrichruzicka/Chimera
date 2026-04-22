@@ -17,18 +17,32 @@
 // ---------------------------------------------------------------------------
 // Phantom asset-kind types — compile-time documentation only; no runtime
 // representation. The renderer maps these to actual loader output types.
+//
+// Each kind carries a unique nominal `__kind` literal brand so that
+// AssetRef<TextureAsset> and AssetRef<AudioClipAsset> are mutually
+// incompatible types (H1 hardening).
 // ---------------------------------------------------------------------------
 
 /** → THREE.Texture */
-export type TextureAsset = Record<string, never>;
+export interface TextureAsset {
+    readonly __kind: 'texture';
+}
 /** → AudioBuffer (Web Audio API) */
-export type AudioClipAsset = Record<string, never>;
+export interface AudioClipAsset {
+    readonly __kind: 'audio-clip';
+}
 /** → GLTF (drei or three/examples/jsm) */
-export type GLTFModelAsset = Record<string, never>;
+export interface GLTFModelAsset {
+    readonly __kind: 'gltf-model';
+}
 /** → THREE.Texture + SpriteAtlas frame map */
-export type SpriteSheetAsset = Record<string, never>;
+export interface SpriteSheetAsset {
+    readonly __kind: 'sprite-sheet';
+}
 /** → plain JSON (no Three.js dependency at all) */
-export type ParticleConfigAsset = Record<string, never>;
+export interface ParticleConfigAsset {
+    readonly __kind: 'particle-config';
+}
 
 /** Union of all recognised asset kinds. */
 export type AssetKind =
@@ -53,8 +67,10 @@ export type AssetKind =
  * The game-id prefix prevents cross-game ref collisions and makes paths
  * self-describing.
  */
-export type AssetRef<_T extends AssetKind = AssetKind> = string & {
-    readonly __assetRef: void;
+export type AssetRef<T extends AssetKind = AssetKind> = string & {
+    // Embedding T in the brand makes AssetRef<TextureAsset> and
+    // AssetRef<AudioClipAsset> structurally incompatible (H1 hardening).
+    readonly __assetRef: T;
 };
 
 // ---------------------------------------------------------------------------

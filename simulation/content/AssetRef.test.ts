@@ -127,6 +127,22 @@ describe('AssetKind phantom types', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Nominal brand discrimination — compile-time only (verified by pnpm typecheck)
+// ---------------------------------------------------------------------------
+
+describe('AssetKind nominal brand discrimination', () => {
+    it('different AssetKind types produce incompatible AssetRef types at compile time', () => {
+        // The @ts-expect-error below is the assertion: if the brands ever become
+        // structurally identical again, TypeScript emits "Unused '@ts-expect-error'
+        // directive" during pnpm typecheck — making this test red at the type level.
+        const textureRef = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        // @ts-expect-error — AssetRef<TextureAsset> must not be assignable to AssetRef<AudioClipAsset>
+        const _audioRef: AssetRef<AudioClipAsset> = textureRef;
+        void _audioRef;
+    });
+});
+
+// ---------------------------------------------------------------------------
 // AssetManifest types — structural checks
 // ---------------------------------------------------------------------------
 
