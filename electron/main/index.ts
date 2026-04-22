@@ -9,6 +9,7 @@ import {
     registerSettingsHandlers,
     registerSystemHandlers,
 } from './ipc-handlers.js';
+import { createLogger, type Logger, type LoggerSink } from './logger.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME };
 
@@ -214,6 +215,25 @@ export function registerAppLifecycle(options: RegisterAppLifecycleOptions): void
 }
 
 /**
+ * Construct the production {@link LoggerSink} used by the main process.
+ *
+ * F02 ships a no-op sink \u2014 the `Logger` interface + injection plumbing is
+ * the invariant-67 deliverable; rotated Pino-backed files under
+ * `userData/logs/` land in F43 (\u00a74.27) alongside the crash reporter.
+ * Swapping the sink is a one-line change here; nothing else in the main
+ * process needs to know.\n */
+function createProductionLoggerSink(): LoggerSink {
+    // Intentional noop for F02. Replace with the Pino sink in F43.
+    // `createNoopLogger` wraps this same behaviour; using its internal sink
+    // would leak module state, so we declare the no-op inline instead.
+    return {
+        write: () => {
+            // F43: pino.destination + daily rotation lives here.
+        },
+    };
+}
+
+/**
  * Entry-point orchestration. Kept as a distinct function so tests can import
  * the helpers above without triggering Electron lifecycle side effects.
  *
@@ -229,6 +249,17 @@ export function main(): void {
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
     const flagPath = path.join(app.getPath('userData'), CLEAN_EXIT_FLAG_FILENAME);
 
+    // Construct the root main-process logger once (invariant 67). The sink
+    // is currently a noop — production sinks (Pino + userData/logs rotation)
+    // land in F43 alongside the crash reporter. Child loggers are injected
+    // into each register*Handlers call so every namespace is tagged with its
+    // own `module`. Managers landing in F03+ will demand a required
+    // `logger` rather than falling back to noop.
+    const logger: Logger = createLogger({
+        source: { process: 'main', module: 'root' },
+        sink: createProductionLoggerSink(),
+    });
+
     // Capture crash status before any window opens so the renderer can
     // reliably ask for it via the IPC channel.
     const { wasCleanExit } = checkCleanExitFlag({ flagPath, fs });
@@ -243,31 +274,32 @@ export function main(): void {
         app,
         platform: process.platform,
         electronVersion: process.versions.electron ?? '',
+        logger: logger.child({ module: 'system' }),
     });
 
     // Register the `chimera:game:*` channels as stubs. Actual ActionPipeline
     // dispatch and seat-switch logic land in F03–F15; wiring the handlers
     // here lets the preload bridge already speak the full protocol without
     // racing the engine work.
-    registerGameHandlers({ ipcMain });
+    registerGameHandlers({ ipcMain, logger: logger.child({ module: 'game' }) });
 
     // Register the `chimera:lobby:*` channels as stubs. Real lobby logic
     // (host/join/leave/state broadcast) lands in F11; wiring stubs here
     // lets the preload bridge and renderer already speak the full lobby
     // protocol without unhandled-channel errors.
-    registerLobbyHandlers({ ipcMain });
+    registerLobbyHandlers({ ipcMain, logger: logger.child({ module: 'lobby' }) });
 
     // Register the `chimera:saves:*` channels as stubs. Real save
     // persistence (SaveRepository, slot indexing, autosave cadence)
     // lands in F06/F18; wiring stubs here keeps the renderer's typed
     // Promises from rejecting before persistence exists.
-    registerSavesHandlers({ ipcMain });
+    registerSavesHandlers({ ipcMain, logger: logger.child({ module: 'saves' }) });
 
     // Register the `chimera:settings:*` channels as stubs. Real schema
     // validation, three-layer merge, and persisted user overrides land
     // in F07/F19; wiring stubs here lets the renderer speak the full
     // settings protocol without unhandled-channel errors.
-    registerSettingsHandlers({ ipcMain });
+    registerSettingsHandlers({ ipcMain, logger: logger.child({ module: 'settings' }) });
 
     const createWindow = (): void => {
         createMainWindow({ preloadPath, rendererEntry, env });

@@ -62,6 +62,7 @@ import {
     UserSettingsPatchSchema,
     parseInvokeRequest,
 } from './ipc-schemas.js';
+import { createNoopLogger, type Logger } from './logger.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -109,6 +110,12 @@ export interface RegisterSystemHandlersOptions {
     readonly app: SystemHandlersAppHost;
     readonly platform: NodeJS.Platform;
     readonly electronVersion: string;
+    /**
+     * Injected logger (invariant 67). Optional at F02 because the handlers
+     * are stubs; real managers landing in F03+ will require it. Defaults to
+     * a noop logger so today's tests and call sites need not supply one.
+     */
+    readonly logger?: Logger;
 }
 
 /**
@@ -140,6 +147,10 @@ export function mapPlatform(platform: NodeJS.Platform): PlatformInfo['os'] {
  */
 export function registerSystemHandlers(options: RegisterSystemHandlersOptions): void {
     const { ipcMain, app, platform, electronVersion } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:system:* handlers', {
+        channels: [SYSTEM_PLATFORM_CHANNEL, SYSTEM_QUIT_CHANNEL],
+    });
 
     ipcMain.handle(SYSTEM_PLATFORM_CHANNEL, () => {
         const info: PlatformInfo = {
@@ -186,6 +197,8 @@ export interface GameHandlersIpcMain {
 
 export interface RegisterGameHandlersOptions {
     readonly ipcMain: GameHandlersIpcMain;
+    /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
+    readonly logger?: Logger;
 }
 
 /**
@@ -242,6 +255,10 @@ function buildIpcValidationRejection(
  */
 export function registerGameHandlers(options: RegisterGameHandlersOptions): void {
     const { ipcMain } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:game:* handlers', {
+        channels: [GAME_SEND_ACTION_CHANNEL, GAME_SWITCH_SEAT_CHANNEL],
+    });
 
     ipcMain.on(GAME_SEND_ACTION_CHANNEL, (event, action) => {
         // Validate the envelope before handing off to the (future)
@@ -262,6 +279,14 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
         } catch (err) {
             if (err instanceof IpcRequestValidationError) {
                 const rejection: ActionRejection = buildIpcValidationRejection(err, action);
+                logger.warn('ipc envelope rejected', {
+                    channel: GAME_SEND_ACTION_CHANNEL,
+                    reason: rejection.reason,
+                    tick: rejection.tick,
+                    ...(rejection.actionType !== undefined
+                        ? { actionType: rejection.actionType }
+                        : {}),
+                });
                 event.sender.send(GAME_ACTION_REJECTED_CHANNEL, rejection);
                 return;
             }
@@ -306,6 +331,8 @@ export interface LobbyHandlersIpcMain {
 
 export interface RegisterLobbyHandlersOptions {
     readonly ipcMain: LobbyHandlersIpcMain;
+    /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
+    readonly logger?: Logger;
 }
 
 /**
@@ -337,6 +364,10 @@ const STUB_LOBBY_INFO: LobbyInfo = {
  */
 export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): void {
     const { ipcMain } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:lobby:* handlers', {
+        channels: [LOBBY_HOST_CHANNEL, LOBBY_JOIN_CHANNEL, LOBBY_LEAVE_CHANNEL],
+    });
 
     ipcMain.handle(LOBBY_HOST_CHANNEL, (_event, params) => {
         parseInvokeRequest(HostLobbyParamsSchema, LOBBY_HOST_CHANNEL, params);
@@ -379,6 +410,8 @@ export interface SavesHandlersIpcMain {
 
 export interface RegisterSavesHandlersOptions {
     readonly ipcMain: SavesHandlersIpcMain;
+    /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
+    readonly logger?: Logger;
 }
 
 /**
@@ -413,6 +446,15 @@ const STUB_SAVE_SLOT: SaveSlotMeta = {
  */
 export function registerSavesHandlers(options: RegisterSavesHandlersOptions): void {
     const { ipcMain } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:saves:* handlers', {
+        channels: [
+            SAVES_LIST_CHANNEL,
+            SAVES_SAVE_CHANNEL,
+            SAVES_LOAD_CHANNEL,
+            SAVES_DELETE_CHANNEL,
+        ],
+    });
 
     ipcMain.handle(SAVES_LIST_CHANNEL, (_event, gameId) => {
         parseInvokeRequest(GameIdSchema, SAVES_LIST_CHANNEL, gameId);
@@ -466,6 +508,8 @@ export interface SettingsHandlersIpcMain {
 
 export interface RegisterSettingsHandlersOptions {
     readonly ipcMain: SettingsHandlersIpcMain;
+    /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
+    readonly logger?: Logger;
 }
 
 /**
@@ -491,6 +535,10 @@ const STUB_RESOLVED_SETTINGS: ResolvedSettings = Object.freeze({});
  */
 export function registerSettingsHandlers(options: RegisterSettingsHandlersOptions): void {
     const { ipcMain } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:settings:* handlers', {
+        channels: [SETTINGS_GET_CHANNEL, SETTINGS_UPDATE_CHANNEL, SETTINGS_RESET_CHANNEL],
+    });
 
     ipcMain.handle(SETTINGS_GET_CHANNEL, (_event, gameId) => {
         parseInvokeRequest(GameIdSchema, SETTINGS_GET_CHANNEL, gameId);

@@ -40,6 +40,7 @@ import {
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
 import { IpcRequestValidationError } from './ipc-schemas.js';
+import { createLogger, createMemorySink } from './logger.js';
 import type {
     ActionRejection,
     EngineAction,
@@ -671,5 +672,72 @@ describe('inbound IPC request validation', () => {
             expect(err).toBeInstanceOf(IpcRequestValidationError);
             expect((err as IpcRequestValidationError).channel).toBe(LOBBY_HOST_CHANNEL);
         }
+    });
+});
+
+describe('Logger injection (invariant 67)', () => {
+    it('registerSystemHandlers emits an info log tagged with the injected module', () => {
+        const sink = createMemorySink();
+        const logger = createLogger({
+            source: { process: 'main', module: 'root' },
+            sink,
+        }).child({ module: 'system' });
+        const stub = makeIpcMainStub();
+
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app: { quit: vi.fn() },
+            platform: 'linux',
+            electronVersion: '33.4.11',
+            logger,
+        });
+
+        const infoEntries = sink.entries.filter((e) => e.level === 'info');
+        expect(infoEntries).toHaveLength(1);
+        expect(infoEntries[0]?.source).toEqual({ process: 'main', module: 'system' });
+        expect(infoEntries[0]?.message).toContain('chimera:system');
+    });
+
+    it('registerGameHandlers warn-logs every IPC REJECT with channel/reason/tick context', () => {
+        const sink = createMemorySink();
+        const logger = createLogger({
+            source: { process: 'main', module: 'root' },
+            sink,
+        }).child({ module: 'game' });
+        const stub = makeGameIpcMainStub();
+        registerGameHandlers({ ipcMain: stub.ipcMain, logger });
+
+        const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
+        const { event, sends } = makeGameEvent();
+        sink.clear();
+        // Use an envelope with recoverable tick + actionType so the log
+        // context carries them.
+        handler?.(event, { type: 'noop', playerId: 'p1', tick: 7, payload: 'not-an-object' });
+
+        // REJECT push is still emitted for the renderer.
+        expect(sends).toHaveLength(1);
+
+        const warns = sink.entries.filter((e) => e.level === 'warn');
+        expect(warns).toHaveLength(1);
+        const warn = warns[0];
+        expect(warn?.source).toEqual({ process: 'main', module: 'game' });
+        expect(warn?.context).toMatchObject({
+            channel: GAME_SEND_ACTION_CHANNEL,
+            tick: 7,
+            actionType: 'noop',
+        });
+        expect(String(warn?.context?.['reason'])).toContain(
+            `ipc-validation:${GAME_SEND_ACTION_CHANNEL}`,
+        );
+    });
+
+    it('handlers default to a noop logger when none is injected (back-compat with stub tests)', () => {
+        // All preceding test blocks call register*Handlers without a `logger`
+        // option. This test documents and pins the back-compat behaviour:
+        // omitting `logger` must not throw and must not require any other
+        // wiring. Failure of this test means the logger option became
+        // required without updating the other call sites.
+        const stub = makeGameIpcMainStub();
+        expect(() => registerGameHandlers({ ipcMain: stub.ipcMain })).not.toThrow();
     });
 });
