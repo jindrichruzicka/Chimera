@@ -144,16 +144,17 @@ export async function registerSaveManagerLifecycle(
 ): Promise<SaveManagerLifecycleResult> {
     const { app: appHost, saveManager, knownGameIds } = options;
 
-    // 1. Clear the flag so a subsequent crash is detectable.
+    // 1. Check if the previous session crashed (flag present = clean exit).
+    //    Must happen BEFORE clearing the flag; otherwise the evidence is gone.
+    const autosaveMeta = await saveManager.checkCrashRecovery(knownGameIds);
+
+    // 2. Clear the flag so a subsequent crash is detectable.
     await saveManager.clearCleanExitFlag();
 
-    // 2. Write the flag on graceful shutdown.
+    // 3. Write the flag on graceful shutdown.
     appHost.on('before-quit', () => {
         void saveManager.markCleanExit();
     });
-
-    // 3. Check if the previous session crashed.
-    const autosaveMeta = await saveManager.checkCrashRecovery(knownGameIds);
 
     return { autosaveMeta };
 }

@@ -643,4 +643,24 @@ describe('registerSaveManagerLifecycle', () => {
 
         expect(result.autosaveMeta).toStrictEqual(meta);
     });
+
+    it('checks crash recovery BEFORE clearing the clean-exit flag (order invariant — BLOCK-2)', async () => {
+        const callOrder: string[] = [];
+        const saveManager = {
+            clearCleanExitFlag: vi.fn(() => {
+                callOrder.push('clear');
+                return Promise.resolve();
+            }),
+            markCleanExit: vi.fn(() => Promise.resolve()),
+            checkCrashRecovery: vi.fn(() => {
+                callOrder.push('check');
+                return Promise.resolve(null);
+            }),
+        };
+        const fakeApp = { on: vi.fn() };
+
+        await registerSaveManagerLifecycle({ app: fakeApp, saveManager, knownGameIds: [] });
+
+        expect(callOrder).toStrictEqual(['check', 'clear']);
+    });
 });
