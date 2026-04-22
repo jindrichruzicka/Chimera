@@ -14,6 +14,8 @@
  */
 
 import { createServer, type Server } from 'node:net';
+import { EventEmitter } from 'node:events';
+import type { ChildProcess } from 'node:child_process';
 import { describe, it, expect } from 'vitest';
 import {
     MIN_PLAYERS,
@@ -23,6 +25,7 @@ import {
     buildHostSpawnConfig,
     buildClientSpawnConfig,
     waitForPortListening,
+    waitForAnyChildExit,
     HarnessArgsError,
     HarnessGuardError,
     HarnessTimeoutError,
@@ -289,5 +292,101 @@ describe('waitForPortListening()', () => {
         expect(msg).toContain('127.0.0.1');
         expect(msg).toContain(String(port));
         expect(msg).toContain('150');
+    });
+});
+
+// ─── waitForAnyChildExit ─────────────────────────────────────────────────────
+
+interface FakeChild extends EventEmitter {
+    killed: boolean;
+    readonly kills: NodeJS.Signals[];
+    kill(signal?: NodeJS.Signals): boolean;
+    emitExit(code: number | null, signal?: NodeJS.Signals | null): void;
+}
+
+function makeFakeChild(): FakeChild {
+    const emitter = new EventEmitter() as FakeChild;
+    emitter.killed = false;
+    (emitter as { kills: NodeJS.Signals[] }).kills = [];
+    emitter.kill = (signal: NodeJS.Signals = 'SIGTERM'): boolean => {
+        emitter.kills.push(signal);
+        emitter.killed = true;
+        return true;
+    };
+    emitter.emitExit = (code, signal = null): void => {
+        emitter.killed = true;
+        emitter.emit('exit', code, signal);
+    };
+    return emitter;
+}
+
+function asChildren(fakes: readonly FakeChild[]): readonly ChildProcess[] {
+    return fakes as unknown as readonly ChildProcess[];
+}
+
+describe('waitForAnyChildExit()', () => {
+    it('returns the exit code of the first child to exit when no siblings remain', async () => {
+        const a = makeFakeChild();
+        const promise = waitForAnyChildExit(asChildren([a]), 100);
+        a.emitExit(0);
+        expect(await promise).toBe(0);
+    });
+
+    it('sends SIGTERM to remaining alive children when one exits', async () => {
+        const a = makeFakeChild();
+        const b = makeFakeChild();
+        const c = makeFakeChild();
+        const promise = waitForAnyChildExit(asChildren([a, b, c]), 200);
+        a.emitExit(0);
+        // Allow microtasks to flush so siblings are signalled.
+        await new Promise((r) => setImmediate(r));
+        expect(b.kills).toEqual(['SIGTERM']);
+        expect(c.kills).toEqual(['SIGTERM']);
+        b.emitExit(0);
+        c.emitExit(0);
+        await promise;
+    });
+
+    it('escalates to SIGKILL for children that do not exit within graceMs', async () => {
+        const a = makeFakeChild();
+        const b = makeFakeChild();
+        const promise = waitForAnyChildExit(asChildren([a, b]), 50);
+        a.emitExit(0);
+        await new Promise((r) => setTimeout(r, 120));
+        expect(b.kills).toEqual(['SIGTERM', 'SIGKILL']);
+        b.emitExit(null, 'SIGKILL');
+        await promise;
+    });
+
+    it('returns the highest exit code across all children', async () => {
+        const a = makeFakeChild();
+        const b = makeFakeChild();
+        const c = makeFakeChild();
+        const promise = waitForAnyChildExit(asChildren([a, b, c]), 200);
+        a.emitExit(1);
+        b.emitExit(7);
+        c.emitExit(3);
+        expect(await promise).toBe(7);
+    });
+
+    it('does not signal a child that is already killed', async () => {
+        const a = makeFakeChild();
+        const b = makeFakeChild();
+        b.killed = true;
+        const promise = waitForAnyChildExit(asChildren([a, b]), 50);
+        a.emitExit(0);
+        await new Promise((r) => setImmediate(r));
+        expect(b.kills).toEqual([]);
+        b.emitExit(0);
+        await promise;
+    });
+
+    it('treats a null exit code as zero when computing the highest code', async () => {
+        const a = makeFakeChild();
+        const b = makeFakeChild();
+        const promise = waitForAnyChildExit(asChildren([a, b]), 50);
+        a.emitExit(null, 'SIGTERM');
+        b.emitExit(0);
+        expect(await promise).toBe(0);
     });
 });

@@ -322,20 +322,57 @@ function installSignalForwarding(children: readonly ChildProcess[]): void {
     process.on('SIGTERM', () => forward('SIGTERM'));
 }
 
-async function waitForAllChildExit(children: readonly ChildProcess[]): Promise<number> {
+/**
+ * Wait until the first child exits, then tear down the rest.
+ *
+ * Per §4.32 the harness is a "one-out, all-out" orchestrator: if any process
+ * (host or client) exits, the remaining siblings are signalled so the user
+ * gets a clean shutdown instead of orphan ECONNREFUSED loops.
+ *
+ *  1. Wait for the first `exit` event from any child.
+ *  2. Send `SIGTERM` to every still-alive sibling.
+ *  3. Wait up to `graceMs` for siblings to exit; escalate survivors to `SIGKILL`.
+ *  4. Resolve with the highest non-null exit code observed.
+ */
+export async function waitForAnyChildExit(
+    children: readonly ChildProcess[],
+    graceMs: number,
+): Promise<number> {
     let highestExit = 0;
-    await Promise.all(
-        children.map(
-            (child) =>
-                new Promise<void>((done) => {
-                    child.on('exit', (code) => {
-                        if (code !== null && code > highestExit) highestExit = code;
-                        done();
-                    });
-                }),
-        ),
+    const exited = children.map(() => false);
+    const exitPromises = children.map((child, i) =>
+        onExit(child).then((code) => {
+            exited[i] = true;
+            if (code !== null && code > highestExit) highestExit = code;
+            return code;
+        }),
     );
+
+    await Promise.race(exitPromises);
+
+    for (let i = 0; i < children.length; i++) {
+        const child = children[i]!;
+        if (!exited[i] && !child.killed) child.kill('SIGTERM');
+    }
+
+    const gracePromise = new Promise<'grace'>((r) => setTimeout(() => r('grace'), graceMs));
+    const allExited = Promise.all(exitPromises).then(() => 'all' as const);
+    const outcome = await Promise.race([allExited, gracePromise]);
+
+    if (outcome === 'grace') {
+        for (let i = 0; i < children.length; i++) {
+            if (!exited[i]) children[i]!.kill('SIGKILL');
+        }
+        await Promise.all(exitPromises);
+    }
+
     return highestExit;
+}
+
+function onExit(child: ChildProcess): Promise<number | null> {
+    return new Promise((resolveExit) => {
+        child.once('exit', (code) => resolveExit(code));
+    });
 }
 
 // ─── main ─────────────────────────────────────────────────────────────────────
@@ -356,7 +393,7 @@ async function main(): Promise<number> {
     }
 
     installSignalForwarding(children);
-    return waitForAllChildExit(children);
+    return waitForAnyChildExit(children, 5_000);
 }
 
 // Execute when invoked as a script (not when imported by the test suite).
