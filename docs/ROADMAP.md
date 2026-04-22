@@ -33,6 +33,34 @@ Bootstrap the Electron entry point: create and manage the `BrowserWindow`, injec
 
 Wire the full `window.__chimera` contextBridge surface. Declare all five type-safe namespace files (`game-api.ts`, `lobby-api.ts`, `saves-api.ts`, `settings-api.ts`, `system-api.ts`) and compose them in `preload/api.ts`. Enforce `nodeIntegration: false` and `contextIsolation: true`. **Carried over from F01:** verify the Electron app boots and loads the Next.js static export from `renderer/out/` — this §12 M1 checklist item could not be exercised in F01 because `preload/api.js` and a first Next.js page did not yet exist.
 
+#### F02 retrospective follow-ups (deferred, pinned to blocking features)
+
+The F02 retrospective (issues #16–#22) hardened the preload bridge, but four
+items are genuinely blocked on later features and land with them. Recorded
+here so they resurface automatically when the blocking feature is opened —
+no separate GitHub issues are filed before the relevant feature starts.
+
+- **PlayerSnapshot projection / masking** → lands with **F26 `StateProjector`** (§4.6, §8).
+  Today's preload types declare `PlayerSnapshot` as an interface with no masking
+  logic; the real projection pipeline (`GameSnapshot → PlayerSnapshot` per
+  viewer, fog-of-war, commitment concealment) is part of F26. The IPC envelope
+  already carries only `PlayerSnapshot` (invariant #1), so no preload change is
+  needed when F26 lands.
+- **CRC32 on inbound `ACTION` messages** → lands with **F13 WebSocket Message Protocol** (§4.3).
+  The `ServerMessage` / `ClientMessage` envelopes are defined but no transport
+  exists yet. F13 wires the WebSocket adapter and is the right place to add the
+  CRC32 check — the IPC REJECT surface (§4.3 mirror, issues #17/#18) is already
+  reusable for CRC mismatches.
+- **`tools/dev-multiplayer.ts` harness** → already enumerated in **F08 Development Tooling**.
+  No follow-up needed; the F02 retrospective only flagged it because the harness
+  is convenient for exercising the new REJECT path end-to-end, which F08 will
+  naturally cover.
+- **`chimera/no-fromfloat-in-simulation` ESLint rule** → lands with **F20 Fixed-Point Math** (§4.31).
+  The rule guards against float-to-`FixedPoint` conversions in `simulation/`; it
+  cannot exist before the `FixedPoint` module does. F04's existing
+  `chimera/no-restricted-globals` rule covers the `Math.random` / `Date.now`
+  cases in the meantime.
+
 ### F03 — Simulation Engine Stub `§4.2, §4.7`
 
 Implement `BaseGameSnapshot`, `ActionEnvelope`, `ActionRegistry`, `ActionPipeline` (7-stage, fixed order), `StateReducer`, and `EngineActions` (reserved action set). No game-specific rules — just the invariant pipeline contract operating on a pass-through no-op game.
