@@ -320,12 +320,23 @@ describe('engine:save definition', () => {
         expect(result.ok).toBe(false);
     });
 
-    it('validate returns ok: false when hostPlayerId is absent', () => {
-        const snapshot = makeSnapshot(); // no hostPlayerId
+    it('validate returns ok: true when hostPlayerId is undefined (single-player, invariant #25)', () => {
+        const snapshot = makeSnapshot(); // no hostPlayerId → single-player mode
         const result = definition().validate(
             { slotId: 'tactics/autosave' },
             snapshot,
             hostId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    it('validate returns ok: false when hostPlayerId is set and dispatching player is not the host', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate(
+            { slotId: 'tactics/autosave' },
+            snapshot,
+            guestId,
             stubCtx,
         );
         expect(result.ok).toBe(false);
@@ -398,12 +409,23 @@ describe('engine:load definition', () => {
         expect(result.ok).toBe(false);
     });
 
-    it('validate returns ok: false when hostPlayerId is absent', () => {
-        const snapshot = makeSnapshot(); // no hostPlayerId
+    it('validate returns ok: true when hostPlayerId is undefined (single-player, invariant #25)', () => {
+        const snapshot = makeSnapshot(); // no hostPlayerId → single-player mode
         const result = definition().validate(
             { slotId: 'tactics/slot-1' },
             snapshot,
             hostId,
+            stubCtx,
+        );
+        expect(result.ok).toBe(true);
+    });
+
+    it('validate returns ok: false when hostPlayerId is set and dispatching player is not the host', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate(
+            { slotId: 'tactics/slot-1' },
+            snapshot,
+            guestId,
             stubCtx,
         );
         expect(result.ok).toBe(false);

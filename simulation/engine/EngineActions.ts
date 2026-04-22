@@ -143,7 +143,7 @@ const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
         playerId: string,
         _ctx,
     ): ValidationResult {
-        if (state.hostPlayerId === undefined || playerId !== state.hostPlayerId) {
+        if (state.hostPlayerId !== undefined && playerId !== state.hostPlayerId) {
             return {
                 ok: false,
                 reason: 'engine:save may only be dispatched by the host player (invariant #25)',
@@ -187,7 +187,7 @@ const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
         playerId: string,
         _ctx,
     ): ValidationResult {
-        if (state.hostPlayerId === undefined || playerId !== state.hostPlayerId) {
+        if (state.hostPlayerId !== undefined && playerId !== state.hostPlayerId) {
             return {
                 ok: false,
                 reason: 'engine:load may only be dispatched by the host player (invariant #25)',
