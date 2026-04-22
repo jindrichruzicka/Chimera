@@ -29,3 +29,9 @@ export type {
     SimulationHostRole,
     SimulationClientRole,
 } from './types.js';
+
+export {
+    ActionRegistry,
+    NamespaceCollisionError,
+    UnknownActionTypeError,
+} from './ActionRegistry.js';
