@@ -13,6 +13,7 @@
  * Issue: #84
  */
 
+import { createServer, type Server } from 'node:net';
 import { describe, it, expect } from 'vitest';
 import {
     MIN_PLAYERS,
@@ -21,8 +22,10 @@ import {
     assertHarnessEnv,
     buildHostSpawnConfig,
     buildClientSpawnConfig,
+    waitForPortListening,
     HarnessArgsError,
     HarnessGuardError,
+    HarnessTimeoutError,
     type HarnessOptions,
 } from './dev-multiplayer.js';
 
@@ -221,5 +224,70 @@ describe('buildClientSpawnConfig()', () => {
 
     it('exposes a human label for log prefixes', () => {
         expect(buildClientSpawnConfig(baseOpts, 7812, 2).label).toBe('p2');
+    });
+});
+
+// ─── waitForPortListening ────────────────────────────────────────────────────
+
+async function listenOn(port: number): Promise<Server> {
+    return new Promise((resolveServer, rejectServer) => {
+        const server = createServer();
+        server.once('error', rejectServer);
+        server.listen(port, '127.0.0.1', () => resolveServer(server));
+    });
+}
+
+async function reserveFreePort(): Promise<number> {
+    const server = await listenOn(0);
+    const addr = server.address();
+    if (addr === null || typeof addr === 'string') {
+        throw new Error('no address');
+    }
+    const { port } = addr;
+    await new Promise<void>((done) => server.close(() => done()));
+    return port;
+}
+
+describe('waitForPortListening()', () => {
+    it('resolves once a listener is accepting connections on the port', async () => {
+        const port = await reserveFreePort();
+        const server = await listenOn(port);
+        try {
+            await expect(waitForPortListening('127.0.0.1', port, 1_000)).resolves.toBeUndefined();
+        } finally {
+            await new Promise<void>((done) => server.close(() => done()));
+        }
+    });
+
+    it('resolves when a listener appears before the timeout elapses', async () => {
+        const port = await reserveFreePort();
+        const waiter = waitForPortListening('127.0.0.1', port, 2_000);
+        const server = await new Promise<Server>((resolveSrv, rejectSrv) => {
+            setTimeout(() => {
+                listenOn(port).then(resolveSrv, rejectSrv);
+            }, 50);
+        });
+        try {
+            await expect(waiter).resolves.toBeUndefined();
+        } finally {
+            await new Promise<void>((done) => server.close(() => done()));
+        }
+    });
+
+    it('rejects with HarnessTimeoutError when no listener appears within the timeout', async () => {
+        const port = await reserveFreePort();
+        await expect(waitForPortListening('127.0.0.1', port, 150)).rejects.toBeInstanceOf(
+            HarnessTimeoutError,
+        );
+    });
+
+    it('includes the host, port, and timeout in the timeout error message', async () => {
+        const port = await reserveFreePort();
+        const err = await waitForPortListening('127.0.0.1', port, 150).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(HarnessTimeoutError);
+        const msg = (err as Error).message;
+        expect(msg).toContain('127.0.0.1');
+        expect(msg).toContain(String(port));
+        expect(msg).toContain('150');
     });
 });

@@ -23,7 +23,7 @@
  */
 
 import { spawn, type ChildProcess } from 'node:child_process';
-import { createServer, type AddressInfo } from 'node:net';
+import { createConnection, createServer, type AddressInfo } from 'node:net';
 import { createRequire } from 'node:module';
 import { mkdir, rm } from 'node:fs/promises';
 import { resolve } from 'node:path';
@@ -67,6 +67,15 @@ export class HarnessGuardError extends Error {
     constructor(message: string) {
         super(message);
         this.name = 'HarnessGuardError';
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+export class HarnessTimeoutError extends Error {
+    readonly code = 'HARNESS_TIMEOUT' as const;
+    constructor(message: string) {
+        super(message);
+        this.name = 'HarnessTimeoutError';
         Object.setPrototypeOf(this, new.target.prototype);
     }
 }
@@ -240,6 +249,42 @@ async function findFreePort(): Promise<number> {
     });
 }
 
+/**
+ * Poll `host:port` with short TCP connect attempts until one succeeds, or
+ * reject with `HarnessTimeoutError` once `timeoutMs` has elapsed. Used between
+ * host-spawn and client-spawn so auto-joining clients never race a cold host.
+ */
+export async function waitForPortListening(
+    host: string,
+    port: number,
+    timeoutMs: number,
+): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    const retryMs = 50;
+
+    const tryOnce = (): Promise<boolean> =>
+        new Promise((resolveProbe) => {
+            const socket = createConnection({ host, port });
+            const done = (ok: boolean): void => {
+                socket.removeAllListeners();
+                socket.destroy();
+                resolveProbe(ok);
+            };
+            socket.once('connect', () => done(true));
+            socket.once('error', () => done(false));
+        });
+
+    while (true) {
+        if (await tryOnce()) return;
+        if (Date.now() >= deadline) {
+            throw new HarnessTimeoutError(
+                `Timed out after ${timeoutMs}ms waiting for a TCP listener on ${host}:${port}.`,
+            );
+        }
+        await new Promise<void>((r) => setTimeout(r, retryMs));
+    }
+}
+
 async function resetDevUserDataDirs(players: number): Promise<void> {
     await rm(USER_DATA_ROOT, { recursive: true, force: true });
     for (let i = 1; i <= players; i++) {
@@ -305,6 +350,7 @@ async function main(): Promise<number> {
 
     const children: ChildProcess[] = [];
     children.push(spawnInstance(binary, buildHostSpawnConfig(opts, port)));
+    await waitForPortListening('127.0.0.1', port, 10_000);
     for (let i = 2; i <= opts.players; i++) {
         children.push(spawnInstance(binary, buildClientSpawnConfig(opts, port, i)));
     }
