@@ -158,6 +158,23 @@ If you do not yet know the first commit SHA when making a fixup, run `git log --
 
 ---
 
+## Root-Cause Discipline
+
+When working on a bug fix or hardening task, always fix the **root cause**, not the symptom. Before writing any code:
+
+1. **Identify the root cause** by asking: _why_ does this problem exist? Trace the failure backwards until you reach the design decision or missing invariant that allows the bug. Do not stop at the first observable symptom.
+2. **Distinguish root cause from symptom:**
+    - Symptom: `window.onerror` gets clobbered → Root cause: assignment instead of `addEventListener`.
+    - Symptom: `readRecent` returns too many entries → Root cause: `MemorySink` is unbounded and the IPC handler has no cap.
+    - Symptom: Crash dump may be empty on power loss → Root cause: no `fsync` before rename.
+3. **Fix the root cause in the correct layer.** Do not paper over a missing abstraction with a workaround in the caller. If the problem is a leaking resource, fix the resource management; if the problem is a missing input guard, fix the input validation at the boundary, not inside every consumer.
+4. **Add a test that would have caught the root cause.** A symptom-level test can be fooled by a different workaround; a root-cause test describes the invariant that must always hold.
+5. **State the root cause in the commit body.** The first line of the conventional commit describes what changed; the body explains _why_ — the root cause and the invariant it violated.
+
+If you are unsure whether a fix addresses the root cause, ask: _could the same bug recur via a different code path?_ If yes, you are treating a symptom.
+
+---
+
 ## Invariants
 
 The architecture document lists 78 invariants in Appendix B. These are hard rules. Before completing any task, verify the relevant invariants are not violated. Key ones to check on almost every task:
