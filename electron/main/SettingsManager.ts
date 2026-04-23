@@ -147,10 +147,7 @@ export class SettingsManager {
         const currentOverrides = await this.repo.load(gameId);
         // BLOCK-1 fix: merge the validated patch into existing OVERRIDES only,
         // not into the full resolved defaults tree.
-        const newOverrides = mergeUserOverrides(
-            currentOverrides,
-            validatedPatch,
-        ) as UserSettings;
+        const newOverrides = mergeUserOverrides(currentOverrides, validatedPatch) as UserSettings;
         await this.repo.save(gameId, newOverrides);
 
         const result = await this.getSettings(gameId);

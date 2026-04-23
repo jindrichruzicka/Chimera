@@ -6,6 +6,7 @@
 // need is a valid HTML scaffold that hosts `page.tsx`.
 
 import type { ReactNode } from 'react';
+import { SettingsBootstrap } from './SettingsBootstrap';
 
 export const metadata = {
     title: 'Chimera',
@@ -15,7 +16,10 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (
         <html lang="en">
-            <body>{children}</body>
+            <body>
+                <SettingsBootstrap />
+                {children}
+            </body>
         </html>
     );
 }

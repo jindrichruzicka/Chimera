@@ -14,6 +14,7 @@ import { SettingsManager } from './SettingsManager.js';
 import { FileSettingsRepository } from './FileSettingsRepository.js';
 import { InMemorySaveRepository } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
+import { SETTINGS_CHANGE_CHANNEL } from '../preload/settings-api.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -306,8 +307,14 @@ export async function main(): Promise<void> {
     // FileSettingsRepository persists user overrides under `<userData>/settings/`.
     // TacticsSettings schema is registered here so getSettings('tactics')
     // returns full game defaults rather than bare engine defaults.
+    // broadcastFn pushes chimera:settings:change to all open renderer windows
+    // so multi-window coherence is maintained (BLOCK-2 fix).
     const settingsRepo = new FileSettingsRepository(path.join(userData, 'settings'));
-    const settingsManager = new SettingsManager(settingsRepo);
+    const settingsManager = new SettingsManager(settingsRepo, (gameId, settings) => {
+        BrowserWindow.getAllWindows().forEach((win) => {
+            win.webContents.send(SETTINGS_CHANGE_CHANNEL, gameId, settings);
+        });
+    });
     settingsManager.registerSchema(tacticsSettingsSchema);
     registerSettingsHandlers({
         ipcMain,
