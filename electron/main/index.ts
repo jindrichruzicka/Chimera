@@ -234,6 +234,16 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
 
     void window.loadFile(options.rendererEntry);
 
+    // WARN-2: block all new-window / popup navigations
+    window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+
+    // WARN-3: prevent in-page navigations to non-file URLs
+    window.webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith('file://')) {
+            event.preventDefault();
+        }
+    });
+
     if (options.env === 'development') {
         window.webContents.openDevTools();
     }

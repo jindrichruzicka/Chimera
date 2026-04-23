@@ -62,6 +62,10 @@ const browserWindowInstances: FakeBrowserWindow[] = [];
 
 class FakeWebContents {
     public readonly openDevTools = vi.fn();
+    public readonly setWindowOpenHandler =
+        vi.fn<(handler: (details: { url: string }) => { action: string }) => void>();
+    public readonly on =
+        vi.fn<(event: string, handler: (...args: readonly unknown[]) => void) => void>();
 }
 
 class FakeBrowserWindow {
@@ -233,6 +237,51 @@ describe('createMainWindow', () => {
         });
 
         expect(win.webContents.openDevTools).not.toHaveBeenCalled();
+    });
+
+    it('calls setWindowOpenHandler with a handler that returns { action: "deny" } (WARN-2)', () => {
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        }) as unknown as FakeBrowserWindow;
+
+        expect(win.webContents.setWindowOpenHandler).toHaveBeenCalledTimes(1);
+        const handler = win.webContents.setWindowOpenHandler.mock.calls[0]?.[0] as
+            | ((details: { url: string }) => { action: string })
+            | undefined;
+        expect(handler?.({ url: 'https://evil.example.com' })).toEqual({ action: 'deny' });
+    });
+
+    it('prevents navigation to external URLs via will-navigate (WARN-3)', () => {
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        }) as unknown as FakeBrowserWindow;
+
+        // Find the will-navigate handler registered via webContents.on
+        const onCalls = win.webContents.on.mock.calls as readonly (readonly [
+            string,
+            ...unknown[],
+        ])[];
+        const willNavCall = onCalls.find(([event]) => event === 'will-navigate');
+        expect(willNavCall).toBeDefined();
+
+        // External URL: preventDefault must be called
+        const preventDefault = vi.fn();
+        const externalEvent = { preventDefault };
+        const handler = willNavCall?.[1] as (
+            event: { preventDefault(): void },
+            url: string,
+        ) => void;
+        handler(externalEvent, 'https://evil.example.com/');
+        expect(preventDefault).toHaveBeenCalledTimes(1);
+
+        // file:// URL: preventDefault must NOT be called
+        const safeEvent = { preventDefault: vi.fn() };
+        handler(safeEvent, 'file:///renderer/out/index.html');
+        expect(safeEvent.preventDefault).not.toHaveBeenCalled();
     });
 });
 
