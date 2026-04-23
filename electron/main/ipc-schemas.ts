@@ -166,3 +166,31 @@ export const EngineActionSchema = z.object({
     tick: z.number().int().nonnegative(),
     payload: z.record(z.string(), z.unknown()),
 }) satisfies z.ZodType<EngineAction>;
+
+/**
+ * Runtime schema for a {@link LogEntry} received from the renderer via
+ * `chimera:logs:emit`. Validates every required field before forwarding
+ * to the main-process logger (Invariant 1).
+ */
+export const LogLevelSchema = z.enum(['trace', 'debug', 'info', 'warn', 'error', 'fatal']);
+
+export const LogSourceSchema = z.union([
+    z.object({ process: z.literal('main'), module: z.string() }),
+    z.object({ process: z.literal('renderer'), module: z.string() }),
+    z.object({ process: z.literal('simulation'), module: z.string() }),
+]);
+
+export const LogErrorInfoSchema = z.object({
+    name: z.string(),
+    message: z.string(),
+    stack: z.string().optional(),
+});
+
+export const LogEntrySchema = z.object({
+    level: LogLevelSchema,
+    message: z.string(),
+    timestamp: z.number(),
+    source: LogSourceSchema,
+    context: z.record(z.string(), z.unknown()).optional(),
+    error: LogErrorInfoSchema.optional(),
+});

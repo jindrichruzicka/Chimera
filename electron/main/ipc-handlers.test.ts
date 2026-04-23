@@ -992,3 +992,87 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
         expect(result.audio.masterVolume).toBe(0.2);
     });
 });
+
+// ── Logs handlers ──────────────────────────────────────────────────────────────
+
+import {
+    LOGS_EMIT_CHANNEL,
+    LOGS_READ_RECENT_CHANNEL,
+    registerLogsHandlers,
+    type LogsHandlersIpcMain,
+} from './ipc-handlers.js';
+import type { LogEntry } from '@chimera/shared/logging.js';
+
+function makeLogsIpcMainStub(): {
+    readonly ipcMain: LogsHandlersIpcMain;
+    readonly handled: Map<string, (...args: unknown[]) => unknown>;
+    readonly listeners: Map<string, (...args: unknown[]) => void>;
+} {
+    const handled = new Map<string, (...args: unknown[]) => unknown>();
+    const listeners = new Map<string, (...args: unknown[]) => void>();
+    const ipcMain: LogsHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+        on: (channel, handler) => {
+            listeners.set(channel, handler);
+        },
+    };
+    return { ipcMain, handled, listeners };
+}
+
+const VALID_ENTRY: LogEntry = {
+    level: 'info',
+    message: 'hello',
+    timestamp: 123456789,
+    source: { process: 'renderer', module: 'test' },
+};
+
+describe('registerLogsHandlers', () => {
+    it('chimera:logs:emit handler rejects entries that fail Zod validation', () => {
+        const stub = makeLogsIpcMainStub();
+        const sink = createMemorySink();
+        const logger = createLogger({ source: { process: 'main', module: 'root' }, sink });
+        registerLogsHandlers({ ipcMain: stub.ipcMain, logger, memorySink: sink });
+
+        const handler = stub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        const initialCount = sink.entries.length;
+        // Malformed: missing required fields
+        expect(() => handler({}, { message: 'bad' })).not.toThrow();
+        // Should NOT have added a new log entry from the bad payload
+        expect(sink.entries.length).toBe(initialCount);
+    });
+
+    it('chimera:logs:emit handler forwards a valid LogEntry to the logger', () => {
+        const stub = makeLogsIpcMainStub();
+        const sink = createMemorySink();
+        const logger = createLogger({ source: { process: 'main', module: 'root' }, sink });
+        registerLogsHandlers({ ipcMain: stub.ipcMain, logger, memorySink: sink });
+
+        const handler = stub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        sink.clear();
+        handler({}, VALID_ENTRY);
+        const last = sink.entries.at(-1);
+        expect(last?.message).toBe('hello');
+        expect(last?.level).toBe('info');
+    });
+
+    it('chimera:logs:readRecent returns the last N entries from the memory sink', async () => {
+        const stub = makeLogsIpcMainStub();
+        const sink = createMemorySink();
+        const logger = createLogger({ source: { process: 'main', module: 'root' }, sink });
+
+        // Seed the sink with 5 entries
+        for (let i = 0; i < 5; i++) {
+            sink.write({ ...VALID_ENTRY, message: `entry-${i}` });
+        }
+
+        registerLogsHandlers({ ipcMain: stub.ipcMain, logger, memorySink: sink });
+
+        const handler = stub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
+        const result = (await Promise.resolve(handler({}, 3))) as LogEntry[];
+        expect(result).toHaveLength(3);
+        expect(result[0]?.message).toBe('entry-2');
+        expect(result[2]?.message).toBe('entry-4');
+    });
+});

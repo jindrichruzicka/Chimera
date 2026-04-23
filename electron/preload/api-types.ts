@@ -12,6 +12,8 @@
 // Invariant 28: this file must NEVER declare a `__chimeraDebug` surface —
 // the Debug Inspector preload lives elsewhere.
 
+import type { LogEntry } from '@chimera/shared/logging.js';
+
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
 /** Opaque player identifier. Canonical branded type: simulation/ (F03). */
@@ -204,8 +206,12 @@ export interface ReplayAPI {}
 export interface ChatAPI {}
 
 /** Stub. Expanded in F43 — Crash Reporter / Logging (§4.27). */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface LogsAPI {}
+export interface LogsAPI {
+    /** Fire-and-forget: renderer emits a structured log entry to the main process. */
+    emit(entry: LogEntry): void;
+    /** Fetch the last `maxEntries` log entries from the main-process ring buffer. */
+    readRecent(maxEntries: number): Promise<LogEntry[]>;
+}
 
 // ─── ChimeraAPI — root surface ────────────────────────────────────────────────
 

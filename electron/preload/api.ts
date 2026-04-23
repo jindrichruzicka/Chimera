@@ -24,6 +24,7 @@ import { createLobbyApi } from './lobby-api.js';
 import { createSavesApi } from './saves-api.js';
 import { createSettingsApi } from './settings-api.js';
 import { createSystemApi } from './system-api.js';
+import { buildLogsApi } from './logs-api.js';
 
 /**
  * Shape of an `ipcRenderer` listener as seen by our narrow port interfaces.
@@ -78,7 +79,7 @@ const api: ChimeraAPI = {
     profile: {},
     replay: {},
     chat: {},
-    logs: {},
+    logs: buildLogsApi(port),
 };
 
 contextBridge.exposeInMainWorld('__chimera', api);

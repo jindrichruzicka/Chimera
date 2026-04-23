@@ -7,8 +7,15 @@ import {
     registerSavesHandlers,
     registerSettingsHandlers,
     registerSystemHandlers,
+    registerLogsHandlers,
 } from './ipc-handlers.js';
-import { createLogger, createPinoSink, type Logger, type LoggerSink } from './logger.js';
+import {
+    createLogger,
+    createPinoSink,
+    createMemorySink,
+    type Logger,
+    type LoggerSink,
+} from './logger.js';
 import { registerCrashReporter } from './crash-reporter.js';
 import { SaveManager } from './SaveManager.js';
 import { SettingsManager } from './SettingsManager.js';
@@ -234,15 +241,26 @@ export async function main(): Promise<void> {
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
     const userData = app.getPath('userData');
 
-    // Construct the root main-process logger once (invariant 67). The sink
-    // is currently a noop — production sinks (Pino + userData/logs rotation)
-    // land in F43 alongside the crash reporter. Child loggers are injected
-    // into each register*Handlers call so every namespace is tagged with its
-    // own `module`. Managers landing in F03+ will demand a required
-    // `logger` rather than falling back to noop.
+    // Shared in-memory ring buffer: used by the logs IPC `readRecent` handler
+    // so the renderer can fetch recent entries for export/debug.
+    const memorySink = createMemorySink();
+
+    // Fan-out sink: entries go to both the Pino file sink and the in-memory
+    // ring buffer so `chimera:logs:readRecent` has data to return.
+    const pinoSink = createProductionLoggerSink(path.join(userData, 'logs'));
+    const combinedSink: LoggerSink = {
+        write(entry) {
+            pinoSink.write(entry);
+            memorySink.write(entry);
+        },
+    };
+
+    // Construct the root main-process logger once (invariant 67). Child
+    // loggers injected into each register*Handlers call so every namespace
+    // is tagged with its own `module`.
     const logger: Logger = createLogger({
         source: { process: 'main', module: 'root' },
-        sink: createProductionLoggerSink(path.join(userData, 'logs')),
+        sink: combinedSink,
     });
 
     // Register crash reporter early — before any window opens — so all
@@ -322,6 +340,15 @@ export async function main(): Promise<void> {
         ipcMain,
         logger: logger.child({ module: 'settings' }),
         settingsManager,
+    });
+
+    // Register the `chimera:logs:*` channels. The renderer emits structured
+    // log entries via `window.__chimera.logs.emit()`; `readRecent` lets the
+    // user export the last N entries from the in-memory ring buffer.
+    registerLogsHandlers({
+        ipcMain,
+        logger: logger.child({ module: 'logs' }),
+        memorySink,
     });
 
     const createWindow = (): void => {

@@ -63,8 +63,10 @@ import {
     UserSettingsPatchSchema,
     parseInvokeRequest,
 } from './ipc-schemas.js';
-import { createNoopLogger, type Logger } from './logger.js';
+import { createNoopLogger, type Logger, type MemorySink } from './logger.js';
 import type { SettingsManager } from './SettingsManager.js';
+import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../preload/logs-api.js';
+import { LogEntrySchema } from './ipc-schemas.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -86,6 +88,8 @@ export {
     SETTINGS_GET_CHANNEL,
     SETTINGS_RESET_CHANNEL,
     SETTINGS_UPDATE_CHANNEL,
+    LOGS_EMIT_CHANNEL,
+    LOGS_READ_RECENT_CHANNEL,
 };
 
 /**
@@ -573,5 +577,65 @@ export function registerSettingsHandlers(options: RegisterSettingsHandlersOption
             return mgr.resetSettings(gameId as string);
         }
         return STUB_RESOLVED_SETTINGS;
+    });
+}
+
+// ── Logs handlers (§4.27, §4.32) ─────────────────────────────────────────────
+
+/**
+ * Narrow slice of `Electron.IpcMain` required to register the
+ * `chimera:logs:*` channels. Using a locally-declared interface ensures
+ * tests can drive the registration without a real Electron module.
+ */
+export interface LogsHandlersIpcMain {
+    handle(channel: string, handler: (...args: unknown[]) => unknown): unknown;
+    on(channel: string, handler: (...args: unknown[]) => void): unknown;
+}
+
+export interface RegisterLogsHandlersOptions {
+    readonly ipcMain: LogsHandlersIpcMain;
+    readonly logger: Logger;
+    /**
+     * In-memory ring buffer whose entries are returned by `readRecent`.
+     * Pass `createMemorySink()` from `logger.ts`.
+     */
+    readonly memorySink: MemorySink;
+}
+
+/**
+ * Register `chimera:logs:emit` and `chimera:logs:readRecent` handlers.
+ *
+ * - `chimera:logs:emit` — validates the renderer-supplied {@link LogEntry}
+ *   with Zod (Invariant 1) before forwarding to the main-process logger.
+ *   Malformed entries are silently dropped (no throw — `ipcMain.on`
+ *   callback errors are unobservable to the renderer).
+ * - `chimera:logs:readRecent` — returns the last `maxEntries` entries from
+ *   the in-memory ring buffer so the user can export recent logs.
+ */
+export function registerLogsHandlers(options: RegisterLogsHandlersOptions): void {
+    const { ipcMain, logger, memorySink } = options;
+
+    ipcMain.on(LOGS_EMIT_CHANNEL, (_event, arg) => {
+        const result = LogEntrySchema.safeParse(arg);
+        if (!result.success) {
+            // Silently drop — malformed renderer payload should never reach the
+            // logger (Invariant 1). Logging the error here would risk recursion.
+            return;
+        }
+        const entry = result.data;
+        // Forward to the main-process logger at the declared level so it
+        // lands in the Pino file sink alongside main-process entries.
+        const ctx = entry.context ?? {};
+        if (entry.level === 'error' || entry.level === 'fatal') {
+            logger[entry.level](entry.message, undefined, ctx);
+        } else {
+            logger[entry.level](entry.message, ctx);
+        }
+    });
+
+    ipcMain.handle(LOGS_READ_RECENT_CHANNEL, (_event, maxEntries) => {
+        const count = typeof maxEntries === 'number' && maxEntries > 0 ? maxEntries : 100;
+        const all = memorySink.entries;
+        return all.slice(Math.max(0, all.length - count));
     });
 }
