@@ -181,20 +181,46 @@ function serialiseError(err: Error): LogErrorInfo {
  */
 export interface MemorySink extends LoggerSink {
     readonly entries: readonly LogEntry[];
+    /** Maximum number of entries the ring buffer retains. */
+    readonly capacity: number;
     clear(): void;
 }
 
-export function createMemorySink(): MemorySink {
-    const entries: LogEntry[] = [];
+/**
+ * Default capacity for the in-memory log ring buffer (number of entries).
+ * Large enough to retain a full session's recent logs, small enough to bound
+ * memory use regardless of renderer-driven log volume.
+ */
+const MEMORY_SINK_DEFAULT_CAPACITY = 2000;
+
+export function createMemorySink(capacity = MEMORY_SINK_DEFAULT_CAPACITY): MemorySink {
+    const buffer: (LogEntry | undefined)[] = new Array<LogEntry | undefined>(capacity);
+    let head = 0; // index of the oldest entry in the ring
+    let size = 0; // number of valid entries currently held
     return {
         write(entry) {
-            entries.push(entry);
+            const slot = (head + size) % capacity;
+            buffer[slot] = entry;
+            if (size < capacity) {
+                size++;
+            } else {
+                // Buffer full — evict oldest by advancing head
+                head = (head + 1) % capacity;
+            }
         },
-        get entries() {
-            return entries;
+        get entries(): readonly LogEntry[] {
+            const result: LogEntry[] = [];
+            for (let i = 0; i < size; i++) {
+                result.push(buffer[(head + i) % capacity]!);
+            }
+            return result;
+        },
+        get capacity() {
+            return capacity;
         },
         clear() {
-            entries.length = 0;
+            head = 0;
+            size = 0;
         },
     };
 }

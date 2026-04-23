@@ -109,6 +109,56 @@ describe('createMemorySink', () => {
         sink.clear();
         expect(sink.entries).toHaveLength(0);
     });
+
+    it('exposes the configured capacity', () => {
+        const sink = createMemorySink(50);
+        expect(sink.capacity).toBe(50);
+    });
+
+    it('defaults to capacity 2000', () => {
+        const sink = createMemorySink();
+        expect(sink.capacity).toBe(2000);
+    });
+
+    it('evicts the oldest entry when capacity is exceeded', () => {
+        const sink = createMemorySink(3);
+        const logger = createLogger({ source: TEST_SOURCE, sink });
+
+        logger.info('first');
+        logger.info('second');
+        logger.info('third');
+        logger.info('fourth'); // pushes 'first' out
+
+        expect(sink.entries).toHaveLength(3);
+        expect(sink.entries[0]?.message).toBe('second');
+        expect(sink.entries[1]?.message).toBe('third');
+        expect(sink.entries[2]?.message).toBe('fourth');
+    });
+
+    it('entries.length never exceeds capacity even after many writes', () => {
+        const cap = 5;
+        const sink = createMemorySink(cap);
+        const logger = createLogger({ source: TEST_SOURCE, sink });
+
+        for (let i = 0; i < cap * 3; i++) {
+            logger.info(`entry-${i}`);
+        }
+        expect(sink.entries.length).toBeLessThanOrEqual(cap);
+    });
+
+    it('entries are returned in insertion order (oldest first)', () => {
+        const sink = createMemorySink(4);
+        const logger = createLogger({ source: TEST_SOURCE, sink });
+
+        logger.info('a');
+        logger.info('b');
+        logger.info('c');
+        logger.info('d');
+        logger.info('e'); // evicts 'a'
+
+        const messages = sink.entries.map((e) => e.message);
+        expect(messages).toEqual(['b', 'c', 'd', 'e']);
+    });
 });
 
 describe('createNoopLogger', () => {

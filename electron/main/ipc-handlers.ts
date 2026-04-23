@@ -663,7 +663,10 @@ export function registerLogsHandlers(options: RegisterLogsHandlersOptions): void
     });
 
     ipcMain.handle(LOGS_READ_RECENT_CHANNEL, (_event, maxEntries) => {
-        const count = typeof maxEntries === 'number' && maxEntries > 0 ? maxEntries : 100;
+        const requested = typeof maxEntries === 'number' && maxEntries > 0 ? maxEntries : 100;
+        // Cap at buffer capacity to prevent DoS via oversized IPC requests
+        // (Invariant #1 — renderer-driven unbounded reads are a DoS vector).
+        const count = Math.min(requested, memorySink.capacity);
         const all = memorySink.entries;
         return all.slice(Math.max(0, all.length - count));
     });

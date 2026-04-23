@@ -1122,4 +1122,20 @@ describe('registerLogsHandlers', () => {
         expect(result[0]?.message).toBe('entry-2');
         expect(result[2]?.message).toBe('entry-4');
     });
+
+    it('readRecent caps maxEntries at the sink capacity to prevent DoS', async () => {
+        const { ipcStub, sink, logger } = makeLogsStubs();
+        // Use a small-capacity memory sink (3 entries max)
+        const smallSink = createMemorySink(3);
+        for (let i = 0; i < 3; i++) {
+            smallSink.write({ ...VALID_ENTRY, message: `entry-${i}` });
+        }
+
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink: smallSink, sink });
+
+        const handler = ipcStub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
+        // Request more entries than the sink can hold
+        const result = (await Promise.resolve(handler({}, Number.MAX_SAFE_INTEGER))) as LogEntry[];
+        expect(result.length).toBeLessThanOrEqual(smallSink.capacity);
+    });
 });
