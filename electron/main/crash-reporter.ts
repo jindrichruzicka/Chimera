@@ -83,6 +83,56 @@ export function registerCrashReporter(options: CrashReporterOptions): void {
 
 // ── private helpers ────────────────────────────────────────────────────────────
 
+/**
+ * Maximum serialised byte length allowed for the snapshot field in a crash
+ * dump. Snapshots exceeding this limit are replaced with a truncation sentinel
+ * to prevent synchronous I/O of tens-of-megabytes on the crash path.
+ */
+const MAX_SNAPSHOT_BYTES = 512_000;
+
+/**
+ * Serialise `snapshot` safely for inclusion in a crash dump.
+ *
+ * - Circular references in the value are replaced with the string `"[Circular]"`
+ *   (WeakSet-based cycle detection — O(1) per node, no JSON.stringify throw).
+ * - If the resulting serialised string would exceed `MAX_SNAPSHOT_BYTES` the
+ *   whole field is replaced with `{ truncated: true, reason: 'size_limit' }`.
+ * - Non-object primitives (numbers, strings, booleans, `null`) pass through
+ *   without modification.
+ *
+ * Exported for direct unit testing — not part of the public module API.
+ */
+export function safeSerialiseSnapshot(snapshot: unknown): unknown {
+    if (snapshot === null || typeof snapshot !== 'object') {
+        return snapshot;
+    }
+
+    // Build a cycle-safe copy via a WeakSet replacer.
+    const seen = new WeakSet<object>();
+
+    const replacer = (_key: string, value: unknown): unknown => {
+        if (value !== null && typeof value === 'object') {
+            if (seen.has(value)) {
+                return '[Circular]';
+            }
+            seen.add(value);
+        }
+        return value;
+    };
+
+    const serialised = JSON.stringify(snapshot, replacer);
+
+    // Check size in bytes (UTF-8; JSON.stringify produces a UTF-16 JS string
+    // but the characters are all ASCII-range for typical snapshots; using
+    // .length as byte proxy is conservative — Buffer.byteLength would be more
+    // precise but introduces a Node.js dependency we can keep optional here).
+    if (serialised.length > MAX_SNAPSHOT_BYTES) {
+        return { truncated: true, reason: 'size_limit' };
+    }
+
+    return JSON.parse(serialised) as unknown;
+}
+
 async function handleUncaughtException(
     err: Error,
     options: {
@@ -138,7 +188,7 @@ function writeCrashDump(crashesDir: string, err: Error, snapshot: unknown): void
         },
         versions: process.versions,
         osRelease: os.release(),
-        snapshot: snapshot ?? null,
+        snapshot: safeSerialiseSnapshot(snapshot ?? null),
     };
 
     const data = JSON.stringify(dump, null, 2);
