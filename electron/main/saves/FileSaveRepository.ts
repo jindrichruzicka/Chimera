@@ -123,7 +123,10 @@ export class FileSaveRepository implements SaveRepository {
 
     async list(gameId: string): Promise<SaveSlotMeta[]> {
         const dir = path.join(this.baseDir, gameId);
-        const entries = await fs.readdir(dir).catch((): string[] => []);
+        const entries = await fs.readdir(dir).catch((err: unknown): string[] => {
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+            throw err;
+        });
 
         const metas = await Promise.all(
             entries
@@ -149,8 +152,11 @@ export class FileSaveRepository implements SaveRepository {
         let raw: Buffer;
         try {
             raw = await fs.readFile(filePath);
-        } catch {
-            throw new SaveNotFoundError(slotId);
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+                throw new SaveNotFoundError(slotId);
+            }
+            throw err;
         }
 
         const file = this.serializer.deserialize(raw);
@@ -204,16 +210,22 @@ export class FileSaveRepository implements SaveRepository {
         const [gameId, slotName] = parseSlotId(slotId);
         try {
             await fs.unlink(this.slotPath(gameId, slotName));
-        } catch {
-            throw new SaveNotFoundError(slotId);
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+                throw new SaveNotFoundError(slotId);
+            }
+            throw err;
         }
     }
 
     async has(slotId: string): Promise<boolean> {
         const [gameId, slotName] = parseSlotId(slotId);
-        return fs
-            .access(this.slotPath(gameId, slotName))
-            .then(() => true)
-            .catch(() => false);
+        try {
+            await fs.access(this.slotPath(gameId, slotName));
+            return true;
+        } catch (err) {
+            if ((err as NodeJS.ErrnoException).code === 'ENOENT') return false;
+            throw err;
+        }
     }
 }
