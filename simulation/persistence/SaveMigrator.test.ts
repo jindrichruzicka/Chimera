@@ -193,6 +193,37 @@ describe('SaveMigrator', () => {
         expect(() => migrator.migrate(file)).not.toThrow();
         expect(migrator.migrate(file)).toStrictEqual(file);
     });
+
+    // ── Freeze-after-first-use ────────────────────────────────────────────────
+
+    it('register() throws after migrate() has been called', () => {
+        const migrator = new SaveMigrator();
+        const file = makeFileAtVersion(CURRENT_SCHEMA_VERSION);
+
+        migrator.migrate(file);
+
+        expect(() =>
+            migrator.register({
+                fromVersion: 1,
+                apply(f: SaveFile): SaveFile {
+                    return f;
+                },
+            }),
+        ).toThrow('Cannot register migrations after migrate() has been called');
+    });
+
+    it('register() does not throw before migrate() has been called', () => {
+        const migrator = new SaveMigrator();
+
+        expect(() =>
+            migrator.register({
+                fromVersion: 1,
+                apply(f: SaveFile): SaveFile {
+                    return f;
+                },
+            }),
+        ).not.toThrow();
+    });
 });
 
 // ─── SaveNotFoundError ────────────────────────────────────────────────────────

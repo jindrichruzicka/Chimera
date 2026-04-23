@@ -57,13 +57,19 @@ export interface SaveMigration {
  */
 export class SaveMigrator {
     private readonly migrations: SaveMigration[] = [];
+    private frozen = false;
 
     /**
      * Add a migration step to the chain. After each registration, the
      * chain is re-sorted by `fromVersion` so that registration order is
      * irrelevant to the upgrade sequence applied at load time.
+     *
+     * @throws {Error} if called after `migrate()` has already been invoked.
      */
     register(migration: SaveMigration): void {
+        if (this.frozen) {
+            throw new Error('Cannot register migrations after migrate() has been called');
+        }
         this.migrations.push(migration);
         this.migrations.sort((a, b) => a.fromVersion - b.fromVersion);
     }
@@ -74,6 +80,8 @@ export class SaveMigrator {
      * schema version, repeating until no matching migration remains.
      *
      * Returns the (possibly new) file object. The input is never mutated.
+     * After the first call the migrations array is frozen — further calls
+     * to `register()` will throw.
      *
      * @throws {SaveMigrationError} if `file.header.schemaVersion` is not a
      *   positive integer (covers `0`, `-1`, `NaN`, `undefined`).
@@ -82,6 +90,11 @@ export class SaveMigrator {
      *   `CURRENT_SCHEMA_VERSION` (gap in registered migrations).
      */
     migrate(file: SaveFile): SaveFile {
+        if (!this.frozen) {
+            Object.freeze(this.migrations);
+            this.frozen = true;
+        }
+
         const version = file.header.schemaVersion;
         if (!Number.isInteger(version) || version < 1) {
             throw new SaveMigrationError(`Invalid schema version: ${JSON.stringify(version)}`);
