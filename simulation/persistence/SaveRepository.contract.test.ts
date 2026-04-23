@@ -46,4 +46,29 @@ describe('InMemorySaveRepository — implementation details', () => {
         expect(meta[0]?.sizeBytes).toBeGreaterThan(0);
         expect(Number.isInteger(meta[0]?.sizeBytes)).toBe(true);
     });
+
+    it('sizeBytes reflects UTF-8 byte length, not character count, for non-ASCII content', async () => {
+        const repo = new InMemorySaveRepository();
+        const { makeFile } = await import('./__test-support__/saveRepositoryContractTests.js');
+        // Build a file whose playerNames contain multi-byte UTF-8 characters.
+        // Each emoji is 4 UTF-8 bytes but only 2 UTF-16 code units (surrogate pair),
+        // so String.length underreports. Cyrillic chars are 2 UTF-8 bytes but 1 code unit.
+        const file = {
+            ...makeFile('tactics', 'slot-unicode'),
+            header: {
+                ...makeFile('tactics', 'slot-unicode').header,
+                playerNames: ['Алиса', '🎮'],
+            },
+        };
+
+        await repo.save(file);
+        const meta = await repo.list('tactics');
+
+        const reported = meta[0]?.sizeBytes ?? 0;
+        const charCount = JSON.stringify(file).length;
+
+        // UTF-8 encoding of the same JSON must be strictly larger than the
+        // UTF-16 character count because of the multi-byte characters present.
+        expect(reported).toBeGreaterThan(charCount);
+    });
 });

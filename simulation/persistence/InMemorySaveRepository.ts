@@ -38,8 +38,11 @@ export class InMemorySaveRepository implements SaveRepository {
             turnNumber: file.header.turnNumber,
             playerNames: file.header.playerNames,
             schemaVersion: file.header.schemaVersion,
-            // Approximate byte size using JSON representation (no compression).
-            sizeBytes: JSON.stringify(file).length,
+            // UTF-8 byte size of the JSON representation (no compression).
+            // TextEncoder is a Web Crypto API available in all environments
+            // (browser, Node ≥ 11, Electron) — no Node.js-only import needed,
+            // keeping Invariant #2 intact.
+            sizeBytes: new TextEncoder().encode(JSON.stringify(file)).byteLength,
         };
 
         if (file.header.thumbnailDataUrl !== undefined) {
