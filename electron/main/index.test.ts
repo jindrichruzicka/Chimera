@@ -1,5 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// ── pino mock — prevent SonicBoom from opening real file descriptors ──────────
+vi.mock('pino', () => {
+    const fakeDest = { write: vi.fn<(data: string) => void>() };
+    const destination = vi.fn(() => fakeDest);
+    const pinoFn = Object.assign(vi.fn(), { destination });
+    return { default: pinoFn };
+});
+
 // ── SaveManager mock (used by main() after the sync-helper removal) ──────────
 const { mockSaveManagerClearFlag, mockSaveManagerMarkExit, mockSaveManagerCheckCrash } = vi.hoisted(
     () => ({
@@ -73,11 +81,15 @@ vi.mock('electron', () => ({
 const fsExistsSync = vi.fn<(path: string) => boolean>(() => false);
 const fsWriteFileSync = vi.fn<(path: string, data: string) => void>();
 const fsUnlinkSync = vi.fn<(path: string) => void>();
+const fsMkdirSync = vi.fn<(path: string, options?: unknown) => void>();
+const fsReaddirSync = vi.fn<(path: string) => string[]>(() => []);
 
 vi.mock('node:fs', () => ({
     existsSync: fsExistsSync,
     writeFileSync: fsWriteFileSync,
     unlinkSync: fsUnlinkSync,
+    mkdirSync: fsMkdirSync,
+    readdirSync: fsReaddirSync,
 }));
 
 const {

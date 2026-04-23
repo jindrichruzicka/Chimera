@@ -1,6 +1,9 @@
-import { describe, expect, it } from 'vitest';
-import { createLogger, createMemorySink, createNoopLogger } from './logger.js';
-import type { LogSource } from '@chimera/shared/logging.js';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { createLogger, createMemorySink, createNoopLogger, createPinoSink } from './logger.js';
+import type { LogEntry, LogSource } from '@chimera/shared/logging.js';
 
 const TEST_SOURCE: LogSource = { process: 'main', module: 'test' };
 
@@ -123,5 +126,99 @@ describe('createNoopLogger', () => {
         logger.child({ module: 'other' }).info('z');
         // No assertion target — surviving this block is the contract.
         expect(true).toBe(true);
+    });
+});
+
+// ─── Helpers used by createPinoSink tests ────────────────────────────────────
+
+function makeDateString(d: Date): string {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+const TEST_ENTRY: LogEntry = {
+    level: 'info',
+    message: 'test message',
+    timestamp: 1000,
+    source: { process: 'main', module: 'test' },
+};
+
+describe('createPinoSink', () => {
+    let tmpDir: string;
+
+    beforeEach(() => {
+        tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'chimera-pino-test-'));
+    });
+
+    afterEach(() => {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+    });
+
+    it('writes a LogEntry to the file system as a valid JSON line', () => {
+        const fixedDate = new Date('2025-06-15T12:00:00Z');
+        const sink = createPinoSink(tmpDir, () => fixedDate);
+
+        sink.write(TEST_ENTRY);
+
+        const logFile = path.join(tmpDir, 'chimera-2025-06-15.log');
+        expect(fs.existsSync(logFile)).toBe(true);
+        const line = fs.readFileSync(logFile, 'utf-8').trim();
+        const parsed: unknown = JSON.parse(line);
+        expect((parsed as LogEntry).level).toBe('info');
+        expect((parsed as LogEntry).message).toBe('test message');
+        expect((parsed as LogEntry).timestamp).toBe(1000);
+    });
+
+    it('uses the chimera-YYYY-MM-DD.log filename pattern', () => {
+        const fixedDate = new Date('2025-03-07T00:00:00Z');
+        const sink = createPinoSink(tmpDir, () => fixedDate);
+
+        sink.write(TEST_ENTRY);
+
+        const files = fs.readdirSync(tmpDir);
+        expect(files).toContain('chimera-2025-03-07.log');
+    });
+
+    it('prunes log files older than 14 days on construction', () => {
+        const now = new Date('2025-06-15T12:00:00Z');
+
+        // Create a stale file (15 days ago — should be pruned).
+        const staleDate = new Date(now.getTime() - 15 * 24 * 60 * 60 * 1000);
+        const staleFile = path.join(tmpDir, `chimera-${makeDateString(staleDate)}.log`);
+        fs.writeFileSync(staleFile, 'old\n');
+
+        // Create a recent file (13 days ago — should be kept).
+        const recentDate = new Date(now.getTime() - 13 * 24 * 60 * 60 * 1000);
+        const recentFile = path.join(tmpDir, `chimera-${makeDateString(recentDate)}.log`);
+        fs.writeFileSync(recentFile, 'recent\n');
+
+        createPinoSink(tmpDir, () => now);
+
+        expect(fs.existsSync(staleFile)).toBe(false);
+        expect(fs.existsSync(recentFile)).toBe(true);
+    });
+
+    it('rotates to a new file when the date changes between writes', () => {
+        // now() is called once at construction (for pruning), then once per write.
+        // Sequence: construction=day1, write1=day1, write2=day2.
+        let callCount = 0;
+        const dates = [
+            new Date('2025-06-15T23:59:00Z'), // construction (pruning)
+            new Date('2025-06-15T23:59:00Z'), // first write — day one
+            new Date('2025-06-16T00:01:00Z'), // second write — day two
+        ];
+        const sink = createPinoSink(tmpDir, () => dates[Math.min(callCount++, 2)]!);
+
+        sink.write({ ...TEST_ENTRY, message: 'day one' });
+        sink.write({ ...TEST_ENTRY, message: 'day two' });
+
+        const day1 = path.join(tmpDir, 'chimera-2025-06-15.log');
+        const day2 = path.join(tmpDir, 'chimera-2025-06-16.log');
+        expect(fs.existsSync(day1)).toBe(true);
+        expect(fs.existsSync(day2)).toBe(true);
+        expect(fs.readFileSync(day1, 'utf-8')).toContain('day one');
+        expect(fs.readFileSync(day2, 'utf-8')).toContain('day two');
     });
 });

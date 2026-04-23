@@ -8,7 +8,7 @@ import {
     registerSettingsHandlers,
     registerSystemHandlers,
 } from './ipc-handlers.js';
-import { createLogger, type Logger, type LoggerSink } from './logger.js';
+import { createLogger, createPinoSink, type Logger, type LoggerSink } from './logger.js';
 import { SaveManager } from './SaveManager.js';
 import { SettingsManager } from './SettingsManager.js';
 import { FileSettingsRepository } from './FileSettingsRepository.js';
@@ -208,20 +208,13 @@ export function registerAppLifecycle(options: RegisterAppLifecycleOptions): void
 /**
  * Construct the production {@link LoggerSink} used by the main process.
  *
- * F02 ships a no-op sink \u2014 the `Logger` interface + injection plumbing is
- * the invariant-67 deliverable; rotated Pino-backed files under
- * `userData/logs/` land in F43 (\u00a74.27) alongside the crash reporter.
- * Swapping the sink is a one-line change here; nothing else in the main
- * process needs to know.\n */
-function createProductionLoggerSink(): LoggerSink {
-    // Intentional noop for F02. Replace with the Pino sink in F43.
-    // `createNoopLogger` wraps this same behaviour; using its internal sink
-    // would leak module state, so we declare the no-op inline instead.
-    return {
-        write: () => {
-            // F43: pino.destination + daily rotation lives here.
-        },
-    };
+ * Backed by Pino (§4.27): writes JSON-line entries to a daily rotating
+ * `userData/logs/chimera-YYYY-MM-DD.log` file; prunes files older than
+ * 14 days on startup. The `logsDir` is injected by `main()` so this
+ * function is pure (and therefore unit-testable without touching Electron).
+ */
+function createProductionLoggerSink(logsDir: string): LoggerSink {
+    return createPinoSink(logsDir);
 }
 
 /**
@@ -248,7 +241,7 @@ export async function main(): Promise<void> {
     // `logger` rather than falling back to noop.
     const logger: Logger = createLogger({
         source: { process: 'main', module: 'root' },
-        sink: createProductionLoggerSink(),
+        sink: createProductionLoggerSink(path.join(userData, 'logs')),
     });
 
     // Create the SaveManager. InMemorySaveRepository is a temporary placeholder

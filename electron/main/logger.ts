@@ -12,15 +12,15 @@
 //                                          helpers that do not (yet) have a
 //                                          real logger injected.
 //   - `createMemorySink()`               — captures entries for assertion.
-//
-// Production `LoggerSink` implementations (Pino-backed file rotation,
-// console JSON-line mirror) land in F43 (§4.27). F02 only needs the
-// interface + injection plumbing in place so managers landing in F03+
-// find the socket pre-wired and today's IPC handlers can emit structured
-// events through it.
+//   - `createPinoSink(logsDir, now?)`    — Pino-backed file sink with daily
+//                                          rotation and 14-day retention.
 //
 // Invariant 67: no module emits logs via raw `console.*`; all structured
 // logging flows through the injected `Logger`.
+
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import pino from 'pino';
 
 import type {
     LogEntry,
@@ -220,4 +220,70 @@ const NOOP_SOURCE: LogSource = { process: 'main', module: 'noop' };
  */
 export function createNoopLogger(): Logger {
     return createLogger({ source: NOOP_SOURCE, sink: NOOP_SINK });
+}
+
+// ─── Pino-backed file sink ────────────────────────────────────────────────────
+
+const LOG_RETENTION_DAYS = 14;
+const LOG_FILENAME_PATTERN = /^chimera-(\d{4}-\d{2}-\d{2})\.log$/;
+
+function toDateString(d: Date): string {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+}
+
+function pruneOldLogs(logsDir: string, now: Date): void {
+    const cutoffMs = now.getTime() - LOG_RETENTION_DAYS * 24 * 60 * 60 * 1000;
+    let files: string[];
+    try {
+        files = fs.readdirSync(logsDir);
+    } catch {
+        return; // Directory does not exist yet — nothing to prune.
+    }
+    for (const file of files) {
+        const match = LOG_FILENAME_PATTERN.exec(file);
+        if (match === null) continue;
+        const fileDate = new Date(match[1]!);
+        if (fileDate.getTime() < cutoffMs) {
+            try {
+                fs.unlinkSync(path.join(logsDir, file));
+            } catch {
+                // Best-effort: ignore if the file was already removed concurrently.
+            }
+        }
+    }
+}
+
+/**
+ * Pino-backed {@link LoggerSink} that writes JSON-line entries to a daily
+ * rotating log file under `logsDir`:
+ *
+ *   `<logsDir>/chimera-YYYY-MM-DD.log`
+ *
+ * Files older than 14 days are pruned synchronously on construction.
+ * The optional `now` parameter injects a clock for deterministic tests.
+ *
+ * Backed by {@link https://getpino.io pino}'s `destination()` (SonicBoom)
+ * for efficient file writes. See §4.27.
+ */
+export function createPinoSink(logsDir: string, now?: () => Date): LoggerSink {
+    fs.mkdirSync(logsDir, { recursive: true });
+    pruneOldLogs(logsDir, now?.() ?? new Date());
+
+    let currentDateStr = '';
+    let dest: ReturnType<typeof pino.destination> | null = null;
+
+    return {
+        write(entry: LogEntry): void {
+            const today = toDateString(now?.() ?? new Date());
+            if (today !== currentDateStr || dest === null) {
+                currentDateStr = today;
+                const filepath = path.join(logsDir, `chimera-${today}.log`);
+                dest = pino.destination({ dest: filepath, append: true, sync: true });
+            }
+            dest.write(JSON.stringify(entry) + '\n');
+        },
+    };
 }
