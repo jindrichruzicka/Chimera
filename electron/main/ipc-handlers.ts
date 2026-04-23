@@ -49,6 +49,7 @@ import type {
     LobbyInfo,
     ResolvedSettings,
     SaveSlotMeta,
+    UserSettings,
 } from '../preload/api-types.js';
 import {
     EngineActionSchema,
@@ -63,6 +64,7 @@ import {
     parseInvokeRequest,
 } from './ipc-schemas.js';
 import { createNoopLogger, type Logger } from './logger.js';
+import type { SettingsManager } from './SettingsManager.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -510,6 +512,8 @@ export interface RegisterSettingsHandlersOptions {
     readonly ipcMain: SettingsHandlersIpcMain;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
+    /** Live SettingsManager instance (wired in F07). When absent, falls back to stub behaviour. */
+    readonly settingsManager?: SettingsManager;
 }
 
 /**
@@ -536,31 +540,33 @@ const STUB_RESOLVED_SETTINGS: ResolvedSettings = Object.freeze({});
 export function registerSettingsHandlers(options: RegisterSettingsHandlersOptions): void {
     const { ipcMain } = options;
     const logger = options.logger ?? createNoopLogger();
+    const mgr = options.settingsManager;
     logger.info('registering chimera:settings:* handlers', {
         channels: [SETTINGS_GET_CHANNEL, SETTINGS_UPDATE_CHANNEL, SETTINGS_RESET_CHANNEL],
     });
 
     ipcMain.handle(SETTINGS_GET_CHANNEL, (_event, gameId) => {
         parseInvokeRequest(GameIdSchema, SETTINGS_GET_CHANNEL, gameId);
-        // Stub. Real merge (engine defaults + game defaults + user
-        // overrides) lands in F07/F19. An empty object honours the
-        // preload's `Promise<ResolvedSettings>` contract without claiming
-        // any particular default value.
+        if (mgr !== undefined) {
+            return mgr.getSettings(gameId as string);
+        }
         return STUB_RESOLVED_SETTINGS;
     });
 
     ipcMain.handle(SETTINGS_UPDATE_CHANNEL, (_event, gameId, patch) => {
         parseInvokeRequest(GameIdSchema, SETTINGS_UPDATE_CHANNEL, gameId);
         parseInvokeRequest(UserSettingsPatchSchema, SETTINGS_UPDATE_CHANNEL, patch);
-        // Stub. Real persistence lands in F07/F19. Returning a placeholder
-        // keeps the preload's `Promise<ResolvedSettings>` contract honest.
+        if (mgr !== undefined) {
+            return mgr.updateSettings(gameId as string, patch as UserSettings);
+        }
         return STUB_RESOLVED_SETTINGS;
     });
 
     ipcMain.handle(SETTINGS_RESET_CHANNEL, (_event, gameId) => {
         parseInvokeRequest(GameIdSchema, SETTINGS_RESET_CHANNEL, gameId);
-        // Stub. Real reset (clear user overrides, re-merge) lands in
-        // F07/F19.
+        if (mgr !== undefined) {
+            return mgr.resetSettings(gameId as string);
+        }
         return STUB_RESOLVED_SETTINGS;
     });
 }

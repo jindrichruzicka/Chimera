@@ -476,6 +476,154 @@ describe('registerSettingsHandlers', () => {
     });
 });
 
+describe('registerSettingsHandlers — with real SettingsManager', () => {
+    it('get handler returns merged defaults from registered schema', async () => {
+        const stub = makeSettingsIpcMainStub();
+        const { SettingsManager } = await import('./SettingsManager.js');
+        const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
+            await import('@chimera/simulation/settings/index.js');
+        const { z } = await import('zod');
+
+        const engineSchema = z.object({
+            audio: z.object({
+                masterVolume: z.number(),
+                sfxVolume: z.number(),
+                musicVolume: z.number(),
+                muted: z.boolean(),
+            }),
+            display: z.object({
+                fullscreen: z.boolean(),
+                vsync: z.boolean(),
+                targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                uiScale: z.number(),
+            }),
+            gameplay: z.object({
+                language: z.string(),
+                autoSave: z.boolean(),
+                autoSaveIntervalTurns: z.number().int(),
+                showHints: z.boolean(),
+                showPerfHud: z.boolean(),
+            }),
+            controls: z.object({
+                keyBindings: z.record(z.string(), z.string()),
+            }),
+        });
+
+        const mgr = new SettingsManager(new InMemorySettingsRepository());
+        mgr.registerSchema({
+            gameId: 'wired-game',
+            defaults: ENGINE_DEFAULTS,
+            zodSchema: engineSchema,
+        });
+
+        registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
+
+        const handler = stub.handled.get(SETTINGS_GET_CHANNEL)!;
+        const result = await Promise.resolve(handler({}, 'wired-game'));
+        expect(result).toMatchObject({
+            audio: { masterVolume: ENGINE_DEFAULTS.audio.masterVolume },
+        });
+    });
+
+    it('update handler persists patch and returns merged settings', async () => {
+        const stub = makeSettingsIpcMainStub();
+        const { SettingsManager } = await import('./SettingsManager.js');
+        const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
+            await import('@chimera/simulation/settings/index.js');
+        const { z } = await import('zod');
+
+        const engineSchema = z.object({
+            audio: z.object({
+                masterVolume: z.number(),
+                sfxVolume: z.number(),
+                musicVolume: z.number(),
+                muted: z.boolean(),
+            }),
+            display: z.object({
+                fullscreen: z.boolean(),
+                vsync: z.boolean(),
+                targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                uiScale: z.number(),
+            }),
+            gameplay: z.object({
+                language: z.string(),
+                autoSave: z.boolean(),
+                autoSaveIntervalTurns: z.number().int(),
+                showHints: z.boolean(),
+                showPerfHud: z.boolean(),
+            }),
+            controls: z.object({
+                keyBindings: z.record(z.string(), z.string()),
+            }),
+        });
+
+        const mgr = new SettingsManager(new InMemorySettingsRepository());
+        mgr.registerSchema({
+            gameId: 'wired-game',
+            defaults: ENGINE_DEFAULTS,
+            zodSchema: engineSchema,
+        });
+
+        registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
+
+        const handler = stub.handled.get(SETTINGS_UPDATE_CHANNEL)!;
+        const result = (await Promise.resolve(
+            handler({}, 'wired-game', { audio: { masterVolume: 0.1 } }),
+        )) as { audio: { masterVolume: number } };
+        expect(result.audio.masterVolume).toBe(0.1);
+    });
+
+    it('reset handler returns engine defaults after clearing overrides', async () => {
+        const stub = makeSettingsIpcMainStub();
+        const { SettingsManager } = await import('./SettingsManager.js');
+        const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
+            await import('@chimera/simulation/settings/index.js');
+        const { z } = await import('zod');
+
+        const engineSchema = z.object({
+            audio: z.object({
+                masterVolume: z.number(),
+                sfxVolume: z.number(),
+                musicVolume: z.number(),
+                muted: z.boolean(),
+            }),
+            display: z.object({
+                fullscreen: z.boolean(),
+                vsync: z.boolean(),
+                targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                uiScale: z.number(),
+            }),
+            gameplay: z.object({
+                language: z.string(),
+                autoSave: z.boolean(),
+                autoSaveIntervalTurns: z.number().int(),
+                showHints: z.boolean(),
+                showPerfHud: z.boolean(),
+            }),
+            controls: z.object({
+                keyBindings: z.record(z.string(), z.string()),
+            }),
+        });
+
+        const repo = new InMemorySettingsRepository();
+        await repo.save('wired-game', { audio: { masterVolume: 0.1 } });
+        const mgr = new SettingsManager(repo);
+        mgr.registerSchema({
+            gameId: 'wired-game',
+            defaults: ENGINE_DEFAULTS,
+            zodSchema: engineSchema,
+        });
+
+        registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
+
+        const handler = stub.handled.get(SETTINGS_RESET_CHANNEL)!;
+        const result = (await Promise.resolve(handler({}, 'wired-game'))) as {
+            audio: { masterVolume: number };
+        };
+        expect(result.audio.masterVolume).toBe(ENGINE_DEFAULTS.audio.masterVolume);
+    });
+});
+
 /**
  * Negative-path tests: every handler that accepts a structured payload must
  * reject malformed input with {@link IpcRequestValidationError} BEFORE any
