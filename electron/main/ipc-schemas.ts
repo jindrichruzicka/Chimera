@@ -188,8 +188,8 @@ export const LogErrorInfoSchema = z.object({
 
 export const LogEntrySchema = z.object({
     level: LogLevelSchema,
-    message: z.string(),
-    timestamp: z.number(),
+    message: z.string().max(4096),
+    timestamp: z.number().int().nonnegative().finite(),
     source: LogSourceSchema,
     context: z.record(z.string(), z.unknown()).optional(),
     error: LogErrorInfoSchema.optional(),
@@ -217,8 +217,8 @@ export const RendererLogSourceSchema = z.object({
  */
 export const RendererLogEntrySchema = z.object({
     level: LogLevelSchema,
-    message: z.string(),
-    timestamp: z.number(),
+    message: z.string().max(4096),
+    timestamp: z.number().int().nonnegative().finite(),
     source: RendererLogSourceSchema,
     context: z.record(z.string(), z.unknown()).optional(),
     error: LogErrorInfoSchema.optional(),

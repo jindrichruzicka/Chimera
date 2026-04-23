@@ -7,6 +7,7 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     PlayerIdSchema,
+    LogEntrySchema,
     RendererLogEntrySchema,
     SaveRequestSchema,
     SlotIdSchema,
@@ -272,6 +273,45 @@ describe('EngineActionSchema', () => {
     });
 });
 
+describe('LogEntrySchema', () => {
+    const VALID_ENTRY = {
+        level: 'info',
+        message: 'test message',
+        timestamp: 1700000000000,
+        source: { process: 'main', module: 'test' },
+    };
+
+    it('accepts a valid log entry', () => {
+        expect(LogEntrySchema.safeParse(VALID_ENTRY).success).toBe(true);
+    });
+
+    it('rejects timestamp: NaN', () => {
+        expect(LogEntrySchema.safeParse({ ...VALID_ENTRY, timestamp: NaN }).success).toBe(false);
+    });
+
+    it('rejects timestamp: -1 (negative)', () => {
+        expect(LogEntrySchema.safeParse({ ...VALID_ENTRY, timestamp: -1 }).success).toBe(false);
+    });
+
+    it('rejects timestamp: Infinity', () => {
+        expect(LogEntrySchema.safeParse({ ...VALID_ENTRY, timestamp: Infinity }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects message longer than 4096 characters', () => {
+        expect(
+            LogEntrySchema.safeParse({ ...VALID_ENTRY, message: 'x'.repeat(4097) }).success,
+        ).toBe(false);
+    });
+
+    it('accepts message of exactly 4096 characters', () => {
+        expect(
+            LogEntrySchema.safeParse({ ...VALID_ENTRY, message: 'x'.repeat(4096) }).success,
+        ).toBe(true);
+    });
+});
+
 describe('RendererLogEntrySchema', () => {
     const VALID_RENDERER_ENTRY = {
         level: 'info',
@@ -282,6 +322,51 @@ describe('RendererLogEntrySchema', () => {
 
     it('accepts a valid renderer log entry with source.module only', () => {
         expect(RendererLogEntrySchema.safeParse(VALID_RENDERER_ENTRY).success).toBe(true);
+    });
+
+    it('rejects timestamp: NaN', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({ ...VALID_RENDERER_ENTRY, timestamp: NaN }).success,
+        ).toBe(false);
+    });
+
+    it('rejects timestamp: -1 (negative)', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({ ...VALID_RENDERER_ENTRY, timestamp: -1 }).success,
+        ).toBe(false);
+    });
+
+    it('rejects timestamp: Infinity', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                timestamp: Infinity,
+            }).success,
+        ).toBe(false);
+    });
+
+    it('rejects timestamp: 1.5 (non-integer float)', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({ ...VALID_RENDERER_ENTRY, timestamp: 1.5 }).success,
+        ).toBe(false);
+    });
+
+    it('rejects message longer than 4096 characters', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                message: 'x'.repeat(4097),
+            }).success,
+        ).toBe(false);
+    });
+
+    it('accepts message of exactly 4096 characters', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                message: 'x'.repeat(4096),
+            }).success,
+        ).toBe(true);
     });
 
     it('strips source.process entirely — renderer-supplied process is never in the parsed output', () => {
