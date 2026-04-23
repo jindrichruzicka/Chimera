@@ -75,6 +75,15 @@ describe('preload/api.ts', () => {
         expect(typeof (api?.['system'] as Record<string, unknown>)?.['platform']).toBe('function');
     });
 
+    it('exposes an extensions namespace as a frozen empty object by default', async () => {
+        await importPreloadApi();
+        const [, api] = exposeInMainWorld.mock.calls[0] ?? [];
+        // extensions must be present and be an object (the stub for 1.0.0 is empty).
+        expect(typeof api?.['extensions']).toBe('object');
+        expect(Object.isFrozen(api?.['extensions'])).toBe(true);
+        expect(Object.keys(api?.['extensions'] as object)).toHaveLength(0);
+    });
+
     it('does NOT expose a __chimeraDebug namespace (invariant 28)', async () => {
         await importPreloadApi();
         // Invariant 28: the debug surface is a separate preload for the

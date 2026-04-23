@@ -92,6 +92,8 @@ chimera/
 │   │       └── InMemorySaveRepository.ts  # In-memory test double; used by E2E fixtures for clean state
 │   ├── preload/
 │   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera
+│   │   ├── api-types.ts             # Type-only module: ChimeraAPI, ChimeraExtensions, all namespace interfaces
+│   │   ├── extensions-api.ts        # registerExtension() + buildExtensionsApi() — extension registration infrastructure
 │   │   ├── game-api.ts              # window.__chimera.game — action dispatch + snapshot stream
 │   │   ├── lobby-api.ts             # window.__chimera.lobby — host/join/leave/discover
 │   │   ├── saves-api.ts             # window.__chimera.saves — slot list/save/load/delete
@@ -364,6 +366,8 @@ interface ChimeraAPI {
     system: SystemAPI; // Connection status, platform info, quit
     /** Present only when the active MultiplayerProvider supports discovery. */
     lobbyDiscovery?: LobbyDiscoveryAPI;
+    /** Typed map of all registered extensions. Empty in core 1.0.0; see §4.1a. */
+    readonly extensions: ChimeraExtensions;
 }
 
 // ─── game namespace ──────────────────────────────────────────────────────
@@ -438,6 +442,66 @@ interface SystemAPI {
 ```
 
 Each namespace file (`preload/game-api.ts`, `preload/lobby-api.ts`, …) registers its own IPC channel prefix (`chimera:game:*`, `chimera:lobby:*`, …). The security boundary is: every IPC handler is declared in exactly one namespace file, and `ipc-handlers.ts` in the main process composes them the same way. No channel crosses namespaces.
+
+### 4.1a Extension System (`preload/extensions-api.ts`)
+
+The extension system lets game packages and external integrations add typed namespaces to `window.__chimera.extensions` without modifying core preload files.
+
+#### Type layer — TypeScript declaration merging
+
+`ChimeraExtensions` is an empty, exported interface in `api-types.ts`. External packages opt in by augmenting it:
+
+```typescript
+// In your game package's type declarations (e.g. @my-org/tactics):
+declare module '@chimera/core/electron/preload/api-types.js' {
+    interface ChimeraExtensions {
+        tactics: TacticsExtensionAPI;
+    }
+}
+```
+
+`ChimeraAPI` exposes the merged result at `window.__chimera.extensions`:
+
+```typescript
+export interface ChimeraAPI {
+    // ... existing namespaces ...
+    /** Typed namespace map for all registered extensions. Empty in core 1.0.0. */
+    readonly extensions: ChimeraExtensions;
+}
+```
+
+This is the same pattern used by Fastify (`FastifyRequest` augmentation) and Knex (`Tables` augmentation) — zero runtime overhead, full IDE autocomplete, no code generation.
+
+#### Runtime layer — `registerExtension` + `buildExtensionsApi`
+
+Two exports from `electron/preload/extensions-api.ts`:
+
+| Export                             | Role                                                                                                                                  |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `registerExtension(name, factory)` | Called by the game's preload entry. Invokes `factory()` once and stores the result keyed by `name`. Throws on duplicate registration. |
+| `buildExtensionsApi()`             | Called once by `api.ts` when composing `ChimeraAPI`. Returns a **frozen** `ChimeraExtensions` object.                                 |
+
+**Invocation order constraint:** `registerExtension` must be called _before_ `api.ts` executes its module-level `contextBridge.exposeInMainWorld` call. In practice, this means the game's preload entry imports `registerExtension` and registers its API, then imports `api.ts` last (or the compiled bundle is ordered accordingly).
+
+```typescript
+// Example: games/tactics/preload/index.ts
+import { registerExtension } from '@chimera/core/electron/preload/extensions-api.js';
+import { createTacticsApi } from './tactics-api.js';
+// ... ipcRenderer port setup ...
+registerExtension('tactics', () => createTacticsApi(port));
+
+// api.ts is imported/bundled after — exposeInMainWorld fires with extensions wired in.
+```
+
+#### Security boundary
+
+- Extensions are registered in the **preload script** — same security context as all other preload code. Invariant #1 is unaffected: `GameSnapshot` never crosses IPC; extension APIs may only expose renderer-facing IPC method surfaces.
+- The frozen return value of `buildExtensionsApi()` prevents renderer-side mutation of the extension surface after `contextBridge` has published it.
+- Core (`@chimera/core`) registers **zero** extensions in 1.0.0 — the registry is empty by default.
+
+#### Invariant
+
+> **Invariant #79:** `buildExtensionsApi()` is called exactly once per preload session, immediately before `contextBridge.exposeInMainWorld`. No extension may be registered after that call.
 
 ### 4.2 Simulation Core (`simulation/`)
 
@@ -7193,7 +7257,7 @@ On macOS runners, `DISPLAY` is not required. On Linux runners, an `Xvfb` or `xvf
 
 ---
 
-## Appendix B — Key Invariants (Never Violate) (78 total)
+## Appendix B — Key Invariants (Never Violate) (79 total)
 
 ### Thematic Index
 
@@ -7203,7 +7267,7 @@ The 78 invariants are numbered stably; this index is purely navigational. A sing
 | -------------------------------------- | --------------------------------------------------------------------------------- |
 | **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                          |
 | **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78 |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25                                             |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79                                         |
 | **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                        |
 | **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                            |
 | **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                        |
@@ -7292,6 +7356,7 @@ The 78 invariants are numbered stably; this index is purely navigational. A sing
 76. **`fromFloat()` is permitted only at content-load time for hard-coded constants. It must not be called inside `validate()`, `reduce()`, or any hot simulation path. Linting is enforced by a dedicated ESLint rule in CI. (See §4.31.)**
 77. **The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and every harness flag (`--dev-auto-host`, `--dev-auto-join`, `--dev-port`, `--dev-profile-id`, `--dev-game`, `--dev-scenario`) must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent. (See §4.32.)**
 78. **Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines. (See §4.32.)**
+79. **`registerExtension()` must be called before `contextBridge.exposeInMainWorld`. `buildExtensionsApi()` is called exactly once, immediately before that single `exposeInMainWorld` call. Any extension registered after `buildExtensionsApi()` returns is silently ignored — the frozen object has already been published. (See §4.1a.)**
 
 ---
 

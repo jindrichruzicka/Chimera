@@ -83,4 +83,4 @@ Never use `git commit --no-verify`. Never bypass this gate.
 | 44  | No float fields in `GameSnapshot` that participate in equality or arithmetic                      |
 | 47  | `AssetManager` never imports from `games/*`                                                       |
 
-The full invariant list (78 entries) is in `docs/architecture-overview.md` Appendix B.
+The full invariant list (79 entries) is in `docs/architecture-overview.md` Appendix B.

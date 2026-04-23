@@ -19,6 +19,7 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ChimeraAPI } from './api-types.js';
+import { buildExtensionsApi } from './extensions-api.js';
 import { createGameApi } from './game-api.js';
 import { createLobbyApi } from './lobby-api.js';
 import { createSavesApi } from './saves-api.js';
@@ -80,6 +81,7 @@ const api: ChimeraAPI = {
     replay: {},
     chat: {},
     logs: buildLogsApi(port),
+    extensions: buildExtensionsApi(),
 };
 
 contextBridge.exposeInMainWorld('__chimera', api);

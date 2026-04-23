@@ -213,6 +213,32 @@ export interface LogsAPI {
     readRecent(maxEntries: number): Promise<LogEntry[]>;
 }
 
+// ─── Extension registry ───────────────────────────────────────────────────────
+
+/**
+ * Open extension namespace registry — augment this interface from external
+ * packages to add typed namespaces to `window.__chimera.extensions`.
+ *
+ * **How to extend (TypeScript declaration merging):**
+ * ```ts
+ * // In your game package's type declarations:
+ * declare module '@chimera/core/electron/preload/api-types.js' {
+ *     interface ChimeraExtensions {
+ *         tactics: TacticsExtensionAPI;
+ *     }
+ * }
+ * ```
+ *
+ * **Runtime registration** is separate — pair the declaration above with a
+ * call to `registerExtension()` from `extensions-api.ts` in your preload
+ * entry, before `contextBridge.exposeInMainWorld` is invoked.
+ *
+ * Invariant: `ChimeraExtensions` is intentionally empty in `@chimera/core`
+ * 1.0.0. All extension namespaces are contributed by consuming packages.
+ */
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
+export interface ChimeraExtensions {}
+
 // ─── ChimeraAPI — root surface ────────────────────────────────────────────────
 
 /**
@@ -238,6 +264,17 @@ export interface ChimeraAPI {
     system: SystemAPI;
     /** Present only when the active MultiplayerProvider supports discovery. */
     lobbyDiscovery?: LobbyDiscoveryAPI;
+    /**
+     * Typed namespace map for all registered extensions.
+     *
+     * Empty in `@chimera/core` 1.0.0. External packages populate this at
+     * preload time via `registerExtension()` from `extensions-api.ts` and
+     * extend the type via TypeScript declaration merging on `ChimeraExtensions`.
+     *
+     * Invariant: the object is frozen before it is passed to
+     * `contextBridge.exposeInMainWorld`.
+     */
+    readonly extensions: ChimeraExtensions;
 }
 
 // ─── game namespace ───────────────────────────────────────────────────────────
