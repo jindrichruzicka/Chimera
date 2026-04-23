@@ -1,8 +1,8 @@
 // renderer/logging/rendererLogger.ts
 //
 // Renderer-side structured logger (§4.27). Hooks console.warn, console.error,
-// window.onerror, and window.onunhandledrejection, forwarding entries to the
-// main process via the window.__chimera.logs IPC channel.
+// window.addEventListener('error'), and window.addEventListener('unhandledrejection'),
+// forwarding entries to the main process via the window.__chimera.logs IPC channel.
 //
 // Must NOT import from electron/, simulation/, or games/*.
 // Uses globalThis.__chimera?.logs for root-tsconfig compatibility (no DOM).
@@ -14,19 +14,15 @@ import type { LogsAPI } from '@chimera/electron/preload/api-types.js';
 // Ambient declarations so the root tsconfig (no DOM lib) can type-check this
 // file. The renderer tsconfig (lib: ["ES2022","DOM"]) provides the full types.
 declare const window: {
-    onerror:
-        | ((
-              event: string | Event,
-              source?: string,
-              lineno?: number,
-              colno?: number,
-              error?: Error,
-          ) => boolean | void)
-        | null;
-    onunhandledrejection: ((event: PromiseRejectionEvent) => void) | null;
+    addEventListener(type: string, listener: (event: Event) => void): void;
 };
 
-interface PromiseRejectionEvent {
+interface ErrorEvent extends Event {
+    readonly message: string;
+    readonly error?: unknown;
+}
+
+interface PromiseRejectionEvent extends Event {
     readonly reason: unknown;
 }
 
@@ -60,8 +56,14 @@ function argsToMessage(args: unknown[]): string {
  * Patch the global error surfaces so renderer-side errors are forwarded to
  * the main process as structured log entries.
  *
+ * Uses addEventListener so pre-existing handlers installed by Next.js,
+ * React DevTools, or other libraries are composed rather than clobbered.
+ * All logsApi.emit calls are wrapped in try/catch to prevent re-entry if
+ * the IPC bridge itself throws.
+ *
  * Call once during renderer boot (before React hydration). Calling twice
- * compounds the hooks — callers must guard against that in production.
+ * compounds the hooks — use installRendererLogger idempotently or guard
+ * at the call site.
  *
  * @param logsApi — the `window.__chimera.logs` namespace (or any compatible
  *   stub for tests).
@@ -73,48 +75,60 @@ export function installRendererLogger(logsApi: LogsAPI): void {
     // console.warn → level: 'warn'
     console.warn = (...args: unknown[]): void => {
         origWarn(...args);
-        logsApi.emit(makeEntry('warn', argsToMessage(args)));
+        try {
+            logsApi.emit(makeEntry('warn', argsToMessage(args)));
+        } catch {
+            // swallow — prevent re-entry if IPC bridge throws
+        }
     };
 
     // console.error → level: 'error'
     console.error = (...args: unknown[]): void => {
         origError(...args);
-        logsApi.emit(makeEntry('error', argsToMessage(args)));
+        try {
+            logsApi.emit(makeEntry('error', argsToMessage(args)));
+        } catch {
+            // swallow — prevent re-entry if IPC bridge throws
+        }
     };
 
-    // window.onerror → level: 'fatal'
-    window.onerror = (
-        event: string | Event,
-        _source?: string,
-        _lineno?: number,
-        _colno?: number,
-        error?: Error,
-    ): boolean => {
-        const message = error?.message ?? (typeof event === 'string' ? event : 'Uncaught error');
+    // window 'error' event → level: 'fatal'
+    window.addEventListener('error', (event: Event) => {
+        const e = event as ErrorEvent;
+        const error = e.error instanceof Error ? e.error : undefined;
+        const message = error?.message ?? e.message ?? 'Uncaught error';
         const context: Record<string, unknown> = {};
         if (error?.stack !== undefined) {
             context['stack'] = error.stack;
         }
-        logsApi.emit(
-            makeEntry('fatal', message, Object.keys(context).length > 0 ? context : undefined),
-        );
-        return false; // let the browser's default error handling continue
-    };
+        try {
+            logsApi.emit(
+                makeEntry('fatal', message, Object.keys(context).length > 0 ? context : undefined),
+            );
+        } catch {
+            // swallow
+        }
+    });
 
-    // window.onunhandledrejection → level: 'error'
-    window.onunhandledrejection = (event: PromiseRejectionEvent): void => {
-        const reason: unknown = event.reason;
+    // window 'unhandledrejection' event → level: 'error'
+    window.addEventListener('unhandledrejection', (event: Event) => {
+        const e = event as PromiseRejectionEvent;
+        const reason: unknown = e.reason;
         const message = reason instanceof Error ? reason.message : String(reason);
         const context: Record<string, unknown> = {};
         if (reason instanceof Error && reason.stack !== undefined) {
             context['stack'] = reason.stack;
         }
-        logsApi.emit(
-            makeEntry(
-                'error',
-                `Unhandled rejection: ${message}`,
-                Object.keys(context).length > 0 ? context : undefined,
-            ),
-        );
-    };
+        try {
+            logsApi.emit(
+                makeEntry(
+                    'error',
+                    `Unhandled rejection: ${message}`,
+                    Object.keys(context).length > 0 ? context : undefined,
+                ),
+            );
+        } catch {
+            // swallow
+        }
+    });
 }

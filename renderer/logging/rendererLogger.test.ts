@@ -1,25 +1,31 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { LogsAPI } from '@chimera/electron/preload/api-types.js';
 import { installRendererLogger } from './rendererLogger.js';
 
 // jsdom provides window/PromiseRejectionEvent at runtime; these declarations
 // let the root tsconfig (no DOM lib) type-check this file.
 declare const window: {
-    onerror:
-        | ((
-              event: string | Event,
-              source?: string,
-              lineno?: number,
-              colno?: number,
-              error?: Error,
-          ) => boolean | void)
-        | null;
-    onunhandledrejection: ((event: PromiseRejectionEvent) => void) | null;
+    addEventListener(type: string, listener: (event: Event) => void): void;
+    dispatchEvent(event: Event): boolean;
 };
-interface PromiseRejectionEvent {
+
+interface ErrorEvent extends Event {
+    readonly message: string;
+    readonly error?: unknown;
+}
+declare const ErrorEvent: new (
+    type: string,
+    init?: { message?: string; error?: unknown },
+) => ErrorEvent;
+
+interface PromiseRejectionEvent extends Event {
     readonly reason: unknown;
 }
+declare const PromiseRejectionEvent: new (
+    type: string,
+    init: { promise: Promise<unknown>; reason: unknown },
+) => PromiseRejectionEvent;
 
 function makeLogsApi(): LogsAPI & { emitCalls: Parameters<LogsAPI['emit']>[] } {
     const emitCalls: Parameters<LogsAPI['emit']>[] = [];
@@ -34,9 +40,18 @@ function makeLogsApi(): LogsAPI & { emitCalls: Parameters<LogsAPI['emit']>[] } {
 
 describe('installRendererLogger', () => {
     let logsApi: ReturnType<typeof makeLogsApi>;
+    let origWarn: typeof console.warn;
+    let origError: typeof console.error;
 
     beforeEach(() => {
         logsApi = makeLogsApi();
+        origWarn = console.warn;
+        origError = console.error;
+    });
+
+    afterEach(() => {
+        console.warn = origWarn;
+        console.error = origError;
     });
 
     it('console.error triggers logsApi.emit with level error', () => {
@@ -68,17 +83,21 @@ describe('installRendererLogger', () => {
         expect((logsApi.emit as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore);
     });
 
-    it('window.onerror handler calls logsApi.emit with level fatal', () => {
+    it('window error event calls logsApi.emit with level fatal', () => {
         installRendererLogger(logsApi);
-        // Simulate a global error event
-        window.onerror?.('uncaught error', 'test.js', 10, 5, new Error('fatal'));
+        const err = new Error('fatal');
+        const event = new ErrorEvent('error', { message: 'fatal', error: err });
+        window.dispatchEvent(event);
         expect(logsApi.emit).toHaveBeenCalledWith(expect.objectContaining({ level: 'fatal' }));
     });
 
-    it('window.onunhandledrejection triggers logsApi.emit with level error', () => {
+    it('window unhandledrejection event triggers logsApi.emit with level error', () => {
         installRendererLogger(logsApi);
-        const event = { reason: new Error('rejected') } as PromiseRejectionEvent;
-        window.onunhandledrejection?.(event);
+        const event = new PromiseRejectionEvent('unhandledrejection', {
+            promise: Promise.resolve(),
+            reason: new Error('rejected'),
+        });
+        window.dispatchEvent(event);
         expect(logsApi.emit).toHaveBeenCalledWith(expect.objectContaining({ level: 'error' }));
     });
 
@@ -87,5 +106,45 @@ describe('installRendererLogger', () => {
         console.error('source test');
         const call = (logsApi.emit as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
         expect(call?.source?.process).toBe('renderer');
+    });
+
+    it('does not replace a pre-existing window error handler (addEventListener composes)', () => {
+        const spy = vi.fn();
+        window.addEventListener('error', spy);
+        installRendererLogger(logsApi);
+        const event = new ErrorEvent('error', {
+            message: 'compose test',
+            error: new Error('compose test'),
+        });
+        window.dispatchEvent(event);
+        expect(spy).toHaveBeenCalled();
+        expect(logsApi.emit).toHaveBeenCalledWith(expect.objectContaining({ level: 'fatal' }));
+    });
+
+    it('logsApi.emit throwing does not propagate out of the error handler', () => {
+        const throwingApi: LogsAPI = {
+            emit: vi.fn(() => {
+                throw new Error('emit blew up');
+            }),
+            readRecent: vi.fn(() => Promise.resolve([])),
+        };
+        installRendererLogger(throwingApi);
+        expect(() => {
+            const event = new ErrorEvent('error', { message: 'boom', error: new Error('boom') });
+            window.dispatchEvent(event);
+        }).not.toThrow();
+    });
+
+    it('logsApi.emit throwing in console.error does not propagate', () => {
+        const throwingApi: LogsAPI = {
+            emit: vi.fn(() => {
+                throw new Error('emit blew up');
+            }),
+            readRecent: vi.fn(() => Promise.resolve([])),
+        };
+        installRendererLogger(throwingApi);
+        expect(() => {
+            console.error('should not throw');
+        }).not.toThrow();
     });
 });
