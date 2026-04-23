@@ -164,7 +164,12 @@ export class FileSaveRepository implements SaveRepository {
         const tmp = `${dest}.tmp`;
 
         await fs.writeFile(tmp, this.serializer.serialize(file));
-        await fs.rename(tmp, dest);
+        try {
+            await fs.rename(tmp, dest);
+        } catch (err) {
+            await fs.unlink(tmp).catch(() => undefined); // best-effort cleanup
+            throw err;
+        }
     }
 
     async delete(slotId: string): Promise<void> {

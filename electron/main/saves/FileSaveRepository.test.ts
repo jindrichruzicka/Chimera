@@ -117,6 +117,25 @@ describe('FileSaveRepository — integration', () => {
 
         await expect(repo.delete('tactics/missing')).rejects.toBeInstanceOf(SaveNotFoundError);
     });
+
+    it('save cleans up the .tmp file and re-throws when rename fails', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave');
+
+        // Ensure the game directory exists so the write succeeds.
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+
+        // Make the destination path a directory so rename() fails with EISDIR.
+        const dest = path.join(dir, 'autosave.chimera');
+        await fs.mkdir(dest, { recursive: true });
+
+        await expect(repo.save(file)).rejects.toThrow();
+
+        // The .tmp file must have been cleaned up.
+        const entries = await fs.readdir(dir);
+        expect(entries.filter((e) => e.endsWith('.tmp'))).toHaveLength(0);
+    });
 });
 
 // ── Path traversal hardening tests (BLOCK-1 / issue #128) ────────────────────
