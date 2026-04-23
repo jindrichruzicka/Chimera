@@ -28,6 +28,37 @@ import { ENGINE_DEFAULTS, SettingsMerger } from '@chimera/simulation/settings/in
 const ENGINE_NAMESPACE_KEYS = new Set(['audio', 'display', 'gameplay', 'controls']);
 
 /**
+ * Deep-merges `incoming` into `current`, keeping all keys from both.
+ * Used to combine two UserSettings objects (both are DeepPartial) so that
+ * incoming values win at each leaf, without injecting any defaults.
+ */
+function mergeUserOverrides(
+    current: Record<string, unknown>,
+    incoming: Record<string, unknown>,
+): Record<string, unknown> {
+    const result: Record<string, unknown> = { ...current };
+    for (const [key, inVal] of Object.entries(incoming)) {
+        const curVal = current[key];
+        if (
+            curVal !== null &&
+            typeof curVal === 'object' &&
+            !Array.isArray(curVal) &&
+            inVal !== null &&
+            typeof inVal === 'object' &&
+            !Array.isArray(inVal)
+        ) {
+            result[key] = mergeUserOverrides(
+                curVal as Record<string, unknown>,
+                inVal as Record<string, unknown>,
+            );
+        } else {
+            result[key] = inVal;
+        }
+    }
+    return result;
+}
+
+/**
  * Thrown by `registerSchema()` when:
  * (a) a schema for the same gameId is registered twice, or
  * (b) the schema's game-specific keys shadow an engine namespace key.
@@ -102,19 +133,24 @@ export class SettingsManager {
     /**
      * Validate, merge, persist, and broadcast updated settings.
      * Throws `SettingsValidationError` if the patch contains invalid values.
+     *
+     * Only the validated user overrides are persisted — never the full defaults
+     * tree (BLOCK-1 fix). The return value of validatePatch is used so that
+     * type-coerced, unknown-key-stripped values are what gets saved (WARN-2 fix).
      */
     async updateSettings(gameId: string, patch: Partial<UserSettings>): Promise<ResolvedSettings> {
         const schema = this.schemas.get(gameId);
-        if (schema !== undefined) {
-            SettingsMerger.validatePatch(schema.zodSchema, patch);
-        }
+        // WARN-2 fix: use the return value (validated, stripped patch)
+        const validatedPatch =
+            schema !== undefined ? SettingsMerger.validatePatch(schema.zodSchema, patch) : patch;
 
         const currentOverrides = await this.repo.load(gameId);
-        const merged = SettingsMerger.mergeAll(
-            schema?.defaults ?? ENGINE_DEFAULTS,
+        // BLOCK-1 fix: merge the validated patch into existing OVERRIDES only,
+        // not into the full resolved defaults tree.
+        const newOverrides = mergeUserOverrides(
             currentOverrides,
-        );
-        const newOverrides = SettingsMerger.mergeAll(merged, patch);
+            validatedPatch,
+        ) as UserSettings;
         await this.repo.save(gameId, newOverrides);
 
         const result = await this.getSettings(gameId);

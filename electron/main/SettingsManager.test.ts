@@ -218,3 +218,61 @@ describe('SettingsManager broadcastChange', () => {
         await expect(mgr.updateSettings('test-game', {})).resolves.toBeDefined();
     });
 });
+
+// ── overrides persistence (BLOCK-1, WARN-2, WARN-7) ──────────────────────────
+
+describe('SettingsManager.updateSettings() — overrides-only persistence (BLOCK-1)', () => {
+    it('repo.load() after a single-field update returns only the changed key, not all defaults', async () => {
+        const repo = new InMemorySettingsRepository();
+        const mgr = new SettingsManager(repo);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await mgr.updateSettings('test-game', { audio: { masterVolume: 0.3 } });
+
+        const persisted = await repo.load('test-game');
+        // Only the overridden key should be stored — not the full defaults tree
+        expect(persisted).toEqual({ audio: { masterVolume: 0.3 } });
+    });
+
+    it('getSettings() still returns fully-merged result after the overrides-only fix', async () => {
+        const repo = new InMemorySettingsRepository();
+        const mgr = new SettingsManager(repo);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await mgr.updateSettings('test-game', { audio: { masterVolume: 0.3 } });
+
+        const settings = await mgr.getSettings('test-game');
+        expect(settings.audio.masterVolume).toBe(0.3);
+        expect(settings.audio.sfxVolume).toBe(ENGINE_DEFAULTS.audio.sfxVolume);
+        expect(settings.display).toEqual(ENGINE_DEFAULTS.display);
+    });
+
+    it('two sequential updates accumulate overrides without restoring defaults', async () => {
+        const repo = new InMemorySettingsRepository();
+        const mgr = new SettingsManager(repo);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await mgr.updateSettings('test-game', { audio: { masterVolume: 0.3 } });
+        await mgr.updateSettings('test-game', { audio: { sfxVolume: 0.5 } });
+
+        const persisted = await repo.load('test-game');
+        // Both overrides should be present; no defaults pollution
+        expect(persisted).toEqual({ audio: { masterVolume: 0.3, sfxVolume: 0.5 } });
+    });
+
+    it('validatePatch return value is used — invalid patch is rejected before reaching repo', async () => {
+        const repo = new InMemorySettingsRepository();
+        const mgr = new SettingsManager(repo);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await expect(
+            mgr.updateSettings('test-game', {
+                audio: { masterVolume: 'not-a-number' as unknown as number },
+            }),
+        ).rejects.toThrow();
+
+        // Repo must remain empty — patch must not have been saved
+        const persisted = await repo.load('test-game');
+        expect(persisted).toEqual({});
+    });
+});
