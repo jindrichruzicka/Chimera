@@ -660,6 +660,22 @@ export function registerLogsHandlers(options: RegisterLogsHandlersOptions): void
                 : {}),
         };
         options.sink.write(trustedEntry);
+
+        // For error/fatal entries, additionally forward a reconstructed Error
+        // object through the logger so the main-process log receives proper
+        // Error object formatting (name, message, stack) via the Logger API.
+        // The sink.write above preserves renderer source attribution; this
+        // call adds structured error visibility in the logger's output.
+        if (parsed.level === 'error' || parsed.level === 'fatal') {
+            const err =
+                parsed.error !== undefined
+                    ? Object.assign(new Error(parsed.error.message), {
+                          name: parsed.error.name,
+                          stack: parsed.error.stack,
+                      })
+                    : undefined;
+            options.logger[parsed.level](parsed.message, err, parsed.context ?? {});
+        }
     });
 
     ipcMain.handle(LOGS_READ_RECENT_CHANNEL, (_event, maxEntries) => {

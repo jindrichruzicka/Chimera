@@ -1138,4 +1138,65 @@ describe('registerLogsHandlers', () => {
         const result = (await Promise.resolve(handler({}, Number.MAX_SAFE_INTEGER))) as LogEntry[];
         expect(result.length).toBeLessThanOrEqual(smallSink.capacity);
     });
+
+    it('level:error entry with error field calls logger.error with reconstructed Error', () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        handler(
+            {},
+            {
+                ...VALID_ENTRY,
+                level: 'error',
+                error: { name: 'TypeError', message: 'boom', stack: 'TypeError: boom\n  at test' },
+            },
+        );
+
+        // The logger writes to memorySink — check that an error entry arrived there
+        const errorEntries = memorySink.entries.filter((e) => e.level === 'error');
+        expect(errorEntries.length).toBeGreaterThanOrEqual(1);
+        const last = errorEntries.at(-1);
+        expect(last?.error?.name).toBe('TypeError');
+        expect(last?.error?.message).toBe('boom');
+        expect(last?.error?.stack).toContain('TypeError: boom');
+    });
+
+    it('level:fatal entry with error field calls logger.fatal with reconstructed Error', () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        handler(
+            {},
+            {
+                ...VALID_ENTRY,
+                level: 'fatal',
+                error: {
+                    name: 'RangeError',
+                    message: 'out of range',
+                    stack: 'RangeError: out of range',
+                },
+            },
+        );
+
+        const fatalEntries = memorySink.entries.filter((e) => e.level === 'fatal');
+        expect(fatalEntries.length).toBeGreaterThanOrEqual(1);
+        const last = fatalEntries.at(-1);
+        expect(last?.error?.name).toBe('RangeError');
+        expect(last?.error?.message).toBe('out of range');
+    });
+
+    it('level:info entry (no error) still works unchanged', () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        handler({}, { ...VALID_ENTRY, level: 'info', message: 'just info' });
+
+        const last = sink.entries.at(-1);
+        expect(last?.level).toBe('info');
+        expect(last?.message).toBe('just info');
+        expect(last?.error).toBeUndefined();
+    });
 });
