@@ -35,6 +35,7 @@
         "electron/**/*.ts",
         "simulation/**/*.ts",
         "ai/**/*.ts",
+        "games/**/*.ts",
         "renderer/**/*.ts",
         "shared/**/*.ts",
         "tools/**/*.ts"

@@ -10,7 +10,10 @@ import {
 } from './ipc-handlers.js';
 import { createLogger, type Logger, type LoggerSink } from './logger.js';
 import { SaveManager } from './SaveManager.js';
+import { SettingsManager } from './SettingsManager.js';
+import { FileSettingsRepository } from './FileSettingsRepository.js';
 import { InMemorySaveRepository } from '@chimera/simulation/persistence/index.js';
+import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -299,11 +302,18 @@ export async function main(): Promise<void> {
     // Promises from rejecting before persistence exists.
     registerSavesHandlers({ ipcMain, logger: logger.child({ module: 'saves' }) });
 
-    // Register the `chimera:settings:*` channels as stubs. Real schema
-    // validation, three-layer merge, and persisted user overrides land
-    // in F07/F19; wiring stubs here lets the renderer speak the full
-    // settings protocol without unhandled-channel errors.
-    registerSettingsHandlers({ ipcMain, logger: logger.child({ module: 'settings' }) });
+    // Register the `chimera:settings:*` channels backed by SettingsManager.
+    // FileSettingsRepository persists user overrides under `<userData>/settings/`.
+    // TacticsSettings schema is registered here so getSettings('tactics')
+    // returns full game defaults rather than bare engine defaults.
+    const settingsRepo = new FileSettingsRepository(path.join(userData, 'settings'));
+    const settingsManager = new SettingsManager(settingsRepo);
+    settingsManager.registerSchema(tacticsSettingsSchema);
+    registerSettingsHandlers({
+        ipcMain,
+        logger: logger.child({ module: 'settings' }),
+        settingsManager,
+    });
 
     const createWindow = (): void => {
         createMainWindow({ preloadPath, rendererEntry, env });
