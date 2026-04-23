@@ -219,6 +219,59 @@ describe('SettingsManager broadcastChange', () => {
     });
 });
 
+// ── BLOCK-3: validate loaded JSON in getSettings() ────────────────────────────
+
+describe('SettingsManager.getSettings() — corrupt JSON validation (BLOCK-3)', () => {
+    it('returns defaults and logs a warning when stored overrides fail schema validation', async () => {
+        const repo = new InMemorySettingsRepository();
+        // Corrupt override: audio.masterVolume should be a number but is a string
+        await repo.save('test-game', {
+            audio: { masterVolume: 'loud' as unknown as number },
+        });
+        const warnSpy = vi.fn();
+        const logger = {
+            trace: vi.fn(),
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: warnSpy,
+            error: vi.fn(),
+            fatal: vi.fn(),
+            child: vi.fn().mockReturnThis(),
+        };
+        const mgr = new SettingsManager(repo, undefined, logger);
+        mgr.registerSchema(engineSettingsSchema);
+
+        const settings = await mgr.getSettings('test-game');
+
+        // Should fall back to defaults, not blow up
+        expect(settings.audio.masterVolume).toBe(ENGINE_DEFAULTS.audio.masterVolume);
+        // Should have logged a warning
+        expect(warnSpy).toHaveBeenCalledOnce();
+    });
+
+    it('returns merged settings without warning when stored overrides are valid', async () => {
+        const repo = new InMemorySettingsRepository();
+        await repo.save('test-game', { audio: { masterVolume: 0.4 } });
+        const warnSpy = vi.fn();
+        const logger = {
+            trace: vi.fn(),
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: warnSpy,
+            error: vi.fn(),
+            fatal: vi.fn(),
+            child: vi.fn().mockReturnThis(),
+        };
+        const mgr = new SettingsManager(repo, undefined, logger);
+        mgr.registerSchema(engineSettingsSchema);
+
+        const settings = await mgr.getSettings('test-game');
+
+        expect(settings.audio.masterVolume).toBe(0.4);
+        expect(warnSpy).not.toHaveBeenCalled();
+    });
+});
+
 // ── overrides persistence (BLOCK-1, WARN-2, WARN-7) ──────────────────────────
 
 describe('SettingsManager.updateSettings() — overrides-only persistence (BLOCK-1)', () => {

@@ -15,6 +15,7 @@
  *   #67 — Constructed with injected dependencies; no raw console.* calls.
  */
 
+import type { Logger } from '../../shared/logging.js';
 import type {
     EngineSettings,
     GameSettingsSchema,
@@ -87,6 +88,7 @@ export class SettingsManager {
     constructor(
         private readonly repo: SettingsRepository,
         private readonly broadcastFn?: BroadcastFn,
+        private readonly logger?: Logger,
     ) {}
 
     /**
@@ -126,7 +128,19 @@ export class SettingsManager {
     async getSettings(gameId: string): Promise<ResolvedSettings> {
         const schema = this.schemas.get(gameId);
         const defaults = schema?.defaults ?? ENGINE_DEFAULTS;
-        const userOverrides = await this.repo.load(gameId);
+        const rawOverrides = await this.repo.load(gameId);
+        let userOverrides: UserSettings = rawOverrides;
+        if (schema !== undefined && Object.keys(rawOverrides).length > 0) {
+            try {
+                userOverrides = SettingsMerger.validatePatch(schema.zodSchema, rawOverrides);
+            } catch {
+                this.logger?.warn(
+                    'Stored settings for game failed schema validation; falling back to defaults.',
+                    { gameId },
+                );
+                userOverrides = {};
+            }
+        }
         return SettingsMerger.mergeAll(defaults, userOverrides);
     }
 
