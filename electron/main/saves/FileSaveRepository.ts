@@ -163,7 +163,13 @@ export class FileSaveRepository implements SaveRepository {
         const dest = this.slotPath(file.header.gameId, file.header.slotId);
         const tmp = `${dest}.tmp`;
 
-        await fs.writeFile(tmp, this.serializer.serialize(file));
+        const fh = await fs.open(tmp, 'w');
+        try {
+            await fh.writeFile(this.serializer.serialize(file));
+            await fh.sync();
+        } finally {
+            await fh.close();
+        }
         try {
             await fs.rename(tmp, dest);
         } catch (err) {
