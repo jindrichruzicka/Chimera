@@ -6,6 +6,7 @@
 // need is a valid HTML scaffold that hosts `page.tsx`.
 
 import type { ReactNode } from 'react';
+import React from 'react';
 import { SettingsBootstrap } from './SettingsBootstrap';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 
@@ -17,6 +18,12 @@ export const metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (
         <html lang="en">
+            <head>
+                <meta
+                    httpEquiv="Content-Security-Policy"
+                    content="default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'"
+                />
+            </head>
             <body>
                 <SettingsBootstrap />
                 <RootErrorBoundary>{children}</RootErrorBoundary>
