@@ -23,11 +23,15 @@ import type { SaveFile } from './SaveFile.js';
  * `serialize` converts a `SaveFile` to a storable form (string or binary
  * Buffer). `deserialize` reverses the transformation.
  *
+ * Both methods are async to accommodate implementations that perform
+ * non-blocking I/O transforms (e.g. async gzip compression). Synchronous
+ * implementations wrap their result in a resolved Promise.
+ *
  * Implementations must be stateless: the same `SaveFile` always produces
  * the same bytes, and `deserialize(serialize(file))` is structurally equal
  * to `file`.
  */
 export interface SaveSerializer {
-    serialize(file: SaveFile): string | Buffer;
-    deserialize(raw: string | Buffer): SaveFile;
+    serialize(file: SaveFile): Promise<string | Buffer>;
+    deserialize(raw: string | Buffer): Promise<SaveFile>;
 }

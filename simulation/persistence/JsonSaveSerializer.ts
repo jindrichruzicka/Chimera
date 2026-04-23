@@ -100,16 +100,18 @@ function safeReviver(key: string, value: any): unknown {
  * violation.
  */
 export class JsonSaveSerializer implements SaveSerializer {
-    serialize(file: SaveFile): string {
-        return JSON.stringify(file, null, 2);
+    serialize(file: SaveFile): Promise<string> {
+        return Promise.resolve(JSON.stringify(file, null, 2));
     }
 
-    deserialize(raw: string | Buffer): SaveFile {
+    deserialize(raw: string | Buffer): Promise<SaveFile> {
         const text = typeof raw === 'string' ? raw : raw.toString('utf8');
 
         if (text.length > MAX_SAVE_SIZE_CHARS) {
-            throw new SaveParseError(
-                `Save file exceeds maximum allowed size of ${MAX_SAVE_SIZE_CHARS.toString()} characters`,
+            return Promise.reject(
+                new SaveParseError(
+                    `Save file exceeds maximum allowed size of ${MAX_SAVE_SIZE_CHARS.toString()} characters`,
+                ),
             );
         }
 
@@ -117,14 +119,18 @@ export class JsonSaveSerializer implements SaveSerializer {
         try {
             parsed = JSON.parse(text, safeReviver);
         } catch (cause) {
-            throw new SaveParseError(
-                `Save file contains invalid JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
+            return Promise.reject(
+                new SaveParseError(
+                    `Save file contains invalid JSON: ${cause instanceof Error ? cause.message : String(cause)}`,
+                ),
             );
         }
 
         const result = SaveFileSchema.safeParse(parsed);
         if (!result.success) {
-            throw new SaveParseError(`Save file failed schema validation: ${result.error.message}`);
+            return Promise.reject(
+                new SaveParseError(`Save file failed schema validation: ${result.error.message}`),
+            );
         }
 
         // Safe: Zod has validated the required structural shape. Branded types
@@ -132,6 +138,6 @@ export class JsonSaveSerializer implements SaveSerializer {
         // produces plain strings which are assignable to branded aliases at
         // runtime. The cast narrows from `unknown` (JSON.parse output) to the
         // fully-typed SaveFile interface after schema validation has passed.
-        return parsed as SaveFile;
+        return Promise.resolve(parsed as SaveFile);
     }
 }

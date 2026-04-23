@@ -137,7 +137,7 @@ export class FileSaveRepository implements SaveRepository {
                         fs.readFile(filePath),
                         fs.stat(filePath),
                     ]);
-                    const file = this.serializer.deserialize(raw);
+                    const file = await this.serializer.deserialize(raw);
                     return FileSaveRepository.fileToMeta(file, stat.size);
                 }),
         );
@@ -159,7 +159,7 @@ export class FileSaveRepository implements SaveRepository {
             throw err;
         }
 
-        const file = this.serializer.deserialize(raw);
+        const file = await this.serializer.deserialize(raw);
         const migrated = this.migrator.migrate(file);
 
         // Verify integrity checksum if the file was written with one.
@@ -193,7 +193,7 @@ export class FileSaveRepository implements SaveRepository {
 
         const fh = await fs.open(tmp, 'w');
         try {
-            await fh.writeFile(this.serializer.serialize(fileWithChecksum));
+            await fh.writeFile(await this.serializer.serialize(fileWithChecksum));
             await fh.sync();
         } finally {
             await fh.close();

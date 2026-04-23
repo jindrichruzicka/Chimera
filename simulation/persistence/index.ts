@@ -15,7 +15,6 @@
 export type { CommitmentId, CommitmentEnvelope, SaveFileHeader, SaveFile } from './SaveFile.js';
 export type { SaveSerializer } from './SaveSerializer.js';
 export { JsonSaveSerializer } from './JsonSaveSerializer.js';
-export { CompressedSaveSerializer } from './CompressedSaveSerializer.js';
 export {
     CURRENT_SCHEMA_VERSION,
     SaveMigrator,

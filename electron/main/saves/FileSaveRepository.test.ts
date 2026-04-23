@@ -305,7 +305,7 @@ describe('FileSaveRepository — integrity checksum', () => {
         await fs.mkdir(dir, { recursive: true });
         const filePath = path.join(dir, 'autosave.chimera');
         const serializer = new JsonSaveSerializer();
-        await fs.writeFile(filePath, serializer.serialize(file));
+        await fs.writeFile(filePath, await serializer.serialize(file));
 
         // Should load without throwing
         await expect(repo.load('tactics/autosave')).resolves.toMatchObject(file);
