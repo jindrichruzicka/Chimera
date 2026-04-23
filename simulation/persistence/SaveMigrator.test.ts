@@ -14,11 +14,11 @@
 import { describe, expect, it } from 'vitest';
 import {
     CURRENT_SCHEMA_VERSION,
+    SaveMigrationError,
     SaveMigrator,
     SaveNotFoundError,
     SaveSchemaTooNewError,
 } from './SaveMigrator.js';
-import type { SaveMigration } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
 import type { GamePhase } from '../engine/types.js';
 
@@ -67,79 +67,6 @@ describe('SaveMigrator', () => {
         expect(migrator.migrate(file)).toStrictEqual(file);
     });
 
-    it('applies a v0 → v1 migration and returns file with schemaVersion 1', () => {
-        const migrator = new SaveMigrator();
-        const migration: SaveMigration = {
-            fromVersion: 0,
-            apply(file: SaveFile): SaveFile {
-                return {
-                    ...file,
-                    header: {
-                        ...file.header,
-                        // Simulate a migration that adds a field to the header
-                        gameVersion: '0.2.0',
-                    },
-                };
-            },
-        };
-        migrator.register(migration);
-
-        const file = makeFileAtVersion(0);
-        const result = migrator.migrate(file);
-
-        expect(result.header.schemaVersion).toBe(1);
-        expect(result.header.gameVersion).toBe('0.2.0');
-    });
-
-    it('applies chained migrations v0 → v1 → v2 in order', () => {
-        const migrator = new SaveMigrator();
-        const applied: number[] = [];
-
-        migrator.register({
-            fromVersion: 0,
-            apply(file: SaveFile): SaveFile {
-                applied.push(0);
-                return file;
-            },
-        });
-        migrator.register({
-            fromVersion: 1,
-            apply(file: SaveFile): SaveFile {
-                applied.push(1);
-                return file;
-            },
-        });
-
-        migrator.migrate(makeFileAtVersion(0));
-
-        expect(applied).toStrictEqual([0, 1]);
-    });
-
-    it('applies migrations regardless of registration order (sorts by fromVersion)', () => {
-        const migrator = new SaveMigrator();
-        const applied: number[] = [];
-
-        // Register in reverse order — migrator must sort before applying.
-        migrator.register({
-            fromVersion: 1,
-            apply(file: SaveFile): SaveFile {
-                applied.push(1);
-                return file;
-            },
-        });
-        migrator.register({
-            fromVersion: 0,
-            apply(file: SaveFile): SaveFile {
-                applied.push(0);
-                return file;
-            },
-        });
-
-        migrator.migrate(makeFileAtVersion(0));
-
-        expect(applied).toStrictEqual([0, 1]);
-    });
-
     it('throws SaveSchemaTooNewError when file schemaVersion exceeds CURRENT_SCHEMA_VERSION', () => {
         const migrator = new SaveMigrator();
         const file = makeFileAtVersion(CURRENT_SCHEMA_VERSION + 1);
@@ -163,19 +90,108 @@ describe('SaveMigrator', () => {
         }
     });
 
-    it('does not mutate the input file', () => {
+    // ── Invalid schema version ────────────────────────────────────────────────
+
+    it('throws SaveMigrationError when schemaVersion is 0', () => {
+        const migrator = new SaveMigrator();
+        const file = makeFileAtVersion(0);
+
+        expect(() => migrator.migrate(file)).toThrow(SaveMigrationError);
+    });
+
+    it('throws SaveMigrationError when schemaVersion is -1', () => {
+        const migrator = new SaveMigrator();
+        const file = makeFileAtVersion(-1);
+
+        expect(() => migrator.migrate(file)).toThrow(SaveMigrationError);
+    });
+
+    it('throws SaveMigrationError when schemaVersion is NaN', () => {
+        const migrator = new SaveMigrator();
+        const file = makeFileAtVersion(NaN);
+
+        expect(() => migrator.migrate(file)).toThrow(SaveMigrationError);
+    });
+
+    it('throws SaveMigrationError when schemaVersion is undefined cast to number', () => {
+        const migrator = new SaveMigrator();
+        const file = {
+            ...makeFileAtVersion(1),
+            header: {
+                ...makeFileAtVersion(1).header,
+                schemaVersion: undefined as unknown as number,
+            },
+        };
+
+        expect(() => migrator.migrate(file)).toThrow(SaveMigrationError);
+    });
+
+    it('SaveMigrationError message includes the invalid version', () => {
+        const migrator = new SaveMigrator();
+        const file = makeFileAtVersion(-1);
+
+        try {
+            migrator.migrate(file);
+            expect.fail('Expected SaveMigrationError');
+        } catch (err) {
+            expect(err).toBeInstanceOf(SaveMigrationError);
+            expect((err as SaveMigrationError).message).toContain('-1');
+        }
+    });
+
+    // ── Gap detection ─────────────────────────────────────────────────────────
+    //
+    // With CURRENT_SCHEMA_VERSION=1 the only valid input version is 1 (already
+    // current), so the post-loop check "reached vX, expected vY" can only fire
+    // when a spurious migration registered for fromVersion=1 overshoots the
+    // target. That edge-case is tested below; a fuller gap test (e.g. v1→v2
+    // exists but v2→v3 is missing while CURRENT=3) becomes possible once the
+    // constant is bumped.
+
+    it('throws SaveMigrationError when a registered migration causes the chain to overshoot CURRENT_SCHEMA_VERSION', () => {
+        // A migration for fromVersion=CURRENT_SCHEMA_VERSION (1→2) is registered.
+        // The file starts at v1, which passes all early guards. The migration
+        // advances it to v2, but v2 ≠ CURRENT_SCHEMA_VERSION (1), so the
+        // post-loop incomplete-chain check must throw.
         const migrator = new SaveMigrator();
         migrator.register({
-            fromVersion: 0,
+            fromVersion: CURRENT_SCHEMA_VERSION,
             apply(file: SaveFile): SaveFile {
-                return { ...file, header: { ...file.header, gameVersion: 'mutated' } };
+                return file;
             },
         });
+        const file = makeFileAtVersion(CURRENT_SCHEMA_VERSION);
 
-        const original = makeFileAtVersion(0);
-        migrator.migrate(original);
+        expect(() => migrator.migrate(file)).toThrow(SaveMigrationError);
+    });
 
-        expect(original.header.gameVersion).toBe('0.1.0');
+    it('SaveMigrationError from post-loop check has a descriptive message', () => {
+        const migrator = new SaveMigrator();
+        migrator.register({
+            fromVersion: CURRENT_SCHEMA_VERSION,
+            apply(file: SaveFile): SaveFile {
+                return file;
+            },
+        });
+        const file = makeFileAtVersion(CURRENT_SCHEMA_VERSION);
+
+        try {
+            migrator.migrate(file);
+            expect.fail('Expected SaveMigrationError');
+        } catch (err) {
+            expect(err).toBeInstanceOf(SaveMigrationError);
+            const msg = (err as SaveMigrationError).message;
+            expect(msg).toContain(String(CURRENT_SCHEMA_VERSION + 1));
+            expect(msg).toContain(String(CURRENT_SCHEMA_VERSION));
+        }
+    });
+
+    it('migrate() still accepts a file already at CURRENT_SCHEMA_VERSION without error', () => {
+        const migrator = new SaveMigrator();
+        const file = makeFileAtVersion(CURRENT_SCHEMA_VERSION);
+
+        expect(() => migrator.migrate(file)).not.toThrow();
+        expect(migrator.migrate(file)).toStrictEqual(file);
     });
 });
 
@@ -234,5 +250,33 @@ describe('SaveSchemaTooNewError', () => {
 
         expect(err.message).toContain('5');
         expect(err.message).toContain('1');
+    });
+});
+
+// ─── SaveMigrationError ───────────────────────────────────────────────────────
+
+describe('SaveMigrationError', () => {
+    it('is an instanceof Error', () => {
+        const err = new SaveMigrationError('bad input');
+
+        expect(err).toBeInstanceOf(Error);
+    });
+
+    it('is an instanceof SaveMigrationError', () => {
+        const err = new SaveMigrationError('bad input');
+
+        expect(err).toBeInstanceOf(SaveMigrationError);
+    });
+
+    it('carries the message supplied to the constructor', () => {
+        const err = new SaveMigrationError('Invalid schema version: -1');
+
+        expect(err.message).toBe('Invalid schema version: -1');
+    });
+
+    it('has name SaveMigrationError', () => {
+        const err = new SaveMigrationError('any');
+
+        expect(err.name).toBe('SaveMigrationError');
     });
 });

@@ -75,11 +75,20 @@ export class SaveMigrator {
      *
      * Returns the (possibly new) file object. The input is never mutated.
      *
+     * @throws {SaveMigrationError} if `file.header.schemaVersion` is not a
+     *   positive integer (covers `0`, `-1`, `NaN`, `undefined`).
      * @throws {SaveSchemaTooNewError} if `file.header.schemaVersion > CURRENT_SCHEMA_VERSION`.
+     * @throws {SaveMigrationError} if the migration chain does not reach
+     *   `CURRENT_SCHEMA_VERSION` (gap in registered migrations).
      */
     migrate(file: SaveFile): SaveFile {
-        if (file.header.schemaVersion > CURRENT_SCHEMA_VERSION) {
-            throw new SaveSchemaTooNewError(file.header.schemaVersion, CURRENT_SCHEMA_VERSION);
+        const version = file.header.schemaVersion;
+        if (!Number.isInteger(version) || version < 1) {
+            throw new SaveMigrationError(`Invalid schema version: ${JSON.stringify(version)}`);
+        }
+
+        if (version > CURRENT_SCHEMA_VERSION) {
+            throw new SaveSchemaTooNewError(version, CURRENT_SCHEMA_VERSION);
         }
 
         let current = file;
@@ -96,6 +105,12 @@ export class SaveMigrator {
                     },
                 };
             }
+        }
+
+        if (current.header.schemaVersion !== CURRENT_SCHEMA_VERSION) {
+            throw new SaveMigrationError(
+                `Migration chain incomplete: reached v${current.header.schemaVersion}, expected v${CURRENT_SCHEMA_VERSION}`,
+            );
         }
 
         return current;
@@ -171,6 +186,20 @@ export class SaveSchemaTooNewError extends Error {
         this.name = 'SaveSchemaTooNewError';
         this.fileVersion = fileVersion;
         this.engineVersion = engineVersion;
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/**
+ * Thrown by `SaveMigrator.migrate()` when the save file's `schemaVersion`
+ * is not a valid positive integer (e.g. `0`, `-1`, `NaN`, or `undefined`),
+ * or when the registered migration chain does not reach `CURRENT_SCHEMA_VERSION`
+ * (indicating a gap in the migrations).
+ */
+export class SaveMigrationError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'SaveMigrationError';
         Object.setPrototypeOf(this, new.target.prototype);
     }
 }

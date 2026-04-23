@@ -17,6 +17,7 @@ export type { SaveSerializer } from './SaveSerializer.js';
 export { JsonSaveSerializer } from './JsonSaveSerializer.js';
 export {
     CURRENT_SCHEMA_VERSION,
+    SaveMigrationError,
     SaveMigrator,
     SaveIntegrityError,
     SaveNotFoundError,
