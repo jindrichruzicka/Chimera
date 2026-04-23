@@ -15,6 +15,7 @@ import type { LogsAPI } from '@chimera/electron/preload/api-types.js';
 // file. The renderer tsconfig (lib: ["ES2022","DOM"]) provides the full types.
 declare const window: {
     addEventListener(type: string, listener: (event: Event) => void): void;
+    removeEventListener(type: string, listener: (event: Event) => void): void;
 };
 
 interface ErrorEvent extends Event {
@@ -50,6 +51,10 @@ function argsToMessage(args: unknown[]): string {
     return args.map((a) => (typeof a === 'string' ? a : String(a))).join(' ');
 }
 
+// ── idempotency guard ──────────────────────────────────────────────────────────
+
+let installed = false;
+
 // ── public API ─────────────────────────────────────────────────────────────────
 
 /**
@@ -61,14 +66,21 @@ function argsToMessage(args: unknown[]): string {
  * All logsApi.emit calls are wrapped in try/catch to prevent re-entry if
  * the IPC bridge itself throws.
  *
- * Call once during renderer boot (before React hydration). Calling twice
- * compounds the hooks — use installRendererLogger idempotently or guard
- * at the call site.
+ * Idempotent: calling more than once is a no-op until the returned teardown
+ * is called. The teardown restores original console methods, removes event
+ * listeners, and resets the installed guard.
  *
  * @param logsApi — the `window.__chimera.logs` namespace (or any compatible
  *   stub for tests).
+ * @returns A teardown function that undoes all patches.
  */
-export function installRendererLogger(logsApi: LogsAPI): void {
+export function installRendererLogger(logsApi: LogsAPI): () => void {
+    if (installed)
+        return (): void => {
+            /* already installed — no-op teardown */
+        };
+    installed = true;
+
     const origWarn = console.warn;
     const origError = console.error;
 
@@ -93,7 +105,7 @@ export function installRendererLogger(logsApi: LogsAPI): void {
     };
 
     // window 'error' event → level: 'fatal'
-    window.addEventListener('error', (event: Event) => {
+    const onError = (event: Event): void => {
         const e = event as ErrorEvent;
         const error = e.error instanceof Error ? e.error : undefined;
         const message = error?.message ?? e.message ?? 'Uncaught error';
@@ -108,10 +120,10 @@ export function installRendererLogger(logsApi: LogsAPI): void {
         } catch {
             // swallow
         }
-    });
+    };
 
     // window 'unhandledrejection' event → level: 'error'
-    window.addEventListener('unhandledrejection', (event: Event) => {
+    const onUnhandledRejection = (event: Event): void => {
         const e = event as PromiseRejectionEvent;
         const reason: unknown = e.reason;
         const message = reason instanceof Error ? reason.message : String(reason);
@@ -130,5 +142,16 @@ export function installRendererLogger(logsApi: LogsAPI): void {
         } catch {
             // swallow
         }
-    });
+    };
+
+    window.addEventListener('error', onError);
+    window.addEventListener('unhandledrejection', onUnhandledRejection);
+
+    return (): void => {
+        console.warn = origWarn;
+        console.error = origError;
+        window.removeEventListener('error', onError);
+        window.removeEventListener('unhandledrejection', onUnhandledRejection);
+        installed = false;
+    };
 }

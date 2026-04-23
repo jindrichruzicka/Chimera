@@ -7,6 +7,7 @@ import { installRendererLogger } from './rendererLogger.js';
 // let the root tsconfig (no DOM lib) type-check this file.
 declare const window: {
     addEventListener(type: string, listener: (event: Event) => void): void;
+    removeEventListener(type: string, listener: (event: Event) => void): void;
     dispatchEvent(event: Event): boolean;
 };
 
@@ -42,20 +43,24 @@ describe('installRendererLogger', () => {
     let logsApi: ReturnType<typeof makeLogsApi>;
     let origWarn: typeof console.warn;
     let origError: typeof console.error;
+    let teardown: (() => void) | undefined;
 
     beforeEach(() => {
         logsApi = makeLogsApi();
         origWarn = console.warn;
         origError = console.error;
+        teardown = undefined;
     });
 
     afterEach(() => {
+        teardown?.();
+        // Restore in case teardown didn't (should not be needed, but safety net)
         console.warn = origWarn;
         console.error = origError;
     });
 
     it('console.error triggers logsApi.emit with level error', () => {
-        installRendererLogger(logsApi);
+        teardown = installRendererLogger(logsApi);
         console.error('test error');
         expect(logsApi.emit).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -66,7 +71,7 @@ describe('installRendererLogger', () => {
     });
 
     it('console.warn triggers logsApi.emit with level warn', () => {
-        installRendererLogger(logsApi);
+        teardown = installRendererLogger(logsApi);
         console.warn('test warning');
         expect(logsApi.emit).toHaveBeenCalledWith(
             expect.objectContaining({
@@ -77,14 +82,14 @@ describe('installRendererLogger', () => {
     });
 
     it('console.log does NOT trigger logsApi.emit', () => {
-        installRendererLogger(logsApi);
+        teardown = installRendererLogger(logsApi);
         const callsBefore = (logsApi.emit as ReturnType<typeof vi.fn>).mock.calls.length;
         console.log('should not be forwarded');
         expect((logsApi.emit as ReturnType<typeof vi.fn>).mock.calls.length).toBe(callsBefore);
     });
 
     it('window error event calls logsApi.emit with level fatal', () => {
-        installRendererLogger(logsApi);
+        teardown = installRendererLogger(logsApi);
         const err = new Error('fatal');
         const event = new ErrorEvent('error', { message: 'fatal', error: err });
         window.dispatchEvent(event);
@@ -92,7 +97,7 @@ describe('installRendererLogger', () => {
     });
 
     it('window unhandledrejection event triggers logsApi.emit with level error', () => {
-        installRendererLogger(logsApi);
+        teardown = installRendererLogger(logsApi);
         const event = new PromiseRejectionEvent('unhandledrejection', {
             promise: Promise.resolve(),
             reason: new Error('rejected'),
@@ -102,7 +107,7 @@ describe('installRendererLogger', () => {
     });
 
     it('emitted entries have source.process = renderer', () => {
-        installRendererLogger(logsApi);
+        teardown = installRendererLogger(logsApi);
         console.error('source test');
         const call = (logsApi.emit as ReturnType<typeof vi.fn>).mock.calls[0]?.[0];
         expect(call?.source?.process).toBe('renderer');
@@ -111,7 +116,7 @@ describe('installRendererLogger', () => {
     it('does not replace a pre-existing window error handler (addEventListener composes)', () => {
         const spy = vi.fn();
         window.addEventListener('error', spy);
-        installRendererLogger(logsApi);
+        teardown = installRendererLogger(logsApi);
         const event = new ErrorEvent('error', {
             message: 'compose test',
             error: new Error('compose test'),
@@ -128,7 +133,7 @@ describe('installRendererLogger', () => {
             }),
             readRecent: vi.fn(() => Promise.resolve([])),
         };
-        installRendererLogger(throwingApi);
+        teardown = installRendererLogger(throwingApi);
         expect(() => {
             const event = new ErrorEvent('error', { message: 'boom', error: new Error('boom') });
             window.dispatchEvent(event);
@@ -142,9 +147,34 @@ describe('installRendererLogger', () => {
             }),
             readRecent: vi.fn(() => Promise.resolve([])),
         };
-        installRendererLogger(throwingApi);
+        teardown = installRendererLogger(throwingApi);
         expect(() => {
             console.error('should not throw');
         }).not.toThrow();
+    });
+
+    it('calling installRendererLogger twice does not double-wrap console.error', () => {
+        teardown = installRendererLogger(logsApi);
+        installRendererLogger(logsApi); // second call should be a no-op
+        console.error('once only');
+        expect(logsApi.emit).toHaveBeenCalledTimes(1);
+    });
+
+    it('teardown restores original console.warn and console.error', () => {
+        const td = installRendererLogger(logsApi);
+        td();
+        // After teardown, console methods should be the originals again
+        expect(console.warn).toBe(origWarn);
+        expect(console.error).toBe(origError);
+    });
+
+    it('teardown allows reinstalling (idempotent guard resets)', () => {
+        const td = installRendererLogger(logsApi);
+        td(); // teardown resets `installed` flag
+        const logsApi2 = makeLogsApi();
+        const td2 = installRendererLogger(logsApi2);
+        console.error('reinstalled');
+        expect(logsApi2.emit).toHaveBeenCalledTimes(1);
+        td2();
     });
 });
