@@ -481,22 +481,31 @@ Two exports from `electron/preload/extensions-api.ts`:
 | `registerExtension(name, factory)` | Called by the game's preload entry. Invokes `factory()` once and stores the result keyed by `name`. Throws on duplicate registration. |
 | `buildExtensionsApi()`             | Called once by `api.ts` when composing `ChimeraAPI`. Returns a **frozen** `ChimeraExtensions` object.                                 |
 
-**Invocation order constraint:** `registerExtension` must be called _before_ `api.ts` executes its module-level `contextBridge.exposeInMainWorld` call. In practice, this means the game's preload entry imports `registerExtension` and registers its API, then imports `api.ts` last (or the compiled bundle is ordered accordingly).
+**Invocation order constraint:** All `registerExtension` calls must complete before `api.ts` is _loaded_. ESM hoists `import` statements above body code, so the correct pattern is **two separate modules** — a registration module whose top-level body calls `registerExtension`, imported _before_ `api.ts`:
 
 ```typescript
-// Example: games/tactics/preload/index.ts
+// games/tactics/preload/register-tactics.ts  (loaded first)
 import { registerExtension } from '@chimera/core/electron/preload/extensions-api.js';
 import { createTacticsApi } from './tactics-api.js';
-// ... ipcRenderer port setup ...
-registerExtension('tactics', () => createTacticsApi(port));
+import { port } from './port.js'; // narrow IpcRendererPort built in this module
 
-// api.ts is imported/bundled after — exposeInMainWorld fires with extensions wired in.
+registerExtension('tactics', () => createTacticsApi(port));
 ```
+
+```typescript
+// games/tactics/preload/index.ts  (the BrowserWindow preload entry)
+// Import the registration module first — its top-level body runs registerExtension().
+import './register-tactics.js';
+// Then load core api.ts; buildExtensionsApi() runs at this point and captures the registration.
+import '@chimera/core/electron/preload/api.js';
+```
+
+Do **not** mix a body-level `registerExtension()` call and `import './api.js'` in the same file — ESM's static import hoisting means `api.js` always evaluates before any body code in the importing module.
 
 #### Security boundary
 
 - Extensions are registered in the **preload script** — same security context as all other preload code. Invariant #1 is unaffected: `GameSnapshot` never crosses IPC; extension APIs may only expose renderer-facing IPC method surfaces.
-- The frozen return value of `buildExtensionsApi()` prevents renderer-side mutation of the extension surface after `contextBridge` has published it.
+- `buildExtensionsApi()` freezes the returned object before it is passed to `exposeInMainWorld`. This is a defence-in-depth measure that prevents accidental mutation of the extensions map inside the preload module itself. Note: `contextBridge` independently clones values into the renderer world, so the freeze does not directly restrict renderer code — it guards the main-world (preload) side.
 - Core (`@chimera/core`) registers **zero** extensions in 1.0.0 — the registry is empty by default.
 
 #### Invariant
@@ -7356,7 +7365,7 @@ The 78 invariants are numbered stably; this index is purely navigational. A sing
 76. **`fromFloat()` is permitted only at content-load time for hard-coded constants. It must not be called inside `validate()`, `reduce()`, or any hot simulation path. Linting is enforced by a dedicated ESLint rule in CI. (See §4.31.)**
 77. **The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and every harness flag (`--dev-auto-host`, `--dev-auto-join`, `--dev-port`, `--dev-profile-id`, `--dev-game`, `--dev-scenario`) must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent. (See §4.32.)**
 78. **Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines. (See §4.32.)**
-79. **`registerExtension()` must be called before `contextBridge.exposeInMainWorld`. `buildExtensionsApi()` is called exactly once, immediately before that single `exposeInMainWorld` call. Any extension registered after `buildExtensionsApi()` returns is silently ignored — the frozen object has already been published. (See §4.1a.)**
+79. **All `registerExtension()` calls must complete before `api.ts` is loaded. `buildExtensionsApi()` is called exactly once, immediately before `contextBridge.exposeInMainWorld`. A late registration after `buildExtensionsApi()` has run will mutate the internal registry but the frozen copy already handed to `exposeInMainWorld` will not reflect it — callers must not rely on this behaviour. Use the two-module import pattern described in §4.1a. (See §4.1a.)**
 
 ---
 

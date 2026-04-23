@@ -69,14 +69,19 @@ export function registerExtension<TKey extends keyof ChimeraExtensions>(
  *
  * Called once by `api.ts` when composing the `ChimeraAPI` object that is
  * passed to `contextBridge.exposeInMainWorld`. The returned object is frozen
- * so that renderer-side code cannot mutate the extension surface.
+ * as a defence-in-depth measure against accidental mutation inside the preload
+ * module itself. Note: `contextBridge` independently clones values into the
+ * renderer world, so the freeze guards the main-world (preload) side only.
  *
- * @returns A frozen `ChimeraExtensions` record — empty when no extensions have
- *          been registered (the 1.0.0 default for core).
+ * @returns A frozen, partial `ChimeraExtensions` record. Keys are present only
+ *          for extensions that were registered via `registerExtension()`. In
+ *          `@chimera/core` 1.0.0 no extensions are registered, so the result
+ *          is an empty frozen object by default.
  */
-export function buildExtensionsApi(): ChimeraExtensions {
-    // `ChimeraExtensions` is an empty interface — any non-null object satisfies it.
-    // External packages that augment it must pair each declaration with a matching
-    // `registerExtension()` call; the runtime registry is the source of truth.
+export function buildExtensionsApi(): Readonly<Partial<ChimeraExtensions>> {
+    // `ChimeraExtensions` is an empty interface in core — any non-null object
+    // satisfies it. Keys are partial because a consuming package that augments
+    // the interface is not required to pair every declaration with a runtime
+    // `registerExtension()` call; the partial type makes this visible to callers.
     return Object.freeze({ ...registry });
 }

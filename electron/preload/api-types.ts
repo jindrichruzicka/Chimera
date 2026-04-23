@@ -271,10 +271,17 @@ export interface ChimeraAPI {
      * preload time via `registerExtension()` from `extensions-api.ts` and
      * extend the type via TypeScript declaration merging on `ChimeraExtensions`.
      *
+     * Keys are optional because `buildExtensionsApi()` returns a
+     * `Readonly<Partial<ChimeraExtensions>>` — a consuming package that augments
+     * `ChimeraExtensions` must also call `registerExtension()` to populate the
+     * runtime value, otherwise the field will be `undefined` at runtime.
+     * Always narrow the field before use:
+     *   `if (window.__chimera.extensions.tactics) { ... }`
+     *
      * Invariant: the object is frozen before it is passed to
      * `contextBridge.exposeInMainWorld`.
      */
-    readonly extensions: ChimeraExtensions;
+    readonly extensions: Readonly<Partial<ChimeraExtensions>>;
 }
 
 // ─── game namespace ───────────────────────────────────────────────────────────

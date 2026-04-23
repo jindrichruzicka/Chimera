@@ -5,7 +5,7 @@
 // no Electron module is needed here because extensions-api.ts has no IPC
 // or contextBridge dependency.
 
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // NOTE: The module is reset before every test so that the module-level
 // registry starts clean for each case (vi.resetModules + re-import).
@@ -23,8 +23,6 @@ async function reimportModule(): Promise<void> {
     buildExtensionsApi = b;
     registerExtension = r;
 }
-
-import { vi } from 'vitest';
 
 beforeEach(async () => {
     vi.resetModules();

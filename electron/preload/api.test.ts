@@ -101,4 +101,23 @@ describe('preload/api.ts', () => {
         const [channel] = ipcRendererSend.mock.calls[0] ?? [];
         expect(channel).toBe('chimera:game:send-action');
     });
+
+    it('integration: a registered extension survives through to the contextBridge payload', async () => {
+        // Register an extension BEFORE api.ts runs (simulating a game preload that
+        // imports the registration module first, then api.ts).
+        vi.resetModules();
+        const { registerExtension } = (await import('./extensions-api.js')) as {
+            registerExtension: (name: string, factory: () => unknown) => void;
+        };
+        registerExtension('testExt', () => ({ ping: () => 'pong' }));
+
+        // Now load api.ts — buildExtensionsApi() runs and captures the registration.
+        await import('./api.js');
+
+        const [, api] = exposeInMainWorld.mock.calls[0] ?? [];
+        const extensions = api?.['extensions'] as Record<string, Record<string, unknown>>;
+        expect(typeof extensions).toBe('object');
+        expect(typeof extensions['testExt']).toBe('object');
+        expect(typeof extensions['testExt']?.['ping']).toBe('function');
+    });
 });
