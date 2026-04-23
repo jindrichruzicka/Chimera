@@ -154,6 +154,7 @@ const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
 
     reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineSaveLoadPayload): BaseGameSnapshot {
         // Stub: returns snapshot unchanged. Actual save is performed by SaveManager.
+        // TODO(F18): wire post-pipeline save/load side-effect handler
         return state;
     },
 } satisfies ActionDefinition<EngineSaveLoadPayload>;
@@ -198,6 +199,7 @@ const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
 
     reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineSaveLoadPayload): BaseGameSnapshot {
         // Stub: returns snapshot unchanged. Actual load is performed by SaveManager.
+        // TODO(F18): wire post-pipeline save/load side-effect handler
         return state;
     },
 } satisfies ActionDefinition<EngineSaveLoadPayload>;

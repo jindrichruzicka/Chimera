@@ -106,6 +106,7 @@ export class SaveManager {
      */
     async restoreFromSave(slotId: string): Promise<SaveFile> {
         this.log.info('restoreFromSave', { slotId });
+        // TODO(F18): apply loaded SaveFile.checkpoint to the running SimulationHost
         return this.repository.load(slotId);
     }
 

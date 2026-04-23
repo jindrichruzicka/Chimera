@@ -355,6 +355,10 @@ describe('engine:save definition', () => {
             definition().reduce(frozen, { slotId: 'tactics/autosave' }, hostId, stubCtx),
         ).not.toThrow();
     });
+    // TODO(F18): post-pipeline save wiring is not yet implemented.
+    it.todo(
+        'dispatching engine:save should result in a file being written to the repository (post-pipeline wiring — F18)',
+    );
 });
 
 // ─── engine:load definition ───────────────────────────────────────────────────
@@ -444,4 +448,9 @@ describe('engine:load definition', () => {
             definition().reduce(frozen, { slotId: 'tactics/slot-1' }, hostId, stubCtx),
         ).not.toThrow();
     });
+
+    // TODO(F18): post-pipeline load wiring is not yet implemented.
+    it.todo(
+        'dispatching engine:load should result in the simulation state being replaced (post-pipeline wiring — F18)',
+    );
 });
