@@ -32,6 +32,13 @@ export interface CrashReporterOptions {
     /** Called before writing the crash dump on `uncaughtException`. */
     readonly autosave?: () => Promise<void>;
     /**
+     * Called in the `uncaughtException` path before `process.exit`, after all
+     * logging and dumping is complete. Use this to flush any async log sink
+     * (e.g. `pinoSink.flushSync()`) so buffered entries reach disk before the
+     * process terminates. Optional — if omitted, no flush is performed.
+     */
+    readonly flush?: () => void;
+    /**
      * Injection point for `process` — defaults to the real global `process`.
      * Injected in tests to avoid hooking the real process listeners.
      */
@@ -62,6 +69,7 @@ export function registerCrashReporter(options: CrashReporterOptions): void {
             logger,
             crashesDir,
             proc,
+            ...(options.flush !== undefined && { flush: options.flush }),
             ...(getSnapshot !== undefined && { getSnapshot }),
             ...(autosave !== undefined && { autosave }),
         });
@@ -81,6 +89,7 @@ async function handleUncaughtException(
         readonly logger: Logger;
         readonly crashesDir: string;
         readonly proc: NodeJS.Process;
+        readonly flush?: () => void;
         readonly getSnapshot?: () => unknown;
         readonly autosave?: () => Promise<void>;
     },
@@ -106,6 +115,8 @@ async function handleUncaughtException(
             logger.error('failed to write crash dump', e, {});
         }
     } finally {
+        // Flush any async log sink so buffered entries reach disk before exit.
+        options.flush?.();
         proc.exit(1);
     }
 }

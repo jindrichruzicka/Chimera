@@ -280,4 +280,40 @@ describe('registerCrashReporter', () => {
 
         expect(proc.exit).toHaveBeenCalledWith(1);
     });
+
+    it('calls the flush option before proc.exit on uncaughtException', async () => {
+        const logger = makeLogger();
+        const proc = makeProcess();
+        const app = makeApp();
+        const flushOrder: string[] = [];
+
+        const flush = vi.fn(() => {
+            flushOrder.push('flush');
+        });
+
+        // Capture exit order
+        const exitSpy = vi.spyOn(proc, 'exit').mockImplementation(() => {
+            flushOrder.push('exit');
+        });
+
+        const options: CrashReporterOptions = {
+            logger,
+            crashesDir: path.join(tmpDir, 'crashes'),
+            getSnapshot: () => null,
+            autosave: vi.fn(() => Promise.resolve()),
+            process: proc as unknown as NodeJS.Process,
+            app,
+            flush,
+        };
+
+        registerCrashReporter(options);
+        proc._emit('uncaughtException', new Error('flush test'));
+
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(flush).toHaveBeenCalledOnce();
+        // flush must happen BEFORE exit
+        expect(flushOrder.indexOf('flush')).toBeLessThan(flushOrder.indexOf('exit'));
+        exitSpy.mockRestore();
+    });
 });

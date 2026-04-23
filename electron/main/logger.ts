@@ -46,6 +46,15 @@ export interface LoggerSink {
     write(entry: LogEntry): void;
 }
 
+/**
+ * A {@link LoggerSink} that supports explicit flushing. Returned by
+ * `createPinoSink` so crash and shutdown paths can call `flushSync()`
+ * before the process exits to ensure all buffered async writes reach disk.
+ */
+export interface FlushableSink extends LoggerSink {
+    flushSync(): void;
+}
+
 export interface CreateLoggerOptions {
     /** Root `LogSource` — `module` is overridable via `child({ module })`. */
     readonly source: LogSource;
@@ -294,7 +303,7 @@ function pruneOldLogs(logsDir: string, now: Date): void {
  * Backed by {@link https://getpino.io pino}'s `destination()` (SonicBoom)
  * for efficient file writes. See §4.27.
  */
-export function createPinoSink(logsDir: string, now?: () => Date): LoggerSink {
+export function createPinoSink(logsDir: string, now?: () => Date): FlushableSink {
     fs.mkdirSync(logsDir, { recursive: true });
     pruneOldLogs(logsDir, now?.() ?? new Date());
 
@@ -306,18 +315,29 @@ export function createPinoSink(logsDir: string, now?: () => Date): LoggerSink {
             const today = toDateString(now?.() ?? new Date());
             if (today !== currentDateStr || dest === null) {
                 // Close the previous SonicBoom before rolling to a new file.
-                // flushSync() ensures any in-flight buffered bytes reach the OS
-                // (a no-op with sync:true but harmless); end() releases the file
-                // descriptor so the OS can reclaim it (Invariant #68).
+                // flushSync() drains buffered data to the fd; end() releases
+                // the file descriptor so the OS can reclaim it (Invariant #68).
                 if (dest !== null) {
                     dest.flushSync();
                     dest.end();
                 }
                 currentDateStr = today;
                 const filepath = path.join(logsDir, `chimera-${today}.log`);
-                dest = pino.destination({ dest: filepath, append: true, sync: true });
+                // Open the file synchronously to obtain an immediately-available fd.
+                // Passing a numeric fd to pino.destination sets SonicBoom.fd at
+                // construction time (no async open), so flushSync() can be called
+                // at any point (crash path, rollover, before-quit) without the
+                // "sonic boom is not ready yet" error. Writes remain async —
+                // SonicBoom buffers and drains independently of the write() caller,
+                // keeping the main-process event loop unblocked (§4.27).
+                const fd = fs.openSync(filepath, 'a');
+                dest = pino.destination({ dest: fd });
             }
             dest.write(JSON.stringify(entry) + '\n');
+        },
+
+        flushSync(): void {
+            dest?.flushSync();
         },
     };
 }

@@ -15,6 +15,7 @@ import {
     createMemorySink,
     type Logger,
     type LoggerSink,
+    type FlushableSink,
 } from './logger.js';
 import { registerCrashReporter } from './crash-reporter.js';
 import { SaveManager } from './SaveManager.js';
@@ -271,7 +272,7 @@ export function registerAppLifecycle(options: RegisterAppLifecycleOptions): void
  * 14 days on startup. The `logsDir` is injected by `main()` so this
  * function is pure (and therefore unit-testable without touching Electron).
  */
-function createProductionLoggerSink(logsDir: string): LoggerSink {
+function createProductionLoggerSink(logsDir: string): FlushableSink {
     return createPinoSink(logsDir);
 }
 
@@ -324,6 +325,9 @@ export async function main(): Promise<void> {
     registerCrashReporter({
         logger: crashLogger,
         crashesDir: path.join(userData, 'crashes'),
+        flush: () => {
+            pinoSink.flushSync();
+        },
         getSnapshot: () => null, // F14 wires the live snapshot when simulation is running
         autosave: () => {
             // TODO(F18): replace with real SaveManager.autosave(...) once the active
@@ -350,6 +354,12 @@ export async function main(): Promise<void> {
         app,
         saveManager,
         knownGameIds: [],
+    });
+
+    // Flush the async Pino sink on graceful shutdown so buffered log entries
+    // reach disk before the process exits (§4.27).
+    app.on('before-quit', () => {
+        pinoSink.flushSync();
     });
 
     // Expose the crash-status to the renderer via a dedicated IPC channel.

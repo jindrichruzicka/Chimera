@@ -92,6 +92,7 @@ const fsWriteFileSync = vi.fn<(path: string, data: string) => void>();
 const fsUnlinkSync = vi.fn<(path: string) => void>();
 const fsMkdirSync = vi.fn<(path: string, options?: unknown) => void>();
 const fsReaddirSync = vi.fn<(path: string) => string[]>(() => []);
+const fsOpenSync = vi.fn<(path: string, flags: string) => number>(() => 42);
 
 vi.mock('node:fs', () => ({
     existsSync: fsExistsSync,
@@ -99,6 +100,7 @@ vi.mock('node:fs', () => ({
     unlinkSync: fsUnlinkSync,
     mkdirSync: fsMkdirSync,
     readdirSync: fsReaddirSync,
+    openSync: fsOpenSync,
 }));
 
 const {

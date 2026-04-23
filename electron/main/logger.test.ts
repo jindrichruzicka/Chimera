@@ -212,6 +212,8 @@ describe('createPinoSink', () => {
         const sink = createPinoSink(tmpDir, () => fixedDate);
 
         sink.write(TEST_ENTRY);
+        // Flush the async SonicBoom buffer to disk before reading the file.
+        sink.flushSync();
 
         const logFile = path.join(tmpDir, 'chimera-2025-06-15.log');
         expect(fs.existsSync(logFile)).toBe(true);
@@ -264,6 +266,9 @@ describe('createPinoSink', () => {
 
         sink.write({ ...TEST_ENTRY, message: 'day one' });
         sink.write({ ...TEST_ENTRY, message: 'day two' });
+        // Flush the async buffer of the current (day-two) dest before reading.
+        // The day-one dest was flushed synchronously on rollover.
+        sink.flushSync();
 
         const day1 = path.join(tmpDir, 'chimera-2025-06-15.log');
         const day2 = path.join(tmpDir, 'chimera-2025-06-16.log');
@@ -321,6 +326,9 @@ describe('createPinoSink', () => {
         sink.write({ ...TEST_ENTRY, message: 'before-rollover' });
         sink.write({ ...TEST_ENTRY, message: 'after-rollover-1' });
         sink.write({ ...TEST_ENTRY, message: 'after-rollover-2' });
+        // Flush the async buffer of the current (day-21) dest before reading.
+        // The day-20 dest was flushed synchronously on rollover.
+        sink.flushSync();
 
         const oldFile = path.join(tmpDir, 'chimera-2025-06-20.log');
         const newFile = path.join(tmpDir, 'chimera-2025-06-21.log');
@@ -332,5 +340,41 @@ describe('createPinoSink', () => {
         expect(newContent).toContain('after-rollover-1');
         expect(newContent).toContain('after-rollover-2');
         expect(newContent).not.toContain('before-rollover');
+    });
+
+    it('createPinoSink returns a FlushableSink with a callable flushSync() method', () => {
+        const fixedDate = new Date('2025-06-15T12:00:00Z');
+        const sink = createPinoSink(tmpDir, () => fixedDate);
+
+        // FlushableSink contract: must have a flushSync method
+        expect(typeof (sink as { flushSync?: unknown }).flushSync).toBe('function');
+
+        // Write an entry so dest is initialised, then flushing should not throw
+        sink.write(TEST_ENTRY);
+        expect(() => (sink as { flushSync(): void }).flushSync()).not.toThrow();
+    });
+
+    it('pino.destination is not called with sync: true (async writes for main-loop health)', () => {
+        const capturedOpts: Parameters<typeof pino.destination>[] = [];
+        const realDestination = pino.destination.bind(pino);
+        const intercepted = vi
+            .spyOn(pino, 'destination')
+            .mockImplementation((...args: Parameters<typeof pino.destination>) => {
+                capturedOpts.push(args);
+                return realDestination(...args);
+            });
+
+        const fixedDate = new Date('2025-07-01T00:00:00Z');
+        const sink = createPinoSink(tmpDir, () => fixedDate);
+        sink.write(TEST_ENTRY);
+
+        // There must be at least one pino.destination call and none of them
+        // may use sync: true (which blocks the event loop on every write).
+        expect(capturedOpts.length).toBeGreaterThanOrEqual(1);
+        for (const [opts] of capturedOpts) {
+            expect((opts as { sync?: boolean } | undefined)?.sync).not.toBe(true);
+        }
+
+        intercepted.mockRestore();
     });
 });
