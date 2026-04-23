@@ -98,6 +98,7 @@ const {
     resolveChimeraEnv,
     registerCleanExitIpc,
     registerSaveManagerLifecycle,
+    parseHarnessFlags,
     main,
 } = await import('./index.js');
 
@@ -634,5 +635,76 @@ describe('registerSaveManagerLifecycle', () => {
         await registerSaveManagerLifecycle({ app: fakeApp, saveManager, knownGameIds: [] });
 
         expect(callOrder).toStrictEqual(['check', 'clear']);
+    });
+});
+
+// ─── parseHarnessFlags ────────────────────────────────────────────────────────
+
+describe('parseHarnessFlags', () => {
+    it('returns null when CHIMERA_DEV_HARNESS is absent', () => {
+        const result = parseHarnessFlags(
+            ['node', 'electron/main/index.js', '--dev-auto-host', '--dev-port=7777'],
+            {},
+        );
+        expect(result).toBeNull();
+    });
+
+    it('returns null when CHIMERA_DEV_HARNESS is not "1"', () => {
+        const result = parseHarnessFlags(['node', 'electron/main/index.js', '--dev-auto-host'], {
+            CHIMERA_DEV_HARNESS: '0',
+        });
+        expect(result).toBeNull();
+    });
+
+    it('parses --dev-auto-host flag when CHIMERA_DEV_HARNESS=1', () => {
+        const result = parseHarnessFlags(['node', 'electron/main/index.js', '--dev-auto-host'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(result?.autoHost).toBe(true);
+    });
+
+    it('parses --dev-port=7777 when CHIMERA_DEV_HARNESS=1', () => {
+        const result = parseHarnessFlags(['node', 'electron/main/index.js', '--dev-port=7777'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(result?.port).toBe(7777);
+    });
+
+    it('parses --dev-auto-join flag when CHIMERA_DEV_HARNESS=1', () => {
+        const result = parseHarnessFlags(['node', 'electron/main/index.js', '--dev-auto-join'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(result?.autoJoin).toBe(true);
+    });
+
+    it('parses --dev-game=tactics when CHIMERA_DEV_HARNESS=1', () => {
+        const result = parseHarnessFlags(['node', 'electron/main/index.js', '--dev-game=tactics'], {
+            CHIMERA_DEV_HARNESS: '1',
+        });
+        expect(result?.game).toBe('tactics');
+    });
+});
+
+// ─── CHIMERA_DEV_HARNESS production guard ────────────────────────────────────
+
+describe('main() CHIMERA_DEV_HARNESS guard', () => {
+    it('throws when CHIMERA_DEV_HARNESS=1 and NODE_ENV=production', async () => {
+        const origEnv = process.env;
+        process.env = { ...origEnv, CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'production' };
+        try {
+            await expect(main()).rejects.toThrow(/CHIMERA_DEV_HARNESS.*production/i);
+        } finally {
+            process.env = origEnv;
+        }
+    });
+
+    it('does not throw when CHIMERA_DEV_HARNESS=1 and NODE_ENV=development', async () => {
+        const origEnv = process.env;
+        process.env = { ...origEnv, CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'development' };
+        try {
+            await expect(main()).resolves.not.toThrow();
+        } finally {
+            process.env = origEnv;
+        }
     });
 });

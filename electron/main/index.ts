@@ -26,6 +26,56 @@ import { SETTINGS_CHANGE_CHANNEL } from '../preload/settings-api.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
+// ── HarnessFlags ──────────────────────────────────────────────────────────────
+
+/**
+ * Parsed harness flags from `process.argv`. Only populated when
+ * `CHIMERA_DEV_HARNESS=1` is present in the environment.
+ */
+export interface HarnessFlags {
+    readonly autoHost: boolean;
+    readonly autoJoin: boolean;
+    readonly port: number | undefined;
+    readonly profileId: string | undefined;
+    readonly game: string | undefined;
+    readonly scenario: string | undefined;
+}
+
+/**
+ * Parse the six harness flags from `argv` when `env.CHIMERA_DEV_HARNESS === '1'`.
+ * Returns `null` (and silently ignores any flag-shaped args) when the env var
+ * is absent or not `'1'`.
+ *
+ * Pure function — no I/O, no side effects; testable in isolation.
+ */
+export function parseHarnessFlags(
+    argv: readonly string[],
+    env: Readonly<Record<string, string | undefined>>,
+): HarnessFlags | null {
+    if (env['CHIMERA_DEV_HARNESS'] !== '1') return null;
+
+    const has = (flag: string): boolean => argv.includes(flag);
+    const val = (prefix: string): string | undefined => {
+        const entry = argv.find((a) => a.startsWith(prefix));
+        return entry !== undefined ? entry.slice(prefix.length) : undefined;
+    };
+    const numVal = (prefix: string): number | undefined => {
+        const s = val(prefix);
+        if (s === undefined) return undefined;
+        const n = Number(s);
+        return Number.isFinite(n) ? n : undefined;
+    };
+
+    return {
+        autoHost: has('--dev-auto-host'),
+        autoJoin: has('--dev-auto-join'),
+        port: numVal('--dev-port='),
+        profileId: val('--dev-profile-id='),
+        game: val('--dev-game='),
+        scenario: val('--dev-scenario='),
+    };
+}
+
 /**
  * Narrow slice of `Electron.App` required by `registerAppLifecycle`.
  * Declared here so callers (and tests) are not forced to construct a full
@@ -236,6 +286,11 @@ function createProductionLoggerSink(logsDir: string): LoggerSink {
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
 export async function main(): Promise<void> {
+    // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
+    if (process.env['CHIMERA_DEV_HARNESS'] === '1' && process.env.NODE_ENV === 'production') {
+        throw new Error('CHIMERA_DEV_HARNESS is enabled in a production build. Refusing to start.');
+    }
+
     const preloadPath = path.join(__dirname, '..', 'preload', 'api.js');
     const rendererEntry = path.join(__dirname, '..', '..', 'renderer', 'out', 'index.html');
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
@@ -330,11 +385,15 @@ export async function main(): Promise<void> {
     // broadcastFn pushes chimera:settings:change to all open renderer windows
     // so multi-window coherence is maintained (BLOCK-2 fix).
     const settingsRepo = new FileSettingsRepository(path.join(userData, 'settings'));
-    const settingsManager = new SettingsManager(settingsRepo, (gameId, settings) => {
-        BrowserWindow.getAllWindows().forEach((win) => {
-            win.webContents.send(SETTINGS_CHANGE_CHANNEL, gameId, settings);
-        });
-    });
+    const settingsManager = new SettingsManager(
+        settingsRepo,
+        (gameId, settings) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                win.webContents.send(SETTINGS_CHANGE_CHANNEL, gameId, settings);
+            });
+        },
+        logger.child({ module: 'settings' }),
+    );
     settingsManager.registerSchema(tacticsSettingsSchema);
     registerSettingsHandlers({
         ipcMain,
