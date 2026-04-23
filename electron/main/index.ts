@@ -353,7 +353,9 @@ export async function main(): Promise<void> {
     const { wasCleanExit } = await registerSaveManagerLifecycle({
         app,
         saveManager,
-        knownGameIds: [],
+        // 'tactics' is the only game registered at M1. When F18 adds more games,
+        // extend this array to match the registerSchema(...) calls below.
+        knownGameIds: ['tactics'],
     });
 
     // Flush the async Pino sink on graceful shutdown so buffered log entries

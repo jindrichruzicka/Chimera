@@ -508,6 +508,12 @@ describe('main', () => {
         expect(options?.autosave).toBeDefined();
         await expect(options?.autosave?.()).resolves.toBeUndefined();
     });
+
+    it('calls checkCrashRecovery with ["tactics"] as knownGameIds (BLOCK-2)', async () => {
+        await main();
+
+        expect(mockSaveManagerCheckCrash).toHaveBeenCalledWith(['tactics']);
+    });
 });
 
 // ─── registerSaveManagerLifecycle ────────────────────────────────────────────
