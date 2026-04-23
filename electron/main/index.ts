@@ -245,6 +245,11 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         }
     });
 
+    // WARN-6: log renderer load failures so silent white-screen bugs are diagnosable
+    window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+        console.error(`[chimera] renderer failed to load: ${errorCode} ${errorDescription}`);
+    });
+
     if (options.env === 'development') {
         window.webContents.openDevTools();
     }

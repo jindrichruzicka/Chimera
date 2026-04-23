@@ -311,6 +311,21 @@ describe('createMainWindow', () => {
         handler(safeEvent, 'file:///renderer/out/index.html');
         expect(safeEvent.preventDefault).not.toHaveBeenCalled();
     });
+
+    it('registers a did-fail-load handler on webContents (WARN-6)', () => {
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        }) as unknown as FakeBrowserWindow;
+
+        const onCalls = win.webContents.on.mock.calls as readonly (readonly [
+            string,
+            ...unknown[],
+        ])[];
+        const failLoadCall = onCalls.find(([event]) => event === 'did-fail-load');
+        expect(failLoadCall).toBeDefined();
+    });
 });
 
 describe('resolveChimeraEnv', () => {
