@@ -119,5 +119,9 @@ export interface SaveFile {
      * Empty until F27 is implemented. Typed now so save files written
      * at M1 are forward-compatible with F27 persistence.
      */
+    // KNOWN-LIMITATION(F27): Record<CommitmentId, ...> does not enforce the CommitmentId brand at
+    // the type level — TypeScript allows plain string keys in computed positions. Authoritative
+    // validation of all CommitmentId keys is deferred to the F27 commitment scheme implementation,
+    // which will own a dedicated validator at the deserialization boundary.
     readonly pendingCommitments: Record<CommitmentId, CommitmentEnvelope>;
 }
