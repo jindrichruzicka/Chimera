@@ -5,9 +5,13 @@
 // without actually spawning Electron or touching the filesystem.
 
 import { describe, it, expect, vi } from 'vitest';
+import type { SpawnOptions } from 'node:child_process';
 import {
     createRestartController,
     startWatching,
+    spawnElectronProcess,
+    killProcessGroup,
+    registerDevServerSignalHandlers,
     type RestartController,
     type FileWatcherLike,
     type WatchFn,
@@ -153,5 +157,102 @@ describe('startWatching', () => {
         vi.advanceTimersByTime(101);
         expect(onRestart).toHaveBeenCalledTimes(1);
         vi.useRealTimers();
+    });
+});
+
+// ── spawnElectronProcess ──────────────────────────────────────────────────────
+
+describe('spawnElectronProcess', () => {
+    it('spawns with detached: true and shell: false', () => {
+        const fakeChild = { pid: 42 };
+        const spawnFn = vi.fn(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
+        const env = { PATH: '/usr/bin' } as unknown as NodeJS.ProcessEnv;
+
+        spawnElectronProcess(spawnFn, env);
+
+        expect(spawnFn).toHaveBeenCalledOnce();
+        const [, , opts] = spawnFn.mock.calls[0] as unknown as [string, string[], SpawnOptions];
+        expect(opts).toMatchObject({ detached: true, shell: false });
+    });
+
+    it('spawns pnpm with the electron . args', () => {
+        const fakeChild = { pid: 42 };
+        const spawnFn = vi.fn(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
+
+        spawnElectronProcess(spawnFn, {} as unknown as NodeJS.ProcessEnv);
+
+        const [cmd, args] = spawnFn.mock.calls[0] as unknown as [string, string[], SpawnOptions];
+        expect(cmd).toBe('pnpm');
+        expect(args).toEqual(['electron', '.']);
+    });
+
+    it('sets CHIMERA_DEV_HARNESS and NODE_ENV in the child env', () => {
+        const fakeChild = { pid: 42 };
+        const spawnFn = vi.fn(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
+
+        spawnElectronProcess(spawnFn, { MY_VAR: 'hello' } as unknown as NodeJS.ProcessEnv);
+
+        const [, , opts] = spawnFn.mock.calls[0] as unknown as [string, string[], SpawnOptions];
+        expect(opts.env).toMatchObject({
+            MY_VAR: 'hello',
+            CHIMERA_DEV_HARNESS: '1',
+            NODE_ENV: 'development',
+        });
+    });
+});
+
+// ── killProcessGroup ──────────────────────────────────────────────────────────
+
+describe('killProcessGroup', () => {
+    it('calls proc.kill with the negative pid and SIGTERM', () => {
+        const fakeProc = { kill: vi.fn<(pid: number, signal: string) => true>() };
+        killProcessGroup(42, fakeProc as unknown as NodeJS.Process);
+        expect(fakeProc.kill).toHaveBeenCalledOnce();
+        expect(fakeProc.kill).toHaveBeenCalledWith(-42, 'SIGTERM');
+    });
+});
+
+// ── registerDevServerSignalHandlers ──────────────────────────────────────────
+
+describe('registerDevServerSignalHandlers', () => {
+    it('calls onSignal when SIGINT is received', () => {
+        const handlers = new Map<string, () => void>();
+        const fakeProc = {
+            on: vi.fn((event: string, handler: () => void) => {
+                handlers.set(event, handler);
+            }),
+        };
+        const onSignal = vi.fn<() => void>();
+
+        registerDevServerSignalHandlers(fakeProc as unknown as NodeJS.Process, onSignal);
+
+        handlers.get('SIGINT')?.();
+        expect(onSignal).toHaveBeenCalledOnce();
+    });
+
+    it('calls onSignal when SIGTERM is received', () => {
+        const handlers = new Map<string, () => void>();
+        const fakeProc = {
+            on: vi.fn((event: string, handler: () => void) => {
+                handlers.set(event, handler);
+            }),
+        };
+        const onSignal = vi.fn<() => void>();
+
+        registerDevServerSignalHandlers(fakeProc as unknown as NodeJS.Process, onSignal);
+
+        handlers.get('SIGTERM')?.();
+        expect(onSignal).toHaveBeenCalledOnce();
+    });
+
+    it('registers handlers for both SIGINT and SIGTERM', () => {
+        const fakeProc = { on: vi.fn() };
+        const onSignal = vi.fn<() => void>();
+
+        registerDevServerSignalHandlers(fakeProc as unknown as NodeJS.Process, onSignal);
+
+        const events = fakeProc.on.mock.calls.map(([e]) => e);
+        expect(events).toContain('SIGINT');
+        expect(events).toContain('SIGTERM');
     });
 });

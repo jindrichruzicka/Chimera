@@ -17,7 +17,7 @@
  *   fs.watch('renderer', { recursive: true }, (_, f) => ctrl.reportChange(f ?? ''));
  */
 
-import type { ChildProcess } from 'node:child_process';
+import type { ChildProcess, SpawnOptions } from 'node:child_process';
 
 // ── Public types ──────────────────────────────────────────────────────────────
 
@@ -107,22 +107,74 @@ export function startWatching(
 // `tsx tools/dev-server.ts`). It is excluded from the unit-test surface by
 // the `VITEST` guard, keeping the module boundary clean.
 
+// ── Electron process management (exported for unit testing) ───────────────────
+
+/**
+ * Minimal spawn signature that matches `childProcess.spawn` for the subset
+ * this module uses. Injected in unit tests via a vi.fn() stub.
+ */
+export type SpawnFn = (command: string, args: string[], options: SpawnOptions) => ChildProcess;
+
+/**
+ * Spawn the Electron app as a detached process group.
+ *
+ * Using `detached: true` and `shell: false` means the child and all of its
+ * descendants share a new process group id equal to `child.pid`. Killing via
+ * `process.kill(-child.pid, 'SIGTERM')` (see `killProcessGroup`) then
+ * terminates the entire group, preventing orphan `sh → pnpm → electron`
+ * chains that arise from `shell: true`.
+ */
+export function spawnElectronProcess(spawnFn: SpawnFn, env: NodeJS.ProcessEnv): ChildProcess {
+    return spawnFn('pnpm', ['electron', '.'], {
+        stdio: 'inherit',
+        detached: true,
+        shell: false,
+        env: { ...env, CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'development' },
+    });
+}
+
+/**
+ * Terminate the entire OS process group that `pid` belongs to.
+ *
+ * On POSIX, passing a negative pid to `process.kill` sends the signal to
+ * every process in the group (`kill(-pgid, signal)` semantics). On Windows,
+ * this behaves like `proc.kill(pid, signal)`.
+ */
+export function killProcessGroup(pid: number, proc: NodeJS.Process): void {
+    proc.kill(-pid, 'SIGTERM');
+}
+
+/**
+ * Register SIGINT and SIGTERM handlers that invoke `onSignal` before the
+ * dev-server exits. Used to propagate termination to the Electron child group
+ * so that pressing Ctrl-C in the terminal leaves no orphan processes.
+ */
+export function registerDevServerSignalHandlers(proc: NodeJS.Process, onSignal: () => void): void {
+    proc.on('SIGINT', onSignal);
+    proc.on('SIGTERM', onSignal);
+}
+
 if (process.env['VITEST'] === undefined) {
     const chokidar = await import('chokidar');
     const childProcess = await import('node:child_process');
 
     let child: ChildProcess | undefined;
 
-    const startElectron = (): void => {
-        if (child !== undefined) {
-            child.kill();
+    const killChild = (): void => {
+        if (child?.pid !== undefined) {
+            killProcessGroup(child.pid, process);
         }
-        child = childProcess.spawn('pnpm', ['electron', '.'], {
-            stdio: 'inherit',
-            env: { ...process.env, CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'development' },
-            shell: true,
-        });
     };
+
+    const startElectron = (): void => {
+        killChild();
+        child = spawnElectronProcess(childProcess.spawn, process.env);
+    };
+
+    registerDevServerSignalHandlers(process, () => {
+        killChild();
+        process.exit(0);
+    });
 
     const controller = createRestartController({
         onRestart: (p) => {
