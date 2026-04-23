@@ -408,6 +408,7 @@ export async function main(): Promise<void> {
         ipcMain,
         logger: logger.child({ module: 'logs' }),
         memorySink,
+        sink: combinedSink,
     });
 
     const createWindow = (): void => {

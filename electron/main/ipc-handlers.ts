@@ -63,10 +63,11 @@ import {
     UserSettingsPatchSchema,
     parseInvokeRequest,
 } from './ipc-schemas.js';
-import { createNoopLogger, type Logger, type MemorySink } from './logger.js';
+import { createNoopLogger, type Logger, type LoggerSink, type MemorySink } from './logger.js';
 import type { SettingsManager } from './SettingsManager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../preload/logs-api.js';
-import { LogEntrySchema } from './ipc-schemas.js';
+import { RendererLogEntrySchema } from './ipc-schemas.js';
+import type { LogEntry } from '@chimera/shared/logging.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -600,6 +601,17 @@ export interface RegisterLogsHandlersOptions {
      * Pass `createMemorySink()` from `logger.ts`.
      */
     readonly memorySink: MemorySink;
+    /**
+     * Sink that receives the fully-trusted, server-attributed {@link LogEntry}
+     * for each renderer emission. In production this is the combined sink
+     * (Pino file + memory ring buffer). In tests, pass a `createMemorySink()`
+     * to assert the corrected source and timestamp.
+     *
+     * Using a direct sink write (rather than the Logger API) ensures the
+     * entry's `source.process` and `timestamp` are set server-side and are
+     * never derived from the renderer-supplied payload (§9.1, Invariant #1).
+     */
+    readonly sink: LoggerSink;
 }
 
 /**
@@ -613,24 +625,41 @@ export interface RegisterLogsHandlersOptions {
  *   the in-memory ring buffer so the user can export recent logs.
  */
 export function registerLogsHandlers(options: RegisterLogsHandlersOptions): void {
-    const { ipcMain, logger, memorySink } = options;
+    const { ipcMain, memorySink } = options;
 
     ipcMain.on(LOGS_EMIT_CHANNEL, (_event, arg) => {
-        const result = LogEntrySchema.safeParse(arg);
+        const result = RendererLogEntrySchema.safeParse(arg);
         if (!result.success) {
-            // Silently drop — malformed renderer payload should never reach the
-            // logger (Invariant 1). Logging the error here would risk recursion.
+            // Silently drop — malformed renderer payload should never reach
+            // the sink (Invariant #1). Logging the error here would risk
+            // recursion since this handler IS the log emission path.
             return;
         }
-        const entry = result.data;
-        // Forward to the main-process logger at the declared level so it
-        // lands in the Pino file sink alongside main-process entries.
-        const ctx = entry.context ?? {};
-        if (entry.level === 'error' || entry.level === 'fatal') {
-            logger[entry.level](entry.message, undefined, ctx);
-        } else {
-            logger[entry.level](entry.message, ctx);
-        }
+        const parsed = result.data;
+        // Override source and timestamp server-side. The renderer is never
+        // trusted to self-identify its process or supply its own wall-clock
+        // time — any renderer-supplied `source.process` was already stripped
+        // by RendererLogEntrySchema; we add 'renderer' explicitly here
+        // (§9.1 IPC Attack Surface, Invariant #1).
+        const trustedEntry: LogEntry = {
+            level: parsed.level,
+            message: parsed.message,
+            timestamp: Date.now(),
+            source: { process: 'renderer' as const, module: parsed.source.module },
+            ...(parsed.context !== undefined ? { context: parsed.context } : {}),
+            ...(parsed.error !== undefined
+                ? {
+                      error: {
+                          name: parsed.error.name,
+                          message: parsed.error.message,
+                          ...(parsed.error.stack !== undefined
+                              ? { stack: parsed.error.stack }
+                              : {}),
+                      },
+                  }
+                : {}),
+        };
+        options.sink.write(trustedEntry);
     });
 
     ipcMain.handle(LOGS_READ_RECENT_CHANNEL, (_event, maxEntries) => {

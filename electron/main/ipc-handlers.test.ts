@@ -1002,6 +1002,7 @@ import {
     type LogsHandlersIpcMain,
 } from './ipc-handlers.js';
 import type { LogEntry } from '@chimera/shared/logging.js';
+import type { MemorySink } from './logger.js';
 
 function makeLogsIpcMainStub(): {
     readonly ipcMain: LogsHandlersIpcMain;
@@ -1028,48 +1029,94 @@ const VALID_ENTRY: LogEntry = {
     source: { process: 'renderer', module: 'test' },
 };
 
+/**
+ * Helper: build a `RegisterLogsHandlersOptions`-compatible set of stubs.
+ * `sink` is the LoggerSink the handler writes trusted entries to.
+ * `memorySink` is the ring buffer used by readRecent (may be the same sink).
+ */
+function makeLogsStubs(): {
+    readonly ipcStub: ReturnType<typeof makeLogsIpcMainStub>;
+    readonly sink: MemorySink;
+    readonly memorySink: MemorySink;
+    readonly logger: ReturnType<typeof createLogger>;
+} {
+    const sink = createMemorySink();
+    const memorySink = createMemorySink();
+    const logger = createLogger({ source: { process: 'main', module: 'root' }, sink: memorySink });
+    return { ipcStub: makeLogsIpcMainStub(), sink, memorySink, logger };
+}
+
 describe('registerLogsHandlers', () => {
     it('chimera:logs:emit handler rejects entries that fail Zod validation', () => {
-        const stub = makeLogsIpcMainStub();
-        const sink = createMemorySink();
-        const logger = createLogger({ source: { process: 'main', module: 'root' }, sink });
-        registerLogsHandlers({ ipcMain: stub.ipcMain, logger, memorySink: sink });
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
 
-        const handler = stub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
         const initialCount = sink.entries.length;
         // Malformed: missing required fields
         expect(() => handler({}, { message: 'bad' })).not.toThrow();
-        // Should NOT have added a new log entry from the bad payload
+        // Sink must NOT receive a new entry from the bad payload
         expect(sink.entries.length).toBe(initialCount);
     });
 
-    it('chimera:logs:emit handler forwards a valid LogEntry to the logger', () => {
-        const stub = makeLogsIpcMainStub();
-        const sink = createMemorySink();
-        const logger = createLogger({ source: { process: 'main', module: 'root' }, sink });
-        registerLogsHandlers({ ipcMain: stub.ipcMain, logger, memorySink: sink });
+    it('chimera:logs:emit handler forwards a valid LogEntry to the sink', () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
 
-        const handler = stub.listeners.get(LOGS_EMIT_CHANNEL)!;
-        sink.clear();
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
         handler({}, VALID_ENTRY);
         const last = sink.entries.at(-1);
         expect(last?.message).toBe('hello');
         expect(last?.level).toBe('info');
     });
 
-    it('chimera:logs:readRecent returns the last N entries from the memory sink', async () => {
-        const stub = makeLogsIpcMainStub();
-        const sink = createMemorySink();
-        const logger = createLogger({ source: { process: 'main', module: 'root' }, sink });
+    it('overrides source.process to "renderer" even when the renderer sends source.process: "main"', () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
 
-        // Seed the sink with 5 entries
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        // Renderer claims to be 'main' — must be overridden
+        handler({}, { ...VALID_ENTRY, source: { process: 'main', module: 'test' } });
+        const last = sink.entries.at(-1);
+        expect(last?.source.process).toBe('renderer');
+        expect(last?.source.module).toBe('test');
+    });
+
+    it('overrides timestamp with the server-side wall clock regardless of renderer-supplied value', () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const before = Date.now();
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        // Renderer supplies a backdated timestamp (epoch)
+        handler({}, { ...VALID_ENTRY, timestamp: 1 });
+        const after = Date.now();
+        const last = sink.entries.at(-1);
+        expect(last?.timestamp).toBeGreaterThanOrEqual(before);
+        expect(last?.timestamp).toBeLessThanOrEqual(after);
+    });
+
+    it('preserves source.module from the validated renderer payload', () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const handler = ipcStub.listeners.get(LOGS_EMIT_CHANNEL)!;
+        handler({}, { ...VALID_ENTRY, source: { process: 'renderer', module: 'my-module' } });
+        const last = sink.entries.at(-1);
+        expect(last?.source.module).toBe('my-module');
+    });
+
+    it('chimera:logs:readRecent returns the last N entries from the memory sink', async () => {
+        const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
+
+        // Seed the memorySink with 5 entries
         for (let i = 0; i < 5; i++) {
-            sink.write({ ...VALID_ENTRY, message: `entry-${i}` });
+            memorySink.write({ ...VALID_ENTRY, message: `entry-${i}` });
         }
 
-        registerLogsHandlers({ ipcMain: stub.ipcMain, logger, memorySink: sink });
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
 
-        const handler = stub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
+        const handler = ipcStub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
         const result = (await Promise.resolve(handler({}, 3))) as LogEntry[];
         expect(result).toHaveLength(3);
         expect(result[0]?.message).toBe('entry-2');

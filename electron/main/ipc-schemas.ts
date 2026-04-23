@@ -194,3 +194,32 @@ export const LogEntrySchema = z.object({
     context: z.record(z.string(), z.unknown()).optional(),
     error: LogErrorInfoSchema.optional(),
 });
+
+/**
+ * Schema for the `source` field of a {@link LogEntry} arriving from the
+ * renderer via `chimera:logs:emit`. Only `module` is validated — `process`
+ * is intentionally absent so any renderer-supplied value is stripped by
+ * Zod before the handler sees it. The handler unconditionally sets
+ * `process: 'renderer'` on the trusted entry (§9.1, Invariant #1).
+ */
+export const RendererLogSourceSchema = z.object({
+    module: z.string(),
+});
+
+/**
+ * Schema for a {@link LogEntry} received from the renderer via
+ * `chimera:logs:emit`. Differs from {@link LogEntrySchema} in that
+ * `source.process` is **not part of the schema** — any renderer-supplied
+ * `process` value is stripped by Zod's default object parsing, and the
+ * handler replaces it with the server-side constant `'renderer'`.
+ * `timestamp` is also validated (must be a number) but the handler
+ * overrides it with `Date.now()` after parsing (§9.1, Invariant #1).
+ */
+export const RendererLogEntrySchema = z.object({
+    level: LogLevelSchema,
+    message: z.string(),
+    timestamp: z.number(),
+    source: RendererLogSourceSchema,
+    context: z.record(z.string(), z.unknown()).optional(),
+    error: LogErrorInfoSchema.optional(),
+});

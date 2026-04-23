@@ -7,6 +7,7 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     PlayerIdSchema,
+    RendererLogEntrySchema,
     SaveRequestSchema,
     SlotIdSchema,
     UserSettingsPatchSchema,
@@ -268,5 +269,71 @@ describe('EngineActionSchema', () => {
                 payload: null,
             }).success,
         ).toBe(false);
+    });
+});
+
+describe('RendererLogEntrySchema', () => {
+    const VALID_RENDERER_ENTRY = {
+        level: 'info',
+        message: 'hello from renderer',
+        timestamp: 123456789,
+        source: { module: 'ui-module' },
+    };
+
+    it('accepts a valid renderer log entry with source.module only', () => {
+        expect(RendererLogEntrySchema.safeParse(VALID_RENDERER_ENTRY).success).toBe(true);
+    });
+
+    it('strips source.process entirely — renderer-supplied process is never in the parsed output', () => {
+        // A renderer claiming to be 'main' must not appear in the parsed source.
+        const result = RendererLogEntrySchema.safeParse({
+            ...VALID_RENDERER_ENTRY,
+            source: { process: 'main', module: 'ui-module' },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(Object.keys(result.data.source)).not.toContain('process');
+        }
+    });
+
+    it('strips source.process when renderer sends "simulation" — forged identity is dropped', () => {
+        const result = RendererLogEntrySchema.safeParse({
+            ...VALID_RENDERER_ENTRY,
+            source: { process: 'simulation', module: 'sim-module' },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(Object.keys(result.data.source)).not.toContain('process');
+        }
+    });
+
+    it('rejects an entry with missing source.module', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                source: { process: 'renderer' },
+            }).success,
+        ).toBe(false);
+    });
+
+    it('rejects an entry with an invalid log level', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({ ...VALID_RENDERER_ENTRY, level: 'verbose' }).success,
+        ).toBe(false);
+    });
+
+    it('rejects an entry missing the message field', () => {
+        const { message: _msg, ...withoutMessage } = VALID_RENDERER_ENTRY;
+        expect(RendererLogEntrySchema.safeParse(withoutMessage).success).toBe(false);
+    });
+
+    it('accepts optional context and error fields', () => {
+        expect(
+            RendererLogEntrySchema.safeParse({
+                ...VALID_RENDERER_ENTRY,
+                context: { userId: 'u1' },
+                error: { name: 'Error', message: 'oops' },
+            }).success,
+        ).toBe(true);
     });
 });
