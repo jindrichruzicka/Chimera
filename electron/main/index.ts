@@ -320,10 +320,17 @@ export async function main(): Promise<void> {
 
     // Register crash reporter early — before any window opens — so all
     // subsequent crashes are captured (Invariant 68).
+    const crashLogger = logger.child({ module: 'crash' });
     registerCrashReporter({
-        logger: logger.child({ module: 'crash' }),
+        logger: crashLogger,
         crashesDir: path.join(userData, 'crashes'),
         getSnapshot: () => null, // F14 wires the live snapshot when simulation is running
+        autosave: () => {
+            // TODO(F18): replace with real SaveManager.autosave(...) once the active
+            // game state is accessible in the crash handler.
+            crashLogger.warn('autosave not yet wired; crash may lose unsaved game state');
+            return Promise.resolve();
+        },
     });
 
     // Create the SaveManager. InMemorySaveRepository is a temporary placeholder

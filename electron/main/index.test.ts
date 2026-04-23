@@ -27,6 +27,15 @@ vi.mock('./SaveManager.js', () => ({
     })),
 }));
 
+// ── crash-reporter mock — spy on registerCrashReporter options ────────────────
+const { mockRegisterCrashReporter } = vi.hoisted(() => ({
+    mockRegisterCrashReporter: vi.fn<(options: { autosave?: () => Promise<void> }) => void>(),
+}));
+
+vi.mock('./crash-reporter.js', () => ({
+    registerCrashReporter: mockRegisterCrashReporter,
+}));
+
 type AppEventHandler = (...args: readonly unknown[]) => void;
 
 interface FakeWebPreferences {
@@ -369,6 +378,7 @@ describe('main', () => {
         mockSaveManagerMarkExit.mockClear();
         mockSaveManagerCheckCrash.mockClear();
         mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
+        mockRegisterCrashReporter.mockClear();
     });
 
     it('does not call fsExistsSync — only the async SaveManager path owns the clean-exit flag', async () => {
@@ -475,6 +485,22 @@ describe('main', () => {
         // other filename would mean the renderer is wired to a bridge that
         // is not the one guarded by the typed ChimeraAPI surface.
         expect(win?.options.webPreferences?.preload).toMatch(/[/\\]preload[/\\]api\.js$/);
+    });
+
+    it('passes a non-undefined autosave callback to registerCrashReporter', async () => {
+        await main();
+
+        expect(mockRegisterCrashReporter).toHaveBeenCalledOnce();
+        const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
+        expect(options?.autosave).toBeDefined();
+    });
+
+    it('autosave callback resolves without throwing (TODO F18 stub)', async () => {
+        await main();
+
+        const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
+        expect(options?.autosave).toBeDefined();
+        await expect(options?.autosave?.()).resolves.toBeUndefined();
     });
 });
 
