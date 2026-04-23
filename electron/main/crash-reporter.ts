@@ -61,6 +61,7 @@ export function registerCrashReporter(options: CrashReporterOptions): void {
         void handleUncaughtException(err, {
             logger,
             crashesDir,
+            proc,
             ...(getSnapshot !== undefined && { getSnapshot }),
             ...(autosave !== undefined && { autosave }),
         });
@@ -79,28 +80,33 @@ async function handleUncaughtException(
     options: {
         readonly logger: Logger;
         readonly crashesDir: string;
+        readonly proc: NodeJS.Process;
         readonly getSnapshot?: () => unknown;
         readonly autosave?: () => Promise<void>;
     },
 ): Promise<void> {
-    const { logger, crashesDir, getSnapshot, autosave } = options;
+    const { logger, crashesDir, proc, getSnapshot, autosave } = options;
 
     logger.fatal('uncaughtException — writing crash dump', err, { stack: err.stack });
 
-    if (autosave !== undefined) {
-        try {
-            await autosave();
-        } catch (saveErr) {
-            const e = saveErr instanceof Error ? saveErr : new Error(String(saveErr));
-            logger.error('autosave failed during crash handling', e, {});
-        }
-    }
-
     try {
-        writeCrashDump(crashesDir, err, getSnapshot?.() ?? null);
-    } catch (writeErr) {
-        const e = writeErr instanceof Error ? writeErr : new Error(String(writeErr));
-        logger.error('failed to write crash dump', e, {});
+        if (autosave !== undefined) {
+            try {
+                await autosave();
+            } catch (saveErr) {
+                const e = saveErr instanceof Error ? saveErr : new Error(String(saveErr));
+                logger.error('autosave failed during crash handling', e, {});
+            }
+        }
+
+        try {
+            writeCrashDump(crashesDir, err, getSnapshot?.() ?? null);
+        } catch (writeErr) {
+            const e = writeErr instanceof Error ? writeErr : new Error(String(writeErr));
+            logger.error('failed to write crash dump', e, {});
+        }
+    } finally {
+        proc.exit(1);
     }
 }
 

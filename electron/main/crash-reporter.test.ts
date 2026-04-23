@@ -89,6 +89,7 @@ describe('registerCrashReporter', () => {
         const files = fs.readdirSync(path.join(tmpDir, 'crashes'));
         const dumpFile = files.find((f) => f.startsWith('crash-') && f.endsWith('.json'));
         expect(dumpFile).toBeDefined();
+        expect(proc.exit).toHaveBeenCalledWith(1);
     });
 
     it('writes the crash dump atomically — final .json exists and no .tmp remains', async () => {
@@ -116,6 +117,7 @@ describe('registerCrashReporter', () => {
         const tmpFiles = files.filter((f) => f.endsWith('.tmp'));
         expect(jsonFiles.length).toBeGreaterThanOrEqual(1);
         expect(tmpFiles.length).toBe(0); // no leftover .tmp after atomic rename
+        expect(proc.exit).toHaveBeenCalledWith(1);
     });
 
     it('calls autosave before writing the crash dump', async () => {
@@ -156,6 +158,7 @@ describe('registerCrashReporter', () => {
         // But dump must exist after everything settles
         const files = fs.readdirSync(crashesDir);
         expect(files.some((f) => f.endsWith('.json'))).toBe(true);
+        expect(proc.exit).toHaveBeenCalledWith(1);
     });
 
     it('unhandledRejection does NOT call process.exit', async () => {
@@ -205,6 +208,7 @@ describe('registerCrashReporter', () => {
             err,
             expect.anything(),
         );
+        expect(proc.exit).toHaveBeenCalledWith(1);
     });
 
     it('logs at error on unhandledRejection', async () => {
@@ -227,5 +231,53 @@ describe('registerCrashReporter', () => {
         await new Promise((r) => setTimeout(r, 50));
 
         expect(logger.error).toHaveBeenCalled();
+    });
+
+    it('calls proc.exit(1) even when autosave rejects', async () => {
+        const logger = makeLogger();
+        const proc = makeProcess();
+        const app = makeApp();
+
+        const options: CrashReporterOptions = {
+            logger,
+            crashesDir: path.join(tmpDir, 'crashes'),
+            getSnapshot: () => null,
+            autosave: vi.fn(() => Promise.reject(new Error('autosave blew up'))),
+            process: proc as unknown as NodeJS.Process,
+            app,
+        };
+
+        registerCrashReporter(options);
+        proc._emit('uncaughtException', new Error('crash with bad autosave'));
+
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(proc.exit).toHaveBeenCalledWith(1);
+    });
+
+    it('calls proc.exit(1) even when writeCrashDump throws (unwritable crashesDir)', async () => {
+        const logger = makeLogger();
+        const proc = makeProcess();
+        const app = makeApp();
+        // Use a path that will cause writeCrashDump to fail:
+        // create a file where the directory should be so mkdirSync throws
+        const badCrashesDir = path.join(tmpDir, 'not-a-dir');
+        fs.writeFileSync(badCrashesDir, 'I am a file, not a directory');
+
+        const options: CrashReporterOptions = {
+            logger,
+            crashesDir: badCrashesDir,
+            getSnapshot: () => null,
+            autosave: vi.fn(() => Promise.resolve()),
+            process: proc as unknown as NodeJS.Process,
+            app,
+        };
+
+        registerCrashReporter(options);
+        proc._emit('uncaughtException', new Error('crash with bad dump path'));
+
+        await new Promise((r) => setTimeout(r, 100));
+
+        expect(proc.exit).toHaveBeenCalledWith(1);
     });
 });
