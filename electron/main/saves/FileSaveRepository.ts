@@ -40,6 +40,14 @@ import { computeBodyChecksum } from '@chimera/simulation/persistence/SaveChecksu
 const FILE_EXT = '.chimera';
 
 /**
+ * Maximum number of save-file entries read in parallel by `list()`.
+ *
+ * Capping parallelism at this value prevents file-descriptor exhaustion
+ * (EMFILE) when a user has hundreds of save slots (issue #139 — WARN-9).
+ */
+export const LIST_CONCURRENCY = 16;
+
+/**
  * Thrown when a slot-ID component (gameId or slotName) fails the allowlist
  * validation that prevents path traversal (OWASP A01, invariant #128-fix).
  *
@@ -128,19 +136,21 @@ export class FileSaveRepository implements SaveRepository {
             throw err;
         });
 
-        const metas = await Promise.all(
-            entries
-                .filter((name) => name.endsWith(FILE_EXT))
-                .map(async (name): Promise<SaveSlotMeta> => {
-                    const filePath = path.join(dir, name);
-                    const [raw, stat] = await Promise.all([
-                        fs.readFile(filePath),
-                        fs.stat(filePath),
-                    ]);
-                    const file = await this.serializer.deserialize(raw);
-                    return FileSaveRepository.fileToMeta(file, stat.size);
-                }),
-        );
+        const chimeraPaths = entries
+            .filter((name) => name.endsWith(FILE_EXT))
+            .map((name) => path.join(dir, name));
+
+        const readMeta = async (filePath: string): Promise<SaveSlotMeta> => {
+            const [raw, stat] = await Promise.all([fs.readFile(filePath), fs.stat(filePath)]);
+            const file = await this.serializer.deserialize(raw);
+            return FileSaveRepository.fileToMeta(file, stat.size);
+        };
+
+        const metas: SaveSlotMeta[] = [];
+        for (let i = 0; i < chimeraPaths.length; i += LIST_CONCURRENCY) {
+            const chunk = chimeraPaths.slice(i, i + LIST_CONCURRENCY);
+            metas.push(...(await Promise.all(chunk.map(readMeta))));
+        }
 
         return metas.sort((a, b) => b.savedAt - a.savedAt);
     }
