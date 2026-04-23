@@ -310,4 +310,6 @@ export interface SystemAPI {
     onConnectionStatus(cb: (status: ConnectionStatus) => void): Unsubscribe;
     platform(): Promise<{ os: 'macos' | 'windows' | 'linux'; version: string }>;
     quit(): void;
+    /** Relaunches the Electron application (app.relaunch() + app.exit(0)). */
+    relaunch(): void;
 }

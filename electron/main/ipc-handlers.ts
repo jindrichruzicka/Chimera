@@ -17,6 +17,7 @@
 import {
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
+    SYSTEM_RELAUNCH_CHANNEL,
     type PlatformInfo,
 } from '../preload/system-api.js';
 import {
@@ -72,6 +73,7 @@ import type { LogEntry } from '@chimera/shared/logging.js';
 export {
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
+    SYSTEM_RELAUNCH_CHANNEL,
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
@@ -110,6 +112,10 @@ export interface SystemHandlersIpcMain {
  */
 export interface SystemHandlersAppHost {
     quit(): void;
+    /** Schedules a relaunch on next exit. Call `exit(0)` immediately after. */
+    relaunch(): void;
+    /** Exits the Electron process immediately with the given code. */
+    exit(code: number): void;
 }
 
 export interface RegisterSystemHandlersOptions {
@@ -156,7 +162,7 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
     const { ipcMain, app, platform, electronVersion } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:system:* handlers', {
-        channels: [SYSTEM_PLATFORM_CHANNEL, SYSTEM_QUIT_CHANNEL],
+        channels: [SYSTEM_PLATFORM_CHANNEL, SYSTEM_QUIT_CHANNEL, SYSTEM_RELAUNCH_CHANNEL],
     });
 
     ipcMain.handle(SYSTEM_PLATFORM_CHANNEL, () => {
@@ -169,6 +175,11 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
 
     ipcMain.on(SYSTEM_QUIT_CHANNEL, () => {
         app.quit();
+    });
+
+    ipcMain.on(SYSTEM_RELAUNCH_CHANNEL, () => {
+        app.relaunch();
+        app.exit(0);
     });
 }
 

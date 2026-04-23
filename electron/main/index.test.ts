@@ -68,6 +68,8 @@ class FakeBrowserWindow {
 
 const appOn = vi.fn<(event: string, handler: AppEventHandler) => void>();
 const appQuit = vi.fn<() => void>();
+const appRelaunch = vi.fn<() => void>();
+const appExit = vi.fn<(code: number) => void>();
 const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
 const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
@@ -77,6 +79,8 @@ vi.mock('electron', () => ({
     app: {
         on: appOn,
         quit: appQuit,
+        relaunch: appRelaunch,
+        exit: appExit,
         whenReady: appWhenReady,
         getPath: appGetPath,
     },

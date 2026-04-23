@@ -20,6 +20,9 @@ export const SYSTEM_PLATFORM_CHANNEL = 'chimera:system:platform';
 /** `ipcRenderer.send` target for {@link SystemAPI.quit}. */
 export const SYSTEM_QUIT_CHANNEL = 'chimera:system:quit';
 
+/** `ipcRenderer.send` target for {@link SystemAPI.relaunch}. */
+export const SYSTEM_RELAUNCH_CHANNEL = 'chimera:system:relaunch';
+
 /**
  * `ipcRenderer.on` target for {@link SystemAPI.onConnectionStatus}. The main
  * process pushes status updates via `webContents.send` on this channel.
@@ -70,6 +73,9 @@ export function createSystemApi(ipc: SystemApiIpcPort): SystemAPI {
                 ),
         quit: () => {
             ipc.send(SYSTEM_QUIT_CHANNEL);
+        },
+        relaunch: () => {
+            ipc.send(SYSTEM_RELAUNCH_CHANNEL);
         },
         onConnectionStatus: (cb: (status: ConnectionStatus) => void): Unsubscribe =>
             subscribePush<ConnectionStatus>(ipc, SYSTEM_CONNECTION_STATUS_CHANNEL, cb),

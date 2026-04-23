@@ -13,6 +13,7 @@ function makeBridge(
             platform,
             onConnectionStatus: () => () => undefined,
             quit: () => undefined,
+            relaunch: () => undefined,
         },
     };
 }

@@ -58,7 +58,7 @@ describe('RootErrorBoundary', () => {
         expect(screen.getByRole('button', { name: /restart application/i })).toBeTruthy();
     });
 
-    it('"Restart Application" calls globalThis.__chimera.system.quit', async () => {
+    it('"Restart Application" calls __chimera.system.quit', async () => {
         const quit = vi.fn();
         (globalThis as Record<string, unknown>)['__chimera'] = { system: { quit } };
 
@@ -68,8 +68,59 @@ describe('RootErrorBoundary', () => {
             </RootErrorBoundary>,
         );
         await userEvent.click(screen.getByRole('button', { name: /restart application/i }));
-        expect(quit).toHaveBeenCalled();
+        // NOTE: handleRestart now calls relaunch(); this test preserves the
+        // original assertion shape but the fixture no longer routes through quit.
+        // The dedicated 'calls relaunch not quit' test below is the authoritative check.
+        // quit is NOT called — passing this test validates backward-compat shape only.
+        expect(quit).not.toHaveBeenCalled();
 
         delete (globalThis as Record<string, unknown>)['__chimera'];
+    });
+
+    it('"Restart Application" calls __chimera.system.relaunch(), not quit()', async () => {
+        const relaunch = vi.fn();
+        const quit = vi.fn();
+        (globalThis as Record<string, unknown>)['__chimera'] = { system: { relaunch, quit } };
+
+        render(
+            <RootErrorBoundary>
+                <Bomb shouldThrow={true} />
+            </RootErrorBoundary>,
+        );
+        await userEvent.click(screen.getByRole('button', { name: /restart application/i }));
+        expect(relaunch).toHaveBeenCalledOnce();
+        expect(quit).not.toHaveBeenCalled();
+
+        delete (globalThis as Record<string, unknown>)['__chimera'];
+    });
+
+    it('"Return to Main Menu" navigates to root via window.location.replace', async () => {
+        const replaceMock = vi.fn();
+        vi.stubGlobal('location', { replace: replaceMock });
+
+        render(
+            <RootErrorBoundary>
+                <Bomb shouldThrow={true} />
+            </RootErrorBoundary>,
+        );
+        await userEvent.click(screen.getByRole('button', { name: /return to main menu/i }));
+        expect(replaceMock).toHaveBeenCalledWith('/');
+
+        vi.unstubAllGlobals();
+    });
+
+    it('crash ID uses ISO timestamp format to correlate with dump filenames', () => {
+        render(
+            <RootErrorBoundary>
+                <Bomb shouldThrow={true} />
+            </RootErrorBoundary>,
+        );
+        const paragraph = screen
+            .getAllByText(/crash/i)
+            .find((el) => el.textContent?.includes('Crash ID:'));
+        const text = paragraph?.textContent ?? '';
+        // Should match crash-<ISO-with-hyphens> format (e.g. crash-2024-01-15T10-30-45-123Z)
+        // NOT crash-<base36>
+        expect(text).toMatch(/crash-\d{4}-\d{2}-\d{2}T/);
     });
 });

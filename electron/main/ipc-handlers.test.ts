@@ -19,6 +19,7 @@ import {
     SETTINGS_UPDATE_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
+    SYSTEM_RELAUNCH_CHANNEL,
     mapPlatform,
     registerGameHandlers,
     registerLobbyHandlers,
@@ -97,7 +98,7 @@ describe('mapPlatform', () => {
 describe('registerSystemHandlers', () => {
     it('registers chimera:system:platform as an invoke handler returning { os, version }', async () => {
         const stub = makeIpcMainStub();
-        const app: SystemHandlersAppHost = { quit: vi.fn() };
+        const app: SystemHandlersAppHost = { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() };
         registerSystemHandlers({
             ipcMain: stub.ipcMain,
             app,
@@ -115,7 +116,7 @@ describe('registerSystemHandlers', () => {
     it('registers chimera:system:quit as a send listener that calls app.quit()', () => {
         const stub = makeIpcMainStub();
         const quit = vi.fn();
-        const app: SystemHandlersAppHost = { quit };
+        const app: SystemHandlersAppHost = { quit, relaunch: vi.fn(), exit: vi.fn() };
         registerSystemHandlers({
             ipcMain: stub.ipcMain,
             app,
@@ -130,17 +131,38 @@ describe('registerSystemHandlers', () => {
         expect(quit).toHaveBeenCalledOnce();
     });
 
-    it('registers exactly the two system channels (no cross-namespace leakage)', () => {
+    it('registers chimera:system:relaunch as a send listener that calls app.relaunch() then app.exit(0)', () => {
+        const stub = makeIpcMainStub();
+        const quit = vi.fn();
+        const relaunch = vi.fn();
+        const exit = vi.fn();
+        const app: SystemHandlersAppHost = { quit, relaunch, exit };
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app,
+            platform: 'darwin',
+            electronVersion: '33.4.11',
+        });
+
+        const handler = stub.listeners.get(SYSTEM_RELAUNCH_CHANNEL);
+        expect(handler).toBeDefined();
+        handler?.();
+
+        expect(relaunch).toHaveBeenCalledOnce();
+        expect(exit).toHaveBeenCalledWith(0);
+    });
+
+    it('registers exactly the three system channels (no cross-namespace leakage)', () => {
         const stub = makeIpcMainStub();
         registerSystemHandlers({
             ipcMain: stub.ipcMain,
-            app: { quit: vi.fn() },
+            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
             platform: 'linux',
             electronVersion: '33.4.11',
         });
 
         expect([...stub.handled.keys()]).toEqual([SYSTEM_PLATFORM_CHANNEL]);
-        expect([...stub.listeners.keys()]).toEqual([SYSTEM_QUIT_CHANNEL]);
+        expect([...stub.listeners.keys()]).toEqual([SYSTEM_QUIT_CHANNEL, SYSTEM_RELAUNCH_CHANNEL]);
     });
 });
 
@@ -834,7 +856,7 @@ describe('Logger injection (invariant 67)', () => {
 
         registerSystemHandlers({
             ipcMain: stub.ipcMain,
-            app: { quit: vi.fn() },
+            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
             platform: 'linux',
             electronVersion: '33.4.11',
             logger,

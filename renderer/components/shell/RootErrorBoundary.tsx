@@ -57,7 +57,11 @@ export class RootErrorBoundary extends React.Component<Props, State> {
     }
 
     public static getDerivedStateFromError(_error: unknown): State {
-        const crashId = `crash-${Date.now().toString(36)}`;
+        // Use the same ISO timestamp format as the crash dump filename
+        // (crash-reporter.ts: crash-${isoTimestamp}.json) so the UI crash ID
+        // can be correlated with a dump file on disk.
+        const isoTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const crashId = `crash-${isoTimestamp}`;
         return { hasError: true, crashId };
     }
 
@@ -71,15 +75,20 @@ export class RootErrorBoundary extends React.Component<Props, State> {
     }
 
     private handleReturnToMenu = (): void => {
-        this.setState({ hasError: false, crashId: '' });
+        // Navigate to root so React re-renders from a clean tree. Simply
+        // setting hasError:false re-renders the broken subtree and immediately
+        // re-throws. window.location.replace avoids a history entry so the
+        // user cannot navigate "back" to the broken page (F18/§4.19 will
+        // replace this with a proper router call).
+        window.location.replace('/');
     };
 
     private handleRestart = (): void => {
         (
             globalThis as Record<string, unknown> & {
-                __chimera?: { system?: { quit?: () => void } };
+                __chimera?: { system?: { relaunch?: () => void } };
             }
-        ).__chimera?.system?.quit?.();
+        ).__chimera?.system?.relaunch?.();
     };
 
     public override render(): React.ReactNode {

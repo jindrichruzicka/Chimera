@@ -3,6 +3,7 @@ import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
+    SYSTEM_RELAUNCH_CHANNEL,
     createSystemApi,
     type SystemApiIpcPort,
     type SystemApiListener,
@@ -78,6 +79,17 @@ describe('createSystemApi', () => {
             api.quit();
 
             expect(stub.sends).toEqual([SYSTEM_QUIT_CHANNEL]);
+        });
+    });
+
+    describe('relaunch()', () => {
+        it('sends on the chimera:system:relaunch channel without awaiting', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+
+            api.relaunch();
+
+            expect(stub.sends).toEqual([SYSTEM_RELAUNCH_CHANNEL]);
         });
     });
 
