@@ -45,6 +45,22 @@ vi.mock('./crash-reporter.js', () => ({
     registerCrashReporter: mockRegisterCrashReporter,
 }));
 
+// ── SettingsManager mock — captures the broadcastFn for isDestroyed guard tests ─
+type SettingsBroadcastFn = (gameId: string, settings: unknown) => void;
+
+const { capturedSettingsBroadcastFn } = vi.hoisted(() => ({
+    capturedSettingsBroadcastFn: { current: null as SettingsBroadcastFn | null },
+}));
+
+vi.mock('./SettingsManager.js', () => ({
+    SettingsManager: vi.fn((_repo: unknown, broadcastFn: SettingsBroadcastFn) => {
+        capturedSettingsBroadcastFn.current = broadcastFn;
+        return {
+            registerSchema: vi.fn(),
+        };
+    }),
+}));
+
 type AppEventHandler = (...args: readonly unknown[]) => void;
 
 interface FakeWebPreferences {
@@ -67,12 +83,15 @@ class FakeWebContents {
         vi.fn<(handler: (details: { url: string }) => { action: string }) => void>();
     public readonly on =
         vi.fn<(event: string, handler: (...args: readonly unknown[]) => void) => void>();
+    public readonly isDestroyed = vi.fn<() => boolean>(() => false);
+    public readonly send = vi.fn<(channel: string, ...args: readonly unknown[]) => void>();
 }
 
 class FakeBrowserWindow {
     public readonly options: FakeBrowserWindowOptions;
     public readonly loadFile = vi.fn();
     public readonly webContents = new FakeWebContents();
+    public readonly isDestroyed = vi.fn<() => boolean>(() => false);
     constructor(options: FakeBrowserWindowOptions) {
         this.options = options;
         browserWindowInstances.push(this);
@@ -487,6 +506,7 @@ describe('main', () => {
         mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockRegisterCrashReporter.mockClear();
         capturedSaveManagerRepoClassName.value = '';
+        capturedSettingsBroadcastFn.current = null;
     });
 
     it('constructs SaveManager with FileSaveRepository, not InMemorySaveRepository (BLOCK-1)', async () => {
@@ -644,6 +664,39 @@ describe('main', () => {
         callback.mockClear();
         handler?.({}, 'notifications', callback);
         expect(callback).toHaveBeenCalledWith(false);
+    });
+
+    it('skips webContents.send when the window isDestroyed (WARN-10)', async () => {
+        await main();
+        expect(capturedSettingsBroadcastFn.current).toBeDefined();
+
+        // Set up two fake windows: one destroyed, one alive
+        const deadWin = new FakeBrowserWindow({ webPreferences: {} });
+        deadWin.isDestroyed.mockReturnValue(true);
+        const liveWin = new FakeBrowserWindow({ webPreferences: {} });
+        liveWin.isDestroyed.mockReturnValue(false);
+
+        FakeBrowserWindow.getAllWindows.mockReturnValue([deadWin, liveWin]);
+
+        capturedSettingsBroadcastFn.current?.('tactics', { volume: 80 });
+
+        expect(deadWin.webContents.send).not.toHaveBeenCalled();
+        expect(liveWin.webContents.send).toHaveBeenCalledTimes(1);
+    });
+
+    it('skips webContents.send when webContents isDestroyed (WARN-10)', async () => {
+        await main();
+        expect(capturedSettingsBroadcastFn.current).toBeDefined();
+
+        const win = new FakeBrowserWindow({ webPreferences: {} });
+        win.isDestroyed.mockReturnValue(false);
+        win.webContents.isDestroyed.mockReturnValue(true);
+
+        FakeBrowserWindow.getAllWindows.mockReturnValue([win]);
+
+        capturedSettingsBroadcastFn.current?.('tactics', { volume: 80 });
+
+        expect(win.webContents.send).not.toHaveBeenCalled();
     });
 });
 

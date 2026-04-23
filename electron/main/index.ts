@@ -434,7 +434,9 @@ export async function main(): Promise<void> {
         settingsRepo,
         (gameId, settings) => {
             BrowserWindow.getAllWindows().forEach((win) => {
-                win.webContents.send(SETTINGS_CHANGE_CHANNEL, gameId, settings);
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(SETTINGS_CHANGE_CHANNEL, gameId, settings);
+                }
             });
         },
         logger.child({ module: 'settings' }),
