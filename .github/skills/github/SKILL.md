@@ -207,6 +207,72 @@ gh issue close <ISSUE_NUMBER> --repo $GH_REPO --comment "Implemented in $(git re
 
 ---
 
+## Procedure: Create a GitHub Release
+
+Use this procedure when cutting a version release for a completed milestone. The **Chimera Release Manager** agent runs this procedure automatically; it is documented here as the canonical reference.
+
+### 1. Resolve milestone and gather closed issues
+
+```bash
+# Resolve milestone numeric ID by title prefix
+M_ID=$(gh api repos/$GH_REPO/milestones --jq \
+  '.[] | select(.title | startswith("<MILESTONE_PREFIX>")) | .number')
+
+# List all closed issues under the milestone
+gh issue list --repo $GH_REPO \
+  --state closed \
+  --milestone "$M_ID" \
+  --json number,title,labels \
+  --jq '.[] | "#\(.number) \(.title)"'
+```
+
+### 2. Update CHANGELOG.md
+
+Read `CHANGELOG.md` and populate a new `## [<VERSION>] — <YYYY-MM-DD>` section above the previous release, keeping `## [Unreleased]` at the top (always empty until the next cycle). Only include non-empty `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security` subsections. Append version comparison links at the bottom:
+
+```markdown
+[<VERSION>]: https://github.com/jindrichruzicka/Chimera/releases/tag/v<VERSION>
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v<VERSION>...HEAD
+```
+
+Commit and merge the changelog on a `feature/release-<VERSION>` branch using `check-and-merge.sh`.
+
+### 3. Tag main
+
+```bash
+git checkout main && git pull origin main
+git tag -a "v<VERSION>" -m "Release v<VERSION> — <MILESTONE_TITLE>"
+git push origin "v<VERSION>"
+```
+
+### 4. Create the GitHub release
+
+Use `.github/skills/github/assets/release-template.md` as the notes template:
+
+```bash
+gh release create "v<VERSION>" \
+  --repo $GH_REPO \
+  --title "v<VERSION> — <MILESTONE_TITLE>" \
+  --notes-file /tmp/release-body.md \
+  --target main
+
+# Verify
+gh release view "v<VERSION>" --repo $GH_REPO \
+  --json name,tagName,publishedAt,url \
+  --jq '"Release \(.name) published at \(.publishedAt)\nURL: \(.url)"'
+```
+
+### 5. Close the GitHub milestone
+
+```bash
+gh api repos/$GH_REPO/milestones/$M_ID \
+  --method PATCH \
+  --field state=closed \
+  --jq '"Milestone \(.title) closed."'
+```
+
+---
+
 ## Error Handling
 
 | Error                                     | Cause                             | Resolution                                                                  |
@@ -217,3 +283,5 @@ gh issue close <ISSUE_NUMBER> --repo $GH_REPO --comment "Implemented in $(git re
 | `Resource not accessible by integration`  | Token lacks `issues` scope        | Re-auth: `gh auth refresh -s issues`                                        |
 | Milestone not found on issue create       | Milestone title mismatch          | Use exact title from `gh api .../milestones`; prefer API PATCH as fallback  |
 | Issue has label but not on milestone page | Label set; milestone not assigned | Run `gh api repos/$GH_REPO/issues/$N --method PATCH --field milestone=<ID>` |
+| Tag already exists                        | Re-releasing same version         | Ask user whether to re-release or abort                                     |
+| `gh release create` fails                 | Token lacks contents scope        | `gh auth refresh -s write:packages,contents`                                |

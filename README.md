@@ -133,6 +133,7 @@ AI agents and reusable skills live in [`.github/agents/`](.github/agents/) and [
 | **Chimera Code Reviewer**    | Pre-merge quality gate: architecture, SOLID, TypeScript, security, determinism checks |
 | **Chimera Product Manager**  | Planning milestones, creating GitHub issues, roadmap decisions, sprint planning       |
 | **Chimera QA Engineer**      | Writing Playwright E2E specs, adding test coverage, regression tests                  |
+| **Chimera Release Manager**  | Cut a release: update CHANGELOG, tag `main`, create GitHub release, close milestone   |
 
 Skills are on-demand workflows invoked by the agents. Key skills:
 
@@ -140,4 +141,4 @@ Skills are on-demand workflows invoked by the agents. Key skills:
 - [`git/merge`](.github/skills/git/merge/SKILL.md) — validate and merge a branch to `main`
 - [`tdd`](.github/skills/tdd/SKILL.md) — red-green-refactor cycle with exact `vitest` commands
 - [`invariants`](.github/skills/invariants/SKILL.md) — mechanical Appendix B invariant checker
-- [`github`](.github/skills/github/SKILL.md) — create milestones, issues, close tasks
+- [`github`](.github/skills/github/SKILL.md) — create milestones, issues, close tasks, cut releases
