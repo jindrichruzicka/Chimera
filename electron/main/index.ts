@@ -19,9 +19,10 @@ import {
 } from './logger.js';
 import { registerCrashReporter } from './crash-reporter.js';
 import { SaveManager } from './SaveManager.js';
+import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { SettingsManager } from './SettingsManager.js';
 import { FileSettingsRepository } from './FileSettingsRepository.js';
-import { InMemorySaveRepository } from '@chimera/simulation/persistence/index.js';
+import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/settings-api.js';
 
@@ -337,12 +338,15 @@ export async function main(): Promise<void> {
         },
     });
 
-    // Create the SaveManager. InMemorySaveRepository is a temporary placeholder
-    // until F18 wires FileSaveRepository; the crash-recovery flag operations
-    // (markCleanExit / clearCleanExitFlag) are handled directly by SaveManager
-    // using `userData` and do not touch the repository.
+    // Create the SaveManager with FileSaveRepository (invariant #37: concrete
+    // repository chosen here in main(); SaveManager itself never imports it).
+    // Saves are stored under <userData>/saves/<gameId>/<slotId>.chimera.
     const saveManager = new SaveManager(
-        new InMemorySaveRepository(),
+        new FileSaveRepository(
+            new JsonSaveSerializer(),
+            new SaveMigrator(),
+            path.join(userData, 'saves'),
+        ),
         userData,
         logger.child({ module: 'saves' }),
     );

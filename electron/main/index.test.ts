@@ -9,22 +9,31 @@ vi.mock('pino', () => {
 });
 
 // ── SaveManager mock (used by main() after the sync-helper removal) ──────────
-const { mockSaveManagerClearFlag, mockSaveManagerMarkExit, mockSaveManagerCheckCrash } = vi.hoisted(
-    () => ({
-        mockSaveManagerClearFlag: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
-        mockSaveManagerMarkExit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-        mockSaveManagerCheckCrash: vi.fn<(ids: readonly string[]) => Promise<null>>(() =>
-            Promise.resolve(null),
-        ),
-    }),
-);
+const {
+    mockSaveManagerClearFlag,
+    mockSaveManagerMarkExit,
+    mockSaveManagerCheckCrash,
+    capturedSaveManagerRepoClassName,
+} = vi.hoisted(() => ({
+    mockSaveManagerClearFlag: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
+    mockSaveManagerMarkExit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+    mockSaveManagerCheckCrash: vi.fn<(ids: readonly string[]) => Promise<null>>(() =>
+        Promise.resolve(null),
+    ),
+    // Stores the constructor name of the first arg passed to SaveManager
+    // for the BLOCK-1 assertion (avoids importing the real class).
+    capturedSaveManagerRepoClassName: { value: '' },
+}));
 
 vi.mock('./SaveManager.js', () => ({
-    SaveManager: vi.fn(() => ({
-        clearCleanExitFlag: mockSaveManagerClearFlag,
-        markCleanExit: mockSaveManagerMarkExit,
-        checkCrashRecovery: mockSaveManagerCheckCrash,
-    })),
+    SaveManager: vi.fn((repo: { constructor?: { name?: string } }) => {
+        capturedSaveManagerRepoClassName.value = repo?.constructor?.name ?? '';
+        return {
+            clearCleanExitFlag: mockSaveManagerClearFlag,
+            markCleanExit: mockSaveManagerMarkExit,
+            checkCrashRecovery: mockSaveManagerCheckCrash,
+        };
+    }),
 }));
 
 // ── crash-reporter mock — spy on registerCrashReporter options ────────────────
@@ -385,6 +394,13 @@ describe('main', () => {
         mockSaveManagerCheckCrash.mockClear();
         mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockRegisterCrashReporter.mockClear();
+        capturedSaveManagerRepoClassName.value = '';
+    });
+
+    it('constructs SaveManager with FileSaveRepository, not InMemorySaveRepository (BLOCK-1)', async () => {
+        await main();
+
+        expect(capturedSaveManagerRepoClassName.value).toBe('FileSaveRepository');
     });
 
     it('does not call fsExistsSync — only the async SaveManager path owns the clean-exit flag', async () => {
