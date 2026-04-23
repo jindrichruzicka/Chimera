@@ -1139,6 +1139,67 @@ describe('registerLogsHandlers', () => {
         expect(result.length).toBeLessThanOrEqual(smallSink.capacity);
     });
 
+    it('readRecent(MAX_SAFE_INTEGER) never returns more than MAX_READ_RECENT_ENTRIES (1000)', async () => {
+        const { ipcStub, sink, logger } = makeLogsStubs();
+        // Use a sink with 1001 capacity (greater than the 1000 cap)
+        const bigSink = createMemorySink(1001);
+        for (let i = 0; i < 1001; i++) {
+            bigSink.write({ ...VALID_ENTRY, message: `entry-${i}` });
+        }
+
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink: bigSink, sink });
+
+        const handler = ipcStub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
+        const result = (await Promise.resolve(handler({}, Number.MAX_SAFE_INTEGER))) as LogEntry[];
+        expect(result.length).toBeLessThanOrEqual(1000);
+    });
+
+    it('readRecent(1.5) falls back to default because maxEntries must be an integer', async () => {
+        const { ipcStub, sink, logger } = makeLogsStubs();
+        const memorySink = createMemorySink();
+        for (let i = 0; i < 5; i++) {
+            memorySink.write({ ...VALID_ENTRY, message: `entry-${i}` });
+        }
+
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const handler = ipcStub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
+        // 1.5 is not an integer — handler must fall back to the default (100) and
+        // return all 5 seeded entries (5 < 100), not just 1 or 2 (what floor(1.5) would give).
+        const result = (await Promise.resolve(handler({}, 1.5))) as LogEntry[];
+        expect(result).toHaveLength(5);
+    });
+
+    it('readRecent(-1) falls back to default (100)', async () => {
+        const { ipcStub, sink, logger } = makeLogsStubs();
+        const memorySink = createMemorySink();
+        for (let i = 0; i < 5; i++) {
+            memorySink.write({ ...VALID_ENTRY, message: `entry-${i}` });
+        }
+
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const handler = ipcStub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
+        const result = (await Promise.resolve(handler({}, -1))) as LogEntry[];
+        // -1 is invalid — falls back to 100, so all 5 seeded entries are returned
+        expect(result).toHaveLength(5);
+    });
+
+    it('readRecent(NaN) falls back to default (100)', async () => {
+        const { ipcStub, sink, logger } = makeLogsStubs();
+        const memorySink = createMemorySink();
+        for (let i = 0; i < 5; i++) {
+            memorySink.write({ ...VALID_ENTRY, message: `entry-${i}` });
+        }
+
+        registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });
+
+        const handler = ipcStub.handled.get(LOGS_READ_RECENT_CHANNEL)!;
+        const result = (await Promise.resolve(handler({}, Number.NaN))) as LogEntry[];
+        // NaN is invalid — falls back to 100, so all 5 seeded entries are returned
+        expect(result).toHaveLength(5);
+    });
+
     it('level:error entry with error field calls logger.error with reconstructed Error', () => {
         const { ipcStub, sink, memorySink, logger } = makeLogsStubs();
         registerLogsHandlers({ ipcMain: ipcStub.ipcMain, logger, memorySink, sink });

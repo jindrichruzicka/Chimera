@@ -678,11 +678,19 @@ export function registerLogsHandlers(options: RegisterLogsHandlersOptions): void
         }
     });
 
+    /** Hard cap on entries per readRecent response (DoS guard, Invariant #1). */
+    const MAX_READ_RECENT_ENTRIES = 1000;
+
     ipcMain.handle(LOGS_READ_RECENT_CHANNEL, (_event, maxEntries) => {
-        const requested = typeof maxEntries === 'number' && maxEntries > 0 ? maxEntries : 100;
-        // Cap at buffer capacity to prevent DoS via oversized IPC requests
-        // (Invariant #1 — renderer-driven unbounded reads are a DoS vector).
-        const count = Math.min(requested, memorySink.capacity);
+        const isValidCount =
+            typeof maxEntries === 'number' &&
+            Number.isInteger(maxEntries) &&
+            Number.isFinite(maxEntries) &&
+            maxEntries > 0;
+        const requested = isValidCount ? maxEntries : 100;
+        // Cap independently at MAX_READ_RECENT_ENTRIES and at buffer capacity
+        // to prevent oversized IPC payloads regardless of ring buffer size.
+        const count = Math.min(requested, MAX_READ_RECENT_ENTRIES, memorySink.capacity);
         const all = memorySink.entries;
         return all.slice(Math.max(0, all.length - count));
     });
