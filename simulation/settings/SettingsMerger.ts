@@ -96,8 +96,11 @@ export class SettingsMerger {
      * Deep merge: nested objects are merged recursively; primitives in later layers win.
      * Unknown keys from userOverrides absent from gameDefaults are stripped.
      */
-    static mergeAll(gameDefaults: ResolvedSettings, userOverrides: UserSettings): ResolvedSettings {
-        return deepMergeStripped(gameDefaults, userOverrides ?? {}) as ResolvedSettings;
+    static mergeAll(gameDefaults: EngineSettings, userOverrides: UserSettings): ResolvedSettings {
+        return deepMergeStripped(
+            gameDefaults as unknown as Record<string, unknown>,
+            userOverrides ?? {},
+        ) as ResolvedSettings;
     }
 
     /**
