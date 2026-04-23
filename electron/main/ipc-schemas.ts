@@ -124,14 +124,33 @@ export const SaveRequestSchema: z.ZodType<SaveRequest> = z.object({
 }) as z.ZodType<SaveRequest>;
 
 /**
- * Schema for a {@link UserSettings} patch accepted by
- * `chimera:settings:update`. The real three-layer merge and per-game
- * schema validation lands in F07/F19; this schema enforces only the
- * structural `Record<string, unknown>` shape so a hostile renderer cannot
- * pass an array, primitive, or `null` and smuggle past the structural
- * typing into the (future) merger.
+ * Maximum allowed nesting depth for a {@link UserSettings} patch.
+ * Settings patches are at most 3 levels deep (e.g. `{ audio: { masterVolume: 0.5 } }`).
+ * Inputs deeper than this limit are rejected to prevent DoS-shaped payloads
+ * from reaching downstream merge/validate logic.
  */
-export const UserSettingsPatchSchema: z.ZodType<UserSettings> = z.record(z.string(), z.unknown());
+const SETTINGS_PATCH_MAX_DEPTH = 5;
+
+function objectDepth(value: unknown, current = 0): number {
+    if (current > SETTINGS_PATCH_MAX_DEPTH) return current;
+    if (value === null || typeof value !== 'object' || Array.isArray(value)) return current;
+    const depths = Object.values(value as Record<string, unknown>).map((v) =>
+        objectDepth(v, current + 1),
+    );
+    return depths.length === 0 ? current : Math.max(...depths);
+}
+
+/**
+ * Schema for a {@link UserSettings} patch accepted by
+ * `chimera:settings:update`. Enforces the structural `Record<string, unknown>`
+ * shape and rejects objects nested deeper than {@link SETTINGS_PATCH_MAX_DEPTH}
+ * to prevent DoS-shaped payloads reaching the merger (BLOCK-4 depth guard).
+ */
+export const UserSettingsPatchSchema: z.ZodType<UserSettings> = z
+    .record(z.string(), z.unknown())
+    .refine((v) => objectDepth(v) <= SETTINGS_PATCH_MAX_DEPTH, {
+        message: `Settings patch must not be nested deeper than ${SETTINGS_PATCH_MAX_DEPTH} levels`,
+    });
 
 /**
  * Structural schema for the {@link EngineAction} envelope accepted by

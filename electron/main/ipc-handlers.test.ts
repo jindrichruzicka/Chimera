@@ -889,3 +889,106 @@ describe('Logger injection (invariant 67)', () => {
         expect(() => registerGameHandlers({ ipcMain: stub.ipcMain })).not.toThrow();
     });
 });
+
+describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC boundary', () => {
+    it('update handler rejects an invalid patch before reaching the repo (BLOCK-4)', async () => {
+        const stub = makeSettingsIpcMainStub();
+        const { SettingsManager } = await import('./SettingsManager.js');
+        const { InMemorySettingsRepository } =
+            await import('@chimera/simulation/settings/index.js');
+        const { z } = await import('zod');
+
+        const engineSchema = z.object({
+            audio: z.object({
+                masterVolume: z.number(),
+                sfxVolume: z.number(),
+                musicVolume: z.number(),
+                muted: z.boolean(),
+            }),
+            display: z.object({
+                fullscreen: z.boolean(),
+                vsync: z.boolean(),
+                targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                uiScale: z.number(),
+            }),
+            gameplay: z.object({
+                language: z.string(),
+                autoSave: z.boolean(),
+                autoSaveIntervalTurns: z.number().int(),
+                showHints: z.boolean(),
+                showPerfHud: z.boolean(),
+            }),
+            controls: z.object({
+                keyBindings: z.record(z.string(), z.string()),
+            }),
+        });
+
+        const repo = new InMemorySettingsRepository();
+        const mgr = new SettingsManager(repo);
+        mgr.registerSchema({
+            gameId: 'block4-game',
+            defaults: (await import('@chimera/simulation/settings/index.js')).ENGINE_DEFAULTS,
+            zodSchema: engineSchema,
+        });
+
+        registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
+
+        const handler = stub.handled.get(SETTINGS_UPDATE_CHANNEL)!;
+        // Invalid patch: masterVolume should be number but is string
+        // validatePatchForGame throws synchronously, so the handler throws before returning a Promise
+        expect(() =>
+            handler({}, 'block4-game', { audio: { masterVolume: 'loud' as unknown as number } }),
+        ).toThrow();
+
+        // Repo must remain empty — the invalid patch must not have been saved
+        const persisted = await repo.load('block4-game');
+        expect(persisted).toEqual({});
+    });
+
+    it('update handler passes a valid patch through when schema is registered', async () => {
+        const stub = makeSettingsIpcMainStub();
+        const { SettingsManager } = await import('./SettingsManager.js');
+        const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
+            await import('@chimera/simulation/settings/index.js');
+        const { z } = await import('zod');
+
+        const engineSchema = z.object({
+            audio: z.object({
+                masterVolume: z.number(),
+                sfxVolume: z.number(),
+                musicVolume: z.number(),
+                muted: z.boolean(),
+            }),
+            display: z.object({
+                fullscreen: z.boolean(),
+                vsync: z.boolean(),
+                targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+                uiScale: z.number(),
+            }),
+            gameplay: z.object({
+                language: z.string(),
+                autoSave: z.boolean(),
+                autoSaveIntervalTurns: z.number().int(),
+                showHints: z.boolean(),
+                showPerfHud: z.boolean(),
+            }),
+            controls: z.object({
+                keyBindings: z.record(z.string(), z.string()),
+            }),
+        });
+
+        const mgr = new SettingsManager(new InMemorySettingsRepository());
+        mgr.registerSchema({
+            gameId: 'block4-game',
+            defaults: ENGINE_DEFAULTS,
+            zodSchema: engineSchema,
+        });
+        registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
+
+        const handler = stub.handled.get(SETTINGS_UPDATE_CHANNEL)!;
+        const result = (await Promise.resolve(
+            handler({}, 'block4-game', { audio: { masterVolume: 0.2 } }),
+        )) as { audio: { masterVolume: number } };
+        expect(result.audio.masterVolume).toBe(0.2);
+    });
+});

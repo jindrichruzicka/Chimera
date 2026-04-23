@@ -180,6 +180,21 @@ describe('UserSettingsPatchSchema', () => {
         expect(UserSettingsPatchSchema.safeParse(42).success).toBe(false);
         expect(UserSettingsPatchSchema.safeParse(null).success).toBe(false);
     });
+
+    it('rejects objects nested deeper than the safe depth limit (DoS guard)', () => {
+        // Build a deeply nested object: { a: { a: { a: { ... } } } } depth 10+
+        let deep: Record<string, unknown> = { leaf: 'value' };
+        for (let i = 0; i < 12; i++) {
+            deep = { a: deep };
+        }
+        expect(UserSettingsPatchSchema.safeParse(deep).success).toBe(false);
+    });
+
+    it('accepts objects within the safe depth limit', () => {
+        // Typical settings patch: { audio: { masterVolume: 0.5 } } is depth 2
+        const valid = { audio: { masterVolume: 0.5 } };
+        expect(UserSettingsPatchSchema.safeParse(valid).success).toBe(true);
+    });
 });
 
 describe('EngineActionSchema', () => {

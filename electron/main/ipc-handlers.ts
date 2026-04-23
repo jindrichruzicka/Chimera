@@ -557,7 +557,12 @@ export function registerSettingsHandlers(options: RegisterSettingsHandlersOption
         parseInvokeRequest(GameIdSchema, SETTINGS_UPDATE_CHANNEL, gameId);
         parseInvokeRequest(UserSettingsPatchSchema, SETTINGS_UPDATE_CHANNEL, patch);
         if (mgr !== undefined) {
-            return mgr.updateSettings(gameId as string, patch as UserSettings);
+            // BLOCK-4: validate patch against per-game schema at IPC boundary
+            const validatedPatch = mgr.validatePatchForGame(
+                gameId as string,
+                patch as UserSettings,
+            );
+            return mgr.updateSettings(gameId as string, validatedPatch);
         }
         return STUB_RESOLVED_SETTINGS;
     });

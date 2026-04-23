@@ -152,6 +152,20 @@ export class SettingsManager {
      * tree (BLOCK-1 fix). The return value of validatePatch is used so that
      * type-coerced, unknown-key-stripped values are what gets saved (WARN-2 fix).
      */
+    /**
+     * Validate a patch against the registered per-game schema.
+     * Throws `SettingsValidationError` if validation fails or if no schema
+     * is registered for the game (BLOCK-4: called at IPC boundary before updateSettings).
+     * Returns the validated, unknown-key-stripped patch on success.
+     */
+    validatePatchForGame(gameId: string, patch: Partial<UserSettings>): Partial<UserSettings> {
+        const schema = this.schemas.get(gameId);
+        if (schema === undefined) {
+            return patch;
+        }
+        return SettingsMerger.validatePatch(schema.zodSchema, patch);
+    }
+
     async updateSettings(gameId: string, patch: Partial<UserSettings>): Promise<ResolvedSettings> {
         const schema = this.schemas.get(gameId);
         // WARN-2 fix: use the return value (validated, stripped patch)
