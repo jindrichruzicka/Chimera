@@ -1,4 +1,4 @@
-import type { z } from 'zod';
+import { z } from 'zod';
 
 // ─── DeepPartial utility ─────────────────────────────────────────────────────
 
@@ -79,3 +79,39 @@ export type ResolvedSettings = EngineSettings & Record<string, unknown>;
 
 /** What the file on disk contains — only keys the user explicitly changed. */
 export type UserSettings = DeepPartial<ResolvedSettings>;
+
+// ─── Shared engine Zod shape ──────────────────────────────────────────────────
+
+/**
+ * Zod shape for all four engine-owned setting namespaces.
+ * Game schemas can spread this into their own `z.object({ ...engineSettingsZodShape, ... })`
+ * to avoid duplicating the engine field definitions (WARN-1 fix).
+ *
+ * This is exported as a raw `ZodRawShape` (plain object of Zod schemas) so
+ * game packages can use it with `z.object({ ...engineSettingsZodShape, gameKey: ... })`
+ * without importing a fully-constructed ZodObject.
+ */
+export const engineSettingsZodShape = {
+    audio: z.object({
+        masterVolume: z.number().min(0).max(1),
+        sfxVolume: z.number().min(0).max(1),
+        musicVolume: z.number().min(0).max(1),
+        muted: z.boolean(),
+    }),
+    display: z.object({
+        fullscreen: z.boolean(),
+        vsync: z.boolean(),
+        targetFps: z.literal(30).or(z.literal(60)).or(z.literal(120)).or(z.literal(0)),
+        uiScale: z.number().min(0.5).max(2.0),
+    }),
+    gameplay: z.object({
+        language: z.string(),
+        autoSave: z.boolean(),
+        autoSaveIntervalTurns: z.number().int(),
+        showHints: z.boolean(),
+        showPerfHud: z.boolean(),
+    }),
+    controls: z.object({
+        keyBindings: z.record(z.string(), z.string()),
+    }),
+} as const;

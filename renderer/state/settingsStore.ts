@@ -13,6 +13,7 @@
  */
 
 import { createStore, useStore } from 'zustand';
+import type { StoreApi } from 'zustand';
 import type { ResolvedSettings, UserSettings, SettingsAPI } from '../../electron/preload/api-types';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
@@ -43,7 +44,9 @@ export interface SettingsStoreState {
  * lazily from `window.__chimera` at call time so the store can be created
  * before the preload is ready.
  */
-export function createSettingsStore(bridge?: { readonly settings: SettingsAPI }) {
+export function createSettingsStore(bridge?: {
+    readonly settings: SettingsAPI;
+}): StoreApi<SettingsStoreState> {
     return createStore<SettingsStoreState>()((set) => ({
         settings: {},
         activeGameId: null,

@@ -11,7 +11,7 @@
  */
 
 import { z } from 'zod';
-import { ENGINE_DEFAULTS } from '@chimera/simulation/settings/index.js';
+import { ENGINE_DEFAULTS, engineSettingsZodShape } from '@chimera/simulation/settings/index.js';
 import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
 
 // ── TacticsSettings interface ─────────────────────────────────────────────────
@@ -40,29 +40,8 @@ export const TACTICS_DEFAULTS: TacticsSettings = {
 // ── Zod schema ────────────────────────────────────────────────────────────────
 
 const tacticsZodSchema = z.object({
-    // Engine fields (re-declared for full round-trip validation)
-    audio: z.object({
-        masterVolume: z.number().min(0).max(1),
-        sfxVolume: z.number().min(0).max(1),
-        musicVolume: z.number().min(0).max(1),
-        muted: z.boolean(),
-    }),
-    display: z.object({
-        fullscreen: z.boolean(),
-        vsync: z.boolean(),
-        targetFps: z.union([z.literal(30), z.literal(60), z.literal(120), z.literal(0)]),
-        uiScale: z.number().min(0.5).max(2.0),
-    }),
-    gameplay: z.object({
-        language: z.string().min(1),
-        autoSave: z.boolean(),
-        autoSaveIntervalTurns: z.number().int().nonnegative(),
-        showHints: z.boolean(),
-        showPerfHud: z.boolean(),
-    }),
-    controls: z.object({
-        keyBindings: z.record(z.string(), z.string()),
-    }),
+    // Engine fields — spread from shared engineSettingsZodShape (WARN-1 fix)
+    ...engineSettingsZodShape,
     // Tactics-specific fields
     showGrid: z.boolean(),
     animationSpeed: z.enum(['slow', 'normal', 'fast', 'instant']),
