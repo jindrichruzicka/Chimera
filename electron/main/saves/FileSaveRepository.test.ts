@@ -8,10 +8,11 @@
  * parity with InMemorySaveRepository (invariant #41).
  */
 
+import { mkdtempSync, rmSync } from 'node:fs';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
     JsonSaveSerializer,
     SaveMigrator,
@@ -36,16 +37,18 @@ function makeRepo(baseDir: string): FileSaveRepository {
 
 // ── Shared contract tests ────────────────────────────────────────────────────
 
+const contractDirs: string[] = [];
+
 runSaveRepositoryContractTests('FileSaveRepository', () => {
-    // Each factory call gets its own temp dir — vitest will not clean them
-    // automatically but OS temp cleanup handles them eventually.
-    // For isolation, create synchronously-safe names; the actual dir is created
-    // lazily by FileSaveRepository.save() via fs.mkdir({ recursive: true }).
-    const tmpBase = path.join(
-        os.tmpdir(),
-        `chimera-contract-${Math.random().toString(36).slice(2)}`,
-    );
+    const tmpBase = mkdtempSync(path.join(os.tmpdir(), 'chimera-contract-'));
+    contractDirs.push(tmpBase);
     return makeRepo(tmpBase);
+});
+
+afterAll(() => {
+    for (const dir of contractDirs) {
+        rmSync(dir, { recursive: true, force: true });
+    }
 });
 
 // ── FileSaveRepository-specific integration tests ────────────────────────────
