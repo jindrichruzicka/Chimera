@@ -50,6 +50,7 @@ type AppEventHandler = (...args: readonly unknown[]) => void;
 interface FakeWebPreferences {
     readonly nodeIntegration?: boolean;
     readonly contextIsolation?: boolean;
+    readonly webSecurity?: boolean;
     readonly preload?: string;
     readonly additionalArguments?: readonly string[];
 }
@@ -88,6 +89,17 @@ const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-
 const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
 const ipcMainOn = vi.fn<(channel: string, handler: () => void) => void>();
 
+const mockSetPermissionRequestHandler =
+    vi.fn<
+        (
+            handler: (
+                webContents: unknown,
+                permission: string,
+                callback: (allow: boolean) => void,
+            ) => void,
+        ) => void
+    >();
+
 vi.mock('electron', () => ({
     app: {
         on: appOn,
@@ -101,6 +113,11 @@ vi.mock('electron', () => ({
     ipcMain: {
         handle: ipcMainHandle,
         on: ipcMainOn,
+    },
+    session: {
+        defaultSession: {
+            setPermissionRequestHandler: mockSetPermissionRequestHandler,
+        },
     },
 }));
 
@@ -148,6 +165,17 @@ describe('createMainWindow', () => {
         expect(browserWindowInstances).toHaveLength(1);
         const [win] = browserWindowInstances;
         expect(win?.options.webPreferences?.contextIsolation).toBe(true);
+    });
+
+    it('constructs a BrowserWindow with webSecurity: true (WARN-5)', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.webPreferences?.webSecurity).toBe(true);
     });
 
     it('constructs a BrowserWindow with nodeIntegration: false', () => {
@@ -578,6 +606,29 @@ describe('main', () => {
         await main();
 
         expect(mockSaveManagerCheckCrash).toHaveBeenCalledWith(['tactics']);
+    });
+
+    it('calls session.defaultSession.setPermissionRequestHandler with a deny-all handler (WARN-4)', async () => {
+        await main();
+
+        expect(mockSetPermissionRequestHandler).toHaveBeenCalledTimes(1);
+        const handler = mockSetPermissionRequestHandler.mock.calls[0]?.[0] as
+            | ((
+                  webContents: unknown,
+                  permission: string,
+                  callback: (allow: boolean) => void,
+              ) => void)
+            | undefined;
+        expect(handler).toBeDefined();
+
+        // All permissions must be denied
+        const callback = vi.fn<(allow: boolean) => void>();
+        handler?.({}, 'microphone', callback);
+        expect(callback).toHaveBeenCalledWith(false);
+
+        callback.mockClear();
+        handler?.({}, 'notifications', callback);
+        expect(callback).toHaveBeenCalledWith(false);
     });
 });
 

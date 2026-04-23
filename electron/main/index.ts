@@ -1,5 +1,5 @@
 import * as path from 'node:path';
-import { app, BrowserWindow, ipcMain } from 'electron';
+import { app, BrowserWindow, ipcMain, session } from 'electron';
 import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera/shared/constants.js';
 import {
     registerGameHandlers,
@@ -227,6 +227,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
             nodeIntegration: false,
             contextIsolation: true,
             sandbox: true,
+            webSecurity: true,
             preload: options.preloadPath,
             additionalArguments: [`--chimera-env=${options.env}`],
         },
@@ -307,6 +308,12 @@ export async function main(): Promise<void> {
     const rendererEntry = path.join(__dirname, '..', '..', 'renderer', 'out', 'index.html');
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
     const userData = app.getPath('userData');
+
+    // WARN-4: deny all permission requests (camera, microphone, notifications, etc.)
+    // The renderer has no legitimate need for OS-level permissions beyond DOM APIs.
+    session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
+        callback(false);
+    });
 
     // Shared in-memory ring buffer: used by the logs IPC `readRecent` handler
     // so the renderer can fetch recent entries for export/debug.
