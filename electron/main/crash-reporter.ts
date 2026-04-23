@@ -141,6 +141,17 @@ function writeCrashDump(crashesDir: string, err: Error, snapshot: unknown): void
         snapshot: snapshot ?? null,
     };
 
-    fs.writeFileSync(tmpPath, JSON.stringify(dump, null, 2), 'utf-8');
+    const data = JSON.stringify(dump, null, 2);
+
+    // Write atomically with fsync before rename (Invariant #68): openSync
+    // the .tmp file so the fd is available for fsyncSync, then rename to
+    // the final path only after the OS confirms the data is on stable storage.
+    const fd = fs.openSync(tmpPath, 'w');
+    try {
+        fs.writeSync(fd, data, null, 'utf-8');
+        fs.fsyncSync(fd);
+    } finally {
+        fs.closeSync(fd);
+    }
     fs.renameSync(tmpPath, finalPath);
 }
