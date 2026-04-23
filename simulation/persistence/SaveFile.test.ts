@@ -12,7 +12,8 @@
 
 import { describe, expect, it } from 'vitest';
 import { CompressedSaveSerializer } from './CompressedSaveSerializer.js';
-import { JsonSaveSerializer } from './JsonSaveSerializer.js';
+import { JsonSaveSerializer, MAX_SAVE_SIZE_CHARS } from './JsonSaveSerializer.js';
+import { SaveParseError } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
 import type { GamePhase, PlayerId } from '../engine/types.js';
 
@@ -144,5 +145,125 @@ describe('CompressedSaveSerializer', () => {
         const compressedSize = compressed.serialize(file).length;
 
         expect(compressedSize).toBeLessThan(jsonSize);
+    });
+});
+
+// ─── JsonSaveSerializer — security (OWASP A08 / issue #133) ──────────────────
+
+describe('JsonSaveSerializer — security', () => {
+    it('throws SaveParseError when raw input exceeds MAX_SAVE_SIZE_CHARS', () => {
+        const serializer = new JsonSaveSerializer();
+        const oversized = 'x'.repeat(MAX_SAVE_SIZE_CHARS + 1);
+
+        expect(() => serializer.deserialize(oversized)).toThrow(SaveParseError);
+    });
+
+    it('throws SaveParseError when the top-level header field is absent', () => {
+        const serializer = new JsonSaveSerializer();
+        const noHeader = JSON.stringify({
+            checkpoint: {
+                tick: 1,
+                seed: 42,
+                players: {},
+                entities: {},
+                phase: 'playing',
+                events: [],
+            },
+            deltaActions: [],
+            pendingCommitments: {},
+        });
+
+        expect(() => serializer.deserialize(noHeader)).toThrow(SaveParseError);
+    });
+
+    it('throws SaveParseError when header is present but missing required fields', () => {
+        const serializer = new JsonSaveSerializer();
+        const partialHeader = JSON.stringify({
+            header: { schemaVersion: 1 }, // missing engineVersion, gameId, etc.
+            checkpoint: {
+                tick: 1,
+                seed: 42,
+                players: {},
+                entities: {},
+                phase: 'playing',
+                events: [],
+            },
+            deltaActions: [],
+            pendingCommitments: {},
+        });
+
+        expect(() => serializer.deserialize(partialHeader)).toThrow(SaveParseError);
+    });
+
+    it('throws SaveParseError when the top-level checkpoint field is absent', () => {
+        const serializer = new JsonSaveSerializer();
+        const noCheckpoint = JSON.stringify({
+            header: {
+                schemaVersion: 1,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 1,
+                playerNames: [],
+            },
+            deltaActions: [],
+            pendingCommitments: {},
+        });
+
+        expect(() => serializer.deserialize(noCheckpoint)).toThrow(SaveParseError);
+    });
+
+    it('throws SaveParseError when deltaActions is not an array', () => {
+        const serializer = new JsonSaveSerializer();
+        const badDeltaActions = JSON.stringify({
+            header: {
+                schemaVersion: 1,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 1,
+                playerNames: [],
+            },
+            checkpoint: {
+                tick: 1,
+                seed: 42,
+                players: {},
+                entities: {},
+                phase: 'playing',
+                events: [],
+            },
+            deltaActions: 'not-an-array',
+            pendingCommitments: {},
+        });
+
+        expect(() => serializer.deserialize(badDeltaActions)).toThrow(SaveParseError);
+    });
+
+    it('throws SaveParseError when raw JSON is syntactically invalid', () => {
+        const serializer = new JsonSaveSerializer();
+
+        expect(() => serializer.deserialize('{ this is not json }')).toThrow(SaveParseError);
+    });
+
+    it('does not pollute Object.prototype when JSON contains __proto__ injection', () => {
+        const serializer = new JsonSaveSerializer();
+        // A crafted payload that attempts to inject a property via __proto__.
+        const pollutionAttempt = '{"__proto__": {"injected": true}, "header": null}';
+
+        // The call must throw (validation fails) but must not have side-effected
+        // Object.prototype before throwing.
+        expect(() => serializer.deserialize(pollutionAttempt)).toThrow(SaveParseError);
+        expect(Object.hasOwn(Object.prototype, 'injected')).toBe(false);
+    });
+
+    it('deserialize still succeeds on a valid file after the security checks', () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile();
+
+        expect(serializer.deserialize(serializer.serialize(file))).toStrictEqual(file);
     });
 });

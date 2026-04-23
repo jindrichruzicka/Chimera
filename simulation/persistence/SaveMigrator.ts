@@ -105,6 +105,20 @@ export class SaveMigrator {
 // ─── Error types ──────────────────────────────────────────────────────────────
 
 /**
+ * Thrown by `JsonSaveSerializer.deserialize()` when the raw input fails
+ * size validation, JSON parsing, or Zod schema validation. Distinct from
+ * `SaveNotFoundError` (missing slot) and `SaveSchemaTooNewError` (future
+ * engine version). Covers OWASP A08 (Software and Data Integrity Failures).
+ */
+export class SaveParseError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'SaveParseError';
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/**
  * Thrown by `SaveRepository.load()` and `SaveRepository.delete()` when no
  * save slot with the given `slotId` exists in the repository.
  */

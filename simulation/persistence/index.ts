@@ -20,6 +20,7 @@ export {
     CURRENT_SCHEMA_VERSION,
     SaveMigrator,
     SaveNotFoundError,
+    SaveParseError,
     SaveSchemaTooNewError,
 } from './SaveMigrator.js';
 export type { SaveMigration } from './SaveMigrator.js';
