@@ -305,6 +305,14 @@ export function createPinoSink(logsDir: string, now?: () => Date): LoggerSink {
         write(entry: LogEntry): void {
             const today = toDateString(now?.() ?? new Date());
             if (today !== currentDateStr || dest === null) {
+                // Close the previous SonicBoom before rolling to a new file.
+                // flushSync() ensures any in-flight buffered bytes reach the OS
+                // (a no-op with sync:true but harmless); end() releases the file
+                // descriptor so the OS can reclaim it (Invariant #68).
+                if (dest !== null) {
+                    dest.flushSync();
+                    dest.end();
+                }
                 currentDateStr = today;
                 const filepath = path.join(logsDir, `chimera-${today}.log`);
                 dest = pino.destination({ dest: filepath, append: true, sync: true });

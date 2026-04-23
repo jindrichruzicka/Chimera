@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import pino from 'pino';
 import { createLogger, createMemorySink, createNoopLogger, createPinoSink } from './logger.js';
 import type { LogEntry, LogSource } from '@chimera/shared/logging.js';
 
@@ -270,5 +271,66 @@ describe('createPinoSink', () => {
         expect(fs.existsSync(day2)).toBe(true);
         expect(fs.readFileSync(day1, 'utf-8')).toContain('day one');
         expect(fs.readFileSync(day2, 'utf-8')).toContain('day two');
+    });
+
+    it('calls flushSync() then end() on the previous SonicBoom before opening a new destination on rollover', () => {
+        const capturedInstances: ReturnType<typeof pino.destination>[] = [];
+        const realDest = pino.destination.bind(pino);
+        const intercepted = vi
+            .spyOn(pino, 'destination')
+            .mockImplementation((...args: Parameters<typeof pino.destination>) => {
+                const inst = realDest(...args);
+                capturedInstances.push(inst);
+                return inst;
+            });
+
+        let callCount = 0;
+        const dates = [
+            new Date('2025-06-15T23:59:00Z'),
+            new Date('2025-06-15T23:59:00Z'),
+            new Date('2025-06-16T00:01:00Z'),
+        ];
+        const sink = createPinoSink(tmpDir, () => dates[Math.min(callCount++, 2)]!);
+
+        sink.write({ ...TEST_ENTRY, message: 'day one' });
+        // After the first write, capturedInstances[0] is the first SonicBoom.
+        // Spy on its flushSync and end so we can assert they are called on rollover.
+        const firstDest = capturedInstances[0]!;
+        const flushSyncSpy = vi.spyOn(firstDest, 'flushSync');
+        const endSpy = vi.spyOn(firstDest, 'end');
+
+        sink.write({ ...TEST_ENTRY, message: 'day two' }); // triggers rollover
+
+        expect(flushSyncSpy).toHaveBeenCalledOnce();
+        expect(endSpy).toHaveBeenCalledOnce();
+        expect(capturedInstances).toHaveLength(2); // two destinations opened
+
+        intercepted.mockRestore();
+    });
+
+    it('entries written before rollover appear in the old file and entries after in the new file', () => {
+        let callCount = 0;
+        const dates = [
+            new Date('2025-06-20T23:59:00Z'),
+            new Date('2025-06-20T23:59:00Z'),
+            new Date('2025-06-21T00:01:00Z'),
+            new Date('2025-06-21T00:02:00Z'),
+        ];
+        const sink = createPinoSink(tmpDir, () => dates[Math.min(callCount++, 3)]!);
+
+        sink.write({ ...TEST_ENTRY, message: 'before-rollover' });
+        sink.write({ ...TEST_ENTRY, message: 'after-rollover-1' });
+        sink.write({ ...TEST_ENTRY, message: 'after-rollover-2' });
+
+        const oldFile = path.join(tmpDir, 'chimera-2025-06-20.log');
+        const newFile = path.join(tmpDir, 'chimera-2025-06-21.log');
+        const oldContent = fs.readFileSync(oldFile, 'utf-8');
+        const newContent = fs.readFileSync(newFile, 'utf-8');
+
+        expect(oldContent).toContain('before-rollover');
+        expect(oldContent).not.toContain('after-rollover');
+        expect(newContent).toContain('after-rollover-1');
+        expect(newContent).toContain('after-rollover-2');
+        expect(newContent).not.toContain('before-rollover');
     });
 });
