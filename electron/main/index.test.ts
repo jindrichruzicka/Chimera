@@ -1,5 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
+// ── SaveManager mock (used by main() after the sync-helper removal) ──────────
+const { mockSaveManagerClearFlag, mockSaveManagerMarkExit, mockSaveManagerCheckCrash } = vi.hoisted(
+    () => ({
+        mockSaveManagerClearFlag: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
+        mockSaveManagerMarkExit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+        mockSaveManagerCheckCrash: vi.fn<(ids: readonly string[]) => Promise<null>>(() =>
+            Promise.resolve(null),
+        ),
+    }),
+);
+
+vi.mock('./SaveManager.js', () => ({
+    SaveManager: vi.fn(() => ({
+        clearCleanExitFlag: mockSaveManagerClearFlag,
+        markCleanExit: mockSaveManagerMarkExit,
+        checkCrashRecovery: mockSaveManagerCheckCrash,
+    })),
+}));
+
 type AppEventHandler = (...args: readonly unknown[]) => void;
 
 interface FakeWebPreferences {
@@ -65,9 +84,6 @@ const {
     createMainWindow,
     registerAppLifecycle,
     resolveChimeraEnv,
-    checkCleanExitFlag,
-    writeCleanExitFlag,
-    registerCleanExitHook,
     registerCleanExitIpc,
     registerSaveManagerLifecycle,
     main,
@@ -291,108 +307,6 @@ describe('registerAppLifecycle', () => {
     });
 });
 
-interface FakeFs {
-    readonly files: Map<string, string>;
-    existsSync: (p: string) => boolean;
-    writeFileSync: (p: string, data: string) => void;
-    unlinkSync: (p: string) => void;
-}
-
-function makeFakeFs(initial: readonly string[] = []): FakeFs {
-    const files = new Map<string, string>();
-    for (const p of initial) files.set(p, '');
-    return {
-        files,
-        existsSync: (p) => files.has(p),
-        writeFileSync: (p, data) => {
-            files.set(p, data);
-        },
-        unlinkSync: (p) => {
-            files.delete(p);
-        },
-    };
-}
-
-const FLAG_PATH = '/abs/path/userData/lastCleanExit.flag';
-
-describe('checkCleanExitFlag', () => {
-    it('returns wasCleanExit: true when the flag file exists', () => {
-        const fs = makeFakeFs([FLAG_PATH]);
-
-        const result = checkCleanExitFlag({ flagPath: FLAG_PATH, fs });
-
-        expect(result.wasCleanExit).toBe(true);
-    });
-
-    it('returns wasCleanExit: false when the flag file is absent', () => {
-        const fs = makeFakeFs();
-
-        const result = checkCleanExitFlag({ flagPath: FLAG_PATH, fs });
-
-        expect(result.wasCleanExit).toBe(false);
-    });
-
-    it('deletes the flag file after reading so the next launch starts clean', () => {
-        const fs = makeFakeFs([FLAG_PATH]);
-
-        checkCleanExitFlag({ flagPath: FLAG_PATH, fs });
-
-        expect(fs.files.has(FLAG_PATH)).toBe(false);
-    });
-
-    it('does not throw when the flag is absent and no delete is needed', () => {
-        const fs = makeFakeFs();
-
-        expect(() => checkCleanExitFlag({ flagPath: FLAG_PATH, fs })).not.toThrow();
-    });
-});
-
-describe('writeCleanExitFlag', () => {
-    it('writes the flag file at the configured path', () => {
-        const fs = makeFakeFs();
-
-        writeCleanExitFlag({ flagPath: FLAG_PATH, fs });
-
-        expect(fs.files.has(FLAG_PATH)).toBe(true);
-    });
-
-    it('is idempotent: writing twice leaves a single flag', () => {
-        const fs = makeFakeFs();
-
-        writeCleanExitFlag({ flagPath: FLAG_PATH, fs });
-        writeCleanExitFlag({ flagPath: FLAG_PATH, fs });
-
-        expect(fs.files.has(FLAG_PATH)).toBe(true);
-    });
-});
-
-describe('registerCleanExitHook', () => {
-    it('writes the flag when before-quit fires', () => {
-        const fs = makeFakeFs();
-        const beforeQuitHandlers: (() => void)[] = [];
-        const host = {
-            on: vi.fn((event: string, handler: () => void) => {
-                if (event === 'before-quit') beforeQuitHandlers.push(handler);
-            }),
-        };
-
-        registerCleanExitHook({ app: host, flagPath: FLAG_PATH, fs });
-        beforeQuitHandlers.forEach((h) => h());
-
-        expect(fs.files.has(FLAG_PATH)).toBe(true);
-    });
-
-    it('registers the before-quit listener exactly once', () => {
-        const fs = makeFakeFs();
-        const host = { on: vi.fn() };
-
-        registerCleanExitHook({ app: host, flagPath: FLAG_PATH, fs });
-
-        const events = host.on.mock.calls.map(([event]) => event);
-        expect(events.filter((e) => e === 'before-quit')).toHaveLength(1);
-    });
-});
-
 describe('registerCleanExitIpc', () => {
     it('registers chimera:system:was-clean-exit handler returning the captured flag', async () => {
         const handlers = new Map<string, () => unknown>();
@@ -435,40 +349,37 @@ describe('main', () => {
         appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
         ipcMainHandle.mockClear();
         fsExistsSync.mockClear();
-        fsExistsSync.mockImplementation(() => false);
         fsWriteFileSync.mockClear();
         fsUnlinkSync.mockClear();
+        mockSaveManagerClearFlag.mockClear();
+        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
+        mockSaveManagerMarkExit.mockClear();
+        mockSaveManagerCheckCrash.mockClear();
+        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
     });
 
-    it('consults the clean-exit flag under app.getPath("userData")', () => {
-        main();
-
-        expect(appGetPath).toHaveBeenCalledWith('userData');
-        expect(fsExistsSync).toHaveBeenCalledTimes(1);
-        const [checkedPath] = fsExistsSync.mock.calls[0] ?? [];
-        expect(checkedPath).toMatch(/lastCleanExit\.flag$/);
+    it('does not call fsExistsSync — only the async SaveManager path owns the clean-exit flag', async () => {
+        await main();
+        expect(fsExistsSync).not.toHaveBeenCalled();
     });
 
-    it('registers the clean-exit IPC handler before opening any window', () => {
-        main();
+    it('registers the clean-exit IPC handler before opening any window', async () => {
+        await main();
 
         expect(ipcMainHandle).toHaveBeenCalledWith(
             'chimera:system:was-clean-exit',
             expect.any(Function),
         );
-        // whenReady resolves asynchronously; at the synchronous end of main()
-        // no window must have been created yet.
-        expect(browserWindowInstances).toHaveLength(0);
     });
 
-    it('registers the before-quit clean-exit hook', () => {
-        main();
+    it('registers the before-quit clean-exit hook via SaveManager', async () => {
+        await main();
 
         expect(appOn).toHaveBeenCalledWith('before-quit', expect.any(Function));
     });
 
-    it('registers the window-all-closed and activate lifecycle listeners', () => {
-        main();
+    it('registers the window-all-closed and activate lifecycle listeners', async () => {
+        await main();
 
         const events = appOn.mock.calls.map(([event]) => event);
         expect(events).toContain('window-all-closed');
@@ -486,7 +397,10 @@ describe('main', () => {
                 }),
         );
 
-        main();
+        const mainPromise = main();
+        // Await main() so app.whenReady() has been called and resolveReady
+        // is wired to the real promise resolve before we trigger it.
+        await mainPromise;
 
         expect(browserWindowInstances).toHaveLength(0);
         resolveReady();
@@ -498,19 +412,32 @@ describe('main', () => {
         expect(win?.options.webPreferences?.nodeIntegration).toBe(false);
     });
 
-    it('propagates wasCleanExit=true when the flag is present on disk', async () => {
-        fsExistsSync.mockImplementation(() => true);
+    it('propagates wasCleanExit=true when SaveManager.clearCleanExitFlag returns true', async () => {
+        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(true));
         const handlers = new Map<string, () => unknown>();
         ipcMainHandle.mockImplementation((channel, handler) => {
             handlers.set(channel, handler);
         });
 
-        main();
+        await main();
 
-        expect(fsUnlinkSync).toHaveBeenCalledTimes(1);
         const handler = handlers.get('chimera:system:was-clean-exit');
         expect(handler).toBeDefined();
         await expect(Promise.resolve(handler?.())).resolves.toBe(true);
+    });
+
+    it('propagates wasCleanExit=false when SaveManager.clearCleanExitFlag returns false', async () => {
+        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
+        const handlers = new Map<string, () => unknown>();
+        ipcMainHandle.mockImplementation((channel, handler) => {
+            handlers.set(channel, handler);
+        });
+
+        await main();
+
+        const handler = handlers.get('chimera:system:was-clean-exit');
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
     });
 
     it('wires the BrowserWindow preload script to electron/preload/api.js', async () => {
@@ -524,7 +451,8 @@ describe('main', () => {
                 }),
         );
 
-        main();
+        await main();
+        // app.whenReady() has now been called; resolveReady is wired.
         resolveReady();
         await Promise.resolve();
 
@@ -542,7 +470,7 @@ describe('main', () => {
 describe('registerSaveManagerLifecycle', () => {
     it('calls clearCleanExitFlag() once at startup', async () => {
         const saveManager = {
-            clearCleanExitFlag: vi.fn<() => Promise<void>>(() => Promise.resolve()),
+            clearCleanExitFlag: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
             markCleanExit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
             checkCrashRecovery: vi.fn<(gameIds: readonly string[]) => Promise<null>>(() =>
                 Promise.resolve(null),
@@ -571,7 +499,7 @@ describe('registerSaveManagerLifecycle', () => {
         await registerSaveManagerLifecycle({
             app: fakeApp,
             saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
                 markCleanExit,
                 checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
             },
@@ -593,7 +521,7 @@ describe('registerSaveManagerLifecycle', () => {
         await registerSaveManagerLifecycle({
             app: fakeApp,
             saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
                 markCleanExit: vi.fn(() => Promise.resolve()),
                 checkCrashRecovery,
             },
@@ -609,7 +537,7 @@ describe('registerSaveManagerLifecycle', () => {
         const result = await registerSaveManagerLifecycle({
             app: fakeApp,
             saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
                 markCleanExit: vi.fn(() => Promise.resolve()),
                 checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
             },
@@ -634,7 +562,7 @@ describe('registerSaveManagerLifecycle', () => {
         const result = await registerSaveManagerLifecycle({
             app: fakeApp,
             saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve()),
+                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
                 markCleanExit: vi.fn(() => Promise.resolve()),
                 checkCrashRecovery: vi.fn(() => Promise.resolve(meta)),
             },
@@ -644,12 +572,44 @@ describe('registerSaveManagerLifecycle', () => {
         expect(result.autosaveMeta).toStrictEqual(meta);
     });
 
+    it('returns wasCleanExit: true when clearCleanExitFlag returns true', async () => {
+        const fakeApp = { on: vi.fn() };
+
+        const result = await registerSaveManagerLifecycle({
+            app: fakeApp,
+            saveManager: {
+                clearCleanExitFlag: vi.fn(() => Promise.resolve(true)),
+                markCleanExit: vi.fn(() => Promise.resolve()),
+                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
+            },
+            knownGameIds: [],
+        });
+
+        expect(result.wasCleanExit).toBe(true);
+    });
+
+    it('returns wasCleanExit: false when clearCleanExitFlag returns false', async () => {
+        const fakeApp = { on: vi.fn() };
+
+        const result = await registerSaveManagerLifecycle({
+            app: fakeApp,
+            saveManager: {
+                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
+                markCleanExit: vi.fn(() => Promise.resolve()),
+                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
+            },
+            knownGameIds: [],
+        });
+
+        expect(result.wasCleanExit).toBe(false);
+    });
+
     it('checks crash recovery BEFORE clearing the clean-exit flag (order invariant — BLOCK-2)', async () => {
         const callOrder: string[] = [];
         const saveManager = {
             clearCleanExitFlag: vi.fn(() => {
                 callOrder.push('clear');
-                return Promise.resolve();
+                return Promise.resolve(false);
             }),
             markCleanExit: vi.fn(() => Promise.resolve()),
             checkCrashRecovery: vi.fn(() => {

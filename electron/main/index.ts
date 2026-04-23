@@ -1,7 +1,6 @@
 import * as path from 'node:path';
-import * as fs from 'node:fs';
 import { app, BrowserWindow, ipcMain } from 'electron';
-import { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME } from '@chimera/shared/constants.js';
+import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera/shared/constants.js';
 import {
     registerGameHandlers,
     registerLobbyHandlers,
@@ -10,8 +9,10 @@ import {
     registerSystemHandlers,
 } from './ipc-handlers.js';
 import { createLogger, type Logger, type LoggerSink } from './logger.js';
+import { SaveManager } from './SaveManager.js';
+import { InMemorySaveRepository } from '@chimera/simulation/persistence/index.js';
 
-export { CLEAN_EXIT_IPC_CHANNEL, CLEAN_EXIT_FLAG_FILENAME };
+export { CLEAN_EXIT_IPC_CHANNEL };
 
 /**
  * Narrow slice of `Electron.App` required by `registerAppLifecycle`.
@@ -58,44 +59,11 @@ export function resolveChimeraEnv(raw: string | undefined): ChimeraEnv {
 }
 
 /**
- * Narrow filesystem port used by the clean-exit flag helpers. Exposing only
- * the three calls actually required keeps tests free of real filesystem
- * access (see architecture section 10.0 — no real FS in unit tests).
- */
-export interface CleanExitFileSystem {
-    existsSync(path: string): boolean;
-    writeFileSync(path: string, data: string): void;
-    unlinkSync(path: string): void;
-}
-
-export interface CleanExitFlagOptions {
-    readonly flagPath: string;
-    readonly fs: CleanExitFileSystem;
-}
-
-export interface CleanExitCheckResult {
-    readonly wasCleanExit: boolean;
-}
-
-/**
- * Narrow slice of `Electron.App` required to register the clean-exit hook.
- * A separate interface from `AppLifecycleHost` because the event name
- * `'before-quit'` is distinct from the lifecycle events handled there.
- */
-export interface CleanExitAppHost {
-    on(event: 'before-quit', handler: () => void): unknown;
-}
-
-/**
  * Narrow slice of `Electron.IpcMain` required to register the crash-status
  * handler. Declared locally so tests do not need a full `IpcMain`.
  */
 export interface CleanExitIpcMain {
     handle(channel: string, handler: () => unknown): unknown;
-}
-
-export interface RegisterCleanExitHookOptions extends CleanExitFlagOptions {
-    readonly app: CleanExitAppHost;
 }
 
 export interface RegisterCleanExitIpcOptions {
@@ -117,7 +85,7 @@ export interface SaveManagerLifecycleAppHost {
 export interface RegisterSaveManagerLifecycleOptions {
     readonly app: SaveManagerLifecycleAppHost;
     readonly saveManager: {
-        clearCleanExitFlag(): Promise<void>;
+        clearCleanExitFlag(): Promise<boolean>;
         markCleanExit(): Promise<void>;
         checkCrashRecovery(knownGameIds: readonly string[]): Promise<SaveSlotMeta | null>;
     };
@@ -127,6 +95,11 @@ export interface RegisterSaveManagerLifecycleOptions {
 export interface SaveManagerLifecycleResult {
     /** The autosave slot meta if the previous session crashed and a save was found; null otherwise. */
     readonly autosaveMeta: SaveSlotMeta | null;
+    /**
+     * `true` when the clean-exit flag was present at startup (graceful shutdown);
+     * `false` when it was absent (crash or first run).
+     */
+    readonly wasCleanExit: boolean;
 }
 
 /**
@@ -148,57 +121,15 @@ export async function registerSaveManagerLifecycle(
     //    Must happen BEFORE clearing the flag; otherwise the evidence is gone.
     const autosaveMeta = await saveManager.checkCrashRecovery(knownGameIds);
 
-    // 2. Clear the flag so a subsequent crash is detectable.
-    await saveManager.clearCleanExitFlag();
+    // 2. Clear the flag and capture whether it was present (true = clean exit).
+    const wasCleanExit = await saveManager.clearCleanExitFlag();
 
     // 3. Write the flag on graceful shutdown.
     appHost.on('before-quit', () => {
         void saveManager.markCleanExit();
     });
 
-    return { autosaveMeta };
-}
-
-/**
- * Inspect (and consume) the `lastCleanExit.flag` sentinel at startup.
- *
- * - If the flag is present, the previous shutdown completed cleanly. The flag
- *   is deleted immediately so the next launch starts from a blank slate; a
- *   subsequent force-kill will then be correctly detected as a crash.
- * - If the flag is absent, the previous session terminated without running
- *   the `before-quit` hook (crash, SIGKILL, power loss).
- *
- * Invariant 38 (Appendix B): the sentinel must be written atomically before
- * process exit; this helper only *consumes* it on startup.
- */
-export function checkCleanExitFlag(options: CleanExitFlagOptions): CleanExitCheckResult {
-    const { flagPath, fs: fsPort } = options;
-    const wasCleanExit = fsPort.existsSync(flagPath);
-    if (wasCleanExit) {
-        fsPort.unlinkSync(flagPath);
-    }
-    return { wasCleanExit };
-}
-
-/**
- * Write the `lastCleanExit.flag` sentinel synchronously. Called from the
- * `before-quit` hook after all save operations have finished so that the
- * flag's presence genuinely signals a clean shutdown.
- */
-export function writeCleanExitFlag(options: CleanExitFlagOptions): void {
-    options.fs.writeFileSync(options.flagPath, '');
-}
-
-/**
- * Wire the clean-exit sentinel into Electron's `before-quit` event. The hook
- * writes synchronously to honour invariant 38 — the flag must land on disk
- * before the process exits.
- */
-export function registerCleanExitHook(options: RegisterCleanExitHookOptions): void {
-    const { app: appHost, flagPath, fs: fsPort } = options;
-    appHost.on('before-quit', () => {
-        writeCleanExitFlag({ flagPath, fs: fsPort });
-    });
+    return { autosaveMeta, wasCleanExit };
 }
 
 /**
@@ -299,11 +230,11 @@ function createProductionLoggerSink(): LoggerSink {
  * Renderer entry follows issue #3:
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
-export function main(): void {
+export async function main(): Promise<void> {
     const preloadPath = path.join(__dirname, '..', 'preload', 'api.js');
     const rendererEntry = path.join(__dirname, '..', '..', 'renderer', 'out', 'index.html');
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
-    const flagPath = path.join(app.getPath('userData'), CLEAN_EXIT_FLAG_FILENAME);
+    const userData = app.getPath('userData');
 
     // Construct the root main-process logger once (invariant 67). The sink
     // is currently a noop — production sinks (Pino + userData/logs rotation)
@@ -316,11 +247,28 @@ export function main(): void {
         sink: createProductionLoggerSink(),
     });
 
-    // Capture crash status before any window opens so the renderer can
-    // reliably ask for it via the IPC channel.
-    const { wasCleanExit } = checkCleanExitFlag({ flagPath, fs });
+    // Create the SaveManager. InMemorySaveRepository is a temporary placeholder
+    // until F18 wires FileSaveRepository; the crash-recovery flag operations
+    // (markCleanExit / clearCleanExitFlag) are handled directly by SaveManager
+    // using `userData` and do not touch the repository.
+    const saveManager = new SaveManager(
+        new InMemorySaveRepository(),
+        userData,
+        logger.child({ module: 'saves' }),
+    );
+
+    // Wire the SaveManager lifecycle: checks crash recovery, clears the flag,
+    // and registers the before-quit handler. Returns wasCleanExit for the IPC
+    // channel so the renderer can prompt crash-recovery on startup.
+    const { wasCleanExit } = await registerSaveManagerLifecycle({
+        app,
+        saveManager,
+        knownGameIds: [],
+    });
+
+    // Expose the crash-status to the renderer via a dedicated IPC channel.
+    // Captured before any window opens so the renderer never races the handler.
     registerCleanExitIpc({ ipcMain, wasCleanExit });
-    registerCleanExitHook({ app, flagPath, fs });
 
     // Register the `chimera:system:*` channels (platform info, quit). Runs
     // before the first window opens so the renderer never races the handler
@@ -373,5 +321,5 @@ export function main(): void {
 
 // Auto-bootstrap only when executed by Electron, not when imported by Vitest.
 if (process.env['VITEST'] === undefined) {
-    main();
+    void main();
 }

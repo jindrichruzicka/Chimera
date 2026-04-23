@@ -217,7 +217,12 @@ describe('SaveManager — crash recovery', () => {
         expect(result).not.toBeNull();
     });
 
-    it('clearCleanExitFlag is a no-op when the flag does not exist', async () => {
-        await expect(manager.clearCleanExitFlag()).resolves.toBeUndefined();
+    it('clearCleanExitFlag returns false when the flag does not exist', async () => {
+        await expect(manager.clearCleanExitFlag()).resolves.toBe(false);
+    });
+
+    it('clearCleanExitFlag returns true when the flag was present', async () => {
+        await manager.markCleanExit();
+        await expect(manager.clearCleanExitFlag()).resolves.toBe(true);
     });
 });

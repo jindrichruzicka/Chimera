@@ -127,11 +127,19 @@ export class SaveManager {
     /**
      * Remove the clean-exit sentinel from `dataDir`.
      * Call this at application start so the next launch can detect a crash.
-     * Silently succeeds when the flag does not exist.
+     *
+     * Returns `true` if the flag was present (previous exit was clean), or
+     * `false` if it was absent (previous session may have crashed).
      */
-    async clearCleanExitFlag(): Promise<void> {
-        await fs.unlink(this.cleanExitFlagPath).catch((): void => undefined);
-        this.log.debug('clearCleanExitFlag: flag removed (or was absent)');
+    async clearCleanExitFlag(): Promise<boolean> {
+        try {
+            await fs.unlink(this.cleanExitFlagPath);
+            this.log.debug('clearCleanExitFlag: flag removed');
+            return true;
+        } catch {
+            this.log.debug('clearCleanExitFlag: flag was absent');
+            return false;
+        }
     }
 
     /**
