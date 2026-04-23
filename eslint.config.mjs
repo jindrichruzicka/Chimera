@@ -159,6 +159,10 @@ export default tseslint.config(
             // vitest's `expect(mockFn)` pattern intentionally passes method
             // references around; unbound-method is pure noise in test code.
             '@typescript-eslint/unbound-method': 'off',
+            // Empty stub functions and async stubs without await are common in
+            // test scaffolding and do not indicate real code quality issues.
+            '@typescript-eslint/no-empty-function': 'off',
+            '@typescript-eslint/require-await': 'off',
         },
     },
 

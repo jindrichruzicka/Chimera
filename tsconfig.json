@@ -38,6 +38,7 @@
         "games/**/*.ts",
         "renderer/**/*.ts",
         "shared/**/*.ts",
+        "networking/**/*.ts",
         "tools/**/*.ts"
     ],
     "exclude": [
