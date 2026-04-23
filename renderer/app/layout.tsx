@@ -7,6 +7,7 @@
 
 import type { ReactNode } from 'react';
 import { SettingsBootstrap } from './SettingsBootstrap';
+import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 
 export const metadata = {
     title: 'Chimera',
@@ -18,7 +19,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <html lang="en">
             <body>
                 <SettingsBootstrap />
-                {children}
+                <RootErrorBoundary>{children}</RootErrorBoundary>
+                {/* ToastHost will be added here as a sibling in §4.30 */}
             </body>
         </html>
     );
