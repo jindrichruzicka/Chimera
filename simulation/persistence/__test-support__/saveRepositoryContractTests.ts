@@ -119,7 +119,10 @@ export function runSaveRepositoryContractTests(name: string, factory: () => Save
             await repo.save(file);
             const loaded = await repo.load('tactics/autosave');
 
-            expect(loaded).toStrictEqual(file);
+            // Use toMatchObject rather than toStrictEqual: implementations may
+            // attach additional computed fields (e.g. header.checksum) to the
+            // persisted file without violating the contract.
+            expect(loaded).toMatchObject(file);
         });
 
         it('save overwrites an existing slot silently', async () => {

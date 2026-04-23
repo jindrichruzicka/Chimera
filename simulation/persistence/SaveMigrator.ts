@@ -105,6 +105,26 @@ export class SaveMigrator {
 // ─── Error types ──────────────────────────────────────────────────────────────
 
 /**
+ * Thrown by `SaveRepository.load()` when a save file's checksum is present
+ * but does not match the recomputed checksum of the body. Indicates that the
+ * file has been tampered with or corrupted after it was written.
+ *
+ * Covers OWASP A08 (Software and Data Integrity Failures) and invariant #23.
+ */
+export class SaveIntegrityError extends Error {
+    /** The qualified slot ID that failed verification, if known. */
+    public readonly slotId: string | undefined;
+
+    constructor(slotId?: string) {
+        const detail = slotId !== undefined ? ` for slot '${slotId}'` : '';
+        super(`Save file integrity check failed${detail}: checksum mismatch`);
+        this.name = 'SaveIntegrityError';
+        this.slotId = slotId;
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
+
+/**
  * Thrown by `JsonSaveSerializer.deserialize()` when the raw input fails
  * size validation, JSON parsing, or Zod schema validation. Distinct from
  * `SaveNotFoundError` (missing slot) and `SaveSchemaTooNewError` (future

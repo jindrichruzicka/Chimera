@@ -69,6 +69,15 @@ export interface SaveFileHeader {
     readonly playerNames: readonly string[];
     /** Base64 PNG captured by the renderer at save time (optional). */
     readonly thumbnailDataUrl?: string;
+    /**
+     * SHA-256 hex checksum of the canonical save body
+     * (`{ checkpoint, deltaActions, pendingCommitments }`).
+     *
+     * Optional so that saves written before this field was introduced load
+     * without error (backwards-compatible). When present, the repository
+     * verifies it on load and throws `SaveIntegrityError` on mismatch.
+     */
+    readonly checksum?: string;
 }
 
 // ─── SaveFile ─────────────────────────────────────────────────────────────────

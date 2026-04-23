@@ -46,6 +46,7 @@ const SaveFileHeaderSchema = z.object({
     turnNumber: z.number().int(),
     playerNames: z.array(z.string()),
     thumbnailDataUrl: z.string().optional(),
+    checksum: z.string().optional(),
 });
 
 /**

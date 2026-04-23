@@ -16,6 +16,7 @@ import {
     JsonSaveSerializer,
     SaveMigrator,
     SaveNotFoundError,
+    SaveIntegrityError,
 } from '@chimera/simulation/persistence/index.js';
 import {
     runSaveRepositoryContractTests,
@@ -97,7 +98,10 @@ describe('FileSaveRepository — integration', () => {
         await repo.save(file);
         const loaded = await repo.load('tactics/autosave');
 
-        expect(loaded).toStrictEqual(file);
+        // FileSaveRepository attaches a checksum on save; verify the original
+        // fields are preserved (toMatchObject) rather than strict equality.
+        expect(loaded).toMatchObject(file);
+        expect(typeof (loaded.header as { checksum?: string }).checksum).toBe('string');
     });
 
     it('list entry has sizeBytes > 0 matching the file on disk', async () => {
@@ -204,13 +208,106 @@ describe('FileSaveRepository — path traversal hardening', () => {
         const repo = makeRepo(tmpDir);
         const file = makeFile('tactics', 'slot-1');
         await repo.save(file);
-        await expect(repo.load('tactics/slot-1')).resolves.toStrictEqual(file);
+        await expect(repo.load('tactics/slot-1')).resolves.toMatchObject(file);
     });
 
     it('slotId with underscore is accepted', async () => {
         const repo = makeRepo(tmpDir);
         const file = makeFile('my-game', 'save_slot');
         await repo.save(file);
-        await expect(repo.load('my-game/save_slot')).resolves.toStrictEqual(file);
+        await expect(repo.load('my-game/save_slot')).resolves.toMatchObject(file);
+    });
+});
+
+// ── Integrity checksum tests (issue #134) ─────────────────────────────────────
+
+describe('FileSaveRepository — integrity checksum', () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+        tmpDir = await makeTmpDir();
+    });
+
+    afterEach(async () => {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it('save attaches a checksum to the header', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave');
+
+        await repo.save(file);
+
+        const filePath = path.join(tmpDir, 'tactics', 'autosave.chimera');
+        const raw = await fs.readFile(filePath, 'utf8');
+        const parsed = JSON.parse(raw) as { header: { checksum?: unknown } };
+        expect(typeof parsed.header.checksum).toBe('string');
+        expect((parsed.header.checksum as string).length).toBe(64);
+    });
+
+    it('load succeeds when the checksum matches', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave');
+
+        await repo.save(file);
+
+        await expect(repo.load('tactics/autosave')).resolves.toMatchObject(file);
+    });
+
+    it('load throws SaveIntegrityError when the checkpoint is tampered', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave');
+
+        await repo.save(file);
+
+        // Tamper: read the file, mutate the checkpoint, write it back
+        const filePath = path.join(tmpDir, 'tactics', 'autosave.chimera');
+        const raw = await fs.readFile(filePath, 'utf8');
+        const parsed = JSON.parse(raw) as {
+            header: Record<string, unknown>;
+            checkpoint: Record<string, unknown>;
+            deltaActions: unknown[];
+            pendingCommitments: Record<string, unknown>;
+        };
+        parsed.checkpoint['tick'] = 99999;
+        await fs.writeFile(filePath, JSON.stringify(parsed, null, 2));
+
+        await expect(repo.load('tactics/autosave')).rejects.toBeInstanceOf(SaveIntegrityError);
+    });
+
+    it('load throws SaveIntegrityError when deltaActions are tampered', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave');
+
+        await repo.save(file);
+
+        const filePath = path.join(tmpDir, 'tactics', 'autosave.chimera');
+        const raw = await fs.readFile(filePath, 'utf8');
+        const parsed = JSON.parse(raw) as {
+            header: Record<string, unknown>;
+            checkpoint: Record<string, unknown>;
+            deltaActions: unknown[];
+            pendingCommitments: Record<string, unknown>;
+        };
+        // Inject a fake action
+        parsed.deltaActions.push({ type: 'evil:action', payload: {} });
+        await fs.writeFile(filePath, JSON.stringify(parsed, null, 2));
+
+        await expect(repo.load('tactics/autosave')).rejects.toBeInstanceOf(SaveIntegrityError);
+    });
+
+    it('load succeeds for existing saves that have no checksum field (backwards-compatible)', async () => {
+        const repo = makeRepo(tmpDir);
+        const file = makeFile('tactics', 'autosave');
+
+        // Write a save file WITHOUT a checksum field, simulating a legacy save
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        const filePath = path.join(dir, 'autosave.chimera');
+        const serializer = new JsonSaveSerializer();
+        await fs.writeFile(filePath, serializer.serialize(file));
+
+        // Should load without throwing
+        await expect(repo.load('tactics/autosave')).resolves.toMatchObject(file);
     });
 });

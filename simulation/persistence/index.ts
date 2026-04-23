@@ -19,6 +19,7 @@ export { CompressedSaveSerializer } from './CompressedSaveSerializer.js';
 export {
     CURRENT_SCHEMA_VERSION,
     SaveMigrator,
+    SaveIntegrityError,
     SaveNotFoundError,
     SaveParseError,
     SaveSchemaTooNewError,
@@ -26,3 +27,5 @@ export {
 export type { SaveMigration } from './SaveMigrator.js';
 export type { SaveSlotMeta, SaveRepository } from './SaveRepository.js';
 export { InMemorySaveRepository } from './InMemorySaveRepository.js';
+export { computeBodyChecksum } from './SaveChecksum.js';
+export type { SaveBody } from './SaveChecksum.js';

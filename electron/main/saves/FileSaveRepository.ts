@@ -30,7 +30,11 @@ import type {
 } from '@chimera/simulation/persistence/SaveRepository.js';
 import type { SaveSerializer } from '@chimera/simulation/persistence/SaveSerializer.js';
 import type { SaveMigrator } from '@chimera/simulation/persistence/SaveMigrator.js';
-import { SaveNotFoundError } from '@chimera/simulation/persistence/SaveMigrator.js';
+import {
+    SaveNotFoundError,
+    SaveIntegrityError,
+} from '@chimera/simulation/persistence/SaveMigrator.js';
+import { computeBodyChecksum } from '@chimera/simulation/persistence/SaveChecksum.js';
 
 /** Extension used for save files. */
 const FILE_EXT = '.chimera';
@@ -150,7 +154,18 @@ export class FileSaveRepository implements SaveRepository {
         }
 
         const file = this.serializer.deserialize(raw);
-        return this.migrator.migrate(file);
+        const migrated = this.migrator.migrate(file);
+
+        // Verify integrity checksum if the file was written with one.
+        // Absent checksum means a legacy save — load it without error (backwards-compat).
+        if (migrated.header.checksum !== undefined) {
+            const expected = await computeBodyChecksum(migrated);
+            if (expected !== migrated.header.checksum) {
+                throw new SaveIntegrityError(slotId);
+            }
+        }
+
+        return migrated;
     }
 
     async save(file: SaveFile): Promise<void> {
@@ -160,12 +175,19 @@ export class FileSaveRepository implements SaveRepository {
         const dir = path.join(this.baseDir, file.header.gameId);
         await fs.mkdir(dir, { recursive: true });
 
+        // Compute and attach the integrity checksum before serialising.
+        const checksum = await computeBodyChecksum(file);
+        const fileWithChecksum: SaveFile = {
+            ...file,
+            header: { ...file.header, checksum },
+        };
+
         const dest = this.slotPath(file.header.gameId, file.header.slotId);
         const tmp = `${dest}.tmp`;
 
         const fh = await fs.open(tmp, 'w');
         try {
-            await fh.writeFile(this.serializer.serialize(file));
+            await fh.writeFile(this.serializer.serialize(fileWithChecksum));
             await fh.sync();
         } finally {
             await fh.close();
