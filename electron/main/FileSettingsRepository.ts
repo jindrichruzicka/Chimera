@@ -48,6 +48,15 @@ function validateGameId(gameId: string): void {
 }
 
 /**
+ * Versioned envelope stored on disk.
+ * Wrapping overrides in an envelope allows future migrations when the schema changes.
+ */
+interface SettingsFileEnvelope {
+    readonly version: 1;
+    readonly overrides: UserSettings;
+}
+
+/**
  * Filesystem-backed `SettingsRepository`. One `.json` file per game.
  *
  * `baseDir` should be `app.getPath('userData') + '/settings'` in production.
@@ -65,7 +74,20 @@ export class FileSettingsRepository implements SettingsRepository {
         const filePath = this.settingsPath(gameId);
         return fs
             .readFile(filePath, 'utf8')
-            .then((raw) => JSON.parse(raw) as UserSettings)
+            .then((raw) => {
+                const parsed = JSON.parse(raw) as unknown;
+                if (
+                    parsed !== null &&
+                    typeof parsed === 'object' &&
+                    !Array.isArray(parsed) &&
+                    (parsed as Record<string, unknown>)['version'] === 1 &&
+                    typeof (parsed as Record<string, unknown>)['overrides'] === 'object'
+                ) {
+                    return (parsed as SettingsFileEnvelope).overrides;
+                }
+                // Legacy format or wrong version — fall back to empty
+                return {};
+            })
             .catch((err: unknown) => {
                 if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
                     return {};
@@ -80,9 +102,11 @@ export class FileSettingsRepository implements SettingsRepository {
 
         await fs.mkdir(this.baseDir, { recursive: true });
 
+        const envelope: SettingsFileEnvelope = { version: 1, overrides };
+
         const fh = await fs.open(tmpPath, 'w');
         try {
-            await fh.writeFile(JSON.stringify(overrides), 'utf8');
+            await fh.writeFile(JSON.stringify(envelope), 'utf8');
             await fh.sync();
         } finally {
             await fh.close();

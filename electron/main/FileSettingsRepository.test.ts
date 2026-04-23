@@ -120,11 +120,13 @@ describe('FileSettingsRepository (filesystem behaviour)', () => {
         // tmpDir cleaned up via contractDirs pattern is not needed here — just remove per-test
     });
 
-    it('writes a JSON file at <baseDir>/<gameId>.json', async () => {
+    it('writes a JSON file at <baseDir>/<gameId>.json with version envelope (WARN-6)', async () => {
         await repo.save('tactics', { audio: { masterVolume: 0.3 } });
         const filePath = path.join(tmpDir, 'tactics.json');
         const raw = await fs.readFile(filePath, 'utf8');
-        expect(JSON.parse(raw)).toEqual({ audio: { masterVolume: 0.3 } });
+        const parsed = JSON.parse(raw) as { version: number; overrides: unknown };
+        expect(parsed.version).toBe(1);
+        expect(parsed.overrides).toEqual({ audio: { masterVolume: 0.3 } });
     });
 
     it('leaves no .tmp file after a successful save()', async () => {
@@ -154,6 +156,25 @@ describe('FileSettingsRepository (filesystem behaviour)', () => {
 
     it('throws InvalidGameIdError for empty gameId', () => {
         expect(() => new FileSettingsRepository('/tmp').load('')).toThrow(InvalidGameIdError);
+    });
+
+    it('load() falls back to {} when file has no version field (old format)', async () => {
+        // Simulate a legacy file with plain JSON (no envelope)
+        const filePath = path.join(tmpDir, 'legacy-game.json');
+        await fs.writeFile(filePath, JSON.stringify({ audio: { masterVolume: 0.5 } }), 'utf8');
+        const result = await repo.load('legacy-game');
+        expect(result).toEqual({});
+    });
+
+    it('load() falls back to {} when file has wrong version number', async () => {
+        const filePath = path.join(tmpDir, 'old-version.json');
+        await fs.writeFile(
+            filePath,
+            JSON.stringify({ version: 99, overrides: { audio: { masterVolume: 0.5 } } }),
+            'utf8',
+        );
+        const result = await repo.load('old-version');
+        expect(result).toEqual({});
     });
 });
 

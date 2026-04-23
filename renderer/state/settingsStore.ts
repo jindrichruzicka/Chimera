@@ -60,7 +60,12 @@ export function createSettingsStore(bridge?: {
         async updateSettings(gameId: string, patch: Partial<UserSettings>): Promise<void> {
             const api =
                 bridge ?? (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera;
-            const result = await api!.settings.update(gameId, patch);
+            if (api === undefined) {
+                throw new Error(
+                    '[settingsStore] preload bridge unavailable — window.__chimera is not set',
+                );
+            }
+            const result = await api.settings.update(gameId, patch);
             set((state) => ({
                 settings: { ...state.settings, [gameId]: result },
             }));
@@ -69,7 +74,12 @@ export function createSettingsStore(bridge?: {
         async resetSettings(gameId: string): Promise<void> {
             const api =
                 bridge ?? (globalThis as { __chimera?: { settings: SettingsAPI } }).__chimera;
-            const result = await api!.settings.reset(gameId);
+            if (api === undefined) {
+                throw new Error(
+                    '[settingsStore] preload bridge unavailable — window.__chimera is not set',
+                );
+            }
+            const result = await api.settings.reset(gameId);
             set((state) => ({
                 settings: { ...state.settings, [gameId]: result },
             }));

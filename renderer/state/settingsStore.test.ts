@@ -111,3 +111,34 @@ describe('useSettingsStore', () => {
         expect(typeof settings).toBe('object');
     });
 });
+
+// ── Named bridge error (WARN-3) ───────────────────────────────────────────────
+
+describe('settingsStore — named bridge error when bridge is unavailable (WARN-3)', () => {
+    it('updateSettings throws a named error when no bridge is provided and globalThis.__chimera is absent', async () => {
+        // Ensure globalThis.__chimera is not set
+        const g = globalThis as Record<string, unknown>;
+        const prev = g['__chimera'];
+        delete g['__chimera'];
+
+        const store = createSettingsStore(); // no bridge argument
+        await expect(store.getState().updateSettings('game', {})).rejects.toThrow(
+            /\[settingsStore\] preload bridge unavailable/,
+        );
+
+        g['__chimera'] = prev; // restore
+    });
+
+    it('resetSettings throws a named error when no bridge is provided and globalThis.__chimera is absent', async () => {
+        const g = globalThis as Record<string, unknown>;
+        const prev = g['__chimera'];
+        delete g['__chimera'];
+
+        const store = createSettingsStore();
+        await expect(store.getState().resetSettings('game')).rejects.toThrow(
+            /\[settingsStore\] preload bridge unavailable/,
+        );
+
+        g['__chimera'] = prev;
+    });
+});
