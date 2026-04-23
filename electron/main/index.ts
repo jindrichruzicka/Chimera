@@ -9,6 +9,7 @@ import {
     registerSystemHandlers,
 } from './ipc-handlers.js';
 import { createLogger, createPinoSink, type Logger, type LoggerSink } from './logger.js';
+import { registerCrashReporter } from './crash-reporter.js';
 import { SaveManager } from './SaveManager.js';
 import { SettingsManager } from './SettingsManager.js';
 import { FileSettingsRepository } from './FileSettingsRepository.js';
@@ -242,6 +243,14 @@ export async function main(): Promise<void> {
     const logger: Logger = createLogger({
         source: { process: 'main', module: 'root' },
         sink: createProductionLoggerSink(path.join(userData, 'logs')),
+    });
+
+    // Register crash reporter early — before any window opens — so all
+    // subsequent crashes are captured (Invariant 68).
+    registerCrashReporter({
+        logger: logger.child({ module: 'crash' }),
+        crashesDir: path.join(userData, 'crashes'),
+        getSnapshot: () => null, // F14 wires the live snapshot when simulation is running
     });
 
     // Create the SaveManager. InMemorySaveRepository is a temporary placeholder
