@@ -13,7 +13,8 @@
 import { describe, expect, it } from 'vitest';
 import { SaveParseError } from '@chimera/simulation/persistence/index.js';
 import type { SaveFile } from '@chimera/simulation/persistence/index.js';
-import type { GamePhase, PlayerId } from '@chimera/simulation/engine/types.js';
+import type { GamePhase } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera/simulation/engine/index.js';
 import { CompressedSaveSerializer } from './CompressedSaveSerializer.js';
 import { JsonSaveSerializer } from '@chimera/simulation/persistence/index.js';
 
@@ -86,7 +87,7 @@ describe('CompressedSaveSerializer', () => {
             },
             deltaActions: Array.from({ length: 60 }, (_, i) => ({
                 type: 'engine:end_turn',
-                playerId: 'player-1' as PlayerId,
+                playerId: toPlayerId('player-1'),
                 tick: i,
                 payload: {},
             })),

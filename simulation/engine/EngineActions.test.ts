@@ -19,8 +19,9 @@ import { ActionRegistry } from './ActionRegistry.js';
 import { EngineActions, registerEngineActions } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId } from './types.js';
+import { playerId as toPlayerId } from './types.js';
 
-// ─── Test fixtures ────────────────────────────────────────────────────────────
+// ─── Test fixtures ─────────────────────────────────────────────────────────────────
 
 const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
     tick: 0,
@@ -33,8 +34,8 @@ const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
 });
 
 const stubCtx = { rng: makeStubRng(0.5) };
-const hostId = 'p1' as PlayerId;
-const guestId = 'p2' as PlayerId;
+const hostId = toPlayerId('p1');
+const guestId = toPlayerId('p2');
 
 // ─── EngineActions array ──────────────────────────────────────────────────────
 

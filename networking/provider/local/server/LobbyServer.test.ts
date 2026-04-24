@@ -18,14 +18,11 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { LobbyServer } from './LobbyServer.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
 
 /** Safely convert ws RawData (Buffer | ArrayBuffer | Buffer[]) to a string. */
 function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
@@ -45,7 +42,7 @@ function connectAndJoin(
             const joinMsg: ClientMessage = {
                 type: 'JOIN',
                 token: server.token,
-                profile: { playerId: pid('pending'), displayName },
+                profile: { playerId: toPlayerId('pending'), displayName },
             };
             ws.send(JSON.stringify(joinMsg));
         });
@@ -142,7 +139,7 @@ describe('LobbyServer — JOIN handshake', () => {
                 const join: ClientMessage = {
                     type: 'JOIN',
                     token: 'wrong-token',
-                    profile: { playerId: pid('x'), displayName: 'X' },
+                    profile: { playerId: toPlayerId('x'), displayName: 'X' },
                 };
                 ws.send(JSON.stringify(join));
             });
@@ -165,7 +162,7 @@ describe('LobbyServer — JOIN handshake', () => {
                     JSON.stringify({
                         type: 'JOIN',
                         token: server.token,
-                        profile: { playerId: pid('x'), displayName: 'X' },
+                        profile: { playerId: toPlayerId('x'), displayName: 'X' },
                     } satisfies ClientMessage),
                 );
             });
@@ -218,7 +215,7 @@ describe('LobbyServer — sending messages', () => {
         const server = makeServer();
         await server.ready();
         expect(() =>
-            server.sendToPlayer(pid('ghost'), { type: 'PONG', sentAt: 0, serverTime: 0 }),
+            server.sendToPlayer(toPlayerId('ghost'), { type: 'PONG', sentAt: 0, serverTime: 0 }),
         ).not.toThrow();
     });
 });
@@ -307,7 +304,7 @@ describe('LobbyServer — timing-safe token comparison (T07)', () => {
                 const join: ClientMessage = {
                     type: 'JOIN',
                     token: 'short', // different length from the 32-hex token
-                    profile: { playerId: pid('x'), displayName: 'X' },
+                    profile: { playerId: toPlayerId('x'), displayName: 'X' },
                 };
                 ws.send(JSON.stringify(join));
             });

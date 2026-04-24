@@ -8,19 +8,13 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '../networking/provider/MultiplayerProvider.js';
 import {
     isClientMessage,
     isServerMessage,
     type ClientMessage,
     type ServerMessage,
 } from './messages.js';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
 
 // ─── ClientMessage ────────────────────────────────────────────────────────────
 
@@ -29,7 +23,7 @@ describe('shared/messages — ClientMessage', () => {
         const msg: ClientMessage = {
             type: 'JOIN',
             token: 'abc123',
-            profile: { playerId: pid('p1'), displayName: 'Alice' },
+            profile: { playerId: toPlayerId('p1'), displayName: 'Alice' },
         };
         expect(msg.type).toBe('JOIN');
     });
@@ -38,7 +32,7 @@ describe('shared/messages — ClientMessage', () => {
         const msg: ClientMessage = {
             type: 'ACTION',
             tick: 10,
-            action: { type: 'test:noop', playerId: pid('p1'), tick: 10, payload: {} },
+            action: { type: 'test:noop', playerId: toPlayerId('p1'), tick: 10, payload: {} },
             checksum: 0,
         };
         expect(msg.type).toBe('ACTION');
@@ -54,7 +48,7 @@ describe('shared/messages — ClientMessage', () => {
     it('PROFILE_UPDATE message has a profile', () => {
         const msg: ClientMessage = {
             type: 'PROFILE_UPDATE',
-            profile: { playerId: pid('p1'), displayName: 'Bob' },
+            profile: { playerId: toPlayerId('p1'), displayName: 'Bob' },
         };
         expect(msg.type).toBe('PROFILE_UPDATE');
     });
@@ -69,12 +63,12 @@ describe('shared/messages — ClientMessage', () => {
 // ─── ServerMessage ────────────────────────────────────────────────────────────
 
 describe('shared/messages — ServerMessage', () => {
-    const lobbyInfo = { sessionId: 's1', hostId: pid('host'), gameId: 'test' };
+    const lobbyInfo = { sessionId: 's1', hostId: toPlayerId('host'), gameId: 'test' };
 
     it('WELCOME message has playerId and lobbyState', () => {
         const msg: ServerMessage = {
             type: 'WELCOME',
-            playerId: pid('p1'),
+            playerId: toPlayerId('p1'),
             lobbyState: { info: lobbyInfo, players: [] },
         };
         expect(msg.type).toBe('WELCOME');
@@ -85,7 +79,7 @@ describe('shared/messages — ServerMessage', () => {
             type: 'SNAPSHOT',
             snapshot: {
                 tick: 5,
-                viewerId: pid('p1'),
+                viewerId: toPlayerId('p1'),
                 players: {},
                 entities: {},
                 phase: 'playing',

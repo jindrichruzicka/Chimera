@@ -10,6 +10,7 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {
     HostTransport,
     PlayerSnapshot,
@@ -23,10 +24,6 @@ import { MessageRouter } from './MessageRouter.js';
 import { WsHostTransport } from './WsHostTransport.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
 
 function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
     if (Array.isArray(raw)) return Buffer.concat(raw).toString('utf8');
@@ -55,7 +52,7 @@ async function connectAndJoin(server: LobbyServer): Promise<{ ws: WebSocket; pla
                 JSON.stringify({
                     type: 'JOIN',
                     token: server.token,
-                    profile: { playerId: pid('pending'), displayName: 'Tester' },
+                    profile: { playerId: toPlayerId('pending'), displayName: 'Tester' },
                 } satisfies ClientMessage),
             ),
         );
@@ -139,7 +136,7 @@ describe('WsHostTransport — broadcastLobbyState', () => {
         });
 
         const state: LobbyState = {
-            info: { sessionId: 'x', hostId: pid('h'), gameId: 'test' },
+            info: { sessionId: 'x', hostId: toPlayerId('h'), gameId: 'test' },
             players: [],
         };
         transport.broadcastLobbyState(state);
@@ -168,7 +165,7 @@ describe('WsHostTransport — sendSideChannel', () => {
 
         const chatMsg: SideChannelMessage = {
             kind: 'chat',
-            payload: { senderId: pid('host'), text: 'hello', timestamp: 0 },
+            payload: { senderId: toPlayerId('host'), text: 'hello', timestamp: 0 },
         };
         transport.sendSideChannel(c1.playerId, chatMsg);
 
@@ -194,7 +191,7 @@ describe('WsHostTransport — sendSideChannel', () => {
 
         transport.sendSideChannel('broadcast', {
             kind: 'chat',
-            payload: { senderId: pid('host'), text: 'all', timestamp: 0 },
+            payload: { senderId: toPlayerId('host'), text: 'all', timestamp: 0 },
         });
 
         const [r1, r2] = await Promise.all([p1, p2]);
@@ -303,7 +300,7 @@ describe('WsHostTransport — profile side-channel (T04)', () => {
 
         transport.sendSideChannel('broadcast', {
             kind: 'profile',
-            payload: { playerId: pid('p1'), displayName: 'Alice' },
+            payload: { playerId: toPlayerId('p1'), displayName: 'Alice' },
         });
 
         await new Promise<void>((r) => setTimeout(r, 30));

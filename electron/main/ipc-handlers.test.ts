@@ -44,7 +44,8 @@ import { IpcRequestValidationError } from './ipc-schemas.js';
 import { createLogger, createMemorySink, createNoopLogger } from './logger.js';
 import { LobbyManager } from './lobby-manager.js';
 import { InMemoryMultiplayerProvider } from '../../networking/provider/InMemoryMultiplayerProvider.js';
-import type { LobbyInfo, PlayerId } from '../../networking/provider/MultiplayerProvider.js';
+import type { LobbyInfo } from '../../networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';
 import type {
     ActionRejection,
     EngineAction,
@@ -319,7 +320,7 @@ describe('registerLobbyHandlers', () => {
     it('registers chimera:lobby:join as an invoke handler that calls lobbyManager.joinLobby', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
-        const mockHostId = 'host-1' as PlayerId;
+        const mockHostId = toPlayerId('host-1');
         const mockInfo: LobbyInfo = {
             sessionId: 'sess-1',
             hostId: mockHostId,

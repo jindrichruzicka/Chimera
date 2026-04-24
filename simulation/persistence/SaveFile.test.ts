@@ -14,7 +14,8 @@ import { describe, expect, it } from 'vitest';
 import { JsonSaveSerializer, MAX_SAVE_SIZE_CHARS } from './JsonSaveSerializer.js';
 import { SaveParseError } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
-import type { GamePhase, PlayerId } from '../engine/types.js';
+import type { GamePhase } from '../engine/types.js';
+import { playerId as toPlayerId } from '../engine/types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -89,7 +90,7 @@ describe('JsonSaveSerializer', () => {
             deltaActions: [
                 {
                     type: 'engine:end_turn',
-                    playerId: 'player-1' as PlayerId,
+                    playerId: toPlayerId('player-1'),
                     tick: 3,
                     payload: {},
                 },

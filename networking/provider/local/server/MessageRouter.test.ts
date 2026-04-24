@@ -11,15 +11,12 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { LobbyServer } from './LobbyServer.js';
 import { MessageRouter } from './MessageRouter.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
 
 function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
     if (Array.isArray(raw)) return Buffer.concat(raw).toString('utf8');
@@ -36,7 +33,7 @@ async function connectAndJoin(server: LobbyServer): Promise<{ ws: WebSocket; pla
                 JSON.stringify({
                     type: 'JOIN',
                     token: server.token,
-                    profile: { playerId: pid('pending'), displayName: 'Tester' },
+                    profile: { playerId: toPlayerId('pending'), displayName: 'Tester' },
                 } satisfies ClientMessage),
             ),
         );

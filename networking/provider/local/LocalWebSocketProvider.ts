@@ -22,7 +22,7 @@ import type {
     JoinedSession,
     LobbyInfo,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ServerConnectionOptions } from './client/ServerConnection.js';
 import { LobbyServer } from './server/LobbyServer.js';
 import { MessageRouter } from './server/MessageRouter.js';
@@ -68,7 +68,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         const lobbyCode = `127.0.0.1:${server.port}:${server.token}`;
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyCode,
-            hostId: `host-${server.token.slice(0, 8)}` as PlayerId,
+            hostId: toPlayerId(`host-${server.token.slice(0, 8)}`),
             gameId: params.gameId,
         };
 
@@ -92,12 +92,16 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         const conn = new ServerConnection(this.opts);
         this.openConnections.add(conn);
 
-        const { playerId, lobbyState } = await conn.connect(`ws://${host}:${portStr}`, token, {
-            playerId: 'pending' as PlayerId,
-            displayName: 'Player',
-        });
+        const { playerId: assignedPlayerId, lobbyState } = await conn.connect(
+            `ws://${host}:${portStr}`,
+            token,
+            {
+                playerId: toPlayerId('pending'),
+                displayName: 'Player',
+            },
+        );
 
-        const transport = new WsClientTransport(conn, playerId);
+        const transport = new WsClientTransport(conn, assignedPlayerId);
 
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyState.info.sessionId,

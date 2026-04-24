@@ -30,6 +30,15 @@ export type { ContentDatabase } from '../content/index.js';
 export type PlayerId = string & { readonly __brand: 'PlayerId' };
 
 /**
+ * Constructs a branded {@link PlayerId} from a raw string.
+ *
+ * This is the single authorised cast site for the PlayerId brand in
+ * simulation/. Test helpers and production code must call this instead of
+ * writing `raw as PlayerId` directly.
+ */
+export const playerId = (raw: string): PlayerId => raw as PlayerId;
+
+/**
  * Opaque entity identifier. Branded to prevent mix-up with PlayerId or
  * other string keys at call sites.
  */

@@ -25,12 +25,9 @@ import type {
     SideChannelMessage,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { LocalWebSocketProvider } from './LocalWebSocketProvider.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
 
 function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
     return {
@@ -220,7 +217,7 @@ describe('LocalWebSocketProvider integration — side-channel', () => {
 
         hosted.transport.sendSideChannel('broadcast', {
             kind: 'chat',
-            payload: { senderId: pid('host'), text: 'hello', timestamp: 0 },
+            payload: { senderId: toPlayerId('host'), text: 'hello', timestamp: 0 },
         });
 
         await wait(40);
@@ -279,7 +276,7 @@ describe('LocalWebSocketProvider integration — lobby state broadcast', () => {
         client.transport.onLobbyStateChanged((s) => states.push(s));
 
         hosted.transport.broadcastLobbyState({
-            info: { sessionId: hosted.lobbyCode, hostId: pid('host'), gameId: 'tactics' },
+            info: { sessionId: hosted.lobbyCode, hostId: toPlayerId('host'), gameId: 'tactics' },
             players: [{ playerId: clientId, displayName: 'Alice', ready: false }],
         });
 

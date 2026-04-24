@@ -23,13 +23,10 @@ import {
     UnknownActionTypeError,
 } from './ActionRegistry.js';
 import { makeStubRng } from './__test-support__/stubs.js';
-import type { ActionDefinition, BaseGameSnapshot, PlayerId } from './types.js';
+import type { ActionDefinition, BaseGameSnapshot } from './types.js';
+import { playerId as toPlayerId } from './types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function makePlayerId(raw: string): PlayerId {
-    return raw as PlayerId;
-}
 
 /** Minimal no-op ActionDefinition for testing registration and lookup. */
 function makeDefinition(type: string): ActionDefinition<Record<string, unknown>> {
@@ -303,7 +300,7 @@ describe('Error code discriminants', () => {
 describe('ActionRegistry integration', () => {
     it('validates full register → has → resolve → execute round-trip', () => {
         const registry = new ActionRegistry<BaseGameSnapshot>();
-        const pid = makePlayerId('player-1');
+        const pid = toPlayerId('player-1');
 
         const def: ActionDefinition<{ amount: number }> = {
             type: 'game:score',

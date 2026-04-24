@@ -17,6 +17,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
 import { createNoopLogger } from './logger.js';
+import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';
 import type {
     HostTransport,
     PlayerSnapshot,
@@ -49,8 +50,8 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
     };
 }
 
-const PLAYER_A = 'player-a' as PlayerId;
-const PLAYER_B = 'player-b' as PlayerId;
+const PLAYER_A = toPlayerId('player-a');
+const PLAYER_B = toPlayerId('player-b');
 
 // ── broadcast() ────────────────────────────────────────────────────────────────
 

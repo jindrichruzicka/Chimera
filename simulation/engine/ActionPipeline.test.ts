@@ -35,11 +35,12 @@ import type {
     ActionDefinition,
     ReduceContext,
 } from './types.js';
+import { playerId as toPlayerId } from './types.js';
 import { createContentDatabase } from '../content/index.js';
 
-// ─── Test fixtures ─────────────────────────────────────────────────────────────
+// ─── Test fixtures ─────────────────────────────────────────────────────
 
-const PID = 'p1' as PlayerId;
+const PID = toPlayerId('p1');
 
 const makeSnapshot = (tick = 0): BaseGameSnapshot => ({
     tick,

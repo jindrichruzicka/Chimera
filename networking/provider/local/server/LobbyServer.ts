@@ -28,6 +28,7 @@
 import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { ClientMessageSchema } from '@chimera/shared/messages-schemas.js';
@@ -277,7 +278,7 @@ export class LobbyServer {
 
                 // Assign PlayerId and authenticate
                 this.idCounter += 1;
-                playerId = `player-${this.idCounter}` as PlayerId;
+                playerId = toPlayerId(`player-${this.idCounter}`);
                 this.connections.set(playerId, ws);
                 authenticated = true;
                 this.logger?.info('player connected', { playerId });
@@ -289,7 +290,7 @@ export class LobbyServer {
                     lobbyState: {
                         info: {
                             sessionId: this._token,
-                            hostId: `host-${this._token}` as PlayerId,
+                            hostId: toPlayerId(`host-${this._token}`),
                             gameId: this.opts.gameId,
                         },
                         players: [],

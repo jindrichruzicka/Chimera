@@ -18,8 +18,9 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { isBrowsable } from './MultiplayerProvider.js';
+import { isBrowsable, playerId } from './MultiplayerProvider.js';
 
+import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import type {
     MultiplayerProvider,
     BrowsableProvider,
@@ -38,13 +39,7 @@ import type {
     Unsubscribe,
 } from './MultiplayerProvider.js';
 
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
-
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function makePlayerId(raw: string): PlayerId {
-    return raw as PlayerId;
-}
 
 function noop(): void {
     // intentionally empty
@@ -84,7 +79,7 @@ describe('LobbyInfo', () => {
     it('has sessionId, hostId, and gameId', () => {
         const info: LobbyInfo = {
             sessionId: 'sess-1',
-            hostId: makePlayerId('p1'),
+            hostId: playerId('p1'),
             gameId: 'tactics',
         };
         expect(info.sessionId).toBe('sess-1');
@@ -97,7 +92,7 @@ describe('LobbyInfo', () => {
 describe('LobbyPlayerEntry', () => {
     it('has playerId, displayName, and ready flag', () => {
         const entry: LobbyPlayerEntry = {
-            playerId: makePlayerId('p1'),
+            playerId: playerId('p1'),
             displayName: 'Alice',
             ready: false,
         };
@@ -111,7 +106,7 @@ describe('LobbyPlayerEntry', () => {
 describe('LobbyState', () => {
     it('has info and a readonly players array', () => {
         const state: LobbyState = {
-            info: { sessionId: 's1', hostId: makePlayerId('p1'), gameId: 'chess' },
+            info: { sessionId: 's1', hostId: playerId('p1'), gameId: 'chess' },
             players: [],
         };
         expect(state.players).toHaveLength(0);
@@ -148,7 +143,7 @@ describe('SideChannelMessage', () => {
     it('chat variant has kind and payload', () => {
         const msg: SideChannelMessage = {
             kind: 'chat',
-            payload: { senderId: makePlayerId('p1'), text: 'hello', timestamp: 0 },
+            payload: { senderId: playerId('p1'), text: 'hello', timestamp: 0 },
         };
         expect(msg.kind).toBe('chat');
     });
@@ -156,7 +151,7 @@ describe('SideChannelMessage', () => {
     it('profile variant has kind and payload', () => {
         const msg: SideChannelMessage = {
             kind: 'profile',
-            payload: { playerId: makePlayerId('p1'), displayName: 'Alice' },
+            payload: { playerId: playerId('p1'), displayName: 'Alice' },
         };
         expect(msg.kind).toBe('profile');
     });
@@ -212,7 +207,7 @@ describe('HostedSession', () => {
             lobbyCode: 'ABCD',
             lobbyInfo: {
                 sessionId: 'ABCD',
-                hostId: 'host-1' as PlayerId,
+                hostId: playerId('host-1'),
                 gameId: 'tactics',
             },
             transport,
@@ -235,7 +230,7 @@ describe('JoinedSession', () => {
             onDisconnected: () => noopUnsub(),
         };
         const session: JoinedSession = {
-            lobbyInfo: { sessionId: 's1', hostId: makePlayerId('p1'), gameId: 'tactics' },
+            lobbyInfo: { sessionId: 's1', hostId: playerId('p1'), gameId: 'tactics' },
             transport,
             disconnect: async () => {},
         };
@@ -331,5 +326,19 @@ describe('isBrowsable', () => {
             listLobbies: 'not-a-function',
         } as unknown as MultiplayerProvider;
         expect(isBrowsable(provider)).toBe(false);
+    });
+});
+
+// ─── playerId factory ─────────────────────────────────────────────────────────
+
+describe('playerId', () => {
+    it('returns the raw string value unchanged', () => {
+        expect(playerId('alice')).toBe('alice');
+    });
+
+    it('is assignable to PlayerId (type-level: compiles without cast)', () => {
+        // Compile-time check: this file must typecheck clean.
+        const id: PlayerId = playerId('bob');
+        expect(id).toBe('bob');
     });
 });

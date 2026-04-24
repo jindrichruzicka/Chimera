@@ -9,6 +9,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {
     ClientTransport,
     PlayerSnapshot,
@@ -22,10 +23,6 @@ import { ServerConnection } from './ServerConnection.js';
 import { WsClientTransport } from './WsClientTransport.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
 
 function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
     return {
@@ -66,7 +63,7 @@ async function makeClientTransport(opts?: { maxRetries?: number }): Promise<{
     const conn = new ServerConnection(opts);
     connections.push(conn);
     const { playerId } = await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, {
-        playerId: pid('pending'),
+        playerId: toPlayerId('pending'),
         displayName: 'TestClient',
     });
 
@@ -146,7 +143,7 @@ describe('WsClientTransport — onLobbyStateChanged', () => {
         transport.onLobbyStateChanged((s) => states.push(s));
 
         const state: LobbyState = {
-            info: { sessionId: 'x', hostId: pid('h'), gameId: 'test' },
+            info: { sessionId: 'x', hostId: toPlayerId('h'), gameId: 'test' },
             players: [],
         };
         hostTransport.broadcastLobbyState(state);
@@ -168,7 +165,7 @@ describe('WsClientTransport — onSideChannelReceived', () => {
 
         hostTransport.sendSideChannel(playerId, {
             kind: 'chat',
-            payload: { senderId: pid('host'), text: 'hello', timestamp: 0 },
+            payload: { senderId: toPlayerId('host'), text: 'hello', timestamp: 0 },
         });
         await new Promise<void>((r) => setTimeout(r, 30));
 

@@ -31,6 +31,8 @@ export type {
     SimulationClientRole,
 } from './types.js';
 
+export { playerId } from './types.js';
+
 export type { DeterministicRng } from './DeterministicRng.js';
 export { createRng } from './DeterministicRng.js';
 

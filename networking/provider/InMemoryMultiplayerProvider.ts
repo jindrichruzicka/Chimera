@@ -35,6 +35,7 @@ import type {
     LobbyInfo,
 } from './MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from './MultiplayerProvider.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────
 
@@ -136,7 +137,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         const lobbyCode = `in-memory-${this.nextId()}`;
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyCode,
-            hostId: `host-${this.nextId()}` as PlayerId,
+            hostId: toPlayerId(`host-${this.nextId()}`),
             gameId: params.gameId,
         };
         const channel = new InMemoryChannel(lobbyCode, lobbyInfo);
@@ -204,7 +205,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             );
         }
 
-        const clientPlayerId: PlayerId = `client-${this.nextId()}` as PlayerId;
+        const clientPlayerId: PlayerId = toPlayerId(`client-${this.nextId()}`);
         const record = channel.addClient(clientPlayerId);
 
         const playerEntry: LobbyPlayerEntry = {

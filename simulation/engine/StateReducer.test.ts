@@ -16,17 +16,12 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { StateReducer, ActionSchemaError } from './StateReducer.js';
 import { ActionRegistry, UnknownActionTypeError } from './ActionRegistry.js';
 import { makeStubRng } from './__test-support__/stubs.js';
-import type {
-    BaseGameSnapshot,
-    ActionEnvelope,
-    PlayerId,
-    ActionDefinition,
-    ReduceContext,
-} from './types.js';
+import type { BaseGameSnapshot, ActionEnvelope, ActionDefinition, ReduceContext } from './types.js';
+import { playerId as toPlayerId } from './types.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────
 
-const PID = 'p1' as PlayerId;
+const PID = toPlayerId('p1');
 
 const makeSnapshot = (tick = 0): BaseGameSnapshot => ({
     tick,

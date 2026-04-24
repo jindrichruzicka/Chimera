@@ -29,7 +29,7 @@ import { describe, it, expect } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from './InMemoryMultiplayerProvider.js';
 import { SteamNetworkProvider } from './SteamNetworkProvider.js';
-import { isBrowsable } from './MultiplayerProvider.js';
+import { isBrowsable, playerId as toPlayerId } from './MultiplayerProvider.js';
 
 import type {
     MultiplayerProvider,
@@ -42,10 +42,6 @@ import type {
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
-
-function makePlayerId(raw: string): PlayerId {
-    return raw as PlayerId;
-}
 
 function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
     return {
@@ -71,7 +67,7 @@ function makeAction(playerId: PlayerId): EngineAction {
 function makeChatMsg(text: string): SideChannelMessage {
     return {
         kind: 'chat',
-        payload: { senderId: makePlayerId('contract-sender'), text, timestamp: 0 },
+        payload: { senderId: toPlayerId('contract-sender'), text, timestamp: 0 },
     };
 }
 
@@ -302,7 +298,7 @@ export function testMultiplayerProviderContract(
                 unsub();
 
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
-                joined.transport.sendAction(makeAction(makePlayerId('p1')));
+                joined.transport.sendAction(makeAction(toPlayerId('p1')));
 
                 expect(actions).toHaveLength(0);
                 provider.dispose();
@@ -415,7 +411,7 @@ export function testMultiplayerProviderContract(
                 hosted.transport.broadcastLobbyState({
                     info: {
                         sessionId: hosted.lobbyCode,
-                        hostId: makePlayerId('host'),
+                        hostId: toPlayerId('host'),
                         gameId: 'contract-test',
                     },
                     players: [{ playerId: clientId, displayName: 'Alice', ready: false }],

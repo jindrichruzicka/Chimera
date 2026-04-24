@@ -20,6 +20,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from './InMemoryMultiplayerProvider.js';
+import { playerId as toPlayerId } from './MultiplayerProvider.js';
 
 import type {
     MultiplayerProvider,
@@ -31,10 +32,6 @@ import type {
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-
-function makePlayerId(raw: string): PlayerId {
-    return raw as PlayerId;
-}
 
 function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
     return {
@@ -60,7 +57,7 @@ function makeAction(playerId: PlayerId): EngineAction {
 function makeChatSideChannel(text: string): SideChannelMessage {
     return {
         kind: 'chat',
-        payload: { senderId: makePlayerId('p1'), text, timestamp: 0 },
+        payload: { senderId: toPlayerId('p1'), text, timestamp: 0 },
     };
 }
 
@@ -187,8 +184,8 @@ describe('InMemoryMultiplayerProvider', () => {
 
             // Send snapshot to a completely different, unregistered playerId
             hosted.transport.sendSnapshot(
-                makePlayerId('unrelated-player'),
-                makeSnapshot(makePlayerId('unrelated-player')),
+                toPlayerId('unrelated-player'),
+                makeSnapshot(toPlayerId('unrelated-player')),
             );
 
             expect(received).toHaveLength(0);
@@ -252,7 +249,7 @@ describe('InMemoryMultiplayerProvider', () => {
             unsub();
 
             const joined = await provider.joinLobby({ address: hosted.lobbyCode });
-            joined.transport.sendAction(makeAction(makePlayerId('p1')));
+            joined.transport.sendAction(makeAction(toPlayerId('p1')));
 
             expect(actions).toHaveLength(0);
         });
@@ -321,7 +318,7 @@ describe('InMemoryMultiplayerProvider', () => {
             hosted.transport.broadcastLobbyState({
                 info: {
                     sessionId: hosted.lobbyCode,
-                    hostId: makePlayerId('host-1'),
+                    hostId: toPlayerId('host-1'),
                     gameId: 'tactics',
                 },
                 players: [{ playerId: joinedPlayerId, displayName: 'Alice', ready: false }],

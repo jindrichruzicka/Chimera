@@ -9,16 +9,12 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '../networking/provider/MultiplayerProvider.js';
 import { ClientMessageSchema, ServerMessageSchema } from './messages-schemas.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
-
-const defaultLobbyInfo = { sessionId: 's1', hostId: pid('host'), gameId: 'test' };
+const defaultLobbyInfo = { sessionId: 's1', hostId: toPlayerId('host'), gameId: 'test' };
 
 // ─── ClientMessageSchema ──────────────────────────────────────────────────────
 
@@ -27,7 +23,7 @@ describe('ClientMessageSchema — JOIN', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'JOIN',
             token: 'abc123',
-            profile: { playerId: pid('p1'), displayName: 'Alice' },
+            profile: { playerId: toPlayerId('p1'), displayName: 'Alice' },
         });
         expect(result.success).toBe(true);
         if (result.success) {
@@ -38,7 +34,7 @@ describe('ClientMessageSchema — JOIN', () => {
     it('rejects JOIN missing token', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'JOIN',
-            profile: { playerId: pid('p1'), displayName: 'Alice' },
+            profile: { playerId: toPlayerId('p1'), displayName: 'Alice' },
         });
         expect(result.success).toBe(false);
     });
@@ -55,7 +51,7 @@ describe('ClientMessageSchema — JOIN', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'JOIN',
             token: 'abc123',
-            profile: { playerId: pid('p1'), displayName: 'Alice' },
+            profile: { playerId: toPlayerId('p1'), displayName: 'Alice' },
             extra: 'garbage',
         });
         // Zod strips unknown fields by default in strict mode or passes in passthrough
@@ -69,7 +65,7 @@ describe('ClientMessageSchema — ACTION', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'ACTION',
             tick: 10,
-            action: { type: 'test:noop', playerId: pid('p1'), tick: 10, payload: {} },
+            action: { type: 'test:noop', playerId: toPlayerId('p1'), tick: 10, payload: {} },
             checksum: 0,
         });
         expect(result.success).toBe(true);
@@ -78,7 +74,7 @@ describe('ClientMessageSchema — ACTION', () => {
     it('rejects ACTION missing tick', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'ACTION',
-            action: { type: 'test:noop', playerId: pid('p1'), tick: 10, payload: {} },
+            action: { type: 'test:noop', playerId: toPlayerId('p1'), tick: 10, payload: {} },
             checksum: 0,
         });
         expect(result.success).toBe(false);
@@ -88,7 +84,7 @@ describe('ClientMessageSchema — ACTION', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'ACTION',
             tick: 'not-a-number',
-            action: { type: 'test:noop', playerId: pid('p1'), tick: 10, payload: {} },
+            action: { type: 'test:noop', playerId: toPlayerId('p1'), tick: 10, payload: {} },
             checksum: 0,
         });
         expect(result.success).toBe(false);
@@ -111,7 +107,7 @@ describe('ClientMessageSchema — PROFILE_UPDATE', () => {
     it('parses a valid PROFILE_UPDATE message', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'PROFILE_UPDATE',
-            profile: { playerId: pid('p1'), displayName: 'Bob' },
+            profile: { playerId: toPlayerId('p1'), displayName: 'Bob' },
         });
         expect(result.success).toBe(true);
     });
@@ -160,7 +156,7 @@ describe('ServerMessageSchema — WELCOME', () => {
     it('parses a valid WELCOME message', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'WELCOME',
-            playerId: pid('p1'),
+            playerId: toPlayerId('p1'),
             lobbyState: { info: defaultLobbyInfo, players: [] },
         });
         expect(result.success).toBe(true);
@@ -208,7 +204,7 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
             type: 'LOBBY_STATE',
             state: {
                 info: defaultLobbyInfo,
-                players: [{ playerId: pid('p1'), displayName: 'Alice', ready: false }],
+                players: [{ playerId: toPlayerId('p1'), displayName: 'Alice', ready: false }],
             },
         });
         expect(result.success).toBe(true);
@@ -229,7 +225,7 @@ describe('ClientMessageSchema — round-trip via JSON', () => {
         const msg = {
             type: 'JOIN' as const,
             token: 'tok',
-            profile: { playerId: pid('p1'), displayName: 'A' },
+            profile: { playerId: toPlayerId('p1'), displayName: 'A' },
         };
         const round = ClientMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
         expect(round.success).toBe(true);
@@ -243,7 +239,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
             type: 'SNAPSHOT' as const,
             snapshot: {
                 tick: 1,
-                viewerId: pid('p1'),
+                viewerId: toPlayerId('p1'),
                 players: {},
                 entities: {},
                 phase: 'game',

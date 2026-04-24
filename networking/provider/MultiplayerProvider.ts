@@ -20,10 +20,27 @@
  */
 
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
 
 // ─── Re-export simulation primitives used by callers of this module ───────────
 
 export type { PlayerId };
+
+/**
+ * Constructs a branded `PlayerId` from a raw string.
+ *
+ * Use this factory everywhere a `PlayerId` value needs to be created from a
+ * literal or runtime string. This is the single authorised cast site for the
+ * `PlayerId` brand — using `raw as PlayerId` directly outside this helper is
+ * a lint/review violation.
+ *
+ * Re-exported from `simulation/engine/types.ts` so callers of the networking
+ * layer do not need to reach into `simulation/` directly.
+ *
+ * @example
+ *   const id = playerId('host-abc123');
+ */
+export const playerId = _makePlayerId;
 
 // ─── Wire-level snapshot type ────────────────────────────────────────────────
 

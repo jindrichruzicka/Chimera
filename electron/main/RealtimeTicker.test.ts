@@ -21,13 +21,13 @@ import {
     type ActionDefinition,
     type ActionEnvelope,
     type BaseGameSnapshot,
-    type PlayerId,
 } from '@chimera/simulation/engine/index.js';
 import { RealtimeTicker } from './RealtimeTicker.js';
+import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 
-const HOST = 'host' as PlayerId;
+const HOST = toPlayerId('host');
 
 function makeSnapshot(tick: number): BaseGameSnapshot {
     return {

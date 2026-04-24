@@ -12,9 +12,9 @@
 
 import { describe, it, expect } from 'vitest';
 import { makeStubRng } from './__test-support__/stubs.js';
+import { playerId as toPlayerId } from './types.js';
 
 import type {
-    PlayerId,
     EntityId,
     GamePhase,
     BasePlayerState,
@@ -34,10 +34,6 @@ import type {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function makePlayerId(raw: string): PlayerId {
-    return raw as PlayerId;
-}
-
 function makeEntityId(raw: string): EntityId {
     return raw as EntityId;
 }
@@ -46,14 +42,14 @@ function makeEntityId(raw: string): EntityId {
 
 describe('PlayerId and EntityId', () => {
     it('are string-compatible branded types', () => {
-        const pid = makePlayerId('player-1');
+        const pid = toPlayerId('player-1');
         const eid = makeEntityId('entity-42');
         expect(typeof pid).toBe('string');
         expect(typeof eid).toBe('string');
     });
 
     it('type: PlayerId is assignable to string', () => {
-        const pid = makePlayerId('p1');
+        const pid = toPlayerId('p1');
         const s: string = pid;
         expect(s).toBe('p1');
     });
@@ -69,7 +65,7 @@ describe('PlayerId and EntityId', () => {
 
 describe('BasePlayerState', () => {
     it('has a required id field of type PlayerId', () => {
-        const state: BasePlayerState = { id: makePlayerId('p1') };
+        const state: BasePlayerState = { id: toPlayerId('p1') };
         expect(state.id).toBe('p1');
     });
 });
@@ -109,7 +105,7 @@ describe('BaseGameSnapshot', () => {
     });
 
     it('has an optional turnClock field', () => {
-        const pid = makePlayerId('p1');
+        const pid = toPlayerId('p1');
         const snapshot: BaseGameSnapshot = {
             tick: 5,
             seed: 99,
@@ -141,7 +137,7 @@ describe('EngineAction', () => {
     it('includes type, playerId, tick, and payload', () => {
         const action: EngineAction = {
             type: 'engine:end_turn',
-            playerId: makePlayerId('p1'),
+            playerId: toPlayerId('p1'),
             tick: 3,
             payload: {},
         };
@@ -156,7 +152,7 @@ describe('EngineAction', () => {
         }
         const action: TypedAction<'mygame:move', MovePayload> = {
             type: 'mygame:move',
-            playerId: makePlayerId('p1'),
+            playerId: toPlayerId('p1'),
             tick: 1,
             payload: { x: 3, y: 4 },
         };
@@ -170,7 +166,7 @@ describe('ActionEnvelope', () => {
     it('is assignable from a plain EngineAction', () => {
         const action: EngineAction = {
             type: 'engine:undo',
-            playerId: makePlayerId('p1'),
+            playerId: toPlayerId('p1'),
             tick: 2,
             payload: {},
         };
@@ -279,7 +275,7 @@ describe('ActionDefinition', () => {
         };
 
         const ctx: ReduceContext = { rng: makeStubRng(0) };
-        const next = def.reduce(initial, {}, makePlayerId('p1'), ctx);
+        const next = def.reduce(initial, {}, toPlayerId('p1'), ctx);
 
         expect(next).not.toBe(initial);
         expect(next.tick).toBe(initial.tick);

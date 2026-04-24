@@ -10,6 +10,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
@@ -17,11 +18,7 @@ import { ServerConnection } from './ServerConnection.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function pid(s: string): PlayerId {
-    return s as PlayerId;
-}
-
-const defaultProfile = { playerId: pid('pending'), displayName: 'TestClient' };
+const defaultProfile = { playerId: toPlayerId('pending'), displayName: 'TestClient' };
 
 // ─── Setup / teardown ─────────────────────────────────────────────────────────
 
