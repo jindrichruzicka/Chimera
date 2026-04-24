@@ -21,7 +21,9 @@ import type {
     HostLobbyParams,
     HostTransport,
     JoinLobbyParams,
+    MultiplayerProvider,
     PlayerId,
+    Unsubscribe,
 } from '../../networking/provider/MultiplayerProvider.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -34,6 +36,71 @@ function makeProvider(): InMemoryMultiplayerProvider {
 
 function makeManager(provider: InMemoryMultiplayerProvider = makeProvider()): LobbyManager {
     return new LobbyManager(provider, createNoopLogger());
+}
+
+/**
+ * A minimal MultiplayerProvider wrapper that counts active host-transport
+ * subscriptions. Used to verify that closeLobby() invokes all Unsubscribes.
+ */
+function makeTrackingProvider(inner: InMemoryMultiplayerProvider = makeProvider()): {
+    provider: MultiplayerProvider;
+    activeHostSubs: () => number;
+    activeClientSubs: () => number;
+} {
+    function wrapUnsub(unsub: Unsubscribe, counter: { count: number }): Unsubscribe {
+        counter.count += 1;
+        return (): void => {
+            counter.count -= 1;
+            unsub();
+        };
+    }
+
+    const hostCounter = { count: 0 };
+    const clientCounter = { count: 0 };
+
+    const provider: MultiplayerProvider = {
+        async hostLobby(params) {
+            const session = await inner.hostLobby(params);
+            const origTransport = session.transport;
+            const wrappedTransport: HostTransport = {
+                ...origTransport,
+                onActionReceived: (cb) =>
+                    wrapUnsub(origTransport.onActionReceived(cb), hostCounter),
+                onSideChannelReceived: (cb) =>
+                    wrapUnsub(origTransport.onSideChannelReceived(cb), hostCounter),
+                onPlayerJoined: (cb) => wrapUnsub(origTransport.onPlayerJoined(cb), hostCounter),
+                onPlayerLeft: (cb) => wrapUnsub(origTransport.onPlayerLeft(cb), hostCounter),
+            };
+            return { ...session, transport: wrappedTransport };
+        },
+        async joinLobby(params) {
+            const session = await inner.joinLobby(params);
+            const origTransport = session.transport;
+            return {
+                ...session,
+                transport: {
+                    ...origTransport,
+                    onSnapshotReceived: (cb) =>
+                        wrapUnsub(origTransport.onSnapshotReceived(cb), clientCounter),
+                    onSideChannelReceived: (cb) =>
+                        wrapUnsub(origTransport.onSideChannelReceived(cb), clientCounter),
+                    onLobbyStateChanged: (cb) =>
+                        wrapUnsub(origTransport.onLobbyStateChanged(cb), clientCounter),
+                    onDisconnected: (cb) =>
+                        wrapUnsub(origTransport.onDisconnected(cb), clientCounter),
+                },
+            };
+        },
+        dispose() {
+            inner.dispose();
+        },
+    };
+
+    return {
+        provider,
+        activeHostSubs: () => hostCounter.count,
+        activeClientSubs: () => clientCounter.count,
+    };
 }
 
 // ── hostLobby ─────────────────────────────────────────────────────────────────
@@ -198,6 +265,47 @@ describe('LobbyManager.closeLobby', () => {
         const joinManager = makeManager(provider);
         await joinManager.joinLobby({ address: hostInfo.sessionId });
         await expect(joinManager.closeLobby()).resolves.toBeUndefined();
+    });
+
+    it('unsubscribes all host transport subscriptions on close', async () => {
+        const inner = makeProvider();
+        const { provider, activeHostSubs } = makeTrackingProvider(inner);
+        const manager = new LobbyManager(provider, createNoopLogger());
+        await manager.hostLobby(HOST_PARAMS);
+        // LobbyManager wires 4 host callbacks: onActionReceived, onPlayerJoined,
+        // onPlayerLeft, onSideChannelReceived (the latter may be absent if not wired — 3+ minimum)
+        expect(activeHostSubs()).toBeGreaterThan(0);
+        await manager.closeLobby();
+        expect(activeHostSubs()).toBe(0);
+    });
+
+    it('unsubscribes all client transport subscriptions on close', async () => {
+        const inner = makeProvider();
+        const { provider, activeClientSubs } = makeTrackingProvider(inner);
+        const hostInfo = await inner.hostLobby(HOST_PARAMS);
+
+        const joinManager = new LobbyManager(provider, createNoopLogger());
+        await joinManager.joinLobby({ address: hostInfo.lobbyCode });
+        expect(activeClientSubs()).toBeGreaterThan(0);
+        await joinManager.closeLobby();
+        expect(activeClientSubs()).toBe(0);
+    });
+
+    it('re-hosting after close starts with zero subscriptions from the previous session', async () => {
+        const inner = makeProvider();
+        const { provider, activeHostSubs } = makeTrackingProvider(inner);
+        const manager = new LobbyManager(provider, createNoopLogger());
+
+        await manager.hostLobby(HOST_PARAMS);
+        const afterFirst = activeHostSubs();
+        await manager.closeLobby();
+        expect(activeHostSubs()).toBe(0);
+
+        await manager.hostLobby(HOST_PARAMS);
+        // Second hosting should have same subscription count as the first
+        expect(activeHostSubs()).toBe(afterFirst);
+        await manager.closeLobby();
+        expect(activeHostSubs()).toBe(0);
     });
 });
 

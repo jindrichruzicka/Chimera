@@ -24,6 +24,7 @@ import type {
     JoinLobbyParams,
     LobbyInfo,
     HostTransport,
+    Unsubscribe,
 } from '../../networking/provider/MultiplayerProvider.js';
 import type { Logger } from './logger.js';
 
@@ -38,6 +39,8 @@ import type { Logger } from './logger.js';
 export class LobbyManager {
     private readonly log: Logger;
     private session: HostedSession | JoinedSession | null = null;
+    /** Active transport subscriptions; cleared and invoked on every closeLobby(). */
+    private readonly subscriptions: Unsubscribe[] = [];
 
     constructor(
         private readonly provider: MultiplayerProvider,
@@ -64,18 +67,19 @@ export class LobbyManager {
         this.session = session;
 
         // Wire transport callbacks to simulation-host stubs (F15/F17 will
-        // replace these with real simulationHost calls).
-        session.transport.onActionReceived((_from, _action) => {
-            // TODO(F15): simulationHost.enqueueAction(from, action)
-        });
-
-        session.transport.onPlayerJoined((_player) => {
-            // TODO(F15): simulationHost.notifyPlayerJoined(player)
-        });
-
-        session.transport.onPlayerLeft((_playerId, _reason) => {
-            // TODO(F17): simulationHost.notifyPlayerLeft(playerId, reason)
-        });
+        // replace these with real simulationHost calls).  Capture the
+        // Unsubscribe handles so closeLobby() can tear them down cleanly.
+        this.subscriptions.push(
+            session.transport.onActionReceived((_from, _action) => {
+                // TODO(F15): simulationHost.enqueueAction(from, action)
+            }),
+            session.transport.onPlayerJoined((_player) => {
+                // TODO(F15): simulationHost.notifyPlayerJoined(player)
+            }),
+            session.transport.onPlayerLeft((_playerId, _reason) => {
+                // TODO(F17): simulationHost.notifyPlayerLeft(playerId, reason)
+            }),
+        );
 
         // Notify the wiring point (index.ts) that a hosted session is live
         // so it can wire StateBroadcaster.  F15/F17 will replace this with
@@ -109,18 +113,19 @@ export class LobbyManager {
         this.session = session;
 
         // Wire transport callbacks to renderer broadcast stubs (F12 / F15 will
-        // replace these with real IPC pushes to the renderer).
-        session.transport.onSnapshotReceived((_snapshot) => {
-            // TODO(F12/F15): broadcastToRenderer('chimera:snapshot', snapshot)
-        });
-
-        session.transport.onLobbyStateChanged((_state) => {
-            // TODO(F12): broadcastToRenderer('chimera:lobby-update', state)
-        });
-
-        session.transport.onDisconnected((_reason) => {
-            // TODO(F12): broadcastToRenderer('chimera:connection-status', { status: 'disconnected', reason })
-        });
+        // replace these with real IPC pushes to the renderer).  Capture the
+        // Unsubscribe handles so closeLobby() can tear them down cleanly.
+        this.subscriptions.push(
+            session.transport.onSnapshotReceived((_snapshot) => {
+                // TODO(F12/F15): broadcastToRenderer('chimera:snapshot', snapshot)
+            }),
+            session.transport.onLobbyStateChanged((_state) => {
+                // TODO(F12): broadcastToRenderer('chimera:lobby-update', state)
+            }),
+            session.transport.onDisconnected((_reason) => {
+                // TODO(F12): broadcastToRenderer('chimera:connection-status', { status: 'disconnected', reason })
+            }),
+        );
 
         this.log.info('joinLobby:connected', { sessionId: session.lobbyInfo.sessionId });
         return session.lobbyInfo;
@@ -142,6 +147,11 @@ export class LobbyManager {
         }
 
         this.log.info('closeLobby');
+
+        // Tear down all transport subscriptions before closing the session so
+        // that re-hosting does not accumulate dead callbacks (BLOCK-2 fix).
+        const subs = this.subscriptions.splice(0);
+        for (const unsub of subs) unsub();
 
         if ('close' in session) {
             await session.close();
