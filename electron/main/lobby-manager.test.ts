@@ -20,6 +20,7 @@ import { LobbyManager } from './lobby-manager.js';
 import type {
     HostLobbyParams,
     HostTransport,
+    ClientTransport,
     JoinLobbyParams,
     MultiplayerProvider,
     PlayerId,
@@ -471,5 +472,73 @@ describe('LobbyManager onSessionHosted teardown', () => {
         await manager.hostLobby(HOST_PARAMS);
         await manager.closeLobby();
         expect(order).toEqual(['teardown', 'close']);
+    });
+});
+
+// ── onSessionJoined teardown ──────────────────────────────────────────────────
+
+describe('LobbyManager onSessionJoined teardown', () => {
+    async function hostAndGetCode(): Promise<{
+        hostManager: LobbyManager;
+        code: string;
+        provider: InMemoryMultiplayerProvider;
+    }> {
+        const provider = makeProvider();
+        const hostManager = new LobbyManager(provider, createNoopLogger());
+        const info = await hostManager.hostLobby(HOST_PARAMS);
+        return { hostManager, code: info.sessionId, provider };
+    }
+
+    it('fires onSessionJoined exactly once when joinLobby succeeds', async () => {
+        const { code, provider } = await hostAndGetCode();
+        let callCount = 0;
+        const manager = new LobbyManager(provider, createNoopLogger(), undefined, (_transport) => {
+            callCount += 1;
+        });
+        await manager.joinLobby({ address: code });
+        expect(callCount).toBe(1);
+    });
+
+    it('passes the ClientTransport to onSessionJoined', async () => {
+        const { code, provider } = await hostAndGetCode();
+        let capturedTransport: ClientTransport | null = null;
+        const manager = new LobbyManager(provider, createNoopLogger(), undefined, (transport) => {
+            capturedTransport = transport;
+        });
+        await manager.joinLobby({ address: code });
+        expect(capturedTransport).not.toBeNull();
+    });
+
+    it('calls the teardown returned by onSessionJoined when closeLobby is called', async () => {
+        const { code, provider } = await hostAndGetCode();
+        let teardownCalled = false;
+        const manager = new LobbyManager(provider, createNoopLogger(), undefined, (_transport) => {
+            return () => {
+                teardownCalled = true;
+            };
+        });
+        await manager.joinLobby({ address: code });
+        expect(teardownCalled).toBe(false);
+        await manager.closeLobby();
+        expect(teardownCalled).toBe(true);
+    });
+
+    it('does not throw when onSessionJoined returns undefined (no teardown)', async () => {
+        const { code, provider } = await hostAndGetCode();
+        const manager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            (_transport) => undefined,
+        );
+        await manager.joinLobby({ address: code });
+        await expect(manager.closeLobby()).resolves.toBeUndefined();
+    });
+
+    it('does not call onSessionJoined when not provided', async () => {
+        const { code, provider } = await hostAndGetCode();
+        const manager = new LobbyManager(provider, createNoopLogger());
+        await manager.joinLobby({ address: code });
+        await expect(manager.closeLobby()).resolves.toBeUndefined();
     });
 });

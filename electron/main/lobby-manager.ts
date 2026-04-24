@@ -24,6 +24,7 @@ import type {
     JoinLobbyParams,
     LobbyInfo,
     HostTransport,
+    ClientTransport,
     Unsubscribe,
 } from '../../networking/provider/MultiplayerProvider.js';
 import type { Logger } from './logger.js';
@@ -43,11 +44,14 @@ export class LobbyManager {
     private readonly subscriptions: Unsubscribe[] = [];
     /** Optional teardown returned by onSessionHosted; cleared on closeLobby(). */
     private sessionHostedTeardown: (() => void) | null = null;
+    /** Optional teardown returned by onSessionJoined; cleared on closeLobby(). */
+    private sessionJoinedTeardown: (() => void) | null = null;
 
     constructor(
         private readonly provider: MultiplayerProvider,
         logger: Logger,
         private readonly onSessionHosted?: (transport: HostTransport) => (() => void) | void,
+        private readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void,
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
     }
@@ -143,6 +147,15 @@ export class LobbyManager {
         );
 
         this.log.info('joinLobby:connected', { sessionId: session.lobbyInfo.sessionId });
+
+        // Notify the wiring point (index.ts) that a joined session is live
+        // so it can wire the renderer IPC bridge.  F12 will replace this with
+        // real broadcastToRenderer wiring.
+        const joinedTeardown = this.onSessionJoined?.(session.transport);
+        if (joinedTeardown !== undefined) {
+            this.sessionJoinedTeardown = joinedTeardown;
+        }
+
         return session.lobbyInfo;
     }
 
@@ -173,6 +186,12 @@ export class LobbyManager {
         const hostedTeardown = this.sessionHostedTeardown;
         this.sessionHostedTeardown = null;
         hostedTeardown?.();
+
+        // Call the teardown returned by onSessionJoined (e.g. renderer IPC
+        // bridge cleanup) before disconnecting.
+        const joinedTeardown = this.sessionJoinedTeardown;
+        this.sessionJoinedTeardown = null;
+        joinedTeardown?.();
 
         if ('close' in session) {
             await session.close();
