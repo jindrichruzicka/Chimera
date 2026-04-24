@@ -148,6 +148,12 @@ export type Unsubscribe = () => void;
 export interface HostedSession {
     /** Shareable code / invite token that clients present to joinLobby(). */
     readonly lobbyCode: string;
+    /**
+     * Lobby metadata including the provider-assigned hostId.
+     * Symmetric with JoinedSession.lobbyInfo — consumers read hostId from here
+     * instead of casting a literal.
+     */
+    readonly lobbyInfo: LobbyInfo;
     readonly transport: HostTransport;
     /** Tears down the server-side session and frees all resources. */
     close(): Promise<void>;

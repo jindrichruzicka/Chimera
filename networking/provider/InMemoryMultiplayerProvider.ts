@@ -182,6 +182,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
         const session: HostedSession = {
             lobbyCode,
+            lobbyInfo,
             transport,
             close: (): Promise<void> => {
                 this.sessions.delete(lobbyCode);

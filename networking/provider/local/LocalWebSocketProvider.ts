@@ -66,6 +66,11 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         const router = new MessageRouter(server);
         const transport = new WsHostTransport(server, router);
         const lobbyCode = `127.0.0.1:${server.port}:${server.token}`;
+        const lobbyInfo: LobbyInfo = {
+            sessionId: lobbyCode,
+            hostId: `host-${server.token.slice(0, 8)}` as PlayerId,
+            gameId: params.gameId,
+        };
 
         const close = async (): Promise<void> => {
             router.dispose();
@@ -73,7 +78,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             this.openServers.delete(server);
         };
 
-        return { lobbyCode, transport, close };
+        return { lobbyCode, lobbyInfo, transport, close };
     }
 
     async joinLobby(params: JoinLobbyParams): Promise<JoinedSession> {

@@ -210,6 +210,11 @@ describe('HostedSession', () => {
         };
         const session: HostedSession = {
             lobbyCode: 'ABCD',
+            lobbyInfo: {
+                sessionId: 'ABCD',
+                hostId: 'host-1' as PlayerId,
+                gameId: 'tactics',
+            },
             transport,
             close: async () => {},
         };

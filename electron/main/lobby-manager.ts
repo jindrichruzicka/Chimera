@@ -23,7 +23,6 @@ import type {
     HostLobbyParams,
     JoinLobbyParams,
     LobbyInfo,
-    PlayerId,
     HostTransport,
 } from '../../networking/provider/MultiplayerProvider.js';
 import type { Logger } from './logger.js';
@@ -85,7 +84,7 @@ export class LobbyManager {
 
         const info: LobbyInfo = {
             sessionId: session.lobbyCode,
-            hostId: 'host' as PlayerId,
+            hostId: session.lobbyInfo.hostId,
             gameId: params.gameId,
         };
 

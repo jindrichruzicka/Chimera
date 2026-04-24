@@ -46,6 +46,23 @@ describe('LobbyManager.hostLobby', () => {
         expect(info.gameId).toBe('tactics');
     });
 
+    it('returns a provider-assigned hostId (not the hardcoded "host" literal)', async () => {
+        const manager = makeManager();
+        const info = await manager.hostLobby(HOST_PARAMS);
+        expect(info.hostId).toBeTruthy();
+        expect(info.hostId).not.toBe('host');
+    });
+
+    it('returns distinct hostIds for separate hosted sessions', async () => {
+        const provider = makeProvider();
+        const manager1 = new LobbyManager(provider, createNoopLogger());
+        const info1 = await manager1.hostLobby(HOST_PARAMS);
+        await manager1.closeLobby();
+        const manager2 = new LobbyManager(provider, createNoopLogger());
+        const info2 = await manager2.hostLobby(HOST_PARAMS);
+        expect(info1.hostId).not.toBe(info2.hostId);
+    });
+
     it('stores the session (closeLobby succeeds after hostLobby)', async () => {
         const manager = makeManager();
         await manager.hostLobby(HOST_PARAMS);
