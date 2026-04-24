@@ -41,11 +41,13 @@ export class LobbyManager {
     private session: HostedSession | JoinedSession | null = null;
     /** Active transport subscriptions; cleared and invoked on every closeLobby(). */
     private readonly subscriptions: Unsubscribe[] = [];
+    /** Optional teardown returned by onSessionHosted; cleared on closeLobby(). */
+    private sessionHostedTeardown: (() => void) | null = null;
 
     constructor(
         private readonly provider: MultiplayerProvider,
         logger: Logger,
-        private readonly onSessionHosted?: (transport: HostTransport) => void,
+        private readonly onSessionHosted?: (transport: HostTransport) => (() => void) | void,
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
     }
@@ -89,7 +91,10 @@ export class LobbyManager {
         // Notify the wiring point (index.ts) that a hosted session is live
         // so it can wire StateBroadcaster.  F15/F17 will replace this with
         // real simulationHost wiring.
-        this.onSessionHosted?.(session.transport);
+        const teardown = this.onSessionHosted?.(session.transport);
+        if (teardown !== undefined) {
+            this.sessionHostedTeardown = teardown;
+        }
 
         const info: LobbyInfo = {
             sessionId: session.lobbyCode,
@@ -162,6 +167,12 @@ export class LobbyManager {
         // that re-hosting does not accumulate dead callbacks (BLOCK-2 fix).
         const subs = this.subscriptions.splice(0);
         for (const unsub of subs) unsub();
+
+        // Call the teardown returned by onSessionHosted (e.g. StateBroadcaster
+        // cleanup) before closing the underlying transport (BLOCK-4 fix).
+        const hostedTeardown = this.sessionHostedTeardown;
+        this.sessionHostedTeardown = null;
+        hostedTeardown?.();
 
         if ('close' in session) {
             await session.close();

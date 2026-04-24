@@ -419,3 +419,57 @@ describe('LobbyManager provider-swap smoke test', () => {
         await expect(hostManager.closeLobby()).resolves.toBeUndefined();
     });
 });
+
+// ── onSessionHosted teardown ─────────────────────────────────────────────────
+
+describe('LobbyManager onSessionHosted teardown', () => {
+    it('calls the teardown returned by onSessionHosted when closeLobby is called', async () => {
+        let teardownCalled = false;
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), (_transport) => {
+            return () => {
+                teardownCalled = true;
+            };
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        expect(teardownCalled).toBe(false);
+        await manager.closeLobby();
+        expect(teardownCalled).toBe(true);
+    });
+
+    it('does not throw when onSessionHosted returns undefined (no teardown)', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), (_transport) => {
+            return undefined;
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        await expect(manager.closeLobby()).resolves.toBeUndefined();
+    });
+
+    it('calls teardown before session.close()', async () => {
+        const order: string[] = [];
+        const rawProvider = makeProvider();
+        // Wrap hostLobby to instrument session.close() by delegating to rawProvider
+        // but intercepting the close() of the returned HostedSession.
+        const wrappedProvider: MultiplayerProvider = {
+            hostLobby: async (p) => {
+                const session = await rawProvider.hostLobby(p);
+                return {
+                    ...session,
+                    close: async () => {
+                        order.push('close');
+                        await session.close();
+                    },
+                };
+            },
+            joinLobby: (p) => rawProvider.joinLobby(p),
+            dispose: () => rawProvider.dispose(),
+        };
+        const manager = new LobbyManager(wrappedProvider, createNoopLogger(), (_transport) => {
+            return () => {
+                order.push('teardown');
+            };
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        await manager.closeLobby();
+        expect(order).toEqual(['teardown', 'close']);
+    });
+});

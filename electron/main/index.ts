@@ -423,10 +423,14 @@ export async function main(): Promise<void> {
         ipcMain,
         lobbyManager: new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, (transport) => {
             // Shallow wiring: StateBroadcaster constructed with the live
-            // HostTransport once a session is hosted.  The broadcast
-            // callback will be passed to the simulation host in F15.
-            const _broadcaster = new StateBroadcaster(transport, lobbyLogger);
-            // TODO(F15): pass _broadcaster.broadcast to simulationHost
+            // HostTransport once a session is hosted.  Return a teardown
+            // so LobbyManager can clean up on closeLobby() (BLOCK-4 fix).
+            const broadcaster = new StateBroadcaster(transport, lobbyLogger);
+            // TODO(F15): pass broadcaster.broadcast to simulationHost
+            return () => {
+                // TODO(F15): broadcaster will expose a dispose() method; call it here.
+                void broadcaster;
+            };
         }),
         logger: logger.child({ module: 'lobby' }),
     });
