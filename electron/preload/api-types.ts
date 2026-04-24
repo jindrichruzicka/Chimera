@@ -310,7 +310,7 @@ export interface GameAPI {
 export interface LobbyAPI {
     host(params: HostLobbyParams): Promise<LobbyInfo>;
     join(params: JoinLobbyParams): Promise<LobbyInfo>;
-    leave(): void;
+    leave(): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;
 }
 

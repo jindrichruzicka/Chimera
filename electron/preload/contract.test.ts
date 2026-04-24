@@ -106,6 +106,7 @@ async function loadApi(): Promise<ChimeraAPI> {
     invokeResults.set('chimera:system:platform', { os: 'linux', version: '33.0.0' });
     invokeResults.set('chimera:lobby:host', { sessionId: '', hostId: '', gameId: '' });
     invokeResults.set('chimera:lobby:join', { sessionId: '', hostId: '', gameId: '' });
+    invokeResults.set('chimera:lobby:leave', undefined);
     invokeResults.set('chimera:saves:list', []);
     invokeResults.set('chimera:saves:save', {
         slotId: '',
@@ -254,9 +255,9 @@ describe('window.__chimera.lobby — contract', () => {
         expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:join', args: [params] }]);
     });
 
-    it('leave() sends to chimera:lobby:leave with no payload', () => {
-        api.lobby.leave();
-        expect(sendCalls).toEqual([{ channel: 'chimera:lobby:leave', args: [] }]);
+    it('leave() invokes chimera:lobby:leave with no payload', async () => {
+        await api.lobby.leave();
+        expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:leave', args: [] }]);
     });
 
     it('onUpdate() registers on chimera:lobby:update; Unsubscribe removes the listener', () => {

@@ -30,7 +30,6 @@ import {
     type GameHandlerEvent,
     type GameHandlerListener,
     type GameInvokeHandler,
-    type LobbyHandlerListener,
     type LobbyHandlersIpcMain,
     type LobbyInvokeHandler,
     type SavesHandlersIpcMain,
@@ -267,28 +266,23 @@ describe('registerGameHandlers', () => {
 });
 
 /**
- * Recording stub for the narrow `LobbyHandlersIpcMain` slice. Mirrors the
- * game stub — `handle` captures invoke handlers, `on` captures fire-and-
- * forget listeners.
+ * Recording stub for the narrow `LobbyHandlersIpcMain` slice. The lobby
+ * namespace uses `handle` exclusively — every request/response is an
+ * invoke-style round-trip so the renderer can surface failures.
  */
 function makeLobbyIpcMainStub(): {
     readonly ipcMain: LobbyHandlersIpcMain;
     readonly handled: Map<string, LobbyInvokeHandler>;
-    readonly listeners: Map<string, LobbyHandlerListener>;
 } {
     const handled = new Map<string, LobbyInvokeHandler>();
-    const listeners = new Map<string, LobbyHandlerListener>();
 
     const ipcMain: LobbyHandlersIpcMain = {
         handle: (channel, handler) => {
             handled.set(channel, handler);
         },
-        on: (channel, handler) => {
-            listeners.set(channel, handler);
-        },
     };
 
-    return { ipcMain, handled, listeners };
+    return { ipcMain, handled };
 }
 
 /**
@@ -339,18 +333,28 @@ describe('registerLobbyHandlers', () => {
         expect(result).toEqual(mockInfo);
     });
 
-    it('registers chimera:lobby:leave as a send listener that calls lobbyManager.closeLobby', async () => {
+    it('registers chimera:lobby:leave as an invoke handler that calls lobbyManager.closeLobby', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
         const spy = vi.spyOn(lobbyManager, 'closeLobby');
         registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
 
-        const handler = stub.listeners.get(LOBBY_LEAVE_CHANNEL);
+        const handler = stub.handled.get(LOBBY_LEAVE_CHANNEL);
         expect(handler).toBeDefined();
-        handler?.({});
-        // closeLobby is async — wait a microtask for the Promise to settle
-        await Promise.resolve();
+        await Promise.resolve(handler?.({}));
         expect(spy).toHaveBeenCalledOnce();
+    });
+
+    it('rejects when lobbyManager.closeLobby throws', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const error = new Error('WebSocket in CLOSING state');
+        vi.spyOn(lobbyManager, 'closeLobby').mockRejectedValue(error);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_LEAVE_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.({}))).rejects.toThrow('WebSocket in CLOSING state');
     });
 
     it('registers exactly the lobby request channels (update is push-only, not registered here)', () => {
@@ -361,11 +365,9 @@ describe('registerLobbyHandlers', () => {
         // `webContents.send`. It must NOT appear as a main-side listener or
         // invoke handler.
         expect([...stub.handled.keys()].sort()).toEqual(
-            [LOBBY_HOST_CHANNEL, LOBBY_JOIN_CHANNEL].sort(),
+            [LOBBY_HOST_CHANNEL, LOBBY_JOIN_CHANNEL, LOBBY_LEAVE_CHANNEL].sort(),
         );
-        expect([...stub.listeners.keys()]).toEqual([LOBBY_LEAVE_CHANNEL]);
         expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
-        expect(stub.listeners.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
     });
 });
 

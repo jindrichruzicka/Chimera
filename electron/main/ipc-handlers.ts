@@ -326,13 +326,6 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
 }
 
 /**
- * Shape of a main-side `ipcMain.on` listener for the lobby namespace.
- * Mirrors {@link GameHandlerListener} — permissive types keep tests free of
- * Electron imports.
- */
-export type LobbyHandlerListener = (event: unknown, ...args: unknown[]) => void;
-
-/**
  * Shape of a main-side `ipcMain.handle` handler for the lobby namespace.
  * Mirrors {@link GameInvokeHandler}.
  */
@@ -340,11 +333,11 @@ export type LobbyInvokeHandler = (event: unknown, ...args: unknown[]) => unknown
 
 /**
  * Narrow slice of `Electron.IpcMain` required to register the lobby-namespace
- * channels.
+ * channels. The lobby namespace uses `handle` exclusively — every request is
+ * an invoke-style round-trip so the renderer can surface failures.
  */
 export interface LobbyHandlersIpcMain {
     handle(channel: string, handler: LobbyInvokeHandler): unknown;
-    on(channel: string, handler: LobbyHandlerListener): unknown;
 }
 
 export interface RegisterLobbyHandlersOptions {
@@ -387,12 +380,8 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
         return lobbyManager.joinLobby(validated);
     });
 
-    ipcMain.on(LOBBY_LEAVE_CHANNEL, () => {
-        void lobbyManager.closeLobby().catch((err: unknown) => {
-            logger.warn('closeLobby error in leave handler', {
-                error: err instanceof Error ? err.message : String(err),
-            });
-        });
+    ipcMain.handle(LOBBY_LEAVE_CHANNEL, () => {
+        return lobbyManager.closeLobby();
     });
 }
 
