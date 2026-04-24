@@ -1,0 +1,58 @@
+/**
+ * networking/provider/SteamNetworkProvider.test.ts
+ *
+ * Written first (red) per TDD mandate — SteamNetworkProvider.ts does not exist yet.
+ *
+ * Verifies:
+ *   1. SteamNetworkProvider satisfies MultiplayerProvider structurally
+ *   2. hostLobby() throws 'not yet implemented'
+ *   3. joinLobby() throws 'not yet implemented'
+ *   4. dispose() is callable without throwing
+ *   5. isBrowsable() returns false (SteamNetworkProvider does not implement BrowsableProvider yet)
+ *
+ * Architecture: §4.14 — Pluggable Multiplayer Provider
+ * Task: F09 / T3 (issue #203)
+ */
+
+import { describe, it, expect } from 'vitest';
+
+import { SteamNetworkProvider } from './SteamNetworkProvider.js';
+import { isBrowsable } from './MultiplayerProvider.js';
+import type { MultiplayerProvider } from './MultiplayerProvider.js';
+
+// ─── Structural compliance ────────────────────────────────────────────────────
+
+describe('SteamNetworkProvider', () => {
+    it('satisfies MultiplayerProvider structurally', () => {
+        // TypeScript enforces this at compile time; runtime check mirrors it
+        const provider: MultiplayerProvider = new SteamNetworkProvider();
+        expect(provider).toBeDefined();
+        expect(typeof provider.hostLobby).toBe('function');
+        expect(typeof provider.joinLobby).toBe('function');
+        expect(typeof provider.dispose).toBe('function');
+    });
+
+    it('hostLobby throws "not yet implemented"', async () => {
+        const provider = new SteamNetworkProvider();
+        await expect(provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 })).rejects.toThrow(
+            'not yet implemented',
+        );
+    });
+
+    it('joinLobby throws "not yet implemented"', async () => {
+        const provider = new SteamNetworkProvider();
+        await expect(provider.joinLobby({ address: '127.0.0.1:3456' })).rejects.toThrow(
+            'not yet implemented',
+        );
+    });
+
+    it('dispose() does not throw', () => {
+        const provider = new SteamNetworkProvider();
+        expect(() => provider.dispose()).not.toThrow();
+    });
+
+    it('isBrowsable returns false — Steam lobby browsing not yet implemented', () => {
+        const provider = new SteamNetworkProvider();
+        expect(isBrowsable(provider)).toBe(false);
+    });
+});
