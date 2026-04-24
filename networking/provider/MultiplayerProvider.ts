@@ -251,5 +251,5 @@ export interface BrowsableProvider {
  * Uses `unknown` cast instead of `any` to satisfy strict-mode linting.
  */
 export function isBrowsable(p: MultiplayerProvider): p is MultiplayerProvider & BrowsableProvider {
-    return typeof (p as unknown as Record<string, unknown>)['listLobbies'] === 'function';
+    return typeof (p as Partial<BrowsableProvider>).listLobbies === 'function';
 }
