@@ -1,0 +1,25 @@
+name: Create F12 Issues (Runtime Debug Layer)
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "yes" to confirm issue creation'
+        required: true
+        default: ''
+
+permissions:
+  issues: write
+
+jobs:
+  create-f12-issues:
+    runs-on: ubuntu-latest
+    if: github.event.inputs.confirm == 'yes'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create F12 issues
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash .github/issues/f12/create-f12-issues.sh
