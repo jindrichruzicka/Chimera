@@ -207,13 +207,20 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         const clientPlayerId: PlayerId = `client-${nextId()}` as PlayerId;
         const record = channel.addClient(clientPlayerId);
 
-        // Notify the host that this client has joined
         const playerEntry: LobbyPlayerEntry = {
             playerId: clientPlayerId,
             displayName: `Player-${clientPlayerId}`,
             ready: false,
         };
-        for (const cb of channel.playerJoinedCbs) cb(playerEntry);
+
+        // Notify the host that this client has joined — deferred via queueMicrotask so
+        // the returned JoinedSession promise resolves before the callback fires.
+        // This prevents a synchronous call inside joinLobby() from dropping messages
+        // sent by the host in its onPlayerJoined handler (Invariant: callers must be
+        // able to register handlers on JoinedSession before any host reaction fires).
+        queueMicrotask(() => {
+            for (const cb of channel.playerJoinedCbs) cb(playerEntry);
+        });
 
         const transport: ClientTransport = {
             sendAction: (action: EngineAction): void => {

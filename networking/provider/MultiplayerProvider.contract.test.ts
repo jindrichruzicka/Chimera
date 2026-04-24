@@ -166,6 +166,31 @@ export function testMultiplayerProviderContract(
                 provider.dispose();
             });
 
+            it('onPlayerJoined does not fire synchronously inside joinLobby()', async () => {
+                // Invariant: the host callback must not execute during the synchronous
+                // body of joinLobby(). Consumers cannot register handlers on a
+                // JoinedSession they have not yet received, so firing inside joinLobby()
+                // would silently drop any host-side response (e.g. broadcastLobbyState).
+                const provider = factory();
+                const hosted = await provider.hostLobby({
+                    gameId: 'contract-test',
+                    maxPlayers: 4,
+                });
+
+                const joinedPlayers: LobbyPlayerEntry[] = [];
+                hosted.transport.onPlayerJoined((p) => joinedPlayers.push(p));
+
+                // Call joinLobby but do NOT await it yet
+                const joinPromise = provider.joinLobby({ address: hosted.lobbyCode });
+
+                // If onPlayerJoined fired synchronously (inside joinLobby body),
+                // joinedPlayers would already have 1 entry here — that is the bug.
+                expect(joinedPlayers).toHaveLength(0);
+
+                await joinPromise;
+                provider.dispose();
+            });
+
             it('ClientTransport exposes all required subscription methods', async () => {
                 const provider = factory();
                 const hosted = await provider.hostLobby({
