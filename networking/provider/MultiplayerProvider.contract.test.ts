@@ -521,8 +521,8 @@ describe('isBrowsable() narrowing', () => {
         expect(isBrowsable(provider)).toBe(true);
     });
 
-    it('returns false for SteamNetworkProvider — BrowsableProvider not yet implemented', () => {
+    it('returns true for SteamNetworkProvider — implements BrowsableProvider', () => {
         const steam = new SteamNetworkProvider();
-        expect(isBrowsable(steam)).toBe(false);
+        expect(isBrowsable(steam)).toBe(true);
     });
 });

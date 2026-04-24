@@ -20,18 +20,25 @@
 
 import type {
     MultiplayerProvider,
+    BrowsableProvider,
     HostedSession,
     JoinedSession,
+    LobbyListEntry,
     HostLobbyParams,
     JoinLobbyParams,
 } from './MultiplayerProvider.js';
 
-export class SteamNetworkProvider implements MultiplayerProvider {
+export class SteamNetworkProvider implements MultiplayerProvider, BrowsableProvider {
     hostLobby(_params: HostLobbyParams): Promise<HostedSession> {
         return Promise.reject(new Error('not yet implemented'));
     }
 
     joinLobby(_params: JoinLobbyParams): Promise<JoinedSession> {
+        return Promise.reject(new Error('not yet implemented'));
+    }
+
+    listLobbies(): Promise<LobbyListEntry[]> {
+        // SteamMatchmaking.RequestLobbyList() filtered by app ID + gameId metadata
         return Promise.reject(new Error('not yet implemented'));
     }
 
