@@ -289,3 +289,27 @@ describe('WsHostTransport — onPlayerJoined / onPlayerLeft', () => {
         expect(left[0]).toBe(playerId);
     });
 });
+
+// ─── T04: profile side-channel must NOT send LOBBY_STATE ────────────────────
+
+describe('WsHostTransport — profile side-channel (T04)', () => {
+    it('does not deliver any frame to the client when kind=profile', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws } = await connectAndJoin(server);
+
+        const received: ServerMessage[] = [];
+        ws.on('message', (raw) => received.push(JSON.parse(rawToString(raw)) as ServerMessage));
+
+        transport.sendSideChannel('broadcast', {
+            kind: 'profile',
+            payload: { playerId: pid('p1'), displayName: 'Alice' },
+        });
+
+        await new Promise<void>((r) => setTimeout(r, 30));
+        // No LOBBY_STATE or any other frame should arrive for a profile side-channel
+        expect(received.filter((m) => m.type === 'LOBBY_STATE')).toHaveLength(0);
+        expect(received).toHaveLength(0);
+        ws.close();
+    });
+});

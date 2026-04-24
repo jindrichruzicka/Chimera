@@ -25,11 +25,12 @@
  *   networking boundary — LobbyServer is internal to networking/provider/local/
  */
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
-import { isClientMessage } from '@chimera/shared/messages.js';
+import type { Logger } from '@chimera/shared/logging.js';
+import { ClientMessageSchema } from '@chimera/shared/messages-schemas.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,8 @@ export interface LobbyServerOptions {
     readonly port: number;
     readonly gameId: string;
     readonly maxPlayers: number;
+    /** Optional structured logger. Logs join/leave events and validation failures. */
+    readonly logger?: Logger;
 }
 
 // ─── LobbyServer ──────────────────────────────────────────────────────────────
@@ -71,15 +74,21 @@ export class LobbyServer {
     private readonly disconnectedCbs = new Set<DisconnectCallback>();
 
     private readonly opts: LobbyServerOptions;
+    private readonly logger: Logger | undefined;
     private idCounter = 0;
     private closed = false;
     private readonly readyPromise: Promise<void>;
 
     constructor(opts: LobbyServerOptions) {
         this.opts = opts;
+        this.logger = opts.logger;
         this._token = randomBytes(16).toString('hex');
 
-        this.wss = new WebSocketServer({ port: opts.port, host: '127.0.0.1' });
+        this.wss = new WebSocketServer({
+            port: opts.port,
+            host: '127.0.0.1',
+            maxPayload: 1_048_576,
+        });
 
         this.readyPromise = new Promise<void>((resolve, reject) => {
             this.wss.once('listening', () => {
@@ -179,17 +188,18 @@ export class LobbyServer {
         if (this.closed) return;
         this.closed = true;
 
-        // Notify all clients
+        // Notify all clients — snapshot the map before iterating (W-3)
         const closeMsg: ServerMessage = {
             type: 'REJECT',
             reason: 'host_closed',
             tick: 0,
         };
         const serialised = JSON.stringify(closeMsg);
-        for (const [playerId, ws] of this.connections.entries()) {
+        const entries = [...this.connections.entries()];
+        for (const [playerId, ws] of entries) {
             if (ws.readyState === WebSocket.OPEN) {
-                ws.send(serialised);
-                ws.close();
+                // Flush the REJECT frame first, then close in the callback (W-2)
+                ws.send(serialised, () => ws.close());
             }
             for (const cb of this.disconnectedCbs) {
                 cb(playerId, 'host_closed');
@@ -222,7 +232,7 @@ export class LobbyServer {
                 return;
             }
 
-            if (!isClientMessage(parsed)) return;
+            if (!isClientMessageValid(parsed)) return;
             const msg = parsed;
 
             if (!authenticated) {
@@ -239,8 +249,8 @@ export class LobbyServer {
                     return;
                 }
 
-                // Validate token
-                if (msg.token !== this._token) {
+                // Validate token — timing-safe comparison (T07)
+                if (!timingSafeTokenEqual(msg.token, this._token)) {
                     ws.send(
                         JSON.stringify({
                             type: 'REJECT',
@@ -270,6 +280,7 @@ export class LobbyServer {
                 playerId = `player-${this.idCounter}` as PlayerId;
                 this.connections.set(playerId, ws);
                 authenticated = true;
+                this.logger?.info('player connected', { playerId });
 
                 // Send WELCOME
                 const welcomeMsg: ServerMessage = {
@@ -305,6 +316,7 @@ export class LobbyServer {
             if (playerId !== null) {
                 this.connections.delete(playerId);
                 const pid = playerId;
+                this.logger?.info('player disconnected', { playerId: pid });
                 for (const cb of this.disconnectedCbs) {
                     cb(pid, 'normal');
                 }
@@ -317,4 +329,25 @@ export class LobbyServer {
             // Let the 'close' event handle cleanup
         });
     }
+}
+
+// ─── Module-private helpers ───────────────────────────────────────────────────
+
+/**
+ * Validate an unknown value against the full ClientMessage schema.
+ * Returns true (and narrows the type) if the value matches any known variant.
+ */
+function isClientMessageValid(value: unknown): value is ClientMessage {
+    return ClientMessageSchema.safeParse(value).success;
+}
+
+/**
+ * Timing-safe string equality using crypto.timingSafeEqual.
+ * Returns false (not throws) when lengths differ.
+ */
+function timingSafeTokenEqual(a: string, b: string): boolean {
+    const bufA = Buffer.from(a);
+    const bufB = Buffer.from(b);
+    if (bufA.length !== bufB.length) return false;
+    return timingSafeEqual(bufA, bufB);
 }

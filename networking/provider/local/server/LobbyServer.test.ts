@@ -292,3 +292,58 @@ describe('LobbyServer — event subscriptions', () => {
         ws.close();
     });
 });
+
+// ─── T07: timing-safe token comparison ───────────────────────────────────────
+
+describe('LobbyServer — timing-safe token comparison (T07)', () => {
+    it('rejects JOIN when token has wrong length (timingSafeEqual handles length mismatch)', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const rejected = await new Promise<ServerMessage>((resolve, reject) => {
+            const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+            ws.on('error', reject);
+            ws.on('open', () => {
+                const join: ClientMessage = {
+                    type: 'JOIN',
+                    token: 'short', // different length from the 32-hex token
+                    profile: { playerId: pid('x'), displayName: 'X' },
+                };
+                ws.send(JSON.stringify(join));
+            });
+            ws.on('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+        expect(rejected.type).toBe('REJECT');
+    });
+
+    it('accepts JOIN when token exactly matches', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { ws } = await connectAndJoin(server);
+        ws.close();
+    });
+});
+
+// ─── T05: close path hardens ──────────────────────────────────────────────────
+
+describe('LobbyServer — close path (T05)', () => {
+    it('client receives REJECT reason before socket closes', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { ws } = await connectAndJoin(server);
+
+        const frames: ServerMessage[] = [];
+        ws.on('message', (raw) => frames.push(JSON.parse(rawToString(raw)) as ServerMessage));
+
+        await server.close();
+        await new Promise<void>((r) => setTimeout(r, 60));
+
+        expect(frames.some((f) => f.type === 'REJECT')).toBe(true);
+    });
+
+    it('close() is idempotent under concurrent calls', async () => {
+        const server = makeServer();
+        await server.ready();
+        await Promise.all([server.close(), server.close(), server.close()]);
+    });
+});

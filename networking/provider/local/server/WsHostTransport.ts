@@ -55,6 +55,7 @@ export class WsHostTransport implements HostTransport {
 
     sendSideChannel(target: PlayerId | 'broadcast', msg: SideChannelMessage): void {
         const frame = this.sideChannelToServerMessage(msg);
+        if (frame === null) return;
         if (target === 'broadcast') {
             this.server.broadcast(frame);
         } else {
@@ -89,7 +90,7 @@ export class WsHostTransport implements HostTransport {
 
     // ─── Helpers ──────────────────────────────────────────────────────────────
 
-    private sideChannelToServerMessage(msg: SideChannelMessage): ServerMessage {
+    private sideChannelToServerMessage(msg: SideChannelMessage): ServerMessage | null {
         if (msg.kind === 'chat') {
             return {
                 type: 'CHAT',
@@ -99,24 +100,10 @@ export class WsHostTransport implements HostTransport {
                 serverTime: msg.payload.timestamp,
             };
         }
-        // profile: ServerMessage has no dedicated PROFILE_UPDATE frame; encode
-        // as a CHAT-style carrier until F14 expands the protocol.  For now we
-        // use a LOBBY_STATE broadcast which is the closest equivalent in the
-        // current wire protocol. The transport caller is responsible for
-        // issuing a broadcastLobbyState after updating profiles.
+        // profile: The current wire protocol has no SERVER_PROFILE_UPDATE frame.
+        // Sending a garbage LOBBY_STATE frame here is incorrect and confusing.
+        // Drop the side-channel silently until F14 adds proper protocol support.
         // TODO(F14): add a SERVER_PROFILE_UPDATE message type to ServerMessage
-        return {
-            type: 'LOBBY_STATE',
-            state: {
-                info: { sessionId: '', hostId: msg.payload.playerId, gameId: '' },
-                players: [
-                    {
-                        playerId: msg.payload.playerId,
-                        displayName: msg.payload.displayName,
-                        ready: false,
-                    },
-                ],
-            },
-        };
+        return null;
     }
 }

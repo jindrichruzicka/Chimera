@@ -23,11 +23,17 @@ import type {
     LobbyInfo,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { ServerConnectionOptions } from './client/ServerConnection.js';
 import { LobbyServer } from './server/LobbyServer.js';
 import { MessageRouter } from './server/MessageRouter.js';
 import { WsHostTransport } from './server/WsHostTransport.js';
 import { ServerConnection } from './client/ServerConnection.js';
 import { WsClientTransport } from './client/WsClientTransport.js';
+
+// ─── Options ──────────────────────────────────────────────────────────────────
+
+/** Options for LocalWebSocketProvider. All fields optional. */
+export type LocalWebSocketProviderOptions = ServerConnectionOptions;
 
 // ─── LocalWebSocketProvider ───────────────────────────────────────────────────
 
@@ -38,6 +44,11 @@ import { WsClientTransport } from './client/WsClientTransport.js';
 export class LocalWebSocketProvider implements MultiplayerProvider {
     private readonly openServers = new Set<LobbyServer>();
     private readonly openConnections = new Set<ServerConnection>();
+    private readonly opts: LocalWebSocketProviderOptions;
+
+    constructor(opts: LocalWebSocketProviderOptions = {}) {
+        this.opts = opts;
+    }
 
     // ─── MultiplayerProvider API ──────────────────────────────────────────────
 
@@ -47,9 +58,10 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             gameId: params.gameId,
             maxPlayers: params.maxPlayers,
         });
-        this.openServers.add(server);
 
+        // Add to openServers only AFTER ready() succeeds to avoid resource leaks (W-1)
         await server.ready();
+        this.openServers.add(server);
 
         const router = new MessageRouter(server);
         const transport = new WsHostTransport(server, router);
@@ -72,7 +84,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             );
         }
 
-        const conn = new ServerConnection();
+        const conn = new ServerConnection(this.opts);
         this.openConnections.add(conn);
 
         const { playerId, lobbyState } = await conn.connect(`ws://${host}:${portStr}`, token, {
@@ -97,13 +109,15 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
     }
 
     dispose(): void {
-        for (const server of this.openServers) {
-            void server.close();
-        }
-        for (const conn of this.openConnections) {
-            void conn.close();
-        }
+        const servers = [...this.openServers];
+        const conns = [...this.openConnections];
         this.openServers.clear();
         this.openConnections.clear();
+        for (const server of servers) {
+            void server.close();
+        }
+        for (const conn of conns) {
+            void conn.close();
+        }
     }
 }

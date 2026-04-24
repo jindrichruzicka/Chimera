@@ -26,6 +26,8 @@ import type {
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { WirePlayerProfile } from '@chimera/shared/messages.js';
 import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { Logger } from '@chimera/shared/logging.js';
+import { ServerMessageSchema } from '@chimera/shared/messages-schemas.js';
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -41,6 +43,8 @@ export interface ServerConnectionOptions {
     readonly maxRetries?: number;
     /** Base delay in milliseconds for exponential backoff. Default: 250. */
     readonly baseDelayMs?: number;
+    /** Optional structured logger. Logs connect/disconnect and validation failures. */
+    readonly logger?: Logger;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -60,11 +64,15 @@ function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
 export class ServerConnection {
     private readonly maxRetries: number;
     private readonly baseDelayMs: number;
+    private readonly logger: Logger | undefined;
 
     private ws: WebSocket | null = null;
     private url = '';
     private token = '';
     private profile: WirePlayerProfile | null = null;
+
+    /** The PlayerId assigned by the server after a successful WELCOME. */
+    private _assignedPlayerId: PlayerId | null = null;
 
     private readonly messageCbs = new Set<(msg: ServerMessage) => void>();
     private readonly disconnectedCbs = new Set<(reason: DisconnectReason) => void>();
@@ -72,10 +80,18 @@ export class ServerConnection {
     /** Whether the connection was closed intentionally (no reconnect). */
     private intentionalClose = false;
     private retryCount = 0;
+    /** Pending reconnect timer — cleared in close() to prevent timer leaks (W-6). */
+    private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
     constructor(opts?: ServerConnectionOptions) {
         this.maxRetries = opts?.maxRetries ?? 5;
         this.baseDelayMs = opts?.baseDelayMs ?? 250;
+        this.logger = opts?.logger;
+    }
+
+    /** The server-assigned PlayerId, available after a successful connect(). */
+    get assignedPlayerId(): PlayerId | null {
+        return this._assignedPlayerId;
     }
 
     // ─── Public API ───────────────────────────────────────────────────────────
@@ -121,6 +137,11 @@ export class ServerConnection {
     /** Cleanly close the connection. Resolves when the socket is closed. */
     close(): Promise<void> {
         this.intentionalClose = true;
+        // Cancel any pending reconnect timer (W-6)
+        if (this.reconnectTimer !== null) {
+            clearTimeout(this.reconnectTimer);
+            this.reconnectTimer = null;
+        }
         return new Promise<void>((resolve) => {
             if (this.ws === null || this.ws.readyState === WebSocket.CLOSED) {
                 resolve();
@@ -155,14 +176,56 @@ export class ServerConnection {
             let welcomed = false;
 
             const onHandshakeMessage = (raw: Buffer | ArrayBuffer | Buffer[]): void => {
-                const msg = JSON.parse(rawToString(raw)) as ServerMessage;
+                let msg: ServerMessage;
+                try {
+                    const parsed: unknown = JSON.parse(rawToString(raw));
+                    const result = ServerMessageSchema.safeParse(parsed);
+                    if (!result.success) {
+                        this.logger?.warn('malformed server message during handshake', {
+                            issues: result.error.issues,
+                        });
+                        return;
+                    }
+                    // Cast: Zod PlayerId is string; Chimera PlayerId is branded string.
+                    // Structural validation is complete — the cast is safe here.
+                    msg = result.data as unknown as ServerMessage;
+                } catch {
+                    this.logger?.warn('non-JSON data received during handshake');
+                    return;
+                }
 
                 if (msg.type === 'WELCOME') {
                     welcomed = true;
+                    this._assignedPlayerId = msg.playerId;
+                    // Update profile so reconnect sends the server-assigned ID (T03)
+                    if (this.profile !== null) {
+                        this.profile = { ...this.profile, playerId: msg.playerId };
+                    }
                     // Remove the handshake listener and wire up the ongoing listener
                     ws.off('message', onHandshakeMessage);
                     ws.on('message', (r) => {
-                        const m = JSON.parse(rawToString(r)) as ServerMessage;
+                        let m: ServerMessage;
+                        try {
+                            const p: unknown = JSON.parse(rawToString(r));
+                            const res = ServerMessageSchema.safeParse(p);
+                            if (!res.success) {
+                                this.logger?.warn('malformed server message', {
+                                    issues: res.error.issues,
+                                });
+                                return;
+                            }
+                            // Cast: Zod PlayerId is string; Chimera PlayerId is branded string.
+                            // Structural validation is complete — the cast is safe here.
+                            m = res.data as unknown as ServerMessage;
+                        } catch {
+                            this.logger?.warn('non-JSON data received from server');
+                            return;
+                        }
+                        // Forward REJECT reason to disconnect subscribers (W-5)
+                        if (m.type === 'REJECT') {
+                            for (const cb of this.disconnectedCbs) cb(m.reason as DisconnectReason);
+                            return;
+                        }
                         for (const cb of this.messageCbs) cb(m);
                     });
                     ws.on('close', () => this.handleClose());
@@ -199,7 +262,8 @@ export class ServerConnection {
         const delay = this.baseDelayMs * Math.pow(2, this.retryCount);
         this.retryCount += 1;
 
-        setTimeout(() => {
+        this.reconnectTimer = setTimeout(() => {
+            this.reconnectTimer = null;
             if (this.intentionalClose) return;
             void this.attemptReconnect();
         }, delay);

@@ -1,0 +1,258 @@
+/**
+ * shared/messages-schemas.test.ts
+ *
+ * Tests for Zod schemas that validate the wire protocol messages defined in
+ * shared/messages.ts.
+ *
+ * Architecture: §4.3 — WebSocket Message Protocol
+ * Task: F10.1 / T01 (issue #225)
+ */
+
+import { describe, it, expect } from 'vitest';
+import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { ClientMessageSchema, ServerMessageSchema } from './messages-schemas.js';
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function pid(s: string): PlayerId {
+    return s as PlayerId;
+}
+
+const defaultLobbyInfo = { sessionId: 's1', hostId: pid('host'), gameId: 'test' };
+
+// ─── ClientMessageSchema ──────────────────────────────────────────────────────
+
+describe('ClientMessageSchema — JOIN', () => {
+    it('parses a valid JOIN message', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'JOIN',
+            token: 'abc123',
+            profile: { playerId: pid('p1'), displayName: 'Alice' },
+        });
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data.type).toBe('JOIN');
+        }
+    });
+
+    it('rejects JOIN missing token', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'JOIN',
+            profile: { playerId: pid('p1'), displayName: 'Alice' },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects JOIN missing profile', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'JOIN',
+            token: 'abc123',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects JOIN with extra unknown field still parses (unknown stripped)', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'JOIN',
+            token: 'abc123',
+            profile: { playerId: pid('p1'), displayName: 'Alice' },
+            extra: 'garbage',
+        });
+        // Zod strips unknown fields by default in strict mode or passes in passthrough
+        // We use .strict() so extra fields are rejected
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ClientMessageSchema — ACTION', () => {
+    it('parses a valid ACTION message', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'ACTION',
+            tick: 10,
+            action: { type: 'test:noop', playerId: pid('p1'), tick: 10, payload: {} },
+            checksum: 0,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects ACTION missing tick', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'ACTION',
+            action: { type: 'test:noop', playerId: pid('p1'), tick: 10, payload: {} },
+            checksum: 0,
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects ACTION with non-integer tick', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'ACTION',
+            tick: 'not-a-number',
+            action: { type: 'test:noop', playerId: pid('p1'), tick: 10, payload: {} },
+            checksum: 0,
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ClientMessageSchema — PING', () => {
+    it('parses a valid PING message', () => {
+        const result = ClientMessageSchema.safeParse({ type: 'PING', sentAt: 12345 });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects PING missing sentAt', () => {
+        const result = ClientMessageSchema.safeParse({ type: 'PING' });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ClientMessageSchema — PROFILE_UPDATE', () => {
+    it('parses a valid PROFILE_UPDATE message', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'PROFILE_UPDATE',
+            profile: { playerId: pid('p1'), displayName: 'Bob' },
+        });
+        expect(result.success).toBe(true);
+    });
+});
+
+describe('ClientMessageSchema — CHAT', () => {
+    it('parses a valid CHAT message', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'CHAT',
+            body: 'hello',
+            scope: 'all',
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects CHAT with invalid scope', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'CHAT',
+            body: 'hello',
+            scope: 'invalid-scope',
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ClientMessageSchema — invalid type', () => {
+    it('rejects an unknown type', () => {
+        const result = ClientMessageSchema.safeParse({ type: 'UNKNOWN', data: 'x' });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects null', () => {
+        const result = ClientMessageSchema.safeParse(null);
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a plain string', () => {
+        const result = ClientMessageSchema.safeParse('JOIN');
+        expect(result.success).toBe(false);
+    });
+});
+
+// ─── ServerMessageSchema ──────────────────────────────────────────────────────
+
+describe('ServerMessageSchema — WELCOME', () => {
+    it('parses a valid WELCOME message', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'WELCOME',
+            playerId: pid('p1'),
+            lobbyState: { info: defaultLobbyInfo, players: [] },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects WELCOME missing playerId', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'WELCOME',
+            lobbyState: { info: defaultLobbyInfo, players: [] },
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ServerMessageSchema — REJECT', () => {
+    it('parses a valid REJECT message', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'REJECT',
+            reason: 'host_closed',
+            tick: 0,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects REJECT missing reason', () => {
+        const result = ServerMessageSchema.safeParse({ type: 'REJECT', tick: 0 });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ServerMessageSchema — PONG', () => {
+    it('parses a valid PONG message', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'PONG',
+            sentAt: 100,
+            serverTime: 200,
+        });
+        expect(result.success).toBe(true);
+    });
+});
+
+describe('ServerMessageSchema — LOBBY_STATE', () => {
+    it('parses a valid LOBBY_STATE message', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'LOBBY_STATE',
+            state: {
+                info: defaultLobbyInfo,
+                players: [{ playerId: pid('p1'), displayName: 'Alice', ready: false }],
+            },
+        });
+        expect(result.success).toBe(true);
+    });
+});
+
+describe('ServerMessageSchema — invalid', () => {
+    it('rejects unknown type', () => {
+        const result = ServerMessageSchema.safeParse({ type: 'BOGUS' });
+        expect(result.success).toBe(false);
+    });
+});
+
+// ─── Round-trip ───────────────────────────────────────────────────────────────
+
+describe('ClientMessageSchema — round-trip via JSON', () => {
+    it('JOIN survives JSON serialise → parse', () => {
+        const msg = {
+            type: 'JOIN' as const,
+            token: 'tok',
+            profile: { playerId: pid('p1'), displayName: 'A' },
+        };
+        const round = ClientMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+        expect(round.success).toBe(true);
+        if (round.success) expect(round.data).toMatchObject(msg);
+    });
+});
+
+describe('ServerMessageSchema — round-trip via JSON', () => {
+    it('SNAPSHOT survives JSON serialise → parse', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 1,
+                viewerId: pid('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                events: [],
+                undoMeta: { canUndo: false, canRedo: false },
+            },
+            checksum: 42,
+        };
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+        expect(round.success).toBe(true);
+    });
+});
