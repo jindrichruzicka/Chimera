@@ -10,15 +10,19 @@
  *   2. Objects satisfying each interface can be constructed (structural compatibility)
  *   3. SideChannelMessage discriminated union is exhaustive and correct
  *   4. Invariant #2: no simulation/ import required for networking to work
+ *   5. BrowsableProvider and isBrowsable() narrowing helper (T2 / issue #202)
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider
- * Task: F09 / T1 (issue #201)
+ * Task: F09 / T1 (issue #201), T2 (issue #202)
  */
 
 import { describe, it, expect } from 'vitest';
 
+import { isBrowsable } from './MultiplayerProvider.js';
+
 import type {
     MultiplayerProvider,
+    BrowsableProvider,
     HostTransport,
     ClientTransport,
     HostedSession,
@@ -251,5 +255,76 @@ describe('MultiplayerProvider', () => {
         expect(typeof provider.hostLobby).toBe('function');
         expect(typeof provider.joinLobby).toBe('function');
         expect(typeof provider.dispose).toBe('function');
+    });
+});
+
+// ─── BrowsableProvider + isBrowsable ─────────────────────────────────────────
+
+describe('isBrowsable', () => {
+    it('returns false for a plain MultiplayerProvider without listLobbies', () => {
+        const provider: MultiplayerProvider = {
+            hostLobby: async (_params) => {
+                throw new Error('noop');
+            },
+            joinLobby: async (_params) => {
+                throw new Error('noop');
+            },
+            dispose: () => {},
+        };
+        expect(isBrowsable(provider)).toBe(false);
+    });
+
+    it('returns true for a provider that also implements listLobbies', () => {
+        const provider: MultiplayerProvider & BrowsableProvider = {
+            hostLobby: async (_params) => {
+                throw new Error('noop');
+            },
+            joinLobby: async (_params) => {
+                throw new Error('noop');
+            },
+            dispose: () => {},
+            listLobbies: async () => [],
+        };
+        expect(isBrowsable(provider)).toBe(true);
+    });
+
+    it('after narrowing via isBrowsable, listLobbies is accessible and callable', async () => {
+        const entry: LobbyListEntry = {
+            address: '127.0.0.1:3456',
+            gameId: 'tactics',
+            playerCount: 1,
+            maxPlayers: 4,
+        };
+        const provider: MultiplayerProvider & BrowsableProvider = {
+            hostLobby: async (_params) => {
+                throw new Error('noop');
+            },
+            joinLobby: async (_params) => {
+                throw new Error('noop');
+            },
+            dispose: () => {},
+            listLobbies: async () => [entry],
+        };
+        if (isBrowsable(provider)) {
+            const lobbies = await provider.listLobbies();
+            expect(lobbies).toHaveLength(1);
+            expect(lobbies[0]?.address).toBe('127.0.0.1:3456');
+        } else {
+            throw new Error('isBrowsable should have returned true');
+        }
+    });
+
+    it('returns false for an object with listLobbies set to a non-function value', () => {
+        const provider = {
+            hostLobby: async (_params: HostLobbyParams) => {
+                throw new Error('noop');
+            },
+            joinLobby: async (_params: JoinLobbyParams) => {
+                throw new Error('noop');
+            },
+            dispose: () => {},
+            listLobbies: 'not-a-function',
+        } as unknown as MultiplayerProvider;
+        expect(isBrowsable(provider)).toBe(false);
     });
 });

@@ -236,8 +236,20 @@ export interface MultiplayerProvider {
  * not an optional method on MultiplayerProvider.
  *
  * Consumers narrow via `isBrowsable(provider)` before invoking `listLobbies()`.
- * Declared here as a forward reference; isBrowsable() is implemented in T2 (#202).
  */
 export interface BrowsableProvider {
     listLobbies(): Promise<LobbyListEntry[]>;
+}
+
+/**
+ * Type-narrowing helper for BrowsableProvider.
+ *
+ * Returns true iff `p` has a `listLobbies` property that is a function,
+ * narrowing the type to `MultiplayerProvider & BrowsableProvider` so that
+ * callers cannot invoke `listLobbies()` without first passing through this guard.
+ *
+ * Uses `unknown` cast instead of `any` to satisfy strict-mode linting.
+ */
+export function isBrowsable(p: MultiplayerProvider): p is MultiplayerProvider & BrowsableProvider {
+    return typeof (p as unknown as Record<string, unknown>)['listLobbies'] === 'function';
 }
