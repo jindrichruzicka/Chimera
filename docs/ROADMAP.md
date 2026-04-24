@@ -1,6 +1,6 @@
 # Chimera Engine — Product Roadmap
 
-> Based on `docs/architecture-overview.md` (v1.0.0, 2026-04-20)
+> Based on `docs/architecture-overview.md` (v1.0.0, 2026-04-24)
 > Every milestone, feature, and version maps directly to architecture sections.
 
 ---
@@ -211,9 +211,15 @@ Implement `AssetResolver` (dev + production variants), `AssetManager` (`preloadC
 
 Implement `curves.ts` (`lerp`, `linear`, `easeIn`, `easeOut`, `easeInOut`), `useTween` hook (R3F `useFrame`-driven), `useTweenCallback` variant, `useGameInteraction` hook, and `InteractionBlocker` context provider.
 
-### F38 — Scene Transition System `§4.18, §4.19`
+### F50 — UI Design System `§4.35`
+
+Implement `renderer/components/ui/` primitive library: `Button`, `Modal`, `Panel`, `Slider`, `ProgressBar`, `Spinner`, `Tooltip`, `Badge`, `Divider`, `ScrollArea`. Publish `renderer/styles/tokens.css` with the full `--ch-*` custom property token set (colours, spacing, radius, typography, shadows, motion). Enforce via lint that no engine component contains a hardcoded hex, pixel-size, or spacing literal — all values reference `var(--ch-*)` tokens. Define the game override pattern (`games/<name>/styles/tokens-override.css` as a side-effect import that only redefines existing tokens). Wire `prefers-reduced-motion` into `--ch-motion-*` tokens. Invariants #85 and #86 apply.
+
+### F38 — Scene Transition System + MatchShell `§4.18, §4.19, §4.33, §4.34, §4.36`
 
 Implement `SceneDescriptor`, `SceneRegistry`, `SceneManager` (two-phase prepare / commit protocol), reserved actions (`engine:scene_prepare`, `engine:scene_ready`, `engine:scene_commit`), `SceneRouter`, `TransitionOverlay`, and `useFadeTransition`. Add scene invariants 49–52 to validator.
+
+Implement `GameScreenRegistry` (typed slot interface: `board` required; `hud`, `screens`, `transitionOverlay` optional) and `MatchShell.tsx` — the game-agnostic match chrome that receives a `GameScreenRegistry` prop, never imports from any `games/*` path (Invariant #48, #80). `MatchShell` assembles the full context provider tree (`AssetManagerContext`, `ContentDatabaseContext`, `AudioManagerContext`, `DeviceInfoContext`, `FadeContext`) per §4.34, wraps each screen in `<React.Suspense>` per §4.36, and wires `useActiveScreen()` / `useNavigateToScreen()` hooks backed by `uiStore.activeScreenKey`. Implement `ContentDatabaseContext` and `FadeContext`; wire the remaining contexts from F36 (`AssetManagerContext`), F39 (`AudioManagerContext`), and F42 (`DeviceInfoContext`). All screen components registered in a game's `screens/index.ts` must be wrapped in `React.lazy()` (Invariant #87, #88). Invariants #80–#88 apply.
 
 ### F39 — Audio System `§4.25`
 
@@ -332,6 +338,10 @@ Every feature above maps to at least one architecture section. No feature exists
 | §4.30 Toast                   | F46                               |
 | §4.31 Fixed-point             | F20                               |
 | §4.32 Dev harness             | F08                               |
+| §4.33 Game Screen Registry    | F38                               |
+| §4.34 Renderer contexts (DI)  | F36, F38, F39, F42                |
+| §4.35 UI Design System        | F50                               |
+| §4.36 Game screen code split  | F38                               |
 | §8 Obfuscation                | F26, F27, F28, F29                |
 | §10 Testing strategy          | F29, F30, F31, F32, F33, F34, F48 |
 | §12 Implementation milestones | All F-series                      |

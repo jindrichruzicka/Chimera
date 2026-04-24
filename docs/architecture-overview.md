@@ -5952,7 +5952,528 @@ Running N Electron instances on one machine exercises correctness — sync, proj
 
 - Not an E2E test runner. Automated multi-instance assertions belong in the Playwright suite (§13). The harness is an interactive developer tool.
 - Not a production launcher. Nothing in `tools/` is bundled into production builds (`electron-builder` config excludes the directory).
-- Not a load-testing tool. If you need 50-player correctness testing, build a headless test harness with `InMemoryMultiplayerProvider` instead — spawning 50 Electron processes is not a useful stress.
+- Not a load-testing tool. If you need 50-player correctness checking, build a headless test harness with `InMemoryMultiplayerProvider` instead — spawning 50 Electron processes is not a useful stress.
+
+---
+
+### 4.33 Game Screen Registry (`games/<name>/screens/` + `renderer/components/shell/MatchShell.tsx`)
+
+#### Executive Decision
+
+Each game declares its own React screen components. `MatchShell.tsx` — the engine-provided match chrome — renders the active screen without knowing what any of them do. The contract between games and the engine is `GameScreenRegistry`: a plain typed object that maps well-known slot names to React component types. `MatchShell` receives the registry at match start and never imports from any specific game package (Invariant #48).
+
+#### `GameScreenRegistry` Interface
+
+```typescript
+// renderer/components/shell/MatchShell.tsx (exported for game packages to satisfy)
+
+/**
+ * Contract a game must fulfil to integrate with the Chimera renderer.
+ *
+ * `board`            — Required. The primary game-play view (R3F canvas or DOM board).
+ * `hud`              — Optional overlay rendered on top of `board` when active.
+ * `screens`          — Optional: additional named full-screen panels the game declares
+ *                      (e.g. 'tech-tree', 'diplomacy', 'city'). Keys are stable, game-defined
+ *                      strings referenced from `SceneDescriptor.defaultScreen` (§4.18) and
+ *                      from game UI code calling `useScreenNav()`.
+ * `transitionOverlay` — Optional: game-specific full-screen loading UI. When absent,
+ *                       the engine's default `TransitionOverlay` is used (§4.19).
+ */
+export interface GameScreenRegistry {
+    readonly board: React.ComponentType;
+    readonly hud?: React.ComponentType;
+    readonly screens?: Readonly<Record<string, React.ComponentType>>;
+    readonly transitionOverlay?: React.ComponentType;
+}
+```
+
+#### Game Registration Pattern
+
+Each game exports its registry from a single index file:
+
+```typescript
+// games/tactics/screens/index.ts
+import { type GameScreenRegistry } from '@chimera/renderer/components/shell/MatchShell';
+
+// Lazy-loaded: each screen is a separate code-split chunk (see §4.36).
+const BoardScreen = React.lazy(() => import('./BoardScreen'));
+const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
+const DiplomacyScreen = React.lazy(() => import('./DiplomacyScreen'));
+const UnitDetailScreen = React.lazy(() => import('./UnitDetailScreen'));
+
+export const TacticsScreenRegistry: GameScreenRegistry = {
+    board: BoardScreen,
+    screens: {
+        'tech-tree': TechTreeScreen,
+        diplomacy: DiplomacyScreen,
+        'unit-detail': UnitDetailScreen,
+    },
+};
+```
+
+The registry value is pure data — no React tree is constructed until `MatchShell` mounts. Every component type in `screens` must be a valid React component; the engine provides no runtime validation of their props shape.
+
+#### `MatchShell` Resolution
+
+`MatchShell.tsx` receives the registry via a required prop. The caller — `renderer/app/match/page.tsx` — resolves which game is active, dynamically imports its registry, and passes it down:
+
+```typescript
+// renderer/app/match/page.tsx (simplified)
+import { useGameStore } from '../state/gameStore';
+
+// Loaded lazily when the match page mounts.
+// The import expression is the code-split boundary for game screen bundles.
+async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
+    switch (gameId) {
+        case 'tactics': {
+            const m = await import('../../games/tactics/screens/index');
+            return m.TacticsScreenRegistry;
+        }
+        // future games added here
+        default:
+            throw new Error(`No screen registry for game '${gameId}'`);
+    }
+}
+
+export default function MatchPage(): JSX.Element {
+    const gameId = useGameStore((s) => s.snapshot?.gameId ?? null);
+    const [registry, setRegistry] = useState<GameScreenRegistry | null>(null);
+
+    useEffect(() => {
+        if (!gameId) return;
+        void loadRegistry(gameId).then(setRegistry);
+    }, [gameId]);
+
+    if (!registry) return <LoadingScreen />;
+    return <MatchShell registry={registry} />;
+}
+```
+
+`MatchShell` is entirely game-agnostic: it never mentions a game identifier, never imports from `games/`, and never switches on a game name. Its only knowledge of a game is the `GameScreenRegistry` it received.
+
+#### Within-Scene Screen Navigation
+
+Scene changes (lobby → level-1) are host-authoritative simulation events handled by `SceneRouter` (§4.18). Within-scene panel navigation (board → tech-tree → back) is purely a renderer-local concern driven by UI state.
+
+The engine provides a hook pair:
+
+```typescript
+// renderer/hooks/useScreenNav.ts
+
+/**
+ * Returns the currently active screen key for the current scene.
+ * Defaults to 'board' (the mandatory slot) on scene entry.
+ */
+export function useActiveScreen(): string;
+
+/**
+ * Navigate to a named screen within the current scene.
+ * 'board' always returns to the primary game view.
+ * Passing a key absent from the registry logs a warning and is a no-op.
+ */
+export function useNavigateToScreen(): (screenKey: string) => void;
+```
+
+These hooks read/write a per-scene key in `uiStore`. No IPC is involved. Other players are unaffected — one player can be viewing the tech tree while another looks at the board.
+
+```typescript
+// renderer/state/uiStore.ts (addition)
+interface UiStore {
+    // ... existing fields ...
+    /** Per-scene active screen key. Reset to 'board' on every sceneId change. */
+    activeScreenKey: string;
+    setActiveScreenKey(key: string): void;
+}
+```
+
+`SceneRouter` resets `activeScreenKey` to `'board'` whenever `sceneId` changes on the `PlayerSnapshot`.
+
+#### `MatchShell` Rendering Contract
+
+```typescript
+// renderer/components/shell/MatchShell.tsx
+
+interface MatchShellProps {
+    registry: GameScreenRegistry;
+}
+
+/**
+ * Engine-provided match chrome. Responsibilities:
+ *   1. Mount the active screen from the registry (driven by useActiveScreen).
+ *   2. Overlay the HUD component on top of the board when present.
+ *   3. Render engine chrome: SeatSwitcher, PerfHud, ChatPanel, ToastHost.
+ *   4. Pass all engine contexts down the tree (see §4.34).
+ *   5. Gate all screen components behind React.Suspense with a neutral fallback.
+ *   6. Delegate scene transitions to SceneRouter (§4.18).
+ */
+export function MatchShell({ registry }: MatchShellProps): JSX.Element;
+```
+
+The component resolves the active component from the registry, wraps it in `<React.Suspense>`, and renders engine chrome around it. It never inspects the component's props or behaviour.
+
+#### Invariants
+
+80. **`MatchShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code.**
+81. **`GameScreenRegistry.board` is the only required slot. All other slots are optional. A game that provides only `board` is a fully valid Chimera game.**
+82. **Within-scene panel navigation (`useNavigateToScreen`) is a renderer-local state change. It must never trigger an IPC call, advance `tick`, or dispatch an `EngineAction`.**
+
+---
+
+### 4.34 Renderer Contexts — Core Service Injection for Game Screens
+
+#### Executive Decision
+
+Game screen components need access to engine services: `AssetManager`, `ContentDatabase`, `AudioManager`, `DeviceInfo`. These services must not be imported as singletons — doing so would tie game code to implementation details of the renderer and make test doubles impossible. Instead, every engine service available to game screens is delivered through a **React Context** provided by `MatchShell` (§4.33). Game screen components consume services through typed hooks. This is the standard dependency-injection mechanism for the renderer layer.
+
+#### Context Map
+
+The table below is the canonical reference for which service lives on which context. Adding a new service available to game screens requires a new context entry here and a corresponding provider in `MatchShell`.
+
+| Context                  | Value type        | Hook                   | Source                              | Cleared on  |
+| ------------------------ | ----------------- | ---------------------- | ----------------------------------- | ----------- |
+| `AssetManagerContext`    | `AssetManager`    | `useAssetManager()`    | Created at match start; see §4.10   | session end |
+| `ContentDatabaseContext` | `ContentDatabase` | `useContentDatabase()` | Loaded at game init; see §4.8       | session end |
+| `AudioManagerContext`    | `AudioManager`    | `useAudioManager()`    | Created at match start; see §4.25   | session end |
+| `DeviceInfoContext`      | `DeviceInfo`      | `useDeviceInfo()`      | Polled from main process; see §4.17 | —           |
+| `FadeContext`            | `FadeControl`     | `useFade()`            | `TransitionOverlay`; see §4.19      | —           |
+
+All hooks follow the same error contract: if called outside the correct provider tree they throw a descriptive error (never return `null` silently). The `createContext<T | null>(null)` + throwing hook pattern is mandatory for all engine contexts (see §4.19 and Invariant #83 below).
+
+#### Context Declarations
+
+```typescript
+// renderer/assets/AssetManagerContext.ts
+export const AssetManagerContext = createContext<AssetManager | null>(null);
+
+export function useAssetManager(): AssetManager {
+    const ctx = useContext(AssetManagerContext);
+    if (!ctx) throw new Error('useAssetManager() must be used inside <MatchShell>.');
+    return ctx;
+}
+
+// renderer/content/ContentDatabaseContext.ts
+export const ContentDatabaseContext = createContext<ContentDatabase | null>(null);
+
+export function useContentDatabase(): ContentDatabase {
+    const ctx = useContext(ContentDatabaseContext);
+    if (!ctx) throw new Error('useContentDatabase() must be used inside <MatchShell>.');
+    return ctx;
+}
+
+// renderer/audio/AudioManagerContext.ts
+export const AudioManagerContext = createContext<AudioManager | null>(null);
+
+export function useAudioManager(): AudioManager {
+    const ctx = useContext(AudioManagerContext);
+    if (!ctx) throw new Error('useAudioManager() must be used inside <MatchShell>.');
+    return ctx;
+}
+```
+
+#### Consumption from Game Screens
+
+```typescript
+// games/tactics/screens/BoardScreen.tsx
+import { useAssetManager } from '@chimera/renderer/assets/AssetManagerContext';
+import { useContentDatabase } from '@chimera/renderer/content/ContentDatabaseContext';
+import { useGameStore } from '@chimera/renderer/state/gameStore';
+
+export default function BoardScreen(): JSX.Element {
+    const assets = useAssetManager();
+    const db = useContentDatabase();
+    const snapshot = useGameStore((s) => s.snapshot);
+
+    // db and assets are stable across renders — no useMemo needed for the references,
+    // only for the derived values computed from them.
+    // ...
+}
+```
+
+#### Provider Wiring in `MatchShell`
+
+`MatchShell` assembles the full provider tree once at match start:
+
+```typescript
+// renderer/components/shell/MatchShell.tsx (provider section)
+export function MatchShell({ registry }: MatchShellProps): JSX.Element {
+    const assetManager    = useMatchAssetManager();  // hook that creates/disposes on mount/unmount
+    const contentDatabase = useMatchContentDatabase();
+
+    return (
+        <AssetManagerContext.Provider value={assetManager}>
+        <ContentDatabaseContext.Provider value={contentDatabase}>
+        <AudioManagerContext.Provider value={audioManager}>
+            <SceneRouter registry={registry} />
+        </AudioManagerContext.Provider>
+        </ContentDatabaseContext.Provider>
+        </AssetManagerContext.Provider>
+    );
+}
+```
+
+Each `use*` hook above encapsulates lifecycle: `useMatchAssetManager()` calls `AssetManager.dispose()` in its cleanup effect; game screens never need to think about teardown.
+
+#### Module Tree
+
+```
+renderer/assets/
+└── AssetManagerContext.ts   # Context + useAssetManager() hook
+
+renderer/content/
+└── ContentDatabaseContext.ts  # Context + useContentDatabase() hook
+
+renderer/audio/
+└── AudioManagerContext.ts   # Context + useAudioManager() hook
+```
+
+`DeviceInfoContext` and `FadeContext` already have their home modules (§4.17 and §4.19 respectively).
+
+#### What This Is Not
+
+- Not a general-purpose service locator. Only engine services whose lifetime matches a match session (or the app lifetime for `DeviceInfo`) are offered on contexts. One-off utilities (e.g. `curves.ts`) are plain imports.
+- Not a replacement for Zustand stores. Mutable game state (snapshots, lobby state, settings) lives in stores (§4.4). Contexts carry stable service objects, not reactive state.
+
+#### Invariants
+
+83. **All engine-provided React contexts use `createContext<T | null>(null)`. The consumer hook must throw a descriptive error if the context is `null`. `createContext<T>(null!)` (the "null-bang" pattern) is forbidden in engine code. (See §4.19 for the precedent.)**
+84. **Game screen components must not import `AssetManager`, `ContentDatabase`, or `AudioManager` as singleton module-level imports. All access goes through the context hooks (`useAssetManager()`, `useContentDatabase()`, `useAudioManager()`). This preserves testability and the injection contract.**
+
+---
+
+### 4.35 UI Design System (`renderer/components/ui/`)
+
+#### Executive Decision
+
+`renderer/components/ui/` is the engine's library of pure 2D React UI primitives: buttons, modals, panels, tooltips, progress bars, and similar controls. Games use these components to build their custom screens instead of reimplementing from scratch. The visual personality of the components is controlled entirely through **CSS custom properties** (design tokens). Games that want a different look inject a token override block; they never fork or patch engine component code.
+
+#### What the Engine Provides
+
+| Component category | Examples                                    |
+| ------------------ | ------------------------------------------- |
+| **Actions**        | `Button`, `IconButton`, `ToggleButton`      |
+| **Overlays**       | `Modal`, `Drawer`, `Tooltip`, `Popover`     |
+| **Containers**     | `Panel`, `Card`, `Divider`, `ScrollArea`    |
+| **Forms**          | `Slider`, `Toggle`, `Select`, `NumberInput` |
+| **Feedback**       | `ProgressBar`, `Spinner`, `Badge`           |
+| **Typography**     | `Heading`, `Label`, `Caption`               |
+
+All components are **unstyled by default except for tokens**. No hardcoded hex values appear in component CSS. Every colour, radius, shadow, and spacing unit is a CSS custom property resolved at render time.
+
+#### Design Token Naming
+
+Tokens follow a three-part naming convention: `--ch-<category>-<variant>`.
+
+```css
+/* renderer/styles/tokens.css — engine defaults */
+
+/* ── Colour ──────────────────────────────────────────────────── */
+--ch-color-surface: #1a1a2e;
+--ch-color-surface-raised: #16213e;
+--ch-color-surface-overlay: #0f3460;
+--ch-color-accent: #e94560;
+--ch-color-accent-hover: #ff6b81;
+--ch-color-text-primary: #eaeaea;
+--ch-color-text-secondary: #a0a0b0;
+--ch-color-text-disabled: #555577;
+--ch-color-border: #2a2a4a;
+--ch-color-success: #4caf50;
+--ch-color-warning: #ff9800;
+--ch-color-error: #f44336;
+
+/* ── Spacing ─────────────────────────────────────────────────── */
+--ch-space-xs: 4px;
+--ch-space-sm: 8px;
+--ch-space-md: 16px;
+--ch-space-lg: 24px;
+--ch-space-xl: 40px;
+
+/* ── Radius ──────────────────────────────────────────────────── */
+--ch-radius-sm: 4px;
+--ch-radius-md: 8px;
+--ch-radius-lg: 12px;
+
+/* ── Typography ──────────────────────────────────────────────── */
+--ch-font-ui: 'Inter', system-ui, sans-serif;
+--ch-font-game: 'Cinzel', serif; /* optional; games that want a themed typeface */
+--ch-font-mono: 'JetBrains Mono', monospace;
+--ch-font-size-sm: 12px;
+--ch-font-size-md: 14px;
+--ch-font-size-lg: 18px;
+--ch-font-size-xl: 24px;
+
+/* ── Shadows ─────────────────────────────────────────────────── */
+--ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
+--ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
+--ch-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.8);
+
+/* ── Motion ──────────────────────────────────────────────────── */
+--ch-duration-fast: 120ms;
+--ch-duration-normal: 250ms;
+--ch-duration-slow: 400ms;
+--ch-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+```
+
+#### Game Token Overrides
+
+Games that want a custom visual personality inject a CSS file that redefines tokens. The override file is loaded in `games/<name>/screens/index.ts` as a plain side-effect import and applies to all engine UI components rendered beneath `MatchShell`:
+
+```css
+/* games/tactics/styles/tokens-override.css */
+
+--ch-color-surface: #0d1117;
+--ch-color-accent: #58a6ff;
+--ch-color-accent-hover: #79b8ff;
+--ch-font-game: 'MedievalSharp', serif;
+--ch-radius-md: 2px; /* sharper corners for a tactical feel */
+```
+
+```typescript
+// games/tactics/screens/index.ts
+import './styles/tokens-override.css'; // side-effect: redefines tokens in scope
+// ... registry export as before
+```
+
+No TypeScript or React is involved in the token override — it is pure CSS specificity at the `:root` level. Games must only override tokens defined in `tokens.css`; inventing new token names creates fragility and is prohibited by Invariant #85.
+
+#### Component API Shape
+
+Each component accepts `className` and `style` for one-off adjustments alongside its semantic props. Components do **not** accept a `theme` prop — tokens are the theming mechanism, not props.
+
+```typescript
+// Example: renderer/components/ui/Button.tsx
+
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
+export interface ButtonProps {
+    readonly variant?: ButtonVariant; // default: 'primary'
+    readonly size?: ButtonSize; // default: 'md'
+    readonly disabled?: boolean;
+    readonly onClick?: () => void;
+    readonly className?: string;
+    readonly style?: React.CSSProperties;
+    readonly children: React.ReactNode;
+}
+
+export function Button(props: ButtonProps): JSX.Element;
+```
+
+#### Module Tree
+
+```
+renderer/
+├── styles/
+│   └── tokens.css             # Engine default token definitions — loaded at app root
+└── components/
+    └── ui/
+        ├── Button.tsx
+        ├── Modal.tsx
+        ├── Panel.tsx
+        ├── Slider.tsx
+        ├── ProgressBar.tsx
+        └── ...                # One file per primitive component
+```
+
+#### What This Is Not
+
+- Not a fully-featured component library (no data-tables, no date pickers, no charts). Components outside the table above are game-specific and live in `games/<name>/screens/`.
+- Not a CSS-in-JS system. `tokens.css` is a plain CSS file. Components import it and reference `var(--ch-*)` properties in CSS Modules. No runtime style injection.
+- Not a constraint on the game's custom components. Games are free to style their own components however they like. The token system applies only to engine-provided primitives from `renderer/components/ui/`.
+
+#### Invariants
+
+85. **Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation and will be flagged in review.**
+86. **Engine UI components (`renderer/components/ui/`) must not contain hardcoded colour values, spacing values, or border-radius values. Every visual attribute must reference a `var(--ch-*)` token. A component that requires a one-off value that has no token must either introduce a new engine token (with an entry in `tokens.css` and an update to this section) or use a scoped CSS Module class — not an inline hex value.**
+
+---
+
+### 4.36 Game Screen Code Splitting (`renderer/app/match/page.tsx` + `games/<name>/screens/`)
+
+#### Executive Decision
+
+Game screen components can be large — a 4X strategy with eight screens carries significant JavaScript weight. This code must not be part of the initial app bundle. The natural split boundary is the `GameScreenRegistry`: each individual screen component is an independent lazy chunk. The loading lifecycle integrates with the scene transition barrier (§4.18) so the player sees a progress bar during load rather than a blank flash.
+
+#### Split Points
+
+Two distinct split points exist:
+
+| Boundary                         | Mechanism          | When loaded                                                    |
+| -------------------------------- | ------------------ | -------------------------------------------------------------- |
+| **Game registry module**         | Dynamic `import()` | When match page mounts; after game ID is known from snapshot   |
+| **Individual screen components** | `React.lazy()`     | On first render attempt of that screen; usually on scene enter |
+
+These two tiers mean: the registry object itself is small (just component type references) and loads once at match start. Each screen's implementation loads on first visit — a player who never views the tech-tree in a session pays zero download cost for it.
+
+#### Registry-Level Split
+
+```typescript
+// renderer/app/match/page.tsx — registry-level split (see §4.33 for full context)
+
+// Dynamic import: all game screen code stays out of the initial renderer bundle.
+// Each game's screens/ directory becomes a separate webpack / esbuild chunk.
+async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
+    switch (gameId) {
+        case 'tactics':
+            return (await import('../../games/tactics/screens/index')).TacticsScreenRegistry;
+        case 'tic-tac-toe':
+            return (await import('../../games/tic-tac-toe/screens/index')).TicTacToeScreenRegistry;
+        // future games added here
+        default:
+            throw new Error(`No screen registry for game '${gameId}'`);
+    }
+}
+```
+
+#### Screen-Level Split
+
+```typescript
+// games/tactics/screens/index.ts — screen-level split
+
+// React.lazy defers the screen bundle load until React attempts to render it.
+// Each import() call becomes a separate chunk in the bundler output.
+const BoardScreen = React.lazy(() => import('./BoardScreen'));
+const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
+const DiplomacyScreen = React.lazy(() => import('./DiplomacyScreen'));
+const UnitDetailScreen = React.lazy(() => import('./UnitDetailScreen'));
+
+export const TacticsScreenRegistry: GameScreenRegistry = {
+    board: BoardScreen,
+    screens: {
+        'tech-tree': TechTreeScreen,
+        diplomacy: DiplomacyScreen,
+        'unit-detail': UnitDetailScreen,
+    },
+};
+```
+
+#### Integration with Scene Transitions
+
+`MatchShell` wraps every screen component in `<React.Suspense>`:
+
+```typescript
+// renderer/components/shell/MatchShell.tsx (screen mounting)
+const ActiveScreen = resolveActiveScreen(registry, activeScreenKey);
+
+return (
+    <React.Suspense fallback={<ScreenLoadingFallback />}>
+        <ActiveScreen />
+    </React.Suspense>
+);
+```
+
+`<ScreenLoadingFallback />` is the engine's neutral loading state — a subtle spinner centred in the content area. It is distinct from `TransitionOverlay` (§4.19), which handles full-screen scene transitions. A screen-level Suspense boundary fires only for within-scene navigation to a screen the player has not visited before; subsequent visits are instant (React.lazy caches the loaded module).
+
+For scenes where a new screen bundle must load before the game can proceed, the scene's `SceneDescriptor.requiredAssets` barrier (§4.18) already pauses the host commit. The renderer signals `engine:scene_ready` after the asset preload completes; the screen bundle will have loaded by then because the registry dynamic import fires when the match page mounts (before scene entry). Screens visited for the first time within an established scene show the Suspense fallback briefly without any multiplayer coordination — they are UI-only panels.
+
+#### What This Is Not
+
+- Not a route-based code-split. There is no URL change when navigating between screens. `React.lazy` is the only mechanism — no dynamic `import()` at the component level inside screen files.
+- Not a substitute for asset lazy loading (§4.10). Code splitting manages JS module weight. Asset lazy loading manages texture/model/audio binary weight. Both operate independently and complement each other.
+
+#### Invariants
+
+87. **Every screen component exported from `games/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports of large screen components into the registry module are forbidden — they defeat the bundle split and load all game UI on match entry.**
+88. **`MatchShell` wraps every active screen in a `<React.Suspense>` boundary. No game screen component may assume it renders without a Suspense ancestor — components that use async resources (`useAsset`, `useContentDatabase`) rely on it.**
 
 ---
 
@@ -7266,24 +7787,24 @@ On macOS runners, `DISPLAY` is not required. On Linux runners, an `Xvfb` or `xvf
 
 ---
 
-## Appendix B — Key Invariants (Never Violate) (79 total)
+## Appendix B — Key Invariants (Never Violate) (88 total)
 
 ### Thematic Index
 
-The 78 invariants are numbered stably; this index is purely navigational. A single invariant may appear in multiple themes when it straddles concerns.
+The 88 invariants are numbered stably; this index is purely navigational. A single invariant may appear in multiple themes when it straddles concerns.
 
-| Theme                                  | Invariants                                                                        |
-| -------------------------------------- | --------------------------------------------------------------------------------- |
-| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                          |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78 |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79                                         |
-| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                        |
-| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                            |
-| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                        |
-| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                    |
-| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74                                |
-| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                               |
-| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                    |
+| Theme                                  | Invariants                                                                             |
+| -------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                               |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78      |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79                                              |
+| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                             |
+| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                 |
+| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                             |
+| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                         |
+| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88 |
+| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                    |
+| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                         |
 
 ### Invariants
 
@@ -7366,6 +7887,15 @@ The 78 invariants are numbered stably; this index is purely navigational. A sing
 77. **The dev multiplayer harness is a development-only tool. `electron/main/index.ts` must refuse to start when `CHIMERA_DEV_HARNESS=1` is combined with `NODE_ENV=production`, and every harness flag (`--dev-auto-host`, `--dev-auto-join`, `--dev-port`, `--dev-profile-id`, `--dev-game`, `--dev-scenario`) must be ignored (with a warning) when `CHIMERA_DEV_HARNESS` is absent. (See §4.32.)**
 78. **Each harness-spawned instance runs in an isolated Electron `userData` directory (`.dev-userdata/p<i>/`). Shared state between instances is forbidden — profiles, saves, settings, logs, and crash dumps must be per-instance so the harness behaves identically to multiple distinct machines. (See §4.32.)**
 79. **All `registerExtension()` calls must complete before `api.ts` is loaded. `buildExtensionsApi()` is called exactly once, immediately before `contextBridge.exposeInMainWorld`. A late registration after `buildExtensionsApi()` has run will mutate the internal registry but the frozen copy already handed to `exposeInMainWorld` will not reflect it — callers must not rely on this behaviour. Use the two-module import pattern described in §4.1a. (See §4.1a.)**
+80. **`MatchShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. (See §4.33.)**
+81. **`GameScreenRegistry.board` is the only required slot. All other slots are optional. A game that provides only `board` is a fully valid Chimera game. (See §4.33.)**
+82. **Within-scene panel navigation (`useNavigateToScreen`) is a renderer-local state change. It must never trigger an IPC call, advance `tick`, or dispatch an `EngineAction`. (See §4.33.)**
+83. **All engine-provided React contexts use `createContext<T | null>(null)`. The consumer hook must throw a descriptive error if the context is `null`. `createContext<T>(null!)` (the "null-bang" pattern) is forbidden in engine code. (See §4.34.)**
+84. **Game screen components must not import `AssetManager`, `ContentDatabase`, or `AudioManager` as singleton module-level imports. All access goes through the context hooks (`useAssetManager()`, `useContentDatabase()`, `useAudioManager()`). (See §4.34.)**
+85. **Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation. (See §4.35.)**
+86. **Engine UI components (`renderer/components/ui/`) must not contain hardcoded colour, spacing, or radius values. Every visual attribute must reference a `var(--ch-*)` token or a scoped CSS Module class — never an inline hex value. (See §4.35.)**
+87. **Every screen component exported from `games/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports of large screen components into the registry module are forbidden — they defeat the bundle split and load all game UI on match entry. (See §4.36.)**
+88. **`MatchShell` wraps every active screen in a `<React.Suspense>` boundary. No game screen component may assume it renders without a Suspense ancestor. (See §4.36.)**
 
 ---
 
