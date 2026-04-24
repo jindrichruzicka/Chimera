@@ -170,9 +170,8 @@ describe('LobbyManager.hostLobby', () => {
 
         // To test that onActionReceived is wired, join via the same provider
         const clientSession = await provider.joinLobby({ address: hostInfo.sessionId });
-        const action = { type: 'TEST_ACTION' as const };
         // Fire an action from the client side — manager must not throw
-        expect(() => clientSession.transport.sendAction(action as never)).not.toThrow();
+        expect(() => clientSession.transport.sendAction(makeTestAction())).not.toThrow();
     });
 
     it('wires onPlayerJoined callback without throwing', async () => {
