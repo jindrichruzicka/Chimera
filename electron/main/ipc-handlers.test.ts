@@ -41,7 +41,10 @@ import {
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
 import { IpcRequestValidationError } from './ipc-schemas.js';
-import { createLogger, createMemorySink } from './logger.js';
+import { createLogger, createMemorySink, createNoopLogger } from './logger.js';
+import { LobbyManager } from './lobby-manager.js';
+import { InMemoryMultiplayerProvider } from '../../networking/provider/InMemoryMultiplayerProvider.js';
+import type { LobbyInfo, PlayerId } from '../../networking/provider/MultiplayerProvider.js';
 import type {
     ActionRejection,
     EngineAction,
@@ -287,47 +290,71 @@ function makeLobbyIpcMainStub(): {
     return { ipcMain, handled, listeners };
 }
 
+/**
+ * Creates a real LobbyManager backed by InMemoryMultiplayerProvider.
+ * Tests that need to control return values should spy on specific methods.
+ */
+function makeLobbyManagerStub(): LobbyManager {
+    return new LobbyManager(new InMemoryMultiplayerProvider(), createNoopLogger());
+}
+
 describe('registerLobbyHandlers', () => {
-    it('registers chimera:lobby:host as an invoke handler accepting HostLobbyParams (stub: resolves to a LobbyInfo-shaped value)', async () => {
+    it('registers chimera:lobby:host as an invoke handler that calls lobbyManager.hostLobby', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'hostLobby');
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
 
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
         expect(handler).toBeDefined();
 
         const params: HostLobbyParams = { gameId: 'sample-game', maxPlayers: 4 };
-        const result = await Promise.resolve(handler?.({}, params));
-        // Stub contract (F11 replaces with real logic): resolves to any
-        // object so the preload's `Promise<LobbyInfo>` signature is
-        // satisfied without throwing. We only assert the handler does not
-        // reject and returns something defined.
-        expect(result).toBeDefined();
+        const result = (await Promise.resolve(handler?.({}, params))) as LobbyInfo | undefined;
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledWith(params);
+        expect(result?.gameId).toBe('sample-game');
+        expect(result?.sessionId).toBeTruthy();
     });
 
-    it('registers chimera:lobby:join as an invoke handler accepting JoinLobbyParams (stub)', async () => {
+    it('registers chimera:lobby:join as an invoke handler that calls lobbyManager.joinLobby', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        const lobbyManager = makeLobbyManagerStub();
+        const mockHostId = 'host-1' as PlayerId;
+        const mockInfo: LobbyInfo = {
+            sessionId: 'sess-1',
+            hostId: mockHostId,
+            gameId: 'tactics',
+        };
+        const spy = vi.spyOn(lobbyManager, 'joinLobby').mockResolvedValue(mockInfo);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
 
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
         expect(handler).toBeDefined();
 
         const params: JoinLobbyParams = { address: 'ws://127.0.0.1:7777' };
         const result = await Promise.resolve(handler?.({}, params));
-        expect(result).toBeDefined();
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledWith(params);
+        expect(result).toEqual(mockInfo);
     });
 
-    it('registers chimera:lobby:leave as a send listener (stub: no-op)', () => {
+    it('registers chimera:lobby:leave as a send listener that calls lobbyManager.closeLobby', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'closeLobby');
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
 
         const handler = stub.listeners.get(LOBBY_LEAVE_CHANNEL);
         expect(handler).toBeDefined();
-        expect(() => handler?.({})).not.toThrow();
+        handler?.({});
+        // closeLobby is async — wait a microtask for the Promise to settle
+        await Promise.resolve();
+        expect(spy).toHaveBeenCalledOnce();
     });
 
     it('registers exactly the lobby request channels (update is push-only, not registered here)', () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
 
         // `chimera:lobby:update` is a one-way push from main → renderer via
         // `webContents.send`. It must NOT appear as a main-side listener or
@@ -733,7 +760,7 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:lobby:host rejects a malformed HostLobbyParams', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
 
         await expect(
@@ -746,7 +773,7 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:lobby:join rejects a malformed JoinLobbyParams', async () => {
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
         const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
 
         await expect(Promise.resolve().then(() => handler?.({}, {}))).rejects.toBeInstanceOf(
@@ -832,7 +859,7 @@ describe('inbound IPC request validation', () => {
         // test exercises an `ipcMain.handle`-style channel where the throw
         // still surfaces as a renderer-side promise rejection.
         const stub = makeLobbyIpcMainStub();
-        registerLobbyHandlers({ ipcMain: stub.ipcMain });
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
         const handler = stub.handled.get(LOBBY_HOST_CHANNEL);
 
         try {

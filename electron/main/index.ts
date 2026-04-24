@@ -25,6 +25,8 @@ import { FileSettingsRepository } from './FileSettingsRepository.js';
 import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/settings-api.js';
+import { LobbyManager } from './lobby-manager.js';
+import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -415,7 +417,14 @@ export async function main(): Promise<void> {
     // (host/join/leave/state broadcast) lands in F11; wiring stubs here
     // lets the preload bridge and renderer already speak the full lobby
     // protocol without unhandled-channel errors.
-    registerLobbyHandlers({ ipcMain, logger: logger.child({ module: 'lobby' }) });
+    registerLobbyHandlers({
+        ipcMain,
+        lobbyManager: new LobbyManager(
+            new LocalWebSocketProvider(),
+            logger.child({ module: 'lobby-manager' }),
+        ),
+        logger: logger.child({ module: 'lobby' }),
+    });
 
     // Register the `chimera:saves:*` channels as stubs. Real save
     // persistence (SaveRepository, slot indexing, autosave cadence)

@@ -47,7 +47,6 @@ import {
 } from '../preload/settings-api.js';
 import type {
     ActionRejection,
-    LobbyInfo,
     ResolvedSettings,
     SaveSlotMeta,
     UserSettings,
@@ -66,6 +65,7 @@ import {
 } from './ipc-schemas.js';
 import { createNoopLogger, type Logger, type LoggerSink, type MemorySink } from './logger.js';
 import type { SettingsManager } from './SettingsManager.js';
+import type { LobbyManager } from './lobby-manager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../preload/logs-api.js';
 import { RendererLogEntrySchema } from './ipc-schemas.js';
 import type { LogEntry } from '@chimera/shared/logging.js';
@@ -349,31 +349,21 @@ export interface LobbyHandlersIpcMain {
 
 export interface RegisterLobbyHandlersOptions {
     readonly ipcMain: LobbyHandlersIpcMain;
+    /** Real LobbyManager that handles host / join / leave (F11). */
+    readonly lobbyManager: LobbyManager;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
 }
 
 /**
- * Placeholder `LobbyInfo` returned by the host/join stubs. Real values come
- * from the `MultiplayerProvider` in F11. The shape must match
- * `LobbyInfo` from `preload/api.ts` so the preload's typed cast is honest.
- */
-const STUB_LOBBY_INFO: LobbyInfo = {
-    sessionId: '',
-    hostId: '',
-    gameId: '',
-};
-
-/**
- * Register every `chimera:lobby:*` main-side channel. These are deliberate
- * stubs — actual lobby hosting, joining, and broadcasting the `LobbyState`
- * update stream land in F11.
+ * Register every `chimera:lobby:*` main-side channel, delegating to the
+ * injected `LobbyManager`.
  *
  * `chimera:lobby:update` is intentionally absent: it is a one-way push from
  * main → renderer via `webContents.send`. There is no main-side listener
  * or invoke handler for that channel.
  *
- * `chimera:lobby:list` (LobbyDiscoveryAPI) is deferred to F09/F10 and is
+ * `chimera:lobby:list` (LobbyDiscoveryAPI) is deferred to F12 and is
  * surfaced only when the active MultiplayerProvider implements
  * `BrowsableProvider` (§4.1, §4.14).
  *
@@ -381,32 +371,28 @@ const STUB_LOBBY_INFO: LobbyInfo = {
  * no parallel list in this file to drift out of sync.
  */
 export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): void {
-    const { ipcMain } = options;
+    const { ipcMain, lobbyManager } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:lobby:* handlers', {
         channels: [LOBBY_HOST_CHANNEL, LOBBY_JOIN_CHANNEL, LOBBY_LEAVE_CHANNEL],
     });
 
     ipcMain.handle(LOBBY_HOST_CHANNEL, (_event, params) => {
-        parseInvokeRequest(HostLobbyParamsSchema, LOBBY_HOST_CHANNEL, params);
-        // Stub. Real host logic (MultiplayerProvider + session wiring) lands
-        // in F11. Returning a placeholder `LobbyInfo` keeps the preload's
-        // `Promise<LobbyInfo>` contract honest before the engine wiring
-        // exists — callers that rely on the real value simply do not exist
-        // yet on the renderer side.
-        return STUB_LOBBY_INFO;
+        const validated = parseInvokeRequest(HostLobbyParamsSchema, LOBBY_HOST_CHANNEL, params);
+        return lobbyManager.hostLobby(validated);
     });
 
     ipcMain.handle(LOBBY_JOIN_CHANNEL, (_event, params) => {
-        parseInvokeRequest(JoinLobbyParamsSchema, LOBBY_JOIN_CHANNEL, params);
-        // Stub. Real join logic lands in F11.
-        return STUB_LOBBY_INFO;
+        const validated = parseInvokeRequest(JoinLobbyParamsSchema, LOBBY_JOIN_CHANNEL, params);
+        return lobbyManager.joinLobby(validated);
     });
 
     ipcMain.on(LOBBY_LEAVE_CHANNEL, () => {
-        // Stub. Real leave logic (tear down session, notify peers) lands in
-        // F11. Silently accepting the message keeps the renderer's write
-        // path functional (no unhandled-channel errors).
+        void lobbyManager.closeLobby().catch((err: unknown) => {
+            logger.warn('closeLobby error in leave handler', {
+                error: err instanceof Error ? err.message : String(err),
+            });
+        });
     });
 }
 
