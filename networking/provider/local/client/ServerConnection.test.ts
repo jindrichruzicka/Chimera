@@ -46,7 +46,7 @@ describe('ServerConnection — connect', () => {
         await server.ready();
 
         const conn = new ServerConnection();
-        const playerId = await conn.connect(
+        const { playerId } = await conn.connect(
             `ws://127.0.0.1:${server.port}`,
             server.token,
             defaultProfile,
@@ -86,7 +86,7 @@ describe('ServerConnection — send', () => {
         server.onMessage((from, msg) => received.push({ from, msg }));
 
         const conn = new ServerConnection();
-        const playerId = await conn.connect(
+        const { playerId } = await conn.connect(
             `ws://127.0.0.1:${server.port}`,
             server.token,
             defaultProfile,

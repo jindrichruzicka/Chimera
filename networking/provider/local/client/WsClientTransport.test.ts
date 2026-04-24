@@ -65,7 +65,7 @@ async function makeClientTransport(opts?: { maxRetries?: number }): Promise<{
 
     const conn = new ServerConnection(opts);
     connections.push(conn);
-    const playerId = await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, {
+    const { playerId } = await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, {
         playerId: pid('pending'),
         displayName: 'TestClient',
     });

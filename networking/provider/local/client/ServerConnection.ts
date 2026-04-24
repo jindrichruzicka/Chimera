@@ -25,6 +25,14 @@ import type {
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { WirePlayerProfile } from '@chimera/shared/messages.js';
+import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
+
+// ─── Result types ─────────────────────────────────────────────────────────────
+
+export interface ConnectResult {
+    readonly playerId: PlayerId;
+    readonly lobbyState: LobbyState;
+}
 
 // ─── Options ──────────────────────────────────────────────────────────────────
 
@@ -78,7 +86,7 @@ export class ServerConnection {
      * Rejects if the server sends REJECT, the connection fails, or connect times
      * out after the first attempt.
      */
-    connect(url: string, token: string, profile: WirePlayerProfile): Promise<PlayerId> {
+    connect(url: string, token: string, profile: WirePlayerProfile): Promise<ConnectResult> {
         this.url = url;
         this.token = token;
         this.profile = profile;
@@ -125,9 +133,9 @@ export class ServerConnection {
 
     // ─── Internal ─────────────────────────────────────────────────────────────
 
-    /** Open one WebSocket connection and resolve with PlayerId from WELCOME. */
-    private attemptConnect(): Promise<PlayerId> {
-        return new Promise<PlayerId>((resolve, reject) => {
+    /** Open one WebSocket connection and resolve with ConnectResult from WELCOME. */
+    private attemptConnect(): Promise<ConnectResult> {
+        return new Promise<ConnectResult>((resolve, reject) => {
             const ws = new WebSocket(this.url);
             this.ws = ws;
 
@@ -158,7 +166,7 @@ export class ServerConnection {
                         for (const cb of this.messageCbs) cb(m);
                     });
                     ws.on('close', () => this.handleClose());
-                    resolve(msg.playerId);
+                    resolve({ playerId: msg.playerId, lobbyState: msg.lobbyState });
                     return;
                 }
                 if (msg.type === 'REJECT') {
