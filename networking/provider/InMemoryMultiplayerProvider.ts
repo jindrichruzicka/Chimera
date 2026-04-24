@@ -75,7 +75,7 @@ class InMemoryChannel {
     readonly playerLeftCbs = new Set<PlayerLeftCb>();
 
     // Per-client records
-    readonly clients = new Map<string, ClientRecord>();
+    readonly clients = new Map<PlayerId, ClientRecord>();
 
     closed = false;
 
