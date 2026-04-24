@@ -17,14 +17,17 @@ import { describe, it, expect } from 'vitest';
 import { InMemoryMultiplayerProvider } from '../../networking/provider/InMemoryMultiplayerProvider.js';
 import { createNoopLogger } from './logger.js';
 import { LobbyManager } from './lobby-manager.js';
-import type {
-    HostLobbyParams,
-    HostTransport,
-    ClientTransport,
-    JoinLobbyParams,
-    MultiplayerProvider,
-    PlayerId,
-    Unsubscribe,
+import type { EngineAction } from '@chimera/simulation/engine/types.js';
+import {
+    playerId,
+    type HostLobbyParams,
+    type HostTransport,
+    type ClientTransport,
+    type JoinLobbyParams,
+    type MultiplayerProvider,
+    type PlayerSnapshot,
+    type PlayerId,
+    type Unsubscribe,
 } from '../../networking/provider/MultiplayerProvider.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -37,6 +40,29 @@ function makeProvider(): InMemoryMultiplayerProvider {
 
 function makeManager(provider: InMemoryMultiplayerProvider = makeProvider()): LobbyManager {
     return new LobbyManager(provider, createNoopLogger());
+}
+
+/** Build a minimal schema-valid {@link EngineAction} for transport-level smoke tests. */
+function makeTestAction(): EngineAction {
+    return {
+        type: 'smoke:test',
+        playerId: playerId('p1'),
+        tick: 0,
+        payload: {},
+    };
+}
+
+/** Build a minimal schema-valid {@link PlayerSnapshot} for transport-level smoke tests. */
+function makeTestSnapshot(): PlayerSnapshot {
+    return {
+        tick: 1,
+        viewerId: playerId('p1'),
+        players: {},
+        entities: {},
+        phase: 'setup',
+        events: [],
+        undoMeta: { canUndo: false, canRedo: false },
+    };
 }
 
 /**
@@ -356,8 +382,8 @@ describe('LobbyManager provider-swap smoke test', () => {
 
         // Client sends an action — host transport should deliver it
         const clientSession = await provider.joinLobby({ address: hostInfo.sessionId });
-        const testAction = { type: 'SMOKE_TEST' as const };
-        clientSession.transport.sendAction(testAction as never);
+        const testAction = makeTestAction();
+        clientSession.transport.sendAction(testAction);
 
         // Allow microtask queue to flush
         await Promise.resolve();
@@ -397,7 +423,7 @@ describe('LobbyManager provider-swap smoke test', () => {
         // Host sends a snapshot to the joined client
         expect(capturedClientId).not.toBeNull();
         expect(capturedTransport).not.toBeNull();
-        const testSnapshot = { tick: 1 } as never;
+        const testSnapshot = makeTestSnapshot();
         // capturedTransport is set synchronously by the onSessionHosted callback
         capturedTransport!.sendSnapshot(capturedClientId!, testSnapshot);
 
