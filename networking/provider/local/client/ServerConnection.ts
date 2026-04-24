@@ -139,7 +139,8 @@ export class ServerConnection {
                         profile: this.profile!, // profile is always set before attemptConnect
                     } satisfies ClientMessage),
                 );
-            });            ws.once('error', (err) => {
+            });
+            ws.once('error', (err) => {
                 reject(err);
             });
 
