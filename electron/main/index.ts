@@ -26,6 +26,7 @@ import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistenc
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/settings-api.js';
 import { LobbyManager } from './lobby-manager.js';
+import { StateBroadcaster } from './StateBroadcaster.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
@@ -417,12 +418,16 @@ export async function main(): Promise<void> {
     // (host/join/leave/state broadcast) lands in F11; wiring stubs here
     // lets the preload bridge and renderer already speak the full lobby
     // protocol without unhandled-channel errors.
+    const lobbyLogger = logger.child({ module: 'lobby-manager' });
     registerLobbyHandlers({
         ipcMain,
-        lobbyManager: new LobbyManager(
-            new LocalWebSocketProvider(),
-            logger.child({ module: 'lobby-manager' }),
-        ),
+        lobbyManager: new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, (transport) => {
+            // Shallow wiring: StateBroadcaster constructed with the live
+            // HostTransport once a session is hosted.  The broadcast
+            // callback will be passed to the simulation host in F15.
+            const _broadcaster = new StateBroadcaster(transport, lobbyLogger);
+            // TODO(F15): pass _broadcaster.broadcast to simulationHost
+        }),
         logger: logger.child({ module: 'lobby' }),
     });
 

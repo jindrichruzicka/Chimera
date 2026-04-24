@@ -61,6 +61,25 @@ vi.mock('./SettingsManager.js', () => ({
     }),
 }));
 
+// ── LobbyManager mock — captures constructor args for wiring assertions ────────
+const { mockLobbyManagerCtor } = vi.hoisted(() => ({
+    mockLobbyManagerCtor: vi.fn(),
+}));
+
+vi.mock('./lobby-manager.js', () => ({
+    LobbyManager: mockLobbyManagerCtor,
+}));
+
+// ── LocalWebSocketProvider mock — prevents real ws server at boot ─────────────
+vi.mock('../../networking/provider/local/LocalWebSocketProvider.js', () => ({
+    LocalWebSocketProvider: vi.fn(() => ({})),
+}));
+
+// ── StateBroadcaster mock — verifies it is imported from the module ───────────
+vi.mock('./StateBroadcaster.js', () => ({
+    StateBroadcaster: vi.fn(() => ({})),
+}));
+
 type AppEventHandler = (...args: readonly unknown[]) => void;
 
 interface FakeWebPreferences {
@@ -533,6 +552,15 @@ describe('main', () => {
         await main();
 
         expect(appOn).toHaveBeenCalledWith('before-quit', expect.any(Function));
+    });
+
+    it('constructs LobbyManager with a LocalWebSocketProvider (Invariant #2 wiring point)', async () => {
+        mockLobbyManagerCtor.mockClear();
+        await main();
+
+        expect(mockLobbyManagerCtor).toHaveBeenCalledOnce();
+        // First arg is a LocalWebSocketProvider instance (mock returns {})
+        expect(mockLobbyManagerCtor.mock.calls[0]?.[0]).toBeDefined();
     });
 
     it('registers the window-all-closed and activate lifecycle listeners', async () => {

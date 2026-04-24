@@ -24,6 +24,7 @@ import type {
     JoinLobbyParams,
     LobbyInfo,
     PlayerId,
+    HostTransport,
 } from '../../networking/provider/MultiplayerProvider.js';
 import type { Logger } from './logger.js';
 
@@ -42,6 +43,7 @@ export class LobbyManager {
     constructor(
         private readonly provider: MultiplayerProvider,
         logger: Logger,
+        private readonly onSessionHosted?: (transport: HostTransport) => void,
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
     }
@@ -75,6 +77,11 @@ export class LobbyManager {
         session.transport.onPlayerLeft((_playerId, _reason) => {
             // TODO(F17): simulationHost.notifyPlayerLeft(playerId, reason)
         });
+
+        // Notify the wiring point (index.ts) that a hosted session is live
+        // so it can wire StateBroadcaster.  F15/F17 will replace this with
+        // real simulationHost wiring.
+        this.onSessionHosted?.(session.transport);
 
         const info: LobbyInfo = {
             sessionId: session.lobbyCode,
