@@ -331,6 +331,40 @@ export function testMultiplayerProviderContract(
                 expect(receivedMsg.kind).toBe('chat');
                 provider.dispose();
             });
+
+            it('host sendSideChannel unicast is received only by the target client', async () => {
+                const provider = factory();
+                const hosted = await provider.hostLobby({
+                    gameId: 'contract-test',
+                    maxPlayers: 4,
+                });
+
+                let clientAId!: PlayerId;
+                let _clientBId!: PlayerId;
+                hosted.transport.onPlayerJoined((p) => {
+                    if (!clientAId) {
+                        clientAId = p.playerId;
+                    } else {
+                        _clientBId = p.playerId;
+                    }
+                });
+
+                const joinedA = await provider.joinLobby({ address: hosted.lobbyCode });
+                const joinedB = await provider.joinLobby({ address: hosted.lobbyCode });
+
+                const receivedA: SideChannelMessage[] = [];
+                const receivedB: SideChannelMessage[] = [];
+                joinedA.transport.onSideChannelReceived((m) => receivedA.push(m));
+                joinedB.transport.onSideChannelReceived((m) => receivedB.push(m));
+
+                // Unicast to clientA only
+                hosted.transport.sendSideChannel(clientAId, makeChatMsg('private'));
+
+                expect(receivedA).toHaveLength(1);
+                expect(receivedA[0]?.kind).toBe('chat');
+                expect(receivedB).toHaveLength(0);
+                provider.dispose();
+            });
         });
 
         // ── Lobby state broadcast ─────────────────────────────────────────────

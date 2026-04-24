@@ -157,10 +157,16 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
                 }
             },
 
-            sendSideChannel: (_target: PlayerId | 'broadcast', msg: SideChannelMessage): void => {
-                // Test double: broadcast to all connected clients regardless of target
-                for (const client of channel.clients.values()) {
-                    for (const cb of client.sideChannelCbs) cb(msg);
+            sendSideChannel: (target: PlayerId | 'broadcast', msg: SideChannelMessage): void => {
+                if (target === 'broadcast') {
+                    for (const client of channel.clients.values()) {
+                        for (const cb of client.sideChannelCbs) cb(msg);
+                    }
+                } else {
+                    const client = channel.clients.get(target);
+                    if (client) {
+                        for (const cb of client.sideChannelCbs) cb(msg);
+                    }
                 }
             },
 
