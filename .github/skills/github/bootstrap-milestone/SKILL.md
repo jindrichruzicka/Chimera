@@ -10,10 +10,10 @@ Bootstraps a complete GitHub milestone from the architecture overview: creates t
 
 ## When to Use
 
--   Setting up M1, M2, or M3 from scratch
--   Decomposing architecture sections into GitHub issues
--   Creating the full issue backlog for a release
--   Initializing a new milestone before starting implementation work
+- Setting up M1, M2, or M3 from scratch
+- Decomposing architecture sections into GitHub issues
+- Creating the full issue backlog for a release
+- Initializing a new milestone before starting implementation work
 
 ---
 
@@ -23,9 +23,9 @@ Bootstraps a complete GitHub milestone from the architecture overview: creates t
 
 Read the relevant sections from `docs/architecture-overview.md`:
 
--   **M1:** §4.1-4.15 (Core Engine), §12.1 (M1 checklist)
--   **M2:** §4.16-4.25 (Multiplayer), §12.2 (M2 checklist)
--   **M3:** §4.26-4.35 (AI & Content), §12.3 (M3 checklist)
+- **M1:** §4.1-4.15 (Core Engine), §12.1 (M1 checklist)
+- **M2:** §4.16-4.25 (Multiplayer), §12.2 (M2 checklist)
+- **M3:** §4.26-4.35 (AI & Content), §12.3 (M3 checklist)
 
 ### Step 2 — Check existing state
 
@@ -172,7 +172,7 @@ Next steps:
 
 ## Notes
 
--   **Always present the decomposition first** — never create issues without user approval
--   **Create features before tasks** — tasks need the feature issue number for `Part of #N`
--   **Verify milestone assignment** — check both label and milestone field are set
--   **Follow architecture order** — create issues in dependency order (§4.1 before §4.2, etc.)
+- **Always present the decomposition first** — never create issues without user approval
+- **Create features before tasks** — tasks need the feature issue number for `Part of #N`
+- **Verify milestone assignment** — check both label and milestone field are set
+- **Follow architecture order** — create issues in dependency order (§4.1 before §4.2, etc.)

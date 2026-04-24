@@ -10,10 +10,10 @@ Lists and queries GitHub issues for the Chimera project with various filters.
 
 ## When to Use
 
--   Checking what issues exist for a milestone
--   Finding open tasks to work on
--   Reviewing milestone progress
--   Searching for specific issues by label or keyword
+- Checking what issues exist for a milestone
+- Finding open tasks to work on
+- Reviewing milestone progress
+- Searching for specific issues by label or keyword
 
 ---
 
@@ -127,8 +127,8 @@ gh issue list --repo $GH_REPO --state open --label "simulation" --label "task" \
 
 ## Notes
 
--   Use `--state open` or `--state closed` to filter by state
--   Combine multiple `--label` flags to filter by multiple labels
--   Use `--jq` to format output in custom ways
--   Milestone can be filtered by title (`--milestone "M1 — Core Engine"`) or label (`--label "milestone:M1"`)
--   Search uses GitHub's search syntax: `--search "keyword label:task is:open"`
+- Use `--state open` or `--state closed` to filter by state
+- Combine multiple `--label` flags to filter by multiple labels
+- Use `--jq` to format output in custom ways
+- Milestone can be filtered by title (`--milestone "M1 — Core Engine"`) or label (`--label "milestone:M1"`)
+- Search uses GitHub's search syntax: `--search "keyword label:task is:open"`

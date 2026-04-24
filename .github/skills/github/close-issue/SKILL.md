@@ -10,9 +10,9 @@ Closes a GitHub issue after the corresponding branch has been successfully merge
 
 ## When to Use
 
--   After completing a task issue and merging the branch
--   After fixing a bug and landing the fix
--   Marking an issue as resolved after `check-and-merge.sh` exits 0
+- After completing a task issue and merging the branch
+- After fixing a bug and landing the fix
+- Marking an issue as resolved after `check-and-merge.sh` exits 0
 
 ---
 
@@ -28,9 +28,9 @@ Closes a GitHub issue after the corresponding branch has been successfully merge
 
 **Do NOT close the issue if:**
 
--   The merge script reported problems
--   The branch is still open
--   The push to main failed
+- The merge script reported problems
+- The branch is still open
+- The push to main failed
 
 ### Step 2 — Close the issue
 
@@ -61,16 +61,16 @@ The `state` field should be `"CLOSED"`.
 
 If the issue you're closing is a **task** that belongs to a parent **feature** issue:
 
--   ✅ Close the task issue (the one you just implemented)
--   ❌ Do NOT close the parent feature issue
+- ✅ Close the task issue (the one you just implemented)
+- ❌ Do NOT close the parent feature issue
 
 The parent feature issue is closed by the review task (e.g., "#N — Review all F<NN> changes and merge to main") after all child tasks are complete.
 
 **How to tell:**
 
--   Task issues have `Part of #<feature-number>` in the body
--   Feature issues have task issues linked to them
--   Task issues are labelled `task`; feature issues are labelled `feature`
+- Task issues have `Part of #<feature-number>` in the body
+- Feature issues have task issues linked to them
+- Task issues are labelled `task`; feature issues are labelled `feature`
 
 ### Close Issues in Order
 

@@ -10,10 +10,10 @@ Creates a GitHub issue (feature, task, or bug) for the Chimera project with prop
 
 ## When to Use
 
--   Creating a new feature issue from the architecture overview
--   Creating task issues under a parent feature
--   Creating bug reports
--   Decomposing features into implementation tasks
+- Creating a new feature issue from the architecture overview
+- Creating task issues under a parent feature
+- Creating bug reports
+- Decomposing features into implementation tasks
 
 ---
 
@@ -32,8 +32,8 @@ M1_ID=$(gh api repos/$GH_REPO/milestones --jq '.[] | select(.title | startswith(
 
 Use the appropriate template:
 
--   **Feature issues:** [feature-template.md](../assets/feature-template.md)
--   **Task issues:** [task-template.md](../assets/task-template.md)
+- **Feature issues:** [feature-template.md](../assets/feature-template.md)
+- **Task issues:** [task-template.md](../assets/task-template.md)
 
 Write the body to a temp file to avoid shell quoting issues:
 
@@ -93,9 +93,9 @@ gh issue create \
 
 ### Title Format
 
--   **Task:** Start with imperative verb: "Implement", "Add", "Write", "Wire", "Refactor"
--   **Feature:** `<feature name> (§<X.Y>)` — include architecture section reference
--   **Bug:** `fix: <what is broken>`
+- **Task:** Start with imperative verb: "Implement", "Add", "Write", "Wire", "Refactor"
+- **Feature:** `<feature name> (§<X.Y>)` — include architecture section reference
+- **Bug:** `fix: <what is broken>`
 
 ### Body Requirements
 

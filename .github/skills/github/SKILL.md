@@ -129,11 +129,11 @@ gh issue close <NUMBER> --repo $GH_REPO
 
 ## Notes
 
--   **Always use sub-skills** — they contain the complete, validated procedures
--   **Sub-skills are independent** — each can be loaded and used separately
--   **Templates are in `./assets/`** — feature-template.md, task-template.md
--   **Label catalogue is in `./references/labels.md`** — standard colours and descriptions
--   **Milestone number ≠ label** — always resolve the numeric ID before creating issues
+- **Always use sub-skills** — they contain the complete, validated procedures
+- **Sub-skills are independent** — each can be loaded and used separately
+- **Templates are in `./assets/`** — feature-template.md, task-template.md
+- **Label catalogue is in `./references/labels.md`** — standard colours and descriptions
+- **Milestone number ≠ label** — always resolve the numeric ID before creating issues
 
 ```bash
 gh issue close <ISSUE_NUMBER> --repo $GH_REPO --comment "Implemented in $(git rev-parse --short HEAD) on main."

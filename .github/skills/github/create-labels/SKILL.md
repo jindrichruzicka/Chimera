@@ -10,9 +10,9 @@ Creates or updates GitHub labels for the Chimera project following the standard 
 
 ## When to Use
 
--   Setting up labels for a new milestone
--   Ensuring labels exist before creating issues
--   Organizing project labels by milestone, type, and module
+- Setting up labels for a new milestone
+- Ensuring labels exist before creating issues
+- Organizing project labels by milestone, type, and module
 
 ---
 
@@ -87,7 +87,7 @@ done
 
 ## Notes
 
--   Labels are repo-wide, not milestone-specific
--   Safe to re-run: use `|| true` to skip if label exists
--   Use `--force` to overwrite an existing label's description/color
--   Always create labels before creating issues that reference them
+- Labels are repo-wide, not milestone-specific
+- Safe to re-run: use `|| true` to skip if label exists
+- Use `--force` to overwrite an existing label's description/color
+- Always create labels before creating issues that reference them

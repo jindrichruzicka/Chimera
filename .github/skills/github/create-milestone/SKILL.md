@@ -10,9 +10,9 @@ Creates a GitHub milestone for the Chimera project with proper title, descriptio
 
 ## When to Use
 
--   Bootstrapping a new release milestone (M1, M2, etc.)
--   Setting up project timeline in GitHub
--   Creating milestones before creating feature/task issues
+- Bootstrapping a new release milestone (M1, M2, etc.)
+- Setting up project timeline in GitHub
+- Creating milestones before creating feature/task issues
 
 ---
 
@@ -61,14 +61,14 @@ Follow the pattern: `<MILESTONE> — <SHORT_DESCRIPTION>`
 
 Examples:
 
--   `M1 — Core Engine`
--   `M2 — Multiplayer & Networking`
--   `M3 — AI & Content Pipeline`
+- `M1 — Core Engine`
+- `M2 — Multiplayer & Networking`
+- `M3 — AI & Content Pipeline`
 
 ---
 
 ## Notes
 
--   Safe to re-run: if milestone already exists, the API returns 422 (ignore it)
--   Due date is optional but recommended for project tracking
--   Milestone number is different from labels — resolve it before creating issues
+- Safe to re-run: if milestone already exists, the API returns 422 (ignore it)
+- Due date is optional but recommended for project tracking
+- Milestone number is different from labels — resolve it before creating issues

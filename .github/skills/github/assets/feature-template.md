@@ -8,25 +8,25 @@
 
 **In scope:**
 
--   <What this feature covers>
+- <What this feature covers>
 
 **Out of scope (explicit non-goals):**
 
--   <What is deferred — reference the milestone or Appendix E item it belongs to>
+- <What is deferred — reference the milestone or Appendix E item it belongs to>
 
 ## Child tasks
 
 <!-- Populated after feature issue is created. List task issue numbers here. -->
 
--   [ ] #<task-issue>
+- [ ] #<task-issue>
 
 ## Acceptance Criteria
 
--   [ ] All child task issues closed
--   [ ] §12 checklist items for this feature are green
--   [ ] Module boundary invariants upheld (no forbidden imports)
--   [ ] <Feature-specific acceptance condition>
+- [ ] All child task issues closed
+- [ ] §12 checklist items for this feature are green
+- [ ] Module boundary invariants upheld (no forbidden imports)
+- [ ] <Feature-specific acceptance condition>
 
 ## Invariants
 
--   Invariant <N>: <one-sentence restatement>
+- Invariant <N>: <one-sentence restatement>
