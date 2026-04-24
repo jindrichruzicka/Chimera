@@ -193,10 +193,16 @@ export class LobbyManager {
         this.sessionJoinedTeardown = null;
         joinedTeardown?.();
 
-        if ('close' in session) {
-            await session.close();
-        } else {
-            await session.disconnect();
+        try {
+            if ('close' in session) {
+                await session.close();
+            } else {
+                await session.disconnect();
+            }
+        } catch (err) {
+            this.log.warn('closeLobby:teardown-error', {
+                error: err instanceof Error ? err.message : String(err),
+            });
         }
     }
 }

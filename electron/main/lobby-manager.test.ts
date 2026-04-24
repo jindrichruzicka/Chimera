@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { InMemoryMultiplayerProvider } from '../../networking/provider/InMemoryMultiplayerProvider.js';
-import { createNoopLogger } from './logger.js';
+import { createLogger, createMemorySink, createNoopLogger } from './logger.js';
 import { LobbyManager } from './lobby-manager.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import {
@@ -351,6 +351,63 @@ describe('LobbyManager.closeLobby', () => {
         expect(activeHostSubs()).toBe(afterFirst);
         await manager.closeLobby();
         expect(activeHostSubs()).toBe(0);
+    });
+
+    it('resolves and logs a warn when session.close() rejects', async () => {
+        const sink = createMemorySink();
+        const logger = createLogger({ source: { process: 'main', module: 'test' }, sink });
+        const teardownError = new Error('ws server refused close');
+        const rawProvider = makeProvider();
+        const failingProvider: MultiplayerProvider = {
+            hostLobby: async (p) => {
+                const session = await rawProvider.hostLobby(p);
+                return {
+                    ...session,
+                    close: async () => {
+                        throw teardownError;
+                    },
+                };
+            },
+            joinLobby: (p) => rawProvider.joinLobby(p),
+            dispose: () => rawProvider.dispose(),
+        };
+        const manager = new LobbyManager(failingProvider, logger);
+        await manager.hostLobby(HOST_PARAMS);
+        // Must resolve even though close() rejects
+        await expect(manager.closeLobby()).resolves.toBeUndefined();
+        const warnEntry = sink.entries.find(
+            (e) => e.level === 'warn' && e.message === 'closeLobby:teardown-error',
+        );
+        expect(warnEntry).toBeDefined();
+        expect((warnEntry!.context as Record<string, unknown>)['error']).toBe(
+            teardownError.message,
+        );
+    });
+
+    it('second closeLobby() after a failed teardown is a no-op', async () => {
+        const sink = createMemorySink();
+        const logger = createLogger({ source: { process: 'main', module: 'test' }, sink });
+        const rawProvider = makeProvider();
+        const failingProvider: MultiplayerProvider = {
+            hostLobby: async (p) => {
+                const session = await rawProvider.hostLobby(p);
+                return {
+                    ...session,
+                    close: async () => {
+                        throw new Error('teardown failed');
+                    },
+                };
+            },
+            joinLobby: (p) => rawProvider.joinLobby(p),
+            dispose: () => rawProvider.dispose(),
+        };
+        const manager = new LobbyManager(failingProvider, logger);
+        await manager.hostLobby(HOST_PARAMS);
+        await manager.closeLobby(); // first close — logs warn
+        sink.clear();
+        // Second close — session already nulled, must be a no-op (no warn logged)
+        await expect(manager.closeLobby()).resolves.toBeUndefined();
+        expect(sink.entries).toHaveLength(0);
     });
 });
 
