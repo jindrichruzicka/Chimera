@@ -11,6 +11,26 @@ These documents take precedence over anything in this file if they conflict.
 
 ---
 
+## Git Workflow Skills
+
+Before performing any git operations, use the appropriate skill from the git skillset:
+
+- **Sync main with remote**: [`.github/skills/git/pull-latest/SKILL.md`](../.github/skills/git/pull-latest/SKILL.md)
+    - Run: `bash .github/skills/git/pull-latest/scripts/pull-latest.sh`
+    - Use when: Starting a new task, before creating branches, before merging
+
+- **Create branch from issue**: [`.github/skills/git/create-branch/SKILL.md`](../.github/skills/git/create-branch/SKILL.md)
+    - Run: `bash .github/skills/git/create-branch/scripts/create-branch.sh <N>`
+    - Use when: Starting work on a GitHub issue
+
+- **Merge branch to main**: [`.github/skills/git/merge/SKILL.md`](../.github/skills/git/merge/SKILL.md)
+    - Run: `bash .github/skills/git/merge/scripts/check-and-merge.sh`
+    - Use when: Landing completed work onto main
+
+See [`.github/skills/git/SKILL.md`](../.github/skills/git/SKILL.md) for the complete git skillset overview.
+
+---
+
 ## Module Boundary Table
 
 These boundaries are hard constraints. Any violation is a **BLOCK** finding at review.
