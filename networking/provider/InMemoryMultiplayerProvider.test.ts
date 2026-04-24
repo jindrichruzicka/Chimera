@@ -104,6 +104,20 @@ describe('InMemoryMultiplayerProvider', () => {
             const s2 = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 2 });
             expect(s1.lobbyCode).not.toBe(s2.lobbyCode);
         });
+
+        it('each provider instance has an independent ID counter', async () => {
+            // If idCounter were module-scoped (shared), sequential hostLobby() calls
+            // across different instances would consume different counter values and
+            // produce different lobbyCode suffixes. With instance-scoped counters,
+            // each fresh instance starts at 1 and produces the same first lobbyCode.
+            const providerA = new InMemoryMultiplayerProvider();
+            const providerB = new InMemoryMultiplayerProvider();
+
+            const hostedA = await providerA.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            const hostedB = await providerB.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            expect(hostedA.lobbyCode).toBe(hostedB.lobbyCode);
+        });
     });
 
     // ─── joinLobby ────────────────────────────────────────────────────────────

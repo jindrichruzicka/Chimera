@@ -119,25 +119,24 @@ class InMemoryChannel {
     }
 }
 
-// ─── Counter for unique IDs ───────────────────────────────────────────────────
-
-let idCounter = 0;
-
-function nextId(): string {
-    idCounter += 1;
-    return String(idCounter);
-}
-
 // ─── InMemoryMultiplayerProvider ──────────────────────────────────────────────
 
 export class InMemoryMultiplayerProvider implements MultiplayerProvider {
     private readonly sessions = new Map<string, InMemoryChannel>();
 
+    /** Per-instance counter — avoids module-level mutable state and test pollution. */
+    private idCounter = 0;
+
+    private nextId(): string {
+        this.idCounter += 1;
+        return String(this.idCounter);
+    }
+
     hostLobby(params: HostLobbyParams): Promise<HostedSession> {
-        const lobbyCode = `in-memory-${nextId()}`;
+        const lobbyCode = `in-memory-${this.nextId()}`;
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyCode,
-            hostId: `host-${nextId()}` as PlayerId,
+            hostId: `host-${this.nextId()}` as PlayerId,
             gameId: params.gameId,
         };
         const channel = new InMemoryChannel(lobbyCode, lobbyInfo);
@@ -204,7 +203,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             );
         }
 
-        const clientPlayerId: PlayerId = `client-${nextId()}` as PlayerId;
+        const clientPlayerId: PlayerId = `client-${this.nextId()}` as PlayerId;
         const record = channel.addClient(clientPlayerId);
 
         const playerEntry: LobbyPlayerEntry = {
