@@ -63,6 +63,11 @@ export class LobbyManager {
     async hostLobby(params: HostLobbyParams): Promise<LobbyInfo> {
         this.log.info('hostLobby', { gameId: params.gameId, maxPlayers: params.maxPlayers });
 
+        if (this.session !== null) {
+            throw new Error(
+                'LobbyManager: session already active — call closeLobby() before hosting again',
+            );
+        }
         const session = await this.provider.hostLobby(params);
         this.session = session;
 
@@ -109,6 +114,11 @@ export class LobbyManager {
     async joinLobby(params: JoinLobbyParams): Promise<LobbyInfo> {
         this.log.info('joinLobby', { address: params.address });
 
+        if (this.session !== null) {
+            throw new Error(
+                'LobbyManager: session already active — call closeLobby() before joining',
+            );
+        }
         const session = await this.provider.joinLobby(params);
         this.session = session;
 

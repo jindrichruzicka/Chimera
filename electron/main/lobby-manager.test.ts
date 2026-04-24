@@ -164,6 +164,12 @@ describe('LobbyManager.hostLobby', () => {
         // Disconnecting triggers onPlayerLeft on the host transport
         await expect(clientSession.disconnect()).resolves.toBeUndefined();
     });
+
+    it('throws when a session is already active', async () => {
+        const manager = makeManager();
+        await manager.hostLobby(HOST_PARAMS);
+        await expect(manager.hostLobby(HOST_PARAMS)).rejects.toThrow(/session already active/i);
+    });
 });
 
 // ── joinLobby ────────────────────────────────────────────────────────────────
@@ -230,6 +236,19 @@ describe('LobbyManager.joinLobby', () => {
 
         // Host closes — triggers onDisconnected on the joined transport
         await expect(hostManager.closeLobby()).resolves.toBeUndefined();
+    });
+
+    it('throws when a session is already active', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        // A second join on the same manager should reject
+        await expect(joinManager.joinLobby({ address: hostInfo.sessionId })).rejects.toThrow(
+            /session already active/i,
+        );
     });
 });
 
