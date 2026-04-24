@@ -13,6 +13,11 @@
 // — discovery is an optional capability surfaced only when the active
 // MultiplayerProvider implements `BrowsableProvider` (§4.1, §4.14). It lands
 // in F09/F10.
+//
+// Failure-reporting policy for `leave()`:
+//   `chimera:lobby:leave` uses invoke-style IPC (`ipcRenderer.invoke`). The
+//   renderer awaits teardown and surfaces failures via the returned Promise.
+//   This mirrors the pattern used by `host` and `join` (§4.14).
 
 import type {
     HostLobbyParams,
@@ -32,7 +37,7 @@ export const LOBBY_HOST_CHANNEL = 'chimera:lobby:host';
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.join}. */
 export const LOBBY_JOIN_CHANNEL = 'chimera:lobby:join';
 
-/** `ipcRenderer.send` target for {@link LobbyAPI.leave}. */
+/** `ipcRenderer.invoke` target for {@link LobbyAPI.leave}. */
 export const LOBBY_LEAVE_CHANNEL = 'chimera:lobby:leave';
 
 /**
@@ -51,12 +56,11 @@ export type LobbyApiListener = IpcListener;
 
 /**
  * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
- * on/removeListener slice and adds the `invoke` / `send` methods that the
- * lobby namespace uses.
+ * on/removeListener slice and adds the `invoke` method that the lobby
+ * namespace uses.
  */
 export interface LobbyApiIpcPort extends PushListenerPort {
     invoke(channel: string, arg?: unknown): Promise<unknown>;
-    send(channel: string): void;
 }
 
 /**
@@ -74,9 +78,7 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
             ipc
                 .invoke(LOBBY_JOIN_CHANNEL, params)
                 .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
-        leave: (): void => {
-            ipc.send(LOBBY_LEAVE_CHANNEL);
-        },
+        leave: (): Promise<void> => ipc.invoke(LOBBY_LEAVE_CHANNEL).then(() => undefined),
         onUpdate: (cb: (lobby: LobbyState) => void): Unsubscribe =>
             subscribePush<LobbyState>(ipc, LOBBY_UPDATE_CHANNEL, cb),
     };

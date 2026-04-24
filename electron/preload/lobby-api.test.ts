@@ -19,12 +19,10 @@ import type { HostLobbyParams, JoinLobbyParams, LobbyInfo, LobbyState } from './
 function makeIpcStub(): {
     readonly port: LobbyApiIpcPort;
     readonly invocations: { channel: string; arg: unknown }[];
-    readonly sends: string[];
     readonly listeners: Map<string, Set<LobbyApiListener>>;
     readonly invokeResults: Map<string, unknown>;
 } {
     const invocations: { channel: string; arg: unknown }[] = [];
-    const sends: string[] = [];
     const listeners = new Map<string, Set<LobbyApiListener>>();
     const invokeResults = new Map<string, unknown>();
 
@@ -32,9 +30,6 @@ function makeIpcStub(): {
         invoke: (channel, arg) => {
             invocations.push({ channel, arg });
             return Promise.resolve(invokeResults.get(channel));
-        },
-        send: (channel) => {
-            sends.push(channel);
         },
         on: (channel, listener) => {
             const set = listeners.get(channel) ?? new Set<LobbyApiListener>();
@@ -46,7 +41,7 @@ function makeIpcStub(): {
         },
     };
 
-    return { port, invocations, sends, listeners, invokeResults };
+    return { port, invocations, listeners, invokeResults };
 }
 
 function makeLobbyInfo(): LobbyInfo {
@@ -116,14 +111,30 @@ describe('createLobbyApi', () => {
     });
 
     describe('leave()', () => {
-        it('sends on the chimera:lobby:leave channel and returns void', () => {
+        it('invokes chimera:lobby:leave and resolves to void', async () => {
             const stub = makeIpcStub();
             const api = createLobbyApi(stub.port);
 
-            const result = api.leave();
+            const result = await api.leave();
 
-            expect(stub.sends).toEqual([LOBBY_LEAVE_CHANNEL]);
+            expect(stub.invocations).toEqual([{ channel: LOBBY_LEAVE_CHANNEL, arg: undefined }]);
             expect(result).toBeUndefined();
+        });
+
+        it('rejects when the main-process handler rejects', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_LEAVE_CHANNEL) {
+                        return Promise.reject(new Error('closeLobby failed'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(api.leave()).rejects.toThrow('closeLobby failed');
         });
     });
 
