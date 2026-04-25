@@ -96,6 +96,39 @@ export function useSendAction(): (action: EngineAction) => void {
 
 ---
 
+## Lobby Page Integration (`renderer/app/lobby/page.tsx`)
+
+The lobby screen uses two small renderer-local helpers to keep component code typed and boundary-safe:
+
+### `lobbyConfig` (query-string normalization)
+
+`renderer/app/lobby/lobbyConfig.ts` provides:
+
+- `getDefaultLobbyConfig()` for SSR-safe initial render values.
+- `parseLobbyConfig(searchParams)` for client-side query parsing.
+
+Rules enforced by `parseLobbyConfig`:
+
+- `gameId` defaults to `'tactics'` when absent.
+- `maxPlayers` accepts only integer strings.
+- Invalid values fall back to `4`.
+- Final `maxPlayers` is clamped to `[2, 16]`.
+
+The page initializes state with defaults, then updates config in `useEffect` after mount. This avoids server/client hydration divergence while still supporting URL overrides.
+
+### `useLobbyApi` (typed lobby bridge access)
+
+`renderer/app/lobby/useLobbyApi.ts` centralizes bridge access for lobby actions:
+
+- `useLobbyApi()` exposes typed `host`, `join`, and `leave` methods.
+- `getLobbyBridge()` resolves `{ lobby, system }` for bootstrap wiring.
+
+Component code does not call `window.__chimera.lobby.*` directly. The page delegates writes through `useLobbyApi`, and uses `getLobbyBridge()` only to wire `bootstrapLobbyStore(...)` once in `useEffect`.
+
+This keeps lobby writes consistent with the typed-hook pattern and makes bridge-availability handling testable in one place.
+
+---
+
 ## Key Invariants
 
 - **Invariant #3** — `GameSnapshot` never leaves main process; `PlayerSnapshot` is what the renderer receives.
