@@ -165,7 +165,6 @@ export default function LobbyPage() {
             aria-labelledby="lobby-heading"
         >
             <h1 id="lobby-heading">Multiplayer Lobby</h1>
-            <h1>Multiplayer Lobby</h1>
 
             {/* Display current configuration */}
             <div
@@ -183,7 +182,7 @@ export default function LobbyPage() {
             </div>
 
             {error && (
-                <div style={{ color: 'red', marginBottom: '1rem' }} role="alert" aria-live="polite">
+                <div style={{ color: 'red', marginBottom: '1rem' }} role="alert">
                     Error: {error}
                 </div>
             )}
