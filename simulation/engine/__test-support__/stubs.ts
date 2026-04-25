@@ -17,10 +17,8 @@ export function makeStubRng(floatValue = 0.5): DeterministicRng {
     return {
         float: () => floatValue,
         // Math.floor is the approved stdlib function — only Math.random is forbidden.
-        // eslint-disable-next-line no-restricted-globals
         int: (min, max) => Math.floor(floatValue * (max - min + 1)) + min,
         shuffle: <T>(items: readonly T[]) => [...items],
-        // eslint-disable-next-line no-restricted-globals
         pick: <T>(items: readonly T[]) => items[Math.floor(floatValue * items.length)] as T,
     };
 }

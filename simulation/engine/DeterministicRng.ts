@@ -109,7 +109,6 @@ export function createRng(seed: number, tick: number): DeterministicRng {
 
     function int(min: number, max: number): number {
         // Math.floor is the approved stdlib function — only Math.random is forbidden.
-        // eslint-disable-next-line no-restricted-globals
         return Math.floor(float() * (max - min + 1)) + min;
     }
 

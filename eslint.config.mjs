@@ -98,14 +98,6 @@ export default tseslint.config(
     {
         files: ['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}', 'games/*/actions/**/*.{ts,tsx}'],
         rules: {
-            'no-restricted-globals': [
-                'error',
-                {
-                    name: 'Math',
-                    message:
-                        'Use ctx.rng for randomness and snapshot.tick for time. Math.random / Date.now break determinism.',
-                },
-            ],
             'no-restricted-syntax': [
                 'error',
                 {
