@@ -5,18 +5,19 @@
 // Lobby page with host/join/leave flows.
 // Implements the UI for multiplayer lobby management.
 
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 
+type PendingAction = 'hosting' | 'joining' | 'leaving' | null;
+
 export default function LobbyPage() {
     const [lobbyCode, setLobbyCode] = useState('');
-    const [isHosting, setIsHosting] = useState(false);
-    const [isJoining, setIsJoining] = useState(false);
-    const [isLeaving, setIsLeaving] = useState(false);
+    const [pendingAction, setPendingAction] = useState<PendingAction>(null);
     const [error, setError] = useState<string | null>(null);
     const [lobbyConfig, setLobbyConfig] = useState(getDefaultLobbyConfig);
+    const isMountedRef = useRef(true);
 
     const gameId = lobbyConfig.gameId;
     const maxPlayers = lobbyConfig.maxPlayers;
@@ -27,14 +28,16 @@ export default function LobbyPage() {
     // Bootstrap the lobby store with the chimera API
     useEffect(() => {
         let unsubscribe: (() => void) | undefined;
+        isMountedRef.current = true;
 
         setLobbyConfig(parseLobbyConfig(new URLSearchParams(window.location.search)));
 
-        if (typeof window !== 'undefined' && window.__chimera) {
+        if (window.__chimera) {
             unsubscribe = bootstrapLobbyStore(window.__chimera.lobby, window.__chimera.system);
         }
 
         return () => {
+            isMountedRef.current = false;
             if (unsubscribe) {
                 unsubscribe();
             }
@@ -49,7 +52,7 @@ export default function LobbyPage() {
         }
 
         try {
-            setIsHosting(true);
+            setPendingAction('hosting');
             setError(null);
             // Call the host function with configurable parameters
             await window.__chimera.lobby.host({
@@ -57,9 +60,13 @@ export default function LobbyPage() {
                 maxPlayers,
             });
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to host lobby');
+            if (isMountedRef.current) {
+                setError(err instanceof Error ? err.message : 'Failed to host lobby');
+            }
         } finally {
-            setIsHosting(false);
+            if (isMountedRef.current) {
+                setPendingAction(null);
+            }
         }
     };
 
@@ -78,16 +85,20 @@ export default function LobbyPage() {
         }
 
         try {
-            setIsJoining(true);
+            setPendingAction('joining');
             setError(null);
             // Call the join function with the entered lobby code
             await window.__chimera.lobby.join({
                 address: lobbyCode.trim(),
             });
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to join lobby');
+            if (isMountedRef.current) {
+                setError(err instanceof Error ? err.message : 'Failed to join lobby');
+            }
         } finally {
-            setIsJoining(false);
+            if (isMountedRef.current) {
+                setPendingAction(null);
+            }
         }
     };
 
@@ -99,14 +110,18 @@ export default function LobbyPage() {
         }
 
         try {
-            setIsLeaving(true);
+            setPendingAction('leaving');
             setError(null);
             // Call the leave function
             await window.__chimera.lobby.leave();
         } catch (err) {
-            setError(err instanceof Error ? err.message : 'Failed to leave lobby');
+            if (isMountedRef.current) {
+                setError(err instanceof Error ? err.message : 'Failed to leave lobby');
+            }
         } finally {
-            setIsLeaving(false);
+            if (isMountedRef.current) {
+                setPendingAction(null);
+            }
         }
     };
 
@@ -186,11 +201,11 @@ export default function LobbyPage() {
                             onClick={() => {
                                 void handleHost();
                             }}
-                            disabled={isHosting}
+                            disabled={pendingAction !== null}
                             style={{ padding: '0.5rem 1rem', marginRight: '1rem' }}
                             aria-describedby="host-config-info"
                         >
-                            {isHosting ? 'Hosting...' : 'Host Lobby'}
+                            {pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby'}
                         </button>
                         <div
                             id="host-config-info"
@@ -230,10 +245,10 @@ export default function LobbyPage() {
                                 onClick={() => {
                                     void handleJoin();
                                 }}
-                                disabled={isJoining}
+                                disabled={pendingAction !== null}
                                 style={{ padding: '0.5rem 1rem', marginTop: '0.5rem' }}
                             >
-                                {isJoining ? 'Joining...' : 'Join Lobby'}
+                                {pendingAction === 'joining' ? 'Joining...' : 'Join Lobby'}
                             </button>
                         </div>
                     </div>
@@ -248,11 +263,11 @@ export default function LobbyPage() {
                             onClick={() => {
                                 void handleLeave();
                             }}
-                            disabled={isLeaving}
+                            disabled={pendingAction !== null}
                             style={{ padding: '0.5rem 1rem' }}
                             aria-describedby="leave-warning"
                         >
-                            {isLeaving ? 'Leaving...' : 'Leave Lobby'}
+                            {pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby'}
                         </button>
                         <div
                             id="leave-warning"
