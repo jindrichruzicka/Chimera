@@ -148,8 +148,21 @@ export const test = electronTest.extend<LobbyFixtures>({
         await use(app);
         await app.close();
     },
-    // hostWindow and clientWindow — same pattern
+
+    hostWindow: async ({ hostApp }, use) => {
+        const w = await hostApp.firstWindow();
+        await w.waitForLoadState('domcontentloaded');
+        await use(w);
+    },
+
+    clientWindow: async ({ clientApp }, use) => {
+        const w = await clientApp.firstWindow();
+        await w.waitForLoadState('domcontentloaded');
+        await use(w);
+    },
 });
+
+export { expect } from '@playwright/test';
 ```
 
 ---
@@ -160,17 +173,43 @@ export const test = electronTest.extend<LobbyFixtures>({
 
 ```typescript
 // e2e/pages/LobbyPage.ts
-export class LobbyPage {
-    readonly hostButton = page.getByTestId('host-lobby');
-    readonly joinButton = page.getByTestId('join-lobby');
-    readonly readyButton = page.getByTestId('ready-toggle');
-    readonly startButton = page.getByTestId('start-match');
-    readonly playerList = page.getByTestId('player-list');
-    readonly connectionStatus = page.getByTestId('connection-status');
+import { Page, Locator } from '@playwright/test';
 
-    async hostLobby(): Promise<void>;
-    async joinLobby(address: string): Promise<void>;
-    async waitForPlayerCount(count: number): Promise<void>;
+export class LobbyPage {
+    readonly hostButton: Locator;
+    readonly joinButton: Locator;
+    readonly readyButton: Locator;
+    readonly startButton: Locator;
+    readonly playerList: Locator;
+    readonly connectionStatus: Locator;
+
+    constructor(private readonly page: Page) {
+        this.hostButton = page.getByTestId('host-lobby');
+        this.joinButton = page.getByTestId('join-lobby');
+        this.readyButton = page.getByTestId('ready-toggle');
+        this.startButton = page.getByTestId('start-match');
+        this.playerList = page.getByTestId('player-list');
+        this.connectionStatus = page.getByTestId('connection-status');
+    }
+
+    async hostLobby(): Promise<void> {
+        await this.hostButton.click();
+        await this.connectionStatus.waitFor({ state: 'visible' });
+    }
+
+    async joinLobby(address: string): Promise<void> {
+        await this.joinButton.click();
+        await this.page.getByTestId('address-input').fill(address);
+        await this.page.getByTestId('confirm-join').click();
+        await this.connectionStatus.waitFor({ state: 'visible' });
+    }
+
+    async waitForPlayerCount(count: number): Promise<void> {
+        await this.page
+            .getByTestId('player-list-item')
+            .nth(count - 1)
+            .waitFor({ state: 'visible' });
+    }
 }
 ```
 
@@ -178,16 +217,41 @@ export class LobbyPage {
 
 ```typescript
 // e2e/pages/MatchPage.ts
-export class MatchPage {
-    readonly canvas = page.getByTestId('match-canvas');
-    readonly undoButton = page.getByTestId('undo');
-    readonly redoButton = page.getByTestId('redo');
-    readonly endTurnButton = page.getByTestId('end-turn');
-    readonly gameOverBanner = page.getByTestId('game-over-banner');
-    readonly hudTick = page.getByTestId('hud-tick');
+import { Page, Locator } from '@playwright/test';
 
-    async currentTick(): Promise<number>;
-    async waitForTick(tick: number, timeout?: number): Promise<void>;
+export class MatchPage {
+    readonly canvas: Locator;
+    readonly undoButton: Locator;
+    readonly redoButton: Locator;
+    readonly endTurnButton: Locator;
+    readonly gameOverBanner: Locator;
+    readonly hudTick: Locator;
+
+    constructor(private readonly page: Page) {
+        this.canvas = page.getByTestId('match-canvas');
+        this.undoButton = page.getByTestId('undo');
+        this.redoButton = page.getByTestId('redo');
+        this.endTurnButton = page.getByTestId('end-turn');
+        this.gameOverBanner = page.getByTestId('game-over-banner');
+        this.hudTick = page.getByTestId('hud-tick');
+    }
+
+    async currentTick(): Promise<number> {
+        const text = await this.hudTick.innerText();
+        return parseInt(text, 10);
+    }
+
+    async waitForTick(tick: number, timeout = 30_000): Promise<void> {
+        await this.page.waitForFunction(
+            (t) =>
+                parseInt(
+                    document.querySelector('[data-testid=hud-tick]')?.textContent ?? '0',
+                    10,
+                ) >= t,
+            tick,
+            { timeout },
+        );
+    }
 }
 ```
 
@@ -199,34 +263,76 @@ export class MatchPage {
 
 ```typescript
 // e2e/helpers/ipc-spy.ts
+import { ElectronApplication } from 'playwright';
+import { PlayerSnapshot } from '../../shared/snapshot';
 
-/** Read the last PlayerSnapshot delivered to the host renderer. */
-export async function getHostSnapshot(app: ElectronApplication): Promise<PlayerSnapshot>;
+/**
+ * Read the last PlayerSnapshot delivered to the host renderer.
+ * Requires CHIMERA_E2E=1 — main process stores it on globalThis.__e2eHooks.
+ */
+export async function getHostSnapshot(app: ElectronApplication): Promise<PlayerSnapshot> {
+    return app.evaluate(() => (globalThis as Record<string, unknown>).__e2eHooks?.lastHostSnapshot);
+}
 
-/** Current tick from simulation host (not renderer). */
-export async function getSimulationTick(app: ElectronApplication): Promise<number>;
+/**
+ * Retrieve the current tick from the simulation host (not the renderer).
+ * Uses the same __e2eHooks mechanism — avoids reading from renderer DOM.
+ */
+export async function getSimulationTick(app: ElectronApplication): Promise<number> {
+    return app.evaluate(() => (globalThis as Record<string, unknown>).__e2eHooks?.currentTick ?? 0);
+}
 
-/** Last checksum broadcast by StateBroadcaster. */
-export async function getLastBroadcastChecksum(app: ElectronApplication): Promise<number>;
+/**
+ * Retrieve the last checksum broadcast by StateBroadcaster.
+ * Used by soak tests to compare host vs client convergence.
+ */
+export async function getLastBroadcastChecksum(app: ElectronApplication): Promise<number> {
+    return app.evaluate(
+        () => (globalThis as Record<string, unknown>).__e2eHooks?.lastChecksum ?? 0,
+    );
+}
 ```
 
 ### snapshot-assert.ts
 
 ```typescript
 // e2e/helpers/snapshot-assert.ts
+import { expect } from '@playwright/test';
+import { PlayerSnapshot } from '../../shared/snapshot';
 
-/** Assert no owner-only fields from ownerId appear in a non-owner snapshot. */
+/**
+ * Assert that a PlayerSnapshot contains no fields classified owner-only for another player.
+ * Fields tagged with __visibility: 'owner-only' must be null/undefined in non-owner snapshots.
+ */
 export function assertNoLeakedFields(
     snapshot: PlayerSnapshot,
     viewerId: string,
     ownerId: string,
-): void;
+): void {
+    if (viewerId === ownerId) return; // own snapshot — all fields permitted
+    for (const [playerId, playerState] of Object.entries(snapshot.players)) {
+        if (playerId !== viewerId) {
+            // Any field on opponent players that is explicitly marked owner-only must be absent
+            const leaked = Object.entries(playerState as Record<string, unknown>).filter(
+                ([, v]) => (v as { __visibility?: string })?.__visibility === 'owner-only',
+            );
+            expect(
+                leaked,
+                `Snapshot for viewer=${viewerId} leaked owner-only field from player=${playerId}`,
+            ).toHaveLength(0);
+        }
+    }
+}
 
-/** Assert host and client broadcast the same checksum. */
 export async function assertChecksumMatch(
-    hostApp: ElectronApplication,
-    clientApp: ElectronApplication,
-): Promise<void>;
+    hostApp: import('playwright').ElectronApplication,
+    clientApp: import('playwright').ElectronApplication,
+): Promise<void> {
+    const { getLastBroadcastChecksum } = await import('./ipc-spy');
+    const hostChecksum = await getLastBroadcastChecksum(hostApp);
+    const clientChecksum = await getLastBroadcastChecksum(clientApp);
+    expect(hostChecksum).toBe(clientChecksum);
+}
 ```
 
 ---
@@ -236,69 +342,103 @@ export async function assertChecksumMatch(
 ### lobby.spec.ts
 
 ```typescript
-test('host creates lobby; client joins; player list syncs in both windows', async ({
-    hostWindow,
-    clientWindow,
-}) => {
-    const hostLobby = new LobbyPage(hostWindow);
-    const clientLobby = new LobbyPage(clientWindow);
-    await hostLobby.hostLobby();
-    await clientLobby.joinLobby('localhost:7779');
-    await hostLobby.waitForPlayerCount(2);
-    await clientLobby.waitForPlayerCount(2);
-    await expect(hostLobby.connectionStatus).toContainText('Connected');
+// e2e/tests/lobby.spec.ts
+import { test, expect } from '../fixtures/lobby.fixture';
+import { LobbyPage } from '../pages/LobbyPage';
+
+test.describe('Lobby lifecycle', () => {
+    test('host creates lobby; client joins; player list syncs in both windows', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostLobby = new LobbyPage(hostWindow);
+        const clientLobby = new LobbyPage(clientWindow);
+        await hostLobby.hostLobby();
+        await clientLobby.joinLobby('localhost:7779');
+        await hostLobby.waitForPlayerCount(2);
+        await clientLobby.waitForPlayerCount(2);
+        await expect(hostLobby.connectionStatus).toContainText('Connected');
+        await expect(clientLobby.connectionStatus).toContainText('Connected');
+    });
 });
 ```
 
 ### match-flow.spec.ts
 
 ```typescript
-test('host and client reach game-over state', async ({ hostWindow, clientWindow }) => {
-    const hostMatch = new MatchPage(hostWindow);
-    const clientMatch = new MatchPage(clientWindow);
-    await expect(hostMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
-    await expect(clientMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
+// e2e/tests/match-flow.spec.ts
+import { test, expect } from '../fixtures/game.fixture';
+import { MatchPage } from '../pages/MatchPage';
+
+test.describe('Match flow', () => {
+    test('host and client reach game-over state', async ({ hostWindow, clientWindow }) => {
+        const hostMatch = new MatchPage(hostWindow);
+        const clientMatch = new MatchPage(clientWindow);
+        await expect(hostMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
+        await expect(clientMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
+    });
 });
 ```
 
 ### undo-redo.spec.ts
 
 ```typescript
-test('undo reflects canUndo=false after exhausting turn history', async ({ hostWindow }) => {
-    const hostMatch = new MatchPage(hostWindow);
-    await hostWindow.getByTestId('selectable-unit').first().click();
-    await hostWindow.getByTestId('move-target').first().click();
-    await expect(hostMatch.undoButton).toBeEnabled();
-    await hostMatch.undoButton.click();
-    await expect(hostMatch.undoButton).toBeDisabled();
-    await expect(hostMatch.redoButton).toBeEnabled();
+// e2e/tests/undo-redo.spec.ts
+import { test, expect } from '../fixtures/game.fixture';
+import { MatchPage } from '../pages/MatchPage';
+
+test.describe('Undo/redo', () => {
+    test('undo reflects canUndo=false after exhausting turn history', async ({ hostWindow }) => {
+        const hostMatch = new MatchPage(hostWindow);
+        await hostWindow.getByTestId('selectable-unit').first().click();
+        await hostWindow.getByTestId('move-target').first().click();
+        await expect(hostMatch.undoButton).toBeEnabled();
+        await hostMatch.undoButton.click();
+        await expect(hostMatch.undoButton).toBeDisabled();
+        await expect(hostMatch.redoButton).toBeEnabled();
+    });
 });
 ```
 
 ### obfuscation.spec.ts
 
 ```typescript
-test('host snapshot contains no opponent owner-only fields', async ({ hostApp }) => {
-    const snapshot = await getHostSnapshot(hostApp);
-    assertNoLeakedFields(snapshot, snapshot.viewerId, 'p2');
-});
+// e2e/tests/obfuscation.spec.ts
+import { test, expect } from '../fixtures/game.fixture';
+import { getHostSnapshot } from '../helpers/ipc-spy';
+import { assertNoLeakedFields } from '../helpers/snapshot-assert';
 
-test('fog-of-war: invisible entities absent from opponent snapshot', async ({ hostApp }) => {
-    const snapshot = await getHostSnapshot(hostApp);
-    const leaked = Object.values(snapshot.entities).filter((e) => e.__fogHidden === true);
-    expect(leaked).toHaveLength(0);
+test.describe('State obfuscation', () => {
+    test('host snapshot contains no opponent owner-only fields', async ({ hostApp }) => {
+        const snapshot = await getHostSnapshot(hostApp);
+        assertNoLeakedFields(snapshot, snapshot.viewerId, 'p2');
+    });
+
+    test('fog-of-war: invisible entities absent from opponent snapshot', async ({ hostApp }) => {
+        const snapshot = await getHostSnapshot(hostApp);
+        const leaked = Object.values(snapshot.entities).filter((e) => e.__fogHidden === true);
+        expect(leaked).toHaveLength(0);
+    });
 });
 ```
 
 ### multiplayer-soak.spec.ts
 
 ```typescript
-test('checksums converge after 1000 ticks', async ({ hostApp, clientApp }) => {
-    await tick(hostApp, 1000);
-    await hostApp.evaluate(() => new Promise((r) => setTimeout(r, 200)));
-    const simTick = await getSimulationTick(hostApp);
-    expect(simTick).toBeGreaterThanOrEqual(1000);
-    await assertChecksumMatch(hostApp, clientApp);
+// e2e/tests/multiplayer-soak.spec.ts
+import { test, expect } from '../fixtures/game.fixture';
+import { getSimulationTick } from '../helpers/ipc-spy';
+import { assertChecksumMatch } from '../helpers/snapshot-assert';
+import { tick } from '../helpers/tick-driver';
+
+test.describe('Multiplayer soak', () => {
+    test('checksums converge after 1000 ticks', async ({ hostApp, clientApp }) => {
+        await tick(hostApp, 1000);
+        await hostApp.evaluate(() => new Promise((r) => setTimeout(r, 200)));
+        const simTick = await getSimulationTick(hostApp);
+        expect(simTick).toBeGreaterThanOrEqual(1000);
+        await assertChecksumMatch(hostApp, clientApp);
+    });
 });
 ```
 
