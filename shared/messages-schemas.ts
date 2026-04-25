@@ -68,7 +68,7 @@ const LobbyPlayerEntry = z.object({
 
 const LobbyState = z.object({
     info: LobbyInfo,
-    players: z.array(LobbyPlayerEntry),
+    players: z.array(LobbyPlayerEntry).readonly(),
 });
 
 // ─── PlayerSnapshot schema ────────────────────────────────────────────────────
@@ -236,3 +236,17 @@ type _AssertServerMessage =
     z.infer<typeof ServerMessageSchema> extends ServerMessage ? true : never;
 // @ts-expect-error — intentional: asserts the inferred type is assignable to ServerMessage
 const _serverCheck: _AssertServerMessage = true;
+
+// ─── Exported types for renderer and other consumers ────────────────────────
+
+/** Branded type for player identifiers across the system. */
+export type PlayerId = z.infer<typeof PlayerId>;
+
+/** Canonical shared type for a player's entry in the lobby roster. */
+export type LobbyPlayerEntry = z.infer<typeof LobbyPlayerEntry>;
+
+/** Canonical shared type for lobby information. */
+export type LobbyInfo = z.infer<typeof LobbyInfo>;
+
+/** Canonical shared type for the full lobby state. */
+export type LobbyState = z.infer<typeof LobbyState>;

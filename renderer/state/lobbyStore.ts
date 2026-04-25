@@ -14,7 +14,7 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { LobbyState } from '../../electron/preload/api-types.js';
+import type { LobbyState, PlayerId } from '@chimera/shared/messages-schemas.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 
@@ -22,11 +22,20 @@ export interface LobbyStoreState {
     /** Current lobby state, or null if not in a lobby. */
     readonly lobbyState: LobbyState | null;
 
+    /** The ID of the local player in the current lobby, or null if not in a lobby. */
+    readonly localPlayerId: PlayerId | null;
+
     /**
      * Apply incoming lobby state from IPC (chimera:lobby-update push).
      * Do NOT call from components directly.
      */
     _applyLobbyState(state: LobbyState | null): void;
+
+    /**
+     * Set the local player ID (called after host/join succeeds).
+     * Internal method; do NOT call from components.
+     */
+    _setLocalPlayerId(playerId: PlayerId | null): void;
 
     /**
      * Update the ready state of the current player in the lobby.
@@ -50,10 +59,19 @@ export function createLobbyStore(bridge?: {
 }): StoreApi<LobbyStoreState> {
     return createStore<LobbyStoreState>()((set) => ({
         lobbyState: null,
+        localPlayerId: null,
 
         _applyLobbyState(state: LobbyState | null): void {
-            set(() => ({
+            set((currentState) => ({
                 lobbyState: state,
+                // Clear local player ID when leaving a lobby, otherwise preserve it
+                localPlayerId: state === null ? null : currentState.localPlayerId,
+            }));
+        },
+
+        _setLocalPlayerId(playerId: PlayerId | null): void {
+            set(() => ({
+                localPlayerId: playerId,
             }));
         },
 

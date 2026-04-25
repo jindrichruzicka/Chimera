@@ -6,8 +6,7 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createLobbyStore, useLobbyStore } from './lobbyStore';
-import type { LobbyState } from '../../electron/preload/api-types.js';
-import type { PlayerId } from '../../electron/preload/api-types.js';
+import type { LobbyState, PlayerId } from '@chimera/shared/messages-schemas.js';
 
 // Helper to create PlayerId strings for tests
 const playerId = (id: string): PlayerId => id;

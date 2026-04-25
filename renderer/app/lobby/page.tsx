@@ -10,6 +10,7 @@ import { useLobbyStore } from '../../state/lobbyStore';
 import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
+import { PlayerList } from '../../components/shell/PlayerList';
 
 type PendingAction = 'hosting' | 'joining' | 'leaving' | null;
 
@@ -24,8 +25,9 @@ export default function LobbyPage() {
     const maxPlayers = lobbyConfig.maxPlayers;
     const lobbyApi = useLobbyApi();
 
-    // Get lobby state from the store
+    // Get lobby state and local player ID from the store
     const lobbyState = useLobbyStore((state) => state.lobbyState);
+    const localPlayerId = useLobbyStore((state) => state.localPlayerId);
 
     // Bootstrap the lobby store with the chimera API
     useEffect(() => {
@@ -53,10 +55,14 @@ export default function LobbyPage() {
             setPendingAction('hosting');
             setError(null);
             // Call the host function with configurable parameters
-            await lobbyApi.host({
+            const lobbyInfo = await lobbyApi.host({
                 gameId,
                 maxPlayers,
             });
+            if (isMountedRef.current) {
+                // When hosting, the local player is the host
+                useLobbyStore.getState()._setLocalPlayerId(lobbyInfo.hostId);
+            }
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to host lobby');
@@ -84,6 +90,9 @@ export default function LobbyPage() {
             await lobbyApi.join({
                 address: lobbyCode.trim(),
             });
+            // Note: After joining, the local player ID will be determined when we receive
+            // the first lobbyState update from the server or via a getLocalPlayerId() call
+            // on the bridge (if available in future). For now, it remains null.
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to join lobby');
@@ -102,6 +111,9 @@ export default function LobbyPage() {
             setError(null);
             // Call the leave function
             await lobbyApi.leave();
+            if (isMountedRef.current) {
+                useLobbyStore.getState()._setLocalPlayerId(null);
+            }
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to leave lobby');
@@ -136,14 +148,12 @@ export default function LobbyPage() {
                 <p>
                     <strong>Game:</strong> {lobbyState.info.gameId}
                 </p>
-                <h4>Players ({lobbyState.players.length})</h4>
-                <ul>
-                    {lobbyState.players.map((player) => (
-                        <li key={player.playerId}>
-                            {player.displayName} {player.ready ? '(Ready)' : '(Not Ready)'}
-                        </li>
-                    ))}
-                </ul>
+                <PlayerList
+                    localPlayerId={localPlayerId}
+                    onToggleReady={(ready) => {
+                        void useLobbyStore.getState().updateLobbyPlayerReadyState(ready);
+                    }}
+                />
             </div>
         );
     };
