@@ -1,0 +1,79 @@
+---
+title: 'IPC Security Model & Trust Boundaries'
+description: 'Security boundary table (contextBridge/nodeIntegration/action checksums), §9.1 IPC Attack Surface Audit table (all 11 namespaces with validators/trust/gameplay authority), and 6-step audit procedure for adding new namespaces.'
+tags: [security, ipc, trust-boundaries, electron, preload, attack-surface, owasp]
+---
+
+# IPC Security Model & Trust Boundaries
+
+> §9 of the Chimera architecture.
+> Related: [Electron Shell & IPC Bridge](../core-components/electron-shell-ipc-bridge.md) · [Fog of War](fog-of-war-cryptographic-commitment.md) · [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md)
+
+---
+
+## Security Boundary Table
+
+| Boundary             | Rule                                                                                                                                          |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Renderer → Main      | Only through `contextBridge`. `nodeIntegration: false`. `contextIsolation: true`.                                                             |
+| Client → Server      | All actions validated server-side. Client cannot mutate state by crafting a WebSocket message.                                                |
+| Lobby tokens         | Short-lived random tokens issued by host on `JOIN`; prevents unauthenticated connections. No persistent auth required for peer-hosted play.   |
+| IPC surface          | Preload exposes typed, enumerated methods only. No `eval`, no arbitrary Node.js access from renderer.                                         |
+| Action checksums     | `ACTION` messages carry a CRC32 of `(playerId + tick + actionPayload)` to detect tampering or corruption.                                     |
+| State obfuscation    | `GameSnapshot` never crosses any process boundary. `StateProjector` is the mandatory gate between simulation and all outbound messages.       |
+| Commitment integrity | `CommitmentScheme.verify()` is called client-side on every `REVEAL` message before the value is trusted. Failures are surfaced to the player. |
+| Host renderer trust  | Host's own renderer receives `PlayerSnapshot`, not `GameSnapshot`. Host player cannot gain info advantage via devtools inspection.            |
+
+---
+
+## §9.1 IPC Attack Surface Audit
+
+The preload bridge (`electron/preload/api.ts`, §4.1) exposes `window.__chimera` with the namespaces below. This is the single entry point from the untrusted renderer into the trusted main process. **Every change to this surface must update this table.**
+
+| Namespace                   | Writes / side-effects                                            | Main-process validator                                                                                                                                                                                                                                         | Trust classification                                   | Gameplay authority?                                                           |
+| --------------------------- | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------- |
+| `game`                      | `sendAction()` dispatches `EngineAction`s into `ActionPipeline`. | `parseInvokeRequest(EngineActionSchema)` at `ipcMain`; `ActionPipeline.validate()` then runs `ActionDefinition.validate()` + `parsePayload`. Unknown types rejected at `registry.resolve()`. Failures reported via `chimera:game:action-rejected`.             | Sanitiser-gated.                                       | **Yes** — the only authoritative path.                                        |
+| `lobby`                     | Create/join/close lobby; kick players (host only).               | `parseInvokeRequest(HostLobbyParamsSchema / JoinLobbyParamsSchema)`. `LobbyManager` verifies caller is host for privileged ops.                                                                                                                                | Main-authoritative.                                    | No (session control only).                                                    |
+| `saves`                     | List / load / save / delete save files.                          | `parseInvokeRequest(GameIdSchema / SaveRequestSchema / SlotIdSchema)`. Path confined to `userData/saves/`; filename regex `^[A-Za-z0-9_\-]+\.chimera-save$`; atomic writes (inv. #23). Load routes through `SimulationHost.restoreFromSave()` only (inv. #24). | Main-authoritative.                                    | No (requires `engine:save` / `engine:load` action which validates host-only). |
+| `settings`                  | Read / update user settings.                                     | `parseInvokeRequest(UserSettingsPatchSchema)`. `SettingsManager` Zod-validates patch against registered schema; atomic write (inv. #33); schema required (inv. #34).                                                                                           | Main-authoritative.                                    | No (settings never enter `GameSnapshot`, inv. #32).                           |
+| `profile`                   | Read local profile(s); update local profile.                     | `ProfileManager` (local) + `ProfileSanitizer.admit()` for network attestation (inv. #61).                                                                                                                                                                      | Sanitiser-gated for wire; main-authoritative for disk. | No (cosmetic only, inv. #59–62).                                              |
+| `replay`                    | List / export / open / delete replay files.                      | `ReplayManager` — path confined to `userData/replays/`; format-version + `(engineVersion, gameId, gameVersion)` checked on load (inv. #71).                                                                                                                    | Main-authoritative.                                    | No (playback uses live `ActionPipeline`, inv. #70).                           |
+| `chat`                      | Send chat; subscribe to inbound; local mute.                     | `ChatRelay.relay()` — length cap, rate limit, scope check (inv. #73).                                                                                                                                                                                          | Sanitiser-gated.                                       | No (never an `EngineAction`, inv. #72).                                       |
+| `logs`                      | Emit log entry; read recent logs for export.                     | Log-level whitelist; entries capped in size; never re-broadcast.                                                                                                                                                                                               | Renderer-write / main-persist. Local-only (inv. #69).  | No.                                                                           |
+| `system`                    | App quit, relaunch, open-external, OS version query.             | `open-external` URL scheme whitelist (`https:`, `mailto:`); no `file:` or arbitrary protocols.                                                                                                                                                                 | Main-authoritative.                                    | No.                                                                           |
+| `lobbyDiscovery` (optional) | LAN / Steam browse list.                                         | Provider-specific; browse result is read-only.                                                                                                                                                                                                                 | Main-authoritative; read-only.                         | No.                                                                           |
+| `debug` (dev builds only)   | Snapshot browser, time-travel, injected actions.                 | `webContents.id` checked against Inspector Window ID on every call (inv. #29); entire namespace absent in production builds (inv. #27, #28).                                                                                                                   | Main-authoritative; dev-only.                          | **Yes in dev; ABSENT in production.**                                         |
+
+---
+
+## Audit Procedure for New Namespaces
+
+When adding or modifying a namespace, follow all six steps:
+
+1. **Declare shape in `electron/preload/api.ts`** as a typed, enumerated method set. No generic proxies, no pass-through `invoke`.
+2. **Add a row to the table above** covering all six columns.
+3. **Register the main-process handler in `electron/main/ipc-handlers.ts`** with explicit input validation at the first line of each handler.
+4. **If the surface accepts structured payload**: write a Zod (or equivalent) schema and reject before touching any manager.
+5. **If the surface can influence gameplay**: confirm it goes through `ActionPipeline` — never through a direct manager mutation.
+6. **Add at least one invariant in Appendix B** capturing the trust rule and link from the namespace description.
+
+---
+
+## Relevant Invariants
+
+| #       | Rule                                                                                         |
+| ------- | -------------------------------------------------------------------------------------------- |
+| #1      | `GameSnapshot` never leaves the host's main process.                                         |
+| #3      | `GameSnapshot` never crosses any process or network boundary.                                |
+| #4      | The renderer reads state; it never writes state directly.                                    |
+| #5      | All IPC methods are declared in `ipc-handlers.ts` and exposed only through `preload/api.ts`. |
+| #6      | Network messages are validated before they touch the simulation.                             |
+| #27–#29 | Debug namespace is absent in production; `webContents.id` validated on every debug IPC call. |
+
+---
+
+## Cross-References
+
+- [Electron Shell & IPC Bridge](../core-components/electron-shell-ipc-bridge.md) — full `ChimeraAPI` interface, all namespace interface types
+- [Fog of War & Commitment](fog-of-war-cryptographic-commitment.md) — `StateProjector`, `CommitmentScheme`
+- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — complete invariant list including #1–9, #27–29, #59–84
