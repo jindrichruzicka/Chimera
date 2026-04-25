@@ -8,6 +8,7 @@
 import React, { useState, useEffect } from 'react';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
+import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 
 export default function LobbyPage() {
     const [lobbyCode, setLobbyCode] = useState('');
@@ -15,26 +16,10 @@ export default function LobbyPage() {
     const [isJoining, setIsJoining] = useState(false);
     const [isLeaving, setIsLeaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [lobbyConfig, setLobbyConfig] = useState(getDefaultLobbyConfig);
 
-    // Configurable parameters with sensible defaults
-    const gameId =
-        typeof window !== 'undefined'
-            ? (new URLSearchParams(window.location.search).get('gameId') ?? 'tactics')
-            : 'tactics';
-
-    const maxPlayers =
-        typeof window !== 'undefined'
-            ? Math.min(
-                  Math.max(
-                      parseInt(
-                          new URLSearchParams(window.location.search).get('maxPlayers') ?? '4',
-                          10,
-                      ),
-                      2,
-                  ),
-                  16,
-              )
-            : 4;
+    const gameId = lobbyConfig.gameId;
+    const maxPlayers = lobbyConfig.maxPlayers;
 
     // Get lobby state from the store
     const lobbyState = useLobbyStore((state) => state.lobbyState);
@@ -42,6 +27,8 @@ export default function LobbyPage() {
     // Bootstrap the lobby store with the chimera API
     useEffect(() => {
         let unsubscribe: (() => void) | undefined;
+
+        setLobbyConfig(parseLobbyConfig(new URLSearchParams(window.location.search)));
 
         if (typeof window !== 'undefined' && window.__chimera) {
             unsubscribe = bootstrapLobbyStore(window.__chimera.lobby, window.__chimera.system);
