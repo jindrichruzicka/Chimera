@@ -9,6 +9,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
+import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
 
 type PendingAction = 'hosting' | 'joining' | 'leaving' | null;
 
@@ -21,6 +22,7 @@ export default function LobbyPage() {
 
     const gameId = lobbyConfig.gameId;
     const maxPlayers = lobbyConfig.maxPlayers;
+    const lobbyApi = useLobbyApi();
 
     // Get lobby state from the store
     const lobbyState = useLobbyStore((state) => state.lobbyState);
@@ -32,8 +34,9 @@ export default function LobbyPage() {
 
         setLobbyConfig(parseLobbyConfig(new URLSearchParams(window.location.search)));
 
-        if (window.__chimera) {
-            unsubscribe = bootstrapLobbyStore(window.__chimera.lobby, window.__chimera.system);
+        const bridge = getLobbyBridge();
+        if (bridge) {
+            unsubscribe = bootstrapLobbyStore(bridge.lobby, bridge.system);
         }
 
         return () => {
@@ -46,16 +49,11 @@ export default function LobbyPage() {
 
     // Host a new lobby
     const handleHost = async () => {
-        if (!window.__chimera) {
-            setError('Chimera API not available');
-            return;
-        }
-
         try {
             setPendingAction('hosting');
             setError(null);
             // Call the host function with configurable parameters
-            await window.__chimera.lobby.host({
+            await lobbyApi.host({
                 gameId,
                 maxPlayers,
             });
@@ -74,11 +72,6 @@ export default function LobbyPage() {
 
     // Join an existing lobby
     const handleJoin = async () => {
-        if (!window.__chimera) {
-            setError('Chimera API not available');
-            return;
-        }
-
         if (!lobbyCode.trim()) {
             setError('Please enter a lobby code');
             return;
@@ -88,7 +81,7 @@ export default function LobbyPage() {
             setPendingAction('joining');
             setError(null);
             // Call the join function with the entered lobby code
-            await window.__chimera.lobby.join({
+            await lobbyApi.join({
                 address: lobbyCode.trim(),
             });
         } catch (err) {
@@ -104,16 +97,11 @@ export default function LobbyPage() {
 
     // Leave the current lobby
     const handleLeave = async () => {
-        if (!window.__chimera) {
-            setError('Chimera API not available');
-            return;
-        }
-
         try {
             setPendingAction('leaving');
             setError(null);
             // Call the leave function
-            await window.__chimera.lobby.leave();
+            await lobbyApi.leave();
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to leave lobby');
