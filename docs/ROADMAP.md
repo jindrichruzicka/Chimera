@@ -28,8 +28,6 @@ tags: [roadmap, index, milestones, features, traceability]
 
 ---
 
----
-
 ## Milestone Detail Pages
 
 ### [M1 — Skeleton (v0.1.0)](roadmap-sections/m1-skeleton-v0.1.0.md)

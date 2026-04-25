@@ -189,4 +189,4 @@ context.debugObserver?.(nextState.tick, nextState);
 
 - [Simulation Core](simulation-core-action-pipeline.md) — `PipelineContext.debugObserver`
 - [State Projection](state-projection-interfaces.md) — `StateProjector.project()` used in Projection Explorer
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — Invariants #27–31
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — Invariants #27–31

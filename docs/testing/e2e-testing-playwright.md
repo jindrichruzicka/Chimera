@@ -386,4 +386,4 @@ On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed 
 - [Testing Strategy (Unit/Property)](property-tests-soak.md) — Vitest, fast-check, CI gates
 - [Dev Tooling & Harness](../core-components/dev-tooling.md) — interactive dev harness (non-automated counterpart)
 - [Runtime Debug Layer](../core-components/runtime-debug-layer.md) — `CHIMERA_DEBUG` flag pattern (same guard mechanism)
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — invariants referenced in security notes
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants referenced in security notes

@@ -7,7 +7,7 @@ tags: [security, ipc, trust-boundaries, electron, preload, attack-surface, owasp
 # IPC Security Model & Trust Boundaries
 
 > §9 of the Chimera architecture.
-> Related: [Electron Shell & IPC Bridge](../core-components/electron-shell-ipc-bridge.md) · [Fog of War](fog-of-war-cryptographic-commitment.md) · [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md)
+> Related: [Electron Shell & IPC Bridge](../core-components/electron-shell-ipc-bridge.md) · [Fog of War](fog-of-war-cryptographic-commitment.md) · [Architecture Invariants](../executive-architecture/architecture-invariants.md)
 
 ---
 
@@ -76,4 +76,4 @@ When adding or modifying a namespace, follow all six steps:
 
 - [Electron Shell & IPC Bridge](../core-components/electron-shell-ipc-bridge.md) — full `ChimeraAPI` interface, all namespace interface types
 - [Fog of War & Commitment](fog-of-war-cryptographic-commitment.md) — `StateProjector`, `CommitmentScheme`
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — complete invariant list including #1–9, #27–29, #59–84
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — complete invariant list including #1–9, #27–29, #59–84

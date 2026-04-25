@@ -361,4 +361,4 @@ return (
 - [Content Database & DataRefs](content-database-data-refs.md) — `ContentDatabaseContext`, `useContentDatabase()`
 - [Audio System](audio-system.md) — `AudioManagerContext`, `useAudioManager()`
 - [Performance HUD & Device Info](performance-hud-device-info.md) — `DeviceInfoContext`, `useDeviceInfo()`
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — invariants #80–88
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #80–88

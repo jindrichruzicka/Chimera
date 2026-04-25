@@ -51,4 +51,4 @@ Write `fast-check` property tests asserting: (a) no `owner-only` or `hidden` fie
 - [Fog of War & Cryptographic Commitment](../security-trust/fog-of-war-cryptographic-commitment.md)
 - [IPC Security Model](../security-trust/ipc-security-model.md)
 - [Testing Strategy](../testing/property-tests-soak.md) — `StateProjector` property tests, obfuscation soak
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — invariant #1 (snapshot boundary)
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariant #1 (snapshot boundary)

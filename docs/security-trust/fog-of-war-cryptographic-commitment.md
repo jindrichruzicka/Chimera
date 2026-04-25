@@ -113,4 +113,4 @@ simulation/persistence/
 - [State Projection Interfaces](../core-components/state-projection-interfaces.md) — `StateProjector.project()`, `VisibilityRules`, `CommitmentScheme` interfaces
 - [IPC Security Model](ipc-security-model.md) — trust boundary table, IPC attack surface audit
 - [WebSocket Message Protocol](../core-components/websocket-message-protocol.md) — `COMMIT`/`REVEAL` wire messages
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — invariants #3, #8, #9, #26
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #3, #8, #9, #26

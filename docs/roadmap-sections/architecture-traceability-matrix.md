@@ -81,4 +81,4 @@ tags: [traceability, architecture, roadmap, sections, features, cross-reference]
 
 - [System Overview & Context](../executive-architecture/system-overview-and-context.md)
 - [Module Boundaries & File Tree](../executive-architecture/module-boundaries-file-tree.md)
-- [Architecture Invariants (Appendix B)](../executive-architecture/architecture-invariants-appendix.md)
+- [Architecture Invariants (Appendix B)](../executive-architecture/architecture-invariants.md)

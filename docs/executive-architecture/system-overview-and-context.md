@@ -6,7 +6,7 @@ tags: [architecture, executive, process-boundaries, context-diagram, host-author
 
 # System Overview and Context
 
-> Related: [Module Boundaries](module-boundaries-file-tree.md) · [Architecture Invariants](architecture-invariants-appendix.md) · [IPC Bridge](../core-components/electron-shell-ipc-bridge.md)
+> Related: [Module Boundaries](module-boundaries-file-tree.md) · [Architecture Invariants](architecture-invariants.md) · [IPC Bridge](../core-components/electron-shell-ipc-bridge.md)
 
 ---
 

@@ -251,4 +251,4 @@ Game screens may call `useFade()` for dramatic cuts (game-over fade, cinematic i
 - [Simulation Core](simulation-core-action-pipeline.md) — `ReduceContext`, `EngineReservedType`
 - [Asset Reference System](asset-reference-system.md) — `AssetRef` in `SceneDescriptor.requiredAssets`
 - [Renderer State Stores](renderer-state-stores.md) — `gameStore` provides `sceneId` + `sceneTransition`
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — #49–53
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — #49–53

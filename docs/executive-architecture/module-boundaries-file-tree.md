@@ -6,7 +6,7 @@ tags: [module-boundaries, file-tree, architecture, monorepo, import-rules]
 
 # Module Boundaries and File Tree
 
-> Related: [System Overview](system-overview-and-context.md) · [Architecture Invariants](architecture-invariants-appendix.md)
+> Related: [System Overview](system-overview-and-context.md) · [Architecture Invariants](architecture-invariants.md)
 
 ---
 
@@ -292,7 +292,7 @@ chimera/
 ## Cross-References
 
 - [System Overview](system-overview-and-context.md) — process boundaries and context diagram
-- [Architecture Invariants](architecture-invariants-appendix.md) — complete invariant list (88 entries)
+- [Architecture Invariants](architecture-invariants.md) — complete invariant list (88 entries)
 - [Electron Shell and IPC Bridge](../core-components/electron-shell-ipc-bridge.md) — `electron/` in detail
 - [Simulation Core](../core-components/simulation-core-action-pipeline.md) — `simulation/engine/` in detail
 - [Renderer State Stores](../core-components/renderer-state-stores.md) — `renderer/state/` in detail

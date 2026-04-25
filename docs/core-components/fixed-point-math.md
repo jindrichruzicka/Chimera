@@ -7,7 +7,7 @@ tags: [determinism, fixed-point, bigint, math, simulation, eslint]
 # Fixed-Point Math (Q32.32)
 
 > §4.31 of the Chimera architecture.
-> Related: [Simulation Core](simulation-core-action-pipeline.md) · [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) · [Curves & Tweening](curves-tweening-interaction.md)
+> Related: [Simulation Core](simulation-core-action-pipeline.md) · [Architecture Invariants](../executive-architecture/architecture-invariants.md) · [Curves & Tweening](curves-tweening-interaction.md)
 
 ---
 
@@ -141,5 +141,5 @@ The determinism test suite (§10.0) includes a golden-vector test:
 ## Cross-References
 
 - [Simulation Core](simulation-core-action-pipeline.md) — `FixedPoint` used in `GameSnapshot` fields
-- [Architecture Invariants](../executive-architecture/architecture-invariants-appendix.md) — invariants #42, #43, #44, #75, #76
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #42, #43, #44, #75, #76
 - [Curves & Tweening](curves-tweening-interaction.md) — renderer uses `toFloat()` at the R3F boundary
