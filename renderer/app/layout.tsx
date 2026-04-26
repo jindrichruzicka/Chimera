@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react';
 import React from 'react';
 import { SettingsBootstrap } from './SettingsBootstrap';
+import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 
 export const metadata = {
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </head>
             <body>
                 <SettingsBootstrap />
+                <ConnectionStatusIndicator />
                 <RootErrorBoundary>{children}</RootErrorBoundary>
                 {/* ToastHost will be added here as a sibling in §4.30 */}
             </body>
