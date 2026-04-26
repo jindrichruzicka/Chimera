@@ -128,4 +128,24 @@ describe('LobbyPage write lock', () => {
             expect(updatePlayerReadyState).toHaveBeenCalledWith(true);
         });
     });
+
+    it('shows a visible error when ready-state update fails', async () => {
+        updatePlayerReadyState.mockRejectedValueOnce(new Error('ready failed'));
+        mockLobbyState = {
+            info: {
+                sessionId: 's1',
+                hostId: 'p1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
+        };
+
+        render(<LobbyPage />);
+
+        fireEvent.click(screen.getByText('Toggle Ready'));
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert').textContent).toContain('ready failed');
+        });
+    });
 });

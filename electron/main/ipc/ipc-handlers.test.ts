@@ -7,6 +7,7 @@ import {
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
+    LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
@@ -345,6 +346,30 @@ describe('registerLobbyHandlers', () => {
         expect(spy).toHaveBeenCalledOnce();
     });
 
+    it('registers chimera:lobby:update-ready-state as an invoke handler that calls lobbyManager.updatePlayerReadyState', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'updatePlayerReadyState').mockResolvedValue(undefined);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_UPDATE_READY_STATE_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}, true));
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledWith(true);
+    });
+
+    it('rejects invalid update-ready-state payloads with IpcRequestValidationError', async () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+
+        const handler = stub.handled.get(LOBBY_UPDATE_READY_STATE_CHANNEL);
+        expect(handler).toBeDefined();
+
+        expect(() => handler?.({}, 'yes')).toThrow(IpcRequestValidationError);
+    });
+
     it('rejects when lobbyManager.closeLobby throws', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -365,7 +390,12 @@ describe('registerLobbyHandlers', () => {
         // `webContents.send`. It must NOT appear as a main-side listener or
         // invoke handler.
         expect([...stub.handled.keys()].sort()).toEqual(
-            [LOBBY_HOST_CHANNEL, LOBBY_JOIN_CHANNEL, LOBBY_LEAVE_CHANNEL].sort(),
+            [
+                LOBBY_HOST_CHANNEL,
+                LOBBY_JOIN_CHANNEL,
+                LOBBY_LEAVE_CHANNEL,
+                LOBBY_UPDATE_READY_STATE_CHANNEL,
+            ].sort(),
         );
         expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);
     });

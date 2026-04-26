@@ -14,7 +14,7 @@ import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
 import { PlayerList } from '../../components/shell/PlayerList';
 import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
 
-type PendingAction = 'hosting' | 'joining' | 'leaving' | null;
+type PendingAction = 'hosting' | 'joining' | 'leaving' | 'updating-ready' | null;
 
 export default function LobbyPage() {
     const [lobbyCode, setLobbyCode] = useState('');
@@ -121,6 +121,22 @@ export default function LobbyPage() {
         }
     };
 
+    const handleToggleReady = async (ready: boolean): Promise<void> => {
+        try {
+            setPendingAction('updating-ready');
+            setError(null);
+            await lobbyApi.updatePlayerReadyState(ready);
+        } catch (err) {
+            if (isMountedRef.current) {
+                setError(err instanceof Error ? err.message : 'Failed to update ready state');
+            }
+        } finally {
+            if (isMountedRef.current) {
+                setPendingAction(null);
+            }
+        }
+    };
+
     // Display lobby information when in a lobby
     const renderLobbyInfo = () => {
         if (!lobbyState) return null;
@@ -146,9 +162,8 @@ export default function LobbyPage() {
                 </p>
                 <PlayerList
                     localPlayerId={localPlayerId}
-                    onToggleReady={(ready) => {
-                        void lobbyApi.updatePlayerReadyState(ready);
-                    }}
+                    onToggleReady={handleToggleReady}
+                    isTogglePending={pendingAction === 'updating-ready'}
                 />
             </div>
         );

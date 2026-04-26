@@ -112,6 +112,9 @@ export const JoinLobbyParamsSchema = z.object({
     address: NonEmptyStringSchema,
 }) satisfies z.ZodType<JoinLobbyParams>;
 
+/** Schema for `ready` payload accepted by `chimera:lobby:update-ready-state`. */
+export const LobbyReadyStateSchema = z.boolean();
+
 /**
  * Schema for {@link SaveRequest} accepted by `chimera:saves:save`.
  * Typed via an explicit cast — see the schema header for why `satisfies`

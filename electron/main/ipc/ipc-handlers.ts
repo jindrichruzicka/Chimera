@@ -30,6 +30,7 @@ import {
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
+    LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../../preload/apis/lobby-api.js';
 import {
@@ -57,6 +58,7 @@ import {
     HostLobbyParamsSchema,
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
+    LobbyReadyStateSchema,
     PlayerIdSchema,
     SaveRequestSchema,
     SlotIdSchema,
@@ -86,6 +88,7 @@ export {
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
+    LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
@@ -372,7 +375,12 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
     const { ipcMain, lobbyManager } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:lobby:* handlers', {
-        channels: [LOBBY_HOST_CHANNEL, LOBBY_JOIN_CHANNEL, LOBBY_LEAVE_CHANNEL],
+        channels: [
+            LOBBY_HOST_CHANNEL,
+            LOBBY_JOIN_CHANNEL,
+            LOBBY_LEAVE_CHANNEL,
+            LOBBY_UPDATE_READY_STATE_CHANNEL,
+        ],
     });
 
     ipcMain.handle(LOBBY_HOST_CHANNEL, (_event, params) => {
@@ -387,6 +395,15 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
 
     ipcMain.handle(LOBBY_LEAVE_CHANNEL, () => {
         return lobbyManager.closeLobby();
+    });
+
+    ipcMain.handle(LOBBY_UPDATE_READY_STATE_CHANNEL, (_event, ready) => {
+        const validated = parseInvokeRequest(
+            LobbyReadyStateSchema,
+            LOBBY_UPDATE_READY_STATE_CHANNEL,
+            ready,
+        );
+        return lobbyManager.updatePlayerReadyState(validated);
     });
 }
 

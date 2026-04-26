@@ -23,8 +23,11 @@ import type {
     HostLobbyParams,
     JoinLobbyParams,
     LobbyInfo,
+    LobbyPlayerEntry,
+    LobbyState,
     HostTransport,
     ClientTransport,
+    PlayerId,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '../logging/logger.js';
@@ -40,6 +43,8 @@ import type { Logger } from '../logging/logger.js';
 export class LobbyManager {
     private readonly log: Logger;
     private session: HostedSession | JoinedSession | null = null;
+    private localPlayerId: PlayerId | null = null;
+    private lobbyState: LobbyState | null = null;
     /** Active transport subscriptions; cleared and invoked on every closeLobby(). */
     private readonly subscriptions: Unsubscribe[] = [];
     /** Optional teardown returned by onSessionHosted; cleared on closeLobby(). */
@@ -52,8 +57,21 @@ export class LobbyManager {
         logger: Logger,
         private readonly onSessionHosted?: (transport: HostTransport) => (() => void) | void,
         private readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void,
+        private readonly onLobbyStateChanged?: (state: LobbyState) => void,
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
+    }
+
+    private publishLobbyState(state: LobbyState): void {
+        this.lobbyState = state;
+        this.onLobbyStateChanged?.(state);
+    }
+
+    private broadcastLobbyStateIfHosted(state: LobbyState): void {
+        const session = this.session;
+        if (session !== null && 'close' in session) {
+            session.transport.broadcastLobbyState(state);
+        }
     }
 
     /**
@@ -77,6 +95,25 @@ export class LobbyManager {
         const session = await this.provider.hostLobby(params);
         this.session = session;
 
+        const info: LobbyInfo = {
+            sessionId: session.lobbyCode,
+            hostId: session.lobbyInfo.hostId,
+            gameId: params.gameId,
+        };
+        this.localPlayerId = info.hostId;
+
+        const initialState: LobbyState = {
+            info,
+            players: [
+                {
+                    playerId: info.hostId,
+                    displayName: info.hostId,
+                    ready: false,
+                },
+            ],
+        };
+        this.publishLobbyState(initialState);
+
         // Wire transport callbacks to simulation-host stubs (F15/F17 will
         // replace these with real simulationHost calls).  Capture the
         // Unsubscribe handles so closeLobby() can tear them down cleanly.
@@ -84,11 +121,39 @@ export class LobbyManager {
             session.transport.onActionReceived((_from, _action) => {
                 // TODO(F15): simulationHost.enqueueAction(from, action)
             }),
-            session.transport.onPlayerJoined((_player) => {
-                // TODO(F15): simulationHost.notifyPlayerJoined(player)
+            session.transport.onPlayerJoined((player) => {
+                if (this.lobbyState === null) {
+                    return;
+                }
+
+                const existing = this.lobbyState.players.find(
+                    (entry) => entry.playerId === player.playerId,
+                );
+                const nextPlayers: readonly LobbyPlayerEntry[] =
+                    existing === undefined
+                        ? [...this.lobbyState.players, player]
+                        : this.lobbyState.players.map((entry) =>
+                              entry.playerId === player.playerId ? player : entry,
+                          );
+
+                const nextState: LobbyState = {
+                    info: this.lobbyState.info,
+                    players: nextPlayers,
+                };
+                this.publishLobbyState(nextState);
+                this.broadcastLobbyStateIfHosted(nextState);
             }),
-            session.transport.onPlayerLeft((_playerId, _reason) => {
-                // TODO(F17): simulationHost.notifyPlayerLeft(playerId, reason)
+            session.transport.onPlayerLeft((playerId, _reason) => {
+                if (this.lobbyState === null) {
+                    return;
+                }
+
+                const nextState: LobbyState = {
+                    info: this.lobbyState.info,
+                    players: this.lobbyState.players.filter((entry) => entry.playerId !== playerId),
+                };
+                this.publishLobbyState(nextState);
+                this.broadcastLobbyStateIfHosted(nextState);
             }),
         );
 
@@ -100,12 +165,7 @@ export class LobbyManager {
             this.sessionHostedTeardown = teardown;
         }
 
-        const info: LobbyInfo = {
-            sessionId: session.lobbyCode,
-            hostId: session.lobbyInfo.hostId,
-            gameId: params.gameId,
-        };
-
+        this.broadcastLobbyStateIfHosted(initialState);
         this.log.info('hostLobby:ready', { sessionId: info.sessionId });
         return info;
     }
@@ -130,6 +190,7 @@ export class LobbyManager {
         }
         const session = await this.provider.joinLobby(params);
         this.session = session;
+        this.localPlayerId = null;
 
         // Wire transport callbacks to renderer broadcast stubs (F12 / F15 will
         // replace these with real IPC pushes to the renderer).  Capture the
@@ -138,8 +199,8 @@ export class LobbyManager {
             session.transport.onSnapshotReceived((_snapshot) => {
                 // TODO(F12/F15): broadcastToRenderer('chimera:snapshot', snapshot)
             }),
-            session.transport.onLobbyStateChanged((_state) => {
-                // TODO(F12): broadcastToRenderer('chimera:lobby-update', state)
+            session.transport.onLobbyStateChanged((state) => {
+                this.publishLobbyState(state);
             }),
             session.transport.onDisconnected((_reason) => {
                 // TODO(F12): broadcastToRenderer('chimera:connection-status', { status: 'disconnected', reason })
@@ -159,6 +220,34 @@ export class LobbyManager {
         return session.lobbyInfo;
     }
 
+    updatePlayerReadyState(ready: boolean): Promise<void> {
+        const session = this.session;
+        if (session === null || !('close' in session)) {
+            throw new Error('LobbyManager: ready-state updates require an active hosted session');
+        }
+        if (this.lobbyState === null || this.localPlayerId === null) {
+            throw new Error('LobbyManager: lobby state is not available');
+        }
+
+        const hasLocalPlayer = this.lobbyState.players.some(
+            (entry) => entry.playerId === this.localPlayerId,
+        );
+        if (!hasLocalPlayer) {
+            throw new Error('LobbyManager: local player is not present in the lobby roster');
+        }
+
+        const nextState: LobbyState = {
+            info: this.lobbyState.info,
+            players: this.lobbyState.players.map((entry) =>
+                entry.playerId === this.localPlayerId ? { ...entry, ready } : entry,
+            ),
+        };
+
+        this.publishLobbyState(nextState);
+        session.transport.broadcastLobbyState(nextState);
+        return Promise.resolve();
+    }
+
     /**
      * Tear down the active session (hosted or joined) and release all resources.
      *
@@ -169,6 +258,8 @@ export class LobbyManager {
     async closeLobby(): Promise<void> {
         const session = this.session;
         this.session = null;
+        this.localPlayerId = null;
+        this.lobbyState = null;
 
         if (session === null) {
             return;

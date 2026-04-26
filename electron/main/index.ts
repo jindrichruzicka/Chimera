@@ -28,6 +28,7 @@ import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
+import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -421,17 +422,29 @@ export async function main(): Promise<void> {
     const lobbyLogger = logger.child({ module: 'lobby-manager' });
     registerLobbyHandlers({
         ipcMain,
-        lobbyManager: new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, (transport) => {
-            // Shallow wiring: StateBroadcaster constructed with the live
-            // HostTransport once a session is hosted.  Return a teardown
-            // so LobbyManager can clean up on closeLobby() (BLOCK-4 fix).
-            const broadcaster = new StateBroadcaster(transport, lobbyLogger);
-            // TODO(F15): pass broadcaster.broadcast to simulationHost
-            return () => {
-                // TODO(F15): broadcaster will expose a dispose() method; call it here.
-                void broadcaster;
-            };
-        }),
+        lobbyManager: new LobbyManager(
+            new LocalWebSocketProvider(),
+            lobbyLogger,
+            (transport) => {
+                // Shallow wiring: StateBroadcaster constructed with the live
+                // HostTransport once a session is hosted.  Return a teardown
+                // so LobbyManager can clean up on closeLobby() (BLOCK-4 fix).
+                const broadcaster = new StateBroadcaster(transport, lobbyLogger);
+                // TODO(F15): pass broadcaster.broadcast to simulationHost
+                return () => {
+                    // TODO(F15): broadcaster will expose a dispose() method; call it here.
+                    void broadcaster;
+                };
+            },
+            undefined,
+            (state) => {
+                BrowserWindow.getAllWindows().forEach((win) => {
+                    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                        win.webContents.send(LOBBY_UPDATE_CHANNEL, state);
+                    }
+                });
+            },
+        ),
         logger: logger.child({ module: 'lobby' }),
     });
 

@@ -18,6 +18,7 @@ describe('getLobbyBridge', () => {
             host: vi.fn(),
             join: vi.fn(),
             leave: vi.fn(),
+            updatePlayerReadyState: vi.fn(),
             onUpdate: vi.fn(),
         };
         const system = {
@@ -124,26 +125,11 @@ describe('useLobbyApi', () => {
         expect(useLobbyUiStore.getState().localSeatIds).toEqual([]);
     });
 
-    it('throws when updatePlayerReadyState is unavailable on the bridge', async () => {
-        Object.defineProperty(globalThis, '__chimera', {
-            configurable: true,
-            value: {
-                lobby: {
-                    host: vi.fn(),
-                    join: vi.fn(),
-                    leave: vi.fn(),
-                    onUpdate: vi.fn(),
-                },
-                system: {
-                    onConnectionStatus: vi.fn(),
-                },
-            },
-        });
-
+    it('throws when calling updatePlayerReadyState without preload bridge', async () => {
         const { result } = renderHook(() => useLobbyApi());
 
         await expect(result.current.updatePlayerReadyState(true)).rejects.toThrow(
-            'Chimera lobby ready-state API not available',
+            'Chimera API not available',
         );
     });
 });

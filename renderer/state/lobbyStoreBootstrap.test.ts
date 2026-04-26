@@ -43,6 +43,7 @@ function makeLobbyApi(onUpdateImpl?: (cb: (lobby: LobbyState) => void) => Unsubs
         host: vi.fn(),
         join: vi.fn(),
         leave: vi.fn(),
+        updatePlayerReadyState: vi.fn(),
         onUpdate: vi.fn(onUpdateImpl ?? (() => vi.fn())),
     };
 }

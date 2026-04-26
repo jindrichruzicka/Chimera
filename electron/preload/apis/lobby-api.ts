@@ -40,6 +40,9 @@ export const LOBBY_JOIN_CHANNEL = 'chimera:lobby:join';
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.leave}. */
 export const LOBBY_LEAVE_CHANNEL = 'chimera:lobby:leave';
 
+/** `ipcRenderer.invoke` target for {@link LobbyAPI.updatePlayerReadyState}. */
+export const LOBBY_UPDATE_READY_STATE_CHANNEL = 'chimera:lobby:update-ready-state';
+
 /**
  * `ipcRenderer.on` target for {@link LobbyAPI.onUpdate}. Main pushes the
  * full {@link LobbyState} via `webContents.send` whenever the roster,
@@ -79,6 +82,8 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 .invoke(LOBBY_JOIN_CHANNEL, params)
                 .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
         leave: (): Promise<void> => ipc.invoke(LOBBY_LEAVE_CHANNEL).then(() => undefined),
+        updatePlayerReadyState: (ready: boolean): Promise<void> =>
+            ipc.invoke(LOBBY_UPDATE_READY_STATE_CHANNEL, ready).then(() => undefined),
         onUpdate: (cb: (lobby: LobbyState) => void): Unsubscribe =>
             subscribePush<LobbyState>(ipc, LOBBY_UPDATE_CHANNEL, cb),
     };

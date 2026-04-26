@@ -11,14 +11,20 @@ export interface PlayerListProps {
     /** The ID of the local player; used to show (You) label and toggle button. */
     localPlayerId?: PlayerId | null;
     /** Callback when the local player wants to toggle their ready state. */
-    onToggleReady?: (ready: boolean) => void;
+    onToggleReady?: (ready: boolean) => void | Promise<void>;
+    /** Disables the local player's toggle while an update is in flight. */
+    isTogglePending?: boolean;
 }
 
 /**
  * Player list component that displays lobby participants and their ready states.
  * Subscribes only to the players slice of lobbyStore to avoid unnecessary re-renders.
  */
-export function PlayerList({ localPlayerId, onToggleReady }: PlayerListProps) {
+export function PlayerList({
+    localPlayerId,
+    onToggleReady,
+    isTogglePending = false,
+}: PlayerListProps) {
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const players = lobbyState?.players ?? [];
 
@@ -32,6 +38,7 @@ export function PlayerList({ localPlayerId, onToggleReady }: PlayerListProps) {
                         player={player}
                         isLocalPlayer={player.playerId === localPlayerId}
                         onToggleReady={onToggleReady}
+                        isTogglePending={isTogglePending}
                     />
                 ))}
             </ul>
@@ -42,10 +49,11 @@ export function PlayerList({ localPlayerId, onToggleReady }: PlayerListProps) {
 interface PlayerRowProps {
     player: LobbyPlayerEntry;
     isLocalPlayer: boolean;
-    onToggleReady: ((ready: boolean) => void) | undefined;
+    onToggleReady: ((ready: boolean) => void | Promise<void>) | undefined;
+    isTogglePending: boolean;
 }
 
-function PlayerRow({ player, isLocalPlayer, onToggleReady }: PlayerRowProps) {
+function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: PlayerRowProps) {
     return (
         <li
             data-testid={`player-row-${player.playerId}`}
@@ -75,13 +83,16 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady }: PlayerRowProps) {
                 </span>
                 {isLocalPlayer && onToggleReady && (
                     <button
-                        onClick={() => onToggleReady(!player.ready)}
+                        onClick={() => {
+                            void onToggleReady(!player.ready);
+                        }}
+                        disabled={isTogglePending}
                         style={{
                             padding: '0.25rem 0.5rem',
                             fontSize: '0.8rem',
                         }}
                     >
-                        Toggle Ready
+                        {isTogglePending ? 'Updating...' : 'Toggle Ready'}
                     </button>
                 )}
             </div>

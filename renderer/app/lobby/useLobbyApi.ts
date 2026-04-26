@@ -28,12 +28,7 @@ export interface LobbyApi {
 }
 
 const MISSING_BRIDGE_ERROR = 'Chimera API not available';
-const MISSING_READY_API_ERROR = 'Chimera lobby ready-state API not available';
 const STUB_SECONDARY_SEAT_SUFFIX = '-local-seat-2';
-
-interface LobbyReadyApi extends LobbyAPI {
-    updatePlayerReadyState?(ready: boolean): Promise<void>;
-}
 
 export function getLobbyBridge(source: unknown = globalThis): LobbyBridge | null {
     const bridge = source as ChimeraBridge;
@@ -88,13 +83,7 @@ export function useLobbyApi(): LobbyApi {
                 if (!bridge) {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
-
-                const lobbyApi = bridge.lobby as LobbyReadyApi;
-                if (!lobbyApi.updatePlayerReadyState) {
-                    throw new Error(MISSING_READY_API_ERROR);
-                }
-
-                await lobbyApi.updatePlayerReadyState(ready);
+                await bridge.lobby.updatePlayerReadyState(ready);
             },
         }),
         [],
