@@ -29,6 +29,7 @@ import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
+import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -441,6 +442,13 @@ export async function main(): Promise<void> {
                 BrowserWindow.getAllWindows().forEach((win) => {
                     if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
                         win.webContents.send(LOBBY_UPDATE_CHANNEL, state);
+                    }
+                });
+            },
+            (status) => {
+                BrowserWindow.getAllWindows().forEach((win) => {
+                    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                        win.webContents.send(SYSTEM_CONNECTION_STATUS_CHANNEL, status);
                     }
                 });
             },

@@ -184,6 +184,7 @@ const {
     parseHarnessFlags,
     main,
 } = await import('./index.js');
+const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
@@ -561,6 +562,30 @@ describe('main', () => {
         expect(mockLobbyManagerCtor).toHaveBeenCalledOnce();
         // First arg is a LocalWebSocketProvider instance (mock returns {})
         expect(mockLobbyManagerCtor.mock.calls[0]?.[0]).toBeDefined();
+    });
+
+    it('forwards lobby connection-status updates to live renderer windows', async () => {
+        mockLobbyManagerCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        const liveWindow = new FakeBrowserWindow({});
+        const destroyedWindow = new FakeBrowserWindow({});
+        destroyedWindow.isDestroyed.mockReturnValue(true);
+
+        await main();
+
+        const onConnectionStatusChanged = mockLobbyManagerCtor.mock.calls[0]?.[5] as
+            | ((status: 'connected' | 'connecting' | 'disconnected' | 'error') => void)
+            | undefined;
+        expect(onConnectionStatusChanged).toBeTypeOf('function');
+
+        onConnectionStatusChanged?.('disconnected');
+
+        expect(liveWindow.webContents.send).toHaveBeenCalledWith(
+            SYSTEM_CONNECTION_STATUS_CHANNEL,
+            'disconnected',
+        );
+        expect(destroyedWindow.webContents.send).not.toHaveBeenCalled();
     });
 
     it('registers the window-all-closed and activate lifecycle listeners', async () => {

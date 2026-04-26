@@ -29,6 +29,7 @@ import {
     type LobbyState,
     type Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { ConnectionStatus } from '../../preload/api-types.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -288,6 +289,105 @@ describe('LobbyManager.joinLobby', () => {
         const localPlayerId = joinManager.getLocalPlayerId();
         expect(localPlayerId).toBeTruthy();
         expect(localPlayerId).not.toBe(hostInfo.hostId);
+    });
+});
+
+describe('LobbyManager connection-status lifecycle', () => {
+    it('emits connecting and connected when hosting succeeds', async () => {
+        const statuses: ConnectionStatus[] = [];
+        const manager = new LobbyManager(
+            makeProvider(),
+            createNoopLogger(),
+            undefined,
+            undefined,
+            undefined,
+            (status) => {
+                statuses.push(status);
+            },
+        );
+
+        await manager.hostLobby(HOST_PARAMS);
+
+        expect(statuses).toEqual(['connecting', 'connected']);
+        await manager.closeLobby();
+    });
+
+    it('emits connecting and connected when joining succeeds', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const statuses: ConnectionStatus[] = [];
+        const joinManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            undefined,
+            (status) => {
+                statuses.push(status);
+            },
+        );
+
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        expect(statuses).toEqual(['connecting', 'connected']);
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('emits disconnected when joined transport disconnects', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const statuses: ConnectionStatus[] = [];
+        const joinManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            undefined,
+            (status) => {
+                statuses.push(status);
+            },
+        );
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        await hostManager.closeLobby();
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        expect(statuses).toContain('disconnected');
+
+        await joinManager.closeLobby();
+    });
+
+    it('emits error when joinLobby fails', async () => {
+        const errorProvider: MultiplayerProvider = {
+            hostLobby: (params) => makeProvider().hostLobby(params),
+            joinLobby: async (_params) => {
+                throw new Error('unable to connect');
+            },
+            dispose: () => undefined,
+        };
+
+        const statuses: ConnectionStatus[] = [];
+        const manager = new LobbyManager(
+            errorProvider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            undefined,
+            (status) => {
+                statuses.push(status);
+            },
+        );
+
+        await expect(manager.joinLobby({ address: 'invalid' })).rejects.toThrow(
+            'unable to connect',
+        );
+        expect(statuses).toEqual(['connecting', 'error']);
     });
 });
 

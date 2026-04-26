@@ -31,6 +31,7 @@ import type {
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '../logging/logger.js';
+import type { ConnectionStatus } from '../../preload/api-types.js';
 
 /**
  * Main-process orchestrator for the multiplayer session lifecycle.
@@ -58,6 +59,7 @@ export class LobbyManager {
         private readonly onSessionHosted?: (transport: HostTransport) => (() => void) | void,
         private readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void,
         private readonly onLobbyStateChanged?: (state: LobbyState) => void,
+        private readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void,
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
     }
@@ -65,6 +67,10 @@ export class LobbyManager {
     private publishLobbyState(state: LobbyState): void {
         this.lobbyState = state;
         this.onLobbyStateChanged?.(state);
+    }
+
+    private publishConnectionStatus(status: ConnectionStatus): void {
+        this.onConnectionStatusChanged?.(status);
     }
 
     private broadcastLobbyStateIfHosted(state: LobbyState): void {
@@ -87,12 +93,20 @@ export class LobbyManager {
     async hostLobby(params: HostLobbyParams): Promise<LobbyInfo> {
         this.log.info('hostLobby', { gameId: params.gameId, maxPlayers: params.maxPlayers });
 
+        this.publishConnectionStatus('connecting');
+
         if (this.session !== null) {
             throw new Error(
                 'LobbyManager: session already active — call closeLobby() before hosting again',
             );
         }
-        const session = await this.provider.hostLobby(params);
+        let session: HostedSession;
+        try {
+            session = await this.provider.hostLobby(params);
+        } catch (error) {
+            this.publishConnectionStatus('error');
+            throw error;
+        }
         this.session = session;
 
         const info: LobbyInfo = {
@@ -186,6 +200,7 @@ export class LobbyManager {
         }
 
         this.broadcastLobbyStateIfHosted(initialState);
+        this.publishConnectionStatus('connected');
         this.log.info('hostLobby:ready', { sessionId: info.sessionId });
         return info;
     }
@@ -203,12 +218,20 @@ export class LobbyManager {
     async joinLobby(params: JoinLobbyParams): Promise<LobbyInfo> {
         this.log.info('joinLobby', { address: params.address });
 
+        this.publishConnectionStatus('connecting');
+
         if (this.session !== null) {
             throw new Error(
                 'LobbyManager: session already active — call closeLobby() before joining',
             );
         }
-        const session = await this.provider.joinLobby(params);
+        let session: JoinedSession;
+        try {
+            session = await this.provider.joinLobby(params);
+        } catch (error) {
+            this.publishConnectionStatus('error');
+            throw error;
+        }
         this.session = session;
         this.localPlayerId = session.localPlayerId;
         this.publishLobbyState(session.initialLobbyState);
@@ -224,10 +247,11 @@ export class LobbyManager {
                 this.publishLobbyState(state);
             }),
             session.transport.onDisconnected((_reason) => {
-                // TODO(F12): broadcastToRenderer('chimera:connection-status', { status: 'disconnected', reason })
+                this.publishConnectionStatus('disconnected');
             }),
         );
 
+        this.publishConnectionStatus('connected');
         this.log.info('joinLobby:connected', { sessionId: session.lobbyInfo.sessionId });
 
         // Notify the wiring point (index.ts) that a joined session is live
@@ -295,6 +319,8 @@ export class LobbyManager {
         if (session === null) {
             return;
         }
+
+        this.publishConnectionStatus('disconnected');
 
         this.log.info('closeLobby');
 
