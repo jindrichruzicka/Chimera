@@ -30,6 +30,21 @@ export interface LobbyApi {
 const MISSING_BRIDGE_ERROR = 'Chimera API not available';
 const MISSING_LOCAL_PLAYER_ID_ERROR = 'Chimera local player identity not available';
 
+function mergeLocalSeatIds(
+    localPlayerId: string,
+    existingLocalSeatIds: readonly string[],
+): readonly string[] {
+    if (existingLocalSeatIds.length === 0) {
+        return [localPlayerId];
+    }
+
+    if (existingLocalSeatIds.includes(localPlayerId)) {
+        return [...existingLocalSeatIds];
+    }
+
+    return [localPlayerId, ...existingLocalSeatIds];
+}
+
 export function getLobbyBridge(source: unknown = globalThis): LobbyBridge | null {
     const bridge = source as ChimeraBridge;
 
@@ -53,7 +68,10 @@ export function useLobbyApi(): LobbyApi {
                 }
                 const info = await bridge.lobby.host(params);
                 const hostId = info.hostId;
-                useLobbyUiStore.getState().setLocalLobbyContext(hostId, [hostId]);
+                const existingLocalSeatIds = useLobbyUiStore.getState().localSeatIds;
+                useLobbyUiStore
+                    .getState()
+                    .setLocalLobbyContext(hostId, mergeLocalSeatIds(hostId, existingLocalSeatIds));
                 return info;
             },
             async join(params: JoinLobbyParams): Promise<LobbyInfo> {
@@ -66,7 +84,13 @@ export function useLobbyApi(): LobbyApi {
                 if (localPlayerId === null) {
                     throw new Error(MISSING_LOCAL_PLAYER_ID_ERROR);
                 }
-                useLobbyUiStore.getState().setLocalLobbyContext(localPlayerId, [localPlayerId]);
+                const existingLocalSeatIds = useLobbyUiStore.getState().localSeatIds;
+                useLobbyUiStore
+                    .getState()
+                    .setLocalLobbyContext(
+                        localPlayerId,
+                        mergeLocalSeatIds(localPlayerId, existingLocalSeatIds),
+                    );
                 return info;
             },
             async leave(): Promise<void> {

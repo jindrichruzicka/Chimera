@@ -14,9 +14,30 @@
  * Invariant #1: LobbyState (not GameSnapshot) is what crosses IPC.
  */
 
-import type { LobbyAPI, SystemAPI, Unsubscribe } from '../../electron/preload/api-types';
+import type {
+    LobbyAPI,
+    LobbyState,
+    SystemAPI,
+    Unsubscribe,
+} from '../../electron/preload/api-types';
 import { useLobbyStore } from './lobbyStore';
 import { useLobbyUiStore } from './lobbyUiStore';
+
+function syncLocalSeatsFromLobbyState(lobbyState: LobbyState): void {
+    const { localPlayerId } = useLobbyUiStore.getState();
+
+    if (localPlayerId === null) {
+        return;
+    }
+
+    const lobbyPlayerIds = lobbyState.players.map((player) => player.playerId);
+
+    if (!lobbyPlayerIds.includes(localPlayerId)) {
+        return;
+    }
+
+    useLobbyUiStore.getState().setLocalLobbyContext(localPlayerId, lobbyPlayerIds);
+}
 
 /**
  * Register the `onUpdate` push listener on the supplied lobby API and route
@@ -31,6 +52,7 @@ export function bootstrapLobbyStore(lobbyApi: LobbyAPI, systemApi: SystemAPI): U
     // Subscribe to lobby updates
     const unsubscribeLobby = lobbyApi.onUpdate((lobbyState) => {
         useLobbyStore.getState()._applyLobbyState(lobbyState);
+        syncLocalSeatsFromLobbyState(lobbyState);
     });
 
     // Subscribe to connection status changes

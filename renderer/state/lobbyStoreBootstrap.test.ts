@@ -124,6 +124,42 @@ describe('bootstrapLobbyStore()', () => {
         expect(stored).toBe(incoming);
     });
 
+    it('syncs localSeatIds from lobby players when local player identity is known', () => {
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+        const systemApi = makeSystemApi();
+
+        useLobbyUiStore.getState().setLocalLobbyContext('player-1', ['player-1']);
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        expect(capturedLobbyUpdate).toBeDefined();
+
+        capturedLobbyUpdate!({
+            info: {
+                sessionId: 'session-1',
+                hostId: 'player-1',
+                gameId: 'tactics',
+            },
+            players: [
+                {
+                    playerId: 'player-1',
+                    displayName: 'Player One',
+                    ready: false,
+                },
+                {
+                    playerId: 'player-2',
+                    displayName: 'Player Two',
+                    ready: false,
+                },
+            ],
+        });
+
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-1', 'player-2']);
+    });
+
     it('calls _applyLobbyState with null when connection status is disconnected', () => {
         let capturedConnectionStatus:
             | ((status: 'connected' | 'disconnected' | 'connecting' | 'error') => void)

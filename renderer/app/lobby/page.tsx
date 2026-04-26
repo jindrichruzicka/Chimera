@@ -30,7 +30,6 @@ export default function LobbyPage() {
     // Get lobby state and local player ID from the store
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
-    const localSeatIds = useLobbyUiStore((state) => state.localSeatIds);
 
     // Bootstrap the lobby store with the chimera API
     useEffect(() => {
@@ -197,7 +196,7 @@ export default function LobbyPage() {
                 </div>
             )}
 
-            {lobbyState !== null && localSeatIds.length > 1 && <SeatSwitcher />}
+            {lobbyState !== null && <SeatSwitcher />}
 
             {!lobbyState ? (
                 <div>

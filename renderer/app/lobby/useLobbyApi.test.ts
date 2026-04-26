@@ -130,7 +130,36 @@ describe('useLobbyApi', () => {
         expect(useLobbyUiStore.getState().localSeatIds).toEqual([]);
     });
 
-    it('keeps host and join local seat modeling consistent (authoritative single seat)', async () => {
+    it('does not collapse existing multi-seat local context after host', async () => {
+        const host = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host,
+                    join: vi.fn(),
+                    getLocalPlayerId: vi.fn(async () => 'p1'),
+                    leave: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    onUpdate: vi.fn(),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(),
+                },
+            },
+        });
+
+        useLobbyUiStore.getState().setLocalLobbyContext('p1', ['p1', 'p2']);
+
+        const { result } = renderHook(() => useLobbyApi());
+        await result.current.host({ gameId: 'tactics', maxPlayers: 4 });
+
+        expect(useLobbyUiStore.getState().localPlayerId).toBe('p1');
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['p1', 'p2']);
+    });
+
+    it('preserves host and join local seat context without collapsing to a single seat', async () => {
         const host = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
         const join = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
         const getLocalPlayerId = vi.fn(async () => 'player-2');
@@ -158,7 +187,7 @@ describe('useLobbyApi', () => {
         expect(useLobbyUiStore.getState().localSeatIds).toEqual(['p1']);
 
         await result.current.join({ address: 'abc' });
-        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-2']);
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-2', 'p1']);
     });
 
     it('sets a single-seat local context after successful join using authoritative local player identity', async () => {
@@ -188,6 +217,36 @@ describe('useLobbyApi', () => {
         expect(getLocalPlayerId).toHaveBeenCalledOnce();
         expect(useLobbyUiStore.getState().localPlayerId).toBe('player-2');
         expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-2']);
+    });
+
+    it('does not collapse existing multi-seat local context after join', async () => {
+        const join = vi.fn(async () => ({ sessionId: 's', hostId: 'host-1', gameId: 'tactics' }));
+        const getLocalPlayerId = vi.fn(async () => 'player-2');
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: vi.fn(),
+                    join,
+                    getLocalPlayerId,
+                    leave: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    onUpdate: vi.fn(),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(),
+                },
+            },
+        });
+
+        useLobbyUiStore.getState().setLocalLobbyContext('player-2', ['player-2', 'player-3']);
+
+        const { result } = renderHook(() => useLobbyApi());
+        await result.current.join({ address: 'abc' });
+
+        expect(useLobbyUiStore.getState().localPlayerId).toBe('player-2');
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-2', 'player-3']);
     });
 
     it('rejects join when authoritative local identity is unavailable', async () => {
