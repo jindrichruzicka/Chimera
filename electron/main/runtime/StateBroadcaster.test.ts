@@ -1,5 +1,5 @@
 /**
- * electron/main/StateBroadcaster.test.ts
+ * electron/main/runtime/StateBroadcaster.test.ts
  *
  * Unit tests for StateBroadcaster.
  *
@@ -16,13 +16,13 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
-import { createNoopLogger } from './logging/logger.js';
-import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';
+import { createNoopLogger } from '../logging/logger.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {
     HostTransport,
     PlayerSnapshot,
     PlayerId,
-} from '../../networking/provider/MultiplayerProvider.js';
+} from '@chimera/networking/provider/MultiplayerProvider.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

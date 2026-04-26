@@ -76,7 +76,7 @@ vi.mock('../../networking/provider/local/LocalWebSocketProvider.js', () => ({
 }));
 
 // ── StateBroadcaster mock — verifies it is imported from the module ───────────
-vi.mock('./StateBroadcaster.js', () => ({
+vi.mock('./runtime/StateBroadcaster.js', () => ({
     StateBroadcaster: vi.fn(() => ({})),
 }));
 

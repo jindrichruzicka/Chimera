@@ -3,7 +3,8 @@
  *
  * Unit tests for `simulationClock` (the pure snapshot.tick reader).
  *
- * Host-side real-time tick tests live in `electron/main/RealtimeTicker.test.ts`.
+ * Host-side real-time tick tests live in
+ * `electron/main/runtime/RealtimeTicker.test.ts`.
  *
  * Architecture reference: §4.2.1 — Rule 1 (Action-Driven Clock)
  * Task: F04 / T2 (issue #42); relocation: issue #89

@@ -1,5 +1,5 @@
 /**
- * electron/main/StateBroadcaster.ts
+ * electron/main/runtime/StateBroadcaster.ts
  *
  * Projection fan-out component.  Sits between the ActionPipeline broadcast
  * stage and the HostTransport.  When broadcast(snapshot, viewerId) is called
@@ -23,8 +23,8 @@ import type {
     HostTransport,
     PlayerSnapshot,
     PlayerId,
-} from '../../networking/provider/MultiplayerProvider.js';
-import type { Logger } from './logging/logger.js';
+} from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { Logger } from '../logging/logger.js';
 
 /**
  * Fans out projected `PlayerSnapshot` objects to connected players via

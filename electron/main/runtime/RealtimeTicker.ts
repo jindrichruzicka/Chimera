@@ -1,5 +1,5 @@
 /**
- * electron/main/RealtimeTicker.ts
+ * electron/main/runtime/RealtimeTicker.ts
  *
  * Host-side real-time dispatch loop for games that need a wall-clock-driven
  * tick (e.g. real-time strategy). Lives in `electron/main/` — NOT in

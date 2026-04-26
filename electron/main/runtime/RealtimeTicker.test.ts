@@ -1,5 +1,5 @@
 /**
- * electron/main/RealtimeTicker.test.ts
+ * electron/main/runtime/RealtimeTicker.test.ts
  *
  * Unit + integration tests for the host-side `RealtimeTicker`.
  *
@@ -8,7 +8,7 @@
  *                   fix `engine:tick` envelope construction.
  *
  * RealtimeTicker is a host-side wall-clock wrapper; it lives in
- * `electron/main/` so `simulation/` stays host-I/O-free (invariant #2).
+ * `electron/main/runtime/` so `simulation/` stays host-I/O-free (invariant #2).
  * The ticker itself never builds the envelope — the caller supplies a
  * `getEnvelope` factory that has live access to the current snapshot.
  */
@@ -23,7 +23,7 @@ import {
     type BaseGameSnapshot,
 } from '@chimera/simulation/engine/index.js';
 import { RealtimeTicker } from './RealtimeTicker.js';
-import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

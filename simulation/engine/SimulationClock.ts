@@ -8,7 +8,7 @@
  * `performance.now`) are forbidden here by invariant #43.
  *
  * Host-side real-time tick dispatch lives outside `simulation/` — see
- * `electron/main/RealtimeTicker.ts`.
+ * `electron/main/runtime/RealtimeTicker.ts`.
  *
  * Architecture reference: §4.2.1 — Rule 1 (Action-Driven Clock)
  * Task: F04 / T2 (issue #42); relocation: issue #89
