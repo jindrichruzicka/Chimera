@@ -6,6 +6,14 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SeatSwitcher } from './SeatSwitcher';
 
+const switchSeat = vi.fn(async () => undefined);
+
+vi.mock('./useSeatSwitch', () => ({
+    useSeatSwitch: () => ({
+        switchSeat,
+    }),
+}));
+
 interface MockLobbyStoreState {
     readonly localSeatIds: readonly string[];
 }
@@ -18,20 +26,9 @@ vi.mock('../../state/lobbyUiStore', () => ({
 }));
 
 describe('SeatSwitcher', () => {
-    const switchActiveSeat = vi.fn(async () => undefined);
-
     beforeEach(() => {
         mockLocalSeatIds = [];
-        switchActiveSeat.mockReset();
-
-        Object.defineProperty(window, '__chimera', {
-            value: {
-                game: {
-                    switchActiveSeat,
-                },
-            },
-            configurable: true,
-        });
+        switchSeat.mockReset();
     });
 
     afterEach(() => {
@@ -50,14 +47,14 @@ describe('SeatSwitcher', () => {
         expect(screen.getByTestId('seat-btn-p3')).toBeTruthy();
     });
 
-    it('calls window.__chimera.game.switchActiveSeat with the selected playerId', () => {
+    it('calls useSeatSwitch().switchSeat with the selected playerId', () => {
         mockLocalSeatIds = ['p1', 'p2'];
 
         render(<SeatSwitcher />);
 
         fireEvent.click(screen.getByTestId('seat-btn-p2'));
 
-        expect(switchActiveSeat).toHaveBeenCalledWith('p2');
+        expect(switchSeat).toHaveBeenCalledWith('p2');
     });
 
     it('does not render when there is one or fewer local seats', () => {
@@ -70,18 +67,5 @@ describe('SeatSwitcher', () => {
         rendered.rerender(<SeatSwitcher />);
 
         expect(screen.queryByTestId('seat-switcher')).toBeNull();
-    });
-
-    it('logs an error when switchActiveSeat rejects', async () => {
-        const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
-        switchActiveSeat.mockRejectedValueOnce(new Error('seat-switch failed'));
-        mockLocalSeatIds = ['p1', 'p2'];
-
-        render(<SeatSwitcher />);
-        fireEvent.click(screen.getByTestId('seat-btn-p2'));
-
-        await Promise.resolve();
-
-        expect(consoleErrorSpy).toHaveBeenCalled();
     });
 });

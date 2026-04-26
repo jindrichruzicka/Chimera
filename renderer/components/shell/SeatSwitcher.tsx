@@ -5,9 +5,11 @@
 
 import React from 'react';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { useSeatSwitch } from './useSeatSwitch';
 
 export function SeatSwitcher() {
     const localSeatIds = useLobbyUiStore((state) => state.localSeatIds);
+    const seatSwitchApi = useSeatSwitch();
 
     if (localSeatIds.length <= 1) {
         return null;
@@ -22,14 +24,7 @@ export function SeatSwitcher() {
                         key={playerId}
                         data-testid={`seat-btn-${playerId}`}
                         onClick={() => {
-                            void window.__chimera.game
-                                .switchActiveSeat(playerId)
-                                .catch((error: unknown) => {
-                                    console.error(
-                                        '[SeatSwitcher] failed to switch active seat',
-                                        error,
-                                    );
-                                });
+                            void seatSwitchApi.switchSeat(playerId);
                         }}
                         style={{ padding: '0.5rem 0.75rem' }}
                     >
