@@ -41,7 +41,7 @@ import {
 } from './ipc-handlers.js';
 import { IpcRequestValidationError } from './ipc-schemas.js';
 import { createLogger, createMemorySink, createNoopLogger } from './logger.js';
-import { LobbyManager } from './lobby-manager.js';
+import { LobbyManager } from './lobby/LobbyManager.js';
 import { InMemoryMultiplayerProvider } from '../../networking/provider/InMemoryMultiplayerProvider.js';
 import type { LobbyInfo } from '../../networking/provider/MultiplayerProvider.js';
 import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';

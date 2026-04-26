@@ -1,5 +1,5 @@
 /**
- * electron/main/lobby-manager.ts
+ * electron/main/lobby/LobbyManager.ts
  *
  * Orchestrates all multiplayer session management for the main process.
  * Holds the active MultiplayerProvider and translates IPC calls into
@@ -26,8 +26,8 @@ import type {
     HostTransport,
     ClientTransport,
     Unsubscribe,
-} from '../../networking/provider/MultiplayerProvider.js';
-import type { Logger } from './logger.js';
+} from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { Logger } from '../logger.js';
 
 /**
  * Main-process orchestrator for the multiplayer session lifecycle.

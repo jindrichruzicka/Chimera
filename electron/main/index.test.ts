@@ -66,7 +66,7 @@ const { mockLobbyManagerCtor } = vi.hoisted(() => ({
     mockLobbyManagerCtor: vi.fn(),
 }));
 
-vi.mock('./lobby-manager.js', () => ({
+vi.mock('./lobby/LobbyManager.js', () => ({
     LobbyManager: mockLobbyManagerCtor,
 }));
 

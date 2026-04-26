@@ -4,7 +4,7 @@
  * Canonical declaration of the pluggable multiplayer provider abstraction.
  *
  * This module is PURE TYPE DECLARATIONS — zero runtime code.
- * Consumers (electron/main/lobby-manager.ts) reference these interfaces;
+ * Consumers (electron/main/lobby/LobbyManager.ts) reference these interfaces;
  * concrete implementations live in sub-directories (local/, steam/, …).
  *
  * Architecture: §4.14 — Pluggable Multiplayer Provider

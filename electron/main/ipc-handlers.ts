@@ -65,7 +65,7 @@ import {
 } from './ipc-schemas.js';
 import { createNoopLogger, type Logger, type LoggerSink, type MemorySink } from './logger.js';
 import type { SettingsManager } from './SettingsManager.js';
-import type { LobbyManager } from './lobby-manager.js';
+import type { LobbyManager } from './lobby/LobbyManager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../preload/logs-api.js';
 import { RendererLogEntrySchema } from './ipc-schemas.js';
 import type { LogEntry } from '@chimera/shared/logging.js';
