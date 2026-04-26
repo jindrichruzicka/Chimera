@@ -19,32 +19,32 @@ import {
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
     type PlatformInfo,
-} from '../../preload/system-api.js';
+} from '../../preload/apis/system-api.js';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
-} from '../../preload/game-api.js';
+} from '../../preload/apis/game-api.js';
 import {
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
-} from '../../preload/lobby-api.js';
+} from '../../preload/apis/lobby-api.js';
 import {
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
-} from '../../preload/saves-api.js';
+} from '../../preload/apis/saves-api.js';
 import {
     SETTINGS_CHANGE_CHANNEL,
     SETTINGS_GET_CHANNEL,
     SETTINGS_RESET_CHANNEL,
     SETTINGS_UPDATE_CHANNEL,
-} from '../../preload/settings-api.js';
+} from '../../preload/apis/settings-api.js';
 import type {
     ActionRejection,
     ResolvedSettings,
@@ -71,7 +71,7 @@ import {
 } from '../logging/logger.js';
 import type { SettingsManager } from '../settings/SettingsManager.js';
 import type { LobbyManager } from '../lobby/LobbyManager.js';
-import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/logs-api.js';
+import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/apis/logs-api.js';
 import { RendererLogEntrySchema } from './ipc-schemas.js';
 import type { LogEntry } from '@chimera/shared/logging.js';
 

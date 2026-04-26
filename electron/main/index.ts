@@ -24,7 +24,7 @@ import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
-import { SETTINGS_CHANGE_CHANNEL } from '../preload/settings-api.js';
+import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './StateBroadcaster.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';

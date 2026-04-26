@@ -9,9 +9,9 @@
 // the main-process handler module imports these same constants to
 // guarantee the channel strings match on both sides (invariant 5).
 
-import type { ResolvedSettings, SettingsAPI, Unsubscribe, UserSettings } from './api-types.js';
-import type { IpcListener, PushListenerPort } from './listener.js';
-import { ResolvedSettingsSchema, parseInvokeResponse } from './schemas.js';
+import type { ResolvedSettings, SettingsAPI, Unsubscribe, UserSettings } from '../api-types.js';
+import type { IpcListener, PushListenerPort } from '../shared/listener.js';
+import { ResolvedSettingsSchema, parseInvokeResponse } from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SettingsAPI.get}. */
 export const SETTINGS_GET_CHANNEL = 'chimera:settings:get';

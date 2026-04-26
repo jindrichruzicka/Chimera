@@ -21,7 +21,7 @@
 // invariant 5). The helpers are a thin generic utility — nothing more.
 
 import type { z } from 'zod';
-import type { Unsubscribe } from './api-types.js';
+import type { Unsubscribe } from '../api-types.js';
 import { parseInvokeResponse } from './schemas.js';
 
 /**

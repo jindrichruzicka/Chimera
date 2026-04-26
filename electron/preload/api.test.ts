@@ -106,7 +106,7 @@ describe('preload/api.ts', () => {
         // Register an extension BEFORE api.ts runs (simulating a game preload that
         // imports the registration module first, then api.ts).
         vi.resetModules();
-        const { registerExtension } = (await import('./extensions-api.js')) as {
+        const { registerExtension } = (await import('./apis/extensions-api.js')) as {
             registerExtension: (name: string, factory: () => unknown) => void;
         };
         registerExtension('testExt', () => ({ ping: () => 'pong' }));

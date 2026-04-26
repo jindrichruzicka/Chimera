@@ -8,8 +8,8 @@ import {
     type SettingsApiIpcPort,
     type SettingsApiListener,
 } from './settings-api.js';
-import { PreloadIpcValidationError } from './schemas.js';
-import type { ResolvedSettings, UserSettings } from './api-types.js';
+import { PreloadIpcValidationError } from '../shared/schemas.js';
+import type { ResolvedSettings, UserSettings } from '../api-types.js';
 
 /**
  * Recording stub for the narrow `SettingsApiIpcPort` slice. Captures every

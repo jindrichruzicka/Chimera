@@ -8,7 +8,7 @@
 // guarantee the channel strings match on both sides (invariant 5).
 
 import type { LogEntry } from '@chimera/shared/logging.js';
-import type { LogsAPI } from './api-types.js';
+import type { LogsAPI } from '../api-types.js';
 
 /** `ipcRenderer.send` target — renderer emits a log entry. */
 export const LOGS_EMIT_CHANNEL = 'chimera:logs:emit';

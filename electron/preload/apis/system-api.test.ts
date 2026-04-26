@@ -8,8 +8,8 @@ import {
     type SystemApiIpcPort,
     type SystemApiListener,
 } from './system-api.js';
-import type { ConnectionStatus } from './api-types.js';
-import { PreloadIpcValidationError } from './schemas.js';
+import type { ConnectionStatus } from '../api-types.js';
+import { PreloadIpcValidationError } from '../shared/schemas.js';
 
 /**
  * Minimal recording stub that captures every `ipcRenderer` call the system

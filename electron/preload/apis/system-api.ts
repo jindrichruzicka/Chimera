@@ -9,10 +9,10 @@
 // main-process handler module imports these same constants to guarantee the
 // channel strings match on both sides.
 
-import type { ConnectionStatus, SystemAPI, Unsubscribe } from './api-types.js';
-import type { IpcListener, PushListenerPort } from './listener.js';
-import { subscribePush } from './listener.js';
-import { PlatformInfoSchema, parseInvokeResponse } from './schemas.js';
+import type { ConnectionStatus, SystemAPI, Unsubscribe } from '../api-types.js';
+import type { IpcListener, PushListenerPort } from '../shared/listener.js';
+import { subscribePush } from '../shared/listener.js';
+import { PlatformInfoSchema, parseInvokeResponse } from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SystemAPI.platform}. */
 export const SYSTEM_PLATFORM_CHANNEL = 'chimera:system:platform';

@@ -23,10 +23,10 @@ import type {
     PlayerId,
     PlayerSnapshot,
     Unsubscribe,
-} from './api-types.js';
-import type { IpcListener, PushListenerPort } from './listener.js';
-import { subscribePush, subscribeValidatedPush } from './listener.js';
-import { ActionRejectionSchema } from './schemas.js';
+} from '../api-types.js';
+import type { IpcListener, PushListenerPort } from '../shared/listener.js';
+import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
+import { ActionRejectionSchema } from '../shared/schemas.js';
 
 /** `ipcRenderer.send` target for {@link GameAPI.sendAction}. */
 export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';

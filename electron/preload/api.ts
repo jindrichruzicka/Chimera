@@ -19,13 +19,13 @@
 
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ChimeraAPI } from './api-types.js';
-import { buildExtensionsApi } from './extensions-api.js';
-import { createGameApi } from './game-api.js';
-import { createLobbyApi } from './lobby-api.js';
-import { createSavesApi } from './saves-api.js';
-import { createSettingsApi } from './settings-api.js';
-import { createSystemApi } from './system-api.js';
-import { buildLogsApi } from './logs-api.js';
+import { buildExtensionsApi } from './apis/extensions-api.js';
+import { createGameApi } from './apis/game-api.js';
+import { createLobbyApi } from './apis/lobby-api.js';
+import { createSavesApi } from './apis/saves-api.js';
+import { createSettingsApi } from './apis/settings-api.js';
+import { createSystemApi } from './apis/system-api.js';
+import { buildLogsApi } from './apis/logs-api.js';
 
 /**
  * Shape of an `ipcRenderer` listener as seen by our narrow port interfaces.

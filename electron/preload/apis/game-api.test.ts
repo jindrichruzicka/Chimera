@@ -8,8 +8,8 @@ import {
     type GameApiIpcPort,
     type GameApiListener,
 } from './game-api.js';
-import { PreloadIpcValidationError } from './schemas.js';
-import type { ActionRejection, EngineAction, PlayerSnapshot } from './api-types.js';
+import { PreloadIpcValidationError } from '../shared/schemas.js';
+import type { ActionRejection, EngineAction, PlayerSnapshot } from '../api-types.js';
 
 /**
  * Recording stub for the narrow `GameApiIpcPort` slice. Captures every call

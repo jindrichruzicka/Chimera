@@ -26,10 +26,10 @@ import type {
     LobbyInfo,
     LobbyState,
     Unsubscribe,
-} from './api-types.js';
-import type { IpcListener, PushListenerPort } from './listener.js';
-import { subscribePush } from './listener.js';
-import { LobbyInfoSchema, parseInvokeResponse } from './schemas.js';
+} from '../api-types.js';
+import type { IpcListener, PushListenerPort } from '../shared/listener.js';
+import { subscribePush } from '../shared/listener.js';
+import { LobbyInfoSchema, parseInvokeResponse } from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.host}. */
 export const LOBBY_HOST_CHANNEL = 'chimera:lobby:host';

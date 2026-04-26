@@ -22,8 +22,8 @@
 // elsewhere.
 
 import { z } from 'zod';
-import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from './api-types.js';
-import type { PlatformInfo } from './system-api.js';
+import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from '../api-types.js';
+import type { PlatformInfo } from '../apis/system-api.js';
 
 /**
  * Thrown by {@link parseInvokeResponse} when a main-process payload does not

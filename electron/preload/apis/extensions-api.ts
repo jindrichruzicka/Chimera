@@ -16,7 +16,7 @@
 // Invariant: `ChimeraExtensions` is empty in @chimera/core 1.0.0.
 // No extensions are registered here — this file is the infrastructure only.
 
-import type { ChimeraExtensions } from './api-types.js';
+import type { ChimeraExtensions } from '../api-types.js';
 
 /**
  * Module-level registry. Populated by `registerExtension()` calls before
