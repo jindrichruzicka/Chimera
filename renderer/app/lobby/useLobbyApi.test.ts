@@ -17,6 +17,7 @@ describe('getLobbyBridge', () => {
         const lobby = {
             host: vi.fn(),
             join: vi.fn(),
+            getLocalPlayerId: vi.fn(),
             leave: vi.fn(),
             updatePlayerReadyState: vi.fn(),
             onUpdate: vi.fn(),
@@ -60,6 +61,7 @@ describe('useLobbyApi', () => {
     it('delegates host, join and leave through the bridge lobby API', async () => {
         const host = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
         const join = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
+        const getLocalPlayerId = vi.fn(async () => 'p2');
         const leave = vi.fn(async () => undefined);
         const updatePlayerReadyState = vi.fn(async () => undefined);
 
@@ -69,6 +71,7 @@ describe('useLobbyApi', () => {
                 lobby: {
                     host,
                     join,
+                    getLocalPlayerId,
                     leave,
                     updatePlayerReadyState,
                     onUpdate: vi.fn(),
@@ -88,6 +91,7 @@ describe('useLobbyApi', () => {
 
         expect(host).toHaveBeenCalledWith({ gameId: 'tactics', maxPlayers: 4 });
         expect(join).toHaveBeenCalledWith({ address: 'abc' });
+        expect(getLocalPlayerId).toHaveBeenCalledWith();
         expect(updatePlayerReadyState).toHaveBeenCalledWith(true);
         expect(leave).toHaveBeenCalledWith();
     });
@@ -102,6 +106,7 @@ describe('useLobbyApi', () => {
                 lobby: {
                     host,
                     join: vi.fn(),
+                    getLocalPlayerId: vi.fn(async () => 'p1'),
                     leave,
                     updatePlayerReadyState: vi.fn(),
                     onUpdate: vi.fn(),
@@ -123,6 +128,63 @@ describe('useLobbyApi', () => {
 
         expect(useLobbyUiStore.getState().localPlayerId).toBeNull();
         expect(useLobbyUiStore.getState().localSeatIds).toEqual([]);
+    });
+
+    it('sets a single-seat local context after successful join using authoritative local player identity', async () => {
+        const join = vi.fn(async () => ({ sessionId: 's', hostId: 'host-1', gameId: 'tactics' }));
+        const getLocalPlayerId = vi.fn(async () => 'player-2');
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: vi.fn(),
+                    join,
+                    getLocalPlayerId,
+                    leave: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    onUpdate: vi.fn(),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(),
+                },
+            },
+        });
+
+        const { result } = renderHook(() => useLobbyApi());
+        await result.current.join({ address: 'abc' });
+
+        expect(getLocalPlayerId).toHaveBeenCalledOnce();
+        expect(useLobbyUiStore.getState().localPlayerId).toBe('player-2');
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-2']);
+    });
+
+    it('rejects join when authoritative local identity is unavailable', async () => {
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: vi.fn(),
+                    join: vi.fn(async () => ({
+                        sessionId: 's',
+                        hostId: 'host-1',
+                        gameId: 'tactics',
+                    })),
+                    getLocalPlayerId: vi.fn(async () => null),
+                    leave: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    onUpdate: vi.fn(),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(),
+                },
+            },
+        });
+
+        const { result } = renderHook(() => useLobbyApi());
+        await expect(result.current.join({ address: 'abc' })).rejects.toThrow(
+            'Chimera local player identity not available',
+        );
     });
 
     it('throws when calling updatePlayerReadyState without preload bridge', async () => {

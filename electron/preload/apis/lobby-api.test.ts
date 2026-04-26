@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
@@ -136,6 +137,29 @@ describe('createLobbyApi', () => {
             const api = createLobbyApi(port);
 
             await expect(api.leave()).rejects.toThrow('closeLobby failed');
+        });
+    });
+
+    describe('getLocalPlayerId()', () => {
+        it('invokes chimera:lobby:get-local-player-id and resolves to a player id string', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, 'player-2');
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.getLocalPlayerId();
+
+            expect(stub.invocations).toEqual([
+                { channel: LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, arg: undefined },
+            ]);
+            expect(result).toBe('player-2');
+        });
+
+        it('resolves to null when no local player identity is available', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, null);
+            const api = createLobbyApi(stub.port);
+
+            await expect(api.getLocalPlayerId()).resolves.toBeNull();
         });
     });
 

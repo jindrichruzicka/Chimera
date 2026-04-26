@@ -276,6 +276,19 @@ describe('LobbyManager.joinLobby', () => {
             /session already active/i,
         );
     });
+
+    it('stores provider-assigned local player identity for joined sessions', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        const localPlayerId = joinManager.getLocalPlayerId();
+        expect(localPlayerId).toBeTruthy();
+        expect(localPlayerId).not.toBe(hostInfo.hostId);
+    });
 });
 
 // ── closeLobby ───────────────────────────────────────────────────────────────

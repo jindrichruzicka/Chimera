@@ -311,6 +311,7 @@ export interface LobbyAPI {
     host(params: HostLobbyParams): Promise<LobbyInfo>;
     join(params: JoinLobbyParams): Promise<LobbyInfo>;
     leave(): Promise<void>;
+    getLocalPlayerId(): Promise<PlayerId | null>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;
 }

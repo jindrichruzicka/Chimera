@@ -107,6 +107,7 @@ async function loadApi(): Promise<ChimeraAPI> {
     invokeResults.set('chimera:lobby:host', { sessionId: '', hostId: '', gameId: '' });
     invokeResults.set('chimera:lobby:join', { sessionId: '', hostId: '', gameId: '' });
     invokeResults.set('chimera:lobby:leave', undefined);
+    invokeResults.set('chimera:lobby:get-local-player-id', null);
     invokeResults.set('chimera:lobby:update-ready-state', undefined);
     invokeResults.set('chimera:saves:list', []);
     invokeResults.set('chimera:saves:save', {
@@ -259,6 +260,11 @@ describe('window.__chimera.lobby — contract', () => {
     it('leave() invokes chimera:lobby:leave with no payload', async () => {
         await api.lobby.leave();
         expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:leave', args: [] }]);
+    });
+
+    it('getLocalPlayerId() invokes chimera:lobby:get-local-player-id with no payload', async () => {
+        await api.lobby.getLocalPlayerId();
+        expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:get-local-player-id', args: [] }]);
     });
 
     it('updatePlayerReadyState() invokes chimera:lobby:update-ready-state with a boolean payload', async () => {

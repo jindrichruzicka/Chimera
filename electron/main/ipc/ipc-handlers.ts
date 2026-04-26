@@ -27,6 +27,7 @@ import {
     GAME_SWITCH_SEAT_CHANNEL,
 } from '../../preload/apis/game-api.js';
 import {
+    LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
@@ -86,6 +87,7 @@ export {
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
     LOBBY_HOST_CHANNEL,
+    LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
@@ -377,6 +379,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
     logger.info('registering chimera:lobby:* handlers', {
         channels: [
             LOBBY_HOST_CHANNEL,
+            LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
             LOBBY_JOIN_CHANNEL,
             LOBBY_LEAVE_CHANNEL,
             LOBBY_UPDATE_READY_STATE_CHANNEL,
@@ -395,6 +398,10 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
 
     ipcMain.handle(LOBBY_LEAVE_CHANNEL, () => {
         return lobbyManager.closeLobby();
+    });
+
+    ipcMain.handle(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, () => {
+        return lobbyManager.getLocalPlayerId();
     });
 
     ipcMain.handle(LOBBY_UPDATE_READY_STATE_CHANNEL, (_event, ready) => {

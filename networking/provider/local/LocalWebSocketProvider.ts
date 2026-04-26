@@ -114,7 +114,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             this.openConnections.delete(conn);
         };
 
-        return { lobbyInfo, transport, disconnect };
+        return { lobbyInfo, localPlayerId: assignedPlayerId, transport, disconnect };
     }
 
     dispose(): void {

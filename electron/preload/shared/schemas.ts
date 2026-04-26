@@ -97,6 +97,9 @@ export const LobbyInfoSchema = z.object({
     gameId: z.string(),
 }) satisfies z.ZodType<LobbyInfo>;
 
+/** Schema for `chimera:lobby:get-local-player-id` invoke result. */
+export const LocalPlayerIdSchema = z.string().nullable();
+
 /**
  * Schema for a single {@link SaveSlotMeta} returned by `chimera:saves:save`.
  * Typed via a `z.ZodType<SaveSlotMeta>` cast — see the schema header for why

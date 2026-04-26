@@ -89,9 +89,8 @@ export default function LobbyPage() {
             await lobbyApi.join({
                 address: lobbyCode.trim(),
             });
-            // Note: After joining, the local player ID will be determined when we receive
-            // the first lobbyState update from the server or via a getLocalPlayerId() call
-            // on the bridge (if available in future). For now, it remains null.
+            // useLobbyApi.join() populates renderer-local identity context from
+            // the authoritative main-process bridge before returning.
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to join lobby');

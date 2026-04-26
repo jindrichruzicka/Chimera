@@ -205,6 +205,8 @@ export interface HostTransport {
  */
 export interface JoinedSession {
     readonly lobbyInfo: LobbyInfo;
+    /** Provider-assigned identity of the local joined player. */
+    readonly localPlayerId: PlayerId;
     readonly transport: ClientTransport;
     /** Gracefully disconnects from the host and frees resources. */
     disconnect(): Promise<void>;

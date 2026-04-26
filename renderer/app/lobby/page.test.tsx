@@ -85,6 +85,7 @@ describe('LobbyPage pending actions', () => {
                 lobby: {
                     host: vi.fn(() => hostDeferred.promise),
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
+                    getLocalPlayerId: vi.fn(async () => 'p2'),
                     leave: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
@@ -181,6 +182,7 @@ describe('LobbyPage pending actions', () => {
                 lobby: {
                     host,
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
+                    getLocalPlayerId: vi.fn(async () => 'p2'),
                     leave: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },

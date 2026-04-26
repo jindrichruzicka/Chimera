@@ -231,6 +231,7 @@ describe('JoinedSession', () => {
         };
         const session: JoinedSession = {
             lobbyInfo: { sessionId: 's1', hostId: playerId('p1'), gameId: 'tactics' },
+            localPlayerId: playerId('p2'),
             transport,
             disconnect: async () => {},
         };

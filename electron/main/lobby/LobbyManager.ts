@@ -190,7 +190,7 @@ export class LobbyManager {
         }
         const session = await this.provider.joinLobby(params);
         this.session = session;
-        this.localPlayerId = null;
+        this.localPlayerId = session.localPlayerId;
 
         // Wire transport callbacks to renderer broadcast stubs (F12 / F15 will
         // replace these with real IPC pushes to the renderer).  Capture the
@@ -218,6 +218,10 @@ export class LobbyManager {
         }
 
         return session.lobbyInfo;
+    }
+
+    getLocalPlayerId(): PlayerId | null {
+        return this.localPlayerId;
     }
 
     updatePlayerReadyState(ready: boolean): Promise<void> {

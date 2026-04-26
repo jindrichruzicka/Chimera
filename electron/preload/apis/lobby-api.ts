@@ -29,7 +29,7 @@ import type {
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush } from '../shared/listener.js';
-import { LobbyInfoSchema, parseInvokeResponse } from '../shared/schemas.js';
+import { LobbyInfoSchema, LocalPlayerIdSchema, parseInvokeResponse } from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.host}. */
 export const LOBBY_HOST_CHANNEL = 'chimera:lobby:host';
@@ -39,6 +39,9 @@ export const LOBBY_JOIN_CHANNEL = 'chimera:lobby:join';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.leave}. */
 export const LOBBY_LEAVE_CHANNEL = 'chimera:lobby:leave';
+
+/** `ipcRenderer.invoke` target for {@link LobbyAPI.getLocalPlayerId}. */
+export const LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL = 'chimera:lobby:get-local-player-id';
 
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.updatePlayerReadyState}. */
 export const LOBBY_UPDATE_READY_STATE_CHANNEL = 'chimera:lobby:update-ready-state';
@@ -82,6 +85,16 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 .invoke(LOBBY_JOIN_CHANNEL, params)
                 .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
         leave: (): Promise<void> => ipc.invoke(LOBBY_LEAVE_CHANNEL).then(() => undefined),
+        getLocalPlayerId: (): Promise<string | null> =>
+            ipc
+                .invoke(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(
+                        LocalPlayerIdSchema,
+                        LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
+                        value,
+                    ),
+                ),
         updatePlayerReadyState: (ready: boolean): Promise<void> =>
             ipc.invoke(LOBBY_UPDATE_READY_STATE_CHANNEL, ready).then(() => undefined),
         onUpdate: (cb: (lobby: LobbyState) => void): Unsubscribe =>

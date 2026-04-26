@@ -245,6 +245,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
         const session: JoinedSession = {
             lobbyInfo: channel.lobbyInfo,
+            localPlayerId: clientPlayerId,
             transport,
             disconnect: (): Promise<void> => {
                 for (const cb of channel.playerLeftCbs) cb(clientPlayerId, 'normal');
