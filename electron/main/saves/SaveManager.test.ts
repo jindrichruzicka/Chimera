@@ -17,7 +17,7 @@ import {
     SaveNotFoundError,
 } from '@chimera/simulation/persistence/index.js';
 import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
-import { createNoopLogger } from './logger.js';
+import { createNoopLogger } from '../logging/logger.js';
 import { SaveManager } from './SaveManager.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

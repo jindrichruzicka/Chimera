@@ -24,7 +24,7 @@ import type {
     PlayerSnapshot,
     PlayerId,
 } from '../../networking/provider/MultiplayerProvider.js';
-import type { Logger } from './logger.js';
+import type { Logger } from './logging/logger.js';
 
 /**
  * Fans out projected `PlayerSnapshot` objects to connected players via

@@ -15,7 +15,7 @@
  *   #67 — Constructed with injected dependencies; no raw console.* calls.
  */
 
-import type { Logger } from '../../shared/logging.js';
+import type { Logger } from '@chimera/shared/logging.js';
 import type {
     EngineSettings,
     GameSettingsSchema,

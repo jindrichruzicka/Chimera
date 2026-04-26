@@ -17,9 +17,9 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
 import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
-import { FileSaveRepository } from './saves/FileSaveRepository.js';
+import { FileSaveRepository } from './FileSaveRepository.js';
 import { SaveManager } from './SaveManager.js';
-import type { Logger } from './logger.js';
+import type { Logger } from '../logging/logger.js';
 
 // ── Stub logger ────────────────────────────────────────────────────────────────
 

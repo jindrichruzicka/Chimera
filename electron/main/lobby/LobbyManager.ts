@@ -27,7 +27,7 @@ import type {
     ClientTransport,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { Logger } from '../logger.js';
+import type { Logger } from '../logging/logger.js';
 
 /**
  * Main-process orchestrator for the multiplayer session lifecycle.

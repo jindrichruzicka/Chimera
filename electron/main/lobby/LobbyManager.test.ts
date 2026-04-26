@@ -15,7 +15,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
-import { createLogger, createMemorySink, createNoopLogger } from '../logger.js';
+import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from './LobbyManager.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import {

@@ -19,38 +19,38 @@ import {
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
     type PlatformInfo,
-} from '../preload/system-api.js';
+} from '../../preload/system-api.js';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
-} from '../preload/game-api.js';
+} from '../../preload/game-api.js';
 import {
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
-} from '../preload/lobby-api.js';
+} from '../../preload/lobby-api.js';
 import {
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
-} from '../preload/saves-api.js';
+} from '../../preload/saves-api.js';
 import {
     SETTINGS_CHANGE_CHANNEL,
     SETTINGS_GET_CHANNEL,
     SETTINGS_RESET_CHANNEL,
     SETTINGS_UPDATE_CHANNEL,
-} from '../preload/settings-api.js';
+} from '../../preload/settings-api.js';
 import type {
     ActionRejection,
     ResolvedSettings,
     SaveSlotMeta,
     UserSettings,
-} from '../preload/api-types.js';
+} from '../../preload/api-types.js';
 import {
     EngineActionSchema,
     GameIdSchema,
@@ -63,10 +63,15 @@ import {
     UserSettingsPatchSchema,
     parseInvokeRequest,
 } from './ipc-schemas.js';
-import { createNoopLogger, type Logger, type LoggerSink, type MemorySink } from './logger.js';
-import type { SettingsManager } from './SettingsManager.js';
-import type { LobbyManager } from './lobby/LobbyManager.js';
-import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../preload/logs-api.js';
+import {
+    createNoopLogger,
+    type Logger,
+    type LoggerSink,
+    type MemorySink,
+} from '../logging/logger.js';
+import type { SettingsManager } from '../settings/SettingsManager.js';
+import type { LobbyManager } from '../lobby/LobbyManager.js';
+import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/logs-api.js';
 import { RendererLogEntrySchema } from './ipc-schemas.js';
 import type { LogEntry } from '@chimera/shared/logging.js';
 

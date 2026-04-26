@@ -16,7 +16,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
-import { createNoopLogger } from './logger.js';
+import { createNoopLogger } from './logging/logger.js';
 import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';
 import type {
     HostTransport,

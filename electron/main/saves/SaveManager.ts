@@ -31,7 +31,7 @@ import type {
     SaveRepository,
     SaveSlotMeta,
 } from '@chimera/simulation/persistence/SaveRepository.js';
-import type { Logger } from './logger.js';
+import type { Logger } from '../logging/logger.js';
 
 /** Filename of the clean-exit sentinel written on graceful shutdown. */
 const CLEAN_EXIT_FILENAME = 'lastCleanExit.flag';

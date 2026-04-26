@@ -40,11 +40,11 @@ import {
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
 import { IpcRequestValidationError } from './ipc-schemas.js';
-import { createLogger, createMemorySink, createNoopLogger } from './logger.js';
-import { LobbyManager } from './lobby/LobbyManager.js';
-import { InMemoryMultiplayerProvider } from '../../networking/provider/InMemoryMultiplayerProvider.js';
-import type { LobbyInfo } from '../../networking/provider/MultiplayerProvider.js';
-import { playerId as toPlayerId } from '../../networking/provider/MultiplayerProvider.js';
+import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
+import { LobbyManager } from '../lobby/LobbyManager.js';
+import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
+import type { LobbyInfo } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {
     ActionRejection,
     EngineAction,
@@ -52,7 +52,7 @@ import type {
     JoinLobbyParams,
     SaveRequest,
     UserSettings,
-} from '../preload/api-types.js';
+} from '../../preload/api-types.js';
 
 /**
  * Recording stub for the narrow `SystemHandlersIpcMain` slice used by the
@@ -531,7 +531,7 @@ describe('registerSettingsHandlers', () => {
 describe('registerSettingsHandlers — with real SettingsManager', () => {
     it('get handler returns merged defaults from registered schema', async () => {
         const stub = makeSettingsIpcMainStub();
-        const { SettingsManager } = await import('./SettingsManager.js');
+        const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
             await import('@chimera/simulation/settings/index.js');
         const { z } = await import('zod');
@@ -579,7 +579,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
 
     it('update handler persists patch and returns merged settings', async () => {
         const stub = makeSettingsIpcMainStub();
-        const { SettingsManager } = await import('./SettingsManager.js');
+        const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
             await import('@chimera/simulation/settings/index.js');
         const { z } = await import('zod');
@@ -627,7 +627,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
 
     it('reset handler returns engine defaults after clearing overrides', async () => {
         const stub = makeSettingsIpcMainStub();
-        const { SettingsManager } = await import('./SettingsManager.js');
+        const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
             await import('@chimera/simulation/settings/index.js');
         const { z } = await import('zod');
@@ -945,7 +945,7 @@ describe('Logger injection (invariant 67)', () => {
 describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC boundary', () => {
     it('update handler rejects an invalid patch before reaching the repo (BLOCK-4)', async () => {
         const stub = makeSettingsIpcMainStub();
-        const { SettingsManager } = await import('./SettingsManager.js');
+        const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository } =
             await import('@chimera/simulation/settings/index.js');
         const { z } = await import('zod');
@@ -999,7 +999,7 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
 
     it('update handler passes a valid patch through when schema is registered', async () => {
         const stub = makeSettingsIpcMainStub();
-        const { SettingsManager } = await import('./SettingsManager.js');
+        const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
             await import('@chimera/simulation/settings/index.js');
         const { z } = await import('zod');
@@ -1054,7 +1054,7 @@ import {
     type LogsHandlersIpcMain,
 } from './ipc-handlers.js';
 import type { LogEntry } from '@chimera/shared/logging.js';
-import type { MemorySink } from './logger.js';
+import type { MemorySink } from '../logging/logger.js';
 
 function makeLogsIpcMainStub(): {
     readonly ipcMain: LogsHandlersIpcMain;

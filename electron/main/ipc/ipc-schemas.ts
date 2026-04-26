@@ -23,7 +23,7 @@ import type {
     JoinLobbyParams,
     SaveRequest,
     UserSettings,
-} from '../preload/api-types.js';
+} from '../../preload/api-types.js';
 
 /**
  * Thrown by {@link parseInvokeRequest} when a renderer-supplied payload does

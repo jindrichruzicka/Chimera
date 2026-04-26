@@ -25,7 +25,7 @@ const {
     capturedSaveManagerRepoClassName: { value: '' },
 }));
 
-vi.mock('./SaveManager.js', () => ({
+vi.mock('./saves/SaveManager.js', () => ({
     SaveManager: vi.fn((repo: { constructor?: { name?: string } }) => {
         capturedSaveManagerRepoClassName.value = repo?.constructor?.name ?? '';
         return {
@@ -41,7 +41,7 @@ const { mockRegisterCrashReporter } = vi.hoisted(() => ({
     mockRegisterCrashReporter: vi.fn<(options: { autosave?: () => Promise<void> }) => void>(),
 }));
 
-vi.mock('./crash-reporter.js', () => ({
+vi.mock('./logging/crash-reporter.js', () => ({
     registerCrashReporter: mockRegisterCrashReporter,
 }));
 
@@ -52,7 +52,7 @@ const { capturedSettingsBroadcastFn } = vi.hoisted(() => ({
     capturedSettingsBroadcastFn: { current: null as SettingsBroadcastFn | null },
 }));
 
-vi.mock('./SettingsManager.js', () => ({
+vi.mock('./settings/SettingsManager.js', () => ({
     SettingsManager: vi.fn((_repo: unknown, broadcastFn: SettingsBroadcastFn) => {
         capturedSettingsBroadcastFn.current = broadcastFn;
         return {

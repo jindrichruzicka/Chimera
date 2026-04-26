@@ -8,7 +8,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { SettingsMerger, InMemorySettingsRepository } from '@chimera/simulation/settings/index.js';
-import { SettingsManager } from '@chimera/electron/main/SettingsManager.js';
+import { SettingsManager } from '@chimera/electron/main/settings/SettingsManager.js';
 import { tacticsSettingsSchema, TACTICS_DEFAULTS } from './settings-schema.js';
 
 // ── tacticsSettingsSchema declaration ─────────────────────────────────────────

@@ -8,7 +8,7 @@ import {
     registerSettingsHandlers,
     registerSystemHandlers,
     registerLogsHandlers,
-} from './ipc-handlers.js';
+} from './ipc/ipc-handlers.js';
 import {
     createLogger,
     createPinoSink,
@@ -16,12 +16,12 @@ import {
     type Logger,
     type LoggerSink,
     type FlushableSink,
-} from './logger.js';
-import { registerCrashReporter } from './crash-reporter.js';
-import { SaveManager } from './SaveManager.js';
+} from './logging/logger.js';
+import { registerCrashReporter } from './logging/crash-reporter.js';
+import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
-import { SettingsManager } from './SettingsManager.js';
-import { FileSettingsRepository } from './FileSettingsRepository.js';
+import { SettingsManager } from './settings/SettingsManager.js';
+import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/settings-api.js';
