@@ -69,6 +69,10 @@ export class WsHostTransport implements HostTransport {
         return this.router.onActionReceived(cb);
     }
 
+    onReadyStateUpdate(cb: (from: PlayerId, ready: boolean) => void): Unsubscribe {
+        return this.router.onReadyStateUpdate(cb);
+    }
+
     onSideChannelReceived(cb: (from: PlayerId, msg: SideChannelMessage) => void): Unsubscribe {
         return this.router.onSideChannelReceived(cb);
     }

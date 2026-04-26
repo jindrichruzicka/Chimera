@@ -109,6 +109,13 @@ const ProfileUpdateMessage = z
     })
     .strict();
 
+const ReadyStateUpdateMessage = z
+    .object({
+        type: z.literal('READY_STATE_UPDATE'),
+        ready: z.boolean(),
+    })
+    .strict();
+
 const ChatClientMessage = z
     .object({
         type: z.literal('CHAT'),
@@ -136,6 +143,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     JoinMessage,
     ActionMessage,
     ProfileUpdateMessage,
+    ReadyStateUpdateMessage,
     ChatClientMessage,
     PingMessage,
 ]);

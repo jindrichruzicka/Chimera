@@ -54,6 +54,13 @@ export class WsClientTransport implements ClientTransport {
         });
     }
 
+    sendReadyStateUpdate(ready: boolean): void {
+        this.connection.send({
+            type: 'READY_STATE_UPDATE',
+            ready,
+        });
+    }
+
     sendSideChannel(msg: SideChannelMessage): void {
         if (msg.kind === 'chat') {
             this.connection.send({

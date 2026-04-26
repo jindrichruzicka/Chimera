@@ -189,6 +189,8 @@ export interface HostTransport {
     sendSideChannel(target: PlayerId | 'broadcast', msg: SideChannelMessage): void;
     /** Subscribe to inbound game actions from clients. */
     onActionReceived(cb: (from: PlayerId, action: EngineAction) => void): Unsubscribe;
+    /** Subscribe to joined-client ready-state intent updates. */
+    onReadyStateUpdate(cb: (from: PlayerId, ready: boolean) => void): Unsubscribe;
     /** Subscribe to inbound side-channel messages from clients. */
     onSideChannelReceived(cb: (from: PlayerId, msg: SideChannelMessage) => void): Unsubscribe;
     /** Subscribe to player-joined notifications. */
@@ -216,6 +218,8 @@ export interface JoinedSession {
 export interface ClientTransport {
     /** Send a game action to the authoritative host. */
     sendAction(action: EngineAction): void;
+    /** Send ready-state intent to the authoritative host. */
+    sendReadyStateUpdate(ready: boolean): void;
     /**
      * Send a non-authoritative side-channel message to the host. Mirror of
      * HostTransport.sendSideChannel — never an EngineAction, never entered in

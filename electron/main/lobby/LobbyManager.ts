@@ -121,6 +121,26 @@ export class LobbyManager {
             session.transport.onActionReceived((_from, _action) => {
                 // TODO(F15): simulationHost.enqueueAction(from, action)
             }),
+            session.transport.onReadyStateUpdate((from, ready) => {
+                if (this.lobbyState === null) {
+                    return;
+                }
+
+                const hasPlayer = this.lobbyState.players.some((entry) => entry.playerId === from);
+                if (!hasPlayer) {
+                    return;
+                }
+
+                const nextState: LobbyState = {
+                    info: this.lobbyState.info,
+                    players: this.lobbyState.players.map((entry) =>
+                        entry.playerId === from ? { ...entry, ready } : entry,
+                    ),
+                };
+
+                this.publishLobbyState(nextState);
+                this.broadcastLobbyStateIfHosted(nextState);
+            }),
             session.transport.onPlayerJoined((player) => {
                 if (this.lobbyState === null) {
                     return;
@@ -226,9 +246,15 @@ export class LobbyManager {
 
     updatePlayerReadyState(ready: boolean): Promise<void> {
         const session = this.session;
-        if (session === null || !('close' in session)) {
-            throw new Error('LobbyManager: ready-state updates require an active hosted session');
+        if (session === null) {
+            throw new Error('LobbyManager: ready-state updates require an active session');
         }
+
+        if (!('close' in session)) {
+            session.transport.sendReadyStateUpdate(ready);
+            return Promise.resolve();
+        }
+
         if (this.lobbyState === null || this.localPlayerId === null) {
             throw new Error('LobbyManager: lobby state is not available');
         }

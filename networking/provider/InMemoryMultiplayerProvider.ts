@@ -40,6 +40,7 @@ import { playerId as toPlayerId } from './MultiplayerProvider.js';
 // ─── Internal types ───────────────────────────────────────────────────────────
 
 type ActionCb = (from: PlayerId, action: EngineAction) => void;
+type ReadyStateCb = (from: PlayerId, ready: boolean) => void;
 type HostSideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 type PlayerJoinedCb = (player: LobbyPlayerEntry) => void;
 type PlayerLeftCb = (playerId: PlayerId, reason: DisconnectReason) => void;
@@ -71,6 +72,7 @@ class InMemoryChannel {
 
     // Host-side subscriptions (client → host)
     readonly actionCbs = new Set<ActionCb>();
+    readonly readyStateCbs = new Set<ReadyStateCb>();
     readonly hostSideChannelCbs = new Set<HostSideChannelCb>();
     readonly playerJoinedCbs = new Set<PlayerJoinedCb>();
     readonly playerLeftCbs = new Set<PlayerLeftCb>();
@@ -107,6 +109,7 @@ class InMemoryChannel {
             for (const cb of client.disconnectCbs) cb('host_closed');
         }
         this.actionCbs.clear();
+        this.readyStateCbs.clear();
         this.hostSideChannelCbs.clear();
         this.playerJoinedCbs.clear();
         this.playerLeftCbs.clear();
@@ -172,6 +175,9 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
             onActionReceived: (cb: ActionCb): Unsubscribe => addSub(channel.actionCbs, cb),
 
+            onReadyStateUpdate: (cb: ReadyStateCb): Unsubscribe =>
+                addSub(channel.readyStateCbs, cb),
+
             onSideChannelReceived: (cb: HostSideChannelCb): Unsubscribe =>
                 addSub(channel.hostSideChannelCbs, cb),
 
@@ -226,6 +232,10 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         const transport: ClientTransport = {
             sendAction: (action: EngineAction): void => {
                 for (const cb of channel.actionCbs) cb(clientPlayerId, action);
+            },
+
+            sendReadyStateUpdate: (ready: boolean): void => {
+                for (const cb of channel.readyStateCbs) cb(clientPlayerId, ready);
             },
 
             sendSideChannel: (msg: SideChannelMessage): void => {

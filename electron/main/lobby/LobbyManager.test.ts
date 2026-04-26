@@ -27,6 +27,7 @@ import {
     type MultiplayerProvider,
     type PlayerSnapshot,
     type PlayerId,
+    type LobbyState,
     type Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 
@@ -513,6 +514,60 @@ describe('LobbyManager provider-swap smoke test', () => {
 
         await expect(joinManager.closeLobby()).resolves.toBeUndefined();
         await expect(hostManager.closeLobby()).resolves.toBeUndefined();
+    });
+
+    it('joined client can update its ready state and host broadcasts it to all clients', async () => {
+        const provider = makeProvider();
+
+        let hostLobbyStateSnapshot: LobbyState | null = null;
+        let joinLobbyStateSnapshot: LobbyState | null = null;
+
+        const hostManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            (state) => {
+                hostLobbyStateSnapshot = state;
+            },
+        );
+
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            (state) => {
+                joinLobbyStateSnapshot = state;
+            },
+        );
+
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        const joinedPlayerId = joinManager.getLocalPlayerId();
+        expect(joinedPlayerId).toBeTruthy();
+
+        // Wait for host onPlayerJoined callback and the initial lobby-state broadcast.
+        await Promise.resolve();
+
+        await expect(joinManager.updatePlayerReadyState(true)).resolves.toBeUndefined();
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        expect(hostLobbyStateSnapshot).not.toBeNull();
+        expect(joinLobbyStateSnapshot).not.toBeNull();
+
+        const hostState = hostLobbyStateSnapshot!;
+        const joinedState = joinLobbyStateSnapshot!;
+
+        const hostEntry = hostState.players.find((entry) => entry.playerId === joinedPlayerId);
+        const joinedEntry = joinedState.players.find((entry) => entry.playerId === joinedPlayerId);
+
+        expect(hostEntry?.ready).toBe(true);
+        expect(joinedEntry?.ready).toBe(true);
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
     });
 });
 

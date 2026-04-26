@@ -133,6 +133,24 @@ describe('ClientMessageSchema — CHAT', () => {
     });
 });
 
+describe('ClientMessageSchema — READY_STATE_UPDATE', () => {
+    it('parses a valid READY_STATE_UPDATE message', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'READY_STATE_UPDATE',
+            ready: true,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects READY_STATE_UPDATE with non-boolean ready', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'READY_STATE_UPDATE',
+            ready: 'true',
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
 describe('ClientMessageSchema — invalid type', () => {
     it('rejects an unknown type', () => {
         const result = ClientMessageSchema.safeParse({ type: 'UNKNOWN', data: 'x' });

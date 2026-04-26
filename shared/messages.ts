@@ -73,6 +73,8 @@ export interface WireCommitmentReveal {
  *                 host. `checksum` is a CRC32 of the serialised payload (0 for
  *                 F10 — full implementation lands in F13 §4.3).
  * - PROFILE_UPDATE Mid-lobby cosmetic update; side-channel only (§4.24).
+ * - READY_STATE_UPDATE Joined-client intent to toggle its own ready state.
+ *                 Host remains authoritative and rebroadcasts LOBBY_STATE.
  * - CHAT          Player chat message; rate-limited on the server (§4.29).
  * - PING          Latency probe; server responds with PONG.
  */
@@ -85,6 +87,7 @@ export type ClientMessage =
           readonly checksum: number;
       }
     | { readonly type: 'PROFILE_UPDATE'; readonly profile: WirePlayerProfile }
+    | { readonly type: 'READY_STATE_UPDATE'; readonly ready: boolean }
     | { readonly type: 'CHAT'; readonly body: string; readonly scope: ChatScope }
     | { readonly type: 'PING'; readonly sentAt: number };
 
@@ -136,7 +139,14 @@ export type ServerMessage =
 // ─── Type guards ──────────────────────────────────────────────────────────────
 
 /** All valid `ClientMessage.type` values. */
-const CLIENT_MESSAGE_TYPES = new Set<string>(['JOIN', 'ACTION', 'PROFILE_UPDATE', 'CHAT', 'PING']);
+const CLIENT_MESSAGE_TYPES = new Set<string>([
+    'JOIN',
+    'ACTION',
+    'PROFILE_UPDATE',
+    'READY_STATE_UPDATE',
+    'CHAT',
+    'PING',
+]);
 
 /** All valid `ServerMessage.type` values. */
 const SERVER_MESSAGE_TYPES = new Set<string>([

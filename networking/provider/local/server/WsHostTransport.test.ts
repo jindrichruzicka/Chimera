@@ -90,6 +90,7 @@ describe('WsHostTransport — implements HostTransport', () => {
         expect(typeof transport.broadcastLobbyState).toBe('function');
         expect(typeof transport.sendSideChannel).toBe('function');
         expect(typeof transport.onActionReceived).toBe('function');
+        expect(typeof transport.onReadyStateUpdate).toBe('function');
         expect(typeof transport.onSideChannelReceived).toBe('function');
         expect(typeof transport.onPlayerJoined).toBe('function');
         expect(typeof transport.onPlayerLeft).toBe('function');

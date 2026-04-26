@@ -58,6 +58,12 @@ describe('shared/messages — ClientMessage', () => {
         expect(msg.type).toBe('CHAT');
         expect(msg.body).toBe('hello');
     });
+
+    it('READY_STATE_UPDATE message has a boolean ready flag', () => {
+        const msg: ClientMessage = { type: 'READY_STATE_UPDATE', ready: true };
+        expect(msg.type).toBe('READY_STATE_UPDATE');
+        expect(msg.ready).toBe(true);
+    });
 });
 
 // ─── ServerMessage ────────────────────────────────────────────────────────────
@@ -131,6 +137,10 @@ describe('shared/messages — isClientMessage type guard', () => {
 
     it('returns false for an unknown type string', () => {
         expect(isClientMessage({ type: 'UNKNOWN_MSG' })).toBe(false);
+    });
+
+    it('returns true for READY_STATE_UPDATE', () => {
+        expect(isClientMessage({ type: 'READY_STATE_UPDATE', ready: false })).toBe(true);
     });
 });
 

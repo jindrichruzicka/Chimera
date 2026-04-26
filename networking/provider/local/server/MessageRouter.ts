@@ -27,6 +27,7 @@ import type { LobbyServer } from './LobbyServer.js';
 // ─── Callback types ───────────────────────────────────────────────────────────
 
 type ActionCb = (from: PlayerId, action: EngineAction) => void;
+type ReadyStateCb = (from: PlayerId, ready: boolean) => void;
 type SideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 
 // ─── MessageRouter ────────────────────────────────────────────────────────────
@@ -42,6 +43,7 @@ type SideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
  */
 export class MessageRouter {
     private readonly actionCbs = new Set<ActionCb>();
+    private readonly readyStateCbs = new Set<ReadyStateCb>();
     private readonly sideChannelCbs = new Set<SideChannelCb>();
     private readonly unsub: Unsubscribe;
 
@@ -59,6 +61,14 @@ export class MessageRouter {
         };
     }
 
+    /** Subscribe to READY_STATE_UPDATE messages delivered by connected clients. */
+    onReadyStateUpdate(cb: ReadyStateCb): Unsubscribe {
+        this.readyStateCbs.add(cb);
+        return (): void => {
+            this.readyStateCbs.delete(cb);
+        };
+    }
+
     /** Subscribe to side-channel messages (CHAT, PROFILE_UPDATE). */
     onSideChannelReceived(cb: SideChannelCb): Unsubscribe {
         this.sideChannelCbs.add(cb);
@@ -71,6 +81,7 @@ export class MessageRouter {
     dispose(): void {
         this.unsub();
         this.actionCbs.clear();
+        this.readyStateCbs.clear();
         this.sideChannelCbs.clear();
     }
 
@@ -81,6 +92,12 @@ export class MessageRouter {
             case 'ACTION':
                 for (const cb of this.actionCbs) {
                     cb(from, msg.action);
+                }
+                break;
+
+            case 'READY_STATE_UPDATE':
+                for (const cb of this.readyStateCbs) {
+                    cb(from, msg.ready);
                 }
                 break;
 

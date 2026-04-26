@@ -77,6 +77,7 @@ describe('WsClientTransport — implements ClientTransport', () => {
     it('exposes all ClientTransport methods', async () => {
         const { transport } = await makeClientTransport();
         expect(typeof transport.sendAction).toBe('function');
+        expect(typeof transport.sendReadyStateUpdate).toBe('function');
         expect(typeof transport.sendSideChannel).toBe('function');
         expect(typeof transport.onSnapshotReceived).toBe('function');
         expect(typeof transport.onSideChannelReceived).toBe('function');
@@ -101,6 +102,26 @@ describe('WsClientTransport — sendAction', () => {
 
         expect(received).toHaveLength(1);
         expect(received[0]?.from).toBe(playerId);
+    });
+});
+
+describe('WsClientTransport — sendReadyStateUpdate', () => {
+    it('delivers a READY_STATE_UPDATE message to the server', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const received: { from: PlayerId; ready: boolean }[] = [];
+        server.onMessage((from, msg) => {
+            if (msg.type === 'READY_STATE_UPDATE') {
+                received.push({ from, ready: msg.ready });
+            }
+        });
+
+        transport.sendReadyStateUpdate(true);
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(received).toHaveLength(1);
+        expect(received[0]?.from).toBe(playerId);
+        expect(received[0]?.ready).toBe(true);
     });
 });
 

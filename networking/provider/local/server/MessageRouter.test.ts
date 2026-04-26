@@ -204,6 +204,29 @@ describe('MessageRouter — side-channel routing', () => {
     });
 });
 
+describe('MessageRouter — ready-state routing', () => {
+    it('routes READY_STATE_UPDATE messages to onReadyStateUpdate callbacks', async () => {
+        const server = makeServer();
+        await server.ready();
+        const router = new MessageRouter(server);
+
+        const received: { from: PlayerId; ready: boolean }[] = [];
+        router.onReadyStateUpdate((from, ready) => received.push({ from, ready }));
+
+        const { ws, playerId } = await connectAndJoin(server);
+        ws.send(
+            JSON.stringify({ type: 'READY_STATE_UPDATE', ready: true } satisfies ClientMessage),
+        );
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        expect(received).toHaveLength(1);
+        expect(received[0]?.from).toBe(playerId);
+        expect(received[0]?.ready).toBe(true);
+        ws.close();
+    });
+});
+
 // ─── PING → PONG ─────────────────────────────────────────────────────────────
 
 describe('MessageRouter — PING/PONG', () => {
