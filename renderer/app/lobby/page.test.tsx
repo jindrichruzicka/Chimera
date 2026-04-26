@@ -6,9 +6,44 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LobbyPage from './page';
 
+interface MockLobbyStoreState {
+    readonly lobbyState: {
+        readonly info: {
+            readonly sessionId: string;
+            readonly hostId: string;
+            readonly gameId: string;
+        };
+        readonly players: readonly {
+            readonly playerId: string;
+            readonly displayName: string;
+            readonly ready: boolean;
+        }[];
+    } | null;
+    readonly localPlayerId: string | null;
+    readonly localSeatIds: readonly string[];
+}
+
+let mockLocalSeatIds: readonly string[] = [];
+let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
+
+const mockUseLobbyStoreGetState = {
+    _setLocalPlayerId: vi.fn(),
+    _setLocalSeatIds: vi.fn(),
+    updateLobbyPlayerReadyState: vi.fn(async () => undefined),
+};
+
 vi.mock('../../state/lobbyStore', () => ({
-    useLobbyStore: (selector: (state: { lobbyState: null }) => unknown) =>
-        selector({ lobbyState: null }),
+    useLobbyStore: Object.assign(
+        (selector: (state: MockLobbyStoreState) => unknown) =>
+            selector({
+                lobbyState: mockLobbyState,
+                localPlayerId: null,
+                localSeatIds: mockLocalSeatIds,
+            }),
+        {
+            getState: () => mockUseLobbyStoreGetState,
+        },
+    ),
 }));
 
 vi.mock('../../state/lobbyStoreBootstrap', () => ({
@@ -42,6 +77,11 @@ describe('LobbyPage pending actions', () => {
 
     beforeEach(() => {
         hostDeferred = createDeferredPromise();
+        mockLocalSeatIds = [];
+        mockLobbyState = null;
+        mockUseLobbyStoreGetState._setLocalPlayerId.mockReset();
+        mockUseLobbyStoreGetState._setLocalSeatIds.mockReset();
+        mockUseLobbyStoreGetState.updateLobbyPlayerReadyState.mockReset();
 
         Object.defineProperty(window, '__chimera', {
             value: {
@@ -98,5 +138,67 @@ describe('LobbyPage pending actions', () => {
         await Promise.resolve();
 
         expect(consoleErrorSpy.mock.calls.length).toBe(0);
+    });
+
+    it('does not render SeatSwitcher outside an active session', () => {
+        mockLocalSeatIds = ['p1', 'p2'];
+        mockLobbyState = null;
+
+        render(<LobbyPage />);
+
+        expect(screen.queryByTestId('seat-switcher')).toBeNull();
+    });
+
+    it('renders SeatSwitcher when session exists and there is more than one local seat', () => {
+        mockLocalSeatIds = ['p1', 'p2'];
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'p1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
+        };
+
+        render(<LobbyPage />);
+
+        expect(screen.getByTestId('seat-switcher')).toBeTruthy();
+        expect(screen.getByTestId('seat-btn-p1')).toBeTruthy();
+        expect(screen.getByTestId('seat-btn-p2')).toBeTruthy();
+    });
+
+    it('does not render SeatSwitcher when there is only one local seat', () => {
+        mockLocalSeatIds = ['p1'];
+
+        render(<LobbyPage />);
+
+        expect(screen.queryByTestId('seat-switcher')).toBeNull();
+    });
+
+    it('sets stubbed local seat ids after successful host', async () => {
+        Object.defineProperty(window, '__chimera', {
+            value: {
+                lobby: {
+                    host: vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' })),
+                    join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
+                    leave: vi.fn(async () => undefined),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(() => () => undefined),
+                },
+            },
+            configurable: true,
+        });
+
+        render(<LobbyPage />);
+
+        fireEvent.click(screen.getByTestId('lobby-host-btn'));
+
+        await waitFor(() => {
+            expect(mockUseLobbyStoreGetState._setLocalSeatIds).toHaveBeenCalledWith([
+                'p1',
+                'p1-local-seat-2',
+            ]);
+        });
     });
 });

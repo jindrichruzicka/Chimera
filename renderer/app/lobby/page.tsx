@@ -11,8 +11,10 @@ import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
 import { PlayerList } from '../../components/shell/PlayerList';
+import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
 
 type PendingAction = 'hosting' | 'joining' | 'leaving' | null;
+const STUB_SECONDARY_SEAT_SUFFIX = '-local-seat-2';
 
 export default function LobbyPage() {
     const [lobbyCode, setLobbyCode] = useState('');
@@ -28,6 +30,7 @@ export default function LobbyPage() {
     // Get lobby state and local player ID from the store
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const localPlayerId = useLobbyStore((state) => state.localPlayerId);
+    const localSeatIds = useLobbyStore((state) => state.localSeatIds);
 
     // Bootstrap the lobby store with the chimera API
     useEffect(() => {
@@ -62,6 +65,12 @@ export default function LobbyPage() {
             if (isMountedRef.current) {
                 // When hosting, the local player is the host
                 useLobbyStore.getState()._setLocalPlayerId(lobbyInfo.hostId);
+                useLobbyStore
+                    .getState()
+                    ._setLocalSeatIds([
+                        lobbyInfo.hostId,
+                        `${lobbyInfo.hostId}${STUB_SECONDARY_SEAT_SUFFIX}`,
+                    ]);
             }
         } catch (err) {
             if (isMountedRef.current) {
@@ -113,6 +122,7 @@ export default function LobbyPage() {
             await lobbyApi.leave();
             if (isMountedRef.current) {
                 useLobbyStore.getState()._setLocalPlayerId(null);
+                useLobbyStore.getState()._setLocalSeatIds([]);
             }
         } catch (err) {
             if (isMountedRef.current) {
@@ -186,6 +196,8 @@ export default function LobbyPage() {
                     Error: {error}
                 </div>
             )}
+
+            {lobbyState !== null && localSeatIds.length > 1 && <SeatSwitcher />}
 
             {!lobbyState ? (
                 <div>

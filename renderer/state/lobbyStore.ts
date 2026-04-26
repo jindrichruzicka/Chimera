@@ -25,6 +25,9 @@ export interface LobbyStoreState {
     /** The ID of the local player in the current lobby, or null if not in a lobby. */
     readonly localPlayerId: PlayerId | null;
 
+    /** Local pass-and-play seat IDs available on this device. */
+    readonly localSeatIds: readonly PlayerId[];
+
     /**
      * Apply incoming lobby state from IPC (chimera:lobby-update push).
      * Do NOT call from components directly.
@@ -36,6 +39,12 @@ export interface LobbyStoreState {
      * Internal method; do NOT call from components.
      */
     _setLocalPlayerId(playerId: PlayerId | null): void;
+
+    /**
+     * Set local pass-and-play seat IDs for renderer-only seat switching UI.
+     * Internal method; do NOT call from components.
+     */
+    _setLocalSeatIds(playerIds: readonly PlayerId[]): void;
 
     /**
      * Update the ready state of the current player in the lobby.
@@ -60,6 +69,7 @@ export function createLobbyStore(bridge?: {
     return createStore<LobbyStoreState>()((set) => ({
         lobbyState: null,
         localPlayerId: null,
+        localSeatIds: [],
 
         _applyLobbyState(state: LobbyState | null): void {
             set((currentState) => ({
@@ -72,6 +82,12 @@ export function createLobbyStore(bridge?: {
         _setLocalPlayerId(playerId: PlayerId | null): void {
             set(() => ({
                 localPlayerId: playerId,
+            }));
+        },
+
+        _setLocalSeatIds(playerIds: readonly PlayerId[]): void {
+            set(() => ({
+                localSeatIds: [...playerIds],
             }));
         },
 
