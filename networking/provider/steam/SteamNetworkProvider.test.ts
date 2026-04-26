@@ -18,8 +18,8 @@
 import { describe, it, expect } from 'vitest';
 
 import { SteamNetworkProvider } from './SteamNetworkProvider.js';
-import { isBrowsable } from './MultiplayerProvider.js';
-import type { MultiplayerProvider, BrowsableProvider } from './MultiplayerProvider.js';
+import { isBrowsable } from '../MultiplayerProvider.js';
+import type { MultiplayerProvider, BrowsableProvider } from '../MultiplayerProvider.js';
 
 // ─── Structural compliance ────────────────────────────────────────────────────
 

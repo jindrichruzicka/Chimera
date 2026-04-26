@@ -26,7 +26,7 @@ import type {
     LobbyListEntry,
     HostLobbyParams,
     JoinLobbyParams,
-} from './MultiplayerProvider.js';
+} from '../MultiplayerProvider.js';
 
 export class SteamNetworkProvider implements MultiplayerProvider, BrowsableProvider {
     hostLobby(_params: HostLobbyParams): Promise<HostedSession> {

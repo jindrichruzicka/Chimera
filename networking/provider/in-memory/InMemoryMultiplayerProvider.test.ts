@@ -20,7 +20,7 @@
 import { describe, it, expect, vi } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from './InMemoryMultiplayerProvider.js';
-import { playerId as toPlayerId } from './MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../MultiplayerProvider.js';
 
 import type {
     MultiplayerProvider,
@@ -28,7 +28,7 @@ import type {
     LobbyPlayerEntry,
     SideChannelMessage,
     DisconnectReason,
-} from './MultiplayerProvider.js';
+} from '../MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────

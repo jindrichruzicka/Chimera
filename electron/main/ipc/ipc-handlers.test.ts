@@ -44,7 +44,7 @@ import {
 import { IpcRequestValidationError } from './ipc-schemas.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from '../lobby/LobbyManager.js';
-import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
+import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/in-memory/InMemoryMultiplayerProvider.js';
 import type { LobbyInfo } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {

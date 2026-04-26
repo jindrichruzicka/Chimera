@@ -33,9 +33,9 @@ import type {
     DisconnectReason,
     Unsubscribe,
     LobbyInfo,
-} from './MultiplayerProvider.js';
+} from '../MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from './MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../MultiplayerProvider.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────
 
