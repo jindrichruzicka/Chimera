@@ -331,7 +331,15 @@ export function createPinoSink(logsDir: string, now?: () => Date): FlushableSink
                 // SonicBoom buffers and drains independently of the write() caller,
                 // keeping the main-process event loop unblocked (§4.27).
                 const fd = fs.openSync(filepath, 'a');
-                dest = pino.destination({ dest: fd });
+                // minLength: 4096 keeps writes in SonicBoom's JS buffer until
+                // flushSync() drains them synchronously. Without this, each
+                // write() immediately starts an async fs.write (setting
+                // _writing=true), which races against the fsyncSync call inside
+                // flushSync() — the libuv write may not have reached the kernel
+                // yet, so fsync flushes nothing. With a non-zero minLength,
+                // _writing stays false for typical small entries and flushSync()
+                // always drains the buffer atomically. (§4.27)
+                dest = pino.destination({ dest: fd, minLength: 4096 });
             }
             dest.write(JSON.stringify(entry) + '\n');
         },
