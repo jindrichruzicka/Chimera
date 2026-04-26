@@ -96,7 +96,7 @@ describe('useLobbyApi', () => {
         expect(leave).toHaveBeenCalledWith();
     });
 
-    it('sets local lobby UI context after host and clears it after leave', async () => {
+    it('sets authoritative single-seat local context after host and clears it after leave', async () => {
         const host = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
         const leave = vi.fn(async () => undefined);
 
@@ -122,12 +122,43 @@ describe('useLobbyApi', () => {
         await result.current.host({ gameId: 'tactics', maxPlayers: 4 });
 
         expect(useLobbyUiStore.getState().localPlayerId).toBe('p1');
-        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['p1', 'p1-local-seat-2']);
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['p1']);
 
         await result.current.leave();
 
         expect(useLobbyUiStore.getState().localPlayerId).toBeNull();
         expect(useLobbyUiStore.getState().localSeatIds).toEqual([]);
+    });
+
+    it('keeps host and join local seat modeling consistent (authoritative single seat)', async () => {
+        const host = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
+        const join = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
+        const getLocalPlayerId = vi.fn(async () => 'player-2');
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host,
+                    join,
+                    getLocalPlayerId,
+                    leave: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    onUpdate: vi.fn(),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(),
+                },
+            },
+        });
+
+        const { result } = renderHook(() => useLobbyApi());
+
+        await result.current.host({ gameId: 'tactics', maxPlayers: 4 });
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['p1']);
+
+        await result.current.join({ address: 'abc' });
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-2']);
     });
 
     it('sets a single-seat local context after successful join using authoritative local player identity', async () => {

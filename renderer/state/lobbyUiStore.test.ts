@@ -18,9 +18,9 @@ describe('lobbyUiStore', () => {
     it('sets and clears local lobby context', () => {
         const store = createLobbyUiStore();
 
-        store.getState().setLocalLobbyContext('p1', ['p1', 'p1-local-seat-2']);
+        store.getState().setLocalLobbyContext('p1', ['p1', 'p2']);
         expect(store.getState().localPlayerId).toBe('p1');
-        expect(store.getState().localSeatIds).toEqual(['p1', 'p1-local-seat-2']);
+        expect(store.getState().localSeatIds).toEqual(['p1', 'p2']);
 
         store.getState().clearLocalLobbyContext();
         expect(store.getState().localPlayerId).toBeNull();

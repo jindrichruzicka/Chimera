@@ -46,7 +46,7 @@ vi.mock('../../state/lobbyUiStore', () => ({
     ) =>
         selector({
             localPlayerId: 'p1',
-            localSeatIds: ['p1', 'p1-local-seat-2'],
+            localSeatIds: ['p1', 'p2'],
         }),
 }));
 

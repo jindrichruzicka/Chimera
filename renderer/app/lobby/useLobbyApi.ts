@@ -29,7 +29,6 @@ export interface LobbyApi {
 
 const MISSING_BRIDGE_ERROR = 'Chimera API not available';
 const MISSING_LOCAL_PLAYER_ID_ERROR = 'Chimera local player identity not available';
-const STUB_SECONDARY_SEAT_SUFFIX = '-local-seat-2';
 
 export function getLobbyBridge(source: unknown = globalThis): LobbyBridge | null {
     const bridge = source as ChimeraBridge;
@@ -54,12 +53,7 @@ export function useLobbyApi(): LobbyApi {
                 }
                 const info = await bridge.lobby.host(params);
                 const hostId = info.hostId;
-                useLobbyUiStore
-                    .getState()
-                    .setLocalLobbyContext(hostId, [
-                        hostId,
-                        `${hostId}${STUB_SECONDARY_SEAT_SUFFIX}`,
-                    ]);
+                useLobbyUiStore.getState().setLocalLobbyContext(hostId, [hostId]);
                 return info;
             },
             async join(params: JoinLobbyParams): Promise<LobbyInfo> {
