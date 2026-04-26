@@ -143,6 +143,7 @@ describe('InMemoryMultiplayerProvider', () => {
             });
 
             await provider.joinLobby({ address: hosted.lobbyCode });
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
             expect(joinedPlayers).toHaveLength(1);
             expect(typeof joinedPlayers[0]?.playerId).toBe('string');
         });
@@ -155,18 +156,13 @@ describe('InMemoryMultiplayerProvider', () => {
             const provider = new InMemoryMultiplayerProvider();
             const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
 
-            let joinedPlayerId!: PlayerId;
-            hosted.transport.onPlayerJoined((player) => {
-                joinedPlayerId = player.playerId;
-            });
-
             const joined = await provider.joinLobby({ address: hosted.lobbyCode });
 
             const received: PlayerSnapshot[] = [];
             joined.transport.onSnapshotReceived((snap) => received.push(snap));
 
-            const snapshot = makeSnapshot(joinedPlayerId);
-            hosted.transport.sendSnapshot(joinedPlayerId, snapshot);
+            const snapshot = makeSnapshot(joined.localPlayerId);
+            hosted.transport.sendSnapshot(joined.localPlayerId, snapshot);
 
             expect(received).toHaveLength(1);
             expect(received[0]?.tick).toBe(1);
@@ -195,18 +191,13 @@ describe('InMemoryMultiplayerProvider', () => {
             const provider = new InMemoryMultiplayerProvider();
             const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
 
-            let joinedPlayerId!: PlayerId;
-            hosted.transport.onPlayerJoined((player) => {
-                joinedPlayerId = player.playerId;
-            });
-
             const joined = await provider.joinLobby({ address: hosted.lobbyCode });
 
             const received: PlayerSnapshot[] = [];
             const unsub = joined.transport.onSnapshotReceived((snap) => received.push(snap));
             unsub();
 
-            hosted.transport.sendSnapshot(joinedPlayerId, makeSnapshot(joinedPlayerId));
+            hosted.transport.sendSnapshot(joined.localPlayerId, makeSnapshot(joined.localPlayerId));
             expect(received).toHaveLength(0);
         });
     });
@@ -225,16 +216,11 @@ describe('InMemoryMultiplayerProvider', () => {
                 receivedAction = action;
             });
 
-            let clientPlayerId!: PlayerId;
-            hosted.transport.onPlayerJoined((p) => {
-                clientPlayerId = p.playerId;
-            });
-
             const joined = await provider.joinLobby({ address: hosted.lobbyCode });
-            const action = makeAction(clientPlayerId);
+            const action = makeAction(joined.localPlayerId);
             joined.transport.sendAction(action);
 
-            expect(receivedFrom).toBe(clientPlayerId);
+            expect(receivedFrom).toBe(joined.localPlayerId);
             expect(receivedAction.type).toBe('test:noop');
         });
 
@@ -284,16 +270,11 @@ describe('InMemoryMultiplayerProvider', () => {
                 receivedMsg = msg;
             });
 
-            let clientPlayerId!: PlayerId;
-            hosted.transport.onPlayerJoined((p) => {
-                clientPlayerId = p.playerId;
-            });
-
             const joined = await provider.joinLobby({ address: hosted.lobbyCode });
             const msg = makeChatSideChannel('ping');
             joined.transport.sendSideChannel(msg);
 
-            expect(fromHost).toBe(clientPlayerId);
+            expect(fromHost).toBe(joined.localPlayerId);
             expect(receivedMsg.kind).toBe('chat');
         });
     });
@@ -301,6 +282,36 @@ describe('InMemoryMultiplayerProvider', () => {
     // ─── Lobby state broadcast ────────────────────────────────────────────────
 
     describe('lobby state broadcast', () => {
+        it('joinLobby seeds initialLobbyState immediately with the joined player included', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+
+            expect(joined.initialLobbyState.info.sessionId).toBe(hosted.lobbyCode);
+            expect(joined.initialLobbyState.players).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ playerId: joined.localPlayerId }),
+                ]),
+            );
+        });
+
+        it('host onPlayerJoined callback runs after await joinLobby continuation', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            let callbackFired = false;
+            hosted.transport.onPlayerJoined(() => {
+                callbackFired = true;
+            });
+
+            await provider.joinLobby({ address: hosted.lobbyCode });
+
+            expect(callbackFired).toBe(false);
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+            expect(callbackFired).toBe(true);
+        });
+
         it('host broadcastLobbyState is received by the client', async () => {
             const provider = new InMemoryMultiplayerProvider();
             const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
@@ -355,15 +366,10 @@ describe('InMemoryMultiplayerProvider', () => {
                 leftReason = reason;
             });
 
-            let clientPlayerId!: PlayerId;
-            hosted.transport.onPlayerJoined((p) => {
-                clientPlayerId = p.playerId;
-            });
-
             const joined = await provider.joinLobby({ address: hosted.lobbyCode });
             await joined.disconnect();
 
-            expect(leftPlayerId).toBe(clientPlayerId);
+            expect(leftPlayerId).toBe(joined.localPlayerId);
             expect(leftReason).toBe('normal');
         });
     });

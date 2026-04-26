@@ -50,6 +50,7 @@ interface HostTransport {
 
 interface JoinedSession {
     readonly lobbyInfo: LobbyInfo;
+    readonly initialLobbyState: LobbyState;
     readonly transport: ClientTransport;
     disconnect(): Promise<void>;
 }

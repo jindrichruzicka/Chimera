@@ -156,6 +156,7 @@ export function testMultiplayerProviderContract(
                 hosted.transport.onPlayerJoined((p) => joined.push(p));
 
                 await provider.joinLobby({ address: hosted.lobbyCode });
+                await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
                 expect(joined).toHaveLength(1);
                 expect(typeof joined[0]?.playerId).toBe('string');
@@ -195,6 +196,12 @@ export function testMultiplayerProviderContract(
                 });
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
                 const t = joined.transport;
+                expect(joined.initialLobbyState.info.sessionId).toBe(hosted.lobbyCode);
+                expect(joined.initialLobbyState.players).toEqual(
+                    expect.arrayContaining([
+                        expect.objectContaining({ playerId: joined.localPlayerId }),
+                    ]),
+                );
                 expect(typeof t.sendAction).toBe('function');
                 expect(typeof t.sendSideChannel).toBe('function');
                 expect(typeof t.onSnapshotReceived).toBe('function');
@@ -215,17 +222,15 @@ export function testMultiplayerProviderContract(
                     maxPlayers: 4,
                 });
 
-                let clientId!: PlayerId;
-                hosted.transport.onPlayerJoined((p) => {
-                    clientId = p.playerId;
-                });
-
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
 
                 const received: PlayerSnapshot[] = [];
                 joined.transport.onSnapshotReceived((s) => received.push(s));
 
-                hosted.transport.sendSnapshot(clientId, makeSnapshot(clientId));
+                hosted.transport.sendSnapshot(
+                    joined.localPlayerId,
+                    makeSnapshot(joined.localPlayerId),
+                );
 
                 expect(received).toHaveLength(1);
                 expect(received[0]?.tick).toBe(42);
@@ -239,18 +244,16 @@ export function testMultiplayerProviderContract(
                     maxPlayers: 4,
                 });
 
-                let clientId!: PlayerId;
-                hosted.transport.onPlayerJoined((p) => {
-                    clientId = p.playerId;
-                });
-
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
 
                 const received: PlayerSnapshot[] = [];
                 const unsub = joined.transport.onSnapshotReceived((s) => received.push(s));
                 unsub();
 
-                hosted.transport.sendSnapshot(clientId, makeSnapshot(clientId));
+                hosted.transport.sendSnapshot(
+                    joined.localPlayerId,
+                    makeSnapshot(joined.localPlayerId),
+                );
                 expect(received).toHaveLength(0);
                 provider.dispose();
             });
@@ -273,15 +276,10 @@ export function testMultiplayerProviderContract(
                     receivedAction = action;
                 });
 
-                let clientId!: PlayerId;
-                hosted.transport.onPlayerJoined((p) => {
-                    clientId = p.playerId;
-                });
-
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
-                joined.transport.sendAction(makeAction(clientId));
+                joined.transport.sendAction(makeAction(joined.localPlayerId));
 
-                expect(fromId).toBe(clientId);
+                expect(fromId).toBe(joined.localPlayerId);
                 expect(receivedAction.type).toBe('contract:noop');
                 provider.dispose();
             });
@@ -340,15 +338,10 @@ export function testMultiplayerProviderContract(
                     receivedMsg = msg;
                 });
 
-                let clientId!: PlayerId;
-                hosted.transport.onPlayerJoined((p) => {
-                    clientId = p.playerId;
-                });
-
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
                 joined.transport.sendSideChannel(makeChatMsg('ping'));
 
-                expect(fromHost).toBe(clientId);
+                expect(fromHost).toBe(joined.localPlayerId);
                 expect(receivedMsg.kind).toBe('chat');
                 provider.dispose();
             });
@@ -360,16 +353,6 @@ export function testMultiplayerProviderContract(
                     maxPlayers: 4,
                 });
 
-                let clientAId!: PlayerId;
-                let _clientBId!: PlayerId;
-                hosted.transport.onPlayerJoined((p) => {
-                    if (!clientAId) {
-                        clientAId = p.playerId;
-                    } else {
-                        _clientBId = p.playerId;
-                    }
-                });
-
                 const joinedA = await provider.joinLobby({ address: hosted.lobbyCode });
                 const joinedB = await provider.joinLobby({ address: hosted.lobbyCode });
 
@@ -379,7 +362,7 @@ export function testMultiplayerProviderContract(
                 joinedB.transport.onSideChannelReceived((m) => receivedB.push(m));
 
                 // Unicast to clientA only
-                hosted.transport.sendSideChannel(clientAId, makeChatMsg('private'));
+                hosted.transport.sendSideChannel(joinedA.localPlayerId, makeChatMsg('private'));
 
                 expect(receivedA).toHaveLength(1);
                 expect(receivedA[0]?.kind).toBe('chat');
@@ -398,11 +381,6 @@ export function testMultiplayerProviderContract(
                     maxPlayers: 4,
                 });
 
-                let clientId!: PlayerId;
-                hosted.transport.onPlayerJoined((p) => {
-                    clientId = p.playerId;
-                });
-
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
 
                 const states: unknown[] = [];
@@ -414,7 +392,13 @@ export function testMultiplayerProviderContract(
                         hostId: toPlayerId('host'),
                         gameId: 'contract-test',
                     },
-                    players: [{ playerId: clientId, displayName: 'Alice', ready: false }],
+                    players: [
+                        {
+                            playerId: joined.localPlayerId,
+                            displayName: 'Alice',
+                            ready: false,
+                        },
+                    ],
                 });
 
                 expect(states).toHaveLength(1);
@@ -457,15 +441,10 @@ export function testMultiplayerProviderContract(
                     leftReason = r;
                 });
 
-                let clientId!: PlayerId;
-                hosted.transport.onPlayerJoined((p) => {
-                    clientId = p.playerId;
-                });
-
                 const joined = await provider.joinLobby({ address: hosted.lobbyCode });
                 await joined.disconnect();
 
-                expect(leftId).toBe(clientId);
+                expect(leftId).toBe(joined.localPlayerId);
                 expect(leftReason).toBe('normal');
                 provider.dispose();
             });

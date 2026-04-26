@@ -211,6 +211,7 @@ export class LobbyManager {
         const session = await this.provider.joinLobby(params);
         this.session = session;
         this.localPlayerId = session.localPlayerId;
+        this.publishLobbyState(session.initialLobbyState);
 
         // Wire transport callbacks to renderer broadcast stubs (F12 / F15 will
         // replace these with real IPC pushes to the renderer).  Capture the

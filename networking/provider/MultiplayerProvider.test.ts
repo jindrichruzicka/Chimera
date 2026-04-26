@@ -236,6 +236,16 @@ describe('JoinedSession', () => {
         const session: JoinedSession = {
             lobbyInfo: { sessionId: 's1', hostId: playerId('p1'), gameId: 'tactics' },
             localPlayerId: playerId('p2'),
+            initialLobbyState: {
+                info: { sessionId: 's1', hostId: playerId('p1'), gameId: 'tactics' },
+                players: [
+                    {
+                        playerId: playerId('p2'),
+                        displayName: 'Player 2',
+                        ready: false,
+                    },
+                ],
+            },
             transport,
             disconnect: async () => {},
         };

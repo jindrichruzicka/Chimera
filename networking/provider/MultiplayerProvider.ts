@@ -209,6 +209,12 @@ export interface JoinedSession {
     readonly lobbyInfo: LobbyInfo;
     /** Provider-assigned identity of the local joined player. */
     readonly localPlayerId: PlayerId;
+    /**
+     * Deterministic lobby snapshot captured at join success.
+     * LobbyManager seeds renderer-facing state from this value immediately,
+     * before any asynchronous onLobbyStateChanged pushes arrive.
+     */
+    readonly initialLobbyState: LobbyState;
     readonly transport: ClientTransport;
     /** Gracefully disconnects from the host and frees resources. */
     disconnect(): Promise<void>;

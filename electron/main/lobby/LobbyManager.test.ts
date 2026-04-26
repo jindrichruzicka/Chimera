@@ -26,7 +26,6 @@ import {
     type JoinLobbyParams,
     type MultiplayerProvider,
     type PlayerSnapshot,
-    type PlayerId,
     type LobbyState,
     type Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
@@ -469,12 +468,8 @@ describe('LobbyManager provider-swap smoke test', () => {
         const provider = makeProvider();
 
         let capturedTransport: HostTransport | null = null;
-        let capturedClientId: PlayerId | null = null;
         const hostManager = new LobbyManager(provider, createNoopLogger(), (transport) => {
             capturedTransport = transport;
-            transport.onPlayerJoined((player) => {
-                capturedClientId = player.playerId;
-            });
         });
 
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
@@ -487,15 +482,11 @@ describe('LobbyManager provider-swap smoke test', () => {
             receivedSnapshot = snapshot;
         });
 
-        // Allow microtask queue (onPlayerJoined fires via queueMicrotask)
-        await Promise.resolve();
-
         // Host sends a snapshot to the joined client
-        expect(capturedClientId).not.toBeNull();
         expect(capturedTransport).not.toBeNull();
         const testSnapshot = makeTestSnapshot();
         // capturedTransport is set synchronously by the onSessionHosted callback
-        capturedTransport!.sendSnapshot(capturedClientId!, testSnapshot);
+        capturedTransport!.sendSnapshot(clientSession.localPlayerId, testSnapshot);
 
         expect(receivedSnapshot).toEqual(testSnapshot);
 
@@ -514,6 +505,37 @@ describe('LobbyManager provider-swap smoke test', () => {
 
         await expect(joinManager.closeLobby()).resolves.toBeUndefined();
         await expect(hostManager.closeLobby()).resolves.toBeUndefined();
+    });
+
+    it('joinLobby seeds joined manager lobby state immediately from join result', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinedStateRef: { value: LobbyState | null } = { value: null };
+        const joinManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            (state) => {
+                joinedStateRef.value = state;
+            },
+        );
+
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        if (joinedStateRef.value === null) {
+            throw new Error('Expected seeded lobby state after joinLobby');
+        }
+        expect(joinedStateRef.value.players).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ playerId: joinManager.getLocalPlayerId() }),
+            ]),
+        );
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
     });
 
     it('joined client can update its ready state and host broadcasts it to all clients', async () => {
@@ -548,8 +570,8 @@ describe('LobbyManager provider-swap smoke test', () => {
         const joinedPlayerId = joinManager.getLocalPlayerId();
         expect(joinedPlayerId).toBeTruthy();
 
-        // Wait for host onPlayerJoined callback and the initial lobby-state broadcast.
-        await Promise.resolve();
+        // Wait for host onPlayerJoined callback and the lobby-state broadcast.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
         await expect(joinManager.updatePlayerReadyState(true)).resolves.toBeUndefined();
         await new Promise<void>((resolve) => setTimeout(resolve, 30));

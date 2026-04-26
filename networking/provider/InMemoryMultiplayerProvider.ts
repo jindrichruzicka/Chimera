@@ -79,6 +79,7 @@ class InMemoryChannel {
 
     // Per-client records
     readonly clients = new Map<PlayerId, ClientRecord>();
+    latestLobbyState: LobbyState | null = null;
 
     closed = false;
 
@@ -155,6 +156,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             },
 
             broadcastLobbyState: (state: LobbyState): void => {
+                channel.latestLobbyState = state;
                 for (const client of channel.clients.values()) {
                     for (const cb of client.lobbyStateCbs) cb(state);
                 }
@@ -220,14 +222,40 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             ready: false,
         };
 
-        // Notify the host that this client has joined — deferred via queueMicrotask so
-        // the returned JoinedSession promise resolves before the callback fires.
-        // This prevents a synchronous call inside joinLobby() from dropping messages
-        // sent by the host in its onPlayerJoined handler (Invariant: callers must be
-        // able to register handlers on JoinedSession before any host reaction fires).
-        queueMicrotask(() => {
+        // Notify the host that this client has joined on the next macrotask so
+        // the await continuation that receives JoinedSession can run first.
+        // This avoids dropping host reactions that depend on client-side
+        // subscriptions being installed right after await joinLobby().
+        setTimeout(() => {
             for (const cb of channel.playerJoinedCbs) cb(playerEntry);
-        });
+        }, 0);
+
+        const latestState = channel.latestLobbyState;
+        const playersWithJoined =
+            latestState === null
+                ? [
+                      {
+                          playerId: channel.lobbyInfo.hostId,
+                          displayName: channel.lobbyInfo.hostId,
+                          ready: false,
+                      },
+                      playerEntry,
+                  ]
+                : latestState.players.some((entry) => entry.playerId === clientPlayerId)
+                  ? latestState.players
+                  : [...latestState.players, playerEntry];
+
+        const initialLobbyState: LobbyState = {
+            info:
+                latestState === null
+                    ? {
+                          sessionId: channel.lobbyInfo.sessionId,
+                          hostId: channel.lobbyInfo.hostId,
+                          gameId: channel.lobbyInfo.gameId,
+                      }
+                    : latestState.info,
+            players: playersWithJoined,
+        };
 
         const transport: ClientTransport = {
             sendAction: (action: EngineAction): void => {
@@ -256,6 +284,7 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         const session: JoinedSession = {
             lobbyInfo: channel.lobbyInfo,
             localPlayerId: clientPlayerId,
+            initialLobbyState,
             transport,
             disconnect: (): Promise<void> => {
                 for (const cb of channel.playerLeftCbs) cb(clientPlayerId, 'normal');
