@@ -12,8 +12,8 @@ interface MockLobbyStoreState {
 
 let mockLocalSeatIds: readonly string[] = [];
 
-vi.mock('../../state/lobbyStore', () => ({
-    useLobbyStore: (selector: (state: MockLobbyStoreState) => unknown) =>
+vi.mock('../../state/lobbyUiStore', () => ({
+    useLobbyUiStore: (selector: (state: MockLobbyStoreState) => unknown) =>
         selector({ localSeatIds: mockLocalSeatIds }),
 }));
 

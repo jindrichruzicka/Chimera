@@ -19,6 +19,7 @@ import type {
 } from '../../electron/preload/api-types';
 import { bootstrapLobbyStore } from './lobbyStoreBootstrap';
 import { useLobbyStore } from './lobbyStore';
+import { useLobbyUiStore } from './lobbyUiStore';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -62,6 +63,7 @@ function makeSystemApi(
 // Reset the singleton store between tests
 beforeEach(() => {
     useLobbyStore.setState({ lobbyState: null });
+    useLobbyUiStore.getState().clearLocalLobbyContext();
 });
 
 // ── bootstrapLobbyStore ───────────────────────────────────────────────────────
@@ -137,6 +139,7 @@ describe('bootstrapLobbyStore()', () => {
         // Set some initial lobby state
         const initialState = makeLobbyState();
         useLobbyStore.getState()._applyLobbyState(initialState);
+        useLobbyUiStore.getState().setLocalLobbyContext('player-1', ['player-1', 'player-2']);
         expect(useLobbyStore.getState().lobbyState).toBe(initialState);
 
         // Trigger disconnection
@@ -145,5 +148,7 @@ describe('bootstrapLobbyStore()', () => {
         // Verify lobby state was cleared
         const stored = useLobbyStore.getState().lobbyState;
         expect(stored).toBeNull();
+        expect(useLobbyUiStore.getState().localPlayerId).toBeNull();
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual([]);
     });
 });

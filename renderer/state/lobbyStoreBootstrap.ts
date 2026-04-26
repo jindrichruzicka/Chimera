@@ -16,6 +16,7 @@
 
 import type { LobbyAPI, SystemAPI, Unsubscribe } from '../../electron/preload/api-types';
 import { useLobbyStore } from './lobbyStore';
+import { useLobbyUiStore } from './lobbyUiStore';
 
 /**
  * Register the `onUpdate` push listener on the supplied lobby API and route
@@ -36,6 +37,7 @@ export function bootstrapLobbyStore(lobbyApi: LobbyAPI, systemApi: SystemAPI): U
     const unsubscribeSystem = systemApi.onConnectionStatus((status) => {
         if (status === 'disconnected') {
             useLobbyStore.getState()._applyLobbyState(null);
+            useLobbyUiStore.getState().clearLocalLobbyContext();
         }
     });
 

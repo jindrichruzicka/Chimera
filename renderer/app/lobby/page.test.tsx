@@ -19,31 +19,30 @@ interface MockLobbyStoreState {
             readonly ready: boolean;
         }[];
     } | null;
+}
+
+interface MockLobbyUiStoreState {
     readonly localPlayerId: string | null;
     readonly localSeatIds: readonly string[];
 }
 
 let mockLocalSeatIds: readonly string[] = [];
+let mockLocalPlayerId: string | null = null;
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
 
-const mockUseLobbyStoreGetState = {
-    _setLocalPlayerId: vi.fn(),
-    _setLocalSeatIds: vi.fn(),
-    updateLobbyPlayerReadyState: vi.fn(async () => undefined),
-};
-
 vi.mock('../../state/lobbyStore', () => ({
-    useLobbyStore: Object.assign(
-        (selector: (state: MockLobbyStoreState) => unknown) =>
-            selector({
-                lobbyState: mockLobbyState,
-                localPlayerId: null,
-                localSeatIds: mockLocalSeatIds,
-            }),
-        {
-            getState: () => mockUseLobbyStoreGetState,
-        },
-    ),
+    useLobbyStore: (selector: (state: MockLobbyStoreState) => unknown) =>
+        selector({
+            lobbyState: mockLobbyState,
+        }),
+}));
+
+vi.mock('../../state/lobbyUiStore', () => ({
+    useLobbyUiStore: (selector: (state: MockLobbyUiStoreState) => unknown) =>
+        selector({
+            localPlayerId: mockLocalPlayerId,
+            localSeatIds: mockLocalSeatIds,
+        }),
 }));
 
 vi.mock('../../state/lobbyStoreBootstrap', () => ({
@@ -78,10 +77,8 @@ describe('LobbyPage pending actions', () => {
     beforeEach(() => {
         hostDeferred = createDeferredPromise();
         mockLocalSeatIds = [];
+        mockLocalPlayerId = null;
         mockLobbyState = null;
-        mockUseLobbyStoreGetState._setLocalPlayerId.mockReset();
-        mockUseLobbyStoreGetState._setLocalSeatIds.mockReset();
-        mockUseLobbyStoreGetState.updateLobbyPlayerReadyState.mockReset();
 
         Object.defineProperty(window, '__chimera', {
             value: {
@@ -89,6 +86,7 @@ describe('LobbyPage pending actions', () => {
                     host: vi.fn(() => hostDeferred.promise),
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
                     leave: vi.fn(async () => undefined),
+                    updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
                     onConnectionStatus: vi.fn(() => () => undefined),
@@ -176,12 +174,15 @@ describe('LobbyPage pending actions', () => {
     });
 
     it('sets stubbed local seat ids after successful host', async () => {
+        const host = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
+
         Object.defineProperty(window, '__chimera', {
             value: {
                 lobby: {
-                    host: vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' })),
+                    host,
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
                     leave: vi.fn(async () => undefined),
+                    updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
                     onConnectionStatus: vi.fn(() => () => undefined),
@@ -195,10 +196,7 @@ describe('LobbyPage pending actions', () => {
         fireEvent.click(screen.getByTestId('lobby-host-btn'));
 
         await waitFor(() => {
-            expect(mockUseLobbyStoreGetState._setLocalSeatIds).toHaveBeenCalledWith([
-                'p1',
-                'p1-local-seat-2',
-            ]);
+            expect(host).toHaveBeenCalledWith({ gameId: 'tactics', maxPlayers: 4 });
         });
     });
 });

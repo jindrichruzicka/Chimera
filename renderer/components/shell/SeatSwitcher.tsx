@@ -4,10 +4,10 @@
 // the typed preload bridge to switch active seat.
 
 import React from 'react';
-import { useLobbyStore } from '../../state/lobbyStore';
+import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 export function SeatSwitcher() {
-    const localSeatIds = useLobbyStore((state) => state.localSeatIds);
+    const localSeatIds = useLobbyUiStore((state) => state.localSeatIds);
 
     if (localSeatIds.length <= 1) {
         return null;
