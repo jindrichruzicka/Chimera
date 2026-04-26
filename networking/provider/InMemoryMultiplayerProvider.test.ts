@@ -296,6 +296,22 @@ describe('InMemoryMultiplayerProvider', () => {
             );
         });
 
+        it('second join initialLobbyState includes previously joined players under rapid joins', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            const joinedA = await provider.joinLobby({ address: hosted.lobbyCode });
+            const joinedB = await provider.joinLobby({ address: hosted.lobbyCode });
+
+            expect(joinedB.initialLobbyState.players).toEqual(
+                expect.arrayContaining([
+                    expect.objectContaining({ playerId: hosted.lobbyInfo.hostId }),
+                    expect.objectContaining({ playerId: joinedA.localPlayerId }),
+                    expect.objectContaining({ playerId: joinedB.localPlayerId }),
+                ]),
+            );
+        });
+
         it('host onPlayerJoined callback runs after await joinLobby continuation', async () => {
             const provider = new InMemoryMultiplayerProvider();
             const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });

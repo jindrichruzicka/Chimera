@@ -210,6 +210,27 @@ export function testMultiplayerProviderContract(
                 expect(typeof t.onDisconnected).toBe('function');
                 provider.dispose();
             });
+
+            it('second joined session seeds initialLobbyState with full known roster', async () => {
+                const provider = factory();
+                const hosted = await provider.hostLobby({
+                    gameId: 'contract-test',
+                    maxPlayers: 4,
+                });
+
+                const joinedA = await provider.joinLobby({ address: hosted.lobbyCode });
+                const joinedB = await provider.joinLobby({ address: hosted.lobbyCode });
+
+                expect(joinedB.initialLobbyState.players).toEqual(
+                    expect.arrayContaining([
+                        expect.objectContaining({ playerId: hosted.lobbyInfo.hostId }),
+                        expect.objectContaining({ playerId: joinedA.localPlayerId }),
+                        expect.objectContaining({ playerId: joinedB.localPlayerId }),
+                    ]),
+                );
+
+                provider.dispose();
+            });
         });
 
         // ── Snapshot delivery ─────────────────────────────────────────────────

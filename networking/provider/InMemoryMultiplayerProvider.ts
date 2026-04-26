@@ -231,31 +231,53 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         }, 0);
 
         const latestState = channel.latestLobbyState;
-        const playersWithJoined =
+        const info =
             latestState === null
-                ? [
-                      {
-                          playerId: channel.lobbyInfo.hostId,
-                          displayName: channel.lobbyInfo.hostId,
-                          ready: false,
-                      },
-                      playerEntry,
-                  ]
-                : latestState.players.some((entry) => entry.playerId === clientPlayerId)
-                  ? latestState.players
-                  : [...latestState.players, playerEntry];
+                ? {
+                      sessionId: channel.lobbyInfo.sessionId,
+                      hostId: channel.lobbyInfo.hostId,
+                      gameId: channel.lobbyInfo.gameId,
+                  }
+                : latestState.info;
+
+        const byId = new Map<PlayerId, LobbyPlayerEntry>();
+        if (latestState !== null) {
+            for (const entry of latestState.players) {
+                byId.set(entry.playerId, entry);
+            }
+        }
+
+        if (!byId.has(info.hostId)) {
+            byId.set(info.hostId, {
+                playerId: info.hostId,
+                displayName: info.hostId,
+                ready: false,
+            });
+        }
+
+        const nextPlayers: LobbyPlayerEntry[] = [byId.get(info.hostId)!];
+        for (const [existingClientId] of channel.clients) {
+            const existing = byId.get(existingClientId);
+            if (existing !== undefined) {
+                nextPlayers.push(existing);
+                continue;
+            }
+            if (existingClientId === clientPlayerId) {
+                nextPlayers.push(playerEntry);
+                continue;
+            }
+            nextPlayers.push({
+                playerId: existingClientId,
+                displayName: `Player-${existingClientId}`,
+                ready: false,
+            });
+        }
 
         const initialLobbyState: LobbyState = {
-            info:
-                latestState === null
-                    ? {
-                          sessionId: channel.lobbyInfo.sessionId,
-                          hostId: channel.lobbyInfo.hostId,
-                          gameId: channel.lobbyInfo.gameId,
-                      }
-                    : latestState.info,
-            players: playersWithJoined,
+            info,
+            players: nextPlayers,
         };
+        channel.latestLobbyState = initialLobbyState;
 
         const transport: ClientTransport = {
             sendAction: (action: EngineAction): void => {
