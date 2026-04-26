@@ -5,18 +5,27 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogEntry, LogErrorInfo } from '@chimera/shared/logging.js';
 import { getSeatSwitchBridge, useSeatSwitch } from './useSeatSwitch';
+import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 describe('getSeatSwitchBridge', () => {
-    it('returns null when game/logs bridge namespaces are unavailable', () => {
+    it('returns null when game/lobby/logs bridge namespaces are unavailable', () => {
         expect(getSeatSwitchBridge({})).toBeNull();
     });
 
-    it('returns typed game and logs namespaces when present', () => {
+    it('returns typed game, lobby, and logs namespaces when present', () => {
         const game = {
             sendAction: vi.fn(),
             onSnapshot: vi.fn(),
             onActionRejected: vi.fn(),
             switchActiveSeat: vi.fn(),
+        };
+        const lobby = {
+            host: vi.fn(),
+            join: vi.fn(),
+            leave: vi.fn(),
+            getLocalPlayerId: vi.fn(async () => 'p1'),
+            updatePlayerReadyState: vi.fn(),
+            onUpdate: vi.fn(),
         };
         const logs = {
             emit: vi.fn(),
@@ -27,10 +36,11 @@ describe('getSeatSwitchBridge', () => {
             getSeatSwitchBridge({
                 __chimera: {
                     game,
+                    lobby,
                     logs,
                 },
             }),
-        ).toEqual({ game, logs });
+        ).toEqual({ game, lobby, logs });
     });
 });
 
@@ -42,7 +52,10 @@ describe('useSeatSwitch', () => {
 
     it('delegates seat switching through the typed game API', async () => {
         const switchActiveSeat = vi.fn(async () => undefined);
+        const getLocalPlayerId = vi.fn(async () => 'p2');
         const emit = vi.fn();
+
+        useLobbyUiStore.getState().setLocalLobbyContext('p1', ['p1', 'p2']);
 
         Object.defineProperty(globalThis, '__chimera', {
             configurable: true,
@@ -52,6 +65,14 @@ describe('useSeatSwitch', () => {
                     onSnapshot: vi.fn(),
                     onActionRejected: vi.fn(),
                     switchActiveSeat,
+                },
+                lobby: {
+                    host: vi.fn(),
+                    join: vi.fn(),
+                    leave: vi.fn(),
+                    getLocalPlayerId,
+                    updatePlayerReadyState: vi.fn(),
+                    onUpdate: vi.fn(),
                 },
                 logs: {
                     emit,
@@ -64,6 +85,8 @@ describe('useSeatSwitch', () => {
         await result.current.switchSeat('p2');
 
         expect(switchActiveSeat).toHaveBeenCalledWith('p2');
+        expect(getLocalPlayerId).toHaveBeenCalledOnce();
+        expect(useLobbyUiStore.getState().localPlayerId).toBe('p2');
         expect(emit).not.toHaveBeenCalled();
     });
 
@@ -72,6 +95,7 @@ describe('useSeatSwitch', () => {
         const switchActiveSeat = vi.fn(async () => {
             throw failure;
         });
+        const getLocalPlayerId = vi.fn(async () => 'p2');
         const emit = vi.fn();
 
         Object.defineProperty(globalThis, '__chimera', {
@@ -82,6 +106,14 @@ describe('useSeatSwitch', () => {
                     onSnapshot: vi.fn(),
                     onActionRejected: vi.fn(),
                     switchActiveSeat,
+                },
+                lobby: {
+                    host: vi.fn(),
+                    join: vi.fn(),
+                    leave: vi.fn(),
+                    getLocalPlayerId,
+                    updatePlayerReadyState: vi.fn(),
+                    onUpdate: vi.fn(),
                 },
                 logs: {
                     emit,

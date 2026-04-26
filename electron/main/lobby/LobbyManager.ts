@@ -269,6 +269,30 @@ export class LobbyManager {
         return this.localPlayerId;
     }
 
+    switchActiveSeat(playerId: PlayerId): Promise<void> {
+        if (this.session === null) {
+            return Promise.reject(
+                new Error('LobbyManager: seat switching requires an active session'),
+            );
+        }
+
+        if (this.lobbyState === null) {
+            return Promise.reject(new Error('LobbyManager: lobby state is not available'));
+        }
+
+        const hasRequestedSeat = this.lobbyState.players.some(
+            (entry) => entry.playerId === playerId,
+        );
+        if (!hasRequestedSeat) {
+            return Promise.reject(
+                new Error('LobbyManager: requested seat is not present in the lobby roster'),
+            );
+        }
+
+        this.localPlayerId = playerId;
+        return Promise.resolve();
+    }
+
     updatePlayerReadyState(ready: boolean): Promise<void> {
         const session = this.session;
         if (session === null) {

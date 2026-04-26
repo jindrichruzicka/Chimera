@@ -410,49 +410,52 @@ export async function main(): Promise<void> {
         logger: logger.child({ module: 'system' }),
     });
 
-    // Register the `chimera:game:*` channels as stubs. Actual ActionPipeline
-    // dispatch and seat-switch logic land in F03–F15; wiring the handlers
-    // here lets the preload bridge already speak the full protocol without
-    // racing the engine work.
-    registerGameHandlers({ ipcMain, logger: logger.child({ module: 'game' }) });
-
-    // Register the `chimera:lobby:*` channels as stubs. Real lobby logic
-    // (host/join/leave/state broadcast) lands in F11; wiring stubs here
-    // lets the preload bridge and renderer already speak the full lobby
-    // protocol without unhandled-channel errors.
+    // Build the LobbyManager once so both lobby IPC and game seat-switch IPC
+    // use the same authoritative local-seat context.
     const lobbyLogger = logger.child({ module: 'lobby-manager' });
+    const lobbyManager = new LobbyManager(
+        new LocalWebSocketProvider(),
+        lobbyLogger,
+        (transport) => {
+            // Shallow wiring: StateBroadcaster constructed with the live
+            // HostTransport once a session is hosted.  Return a teardown
+            // so LobbyManager can clean up on closeLobby() (BLOCK-4 fix).
+            const broadcaster = new StateBroadcaster(transport, lobbyLogger);
+            // TODO(F15): pass broadcaster.broadcast to simulationHost
+            return () => {
+                // TODO(F15): broadcaster will expose a dispose() method; call it here.
+                void broadcaster;
+            };
+        },
+        undefined,
+        (state) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(LOBBY_UPDATE_CHANNEL, state);
+                }
+            });
+        },
+        (status) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(SYSTEM_CONNECTION_STATUS_CHANNEL, status);
+                }
+            });
+        },
+    );
+
+    // Register the `chimera:game:*` channels. `switch-seat` delegates to the
+    // same LobbyManager instance used by lobby IPC handlers.
+    registerGameHandlers({
+        ipcMain,
+        seatSwitchManager: lobbyManager,
+        logger: logger.child({ module: 'game' }),
+    });
+
+    // Register the `chimera:lobby:*` channels.
     registerLobbyHandlers({
         ipcMain,
-        lobbyManager: new LobbyManager(
-            new LocalWebSocketProvider(),
-            lobbyLogger,
-            (transport) => {
-                // Shallow wiring: StateBroadcaster constructed with the live
-                // HostTransport once a session is hosted.  Return a teardown
-                // so LobbyManager can clean up on closeLobby() (BLOCK-4 fix).
-                const broadcaster = new StateBroadcaster(transport, lobbyLogger);
-                // TODO(F15): pass broadcaster.broadcast to simulationHost
-                return () => {
-                    // TODO(F15): broadcaster will expose a dispose() method; call it here.
-                    void broadcaster;
-                };
-            },
-            undefined,
-            (state) => {
-                BrowserWindow.getAllWindows().forEach((win) => {
-                    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                        win.webContents.send(LOBBY_UPDATE_CHANNEL, state);
-                    }
-                });
-            },
-            (status) => {
-                BrowserWindow.getAllWindows().forEach((win) => {
-                    if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                        win.webContents.send(SYSTEM_CONNECTION_STATUS_CHANNEL, status);
-                    }
-                });
-            },
-        ),
+        lobbyManager,
         logger: logger.child({ module: 'lobby' }),
     });
 

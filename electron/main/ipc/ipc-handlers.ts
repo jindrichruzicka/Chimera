@@ -49,6 +49,7 @@ import {
 } from '../../preload/apis/settings-api.js';
 import type {
     ActionRejection,
+    PlayerId,
     ResolvedSettings,
     SaveSlotMeta,
     UserSettings,
@@ -225,6 +226,10 @@ export interface GameHandlersIpcMain {
 
 export interface RegisterGameHandlersOptions {
     readonly ipcMain: GameHandlersIpcMain;
+    /** Main-process authority for local pass-and-play seat switching. */
+    readonly seatSwitchManager?: {
+        switchActiveSeat(playerId: PlayerId): Promise<void>;
+    };
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
 }
@@ -282,7 +287,7 @@ function buildIpcValidationRejection(
  *         no parallel list in this file to drift out of sync.
  */
 export function registerGameHandlers(options: RegisterGameHandlersOptions): void {
-    const { ipcMain } = options;
+    const { ipcMain, seatSwitchManager } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:game:* handlers', {
         channels: [GAME_SEND_ACTION_CHANNEL, GAME_SWITCH_SEAT_CHANNEL],
@@ -327,11 +332,17 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
     });
 
     ipcMain.handle(GAME_SWITCH_SEAT_CHANNEL, (_event, playerId) => {
-        parseInvokeRequest(PlayerIdSchema, GAME_SWITCH_SEAT_CHANNEL, playerId);
-        // Stub. Real seat-switch logic lands alongside the session/local
-        // multi-seat work. Returning `undefined` satisfies the
-        // `Promise<void>` contract declared by `GameAPI.switchActiveSeat`.
-        return undefined;
+        const validatedPlayerId = parseInvokeRequest(
+            PlayerIdSchema,
+            GAME_SWITCH_SEAT_CHANNEL,
+            playerId,
+        );
+
+        if (seatSwitchManager === undefined) {
+            return undefined;
+        }
+
+        return seatSwitchManager.switchActiveSeat(validatedPlayerId);
     });
 }
 

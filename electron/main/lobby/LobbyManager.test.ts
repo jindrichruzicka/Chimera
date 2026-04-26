@@ -292,6 +292,46 @@ describe('LobbyManager.joinLobby', () => {
     });
 });
 
+// ── switchActiveSeat ─────────────────────────────────────────────────────────
+
+describe('LobbyManager.switchActiveSeat', () => {
+    it('updates local player context when switching to a seat in the local lobby roster', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        const joinedSeatId = joinManager.getLocalPlayerId();
+
+        expect(joinedSeatId).toBeTruthy();
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        await expect(hostManager.switchActiveSeat(joinedSeatId!)).resolves.toBeUndefined();
+        expect(hostManager.getLocalPlayerId()).toBe(joinedSeatId);
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('rejects when switching seats without an active lobby session', async () => {
+        const manager = makeManager();
+        await expect(manager.switchActiveSeat(playerId('p1'))).rejects.toThrow(/active session/i);
+    });
+
+    it('rejects when switching to a seat not present in the local lobby roster', async () => {
+        const manager = makeManager();
+        await manager.hostLobby(HOST_PARAMS);
+
+        await expect(manager.switchActiveSeat(playerId('not-in-lobby'))).rejects.toThrow(
+            /not present in the lobby roster/i,
+        );
+
+        await manager.closeLobby();
+    });
+});
+
 describe('LobbyManager connection-status lifecycle', () => {
     it('emits connecting and connected when hosting succeeds', async () => {
         const statuses: ConnectionStatus[] = [];

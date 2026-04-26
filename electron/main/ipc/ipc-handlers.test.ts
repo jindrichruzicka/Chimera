@@ -240,17 +240,39 @@ describe('registerGameHandlers', () => {
         expect(sends).toEqual([]);
     });
 
-    it('registers chimera:game:switch-seat as an invoke handler resolving to undefined (stub)', async () => {
+    it('registers chimera:game:switch-seat as an invoke handler that delegates to seatSwitchManager', async () => {
         const stub = makeGameIpcMainStub();
-        registerGameHandlers({ ipcMain: stub.ipcMain });
+        const switchActiveSeat = vi.fn(async () => undefined);
+        registerGameHandlers({
+            ipcMain: stub.ipcMain,
+            seatSwitchManager: {
+                switchActiveSeat,
+            },
+        });
 
         const handler = stub.handled.get(GAME_SWITCH_SEAT_CHANNEL);
         expect(handler).toBeDefined();
-        // `ipcMain.handle` auto-wraps a sync return into a Promise in real
-        // Electron. At the registration level the handler may return either
-        // `undefined` or `Promise<undefined>`; both satisfy the declared
-        // `Promise<void>` contract on `GameAPI.switchActiveSeat`.
         await expect(Promise.resolve(handler?.({}, 'p2'))).resolves.toBeUndefined();
+        expect(switchActiveSeat).toHaveBeenCalledWith('p2');
+    });
+
+    it('propagates domain errors from seatSwitchManager.switchActiveSeat', async () => {
+        const stub = makeGameIpcMainStub();
+        const domainError = new Error('Seat switch rejected: player is not a local seat');
+        registerGameHandlers({
+            ipcMain: stub.ipcMain,
+            seatSwitchManager: {
+                switchActiveSeat: async () => {
+                    throw domainError;
+                },
+            },
+        });
+
+        const handler = stub.handled.get(GAME_SWITCH_SEAT_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.({}, 'p99'))).rejects.toThrow(
+            'Seat switch rejected: player is not a local seat',
+        );
     });
 
     it('registers exactly the game request channels (snapshot is push-only, not registered here)', () => {

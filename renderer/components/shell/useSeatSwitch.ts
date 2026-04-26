@@ -1,16 +1,19 @@
 import { useMemo } from 'react';
-import type { GameAPI, LogsAPI, PlayerId } from '@chimera/electron/preload/api-types.js';
+import type { GameAPI, LobbyAPI, LogsAPI, PlayerId } from '@chimera/electron/preload/api-types.js';
 import type { LogEntry, LogErrorInfo } from '@chimera/shared/logging.js';
+import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 interface ChimeraBridge {
     readonly __chimera?: {
         readonly game?: GameAPI;
+        readonly lobby?: LobbyAPI;
         readonly logs?: LogsAPI;
     };
 }
 
 export interface SeatSwitchBridge {
     readonly game: GameAPI;
+    readonly lobby: LobbyAPI;
     readonly logs: LogsAPI;
 }
 
@@ -55,15 +58,31 @@ function makeSeatSwitchFailureEntry(playerId: PlayerId, error: unknown): LogEntr
     };
 }
 
+function mergeLocalSeatIds(
+    localPlayerId: PlayerId,
+    existingLocalSeatIds: readonly PlayerId[],
+): readonly PlayerId[] {
+    if (existingLocalSeatIds.length === 0) {
+        return [localPlayerId];
+    }
+
+    if (existingLocalSeatIds.includes(localPlayerId)) {
+        return [...existingLocalSeatIds];
+    }
+
+    return [localPlayerId, ...existingLocalSeatIds];
+}
+
 export function getSeatSwitchBridge(source: unknown = globalThis): SeatSwitchBridge | null {
     const bridge = source as ChimeraBridge;
 
-    if (!bridge.__chimera?.game || !bridge.__chimera.logs) {
+    if (!bridge.__chimera?.game || !bridge.__chimera.lobby || !bridge.__chimera.logs) {
         return null;
     }
 
     return {
         game: bridge.__chimera.game,
+        lobby: bridge.__chimera.lobby,
         logs: bridge.__chimera.logs,
     };
 }
@@ -79,6 +98,17 @@ export function useSeatSwitch(): SeatSwitchApi {
 
                 try {
                     await bridge.game.switchActiveSeat(playerId);
+                    const activeSeatId = await bridge.lobby.getLocalPlayerId();
+
+                    if (activeSeatId !== null) {
+                        const existingLocalSeatIds = useLobbyUiStore.getState().localSeatIds;
+                        useLobbyUiStore
+                            .getState()
+                            .setLocalLobbyContext(
+                                activeSeatId,
+                                mergeLocalSeatIds(activeSeatId, existingLocalSeatIds),
+                            );
+                    }
                 } catch (error) {
                     bridge.logs.emit(makeSeatSwitchFailureEntry(playerId, error));
                 }
