@@ -591,6 +591,83 @@ describe('LobbyManager provider-swap smoke test', () => {
         await joinManager.closeLobby();
         await hostManager.closeLobby();
     });
+
+    it('updates only the local player when local roster position is not index 0', async () => {
+        const provider = makeProvider();
+
+        let hostLobbyStateSnapshot: LobbyState | null = null;
+        let joinMiddleLobbyStateSnapshot: LobbyState | null = null;
+
+        const hostManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            (state) => {
+                hostLobbyStateSnapshot = state;
+            },
+        );
+
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinMiddleManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            (state) => {
+                joinMiddleLobbyStateSnapshot = state;
+            },
+        );
+
+        const joinLastManager = makeManager(provider);
+
+        await joinMiddleManager.joinLobby({ address: hostInfo.sessionId });
+        await joinLastManager.joinLobby({ address: hostInfo.sessionId });
+
+        const middlePlayerId = joinMiddleManager.getLocalPlayerId();
+        const lastPlayerId = joinLastManager.getLocalPlayerId();
+        const hostPlayerId = hostManager.getLocalPlayerId();
+
+        expect(middlePlayerId).toBeTruthy();
+        expect(lastPlayerId).toBeTruthy();
+        expect(hostPlayerId).toBeTruthy();
+
+        // Wait for join callbacks and lobby-state broadcasts to settle.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        await expect(joinMiddleManager.updatePlayerReadyState(true)).resolves.toBeUndefined();
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        expect(hostLobbyStateSnapshot).not.toBeNull();
+        expect(joinMiddleLobbyStateSnapshot).not.toBeNull();
+
+        const hostState = hostLobbyStateSnapshot!;
+        const middleState = joinMiddleLobbyStateSnapshot!;
+
+        expect(hostState.players.map((player) => player.playerId)).toEqual([
+            hostPlayerId,
+            middlePlayerId,
+            lastPlayerId,
+        ]);
+
+        const hostEntry = hostState.players.find((entry) => entry.playerId === hostPlayerId);
+        const middleEntry = hostState.players.find((entry) => entry.playerId === middlePlayerId);
+        const lastEntry = hostState.players.find((entry) => entry.playerId === lastPlayerId);
+
+        expect(middleEntry?.ready).toBe(true);
+        expect(hostEntry?.ready).toBe(false);
+        expect(lastEntry?.ready).toBe(false);
+
+        const middleSelfEntry = middleState.players.find(
+            (entry) => entry.playerId === middlePlayerId,
+        );
+        expect(middleSelfEntry?.ready).toBe(true);
+
+        await joinLastManager.closeLobby();
+        await joinMiddleManager.closeLobby();
+        await hostManager.closeLobby();
+    });
 });
 
 // ── onSessionHosted teardown ─────────────────────────────────────────────────
