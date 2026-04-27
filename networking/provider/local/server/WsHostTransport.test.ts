@@ -222,6 +222,35 @@ describe('WsHostTransport — sendSideChannel', () => {
         c1.ws.close();
         c2.ws.close();
     });
+
+    it('stamps a real serverTime (≈ Date.now()) on relayed CHAT frames', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const before = Date.now();
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+
+        // Supply timestamp: 0 to simulate a client that sends an unset timestamp.
+        transport.sendSideChannel(playerId, {
+            kind: 'chat',
+            payload: { senderId: toPlayerId('host'), text: 'hi', timestamp: 0 },
+        });
+
+        const received = await p;
+        const after = Date.now();
+
+        expect(received.type).toBe('CHAT');
+        if (received.type === 'CHAT') {
+            // serverTime must be a real wall-clock stamp, not the forwarded 0.
+            expect(received.serverTime).toBeGreaterThanOrEqual(before);
+            expect(received.serverTime).toBeLessThanOrEqual(after + 50);
+        }
+
+        ws.close();
+    });
 });
 
 // ─── onActionReceived ─────────────────────────────────────────────────────────

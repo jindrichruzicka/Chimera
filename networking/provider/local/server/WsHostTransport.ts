@@ -102,7 +102,7 @@ export class WsHostTransport implements HostTransport {
                 from: msg.payload.senderId,
                 body: msg.payload.text,
                 scope: 'all',
-                serverTime: msg.payload.timestamp,
+                serverTime: Date.now(),
             };
         }
         // profile: The current wire protocol has no SERVER_PROFILE_UPDATE frame.
