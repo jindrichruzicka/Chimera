@@ -47,4 +47,17 @@ describe('crc32Json', () => {
         // JSON.stringify(null) === 'null', crc32('null') !== 0
         expect(crc32Json(null)).not.toBe(0);
     });
+
+    it('throws TypeError when passed undefined (non-serializable)', () => {
+        // JSON.stringify(undefined) returns JS undefined, not a string — must throw, not silently produce a wrong checksum
+        expect(() => crc32Json(undefined)).toThrow(TypeError);
+    });
+
+    it('throws TypeError when passed a Symbol (non-serializable)', () => {
+        expect(() => crc32Json(Symbol('test'))).toThrow(TypeError);
+    });
+
+    it('throws TypeError when passed a function (non-serializable)', () => {
+        expect(() => crc32Json(() => 42)).toThrow(TypeError);
+    });
 });

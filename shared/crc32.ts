@@ -41,7 +41,14 @@ export function crc32(input: string): number {
 
 /**
  * Convenience wrapper: computes CRC32 of JSON.stringify(value).
+ *
+ * Throws TypeError if `value` is not JSON-serializable (i.e. JSON.stringify
+ * returns undefined — this happens for `undefined`, Symbol, and functions).
  */
 export function crc32Json(value: unknown): number {
-    return crc32(JSON.stringify(value));
+    const serialised = JSON.stringify(value);
+    if (serialised === undefined) {
+        throw new TypeError(`crc32Json: value is not JSON-serialisable (got ${typeof value})`);
+    }
+    return crc32(serialised);
 }
