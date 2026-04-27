@@ -129,7 +129,7 @@ export class WsClientTransport implements ClientTransport {
         };
     }
 
-    /** Clears the PING interval. Called automatically on disconnect. */
+    /** Clears the PING interval and all subscriber Sets. Called automatically on disconnect. */
     dispose(): void {
         if (this.disconnectUnsub !== null) {
             this.disconnectUnsub();
@@ -140,6 +140,11 @@ export class WsClientTransport implements ClientTransport {
             clearInterval(this.pingInterval);
             this.pingInterval = null;
         }
+
+        this.snapshotCbs.clear();
+        this.sideChannelCbs.clear();
+        this.lobbyStateCbs.clear();
+        this.latencyUpdateCbs.clear();
     }
 
     // ─── Internal routing ─────────────────────────────────────────────────────

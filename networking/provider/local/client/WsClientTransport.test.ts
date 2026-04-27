@@ -446,4 +446,44 @@ describe('WsClientTransport — dispose', () => {
 
         expect(unsubCalled).toBe(1);
     });
+
+    it('clears all subscriber Sets on dispose so no callbacks fire after teardown', () => {
+        // Build a stub that lets us capture the onMessage handler so we can
+        // drive it manually after dispose().
+        let capturedOnMessage: ((msg: ReturnType<typeof vi.fn>) => void) | null = null;
+        const stubConn = {
+            send: (): void => {},
+            onMessage: (handler: (msg: unknown) => void): (() => void) => {
+                capturedOnMessage = handler as typeof capturedOnMessage;
+                return (): void => {};
+            },
+            onDisconnected: (): (() => void) => (): void => {},
+        } as unknown as ServerConnection;
+
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+
+        const snapshotFired: unknown[] = [];
+        const sideChannelFired: unknown[] = [];
+        const lobbyStateFired: unknown[] = [];
+        const latencyFired: unknown[] = [];
+
+        transport.onSnapshotReceived((s) => snapshotFired.push(s));
+        transport.onSideChannelReceived((m) => sideChannelFired.push(m));
+        transport.onLobbyStateChanged((s) => lobbyStateFired.push(s));
+        transport.onLatencyUpdate((ms) => latencyFired.push(ms));
+
+        transport.dispose();
+
+        // Push a PONG message through the captured handler — nothing should fire.
+        capturedOnMessage?.({
+            type: 'PONG',
+            sentAt: performance.now() - 1,
+            serverTime: Date.now(),
+        });
+
+        expect(snapshotFired).toHaveLength(0);
+        expect(sideChannelFired).toHaveLength(0);
+        expect(lobbyStateFired).toHaveLength(0);
+        expect(latencyFired).toHaveLength(0);
+    });
 });
