@@ -17,6 +17,7 @@ import type {
     LobbyState,
     SideChannelMessage,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { Logger } from '@chimera/shared/logging.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { WsHostTransport } from '../server/WsHostTransport.js';
@@ -173,6 +174,93 @@ describe('WsClientTransport — onSnapshotReceived', () => {
         hostTransport.sendSnapshot(playerId, makeSnapshot(playerId));
         await new Promise<void>((r) => setTimeout(r, 30));
         expect(snapshots).toHaveLength(0);
+    });
+});
+
+// ─── CRC32 validation on inbound SNAPSHOT ────────────────────────────────────
+
+describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
+    it('does NOT fire onSnapshotReceived when the SNAPSHOT checksum is wrong', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const snapshots: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => snapshots.push(s));
+
+        const snapshot = makeSnapshot(playerId);
+        // Send a SNAPSHOT with a deliberately wrong checksum (correct + 1)
+        server.sendToPlayer(playerId, {
+            type: 'SNAPSHOT',
+            snapshot,
+            checksum: crc32Json(snapshot) + 1,
+        });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(snapshots).toHaveLength(0);
+    });
+
+    it('fires onSnapshotReceived when the SNAPSHOT checksum is correct', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const snapshots: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => snapshots.push(s));
+
+        const snapshot = makeSnapshot(playerId);
+        server.sendToPlayer(playerId, {
+            type: 'SNAPSHOT',
+            snapshot,
+            checksum: crc32Json(snapshot),
+        });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(snapshots).toHaveLength(1);
+        expect(snapshots[0]?.viewerId).toBe(playerId);
+    });
+
+    it('logs a warning when the SNAPSHOT checksum is wrong', async () => {
+        const warnMessages: string[] = [];
+        const logger: Logger = {
+            trace: (): void => {},
+            debug: (): void => {},
+            info: (): void => {},
+            warn: (msg: string): void => {
+                warnMessages.push(msg);
+            },
+            error: (): void => {},
+            fatal: (): void => {},
+            child(): Logger {
+                return logger;
+            },
+        };
+
+        const server = new LobbyServer({ port: 0, gameId: 'test', maxPlayers: 4 });
+        servers.push(server);
+        // MessageRouter must be constructed to register inbound message handlers on
+        // the server before clients connect — without it the server silently drops
+        // client messages (e.g. JOIN handshake internals).
+        new MessageRouter(server);
+        await server.ready();
+
+        const conn = new ServerConnection();
+        connections.push(conn);
+        const { playerId } = await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, {
+            playerId: toPlayerId('pending'),
+            displayName: 'TestLogger',
+        });
+
+        const transportWithLogger = new WsClientTransport(conn, playerId, logger);
+        const snapshots: PlayerSnapshot[] = [];
+        transportWithLogger.onSnapshotReceived((s) => snapshots.push(s));
+
+        const snapshot = makeSnapshot(playerId);
+        server.sendToPlayer(playerId, {
+            type: 'SNAPSHOT',
+            snapshot,
+            checksum: crc32Json(snapshot) + 1,
+        });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(snapshots).toHaveLength(0);
+        expect(warnMessages).toHaveLength(1);
     });
 });
 

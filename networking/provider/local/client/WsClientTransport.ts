@@ -6,7 +6,7 @@
  * types.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T05 (issue #220)
+ * Task: F10 / T05 (issue #220); F13 / T04 (issue #309)
  */
 
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
@@ -19,6 +19,7 @@ import type {
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
+import type { Logger } from '@chimera/shared/logging.js';
 import type { ServerMessage } from '@chimera/shared/messages.js';
 import type { ServerConnection } from './ServerConnection.js';
 
@@ -40,6 +41,7 @@ export class WsClientTransport implements ClientTransport {
     constructor(
         private readonly connection: ServerConnection,
         private readonly playerId: PlayerId,
+        private readonly logger?: Logger,
     ) {
         connection.onMessage((msg) => this.route(msg));
     }
@@ -113,11 +115,18 @@ export class WsClientTransport implements ClientTransport {
 
     private route(msg: ServerMessage): void {
         switch (msg.type) {
-            case 'SNAPSHOT':
-                // TODO(F13/§9.2): verify msg.checksum === crc32Json(msg.snapshot); on mismatch
-                // request a full state resync instead of applying the snapshot.
+            case 'SNAPSHOT': {
+                const expected = crc32Json(msg.snapshot);
+                if (msg.checksum !== expected) {
+                    this.logger?.warn('SNAPSHOT checksum mismatch — discarding frame', {
+                        expected,
+                        received: msg.checksum,
+                    });
+                    break;
+                }
                 for (const cb of this.snapshotCbs) cb(msg.snapshot);
                 break;
+            }
 
             case 'LOBBY_STATE':
                 for (const cb of this.lobbyStateCbs) cb(msg.state);
