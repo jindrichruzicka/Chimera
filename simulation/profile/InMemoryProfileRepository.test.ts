@@ -20,7 +20,7 @@ function makeProfile(id: string, displayName: string): PlayerProfile {
     return {
         localProfileId: localProfileId(id),
         displayName,
-        avatar: { kind: 'builtin', ref: 'avatar/default' as never },
+        avatar: { kind: 'builtin', ref: 'avatar/default' as never }, // test-fixture: AssetRef brand bypassed — storage tests do not exercise avatar content
         locale: 'en-US',
     };
 }
