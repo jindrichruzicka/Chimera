@@ -69,8 +69,12 @@ type ServerMessage =
       }
     | {
           type: 'REJECT';
-          reason: string; // e.g. 'crc_mismatch' for an action-level rejection, 'host_closed' for terminal close
+          reason: string; // e.g. 'crc_mismatch' for an action-level rejection
           tick: number; // Tick at which the action was rejected
+      }
+    | {
+          type: 'CLOSE';
+          reason: 'host_closed'; // Dedicated session shutdown signal
       }
     | {
           type: 'REVEAL';
@@ -96,7 +100,7 @@ type ServerMessage =
 
 The `checksum` field in `ACTION` (client→server) and `SNAPSHOT` (server→client) is CRC32 of the JSON-serialised payload. This provides a fast integrity guard against transport corruption. It is **not** a cryptographic security control — the `CommitmentScheme` (§4.6) handles anti-cheat.
 
-An `ACTION` checksum mismatch produces `REJECT { reason: 'crc_mismatch' }` for that action only. The joined session remains connected; terminal session shutdown uses explicit reasons such as `host_closed`.
+An `ACTION` checksum mismatch produces `REJECT { reason: 'crc_mismatch' }` for that action only. The joined session remains connected; terminal session shutdown is signaled with `CLOSE { reason: 'host_closed' }`.
 
 ---
 

@@ -103,6 +103,12 @@ describe('shared/messages — ServerMessage', () => {
         expect(msg.type).toBe('REJECT');
     });
 
+    it('CLOSE message has a disconnect reason', () => {
+        const msg: ServerMessage = { type: 'CLOSE', reason: 'host_closed' };
+        expect(msg.type).toBe('CLOSE');
+        expect(msg.reason).toBe('host_closed');
+    });
+
     it('PONG message has sentAt (serverTime deferred to F-clock-skew)', () => {
         const msg: ServerMessage = { type: 'PONG', sentAt: 100 };
         expect(msg.type).toBe('PONG');
@@ -149,6 +155,10 @@ describe('shared/messages — isClientMessage type guard', () => {
 describe('shared/messages — isServerMessage type guard', () => {
     it('returns true for a valid ServerMessage type', () => {
         expect(isServerMessage({ type: 'PONG', sentAt: 0 })).toBe(true);
+    });
+
+    it('returns true for CLOSE', () => {
+        expect(isServerMessage({ type: 'CLOSE', reason: 'host_closed' })).toBe(true);
     });
 
     it('returns false for an unknown type string', () => {

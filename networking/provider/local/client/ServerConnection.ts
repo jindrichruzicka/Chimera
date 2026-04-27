@@ -59,7 +59,6 @@ function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
 const TERMINAL_REJECT_REASONS: ReadonlySet<string> = new Set<DisconnectReason>([
     'kicked',
     'timeout',
-    'host_closed',
     'error',
     'normal',
 ]);
@@ -240,6 +239,10 @@ export class ServerConnection {
                             return;
                         }
                         if (m.type === 'REJECT' && isTerminalRejectReason(m.reason)) {
+                            for (const cb of this.disconnectedCbs) cb(m.reason);
+                            return;
+                        }
+                        if (m.type === 'CLOSE') {
                             for (const cb of this.disconnectedCbs) cb(m.reason);
                             return;
                         }

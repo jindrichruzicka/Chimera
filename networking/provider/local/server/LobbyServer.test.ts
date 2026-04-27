@@ -324,7 +324,7 @@ describe('LobbyServer — timing-safe token comparison (T07)', () => {
 // ─── T05: close path hardens ──────────────────────────────────────────────────
 
 describe('LobbyServer — close path (T05)', () => {
-    it('client receives REJECT reason before socket closes', async () => {
+    it('client receives CLOSE reason before socket closes', async () => {
         const server = makeServer();
         await server.ready();
         const { ws } = await connectAndJoin(server);
@@ -335,7 +335,7 @@ describe('LobbyServer — close path (T05)', () => {
         await server.close();
         await new Promise<void>((r) => setTimeout(r, 60));
 
-        expect(frames.some((f) => f.type === 'REJECT')).toBe(true);
+        expect(frames.some((f) => f.type === 'CLOSE' && f.reason === 'host_closed')).toBe(true);
     });
 
     it('close() is idempotent under concurrent calls', async () => {

@@ -186,6 +186,13 @@ const RejectMessage = z
     })
     .strict();
 
+const CloseMessage = z
+    .object({
+        type: z.literal('CLOSE'),
+        reason: z.literal('host_closed'),
+    })
+    .strict();
+
 const RevealMessage = z
     .object({
         type: z.literal('REVEAL'),
@@ -230,6 +237,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
     SnapshotMessage,
     DeltaMessage,
     RejectMessage,
+    CloseMessage,
     RevealMessage,
     ChatServerMessage,
     PongMessage,

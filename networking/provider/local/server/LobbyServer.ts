@@ -192,15 +192,14 @@ export class LobbyServer implements MessageBus {
 
         // Notify all clients — snapshot the map before iterating (W-3)
         const closeMsg: ServerMessage = {
-            type: 'REJECT',
+            type: 'CLOSE',
             reason: 'host_closed',
-            tick: 0,
         };
         const serialised = JSON.stringify(closeMsg);
         const entries = [...this.connections.entries()];
         for (const [playerId, ws] of entries) {
             if (ws.readyState === WebSocket.OPEN) {
-                // Flush the REJECT frame first, then close in the callback (W-2)
+                // Flush the CLOSE frame first, then close in the callback (W-2)
                 ws.send(serialised, () => ws.close());
             }
             for (const cb of this.disconnectedCbs) {

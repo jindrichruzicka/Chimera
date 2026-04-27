@@ -195,7 +195,7 @@ describe('ServerMessageSchema — REJECT', () => {
     it('parses a valid REJECT message', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'REJECT',
-            reason: 'host_closed',
+            reason: 'stale_tick',
             tick: 0,
         });
         expect(result.success).toBe(true);
@@ -203,6 +203,21 @@ describe('ServerMessageSchema — REJECT', () => {
 
     it('rejects REJECT missing reason', () => {
         const result = ServerMessageSchema.safeParse({ type: 'REJECT', tick: 0 });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ServerMessageSchema — CLOSE', () => {
+    it('parses a valid CLOSE message', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'CLOSE',
+            reason: 'host_closed',
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects CLOSE missing reason', () => {
+        const result = ServerMessageSchema.safeParse({ type: 'CLOSE' });
         expect(result.success).toBe(false);
     });
 });

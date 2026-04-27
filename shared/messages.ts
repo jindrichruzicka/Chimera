@@ -101,8 +101,9 @@ export type ClientMessage =
  * - DELTA         Incremental event stream optimisation (F13). Placeholder only
  *                 in F10 — hosts always send full SNAPSHOT in this milestone.
  * - REJECT        Signals that the host rejected an ACTION (stale tick, checksum
- *                 mismatch, etc.) or is ending the session with a terminal reason
- *                 such as `host_closed`.
+ *                 mismatch, etc.).
+ * - CLOSE         Signals that the hosted session is terminating and the client
+ *                 must disconnect.
  * - REVEAL        Discloses a committed hidden value for anti-tamper verification
  *                 (§4.6 / F27).
  * - CHAT          Chat message relayed from a player; includes server timestamp
@@ -125,6 +126,7 @@ export type ServerMessage =
           readonly events: readonly { readonly type: string }[];
       }
     | { readonly type: 'REJECT'; readonly reason: string; readonly tick: number }
+    | { readonly type: 'CLOSE'; readonly reason: 'host_closed' }
     | { readonly type: 'REVEAL'; readonly reveal: WireCommitmentReveal }
     | {
           readonly type: 'CHAT';
@@ -153,6 +155,7 @@ const SERVER_MESSAGE_TYPES = new Set<string>([
     'SNAPSHOT',
     'DELTA',
     'REJECT',
+    'CLOSE',
     'REVEAL',
     'CHAT',
     'PONG',

@@ -247,6 +247,30 @@ describe('ServerConnection — REJECT reason forwarded (T06)', () => {
         await conn.close();
     });
 
+    it('treats CLOSE as terminal session shutdown', async () => {
+        const server = makeServer();
+        await server.ready();
+        const conn = new ServerConnection({ maxRetries: 0 });
+        const { playerId } = await conn.connect(
+            `ws://127.0.0.1:${server.port}`,
+            server.token,
+            defaultProfile,
+        );
+
+        const reasons: string[] = [];
+        const received: ServerMessage[] = [];
+        conn.onDisconnected((reason) => reasons.push(reason));
+        conn.onMessage((message) => received.push(message));
+
+        server.sendToPlayer(playerId, { type: 'CLOSE', reason: 'host_closed' });
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        expect(reasons).toEqual(['host_closed']);
+        expect(received).toHaveLength(0);
+
+        await conn.close();
+    });
+
     it('keeps the session connected after a tampered ACTION receives crc_mismatch', async () => {
         const server = makeServer();
         await server.ready();
