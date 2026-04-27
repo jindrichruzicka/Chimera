@@ -29,3 +29,5 @@ export {
     ALLOWED_AVATAR_MIME_TYPES,
     RESERVED_ID_PREFIXES,
 } from './ProfileSanitizer.js';
+
+export { InMemoryProfileRepository } from './InMemoryProfileRepository.js';
