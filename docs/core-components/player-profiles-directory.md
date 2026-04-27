@@ -61,19 +61,27 @@ interface ProfileRepository {
 ## ProfileManager & PlayerDirectory
 
 ```typescript
-// electron/main/profile-manager.ts
+// electron/main/profile/ProfileManager.ts
 class ProfileManager {
-    async getLocal(localProfileId: string): Promise<PlayerProfile>;
-    async updateLocal(patch: Partial<PlayerProfile>): Promise<PlayerProfile>;
+    async getLocal(localProfileId: LocalProfileId): Promise<PlayerProfile>;
+    /** Builds a candidate without persisting; throws PendingUpdateAlreadyActiveError if one is already active. */
+    updateLocal(patch: Partial<Omit<PlayerProfile, 'localProfileId'>>): PlayerProfile;
+    /** Returns the pending candidate if one exists, otherwise the last committed profile. */
     currentAttestation(): PlayerProfile;
+    /** Persists the pending candidate to the repository (call on host ACK). */
+    async acknowledgeUpdate(): Promise<PlayerProfile>;
+    /** Discards the pending candidate without writing to disk (call on host REJECT). */
+    discardCandidate(): void;
 }
 
-// electron/main/player-directory.ts — HOST ONLY
+// electron/main/profile/PlayerDirectory.ts — HOST ONLY
 class PlayerDirectory {
     add(playerId: PlayerId, profile: PlayerProfile): void;
     update(playerId: PlayerId, profile: PlayerProfile): void;
     remove(playerId: PlayerId): void;
     snapshot(): Readonly<Record<PlayerId, PlayerProfile>>;
+    /** Clears all entries — call on lobby close. */
+    reset(): void;
 }
 ```
 
