@@ -78,4 +78,11 @@ describe('crc32Json', () => {
     it('throws TypeError when passed a function (non-serializable)', () => {
         expect(() => crc32Json(() => 42)).toThrow(TypeError);
     });
+
+    it('throws TypeError when passed a bigint (JSON.stringify throws internally)', () => {
+        // BigInt causes JSON.stringify to throw its own TypeError before returning undefined.
+        // crc32Json must normalise that into a uniform TypeError with a predictable message.
+        expect(() => crc32Json(BigInt(42))).toThrow(TypeError);
+        expect(() => crc32Json(BigInt(42))).toThrow('crc32Json: value is not JSON-serialisable');
+    });
 });
