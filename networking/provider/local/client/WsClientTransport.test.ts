@@ -450,11 +450,11 @@ describe('WsClientTransport — dispose', () => {
     it('clears all subscriber Sets on dispose so no callbacks fire after teardown', () => {
         // Build a stub that lets us capture the onMessage handler so we can
         // drive it manually after dispose().
-        let capturedOnMessage: ((msg: ReturnType<typeof vi.fn>) => void) | null = null;
+        let capturedOnMessage: ((msg: unknown) => void) | null = null;
         const stubConn = {
             send: (): void => {},
             onMessage: (handler: (msg: unknown) => void): (() => void) => {
-                capturedOnMessage = handler as typeof capturedOnMessage;
+                capturedOnMessage = handler;
                 return (): void => {};
             },
             onDisconnected: (): (() => void) => (): void => {},
@@ -475,7 +475,10 @@ describe('WsClientTransport — dispose', () => {
         transport.dispose();
 
         // Push a PONG message through the captured handler — nothing should fire.
-        capturedOnMessage?.({
+        // TypeScript's control-flow analysis cannot track let-assignments that happen
+        // inside closures, so we assert the type here after construction.
+        const dispatch = capturedOnMessage as ((msg: unknown) => void) | null;
+        dispatch?.({
             type: 'PONG',
             sentAt: performance.now() - 1,
             serverTime: Date.now(),

@@ -114,20 +114,22 @@ describe('ClientMessageSchema — PROFILE_UPDATE', () => {
 });
 
 describe('ClientMessageSchema — CHAT', () => {
-    it('parses a valid CHAT message', () => {
+    it('parses a valid CHAT message without scope (scope deferred to F45)', () => {
+        // scope is removed from the wire protocol until F45 Chat System is implemented.
         const result = ClientMessageSchema.safeParse({
             type: 'CHAT',
             body: 'hello',
-            scope: 'all',
         });
         expect(result.success).toBe(true);
     });
 
-    it('rejects CHAT with invalid scope', () => {
+    it('rejects CHAT with unknown extra fields (strict schema)', () => {
+        // After scope removal, sending scope on the wire must be rejected
+        // so both ends stay in sync and stale clients are detected at the boundary.
         const result = ClientMessageSchema.safeParse({
             type: 'CHAT',
             body: 'hello',
-            scope: 'invalid-scope',
+            scope: 'all',
         });
         expect(result.success).toBe(false);
     });

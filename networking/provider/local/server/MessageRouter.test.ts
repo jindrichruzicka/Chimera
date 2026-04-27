@@ -156,7 +156,7 @@ describe('MessageRouter — side-channel routing', () => {
         router.onSideChannelReceived((from, msg) => received.push({ from, kind: msg.kind }));
 
         const { ws, playerId } = await connectAndJoin(server);
-        ws.send(JSON.stringify({ type: 'CHAT', body: 'hi', scope: 'all' } satisfies ClientMessage));
+        ws.send(JSON.stringify({ type: 'CHAT', body: 'hi' } satisfies ClientMessage));
 
         await new Promise<void>((resolve) => setTimeout(resolve, 30));
 
@@ -199,7 +199,7 @@ describe('MessageRouter — side-channel routing', () => {
         unsub();
 
         const { ws } = await connectAndJoin(server);
-        ws.send(JSON.stringify({ type: 'CHAT', body: 'hi', scope: 'all' } satisfies ClientMessage));
+        ws.send(JSON.stringify({ type: 'CHAT', body: 'hi' } satisfies ClientMessage));
 
         await new Promise<void>((resolve) => setTimeout(resolve, 30));
         expect(received).toHaveLength(0);

@@ -101,7 +101,6 @@ export class WsHostTransport implements HostTransport {
                 type: 'CHAT',
                 from: msg.payload.senderId,
                 body: msg.payload.text,
-                scope: 'all',
                 serverTime: Date.now(),
             };
         }

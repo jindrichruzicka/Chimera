@@ -53,8 +53,8 @@ describe('shared/messages — ClientMessage', () => {
         expect(msg.type).toBe('PROFILE_UPDATE');
     });
 
-    it('CHAT message has body and scope', () => {
-        const msg: ClientMessage = { type: 'CHAT', body: 'hello', scope: 'all' };
+    it('CHAT message has body (scope deferred to F45)', () => {
+        const msg: ClientMessage = { type: 'CHAT', body: 'hello' };
         expect(msg.type).toBe('CHAT');
         expect(msg.body).toBe('hello');
     });

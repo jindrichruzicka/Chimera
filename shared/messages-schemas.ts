@@ -37,8 +37,6 @@ const WirePlayerProfile = z.object({
     displayName: z.string(),
 });
 
-const ChatScope = z.enum(['all', 'team', 'lobby']);
-
 const WireCommitmentReveal = z.object({
     id: z.string(),
     value: z.unknown(),
@@ -120,7 +118,6 @@ const ChatClientMessage = z
     .object({
         type: z.literal('CHAT'),
         body: z.string(),
-        scope: ChatScope,
     })
     .strict();
 
@@ -201,7 +198,6 @@ const ChatServerMessage = z
         type: z.literal('CHAT'),
         from: PlayerId,
         body: z.string(),
-        scope: ChatScope,
         serverTime: z.number(),
     })
     .strict();

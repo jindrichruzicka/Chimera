@@ -34,11 +34,9 @@ export type { PlayerId, EngineAction, PlayerSnapshot, LobbyState };
 
 // ─── Stub / forward-declared types ───────────────────────────────────────────
 
-/**
- * Chat scope. Expanded in F45 — Chat System (§4.29).
- * Carried by both `ClientMessage.CHAT` and `ServerMessage.CHAT`.
- */
-export type ChatScope = 'all' | 'team' | 'lobby';
+// TODO(F45-chat): ChatScope ('all' | 'team' | 'lobby') is deferred to the
+// F45 Chat System (§4.29). The scope field has been removed from the wire
+// protocol until F45 defines the full routing semantics.
 
 /**
  * Lightweight player profile carried with JOIN and PROFILE_UPDATE messages.
@@ -88,7 +86,7 @@ export type ClientMessage =
       }
     | { readonly type: 'PROFILE_UPDATE'; readonly profile: WirePlayerProfile }
     | { readonly type: 'READY_STATE_UPDATE'; readonly ready: boolean }
-    | { readonly type: 'CHAT'; readonly body: string; readonly scope: ChatScope }
+    | { readonly type: 'CHAT'; readonly body: string }
     | { readonly type: 'PING'; readonly sentAt: number };
 
 // ─── Server → Client messages ─────────────────────────────────────────────────
@@ -130,7 +128,6 @@ export type ServerMessage =
           readonly type: 'CHAT';
           readonly from: PlayerId;
           readonly body: string;
-          readonly scope: ChatScope;
           readonly serverTime: number;
       }
     | { readonly type: 'PONG'; readonly sentAt: number; readonly serverTime: number }

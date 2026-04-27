@@ -80,7 +80,6 @@ export class WsClientTransport implements ClientTransport {
             this.connection.send({
                 type: 'CHAT',
                 body: msg.payload.text,
-                scope: 'all',
             });
         }
         // profile updates are handled via PROFILE_UPDATE
