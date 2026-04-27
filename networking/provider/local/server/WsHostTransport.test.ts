@@ -18,6 +18,7 @@ import type {
     SideChannelMessage,
     LobbyPlayerEntry,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { LobbyServer } from './LobbyServer.js';
 import { MessageRouter } from './MessageRouter.js';
@@ -116,6 +117,26 @@ describe('WsHostTransport — sendSnapshot', () => {
         if (msg.type === 'SNAPSHOT') {
             expect(msg.snapshot.viewerId).toBe(playerId);
             expect(msg.snapshot.tick).toBe(7);
+        }
+        ws.close();
+    });
+
+    it('sets checksum to crc32Json(snapshot) on the outbound SNAPSHOT frame', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+
+        const snapshot = makeSnapshot(playerId);
+        transport.sendSnapshot(playerId, snapshot);
+
+        const msg = await p;
+        expect(msg.type).toBe('SNAPSHOT');
+        if (msg.type === 'SNAPSHOT') {
+            expect(msg.checksum).toBe(crc32Json(snapshot));
         }
         ws.close();
     });

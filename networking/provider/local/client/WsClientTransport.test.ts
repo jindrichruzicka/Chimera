@@ -8,6 +8,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {
@@ -19,6 +20,7 @@ import type {
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { WsHostTransport } from '../server/WsHostTransport.js';
+import type { ClientMessage } from '@chimera/shared/messages.js';
 import { ServerConnection } from './ServerConnection.js';
 import { WsClientTransport } from './WsClientTransport.js';
 
@@ -102,6 +104,26 @@ describe('WsClientTransport — sendAction', () => {
 
         expect(received).toHaveLength(1);
         expect(received[0]?.from).toBe(playerId);
+    });
+
+    it('sets checksum to crc32Json(action) on the outbound ACTION frame', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const frames: ClientMessage[] = [];
+        server.onMessage((_from, msg) => {
+            if (msg.type === 'ACTION') frames.push(msg);
+        });
+
+        const action = { type: 'test:move', playerId, tick: 5, payload: { x: 2 } };
+        transport.sendAction(action);
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(frames).toHaveLength(1);
+        const frame = frames[0];
+        expect(frame?.type).toBe('ACTION');
+        if (frame?.type === 'ACTION') {
+            expect(frame.checksum).toBe(crc32Json(action));
+        }
     });
 });
 

@@ -90,6 +90,8 @@ export class MessageRouter {
     private route(from: PlayerId, msg: ClientMessage): void {
         switch (msg.type) {
             case 'ACTION':
+                // TODO(F13/§9.2): verify msg.checksum === crc32Json(msg.action); on mismatch
+                // trigger a full state resync instead of processing the action.
                 for (const cb of this.actionCbs) {
                     cb(from, msg.action);
                 }

@@ -70,8 +70,8 @@ export interface WireCommitmentReveal {
  * - JOIN          Initial authentication handshake. The `token` is the lobby
  *                 token embedded in the lobby code returned by `hostLobby()`.
  * - ACTION        A game action to be processed by the ActionPipeline on the
- *                 host. `checksum` is a CRC32 of the serialised payload (0 for
- *                 F10 — full implementation lands in F13 §4.3).
+ *                 host. `checksum` is CRC32 of JSON(action) — integrity guard,
+ *                 not a cryptographic control (§4.3). Populated since F308.
  * - PROFILE_UPDATE Mid-lobby cosmetic update; side-channel only (§4.24).
  * - READY_STATE_UPDATE Joined-client intent to toggle its own ready state.
  *                 Host remains authoritative and rebroadcasts LOBBY_STATE.

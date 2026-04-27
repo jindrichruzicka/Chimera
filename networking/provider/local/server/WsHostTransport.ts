@@ -19,6 +19,7 @@ import type {
     DisconnectReason,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import type { ServerMessage } from '@chimera/shared/messages.js';
 import type { LobbyServer } from './LobbyServer.js';
 import type { MessageRouter } from './MessageRouter.js';
@@ -44,7 +45,7 @@ export class WsHostTransport implements HostTransport {
     // ─── Outbound ─────────────────────────────────────────────────────────────
 
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void {
-        const msg: ServerMessage = { type: 'SNAPSHOT', snapshot, checksum: 0 };
+        const msg: ServerMessage = { type: 'SNAPSHOT', snapshot, checksum: crc32Json(snapshot) };
         this.server.sendToPlayer(playerId, msg);
     }
 

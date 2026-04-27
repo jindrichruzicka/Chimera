@@ -18,6 +18,7 @@ import type {
     DisconnectReason,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import type { ServerMessage } from '@chimera/shared/messages.js';
 import type { ServerConnection } from './ServerConnection.js';
 
@@ -50,7 +51,7 @@ export class WsClientTransport implements ClientTransport {
             type: 'ACTION',
             tick: action.tick,
             action,
-            checksum: 0,
+            checksum: crc32Json(action),
         });
     }
 
@@ -113,6 +114,8 @@ export class WsClientTransport implements ClientTransport {
     private route(msg: ServerMessage): void {
         switch (msg.type) {
             case 'SNAPSHOT':
+                // TODO(F13/§9.2): verify msg.checksum === crc32Json(msg.snapshot); on mismatch
+                // request a full state resync instead of applying the snapshot.
                 for (const cb of this.snapshotCbs) cb(msg.snapshot);
                 break;
 
