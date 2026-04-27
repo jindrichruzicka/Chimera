@@ -14,3 +14,4 @@
 
 export * from './engine/index.js';
 export * from './persistence/index.js';
+export * from './profile/index.js';
