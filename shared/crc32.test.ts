@@ -25,6 +25,24 @@ describe('crc32', () => {
         const input = 'chimera-engine';
         expect(crc32(input)).toBe(crc32(input));
     });
+
+    it("returns the correct value for a 2-byte UTF-8 sequence ('café' — U+00E9 é)", () => {
+        // 'é' encodes as 0xC3 0xA9 in UTF-8 (2 bytes)
+        // Expected value verified via Node.js TextEncoder + CRC32 reference implementation
+        expect(crc32('café')).toBe(-1733475659);
+    });
+
+    it("returns the correct value for a 4-byte UTF-8 sequence ('🎮' — U+1F3AE)", () => {
+        // '🎮' encodes as 0xF0 0x9F 0x8E 0xAE in UTF-8 (4 bytes, surrogate pair in JS)
+        // Expected value verified via Node.js TextEncoder + CRC32 reference implementation
+        expect(crc32('🎮')).toBe(-989655716);
+    });
+
+    it('correctly handles a string mixing ASCII and multi-byte UTF-8 code points', () => {
+        // 'hello 🌍' — ASCII + 4-byte globe emoji (U+1F30D)
+        // Expected value verified via Node.js TextEncoder + CRC32 reference implementation
+        expect(crc32('hello 🌍')).toBe(-1335285689);
+    });
 });
 
 describe('crc32Json', () => {
