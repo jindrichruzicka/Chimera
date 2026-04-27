@@ -67,6 +67,7 @@ For each acceptance criterion and child task:
     - Simulation owns deterministic game rules and never imports UI, Electron, DOM APIs, or game-specific renderer data.
     - Networking is an adapter around host-authoritative simulation, not the source of truth.
 4. Check that docs or roadmap references were updated when the feature changes public architecture, commands, APIs, or user-visible workflows.
+5. Find potential problems and suggest improvements.
 
 ## Step 4 - Run validation gates
 

@@ -63,6 +63,7 @@ For every milestone feature:
     - Simulation owns deterministic game rules and never imports UI, Electron, DOM APIs, or game-specific renderer data.
     - Networking is an adapter around host-authoritative simulation, not the source of truth.
 5. Check milestone-level documentation, changelog entries, migration notes, diagnostics, and user-facing operational guidance.
+6. Find potential problems and suggest improvements.
 
 ## Step 4 - Run validation gates
 
