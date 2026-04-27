@@ -187,6 +187,7 @@ describe('ClientTransport', () => {
             onSideChannelReceived: (_cb) => noopUnsub(),
             onLobbyStateChanged: (_cb) => noopUnsub(),
             onDisconnected: (_cb) => noopUnsub(),
+            onLatencyUpdate: (_cb) => noopUnsub(),
         };
         expect(transport).toBeDefined();
     });
@@ -232,6 +233,7 @@ describe('JoinedSession', () => {
             onSideChannelReceived: () => noopUnsub(),
             onLobbyStateChanged: () => noopUnsub(),
             onDisconnected: () => noopUnsub(),
+            onLatencyUpdate: () => noopUnsub(),
         };
         const session: JoinedSession = {
             lobbyInfo: { sessionId: 's1', hostId: playerId('p1'), gameId: 'tactics' },

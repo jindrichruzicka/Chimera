@@ -37,6 +37,9 @@ export class WsClientTransport implements ClientTransport {
     private readonly snapshotCbs = new Set<(snapshot: PlayerSnapshot) => void>();
     private readonly sideChannelCbs = new Set<(msg: SideChannelMessage) => void>();
     private readonly lobbyStateCbs = new Set<(state: LobbyState) => void>();
+    private readonly latencyUpdateCbs = new Set<(latencyMs: number) => void>();
+    private disconnectUnsub: Unsubscribe | null = null;
+    private pingInterval: ReturnType<typeof setInterval> | null = null;
 
     constructor(
         private readonly connection: ServerConnection,
@@ -44,6 +47,14 @@ export class WsClientTransport implements ClientTransport {
         private readonly logger?: Logger,
     ) {
         connection.onMessage((msg) => this.route(msg));
+        this.disconnectUnsub = connection.onDisconnected(() => this.dispose());
+
+        // WELCOME has already been received (ServerConnection.connect() resolved).
+        // Send the first PING immediately, then repeat every 5 s.
+        this.connection.send({ type: 'PING', sentAt: performance.now() });
+        this.pingInterval = setInterval(() => {
+            this.connection.send({ type: 'PING', sentAt: performance.now() });
+        }, 5_000);
     }
 
     // ─── Outbound ─────────────────────────────────────────────────────────────
@@ -111,6 +122,26 @@ export class WsClientTransport implements ClientTransport {
         return this.connection.onDisconnected(cb);
     }
 
+    onLatencyUpdate(cb: (latencyMs: number) => void): Unsubscribe {
+        this.latencyUpdateCbs.add(cb);
+        return (): void => {
+            this.latencyUpdateCbs.delete(cb);
+        };
+    }
+
+    /** Clears the PING interval. Called automatically on disconnect. */
+    dispose(): void {
+        if (this.disconnectUnsub !== null) {
+            this.disconnectUnsub();
+            this.disconnectUnsub = null;
+        }
+
+        if (this.pingInterval !== null) {
+            clearInterval(this.pingInterval);
+            this.pingInterval = null;
+        }
+    }
+
     // ─── Internal routing ─────────────────────────────────────────────────────
 
     private route(msg: ServerMessage): void {
@@ -131,6 +162,12 @@ export class WsClientTransport implements ClientTransport {
             case 'LOBBY_STATE':
                 for (const cb of this.lobbyStateCbs) cb(msg.state);
                 break;
+
+            case 'PONG': {
+                const latencyMs = Math.max(0, performance.now() - msg.sentAt);
+                for (const cb of this.latencyUpdateCbs) cb(latencyMs);
+                break;
+            }
 
             case 'CHAT':
                 for (const cb of this.sideChannelCbs) {

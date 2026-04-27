@@ -7,7 +7,7 @@
  * Task: F10 / T05 (issue #220)
  */
 
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect, afterEach, vi } from 'vitest';
 import { crc32Json } from '@chimera/shared/crc32.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
@@ -86,6 +86,7 @@ describe('WsClientTransport — implements ClientTransport', () => {
         expect(typeof transport.onSideChannelReceived).toBe('function');
         expect(typeof transport.onLobbyStateChanged).toBe('function');
         expect(typeof transport.onDisconnected).toBe('function');
+        expect(typeof transport.onLatencyUpdate).toBe('function');
     });
 });
 
@@ -321,5 +322,128 @@ describe('WsClientTransport — onDisconnected', () => {
 
         await new Promise<void>((r) => setTimeout(r, 100));
         expect(reasons.length).toBeGreaterThan(0);
+    });
+});
+
+// ─── onLatencyUpdate ─────────────────────────────────────────────────────────
+
+describe('WsClientTransport — onLatencyUpdate', () => {
+    it('fires with latencyMs >= 0 when a PONG is received', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        // Wait for the initial constructor PING/PONG to complete before subscribing
+        await new Promise<void>((r) => setTimeout(r, 80));
+
+        const latencies: number[] = [];
+        transport.onLatencyUpdate((ms) => latencies.push(ms));
+
+        server.sendToPlayer(playerId, {
+            type: 'PONG',
+            sentAt: performance.now() - 5,
+            serverTime: Date.now(),
+        });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(latencies).toHaveLength(1);
+        expect(latencies[0]).toBeGreaterThanOrEqual(0);
+    });
+
+    it('fires automatically when the server responds to the initial PING', async () => {
+        const { transport } = await makeClientTransport();
+
+        const latencies: number[] = [];
+        transport.onLatencyUpdate((ms) => latencies.push(ms));
+
+        // The initial PING is sent in the constructor; the MessageRouter responds
+        // with a PONG automatically — wait for the round-trip.
+        await new Promise<void>((r) => setTimeout(r, 100));
+
+        expect(latencies.length).toBeGreaterThanOrEqual(1);
+        expect(latencies[0]).toBeGreaterThanOrEqual(0);
+    });
+
+    it('does not fire after unsubscribe', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const latencies: number[] = [];
+        const unsub = transport.onLatencyUpdate((ms) => latencies.push(ms));
+        unsub();
+
+        server.sendToPlayer(playerId, {
+            type: 'PONG',
+            sentAt: performance.now() - 5,
+            serverTime: Date.now(),
+        });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(latencies).toHaveLength(0);
+    });
+
+    it('clamps latency to 0 when a PONG sentAt is in the future', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        await new Promise<void>((r) => setTimeout(r, 80));
+
+        const latencies: number[] = [];
+        transport.onLatencyUpdate((ms) => latencies.push(ms));
+
+        server.sendToPlayer(playerId, {
+            type: 'PONG',
+            sentAt: performance.now() + 1_000,
+            serverTime: Date.now(),
+        });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        expect(latencies).toHaveLength(1);
+        expect(latencies[0]).toBe(0);
+    });
+});
+
+// ─── dispose — clears PING interval ──────────────────────────────────────────
+
+describe('WsClientTransport — dispose', () => {
+    it('clears the PING interval so no additional PINGs are sent after dispose', () => {
+        vi.useFakeTimers();
+
+        const sentMessages: { type: string }[] = [];
+        const stubConn = {
+            send: (msg: { type: string }): void => {
+                sentMessages.push(msg);
+            },
+            onMessage: (): (() => void) => (): void => {},
+            onDisconnected: (): (() => void) => (): void => {},
+        } as unknown as ServerConnection;
+
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+
+        // Initial PING is sent immediately in the constructor
+        expect(sentMessages.filter((m) => m.type === 'PING')).toHaveLength(1);
+
+        transport.dispose();
+
+        // Advance well past the 5 s interval — no further PINGs should be sent
+        vi.advanceTimersByTime(15_000);
+
+        expect(sentMessages.filter((m) => m.type === 'PING')).toHaveLength(1);
+
+        vi.useRealTimers();
+    });
+
+    it('unsubscribes the internal disconnect listener on dispose', () => {
+        let unsubCalled = 0;
+        const stubConn = {
+            send: (): void => {},
+            onMessage: (): (() => void) => (): void => {},
+            onDisconnected: (): (() => void) => {
+                return (): void => {
+                    unsubCalled += 1;
+                };
+            },
+        } as unknown as ServerConnection;
+
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+        transport.dispose();
+
+        expect(unsubCalled).toBe(1);
     });
 });

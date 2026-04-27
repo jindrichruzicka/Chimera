@@ -301,6 +301,12 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
                 addSub(record.lobbyStateCbs, cb),
 
             onDisconnected: (cb: DisconnectCb): Unsubscribe => addSub(record.disconnectCbs, cb),
+
+            onLatencyUpdate:
+                (_cb: (latencyMs: number) => void): Unsubscribe =>
+                (): void => {
+                    // InMemoryMultiplayerProvider does not measure latency — no-op stub.
+                },
         };
 
         const session: JoinedSession = {

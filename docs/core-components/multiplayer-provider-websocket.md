@@ -57,11 +57,13 @@ interface JoinedSession {
 
 interface ClientTransport {
     sendAction(action: EngineAction): void;
+    sendReadyStateUpdate(ready: boolean): void;
     sendSideChannel(msg: SideChannelMessage): void;
     onSnapshotReceived(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
     onSideChannelReceived(cb: (msg: SideChannelMessage) => void): Unsubscribe;
     onLobbyStateChanged(cb: (state: LobbyState) => void): Unsubscribe;
     onDisconnected(cb: (reason: DisconnectReason) => void): Unsubscribe;
+    onLatencyUpdate(cb: (latencyMs: number) => void): Unsubscribe;
 }
 
 /** Discriminated union — extend for new out-of-band channels, never for gameplay */

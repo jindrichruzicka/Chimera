@@ -240,6 +240,12 @@ export interface ClientTransport {
     onLobbyStateChanged(cb: (state: LobbyState) => void): Unsubscribe;
     /** Subscribe to disconnect events. */
     onDisconnected(cb: (reason: DisconnectReason) => void): Unsubscribe;
+    /**
+     * Subscribe to round-trip latency updates. The callback is fired each time
+     * a PONG is received from the host, with the measured RTT in milliseconds.
+     * `latencyMs` is always >= 0.
+     */
+    onLatencyUpdate(cb: (latencyMs: number) => void): Unsubscribe;
 }
 
 // ─── Provider interface ───────────────────────────────────────────────────────
