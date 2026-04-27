@@ -182,8 +182,10 @@ describe('WsHostTransport — sendSideChannel', () => {
         const p1 = new Promise<ServerMessage>((resolve) => {
             c1.ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
         });
-        const received2: ServerMessage[] = [];
-        c2.ws.on('message', (raw) => received2.push(JSON.parse(rawToString(raw)) as ServerMessage));
+        const c2Received: ServerMessage[] = [];
+        c2.ws.on('message', (raw) =>
+            c2Received.push(JSON.parse(rawToString(raw)) as ServerMessage),
+        );
 
         const chatMsg: SideChannelMessage = {
             kind: 'chat',
@@ -193,8 +195,18 @@ describe('WsHostTransport — sendSideChannel', () => {
 
         const r1 = await p1;
         expect(r1.type).toBe('CHAT');
-        await new Promise<void>((r) => setTimeout(r, 20));
-        expect(received2).toHaveLength(0);
+
+        const c2Barrier = new Promise<ServerMessage>((resolve) => {
+            c2.ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+        transport.broadcastLobbyState({
+            info: { sessionId: 'barrier', hostId: toPlayerId('h'), gameId: 'test' },
+            players: [],
+        });
+        const barrierMessage = await c2Barrier;
+
+        expect(barrierMessage.type).toBe('LOBBY_STATE');
+        expect(c2Received).toHaveLength(1);
         c1.ws.close();
         c2.ws.close();
     });
@@ -262,8 +274,12 @@ describe('WsHostTransport — onActionReceived', () => {
         await server.ready();
         const { ws, playerId } = await connectAndJoin(server);
 
-        const received: { from: PlayerId }[] = [];
-        transport.onActionReceived((from) => received.push({ from }));
+        const actionReceived = new Promise<PlayerId>((resolve) => {
+            const unsubscribe = transport.onActionReceived((from) => {
+                unsubscribe();
+                resolve(from);
+            });
+        });
 
         const action3 = { type: 'test:noop', playerId, tick: 3, payload: {} };
         ws.send(
@@ -275,9 +291,8 @@ describe('WsHostTransport — onActionReceived', () => {
             } satisfies ClientMessage),
         );
 
-        await new Promise<void>((r) => setTimeout(r, 30));
-        expect(received).toHaveLength(1);
-        expect(received[0]?.from).toBe(playerId);
+        const from = await actionReceived;
+        expect(from).toBe(playerId);
         ws.close();
     });
 
@@ -290,6 +305,14 @@ describe('WsHostTransport — onActionReceived', () => {
         const unsub = transport.onActionReceived((_from, a) => received.push(a));
         unsub();
 
+        const actionObservedByServer = new Promise<void>((resolve) => {
+            const unsubscribe = server.onMessage((_from, message) => {
+                if (message.type !== 'ACTION') return;
+                unsubscribe();
+                resolve();
+            });
+        });
+
         const action1 = { type: 'test:noop', playerId, tick: 1, payload: {} };
         ws.send(
             JSON.stringify({
@@ -300,7 +323,7 @@ describe('WsHostTransport — onActionReceived', () => {
             } satisfies ClientMessage),
         );
 
-        await new Promise<void>((r) => setTimeout(r, 30));
+        await actionObservedByServer;
         expect(received).toHaveLength(0);
         ws.close();
     });
@@ -357,10 +380,18 @@ describe('WsHostTransport — profile side-channel (T04)', () => {
             payload: { playerId: toPlayerId('p1'), displayName: 'Alice' },
         });
 
-        await new Promise<void>((r) => setTimeout(r, 30));
-        // No LOBBY_STATE or any other frame should arrive for a profile side-channel
-        expect(received.filter((m) => m.type === 'LOBBY_STATE')).toHaveLength(0);
-        expect(received).toHaveLength(0);
+        const barrier = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+        transport.broadcastLobbyState({
+            info: { sessionId: 'barrier', hostId: toPlayerId('h'), gameId: 'test' },
+            players: [],
+        });
+        const barrierMessage = await barrier;
+
+        // The only frame observed should be the explicit barrier LOBBY_STATE.
+        expect(barrierMessage.type).toBe('LOBBY_STATE');
+        expect(received).toHaveLength(1);
         ws.close();
     });
 });

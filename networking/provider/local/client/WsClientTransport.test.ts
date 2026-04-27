@@ -21,7 +21,7 @@ import type { Logger } from '@chimera/shared/logging.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { WsHostTransport } from '../server/WsHostTransport.js';
-import type { ClientMessage } from '@chimera/shared/messages.js';
+import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { ServerConnection } from './ServerConnection.js';
 import { WsClientTransport } from './WsClientTransport.js';
 
@@ -55,6 +55,7 @@ async function makeClientTransport(opts?: { maxRetries?: number }): Promise<{
     server: LobbyServer;
     hostTransport: WsHostTransport;
     playerId: PlayerId;
+    conn: ServerConnection;
     transport: ClientTransport;
 }> {
     const server = new LobbyServer({ port: 0, gameId: 'test', maxPlayers: 4 });
@@ -71,7 +72,33 @@ async function makeClientTransport(opts?: { maxRetries?: number }): Promise<{
     });
 
     const transport = new WsClientTransport(conn, playerId);
-    return { server, hostTransport, playerId, transport };
+    return { server, hostTransport, playerId, conn, transport };
+}
+
+function waitForServerInboundMessage(
+    server: LobbyServer,
+    predicate: (from: PlayerId, message: ClientMessage) => boolean,
+): Promise<{ readonly from: PlayerId; readonly message: ClientMessage }> {
+    return new Promise((resolve) => {
+        const unsubscribe = server.onMessage((from, message) => {
+            if (!predicate(from, message)) return;
+            unsubscribe();
+            resolve({ from, message });
+        });
+    });
+}
+
+function waitForConnectionMessage(
+    conn: ServerConnection,
+    predicate: (message: ServerMessage) => boolean,
+): Promise<ServerMessage> {
+    return new Promise((resolve) => {
+        const unsubscribe = conn.onMessage((message) => {
+            if (!predicate(message)) return;
+            unsubscribe();
+            resolve(message);
+        });
+    });
 }
 
 // ─── Interface compliance ─────────────────────────────────────────────────────
@@ -96,32 +123,24 @@ describe('WsClientTransport — sendAction', () => {
     it('delivers an ACTION message to the server', async () => {
         const { server, playerId, transport } = await makeClientTransport();
 
-        const received: { from: PlayerId }[] = [];
-        server.onMessage((from, msg) => {
-            if (msg.type === 'ACTION') received.push({ from });
-        });
+        const received = waitForServerInboundMessage(server, (_from, msg) => msg.type === 'ACTION');
 
         transport.sendAction({ type: 'test:move', playerId, tick: 3, payload: { x: 1 } });
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const receivedMessage = await received;
 
-        expect(received).toHaveLength(1);
-        expect(received[0]?.from).toBe(playerId);
+        expect(receivedMessage.from).toBe(playerId);
     });
 
     it('sets checksum to crc32Json(action) on the outbound ACTION frame', async () => {
         const { server, playerId, transport } = await makeClientTransport();
 
-        const frames: ClientMessage[] = [];
-        server.onMessage((_from, msg) => {
-            if (msg.type === 'ACTION') frames.push(msg);
-        });
+        const received = waitForServerInboundMessage(server, (_from, msg) => msg.type === 'ACTION');
 
         const action = { type: 'test:move', playerId, tick: 5, payload: { x: 2 } };
         transport.sendAction(action);
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const { message } = await received;
 
-        expect(frames).toHaveLength(1);
-        const frame = frames[0];
+        const frame = message;
         expect(frame?.type).toBe('ACTION');
         if (frame?.type === 'ACTION') {
             expect(frame.checksum).toBe(crc32Json(action));
@@ -133,19 +152,19 @@ describe('WsClientTransport — sendReadyStateUpdate', () => {
     it('delivers a READY_STATE_UPDATE message to the server', async () => {
         const { server, playerId, transport } = await makeClientTransport();
 
-        const received: { from: PlayerId; ready: boolean }[] = [];
-        server.onMessage((from, msg) => {
-            if (msg.type === 'READY_STATE_UPDATE') {
-                received.push({ from, ready: msg.ready });
-            }
-        });
+        const received = waitForServerInboundMessage(
+            server,
+            (_from, msg) => msg.type === 'READY_STATE_UPDATE',
+        );
 
         transport.sendReadyStateUpdate(true);
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const receivedMessage = await received;
 
-        expect(received).toHaveLength(1);
-        expect(received[0]?.from).toBe(playerId);
-        expect(received[0]?.ready).toBe(true);
+        expect(receivedMessage.from).toBe(playerId);
+        expect(receivedMessage.message.type).toBe('READY_STATE_UPDATE');
+        if (receivedMessage.message.type === 'READY_STATE_UPDATE') {
+            expect(receivedMessage.message.ready).toBe(true);
+        }
     });
 });
 
@@ -155,25 +174,34 @@ describe('WsClientTransport — onSnapshotReceived', () => {
     it('fires when the host sends a SNAPSHOT message', async () => {
         const { hostTransport, playerId, transport } = await makeClientTransport();
 
-        const snapshots: PlayerSnapshot[] = [];
-        transport.onSnapshotReceived((s) => snapshots.push(s));
+        const snapshotReceived = new Promise<PlayerSnapshot>((resolve) => {
+            const unsubscribe = transport.onSnapshotReceived((snapshot) => {
+                unsubscribe();
+                resolve(snapshot);
+            });
+        });
 
         hostTransport.sendSnapshot(playerId, makeSnapshot(playerId));
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const snapshot = await snapshotReceived;
 
-        expect(snapshots).toHaveLength(1);
-        expect(snapshots[0]?.viewerId).toBe(playerId);
+        expect(snapshot.viewerId).toBe(playerId);
     });
 
     it('Unsubscribe stops delivery', async () => {
-        const { hostTransport, playerId, transport } = await makeClientTransport();
+        const { hostTransport, playerId, conn, transport } = await makeClientTransport();
 
         const snapshots: PlayerSnapshot[] = [];
         const unsub = transport.onSnapshotReceived((s) => snapshots.push(s));
         unsub();
 
+        const inboundSnapshot = waitForConnectionMessage(
+            conn,
+            (message) => message.type === 'SNAPSHOT',
+        );
+
         hostTransport.sendSnapshot(playerId, makeSnapshot(playerId));
-        await new Promise<void>((r) => setTimeout(r, 30));
+        await inboundSnapshot;
+
         expect(snapshots).toHaveLength(0);
     });
 });
@@ -187,23 +215,42 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
         const snapshots: PlayerSnapshot[] = [];
         transport.onSnapshotReceived((s) => snapshots.push(s));
 
-        const snapshot = makeSnapshot(playerId);
+        const invalidSnapshot = { ...makeSnapshot(playerId), tick: 11 };
+        const validSnapshot = { ...makeSnapshot(playerId), tick: 12 };
+        const validSnapshotReceived = new Promise<PlayerSnapshot>((resolve) => {
+            const unsubscribe = transport.onSnapshotReceived((snapshot) => {
+                unsubscribe();
+                resolve(snapshot);
+            });
+        });
+
         // Send a SNAPSHOT with a deliberately wrong checksum (correct + 1)
         server.sendToPlayer(playerId, {
             type: 'SNAPSHOT',
-            snapshot,
-            checksum: crc32Json(snapshot) + 1,
+            snapshot: invalidSnapshot,
+            checksum: crc32Json(invalidSnapshot) + 1,
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
+        server.sendToPlayer(playerId, {
+            type: 'SNAPSHOT',
+            snapshot: validSnapshot,
+            checksum: crc32Json(validSnapshot),
+        });
 
-        expect(snapshots).toHaveLength(0);
+        const snapshot = await validSnapshotReceived;
+
+        expect(snapshot.tick).toBe(12);
+        expect(snapshots).toHaveLength(1);
     });
 
     it('fires onSnapshotReceived when the SNAPSHOT checksum is correct', async () => {
         const { server, playerId, transport } = await makeClientTransport();
 
-        const snapshots: PlayerSnapshot[] = [];
-        transport.onSnapshotReceived((s) => snapshots.push(s));
+        const snapshotReceived = new Promise<PlayerSnapshot>((resolve) => {
+            const unsubscribe = transport.onSnapshotReceived((snapshot) => {
+                unsubscribe();
+                resolve(snapshot);
+            });
+        });
 
         const snapshot = makeSnapshot(playerId);
         server.sendToPlayer(playerId, {
@@ -211,20 +258,25 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
             snapshot,
             checksum: crc32Json(snapshot),
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const receivedSnapshot = await snapshotReceived;
 
-        expect(snapshots).toHaveLength(1);
-        expect(snapshots[0]?.viewerId).toBe(playerId);
+        expect(receivedSnapshot.viewerId).toBe(playerId);
     });
 
     it('logs a warning when the SNAPSHOT checksum is wrong', async () => {
         const warnMessages: string[] = [];
+        let resolveWarn: (() => void) | null = null;
+        const warned = new Promise<void>((resolve) => {
+            resolveWarn = resolve;
+        });
         const logger: Logger = {
             trace: (): void => {},
             debug: (): void => {},
             info: (): void => {},
             warn: (msg: string): void => {
                 warnMessages.push(msg);
+                resolveWarn?.();
+                resolveWarn = null;
             },
             error: (): void => {},
             fatal: (): void => {},
@@ -260,7 +312,7 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
             snapshot,
             checksum: crc32Json(snapshot) + 1,
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
+        await warned;
 
         expect(snapshots).toHaveLength(0);
         expect(warnMessages).toHaveLength(1);
@@ -277,8 +329,12 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
         // the same bytes, not Zod's reordered output.
         const { server, playerId, transport } = await makeClientTransport();
 
-        const snapshots: PlayerSnapshot[] = [];
-        transport.onSnapshotReceived((s) => snapshots.push(s));
+        const snapshotReceived = new Promise<PlayerSnapshot>((resolve) => {
+            const unsubscribe = transport.onSnapshotReceived((snapshot) => {
+                unsubscribe();
+                resolve(snapshot);
+            });
+        });
 
         // Non-schema key order: phase comes before tick
         const nonSchemaOrderSnapshot: PlayerSnapshot = {
@@ -298,12 +354,11 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
             snapshot: nonSchemaOrderSnapshot,
             checksum,
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const snapshot = await snapshotReceived;
 
         // After the fix: snapshot accepted (CRC validated against pre-Zod bytes)
         // Before the fix: snapshot rejected (CRC computed from Zod-reordered keys)
-        expect(snapshots).toHaveLength(1);
-        expect(snapshots[0]?.tick).toBe(77);
+        expect(snapshot.tick).toBe(77);
     });
 });
 
@@ -313,18 +368,21 @@ describe('WsClientTransport — onLobbyStateChanged', () => {
     it('fires when the host broadcasts a LOBBY_STATE message', async () => {
         const { hostTransport, transport } = await makeClientTransport();
 
-        const states: LobbyState[] = [];
-        transport.onLobbyStateChanged((s) => states.push(s));
+        const stateReceived = new Promise<LobbyState>((resolve) => {
+            const unsubscribe = transport.onLobbyStateChanged((state) => {
+                unsubscribe();
+                resolve(state);
+            });
+        });
 
         const state: LobbyState = {
             info: { sessionId: 'x', hostId: toPlayerId('h'), gameId: 'test' },
             players: [],
         };
         hostTransport.broadcastLobbyState(state);
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const receivedState = await stateReceived;
 
-        expect(states).toHaveLength(1);
-        expect(states[0]?.info.gameId).toBe('test');
+        expect(receivedState.info.gameId).toBe('test');
     });
 });
 
@@ -334,17 +392,20 @@ describe('WsClientTransport — onSideChannelReceived', () => {
     it('fires when the host sends a CHAT frame', async () => {
         const { hostTransport, playerId, transport } = await makeClientTransport();
 
-        const received: SideChannelMessage[] = [];
-        transport.onSideChannelReceived((m) => received.push(m));
+        const messageReceived = new Promise<SideChannelMessage>((resolve) => {
+            const unsubscribe = transport.onSideChannelReceived((message) => {
+                unsubscribe();
+                resolve(message);
+            });
+        });
 
         hostTransport.sendSideChannel(playerId, {
             kind: 'chat',
             payload: { senderId: toPlayerId('host'), text: 'hello', timestamp: 0 },
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
+        const message = await messageReceived;
 
-        expect(received).toHaveLength(1);
-        expect(received[0]?.kind).toBe('chat');
+        expect(message.kind).toBe('chat');
     });
 });
 
@@ -354,16 +415,20 @@ describe('WsClientTransport — onDisconnected', () => {
     it('fires when the server closes the connection', async () => {
         const { server, transport } = await makeClientTransport({ maxRetries: 0 });
 
-        const reasons: string[] = [];
-        transport.onDisconnected((r) => reasons.push(r));
+        const disconnectReason = new Promise<string>((resolve) => {
+            const unsubscribe = transport.onDisconnected((reason) => {
+                unsubscribe();
+                resolve(reason);
+            });
+        });
 
         await server.close();
         // Remove server from cleanup list (already closed)
         const idx = servers.indexOf(server);
         if (idx !== -1) servers.splice(idx, 1);
 
-        await new Promise<void>((r) => setTimeout(r, 100));
-        expect(reasons.length).toBeGreaterThan(0);
+        const reason = await disconnectReason;
+        expect(reason.length).toBeGreaterThan(0);
     });
 });
 
@@ -373,56 +438,57 @@ describe('WsClientTransport — onLatencyUpdate', () => {
     it('fires with latencyMs >= 0 when a PONG is received', async () => {
         const { server, playerId, transport } = await makeClientTransport();
 
-        // Wait for the initial constructor PING/PONG to complete before subscribing
-        await new Promise<void>((r) => setTimeout(r, 80));
-
         const latencies: number[] = [];
         transport.onLatencyUpdate((ms) => latencies.push(ms));
+        const baseline = latencies.length;
 
         server.sendToPlayer(playerId, {
             type: 'PONG',
             sentAt: performance.now() - 5,
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
 
-        expect(latencies).toHaveLength(1);
-        expect(latencies[0]).toBeGreaterThanOrEqual(0);
+        await vi.waitFor(() => {
+            expect(latencies.length).toBeGreaterThan(baseline);
+        });
+
+        const [lastLatency] = latencies.slice(-1);
+
+        expect(lastLatency).toBeGreaterThanOrEqual(0);
     });
 
     it('fires automatically when the server responds to the initial PING', async () => {
         const { transport } = await makeClientTransport();
 
-        const latencies: number[] = [];
-        transport.onLatencyUpdate((ms) => latencies.push(ms));
+        const latency = await new Promise<number>((resolve) => {
+            const unsubscribe = transport.onLatencyUpdate((ms) => {
+                unsubscribe();
+                resolve(ms);
+            });
+        });
 
-        // The initial PING is sent in the constructor; the MessageRouter responds
-        // with a PONG automatically — wait for the round-trip.
-        await new Promise<void>((r) => setTimeout(r, 100));
-
-        expect(latencies.length).toBeGreaterThanOrEqual(1);
-        expect(latencies[0]).toBeGreaterThanOrEqual(0);
+        expect(latency).toBeGreaterThanOrEqual(0);
     });
 
     it('does not fire after unsubscribe', async () => {
-        const { server, playerId, transport } = await makeClientTransport();
+        const { server, playerId, conn, transport } = await makeClientTransport();
 
         const latencies: number[] = [];
         const unsub = transport.onLatencyUpdate((ms) => latencies.push(ms));
         unsub();
 
+        const pongDelivered = waitForConnectionMessage(conn, (message) => message.type === 'PONG');
+
         server.sendToPlayer(playerId, {
             type: 'PONG',
             sentAt: performance.now() - 5,
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
+        await pongDelivered;
 
         expect(latencies).toHaveLength(0);
     });
 
     it('clamps latency to 0 when a PONG sentAt is in the future', async () => {
         const { server, playerId, transport } = await makeClientTransport();
-
-        await new Promise<void>((r) => setTimeout(r, 80));
 
         const latencies: number[] = [];
         transport.onLatencyUpdate((ms) => latencies.push(ms));
@@ -431,10 +497,10 @@ describe('WsClientTransport — onLatencyUpdate', () => {
             type: 'PONG',
             sentAt: performance.now() + 1_000,
         });
-        await new Promise<void>((r) => setTimeout(r, 30));
 
-        expect(latencies).toHaveLength(1);
-        expect(latencies[0]).toBe(0);
+        await vi.waitFor(() => {
+            expect(latencies.some((latencyMs) => latencyMs === 0)).toBe(true);
+        });
     });
 });
 
