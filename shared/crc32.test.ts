@@ -61,7 +61,7 @@ describe('crc32Json', () => {
         expect(crc32Json('')).not.toBe(0);
     });
 
-    it('returns 0 for a value whose JSON serialisation is the empty string — impossible via JSON, so verifies non-zero for null', () => {
+    it('returns non-zero for null (JSON.stringify(null) === "null")', () => {
         // JSON.stringify(null) === 'null', crc32('null') !== 0
         expect(crc32Json(null)).not.toBe(0);
     });
