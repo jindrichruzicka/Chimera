@@ -115,6 +115,8 @@ export class MessageRouter {
 
             case 'CHAT':
                 for (const cb of this.sideChannelCbs) {
+                    // Internal placeholder only: WsHostTransport stamps wire-level CHAT.serverTime.
+                    // Keep this at 0 so review readers do not treat router-local payload time as authoritative.
                     cb(from, {
                         kind: 'chat',
                         payload: { senderId: from, text: msg.body, timestamp: 0 },

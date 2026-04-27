@@ -144,17 +144,27 @@ describe('MessageRouter — ACTION routing', () => {
 // ─── Side-channel routing ─────────────────────────────────────────────────────
 
 describe('MessageRouter — side-channel routing', () => {
-    it('routes CHAT messages to onSideChannelReceived as kind=chat', () => {
+    it('routes CHAT messages with timestamp: 0 placeholder for transport stamping', () => {
         const bus = new FakeMessageBus();
         const router = new MessageRouter(bus);
-        const received: { readonly from: PlayerId; readonly kind: string }[] = [];
-        router.onSideChannelReceived((from, message) =>
-            received.push({ from, kind: message.kind }),
-        );
+        const received: { readonly from: PlayerId; readonly message: unknown }[] = [];
+        router.onSideChannelReceived((from, message) => received.push({ from, message }));
 
         bus.emit(playerOne, { type: 'CHAT', body: 'hi' });
 
-        expect(received).toEqual([{ from: playerOne, kind: 'chat' }]);
+        expect(received).toEqual([
+            {
+                from: playerOne,
+                message: {
+                    kind: 'chat',
+                    payload: {
+                        senderId: playerOne,
+                        text: 'hi',
+                        timestamp: 0,
+                    },
+                },
+            },
+        ]);
     });
 
     it('routes PROFILE_UPDATE messages to onSideChannelReceived as kind=profile', () => {

@@ -244,6 +244,7 @@ describe('WsHostTransport — sendSideChannel', () => {
 
         expect(received.type).toBe('CHAT');
         if (received.type === 'CHAT') {
+            expect(received.serverTime).not.toBe(0);
             // serverTime must be a real wall-clock stamp, not the forwarded 0.
             expect(received.serverTime).toBeGreaterThanOrEqual(before);
             expect(received.serverTime).toBeLessThanOrEqual(after + 50);
