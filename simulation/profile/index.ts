@@ -8,6 +8,7 @@
  *
  * Populated progressively as F14 tasks land:
  *   - T1 (#338): ProfileSchema types, ProfileRepository interface, EngineProfileSchema
+ *   - T2 (#339): ProfileSanitizer.admit() with all 7 rejection types
  */
 
 export type {
@@ -19,3 +20,12 @@ export type {
     ProfileRepository,
 } from './ProfileSchema.js';
 export { localProfileId, EngineProfileSchema } from './ProfileSchema.js';
+
+export type { AdmissionRejection, AdmissionResult } from './ProfileSanitizer.js';
+export {
+    admit,
+    MAX_DISPLAY_NAME_LENGTH,
+    MAX_CUSTOM_AVATAR_BYTES,
+    ALLOWED_AVATAR_MIME_TYPES,
+    RESERVED_ID_PREFIXES,
+} from './ProfileSanitizer.js';

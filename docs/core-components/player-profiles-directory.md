@@ -102,7 +102,18 @@ type AdmissionRejection =
     | 'NAMESPACE_COLLISION';
 
 // Pure. Idempotent. Never throws.
-function admit(attestation: unknown, schema: GameProfileSchema<EngineProfile>): AdmissionResult;
+//
+// existingIds          — set of localProfileIds already in the current lobby;
+//                        used for NAMESPACE_COLLISION detection. Defaults to empty set.
+// gameSchemaValidator  — optional game-specific validator; receives the base-validated
+//                        PlayerProfile and returns false to trigger SCHEMA_MISMATCH.
+//                        Enables game extensions (e.g. TacticsProfile) to enforce
+//                        fields beyond the EngineProfile base.
+function admit(
+    attestation: unknown,
+    existingIds?: ReadonlySet<string>,
+    gameSchemaValidator?: (profile: PlayerProfile) => boolean,
+): AdmissionResult;
 ```
 
 ### Rejection Catalogue
