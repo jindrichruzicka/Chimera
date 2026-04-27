@@ -23,6 +23,10 @@ Before performing any git operations, use the appropriate skill from the git ski
     - Run: `bash .github/skills/git/create-branch/scripts/create-branch.sh <N>`
     - Use when: Starting work on a GitHub issue
 
+- **Commit + push on a feature branch**: [`.github/skills/git/commit-and-push/SKILL.md`](../.github/skills/git/commit-and-push/SKILL.md)
+    - Run: `bash .github/skills/git/commit-and-push/scripts/commit-and-push.sh`
+    - Use when: Saving staged changes on a feature/fix/refactor branch (auto-detects first vs. fixup commit)
+
 - **Merge branch to main**: [`.github/skills/git/merge/SKILL.md`](../.github/skills/git/merge/SKILL.md)
     - Run: `bash .github/skills/git/merge/scripts/check-and-merge.sh`
     - Use when: Landing completed work onto main
