@@ -130,7 +130,7 @@ export type ServerMessage =
           readonly body: string;
           readonly serverTime: number;
       }
-    | { readonly type: 'PONG'; readonly sentAt: number; readonly serverTime: number }
+    | { readonly type: 'PONG'; readonly sentAt: number }
     | { readonly type: 'LOBBY_STATE'; readonly state: LobbyState };
 
 // ─── Type guards ──────────────────────────────────────────────────────────────

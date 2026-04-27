@@ -183,7 +183,7 @@ describe('LobbyServer — sending messages', () => {
 
         const received = await new Promise<ServerMessage>((resolve) => {
             ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
-            server.sendToPlayer(playerId, { type: 'PONG', sentAt: 0, serverTime: 1 });
+            server.sendToPlayer(playerId, { type: 'PONG', sentAt: 0 });
         });
         expect(received.type).toBe('PONG');
         ws.close();
@@ -202,7 +202,7 @@ describe('LobbyServer — sending messages', () => {
             c2.ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
         });
 
-        server.broadcast({ type: 'PONG', sentAt: 0, serverTime: 2 });
+        server.broadcast({ type: 'PONG', sentAt: 0 });
 
         const [r1, r2] = await Promise.all([p1, p2]);
         expect(r1.type).toBe('PONG');
@@ -215,7 +215,7 @@ describe('LobbyServer — sending messages', () => {
         const server = makeServer();
         await server.ready();
         expect(() =>
-            server.sendToPlayer(toPlayerId('ghost'), { type: 'PONG', sentAt: 0, serverTime: 0 }),
+            server.sendToPlayer(toPlayerId('ghost'), { type: 'PONG', sentAt: 0 }),
         ).not.toThrow();
     });
 });

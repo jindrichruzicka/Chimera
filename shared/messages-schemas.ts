@@ -206,7 +206,7 @@ const PongMessage = z
     .object({
         type: z.literal('PONG'),
         sentAt: z.number(),
-        serverTime: z.number(),
+        // TODO(F-clock-skew): serverTime removed until clock-skew estimation is implemented.
     })
     .strict();
 

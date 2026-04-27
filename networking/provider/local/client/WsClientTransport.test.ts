@@ -340,7 +340,6 @@ describe('WsClientTransport — onLatencyUpdate', () => {
         server.sendToPlayer(playerId, {
             type: 'PONG',
             sentAt: performance.now() - 5,
-            serverTime: Date.now(),
         });
         await new Promise<void>((r) => setTimeout(r, 30));
 
@@ -372,7 +371,6 @@ describe('WsClientTransport — onLatencyUpdate', () => {
         server.sendToPlayer(playerId, {
             type: 'PONG',
             sentAt: performance.now() - 5,
-            serverTime: Date.now(),
         });
         await new Promise<void>((r) => setTimeout(r, 30));
 
@@ -390,7 +388,6 @@ describe('WsClientTransport — onLatencyUpdate', () => {
         server.sendToPlayer(playerId, {
             type: 'PONG',
             sentAt: performance.now() + 1_000,
-            serverTime: Date.now(),
         });
         await new Promise<void>((r) => setTimeout(r, 30));
 
@@ -481,7 +478,6 @@ describe('WsClientTransport — dispose', () => {
         dispatch?.({
             type: 'PONG',
             sentAt: performance.now() - 1,
-            serverTime: Date.now(),
         });
 
         expect(snapshotFired).toHaveLength(0);

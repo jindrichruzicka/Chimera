@@ -138,7 +138,7 @@ export class MessageRouter {
                 const pong: ServerMessage = {
                     type: 'PONG',
                     sentAt: msg.sentAt,
-                    serverTime: Date.now(),
+                    // TODO(F-clock-skew): add serverTime once clock-skew estimation is implemented.
                 };
                 this.server.sendToPlayer(from, pong);
                 break;

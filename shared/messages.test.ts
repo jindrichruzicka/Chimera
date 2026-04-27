@@ -103,10 +103,10 @@ describe('shared/messages — ServerMessage', () => {
         expect(msg.type).toBe('REJECT');
     });
 
-    it('PONG message has sentAt and serverTime', () => {
-        const msg: ServerMessage = { type: 'PONG', sentAt: 100, serverTime: 200 };
+    it('PONG message has sentAt (serverTime deferred to F-clock-skew)', () => {
+        const msg: ServerMessage = { type: 'PONG', sentAt: 100 };
         expect(msg.type).toBe('PONG');
-        expect(msg.serverTime).toBe(200);
+        expect(msg.sentAt).toBe(100);
     });
 
     it('LOBBY_STATE message has a LobbyState payload', () => {
@@ -148,7 +148,7 @@ describe('shared/messages — isClientMessage type guard', () => {
 
 describe('shared/messages — isServerMessage type guard', () => {
     it('returns true for a valid ServerMessage type', () => {
-        expect(isServerMessage({ type: 'PONG', sentAt: 0, serverTime: 1 })).toBe(true);
+        expect(isServerMessage({ type: 'PONG', sentAt: 0 })).toBe(true);
     });
 
     it('returns false for an unknown type string', () => {

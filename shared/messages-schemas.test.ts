@@ -208,13 +208,23 @@ describe('ServerMessageSchema — REJECT', () => {
 });
 
 describe('ServerMessageSchema — PONG', () => {
-    it('parses a valid PONG message', () => {
+    it('parses a valid PONG message without serverTime (deferred to F-clock-skew)', () => {
+        // serverTime is removed from PONG until clock-skew estimation is implemented.
+        const result = ServerMessageSchema.safeParse({
+            type: 'PONG',
+            sentAt: 100,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects PONG with extra serverTime field (strict schema)', () => {
+        // Once serverTime is removed, old clients sending serverTime must be detected.
         const result = ServerMessageSchema.safeParse({
             type: 'PONG',
             sentAt: 100,
             serverTime: 200,
         });
-        expect(result.success).toBe(true);
+        expect(result.success).toBe(false);
     });
 });
 
