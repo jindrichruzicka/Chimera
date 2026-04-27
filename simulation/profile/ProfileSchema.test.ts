@@ -9,7 +9,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { AssetRef, TextureAsset } from '../content/AssetRef.js';
+import { buildAssetRef } from '../content/AssetRef.js';
+import type { TextureAsset } from '../content/AssetRef.js';
 import { EngineProfileSchema, localProfileId } from './ProfileSchema.js';
 import type {
     LocalProfileId,
@@ -23,7 +24,7 @@ import type {
 
 const validBuiltinAvatar: AvatarSource = {
     kind: 'builtin',
-    ref: 'tactics/textures/avatars/red.png' as AssetRef<TextureAsset>,
+    ref: buildAssetRef<TextureAsset>('tactics', 'textures/avatars/red.png'),
 };
 
 const validProfile: EngineProfile = {
