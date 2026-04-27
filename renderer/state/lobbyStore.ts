@@ -23,9 +23,9 @@ export interface LobbyStoreState {
 
     /**
      * Apply incoming lobby state from IPC (chimera:lobby-update push).
-     * Do NOT call from components directly.
+     * ipcClient only — do NOT call from components directly.
      */
-    _applyLobbyState(state: LobbyState | null): void;
+    applyLobbyState(state: LobbyState | null): void;
 }
 
 // ── Factory (for testing and production use) ──────────────────────────────────
@@ -37,7 +37,7 @@ export function createLobbyStore(): StoreApi<LobbyStoreState> {
     return createStore<LobbyStoreState>()((set) => ({
         lobbyState: null,
 
-        _applyLobbyState(state: LobbyState | null): void {
+        applyLobbyState(state: LobbyState | null): void {
             set(() => ({
                 lobbyState: state,
             }));
@@ -65,5 +65,4 @@ export function useLobbyStore<T>(selector: (state: LobbyStoreState) => T): T {
 
 // Expose static accessors for direct store access (IPC wiring, tests)
 useLobbyStore.getState = lobbyStoreInstance.getState.bind(lobbyStoreInstance);
-useLobbyStore.setState = lobbyStoreInstance.setState.bind(lobbyStoreInstance);
 useLobbyStore.subscribe = lobbyStoreInstance.subscribe.bind(lobbyStoreInstance);

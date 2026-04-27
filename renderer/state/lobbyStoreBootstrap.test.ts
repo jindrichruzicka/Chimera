@@ -64,7 +64,7 @@ function makeSystemApi(
 
 // Reset the singleton store between tests
 beforeEach(() => {
-    useLobbyStore.setState({ lobbyState: null });
+    useLobbyStore.getState().applyLobbyState(null);
     useLobbyUiStore.getState().clearLocalLobbyContext();
 });
 
@@ -160,7 +160,31 @@ describe('bootstrapLobbyStore()', () => {
         expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-1', 'player-2']);
     });
 
-    it('calls _applyLobbyState with null when connection status is disconnected', () => {
+    it('clears local lobby context when local player is evicted from the roster', () => {
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+        const systemApi = makeSystemApi();
+
+        // Establish that the local player is player-1
+        useLobbyUiStore.getState().setLocalLobbyContext('player-1', ['player-1', 'player-2']);
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        expect(capturedLobbyUpdate).toBeDefined();
+
+        // Push a lobby state that no longer includes player-1 (evicted)
+        capturedLobbyUpdate!({
+            info: { sessionId: 'session-1', hostId: 'player-2', gameId: 'tactics' },
+            players: [{ playerId: 'player-2', displayName: 'Player Two', ready: false }],
+        });
+
+        expect(useLobbyUiStore.getState().localPlayerId).toBeNull();
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual([]);
+    });
+
+    it('calls applyLobbyState with null when connection status is disconnected', () => {
         let capturedConnectionStatus:
             | ((status: 'connected' | 'disconnected' | 'connecting' | 'error') => void)
             | undefined;
@@ -176,7 +200,7 @@ describe('bootstrapLobbyStore()', () => {
 
         // Set some initial lobby state
         const initialState = makeLobbyState();
-        useLobbyStore.getState()._applyLobbyState(initialState);
+        useLobbyStore.getState().applyLobbyState(initialState);
         useLobbyUiStore.getState().setLocalLobbyContext('player-1', ['player-1', 'player-2']);
         expect(useLobbyStore.getState().lobbyState).toBe(initialState);
 

@@ -33,6 +33,7 @@ function syncLocalSeatsFromLobbyState(lobbyState: LobbyState): void {
     const lobbyPlayerIds = lobbyState.players.map((player) => player.playerId);
 
     if (!lobbyPlayerIds.includes(localPlayerId)) {
+        useLobbyUiStore.getState().clearLocalLobbyContext();
         return;
     }
 
@@ -48,17 +49,20 @@ function syncLocalSeatsFromLobbyState(lobbyState: LobbyState): void {
  * Returns the unsubscribe function from the lobby API so the caller can clean
  * up when the component unmounts or the bridge is replaced.
  */
-export function bootstrapLobbyStore(lobbyApi: LobbyAPI, systemApi: SystemAPI): Unsubscribe {
+export function bootstrapLobbyStore(
+    lobbyApi: Pick<LobbyAPI, 'onUpdate'>,
+    systemApi: Pick<SystemAPI, 'onConnectionStatus'>,
+): Unsubscribe {
     // Subscribe to lobby updates
     const unsubscribeLobby = lobbyApi.onUpdate((lobbyState) => {
-        useLobbyStore.getState()._applyLobbyState(lobbyState);
+        useLobbyStore.getState().applyLobbyState(lobbyState);
         syncLocalSeatsFromLobbyState(lobbyState);
     });
 
     // Subscribe to connection status changes
     const unsubscribeSystem = systemApi.onConnectionStatus((status) => {
         if (status === 'disconnected') {
-            useLobbyStore.getState()._applyLobbyState(null);
+            useLobbyStore.getState().applyLobbyState(null);
             useLobbyUiStore.getState().clearLocalLobbyContext();
         }
     });

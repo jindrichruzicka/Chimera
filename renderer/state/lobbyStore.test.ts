@@ -11,7 +11,7 @@ import type { LobbyState } from '@chimera/shared/messages-schemas.js';
 describe('lobbyStore', () => {
     beforeEach(() => {
         // Reset the store before each test
-        useLobbyStore.setState({ lobbyState: null });
+        useLobbyStore.getState().applyLobbyState(null);
     });
 
     it('should initialize with null lobby state', () => {
@@ -37,7 +37,7 @@ describe('lobbyStore', () => {
             ],
         };
 
-        store.getState()._applyLobbyState(mockLobbyState);
+        store.getState().applyLobbyState(mockLobbyState);
         const state = store.getState();
         expect(state.lobbyState).toEqual(mockLobbyState);
     });
@@ -59,8 +59,8 @@ describe('lobbyStore', () => {
             ],
         };
 
-        store.getState()._applyLobbyState(mockLobbyState);
-        store.getState()._applyLobbyState(null);
+        store.getState().applyLobbyState(mockLobbyState);
+        store.getState().applyLobbyState(null);
         const state = store.getState();
         expect(state.lobbyState).toBeNull();
     });
@@ -84,8 +84,8 @@ describe('lobbyStore', () => {
             players: [{ playerId: 'p1', displayName: 'One', ready: true }],
         };
 
-        store.getState()._applyLobbyState(firstState);
-        store.getState()._applyLobbyState(secondState);
+        store.getState().applyLobbyState(firstState);
+        store.getState().applyLobbyState(secondState);
 
         expect(store.getState().lobbyState).toEqual(secondState);
     });

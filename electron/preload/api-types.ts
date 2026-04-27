@@ -13,6 +13,7 @@
 // the Debug Inspector preload lives elsewhere.
 
 import type { LogEntry } from '@chimera/shared/logging.js';
+import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
 
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
@@ -124,24 +125,7 @@ export interface JoinLobbyParams {
 }
 
 /** Metadata returned when a lobby is successfully hosted or joined. */
-export interface LobbyInfo {
-    readonly sessionId: string;
-    readonly hostId: PlayerId;
-    readonly gameId: string;
-}
-
-/** One player's entry in the live lobby roster. */
-export interface LobbyPlayerEntry {
-    readonly playerId: PlayerId;
-    readonly displayName: string;
-    readonly ready: boolean;
-}
-
-/** Full lobby state pushed to all clients via onUpdate(). */
-export interface LobbyState {
-    readonly info: LobbyInfo;
-    readonly players: readonly LobbyPlayerEntry[];
-}
+export type { LobbyInfo, LobbyPlayerEntry, LobbyState };
 
 /** A browsable lobby entry returned by LobbyDiscoveryAPI.list(). */
 export interface LobbyListEntry {
