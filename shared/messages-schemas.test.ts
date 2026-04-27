@@ -107,7 +107,12 @@ describe('ClientMessageSchema — PROFILE_UPDATE', () => {
     it('parses a valid PROFILE_UPDATE message', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'PROFILE_UPDATE',
-            profile: { playerId: toPlayerId('p1'), displayName: 'Bob' },
+            profile: {
+                localProfileId: 'player-001',
+                displayName: 'Bob',
+                avatar: { kind: 'builtin', ref: 'avatars/default' },
+                locale: 'en-US',
+            },
         });
         expect(result.success).toBe(true);
     });

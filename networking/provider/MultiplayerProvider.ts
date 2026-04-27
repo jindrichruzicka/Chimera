@@ -135,12 +135,21 @@ export interface ChatMessage {
 }
 
 /**
- * Stub for player profile payload. Expanded in F14 — Player Profiles (§4.24).
- * Carried by SideChannelMessage.kind === 'profile'.
+ * Full player profile payload carried by SideChannelMessage.kind === 'profile'.
+ *
+ * Expanded in F14 — Player Profiles (§4.24) from the original stub.
+ * Uses plain string types for wire compatibility; branded LocalProfileId and
+ * AssetRef<T> exist only inside the engine (simulation/profile/ProfileSchema.ts).
+ * The host passes this payload as `unknown` to ProfileSanitizer.admit() which
+ * validates all fields structurally (Invariant #61).
  */
 export interface PlayerProfilePayload {
-    readonly playerId: PlayerId;
+    readonly localProfileId: string;
     readonly displayName: string;
+    readonly avatar:
+        | { readonly kind: 'builtin'; readonly ref: string }
+        | { readonly kind: 'custom'; readonly mimeType: string; readonly base64: string };
+    readonly locale: string;
 }
 
 /**
@@ -152,10 +161,17 @@ export interface PlayerProfilePayload {
  * Side-channel messages are STRICTLY PARALLEL to the ActionPipeline — they do
  * NOT advance `tick`, do NOT enter ActionHistory, and do NOT appear in saves or
  * replays. See §4.24 (profiles) and §4.29 (chat).
+ *
+ * Host → client response variants:
+ *   profile_ack    — PROFILE_UPDATE was admitted and the directory updated.
+ *   profile_reject — PROFILE_UPDATE was rejected; `reason` is either
+ *                    `'profile:<AdmissionRejection>'` or `'rate_limit'`.
  */
 export type SideChannelMessage =
     | { readonly kind: 'chat'; readonly payload: ChatMessage }
-    | { readonly kind: 'profile'; readonly payload: PlayerProfilePayload };
+    | { readonly kind: 'profile'; readonly payload: PlayerProfilePayload }
+    | { readonly kind: 'profile_ack' }
+    | { readonly kind: 'profile_reject'; readonly reason: string };
 
 // ─── Subscription handle ──────────────────────────────────────────────────────
 

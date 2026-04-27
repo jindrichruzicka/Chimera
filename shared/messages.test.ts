@@ -48,7 +48,12 @@ describe('shared/messages — ClientMessage', () => {
     it('PROFILE_UPDATE message has a profile', () => {
         const msg: ClientMessage = {
             type: 'PROFILE_UPDATE',
-            profile: { playerId: toPlayerId('p1'), displayName: 'Bob' },
+            profile: {
+                localProfileId: 'player-001',
+                displayName: 'Bob',
+                avatar: { kind: 'builtin', ref: 'avatars/default' },
+                locale: 'en-US',
+            },
         };
         expect(msg.type).toBe('PROFILE_UPDATE');
     });

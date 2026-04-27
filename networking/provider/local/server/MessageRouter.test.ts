@@ -177,7 +177,12 @@ describe('MessageRouter — side-channel routing', () => {
 
         bus.emit(playerOne, {
             type: 'PROFILE_UPDATE',
-            profile: { playerId: playerOne, displayName: 'New Name' },
+            profile: {
+                localProfileId: 'player-001',
+                displayName: 'New Name',
+                avatar: { kind: 'builtin', ref: 'avatars/default' },
+                locale: 'en-US',
+            },
         });
 
         expect(received).toEqual([{ from: playerOne, kind: 'profile' }]);

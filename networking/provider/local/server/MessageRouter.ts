@@ -128,10 +128,7 @@ export class MessageRouter {
                 for (const cb of this.sideChannelCbs) {
                     cb(from, {
                         kind: 'profile',
-                        payload: {
-                            playerId: msg.profile.playerId,
-                            displayName: msg.profile.displayName,
-                        },
+                        payload: msg.profile,
                     });
                 }
                 break;

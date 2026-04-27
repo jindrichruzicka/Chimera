@@ -84,10 +84,7 @@ export class WsClientTransport implements ClientTransport {
         if (msg.kind === 'profile') {
             this.connection.send({
                 type: 'PROFILE_UPDATE',
-                profile: {
-                    playerId: this.playerId,
-                    displayName: msg.payload.displayName,
-                },
+                profile: msg.payload,
             });
         }
     }

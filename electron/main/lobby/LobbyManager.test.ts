@@ -29,6 +29,7 @@ import {
     type MultiplayerProvider,
     type PlayerSnapshot,
     type LobbyState,
+    type SideChannelMessage,
     type Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
@@ -1054,6 +1055,154 @@ describe('LobbyManager — JOIN profile attestation', () => {
 
         // joinLobby without a profile should succeed (gate is absent)
         await expect(provider.joinLobby({ address: hostInfo.sessionId })).resolves.toBeDefined();
+
+        await manager.closeLobby();
+    });
+});
+
+// ── PROFILE_UPDATE side-channel ───────────────────────────────────────────────
+//
+// Invariant #61: ProfileSanitizer.admit() is the mandatory gate for PROFILE_UPDATE.
+// Invariant #62: PROFILE_UPDATE is rate-limited to 1 per 5 seconds per client.
+
+describe('LobbyManager — PROFILE_UPDATE side-channel', () => {
+    /**
+     * Build a base64 string whose decoded byte length exceeds MAX_CUSTOM_AVATAR_BYTES
+     * (64 KB).  The AVATAR_TOO_LARGE check fires before the magic-bytes check, so
+     * the content does not need to be a valid PNG/JPEG.
+     */
+    function makeOversizedAvatarBase64(): string {
+        // 65537 bytes > 65536 (64 KB) — triggers AVATAR_TOO_LARGE in ProfileSanitizer
+        return Buffer.alloc(65537, 0).toString('base64');
+    }
+
+    it('valid PROFILE_UPDATE updates PlayerDirectory and triggers LobbyState rebroadcast', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const lobbyStates: LobbyState[] = [];
+        const manager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            (state) => {
+                lobbyStates.push(state);
+            },
+            undefined,
+            createProfileGate(directory),
+        );
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        const originalProfile = makeValidProfile({ displayName: 'Alice' });
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: originalProfile,
+        });
+
+        // Wait for the deferred onPlayerJoined callback to fire so the player
+        // is in the lobby roster before sending PROFILE_UPDATE.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const updatedProfile = makeValidProfile({ displayName: 'AliceUpdated' });
+        clientSession.transport.sendSideChannel({ kind: 'profile', payload: updatedProfile });
+
+        // PlayerDirectory must reflect the new profile
+        const entries = Object.values(directory.snapshot());
+        expect(entries).toHaveLength(1);
+        expect(entries[0]!.displayName).toBe('AliceUpdated');
+
+        // LobbyState must have been rebroadcast with the new displayName
+        const lastState = lobbyStates[lobbyStates.length - 1];
+        const updatedEntry = lastState?.players.find(
+            (p) => p.playerId === clientSession.localPlayerId,
+        );
+        expect(updatedEntry?.displayName).toBe('AliceUpdated');
+
+        await manager.closeLobby();
+    });
+
+    it('invalid PROFILE_UPDATE (avatar too large) sends profile_reject and leaves directory unchanged', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const manager = makeManager(provider, directory);
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        const originalProfile = makeValidProfile({ displayName: 'Bob' });
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: originalProfile,
+        });
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const receivedMessages: SideChannelMessage[] = [];
+        clientSession.transport.onSideChannelReceived((msg) => {
+            receivedMessages.push(msg);
+        });
+
+        const invalidProfile = makeValidProfile({
+            avatar: {
+                kind: 'custom',
+                mimeType: 'image/png',
+                base64: makeOversizedAvatarBase64(),
+            },
+        });
+        clientSession.transport.sendSideChannel({ kind: 'profile', payload: invalidProfile });
+
+        // Directory must remain unchanged (original profile preserved)
+        const entries = Object.values(directory.snapshot());
+        expect(entries).toHaveLength(1);
+        expect(entries[0]!.displayName).toBe('Bob');
+
+        // Client must have received a profile_reject message
+        const reject = receivedMessages.find((m) => m.kind === 'profile_reject');
+        expect(reject).toBeDefined();
+        expect((reject as { kind: 'profile_reject'; reason: string }).reason).toBe(
+            'profile:AVATAR_TOO_LARGE',
+        );
+
+        await manager.closeLobby();
+    });
+
+    it('6th PROFILE_UPDATE within 5 s returns REJECT { reason: "rate_limit" } without updating directory', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const manager = makeManager(provider, directory);
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        const originalProfile = makeValidProfile({ displayName: 'Carol' });
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: originalProfile,
+        });
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const receivedMessages: SideChannelMessage[] = [];
+        clientSession.transport.onSideChannelReceived((msg) => {
+            receivedMessages.push(msg);
+        });
+
+        const updateProfile = makeValidProfile({ displayName: 'CarolUpdated' });
+
+        // Send 6 PROFILE_UPDATEs in rapid succession.
+        // The 1st is admitted (no prior timestamp); 2nd–6th are rate-limited.
+        for (let i = 0; i < 6; i++) {
+            clientSession.transport.sendSideChannel({ kind: 'profile', payload: updateProfile });
+        }
+
+        // 6th (and all subsequent within 5 s) must be rejected with rate_limit
+        const rateLimitRejects = receivedMessages.filter(
+            (m) =>
+                m.kind === 'profile_reject' &&
+                (m as { kind: 'profile_reject'; reason: string }).reason === 'rate_limit',
+        );
+        expect(rateLimitRejects.length).toBeGreaterThanOrEqual(1);
+
+        // Directory must not have been updated by a rate-limited attempt
+        // (still holds the profile from the 1st successful update)
+        const entries = Object.values(directory.snapshot());
+        expect(entries).toHaveLength(1);
 
         await manager.closeLobby();
     });

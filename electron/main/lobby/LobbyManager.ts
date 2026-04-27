@@ -49,6 +49,13 @@ export class LobbyManager {
     private lobbyState: LobbyState | null = null;
     /** Active transport subscriptions; cleared and invoked on every closeLobby(). */
     private readonly subscriptions: Unsubscribe[] = [];
+    /**
+     * Per-PlayerId timestamp of the last admitted PROFILE_UPDATE (in ms from
+     * Date.now()).  Used to enforce the 1-per-5-second rate limit per client
+     * (Invariant #62).  Cleared on lobby close so timestamps do not bleed
+     * across sessions.
+     */
+    private readonly profileUpdateTimestamps = new Map<PlayerId, number>();
     /** Optional teardown returned by onSessionHosted; cleared on closeLobby(). */
     private sessionHostedTeardown: (() => void) | null = null;
     /** Optional teardown returned by onSessionJoined; cleared on closeLobby(). */
@@ -144,6 +151,52 @@ export class LobbyManager {
         this.subscriptions.push(
             session.transport.onActionReceived((_from, _action) => {
                 // TODO(F15): simulationHost.enqueueAction(from, action)
+            }),
+            session.transport.onSideChannelReceived((from, msg) => {
+                if (msg.kind !== 'profile') {
+                    return;
+                }
+                if (this.profileGate === undefined) {
+                    return;
+                }
+
+                // Invariant #62 — rate limit: 1 PROFILE_UPDATE per 5 seconds per client.
+                const lastAdmit = this.profileUpdateTimestamps.get(from);
+                if (lastAdmit !== undefined && Date.now() - lastAdmit < 5000) {
+                    session.transport.sendSideChannel(from, {
+                        kind: 'profile_reject',
+                        reason: 'rate_limit',
+                    });
+                    return;
+                }
+
+                // Invariant #61 — admit() is the mandatory gate for PROFILE_UPDATE.
+                const result = this.profileGate.update(from, msg.payload);
+                if (!result.ok) {
+                    session.transport.sendSideChannel(from, {
+                        kind: 'profile_reject',
+                        reason: result.reason,
+                    });
+                    return;
+                }
+
+                // Admission succeeded: record timestamp, update lobby state, broadcast, ACK.
+                this.profileUpdateTimestamps.set(from, Date.now());
+
+                if (this.lobbyState !== null) {
+                    const nextState: LobbyState = {
+                        info: this.lobbyState.info,
+                        players: this.lobbyState.players.map((entry) =>
+                            entry.playerId === from
+                                ? { ...entry, displayName: result.profile.displayName }
+                                : entry,
+                        ),
+                    };
+                    this.publishLobbyState(nextState);
+                    this.broadcastLobbyStateIfHosted(nextState);
+                }
+
+                session.transport.sendSideChannel(from, { kind: 'profile_ack' });
             }),
             session.transport.onReadyStateUpdate((from, ready) => {
                 if (this.lobbyState === null) {
@@ -349,6 +402,9 @@ export class LobbyManager {
         this.session = null;
         this.localPlayerId = null;
         this.lobbyState = null;
+        // Clear rate-limit timestamps so they do not bleed into the next session
+        // (Invariant #62).
+        this.profileUpdateTimestamps.clear();
 
         if (session === null) {
             return;

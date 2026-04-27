@@ -32,10 +32,23 @@ import type { ClientMessage, ServerMessage } from './messages.js';
 
 const PlayerId = z.string();
 
-const WirePlayerProfile = z.object({
-    playerId: PlayerId,
-    displayName: z.string(),
-});
+const WirePlayerProfile = z
+    .object({
+        localProfileId: z.string(),
+        displayName: z.string(),
+        avatar: z.discriminatedUnion('kind', [
+            z.object({ kind: z.literal('builtin'), ref: z.string() }).strict(),
+            z
+                .object({
+                    kind: z.literal('custom'),
+                    mimeType: z.string(),
+                    base64: z.string(),
+                })
+                .strict(),
+        ]),
+        locale: z.string(),
+    })
+    .strict();
 
 const WireCommitmentReveal = z.object({
     id: z.string(),

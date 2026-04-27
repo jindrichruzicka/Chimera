@@ -377,7 +377,12 @@ describe('WsHostTransport — profile side-channel (T04)', () => {
 
         transport.sendSideChannel('broadcast', {
             kind: 'profile',
-            payload: { playerId: toPlayerId('p1'), displayName: 'Alice' },
+            payload: {
+                localProfileId: 'player-001',
+                displayName: 'Alice',
+                avatar: { kind: 'builtin', ref: 'avatars/default' },
+                locale: 'en-US',
+            },
         });
 
         const barrier = new Promise<ServerMessage>((resolve) => {

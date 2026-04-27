@@ -39,15 +39,24 @@ export type { PlayerId, EngineAction, PlayerSnapshot, LobbyState };
 // protocol until F45 defines the full routing semantics.
 
 /**
- * Lightweight player profile carried with JOIN and PROFILE_UPDATE messages.
- * The full `PlayerProfile` type lands in F14 (§4.24); for now only the
- * fields needed for the wire handshake are declared.
+ * Wire-level player profile carried with JOIN and PROFILE_UPDATE messages.
+ *
+ * Expanded in F14 (§4.24) to carry the full sanitisable profile. Uses plain
+ * string types for wire compatibility (no branded LocalProfileId / AssetRef).
+ * The host passes this through ProfileSanitizer.admit() before any other
+ * subsystem may read it (Invariant #61).
  */
 export interface WirePlayerProfile {
-    /** Stable, branded identifier matching the simulation's PlayerId. */
-    readonly playerId: PlayerId;
+    /** Stable, client-local identifier for the profile. */
+    readonly localProfileId: string;
     /** Human-readable display name shown in the lobby. */
     readonly displayName: string;
+    /** Avatar source: built-in asset reference or inline base64 image. */
+    readonly avatar:
+        | { readonly kind: 'builtin'; readonly ref: string }
+        | { readonly kind: 'custom'; readonly mimeType: string; readonly base64: string };
+    /** BCP 47 locale tag, e.g. 'en-US'. */
+    readonly locale: string;
 }
 
 /**

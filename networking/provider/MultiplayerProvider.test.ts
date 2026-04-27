@@ -151,7 +151,12 @@ describe('SideChannelMessage', () => {
     it('profile variant has kind and payload', () => {
         const msg: SideChannelMessage = {
             kind: 'profile',
-            payload: { playerId: playerId('p1'), displayName: 'Alice' },
+            payload: {
+                localProfileId: 'player-001',
+                displayName: 'Alice',
+                avatar: { kind: 'builtin', ref: 'avatars/default' },
+                locale: 'en-US',
+            },
         };
         expect(msg.kind).toBe('profile');
     });
