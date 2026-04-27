@@ -122,8 +122,10 @@ interface ProfileAPI {
     /** Update this machine's local profile. Mid-lobby updates use the attest-first flow. */
     updateLocal(patch: Partial<EngineProfile>): Promise<void>;
     /** Returns all profiles known in the current lobby (keyed by PlayerId). */
-    getLobbyDirectory(): Promise<Record<PlayerId, PlayerProfile>>;
-    onDirectoryChanged(listener: (directory: Record<PlayerId, PlayerProfile>) => void): () => void;
+    getLobbyDirectory(): Promise<Readonly<Record<PlayerId, PlayerProfile>>>;
+    onDirectoryChanged(
+        listener: (directory: Readonly<Record<PlayerId, PlayerProfile>>) => void,
+    ): () => void;
 }
 ```
 

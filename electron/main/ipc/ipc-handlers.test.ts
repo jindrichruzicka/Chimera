@@ -1,3 +1,4 @@
+import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
@@ -25,15 +26,22 @@ import {
     mapPlatform,
     registerGameHandlers,
     registerLobbyHandlers,
+    registerProfileHandlers,
     registerSavesHandlers,
     registerSettingsHandlers,
     registerSystemHandlers,
+    PROFILE_DIRECTORY_CHANGED_CHANNEL,
+    PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
+    PROFILE_GET_LOCAL_CHANNEL,
+    PROFILE_UPDATE_LOCAL_CHANNEL,
     type GameHandlersIpcMain,
     type GameHandlerEvent,
     type GameHandlerListener,
     type GameInvokeHandler,
     type LobbyHandlersIpcMain,
     type LobbyInvokeHandler,
+    type ProfileHandlersIpcMain,
+    type ProfileInvokeHandler,
     type SavesHandlersIpcMain,
     type SavesInvokeHandler,
     type SettingsHandlersIpcMain,
@@ -52,6 +60,7 @@ import type {
     EngineAction,
     HostLobbyParams,
     JoinLobbyParams,
+    PlayerProfile,
     SaveRequest,
     UserSettings,
 } from '../../preload/api-types.js';
@@ -1379,5 +1388,192 @@ describe('registerLogsHandlers', () => {
         expect(last?.level).toBe('info');
         expect(last?.message).toBe('just info');
         expect(last?.error).toBeUndefined();
+    });
+});
+
+// ── Profile handler tests (§4.24 — F14-T08) ───────────────────────────────────
+
+/**
+ * Fixture: a valid PlayerProfile for use in profile handler tests.
+ */
+function makeProfile(overrides: Partial<PlayerProfile> = {}): PlayerProfile {
+    return {
+        localProfileId: 'local-1',
+        displayName: 'Alice',
+        avatar: { kind: 'builtin', ref: buildAssetRef<TextureAsset>('avatar', 'default') },
+        locale: 'en-US',
+        ...overrides,
+    };
+}
+
+/**
+ * Recording stub for the narrow `ProfileHandlersIpcMain` slice. The profile
+ * namespace uses `handle` exclusively — every request is an invoke-style
+ * round-trip so the renderer can surface failures.
+ */
+function makeProfileIpcMainStub(): {
+    readonly ipcMain: ProfileHandlersIpcMain;
+    readonly handled: Map<string, ProfileInvokeHandler>;
+} {
+    const handled = new Map<string, ProfileInvokeHandler>();
+
+    const ipcMain: ProfileHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+    };
+
+    return { ipcMain, handled };
+}
+
+describe('registerProfileHandlers', () => {
+    it('registers exactly the profile request channels (directory-changed is push-only)', () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        // `chimera:profile:directory-changed` is a one-way push from main →
+        // renderer via `webContents.send`. It must NOT appear as an invoke
+        // handler.
+        expect([...stub.handled.keys()].sort()).toEqual(
+            [
+                PROFILE_GET_LOCAL_CHANNEL,
+                PROFILE_UPDATE_LOCAL_CHANNEL,
+                PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
+            ].sort(),
+        );
+        expect(stub.handled.has(PROFILE_DIRECTORY_CHANGED_CHANNEL)).toBe(false);
+    });
+
+    it('chimera:profile:get-local resolves to a stub profile when no profileManager provided', async () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_GET_LOCAL_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(handler?.({}));
+        // Stub must return an object with the required PlayerProfile shape
+        expect(result).toBeDefined();
+        expect(typeof result).toBe('object');
+        const profile = result as PlayerProfile;
+        expect(typeof profile.localProfileId).toBe('string');
+        expect(typeof profile.displayName).toBe('string');
+        expect(profile.avatar).toBeDefined();
+        expect(typeof profile.locale).toBe('string');
+    });
+
+    it('chimera:profile:get-local returns profileManager.currentAttestation() when manager provided', async () => {
+        const stub = makeProfileIpcMainStub();
+        const expectedProfile = makeProfile({ displayName: 'Bob' });
+        const profileManager = {
+            currentAttestation: vi.fn<() => PlayerProfile>().mockReturnValue(expectedProfile),
+            updateLocal: vi
+                .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
+                .mockReturnValue(expectedProfile),
+        };
+        registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
+
+        const handler = stub.handled.get(PROFILE_GET_LOCAL_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(handler?.({}));
+        expect(result).toStrictEqual(expectedProfile);
+        expect(profileManager.currentAttestation).toHaveBeenCalledOnce();
+    });
+
+    it('chimera:profile:update-local validates patch and calls profileManager.updateLocal', async () => {
+        const stub = makeProfileIpcMainStub();
+        const profileManager = {
+            currentAttestation: vi.fn<() => PlayerProfile>().mockReturnValue(makeProfile()),
+            updateLocal: vi
+                .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
+                .mockReturnValue(makeProfile({ displayName: 'Charlie' })),
+        };
+        registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
+
+        const handler = stub.handled.get(PROFILE_UPDATE_LOCAL_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const patch = { displayName: 'Charlie' };
+        await Promise.resolve(handler?.({}, patch));
+
+        expect(profileManager.updateLocal).toHaveBeenCalledOnce();
+        expect(profileManager.updateLocal).toHaveBeenCalledWith(patch);
+    });
+
+    it('chimera:profile:update-local resolves to undefined (Promise<void>)', async () => {
+        const stub = makeProfileIpcMainStub();
+        const profileManager = {
+            currentAttestation: vi.fn<() => PlayerProfile>().mockReturnValue(makeProfile()),
+            updateLocal: vi
+                .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
+                .mockReturnValue(makeProfile()),
+        };
+        registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
+
+        const handler = stub.handled.get(PROFILE_UPDATE_LOCAL_CHANNEL);
+        const result = await Promise.resolve(handler?.({}, { displayName: 'Dave' }));
+        expect(result).toBeUndefined();
+    });
+
+    it('chimera:profile:update-local rejects with IpcRequestValidationError on invalid patch', async () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_UPDATE_LOCAL_CHANNEL);
+        expect(handler).toBeDefined();
+
+        // `localProfileId` is not in the patch schema (immutable primary key)
+        expect(() => handler?.({}, { localProfileId: 'should-be-rejected' })).toThrow(
+            IpcRequestValidationError,
+        );
+    });
+
+    it('chimera:profile:update-local rejects with IpcRequestValidationError when patch is not an object', async () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_UPDATE_LOCAL_CHANNEL);
+        expect(() => handler?.({}, 'not-a-patch')).toThrow(IpcRequestValidationError);
+    });
+
+    it('chimera:profile:get-lobby-directory returns empty record when no playerDirectory provided', async () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_GET_LOBBY_DIRECTORY_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(handler?.({}));
+        expect(result).toStrictEqual({});
+    });
+
+    it('chimera:profile:get-lobby-directory returns playerDirectory.snapshot() when directory provided', async () => {
+        const stub = makeProfileIpcMainStub();
+        const directory = { p1: makeProfile({ displayName: 'Host' }) };
+        const playerDirectory = {
+            snapshot: vi
+                .fn<() => Readonly<Record<string, PlayerProfile>>>()
+                .mockReturnValue(directory),
+        };
+        registerProfileHandlers({ ipcMain: stub.ipcMain, playerDirectory });
+
+        const handler = stub.handled.get(PROFILE_GET_LOBBY_DIRECTORY_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(handler?.({}));
+        expect(result).toStrictEqual(directory);
+        expect(playerDirectory.snapshot).toHaveBeenCalledOnce();
+    });
+
+    it('chimera:profile:update-local is a no-op when no profileManager provided (resolves undefined)', async () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_UPDATE_LOCAL_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(handler?.({}, { displayName: 'Eve' }));
+        expect(result).toBeUndefined();
     });
 });

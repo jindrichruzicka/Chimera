@@ -14,6 +14,7 @@
 
 import type { LogEntry } from '@chimera/shared/logging.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
+import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
@@ -177,9 +178,70 @@ export type Unsubscribe = () => void;
 // Empty interfaces exist so that ChimeraAPI declares the full §4.1 shape.
 // Each will be replaced with a concrete interface in the milestone listed.
 
-/** Stub. Expanded in F14 — Player Profiles and Directory (§4.24). */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ProfileAPI {}
+// ─── Profile domain types ─────────────────────────────────────────────────────
+// Canonical definitions live in simulation/profile/ProfileSchema.ts (F14).
+// Redeclared here so the renderer's type-only dependency on this module
+// (via renderer/types/chimera.d.ts) does NOT depend on simulation/profile/.
+// Type-only imports from simulation/content are allowed by the architecture
+// because renderer code may consume AssetRef primitives without pulling in
+// simulation runtime logic.
+
+/** Builtin avatar — references an engine asset; zero transport cost. */
+export interface BuiltinAvatarSource {
+    readonly kind: 'builtin';
+    readonly ref: AssetRef<TextureAsset>;
+}
+
+/** Custom inline avatar — base64-encoded PNG or JPEG, max 64 KB decoded. */
+export interface CustomAvatarSource {
+    readonly kind: 'custom';
+    readonly mimeType: 'image/png' | 'image/jpeg';
+    readonly base64: string;
+}
+
+/**
+ * Discriminated union for the two avatar strategies.
+ * Canonical: simulation/profile/ProfileSchema.ts (F14).
+ */
+export type AvatarSource = BuiltinAvatarSource | CustomAvatarSource;
+
+/**
+ * Base profile carried by every player. Cosmetic only — never enters
+ * GameSnapshot, PlayerSnapshot, or SaveFile (Invariant #59).
+ * Canonical: simulation/profile/ProfileSchema.ts (F14).
+ */
+export interface EngineProfile {
+    readonly localProfileId: string;
+    readonly displayName: string;
+    readonly avatar: AvatarSource;
+    readonly locale: string;
+}
+
+/**
+ * Convenience alias for the unextended engine profile.
+ * Canonical: simulation/profile/ProfileSchema.ts (F14).
+ */
+export type PlayerProfile = EngineProfile;
+
+/** F14 — Player Profiles and Directory (§4.24). */
+export interface ProfileAPI {
+    /** Returns this machine's local player profile. */
+    getLocalProfile(): Promise<PlayerProfile>;
+    /**
+     * Update this machine's local profile.
+     * Mid-lobby updates use the attest-first flow (§4.24).
+     */
+    updateLocal(patch: Partial<EngineProfile>): Promise<void>;
+    /** Returns all profiles known in the current lobby (keyed by PlayerId). */
+    getLobbyDirectory(): Promise<Readonly<Record<PlayerId, PlayerProfile>>>;
+    /**
+     * Subscribe to lobby directory changes (profiles joining/leaving/updating).
+     * Returns an unsubscribe function.
+     */
+    onDirectoryChanged(
+        listener: (directory: Readonly<Record<PlayerId, PlayerProfile>>) => void,
+    ): Unsubscribe;
+}
 
 /** Stub. Expanded in F44 — Replay System (§4.28). */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

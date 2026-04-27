@@ -22,6 +22,7 @@ import type { ChimeraAPI } from './api-types.js';
 import { buildExtensionsApi } from './apis/extensions-api.js';
 import { createGameApi } from './apis/game-api.js';
 import { createLobbyApi } from './apis/lobby-api.js';
+import { createProfileApi } from './apis/profile-api.js';
 import { createSavesApi } from './apis/saves-api.js';
 import { createSettingsApi } from './apis/settings-api.js';
 import { createSystemApi } from './apis/system-api.js';
@@ -75,9 +76,9 @@ const api: ChimeraAPI = {
     system: createSystemApi(port),
     // Deferred namespaces — the interfaces are empty stubs today (see the
     // `*API` declarations in `api-types.ts`) and will gain concrete methods
-    // in their respective milestones (F14, F44, F45, F43). Exposing empty
+    // in their respective milestones (F44, F45, F43). Exposing empty
     // objects now keeps `window.__chimera` shape-stable for the renderer.
-    profile: {},
+    profile: createProfileApi(port),
     replay: {},
     chat: {},
     logs: buildLogsApi(port),

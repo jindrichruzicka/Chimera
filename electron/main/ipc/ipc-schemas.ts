@@ -226,3 +226,42 @@ export const RendererLogEntrySchema = z.object({
     context: z.record(z.string(), z.unknown()).optional(),
     error: LogErrorInfoSchema.optional(),
 });
+
+// ─── Profile domain schemas ───────────────────────────────────────────────────
+
+/**
+ * Zod schema for the {@link AvatarSource} discriminated union received in an
+ * `updateLocal` patch payload. Mirrors the client-side `AvatarSourceSchema`
+ * in `electron/preload/shared/schemas.ts` — defined independently here
+ * (Invariant #5: channel constants + payload shapes live in their respective
+ * boundary modules; no shared schema file spans both sides).
+ */
+export const AvatarSourceSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('builtin'),
+        ref: z.string().min(1),
+    }),
+    z.object({
+        kind: z.literal('custom'),
+        mimeType: z.union([z.literal('image/png'), z.literal('image/jpeg')]),
+        base64: z.string().min(1),
+    }),
+]);
+
+/**
+ * Schema for the `patch` argument accepted by `chimera:profile:update-local`.
+ *
+ * `localProfileId` is intentionally absent — it is the immutable primary key
+ * and must never be patched over IPC. Any payload containing it is rejected
+ * by `.strict()` which disallows unknown keys.
+ *
+ * All fields are optional because the renderer may send a partial update
+ * (e.g. only `displayName` or only `avatar`).
+ */
+export const EngineProfilePatchSchema = z
+    .object({
+        displayName: z.string().optional(),
+        avatar: AvatarSourceSchema.optional(),
+        locale: z.string().optional(),
+    })
+    .strict();

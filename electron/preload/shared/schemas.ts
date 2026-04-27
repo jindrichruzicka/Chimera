@@ -22,7 +22,14 @@
 // elsewhere.
 
 import { z } from 'zod';
-import type { ActionRejection, LobbyInfo, ResolvedSettings, SaveSlotMeta } from '../api-types.js';
+import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import type {
+    ActionRejection,
+    LobbyInfo,
+    PlayerProfile,
+    ResolvedSettings,
+    SaveSlotMeta,
+} from '../api-types.js';
 import type { PlatformInfo } from '../apis/system-api.js';
 
 /**
@@ -139,3 +146,45 @@ export const ActionRejectionSchema: z.ZodType<ActionRejection> = z.object({
     tick: z.number().int(),
     actionType: z.string().optional(),
 }) as z.ZodType<ActionRejection>;
+
+// ─── Profile domain schemas ───────────────────────────────────────────────────
+
+/**
+ * Schema for the {@link AvatarSource} discriminated union returned as part of
+ * a {@link PlayerProfile} in `chimera:profile:get-local` or
+ * `chimera:profile:get-lobby-directory` responses.
+ */
+export const AvatarSourceSchema = z.discriminatedUnion('kind', [
+    z.object({
+        kind: z.literal('builtin'),
+        ref: z.custom<AssetRef<TextureAsset>>(
+            (value): value is AssetRef<TextureAsset> => typeof value === 'string',
+        ),
+    }),
+    z.object({
+        kind: z.literal('custom'),
+        mimeType: z.union([z.literal('image/png'), z.literal('image/jpeg')]),
+        base64: z.string(),
+    }),
+]);
+
+/**
+ * Schema for {@link PlayerProfile} returned by
+ * `chimera:profile:get-local`.
+ *
+ * Structural validation only — business-rule checks (display-name
+ * length caps, avatar byte limits) are enforced by `ProfileSanitizer` on
+ * the main process side before profiles reach the renderer.
+ */
+export const PlayerProfileSchema = z.object({
+    localProfileId: z.string(),
+    displayName: z.string(),
+    avatar: AvatarSourceSchema,
+    locale: z.string(),
+}) satisfies z.ZodType<PlayerProfile>;
+
+/**
+ * Schema for the `Record<PlayerId, PlayerProfile>` directory returned by
+ * `chimera:profile:get-lobby-directory`.
+ */
+export const LobbyDirectorySchema = z.record(z.string(), PlayerProfileSchema);

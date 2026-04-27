@@ -8,10 +8,11 @@
 // Currently wired: `chimera:system:*` (see preload/system-api.ts),
 // `chimera:game:*` stubs (see preload/game-api.ts), `chimera:lobby:*` stubs
 // (see preload/lobby-api.ts), `chimera:saves:*` stubs (see
-// preload/saves-api.ts), and `chimera:settings:*` stubs (see
-// preload/settings-api.ts). The game/lobby/saves/settings handlers are stubs
-// only — actual game/simulation logic lands in F03–F15; real lobby logic
-// lands in F11; real save persistence lands in F06/F18; real settings
+// preload/saves-api.ts), `chimera:settings:*` stubs (see
+// preload/settings-api.ts), and `chimera:profile:*` (see
+// preload/profile-api.ts — F14-T08). The game/lobby/saves/settings handlers
+// are stubs only — actual game/simulation logic lands in F03–F15; real lobby
+// logic lands in F11; real save persistence lands in F06/F18; real settings
 // merging and persistence land in F07/F19.
 
 import {
@@ -47,15 +48,24 @@ import {
     SETTINGS_RESET_CHANNEL,
     SETTINGS_UPDATE_CHANNEL,
 } from '../../preload/apis/settings-api.js';
+import {
+    PROFILE_DIRECTORY_CHANGED_CHANNEL,
+    PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
+    PROFILE_GET_LOCAL_CHANNEL,
+    PROFILE_UPDATE_LOCAL_CHANNEL,
+} from '../../preload/apis/profile-api.js';
 import type {
     ActionRejection,
+    PlayerProfile,
     PlayerId,
     ResolvedSettings,
     SaveSlotMeta,
     UserSettings,
 } from '../../preload/api-types.js';
+import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import {
     EngineActionSchema,
+    EngineProfilePatchSchema,
     GameIdSchema,
     HostLobbyParamsSchema,
     IpcRequestValidationError,
@@ -104,6 +114,10 @@ export {
     SETTINGS_UPDATE_CHANNEL,
     LOGS_EMIT_CHANNEL,
     LOGS_READ_RECENT_CHANNEL,
+    PROFILE_DIRECTORY_CHANGED_CHANNEL,
+    PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
+    PROFILE_GET_LOCAL_CHANNEL,
+    PROFILE_UPDATE_LOCAL_CHANNEL,
 };
 
 /**
@@ -719,5 +733,133 @@ export function registerLogsHandlers(options: RegisterLogsHandlersOptions): void
         const count = Math.min(requested, MAX_READ_RECENT_ENTRIES, memorySink.capacity);
         const all = memorySink.entries;
         return all.slice(Math.max(0, all.length - count));
+    });
+}
+
+// ── Profile handlers (§4.24 — F14-T08) ───────────────────────────────────────
+
+/**
+ * Shape of a main-side `ipcMain.handle` handler for the profile namespace.
+ * Mirrors the other namespaces — permissive types keep tests free of
+ * Electron imports.
+ */
+export type ProfileInvokeHandler = (event: unknown, ...args: unknown[]) => unknown;
+
+/**
+ * Narrow slice of `Electron.IpcMain` required to register the profile-
+ * namespace channels. The profile namespace uses `handle` exclusively —
+ * every query/mutation is an invoke-style round-trip so the renderer can
+ * surface failures.
+ *
+ * `chimera:profile:directory-changed` is a one-way push from main →
+ * renderer via `webContents.send` and is intentionally absent from this
+ * interface.
+ */
+export interface ProfileHandlersIpcMain {
+    handle(channel: string, handler: ProfileInvokeHandler): unknown;
+}
+
+/**
+ * Narrow `ProfileManager` surface the profile IPC handlers need.
+ * Declared here so the real `ProfileManager` class satisfies it structurally
+ * and tests can supply lightweight stubs.
+ */
+export interface ProfileManagerPort {
+    /** Returns the committed profile or the current pending candidate. */
+    currentAttestation(): PlayerProfile;
+    /** Builds a candidate update (no disk write). Returns the candidate. */
+    updateLocal(patch: Partial<Omit<PlayerProfile, 'localProfileId'>>): PlayerProfile;
+}
+
+/**
+ * Narrow `PlayerDirectory` surface the profile IPC handlers need.
+ * Declared here for symmetry with `ProfileManagerPort`.
+ */
+export interface PlayerDirectoryPort {
+    /** Returns a frozen snapshot of the current directory. */
+    snapshot(): Readonly<Record<PlayerId, PlayerProfile>>;
+}
+
+export interface RegisterProfileHandlersOptions {
+    readonly ipcMain: ProfileHandlersIpcMain;
+    /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
+    readonly logger?: Logger;
+    /**
+     * Live ProfileManager instance (wired in F14).
+     * When absent, `chimera:profile:get-local` returns a sentinel stub and
+     * `chimera:profile:update-local` is a no-op.
+     */
+    readonly profileManager?: ProfileManagerPort;
+    /**
+     * Live PlayerDirectory instance (wired in F14, host-only).
+     * When absent, `chimera:profile:get-lobby-directory` returns an empty
+     * record.
+     */
+    readonly playerDirectory?: PlayerDirectoryPort;
+}
+
+/**
+ * Sentinel stub profile returned by `chimera:profile:get-local` when no
+ * `ProfileManager` has been wired yet (F14). The shape satisfies
+ * `PlayerProfile` so the preload's `Promise<PlayerProfile>` contract is
+ * honest, but no real profile data is present.
+ */
+const STUB_PLAYER_PROFILE: PlayerProfile = Object.freeze({
+    localProfileId: '',
+    displayName: '',
+    avatar: { kind: 'builtin' as const, ref: buildAssetRef<TextureAsset>('avatar', 'default') },
+    locale: '',
+});
+
+/**
+ * Register every `chimera:profile:*` main-side channel.
+ *
+ * `chimera:profile:directory-changed` is intentionally absent: it is a
+ * one-way push from main → renderer via `webContents.send` whenever the
+ * lobby directory changes. There is no invoke handler for that channel.
+ *
+ * Invariant #5: channel constants come from `preload/profile-api.ts`; there
+ * is no parallel list in this file to drift out of sync.
+ *
+ * Invariant #59: profile data never enters `GameSnapshot`, `PlayerSnapshot`,
+ * or `SaveFile` — these handlers touch only `ProfileManager` and
+ * `PlayerDirectory`, neither of which writes to the simulation layer.
+ */
+export function registerProfileHandlers(options: RegisterProfileHandlersOptions): void {
+    const { ipcMain } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:profile:* handlers', {
+        channels: [
+            PROFILE_GET_LOCAL_CHANNEL,
+            PROFILE_UPDATE_LOCAL_CHANNEL,
+            PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
+        ],
+    });
+
+    ipcMain.handle(PROFILE_GET_LOCAL_CHANNEL, () => {
+        if (options.profileManager !== undefined) {
+            return options.profileManager.currentAttestation();
+        }
+        return STUB_PLAYER_PROFILE;
+    });
+
+    ipcMain.handle(PROFILE_UPDATE_LOCAL_CHANNEL, (_event, patch) => {
+        parseInvokeRequest(EngineProfilePatchSchema, PROFILE_UPDATE_LOCAL_CHANNEL, patch);
+        if (options.profileManager !== undefined) {
+            options.profileManager.updateLocal(
+                // Safe: EngineProfilePatchSchema validated the runtime shape above.
+                patch as Partial<Omit<PlayerProfile, 'localProfileId'>>,
+            );
+        }
+        return undefined;
+    });
+
+    ipcMain.handle(PROFILE_GET_LOBBY_DIRECTORY_CHANNEL, () => {
+        if (options.playerDirectory !== undefined) {
+            return options.playerDirectory.snapshot();
+        }
+        // No directory wired yet — return an empty record for the renderer's
+        // getLobbyDirectory() contract.
+        return {};
     });
 }
