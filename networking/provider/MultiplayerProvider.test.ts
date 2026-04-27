@@ -170,6 +170,7 @@ describe('HostTransport', () => {
             onSideChannelReceived: (_cb) => noopUnsub(),
             onPlayerJoined: (_cb) => noopUnsub(),
             onPlayerLeft: (_cb) => noopUnsub(),
+            setProfileGate: (_gate) => {},
         };
         expect(transport).toBeDefined();
     });
@@ -206,6 +207,7 @@ describe('HostedSession', () => {
             onSideChannelReceived: () => noopUnsub(),
             onPlayerJoined: () => noopUnsub(),
             onPlayerLeft: () => noopUnsub(),
+            setProfileGate: (_gate) => {},
         };
         const session: HostedSession = {
             lobbyCode: 'ABCD',

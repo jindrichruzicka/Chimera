@@ -28,6 +28,7 @@ import type {
     ClientTransport,
     PlayerSnapshot,
     LobbyState,
+    JoinGateResult,
     LobbyPlayerEntry,
     SideChannelMessage,
     DisconnectReason,
@@ -80,6 +81,9 @@ class InMemoryChannel {
     // Per-client records
     readonly clients = new Map<PlayerId, ClientRecord>();
     latestLobbyState: LobbyState | null = null;
+
+    /** Optional profile gate registered by the host via HostTransport.setProfileGate(). */
+    profileGate: ((pid: PlayerId, rawProfile: unknown) => JoinGateResult) | null = null;
 
     closed = false;
 
@@ -187,6 +191,12 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
                 addSub(channel.playerJoinedCbs, cb),
 
             onPlayerLeft: (cb: PlayerLeftCb): Unsubscribe => addSub(channel.playerLeftCbs, cb),
+
+            setProfileGate: (
+                gate: (pid: PlayerId, rawProfile: unknown) => JoinGateResult,
+            ): void => {
+                channel.profileGate = gate;
+            },
         };
 
         const session: HostedSession = {
@@ -214,11 +224,22 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         }
 
         const clientPlayerId: PlayerId = toPlayerId(`client-${this.nextId()}`);
+
+        // Profile gate check (Invariant #61 — gate is the only path to admission)
+        let displayName = `Player-${clientPlayerId}`;
+        if (channel.profileGate !== null) {
+            const gateResult = channel.profileGate(clientPlayerId, params.profile);
+            if (!gateResult.admitted) {
+                return Promise.reject(new Error(`JOIN rejected: ${gateResult.reason}`));
+            }
+            displayName = gateResult.displayName;
+        }
+
         const record = channel.addClient(clientPlayerId);
 
         const playerEntry: LobbyPlayerEntry = {
             playerId: clientPlayerId,
-            displayName: `Player-${clientPlayerId}`,
+            displayName,
             ready: false,
         };
 

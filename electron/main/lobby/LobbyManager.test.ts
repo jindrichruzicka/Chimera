@@ -17,6 +17,8 @@ import { describe, it, expect } from 'vitest';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/in-memory/InMemoryMultiplayerProvider.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from './LobbyManager.js';
+import { PlayerDirectory } from '../profile/PlayerDirectory.js';
+import { createProfileGate } from '../profile/ProfileGate.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import {
     playerId,
@@ -30,6 +32,9 @@ import {
     type Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
+import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
+import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
+import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -39,8 +44,30 @@ function makeProvider(): InMemoryMultiplayerProvider {
     return new InMemoryMultiplayerProvider();
 }
 
-function makeManager(provider: InMemoryMultiplayerProvider = makeProvider()): LobbyManager {
-    return new LobbyManager(provider, createNoopLogger());
+function makeManager(
+    provider: InMemoryMultiplayerProvider = makeProvider(),
+    directory?: PlayerDirectory,
+): LobbyManager {
+    return new LobbyManager(
+        provider,
+        createNoopLogger(),
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        directory !== undefined ? createProfileGate(directory) : undefined,
+    );
+}
+
+/** Build a minimal valid {@link PlayerProfile} for profile attestation tests. */
+function makeValidProfile(overrides?: Partial<PlayerProfile>): PlayerProfile {
+    return {
+        localProfileId: localProfileId('player-001'),
+        displayName: 'Alice',
+        avatar: { kind: 'builtin', ref: 'test/avatar' as AssetRef<TextureAsset> },
+        locale: 'en-US',
+        ...overrides,
+    };
 }
 
 /** Build a minimal schema-valid {@link EngineAction} for transport-level smoke tests. */
@@ -929,5 +956,105 @@ describe('LobbyManager onSessionJoined teardown', () => {
         const manager = new LobbyManager(provider, createNoopLogger());
         await manager.joinLobby({ address: code });
         await expect(manager.closeLobby()).resolves.toBeUndefined();
+    });
+});
+
+// ── JOIN profile attestation ─────────────────────────────────────────────────
+//
+// Invariant #61: ProfileSanitizer.admit() is the mandatory gate between
+// inbound JOIN and PlayerDirectory. Raw attestation never reaches any other
+// subsystem.
+
+describe('LobbyManager — JOIN profile attestation', () => {
+    it('admits a valid profile and adds it to PlayerDirectory', async () => {
+        const directory = new PlayerDirectory();
+        const provider = makeProvider();
+        const manager = makeManager(provider, directory);
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+
+        const validProfile = makeValidProfile();
+        await provider.joinLobby({ address: hostInfo.sessionId, profile: validProfile });
+
+        // Allow the deferred onPlayerJoined callback to fire
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const entries = Object.values(directory.snapshot());
+        expect(entries).toHaveLength(1);
+        expect(entries[0]!.displayName).toBe('Alice');
+
+        await manager.closeLobby();
+    });
+
+    it('rejects a JOIN with an invalid profile (display name too long) and does not add to directory', async () => {
+        const directory = new PlayerDirectory();
+        const provider = makeProvider();
+        const manager = makeManager(provider, directory);
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+
+        const invalidProfile = makeValidProfile({ displayName: 'A'.repeat(33) });
+        await expect(
+            provider.joinLobby({ address: hostInfo.sessionId, profile: invalidProfile }),
+        ).rejects.toThrow(/JOIN rejected/);
+
+        expect(Object.keys(directory.snapshot())).toHaveLength(0);
+
+        await manager.closeLobby();
+    });
+
+    it('clears PlayerDirectory when closeLobby() is called', async () => {
+        const directory = new PlayerDirectory();
+        const provider = makeProvider();
+        const manager = makeManager(provider, directory);
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+
+        await provider.joinLobby({ address: hostInfo.sessionId, profile: makeValidProfile() });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        expect(Object.keys(directory.snapshot())).toHaveLength(1);
+
+        await manager.closeLobby();
+
+        expect(Object.keys(directory.snapshot())).toHaveLength(0);
+    });
+
+    it('uses the sanitised displayName in the lobby state after a valid JOIN', async () => {
+        const directory = new PlayerDirectory();
+        const provider = makeProvider();
+        const lobbyStates: LobbyState[] = [];
+        const manager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            (state) => {
+                lobbyStates.push(state);
+            },
+            undefined,
+            createProfileGate(directory),
+        );
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+
+        await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Alice' }),
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const lastState = lobbyStates[lobbyStates.length - 1];
+        const aliceEntry = lastState?.players.find((p) => p.displayName === 'Alice');
+        expect(aliceEntry).toBeDefined();
+
+        await manager.closeLobby();
+    });
+
+    it('admits a JOIN with no profile gate (no directory injected) using default displayName', async () => {
+        const provider = makeProvider();
+        const manager = makeManager(provider); // no directory — no gate
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+
+        // joinLobby without a profile should succeed (gate is absent)
+        await expect(provider.joinLobby({ address: hostInfo.sessionId })).resolves.toBeDefined();
+
+        await manager.closeLobby();
     });
 });

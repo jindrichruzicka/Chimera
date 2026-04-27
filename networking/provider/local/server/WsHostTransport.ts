@@ -18,6 +18,7 @@ import type {
     SideChannelMessage,
     DisconnectReason,
     Unsubscribe,
+    JoinGateResult,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
 import type { ServerMessage } from '@chimera/shared/messages.js';
@@ -79,10 +80,10 @@ export class WsHostTransport implements HostTransport {
     }
 
     onPlayerJoined(cb: (player: LobbyPlayerEntry) => void): Unsubscribe {
-        return this.server.onPlayerConnected((playerId) => {
+        return this.server.onPlayerConnected((playerId, displayName) => {
             const entry: LobbyPlayerEntry = {
                 playerId,
-                displayName: playerId,
+                displayName,
                 ready: false,
             };
             cb(entry);
@@ -91,6 +92,10 @@ export class WsHostTransport implements HostTransport {
 
     onPlayerLeft(cb: (playerId: PlayerId, reason: DisconnectReason) => void): Unsubscribe {
         return this.server.onPlayerDisconnected(cb);
+    }
+
+    setProfileGate(gate: (pid: PlayerId, rawProfile: unknown) => JoinGateResult): void {
+        this.server.setJoinGate(gate);
     }
 
     // ─── Helpers ──────────────────────────────────────────────────────────────

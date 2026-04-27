@@ -95,7 +95,10 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         const { playerId: assignedPlayerId, lobbyState } = await conn.connect(
             `ws://${host}:${portStr}`,
             token,
-            {
+            // Use the caller-provided profile if present; fall back to a minimal
+            // placeholder so existing tests (which don't pass a profile) keep working.
+            // The host's profile gate will validate the actual content.
+            params.profile ?? {
                 playerId: toPlayerId('pending'),
                 displayName: 'Player',
             },

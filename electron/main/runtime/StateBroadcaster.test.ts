@@ -36,6 +36,7 @@ function makeTransport(): HostTransport {
         onSideChannelReceived: vi.fn(() => () => {}),
         onPlayerJoined: vi.fn(() => () => {}),
         onPlayerLeft: vi.fn(() => () => {}),
+        setProfileGate: vi.fn(),
     };
 }
 

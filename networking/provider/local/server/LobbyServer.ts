@@ -29,6 +29,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
+import type { JoinGateResult } from '../../MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { ClientMessageSchema } from '@chimera/shared/messages-schemas.js';
@@ -39,7 +40,7 @@ import type { MessageBus } from './MessageBus.js';
 export type Unsubscribe = () => void;
 
 export type MessageCallback = (from: PlayerId, msg: ClientMessage) => void;
-export type PlayerCallback = (playerId: PlayerId) => void;
+export type PlayerCallback = (playerId: PlayerId, displayName: string) => void;
 export type DisconnectCallback = (playerId: PlayerId, reason: DisconnectReason) => void;
 
 export type DisconnectReason = 'kicked' | 'timeout' | 'host_closed' | 'error' | 'normal';
@@ -80,6 +81,11 @@ export class LobbyServer implements MessageBus {
     private idCounter = 0;
     private closed = false;
     private readonly readyPromise: Promise<void>;
+    /**
+     * Optional profile gate set by the host via `setJoinGate()`.
+     * Called synchronously during JOIN handling before WELCOME is sent.
+     */
+    private joinGate: ((pid: PlayerId, rawProfile: unknown) => JoinGateResult) | null = null;
 
     constructor(opts: LobbyServerOptions) {
         this.opts = opts;
@@ -180,6 +186,20 @@ export class LobbyServer implements MessageBus {
     }
 
     /**
+     * Register a profile gate.  Called synchronously during the JOIN handshake
+     * (after token and capacity checks) before WELCOME is sent.
+     *
+     * Returning `{ admitted: true }` allows the join; returning `{ admitted: false }`
+     * causes REJECT `{ reason }` to be sent and the connection to be closed.
+     *
+     * If no gate is registered, all token-valid JOINs are admitted with the
+     * assigned `PlayerId` used as the display name.
+     */
+    setJoinGate(gate: (pid: PlayerId, rawProfile: unknown) => JoinGateResult): void {
+        this.joinGate = gate;
+    }
+
+    /**
      * Gracefully close the server.
      * - Sends 'host_closed' to all connected clients
      * - Closes all ws connections
@@ -276,17 +296,37 @@ export class LobbyServer implements MessageBus {
                     return;
                 }
 
-                // Assign PlayerId and authenticate
+                // Assign PlayerId (before gate check so gate receives the definitive id)
                 this.idCounter += 1;
-                playerId = toPlayerId(`player-${this.idCounter}`);
-                this.connections.set(playerId, ws);
+                const pid = toPlayerId(`player-${this.idCounter}`);
+
+                // Profile gate check (Invariant #61)
+                let displayName: string = pid;
+                if (this.joinGate !== null) {
+                    const gateResult = this.joinGate(pid, msg.profile);
+                    if (!gateResult.admitted) {
+                        ws.send(
+                            JSON.stringify({
+                                type: 'REJECT',
+                                reason: gateResult.reason,
+                                tick: 0,
+                            } satisfies ServerMessage),
+                        );
+                        ws.close();
+                        return;
+                    }
+                    displayName = gateResult.displayName;
+                }
+
+                this.connections.set(pid, ws);
+                playerId = pid;
                 authenticated = true;
-                this.logger?.info('player connected', { playerId });
+                this.logger?.info('player connected', { playerId: pid });
 
                 // Send WELCOME
                 const welcomeMsg: ServerMessage = {
                     type: 'WELCOME',
-                    playerId,
+                    playerId: pid,
                     lobbyState: {
                         info: {
                             sessionId: this._token,
@@ -298,10 +338,9 @@ export class LobbyServer implements MessageBus {
                 };
                 ws.send(JSON.stringify(welcomeMsg));
 
-                // Fire onPlayerConnected
-                const pid = playerId;
+                // Fire onPlayerConnected with the sanitised displayName
                 for (const cb of this.connectedCbs) {
-                    cb(pid);
+                    cb(pid, displayName);
                 }
                 return;
             }

@@ -27,6 +27,8 @@ import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
+import { PlayerDirectory } from './profile/PlayerDirectory.js';
+import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
@@ -413,6 +415,12 @@ export async function main(): Promise<void> {
     // Build the LobbyManager once so both lobby IPC and game seat-switch IPC
     // use the same authoritative local-seat context.
     const lobbyLogger = logger.child({ module: 'lobby-manager' });
+
+    // ProfileGate is the sole caller of ProfileSanitizer.admit().
+    // Constructed here (the DIP wiring point) and injected into LobbyManager
+    // so LobbyManager stays a pure orchestrator (Invariant #61).
+    const profileGate = createProfileGate(new PlayerDirectory());
+
     const lobbyManager = new LobbyManager(
         new LocalWebSocketProvider(),
         lobbyLogger,
@@ -442,6 +450,7 @@ export async function main(): Promise<void> {
                 }
             });
         },
+        profileGate,
     );
 
     // Register the `chimera:game:*` channels. `switch-seat` delegates to the

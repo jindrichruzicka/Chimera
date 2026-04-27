@@ -83,6 +83,12 @@ export interface HostLobbyParams {
 /** Parameters for joining an existing lobby session. */
 export interface JoinLobbyParams {
     readonly address: string;
+    /**
+     * Raw profile attestation to present to the host's profile gate.
+     * Typed as `unknown` here; the host validates it via `ProfileSanitizer.admit()`
+     * before it reaches any other subsystem (Invariant #61).
+     */
+    readonly profile?: unknown;
 }
 
 /** Metadata returned when a lobby is successfully hosted or joined. */
@@ -156,6 +162,18 @@ export type SideChannelMessage =
 /** Returned by every subscription method; call to remove the listener. */
 export type Unsubscribe = () => void;
 
+// ─── Profile gate result ──────────────────────────────────────────────────────
+
+/**
+ * Result returned by the profile gate registered via `HostTransport.setProfileGate()`.
+ *
+ * - `admitted: true`  → the player is allowed in; `displayName` is used in the lobby roster.
+ * - `admitted: false` → REJECT is sent to the client with the given `reason` string.
+ */
+export type JoinGateResult =
+    | { readonly admitted: true; readonly displayName: string }
+    | { readonly admitted: false; readonly reason: string };
+
 // ─── Host-side session ────────────────────────────────────────────────────────
 
 /**
@@ -197,6 +215,22 @@ export interface HostTransport {
     onPlayerJoined(cb: (player: LobbyPlayerEntry) => void): Unsubscribe;
     /** Subscribe to player-left / disconnect notifications. */
     onPlayerLeft(cb: (playerId: PlayerId, reason: DisconnectReason) => void): Unsubscribe;
+    /**
+     * Register a profile gate for JOIN attestation.
+     *
+     * Called synchronously when a JOIN arrives (after token validation, before
+     * WELCOME is sent). Returning `{ admitted: true }` allows the player in
+     * with the given `displayName`; returning `{ admitted: false }` causes
+     * REJECT to be sent with the given `reason` and the connection is closed.
+     *
+     * If no gate is registered, all token-valid JOINs are admitted and the
+     * `PlayerId` string is used as the display name (legacy behaviour).
+     *
+     * Invariant #61: raw attestation must never reach any subsystem other than
+     * `ProfileSanitizer.admit()` — the gate callback is the only place allowed
+     * to call `admit()`.
+     */
+    setProfileGate(gate: (pid: PlayerId, rawProfile: unknown) => JoinGateResult): void;
 }
 
 // ─── Client-side session ──────────────────────────────────────────────────────

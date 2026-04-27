@@ -164,6 +164,36 @@ export default tseslint.config(
         ...tseslint.configs.disableTypeChecked,
     },
 
+    // Invariant #61 — ProfileSanitizer.admit() may only be called from
+    // electron/main/profile/ProfileGate.ts. All other electron/main/ modules
+    // must inject a ProfileGate rather than importing admit() directly.
+    {
+        files: ['electron/main/**/*.{ts,tsx}'],
+        ignores: ['electron/main/profile/ProfileGate.ts'],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: ['../../../*'],
+                            message:
+                                'Do not reach across package boundaries with deep relative paths. Use @chimera/* aliases.',
+                        },
+                        {
+                            group: [
+                                '**/ProfileSanitizer*',
+                                '@chimera/simulation/profile/ProfileSanitizer*',
+                            ],
+                            message:
+                                'ProfileSanitizer.admit() must only be called from electron/main/profile/ProfileGate.ts (Invariant #61). Inject a ProfileGate instead.',
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+
     // Prettier compatibility — must be last.
     prettier,
 );

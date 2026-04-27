@@ -24,7 +24,6 @@ import type {
     DisconnectReason,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { WirePlayerProfile } from '@chimera/shared/messages.js';
 import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { ServerMessageSchema } from '@chimera/shared/messages-schemas.js';
@@ -81,7 +80,9 @@ export class ServerConnection {
     private ws: WebSocket | null = null;
     private url = '';
     private token = '';
-    private profile: WirePlayerProfile | null = null;
+    private profile: Record<string, unknown> | null = null;
+    // profile is typed Record<string,unknown> internally; connect() widens to unknown so
+    // callers never need a cast — the server-side Zod schema validates the shape on receipt.
 
     /** The PlayerId assigned by the server after a successful WELCOME. */
     private _assignedPlayerId: PlayerId | null = null;
@@ -114,10 +115,12 @@ export class ServerConnection {
      * Rejects if the server sends REJECT, the connection fails, or connect times
      * out after the first attempt.
      */
-    connect(url: string, token: string, profile: WirePlayerProfile): Promise<ConnectResult> {
+    connect(url: string, token: string, profile: unknown): Promise<ConnectResult> {
         this.url = url;
         this.token = token;
-        this.profile = profile;
+        // Cast: caller-supplied profile is unknown; server-side Zod schema (ClientMessageSchema)
+        // validates the record structure on receipt — widening here is safe.
+        this.profile = profile as Record<string, unknown>;
         this.intentionalClose = false;
         this.retryCount = 0;
         return this.attemptConnect();

@@ -32,6 +32,7 @@ import type {
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
+import type { ProfileGate } from '../profile/ProfileGate.js';
 
 /**
  * Main-process orchestrator for the multiplayer session lifecycle.
@@ -60,6 +61,7 @@ export class LobbyManager {
         private readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void,
         private readonly onLobbyStateChanged?: (state: LobbyState) => void,
         private readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void,
+        private readonly profileGate?: ProfileGate,
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
     }
@@ -126,6 +128,14 @@ export class LobbyManager {
                 },
             ],
         };
+        // Wire the profile gate BEFORE publishing the lobby state so there is
+        // no window in which a client could learn the session token and JOIN
+        // before the gate is active (Invariant #61).  Only active when a
+        // ProfileGate was injected at construction time.
+        if (this.profileGate !== undefined) {
+            session.transport.setProfileGate(this.profileGate.check);
+        }
+
         this.publishLobbyState(initialState);
 
         // Wire transport callbacks to simulation-host stubs (F15/F17 will
@@ -347,6 +357,10 @@ export class LobbyManager {
         this.publishConnectionStatus('disconnected');
 
         this.log.info('closeLobby');
+
+        // Delegate teardown to ProfileGate so the PlayerDirectory is reset and
+        // stale profiles do not bleed into the next session (Invariant #61).
+        this.profileGate?.onLobbyClose();
 
         // Tear down all transport subscriptions before closing the session so
         // that re-hosting does not accumulate dead callbacks (BLOCK-2 fix).

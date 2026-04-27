@@ -87,7 +87,10 @@ const JoinMessage = z
     .object({
         type: z.literal('JOIN'),
         token: z.string(),
-        profile: WirePlayerProfile,
+        // Accept any object — the host validates the contents via ProfileSanitizer.admit()
+        // (Invariant #61). Using a strict sub-schema here would prevent full
+        // EngineProfile payloads from reaching the gate.
+        profile: z.record(z.string(), z.unknown()),
     })
     .strict();
 

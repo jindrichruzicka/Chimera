@@ -77,7 +77,17 @@ export interface WireCommitmentReveal {
  * - PING          Latency probe; server responds with PONG.
  */
 export type ClientMessage =
-    | { readonly type: 'JOIN'; readonly token: string; readonly profile: WirePlayerProfile }
+    | {
+          readonly type: 'JOIN';
+          readonly token: string;
+          /**
+           * Raw profile attestation from the joining client.
+           * Typed as `Record<string, unknown>` at the transport layer — callers
+           * must never trust the contents without passing through
+           * `ProfileSanitizer.admit()` first (Invariant #61).
+           */
+          readonly profile: Record<string, unknown>;
+      }
     | {
           readonly type: 'ACTION';
           readonly tick: number;
