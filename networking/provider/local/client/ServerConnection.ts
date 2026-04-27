@@ -56,6 +56,18 @@ function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
     return raw.toString('utf8');
 }
 
+const TERMINAL_REJECT_REASONS: ReadonlySet<string> = new Set<DisconnectReason>([
+    'kicked',
+    'timeout',
+    'host_closed',
+    'error',
+    'normal',
+]);
+
+function isTerminalRejectReason(reason: string): reason is DisconnectReason {
+    return TERMINAL_REJECT_REASONS.has(reason);
+}
+
 // ─── ServerConnection ─────────────────────────────────────────────────────────
 
 /**
@@ -227,9 +239,8 @@ export class ServerConnection {
                             this.logger?.warn('non-JSON data received from server');
                             return;
                         }
-                        // Forward REJECT reason to disconnect subscribers (W-5)
-                        if (m.type === 'REJECT') {
-                            for (const cb of this.disconnectedCbs) cb(m.reason as DisconnectReason);
+                        if (m.type === 'REJECT' && isTerminalRejectReason(m.reason)) {
+                            for (const cb of this.disconnectedCbs) cb(m.reason);
                             return;
                         }
                         for (const cb of this.messageCbs) cb(m);

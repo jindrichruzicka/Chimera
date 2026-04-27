@@ -100,7 +100,9 @@ export type ClientMessage =
  *                 GameSnapshot NEVER appears here (Invariant #1).
  * - DELTA         Incremental event stream optimisation (F13). Placeholder only
  *                 in F10 — hosts always send full SNAPSHOT in this milestone.
- * - REJECT        Signals that the host rejected an ACTION (stale tick, etc.).
+ * - REJECT        Signals that the host rejected an ACTION (stale tick, checksum
+ *                 mismatch, etc.) or is ending the session with a terminal reason
+ *                 such as `host_closed`.
  * - REVEAL        Discloses a committed hidden value for anti-tamper verification
  *                 (§4.6 / F27).
  * - CHAT          Chat message relayed from a player; includes server timestamp

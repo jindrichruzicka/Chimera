@@ -12,6 +12,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { ServerConnection } from './ServerConnection.js';
@@ -220,6 +221,64 @@ describe('ServerConnection — REJECT reason forwarded (T06)', () => {
         expect(reasons.length).toBeGreaterThan(0);
         // The reason should reflect the REJECT frame sent by the server
         expect(reasons[0]).toBe('host_closed');
+    });
+
+    it('delivers non-terminal REJECT frames to message subscribers without disconnecting', async () => {
+        const server = makeServer();
+        await server.ready();
+        const conn = new ServerConnection({ maxRetries: 0 });
+        const { playerId } = await conn.connect(
+            `ws://127.0.0.1:${server.port}`,
+            server.token,
+            defaultProfile,
+        );
+
+        const reasons: string[] = [];
+        const received: ServerMessage[] = [];
+        conn.onDisconnected((reason) => reasons.push(reason));
+        conn.onMessage((message) => received.push(message));
+
+        server.sendToPlayer(playerId, { type: 'REJECT', reason: 'crc_mismatch', tick: 11 });
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        expect(reasons).toHaveLength(0);
+        expect(received).toEqual([{ type: 'REJECT', reason: 'crc_mismatch', tick: 11 }]);
+
+        await conn.close();
+    });
+
+    it('keeps the session connected after a tampered ACTION receives crc_mismatch', async () => {
+        const server = makeServer();
+        await server.ready();
+        new MessageRouter(server);
+        const conn = new ServerConnection({ maxRetries: 0 });
+        const { playerId } = await conn.connect(
+            `ws://127.0.0.1:${server.port}`,
+            server.token,
+            defaultProfile,
+        );
+
+        const reasons: string[] = [];
+        const received: ServerMessage[] = [];
+        conn.onDisconnected((reason) => reasons.push(reason));
+        conn.onMessage((message) => received.push(message));
+
+        const action = { type: 'test:move', playerId, tick: 12, payload: { x: 3 } };
+        conn.send({
+            type: 'ACTION',
+            tick: 12,
+            action,
+            checksum: crc32Json(action) + 1,
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+        conn.send({ type: 'PING', sentAt: 123 });
+        await new Promise<void>((resolve) => setTimeout(resolve, 60));
+
+        expect(reasons).toHaveLength(0);
+        expect(received.some((message) => message.type === 'REJECT')).toBe(true);
+        expect(received.some((message) => message.type === 'PONG')).toBe(true);
+
+        await conn.close();
     });
 });
 
