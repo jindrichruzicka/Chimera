@@ -101,7 +101,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             },
         );
 
-        const transport = new WsClientTransport(conn, assignedPlayerId, this.opts.logger);
+        const transport = new WsClientTransport(conn, assignedPlayerId);
 
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyState.info.sessionId,

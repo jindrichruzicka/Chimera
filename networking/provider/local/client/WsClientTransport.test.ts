@@ -241,14 +241,16 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
         new MessageRouter(server);
         await server.ready();
 
-        const conn = new ServerConnection();
+        // Pass the logger to ServerConnection — CRC validation now happens at the
+        // wire boundary in ServerConnection, not in WsClientTransport.
+        const conn = new ServerConnection({ logger });
         connections.push(conn);
         const { playerId } = await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, {
             playerId: toPlayerId('pending'),
             displayName: 'TestLogger',
         });
 
-        const transportWithLogger = new WsClientTransport(conn, playerId, logger);
+        const transportWithLogger = new WsClientTransport(conn, playerId);
         const snapshots: PlayerSnapshot[] = [];
         transportWithLogger.onSnapshotReceived((s) => snapshots.push(s));
 
@@ -262,6 +264,46 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
 
         expect(snapshots).toHaveLength(0);
         expect(warnMessages).toHaveLength(1);
+    });
+
+    it('accepts a SNAPSHOT whose CRC was computed from non-schema-order keys', async () => {
+        // Regression test for WARN-1: if CRC is validated on the Zod-reordered object
+        // rather than the pre-Zod wire bytes, any snapshot with field order that differs
+        // from the Zod schema definition will be falsely rejected.
+        //
+        // The Zod PlayerSnapshot schema defines fields: tick, viewerId, players, entities,
+        // phase, events, undoMeta. This snapshot puts 'phase' FIRST — non-schema order.
+        // The host computes CRC with phase-first order; the client must validate against
+        // the same bytes, not Zod's reordered output.
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const snapshots: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => snapshots.push(s));
+
+        // Non-schema key order: phase comes before tick
+        const nonSchemaOrderSnapshot = {
+            phase: 'test',
+            tick: 77,
+            viewerId: playerId,
+            players: {},
+            entities: {},
+            events: [],
+            undoMeta: { canUndo: false as const, canRedo: false as const },
+        };
+        // CRC computed from the non-schema-order object — as the host would produce it
+        const checksum = crc32Json(nonSchemaOrderSnapshot);
+
+        server.sendToPlayer(playerId, {
+            type: 'SNAPSHOT',
+            snapshot: nonSchemaOrderSnapshot as PlayerSnapshot,
+            checksum,
+        });
+        await new Promise<void>((r) => setTimeout(r, 30));
+
+        // After the fix: snapshot accepted (CRC validated against pre-Zod bytes)
+        // Before the fix: snapshot rejected (CRC computed from Zod-reordered keys)
+        expect(snapshots).toHaveLength(1);
+        expect(snapshots[0]?.tick).toBe(77);
     });
 });
 

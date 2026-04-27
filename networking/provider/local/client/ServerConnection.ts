@@ -28,6 +28,7 @@ import type { WirePlayerProfile } from '@chimera/shared/messages.js';
 import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { ServerMessageSchema } from '@chimera/shared/messages-schemas.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 
@@ -207,6 +208,11 @@ export class ServerConnection {
                         let m: ServerMessage;
                         try {
                             const p: unknown = JSON.parse(rawToString(r));
+                            // Validate SNAPSHOT CRC against pre-Zod bytes.
+                            // Zod may reorder object keys, so computing the CRC from the
+                            // Zod-parsed snapshot would diverge from the host's CRC.
+                            // Validate here — at the wire boundary — before safeParse runs.
+                            if (!this.validateSnapshotCrc(p)) return;
                             const res = ServerMessageSchema.safeParse(p);
                             if (!res.success) {
                                 this.logger?.warn('malformed server message', {
@@ -277,5 +283,32 @@ export class ServerConnection {
             // handleClose will fire again from the close event and schedule
             // the next retry (or give up) based on retryCount
         }
+    }
+
+    /**
+     * Validates the CRC32 checksum of an inbound SNAPSHOT message against the
+     * raw pre-Zod bytes.
+     *
+     * Must be called before `ServerMessageSchema.safeParse()` to avoid comparing
+     * against Zod's potentially key-reordered snapshot object.
+     *
+     * Returns `true` if the message is not a SNAPSHOT, or if it is a SNAPSHOT and
+     * its checksum is valid. Returns `false` (and logs a warning) if the checksum
+     * does not match.
+     */
+    private validateSnapshotCrc(p: unknown): boolean {
+        if (typeof p !== 'object' || p === null) return true;
+        const raw = p as Record<string, unknown>;
+        if (raw['type'] !== 'SNAPSHOT') return true;
+
+        const expected = crc32Json(raw['snapshot']);
+        if (expected !== raw['checksum']) {
+            this.logger?.warn('SNAPSHOT checksum mismatch — discarding frame', {
+                expected,
+                received: raw['checksum'],
+            });
+            return false;
+        }
+        return true;
     }
 }

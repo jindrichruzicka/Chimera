@@ -19,7 +19,6 @@ import type {
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
-import type { Logger } from '@chimera/shared/logging.js';
 import type { ServerMessage } from '@chimera/shared/messages.js';
 import type { ServerConnection } from './ServerConnection.js';
 
@@ -44,7 +43,6 @@ export class WsClientTransport implements ClientTransport {
     constructor(
         private readonly connection: ServerConnection,
         private readonly playerId: PlayerId,
-        private readonly logger?: Logger,
     ) {
         connection.onMessage((msg) => this.route(msg));
         this.disconnectUnsub = connection.onDisconnected(() => this.dispose());
@@ -151,14 +149,6 @@ export class WsClientTransport implements ClientTransport {
     private route(msg: ServerMessage): void {
         switch (msg.type) {
             case 'SNAPSHOT': {
-                const expected = crc32Json(msg.snapshot);
-                if (msg.checksum !== expected) {
-                    this.logger?.warn('SNAPSHOT checksum mismatch — discarding frame', {
-                        expected,
-                        received: msg.checksum,
-                    });
-                    break;
-                }
                 for (const cb of this.snapshotCbs) cb(msg.snapshot);
                 break;
             }
