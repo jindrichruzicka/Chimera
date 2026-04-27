@@ -24,6 +24,7 @@ function buildTable(): Int32Array {
 }
 
 const TABLE = buildTable();
+const ENCODER = new TextEncoder();
 
 /**
  * Computes the CRC32 of a UTF-8 encoded string.
@@ -31,7 +32,7 @@ const TABLE = buildTable();
  */
 export function crc32(input: string): number {
     let crc = 0xffffffff;
-    const bytes = new TextEncoder().encode(input);
+    const bytes = ENCODER.encode(input);
     for (const byte of bytes) {
         crc = (crc >>> 8) ^ (TABLE[(crc ^ byte) & 0xff] ?? 0);
     }
