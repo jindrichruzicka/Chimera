@@ -281,7 +281,7 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
         transport.onSnapshotReceived((s) => snapshots.push(s));
 
         // Non-schema key order: phase comes before tick
-        const nonSchemaOrderSnapshot = {
+        const nonSchemaOrderSnapshot: PlayerSnapshot = {
             phase: 'test',
             tick: 77,
             viewerId: playerId,
@@ -295,7 +295,7 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
 
         server.sendToPlayer(playerId, {
             type: 'SNAPSHOT',
-            snapshot: nonSchemaOrderSnapshot as PlayerSnapshot,
+            snapshot: nonSchemaOrderSnapshot,
             checksum,
         });
         await new Promise<void>((r) => setTimeout(r, 30));
@@ -489,10 +489,12 @@ describe('WsClientTransport — dispose', () => {
     it('clears all subscriber Sets on dispose so no callbacks fire after teardown', () => {
         // Build a stub that lets us capture the onMessage handler so we can
         // drive it manually after dispose().
-        let capturedOnMessage: ((msg: unknown) => void) | null = null;
+        let capturedOnMessage: (msg: unknown) => void = (): void => {};
+        let didCaptureOnMessage = false;
         const stubConn = {
             send: (): void => {},
             onMessage: (handler: (msg: unknown) => void): (() => void) => {
+                didCaptureOnMessage = true;
                 capturedOnMessage = handler;
                 return (): void => {};
             },
@@ -514,10 +516,9 @@ describe('WsClientTransport — dispose', () => {
         transport.dispose();
 
         // Push a PONG message through the captured handler — nothing should fire.
-        // TypeScript's control-flow analysis cannot track let-assignments that happen
-        // inside closures, so we assert the type here after construction.
-        const dispatch = capturedOnMessage as ((msg: unknown) => void) | null;
-        dispatch?.({
+        expect(didCaptureOnMessage).toBe(true);
+
+        capturedOnMessage({
             type: 'PONG',
             sentAt: performance.now() - 1,
         });
