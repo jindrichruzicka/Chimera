@@ -13,6 +13,7 @@ import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import { LobbyServer } from './LobbyServer.js';
 import { MessageRouter } from './MessageRouter.js';
 
@@ -83,12 +84,13 @@ describe('MessageRouter — ACTION routing', () => {
 
         const { ws, playerId } = await connectAndJoin(server);
 
+        const action = { type: 'test:move', playerId, tick: 5, payload: { x: 1 } };
         ws.send(
             JSON.stringify({
                 type: 'ACTION',
                 tick: 5,
-                action: { type: 'test:move', playerId, tick: 5, payload: { x: 1 } },
-                checksum: 0,
+                action,
+                checksum: crc32Json(action),
             } satisfies ClientMessage),
         );
 
@@ -126,12 +128,13 @@ describe('MessageRouter — ACTION routing', () => {
         unsub();
 
         const { ws, playerId } = await connectAndJoin(server);
+        const action = { type: 'test:noop', playerId, tick: 1, payload: {} };
         ws.send(
             JSON.stringify({
                 type: 'ACTION',
                 tick: 1,
-                action: { type: 'test:noop', playerId, tick: 1, payload: {} },
-                checksum: 0,
+                action,
+                checksum: crc32Json(action),
             } satisfies ClientMessage),
         );
 
@@ -244,6 +247,98 @@ describe('MessageRouter — PING/PONG', () => {
         expect(pong.type).toBe('PONG');
         if (pong.type === 'PONG') {
             expect(pong.sentAt).toBe(999);
+        }
+        ws.close();
+    });
+});
+
+// ─── ACTION checksum validation ───────────────────────────────────────────────
+
+describe('MessageRouter — ACTION checksum validation', () => {
+    it('forwards ACTION to callbacks when checksum matches crc32Json(action)', async () => {
+        const server = makeServer();
+        await server.ready();
+        const router = new MessageRouter(server);
+
+        const received: { from: PlayerId; action: unknown }[] = [];
+        router.onActionReceived((from, action) => received.push({ from, action }));
+
+        const { ws, playerId } = await connectAndJoin(server);
+        const action = { type: 'test:move', playerId, tick: 3, payload: { x: 2 } };
+        ws.send(
+            JSON.stringify({
+                type: 'ACTION',
+                tick: 3,
+                action,
+                checksum: crc32Json(action),
+            } satisfies ClientMessage),
+        );
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        expect(received).toHaveLength(1);
+        expect(received[0]?.from).toBe(playerId);
+        ws.close();
+    });
+
+    it('does NOT forward ACTION to callbacks when checksum is tampered', async () => {
+        const server = makeServer();
+        await server.ready();
+        const router = new MessageRouter(server);
+
+        const received: unknown[] = [];
+        router.onActionReceived((_from, action) => received.push(action));
+
+        const { ws, playerId } = await connectAndJoin(server);
+        const action = { type: 'test:move', playerId, tick: 7, payload: { x: 99 } };
+        ws.send(
+            JSON.stringify({
+                type: 'ACTION',
+                tick: 7,
+                action,
+                checksum: crc32Json(action) + 1, // deliberately wrong
+            } satisfies ClientMessage),
+        );
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        expect(received).toHaveLength(0);
+        ws.close();
+    });
+
+    it('sends REJECT with reason crc_mismatch and correct tick when checksum is tampered', async () => {
+        const server = makeServer();
+        await server.ready();
+        new MessageRouter(server);
+
+        const { ws, playerId } = await connectAndJoin(server);
+        const action = { type: 'test:fire', playerId, tick: 12, payload: {} };
+
+        const reject = await new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => {
+                const parsed = JSON.parse(
+                    Array.isArray(raw)
+                        ? Buffer.concat(raw).toString('utf8')
+                        : raw instanceof ArrayBuffer
+                          ? Buffer.from(raw).toString('utf8')
+                          : raw.toString('utf8'),
+                ) as ServerMessage;
+                resolve(parsed);
+            });
+            ws.send(
+                JSON.stringify({
+                    type: 'ACTION',
+                    tick: 12,
+                    action,
+                    checksum: 0, // wrong checksum
+                } satisfies ClientMessage),
+            );
+        });
+
+        expect(reject.type).toBe('REJECT');
+        if (reject.type === 'REJECT') {
+            expect(reject.reason).toBe('crc_mismatch');
+            expect(reject.tick).toBe(12);
         }
         ws.close();
     });

@@ -22,6 +22,7 @@ import type {
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import type { LobbyServer } from './LobbyServer.js';
 
 // ─── Callback types ───────────────────────────────────────────────────────────
@@ -89,13 +90,22 @@ export class MessageRouter {
 
     private route(from: PlayerId, msg: ClientMessage): void {
         switch (msg.type) {
-            case 'ACTION':
-                // TODO(F13/§9.2): verify msg.checksum === crc32Json(msg.action); on mismatch
-                // trigger a full state resync instead of processing the action.
+            case 'ACTION': {
+                const expected = crc32Json(msg.action);
+                if (msg.checksum !== expected) {
+                    const reject: ServerMessage = {
+                        type: 'REJECT',
+                        reason: 'crc_mismatch',
+                        tick: msg.tick,
+                    };
+                    this.server.sendToPlayer(from, reject);
+                    break;
+                }
                 for (const cb of this.actionCbs) {
                     cb(from, msg.action);
                 }
                 break;
+            }
 
             case 'READY_STATE_UPDATE':
                 for (const cb of this.readyStateCbs) {

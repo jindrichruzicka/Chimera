@@ -235,12 +235,13 @@ describe('WsHostTransport — onActionReceived', () => {
         const received: { from: PlayerId }[] = [];
         transport.onActionReceived((from) => received.push({ from }));
 
+        const action3 = { type: 'test:noop', playerId, tick: 3, payload: {} };
         ws.send(
             JSON.stringify({
                 type: 'ACTION',
                 tick: 3,
-                action: { type: 'test:noop', playerId, tick: 3, payload: {} },
-                checksum: 0,
+                action: action3,
+                checksum: crc32Json(action3),
             } satisfies ClientMessage),
         );
 
@@ -259,12 +260,13 @@ describe('WsHostTransport — onActionReceived', () => {
         const unsub = transport.onActionReceived((_from, a) => received.push(a));
         unsub();
 
+        const action1 = { type: 'test:noop', playerId, tick: 1, payload: {} };
         ws.send(
             JSON.stringify({
                 type: 'ACTION',
                 tick: 1,
-                action: { type: 'test:noop', playerId, tick: 1, payload: {} },
-                checksum: 0,
+                action: action1,
+                checksum: crc32Json(action1),
             } satisfies ClientMessage),
         );
 
