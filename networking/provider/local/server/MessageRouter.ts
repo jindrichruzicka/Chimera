@@ -1,13 +1,13 @@
 /**
  * networking/provider/local/server/MessageRouter.ts
  *
- * Routes inbound ClientMessages from LobbyServer to typed callback sets.
+ * Routes inbound ClientMessages from an injected message bus to typed callback sets.
  *
  * Responsibilities:
- *   - Subscribe to LobbyServer.onMessage
+ *   - Subscribe to MessageBus.onMessage
  *   - Route ACTION → onActionReceived callbacks
  *   - Route CHAT / PROFILE_UPDATE → onSideChannelReceived as SideChannelMessage
- *   - Respond to PING with a PONG sent back via LobbyServer.sendToPlayer
+ *   - Respond to PING with a PONG sent back via MessageBus.sendToPlayer
  *
  * All other message types (JOIN is handled by LobbyServer itself before
  * messages reach MessageRouter) are silently ignored.
@@ -23,7 +23,7 @@ import type {
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
-import type { LobbyServer } from './LobbyServer.js';
+import type { MessageBus } from './MessageBus.js';
 
 // ─── Callback types ───────────────────────────────────────────────────────────
 
@@ -34,13 +34,13 @@ type SideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 // ─── MessageRouter ────────────────────────────────────────────────────────────
 
 /**
- * Subscribes to raw ClientMessage events from LobbyServer and routes them to
+ * Subscribes to raw ClientMessage events from an injected bus and routes them to
  * typed callback sets. WsHostTransport delegates its subscription methods to
  * the router.
  *
  * MessageRouter is constructed once per hosted session; it is shared between
  * WsHostTransport and LocalWebSocketProvider. Its only external dependency is
- * LobbyServer — it never touches ws.WebSocket directly.
+ * MessageBus — it never touches LobbyServer or ws.WebSocket directly.
  */
 export class MessageRouter {
     private readonly actionCbs = new Set<ActionCb>();
@@ -48,8 +48,8 @@ export class MessageRouter {
     private readonly sideChannelCbs = new Set<SideChannelCb>();
     private readonly unsub: Unsubscribe;
 
-    constructor(private readonly server: LobbyServer) {
-        this.unsub = server.onMessage((from, msg) => this.route(from, msg));
+    constructor(private readonly bus: MessageBus) {
+        this.unsub = bus.onMessage((from, msg) => this.route(from, msg));
     }
 
     // ─── Public subscription API ──────────────────────────────────────────────
@@ -78,7 +78,7 @@ export class MessageRouter {
         };
     }
 
-    /** Detach from LobbyServer. Called when the session is closed. */
+    /** Detach from the injected bus. Called when the session is closed. */
     dispose(): void {
         this.unsub();
         this.actionCbs.clear();
@@ -98,7 +98,7 @@ export class MessageRouter {
                         reason: 'crc_mismatch',
                         tick: msg.tick,
                     };
-                    this.server.sendToPlayer(from, reject);
+                    this.bus.sendToPlayer(from, reject);
                     break;
                 }
                 for (const cb of this.actionCbs) {
@@ -140,12 +140,12 @@ export class MessageRouter {
                     sentAt: msg.sentAt,
                     // TODO(F-clock-skew): add serverTime once clock-skew estimation is implemented.
                 };
-                this.server.sendToPlayer(from, pong);
+                this.bus.sendToPlayer(from, pong);
                 break;
             }
 
             default:
-                // JOIN is handled by LobbyServer; other unknowns are ignored
+                // JOIN is handled before messages reach the router; other unknowns are ignored
                 break;
         }
     }

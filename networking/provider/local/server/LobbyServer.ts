@@ -32,6 +32,7 @@ import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { ClientMessageSchema } from '@chimera/shared/messages-schemas.js';
+import type { MessageBus } from './MessageBus.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -64,7 +65,7 @@ export interface LobbyServerOptions {
  *   3. Use `server.port` and `server.token` to build the lobby code
  *   4. `await server.close()` — gracefully terminates all connections
  */
-export class LobbyServer {
+export class LobbyServer implements MessageBus {
     private readonly wss: WebSocketServer;
     private readonly connections = new Map<PlayerId, WebSocket>();
     private readonly _token: string;

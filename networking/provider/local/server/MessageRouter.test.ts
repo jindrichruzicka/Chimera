@@ -1,345 +1,278 @@
 /**
  * networking/provider/local/server/MessageRouter.test.ts
  *
- * Tests for MessageRouter — routes inbound ClientMessages from LobbyServer to
- * the WsHostTransport callback sets.
+ * Tests for MessageRouter — routes inbound ClientMessages from an injected
+ * message bus to the WsHostTransport callback sets.
  *
  * Architecture: §4.14 — LocalWebSocketProvider Internal Architecture
- * Task: F10 / T03 (issue #218)
+ * Task: F10 / T03 (issue #218), issue #333
  */
 
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import WebSocket from 'ws';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { describe, it, expect } from 'vitest';
+import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { Unsubscribe } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
-import { LobbyServer } from './LobbyServer.js';
+import type { MessageBus } from './MessageBus.js';
 import { MessageRouter } from './MessageRouter.js';
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Test double ─────────────────────────────────────────────────────────────
 
-function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
-    if (Array.isArray(raw)) return Buffer.concat(raw).toString('utf8');
-    if (raw instanceof ArrayBuffer) return Buffer.from(raw).toString('utf8');
-    return raw.toString('utf8');
+class FakeMessageBus implements MessageBus {
+    readonly sentMessages: { readonly playerId: PlayerId; readonly message: ServerMessage }[] = [];
+
+    private readonly messageCbs = new Set<(from: PlayerId, msg: ClientMessage) => void>();
+
+    onMessage(cb: (from: PlayerId, msg: ClientMessage) => void): Unsubscribe {
+        this.messageCbs.add(cb);
+        return (): void => {
+            this.messageCbs.delete(cb);
+        };
+    }
+
+    sendToPlayer(playerId: PlayerId, message: ServerMessage): void {
+        this.sentMessages.push({ playerId, message });
+    }
+
+    emit(from: PlayerId, message: ClientMessage): void {
+        for (const cb of this.messageCbs) {
+            cb(from, message);
+        }
+    }
+
+    listenerCount(): number {
+        return this.messageCbs.size;
+    }
 }
 
-async function connectAndJoin(server: LobbyServer): Promise<{ ws: WebSocket; playerId: PlayerId }> {
-    return new Promise((resolve, reject) => {
-        const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
-        ws.on('error', reject);
-        ws.on('open', () =>
-            ws.send(
-                JSON.stringify({
-                    type: 'JOIN',
-                    token: server.token,
-                    profile: { playerId: toPlayerId('pending'), displayName: 'Tester' },
-                } satisfies ClientMessage),
-            ),
-        );
-        ws.on('message', (raw) => {
-            const msg = JSON.parse(rawToString(raw)) as ServerMessage;
-            if (msg.type === 'WELCOME') resolve({ ws, playerId: msg.playerId });
-            else if (msg.type === 'REJECT') reject(new Error(`REJECT: ${msg.reason}`));
-        });
-    });
-}
+const playerOne = toPlayerId('p1');
 
-// ─── Setup / teardown ─────────────────────────────────────────────────────────
-
-const servers: LobbyServer[] = [];
-
-afterEach(async () => {
-    await Promise.all(servers.map((s) => s.close()));
-    servers.length = 0;
-    vi.restoreAllMocks();
-});
-
-function makeServer(): LobbyServer {
-    const s = new LobbyServer({ port: 0, gameId: 'test', maxPlayers: 4 });
-    servers.push(s);
-    return s;
+function makeAction(playerId: PlayerId = playerOne): EngineAction {
+    return {
+        type: 'test:move',
+        playerId,
+        tick: 5,
+        payload: { x: 1 },
+    };
 }
 
 // ─── MessageRouter construction ───────────────────────────────────────────────
 
 describe('MessageRouter — construction', () => {
-    it('can be constructed with a LobbyServer', () => {
-        const server = makeServer();
-        expect(() => new MessageRouter(server)).not.toThrow();
+    it('subscribes to an injected message bus without depending on LobbyServer', () => {
+        const bus = new FakeMessageBus();
+
+        expect(() => new MessageRouter(bus)).not.toThrow();
+        expect(bus.listenerCount()).toBe(1);
+    });
+
+    it('dispose detaches from the injected bus and clears callback sets', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: EngineAction[] = [];
+        router.onActionReceived((_from, action) => received.push(action));
+
+        router.dispose();
+        const action = makeAction();
+        bus.emit(playerOne, {
+            type: 'ACTION',
+            tick: action.tick,
+            action,
+            checksum: crc32Json(action),
+        });
+
+        expect(bus.listenerCount()).toBe(0);
+        expect(received).toHaveLength(0);
     });
 });
 
 // ─── ACTION routing ───────────────────────────────────────────────────────────
 
 describe('MessageRouter — ACTION routing', () => {
-    it('routes ACTION messages to onActionReceived callbacks', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
-
-        const received: { from: PlayerId; action: unknown }[] = [];
-        router.onActionReceived((from, action) => received.push({ from, action }));
-
-        const { ws, playerId } = await connectAndJoin(server);
-
-        const action = { type: 'test:move', playerId, tick: 5, payload: { x: 1 } };
-        ws.send(
-            JSON.stringify({
-                type: 'ACTION',
-                tick: 5,
-                action,
-                checksum: crc32Json(action),
-            } satisfies ClientMessage),
+    it('routes ACTION messages to onActionReceived callbacks', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const action = makeAction();
+        const received: { readonly from: PlayerId; readonly action: EngineAction }[] = [];
+        router.onActionReceived((from, routedAction) =>
+            received.push({ from, action: routedAction }),
         );
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+        bus.emit(playerOne, {
+            type: 'ACTION',
+            tick: action.tick,
+            action,
+            checksum: crc32Json(action),
+        });
 
-        expect(received).toHaveLength(1);
-        expect(received[0]?.from).toBe(playerId);
-        expect((received[0]?.action as { type: string }).type).toBe('test:move');
-        ws.close();
+        expect(received).toEqual([{ from: playerOne, action }]);
     });
 
-    it('does not fire onActionReceived for non-ACTION messages', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
+    it('does not fire onActionReceived for non-ACTION messages', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: EngineAction[] = [];
+        router.onActionReceived((_from, action) => received.push(action));
 
-        const received: unknown[] = [];
-        router.onActionReceived((_from, a) => received.push(a));
+        bus.emit(playerOne, { type: 'PING', sentAt: 0 });
 
-        const { ws } = await connectAndJoin(server);
-        ws.send(JSON.stringify({ type: 'PING', sentAt: 0 } satisfies ClientMessage));
-
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
         expect(received).toHaveLength(0);
-        ws.close();
     });
 
-    it('onActionReceived Unsubscribe stops delivery', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
-
-        const received: unknown[] = [];
-        const unsub = router.onActionReceived((_from, a) => received.push(a));
-        unsub();
-
-        const { ws, playerId } = await connectAndJoin(server);
-        const action = { type: 'test:noop', playerId, tick: 1, payload: {} };
-        ws.send(
-            JSON.stringify({
-                type: 'ACTION',
-                tick: 1,
-                action,
-                checksum: crc32Json(action),
-            } satisfies ClientMessage),
+    it('onActionReceived Unsubscribe stops delivery', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const action = makeAction();
+        const received: EngineAction[] = [];
+        const unsubscribe = router.onActionReceived((_from, routedAction) =>
+            received.push(routedAction),
         );
+        unsubscribe();
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+        bus.emit(playerOne, {
+            type: 'ACTION',
+            tick: action.tick,
+            action,
+            checksum: crc32Json(action),
+        });
+
         expect(received).toHaveLength(0);
-        ws.close();
     });
 });
 
 // ─── Side-channel routing ─────────────────────────────────────────────────────
 
 describe('MessageRouter — side-channel routing', () => {
-    it('routes CHAT messages to onSideChannelReceived as kind=chat', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
-
-        const received: { from: PlayerId; kind: string }[] = [];
-        router.onSideChannelReceived((from, msg) => received.push({ from, kind: msg.kind }));
-
-        const { ws, playerId } = await connectAndJoin(server);
-        ws.send(JSON.stringify({ type: 'CHAT', body: 'hi' } satisfies ClientMessage));
-
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
-
-        expect(received).toHaveLength(1);
-        expect(received[0]?.from).toBe(playerId);
-        expect(received[0]?.kind).toBe('chat');
-        ws.close();
-    });
-
-    it('routes PROFILE_UPDATE messages to onSideChannelReceived as kind=profile', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
-
-        const received: { from: PlayerId; kind: string }[] = [];
-        router.onSideChannelReceived((from, msg) => received.push({ from, kind: msg.kind }));
-
-        const { ws, playerId } = await connectAndJoin(server);
-        ws.send(
-            JSON.stringify({
-                type: 'PROFILE_UPDATE',
-                profile: { playerId, displayName: 'New Name' },
-            } satisfies ClientMessage),
+    it('routes CHAT messages to onSideChannelReceived as kind=chat', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: { readonly from: PlayerId; readonly kind: string }[] = [];
+        router.onSideChannelReceived((from, message) =>
+            received.push({ from, kind: message.kind }),
         );
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+        bus.emit(playerOne, { type: 'CHAT', body: 'hi' });
 
-        expect(received).toHaveLength(1);
-        expect(received[0]?.kind).toBe('profile');
-        ws.close();
+        expect(received).toEqual([{ from: playerOne, kind: 'chat' }]);
     });
 
-    it('onSideChannelReceived Unsubscribe stops delivery', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
+    it('routes PROFILE_UPDATE messages to onSideChannelReceived as kind=profile', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: { readonly from: PlayerId; readonly kind: string }[] = [];
+        router.onSideChannelReceived((from, message) =>
+            received.push({ from, kind: message.kind }),
+        );
 
+        bus.emit(playerOne, {
+            type: 'PROFILE_UPDATE',
+            profile: { playerId: playerOne, displayName: 'New Name' },
+        });
+
+        expect(received).toEqual([{ from: playerOne, kind: 'profile' }]);
+    });
+
+    it('onSideChannelReceived Unsubscribe stops delivery', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
         const received: unknown[] = [];
-        const unsub = router.onSideChannelReceived((_from, m) => received.push(m));
-        unsub();
+        const unsubscribe = router.onSideChannelReceived((_from, message) =>
+            received.push(message),
+        );
+        unsubscribe();
 
-        const { ws } = await connectAndJoin(server);
-        ws.send(JSON.stringify({ type: 'CHAT', body: 'hi' } satisfies ClientMessage));
+        bus.emit(playerOne, { type: 'CHAT', body: 'hi' });
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
         expect(received).toHaveLength(0);
-        ws.close();
     });
 });
 
 describe('MessageRouter — ready-state routing', () => {
-    it('routes READY_STATE_UPDATE messages to onReadyStateUpdate callbacks', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
-
-        const received: { from: PlayerId; ready: boolean }[] = [];
+    it('routes READY_STATE_UPDATE messages to onReadyStateUpdate callbacks', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: { readonly from: PlayerId; readonly ready: boolean }[] = [];
         router.onReadyStateUpdate((from, ready) => received.push({ from, ready }));
 
-        const { ws, playerId } = await connectAndJoin(server);
-        ws.send(
-            JSON.stringify({ type: 'READY_STATE_UPDATE', ready: true } satisfies ClientMessage),
-        );
+        bus.emit(playerOne, { type: 'READY_STATE_UPDATE', ready: true });
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
-
-        expect(received).toHaveLength(1);
-        expect(received[0]?.from).toBe(playerId);
-        expect(received[0]?.ready).toBe(true);
-        ws.close();
+        expect(received).toEqual([{ from: playerOne, ready: true }]);
     });
 });
 
 // ─── PING → PONG ─────────────────────────────────────────────────────────────
 
 describe('MessageRouter — PING/PONG', () => {
-    it('responds to PING with a PONG message containing sentAt', async () => {
-        const server = makeServer();
-        await server.ready();
-        new MessageRouter(server); // MessageRouter handles PING
+    it('responds to PING with a PONG message containing sentAt', () => {
+        const bus = new FakeMessageBus();
+        new MessageRouter(bus);
 
-        const { ws } = await connectAndJoin(server);
-        const pong = await new Promise<ServerMessage>((resolve) => {
-            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
-            ws.send(JSON.stringify({ type: 'PING', sentAt: 999 } satisfies ClientMessage));
-        });
+        bus.emit(playerOne, { type: 'PING', sentAt: 999 });
 
-        expect(pong.type).toBe('PONG');
-        if (pong.type === 'PONG') {
-            expect(pong.sentAt).toBe(999);
-        }
-        ws.close();
+        expect(bus.sentMessages).toEqual([
+            { playerId: playerOne, message: { type: 'PONG', sentAt: 999 } },
+        ]);
     });
 });
 
 // ─── ACTION checksum validation ───────────────────────────────────────────────
 
 describe('MessageRouter — ACTION checksum validation', () => {
-    it('forwards ACTION to callbacks when checksum matches crc32Json(action)', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
-
-        const received: { from: PlayerId; action: unknown }[] = [];
-        router.onActionReceived((from, action) => received.push({ from, action }));
-
-        const { ws, playerId } = await connectAndJoin(server);
-        const action = { type: 'test:move', playerId, tick: 3, payload: { x: 2 } };
-        ws.send(
-            JSON.stringify({
-                type: 'ACTION',
-                tick: 3,
-                action,
-                checksum: crc32Json(action),
-            } satisfies ClientMessage),
+    it('forwards ACTION to callbacks when checksum matches crc32Json(action)', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const action = makeAction();
+        const received: { readonly from: PlayerId; readonly action: EngineAction }[] = [];
+        router.onActionReceived((from, routedAction) =>
+            received.push({ from, action: routedAction }),
         );
 
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
-
-        expect(received).toHaveLength(1);
-        expect(received[0]?.from).toBe(playerId);
-        ws.close();
-    });
-
-    it('does NOT forward ACTION to callbacks when checksum is tampered', async () => {
-        const server = makeServer();
-        await server.ready();
-        const router = new MessageRouter(server);
-
-        const received: unknown[] = [];
-        router.onActionReceived((_from, action) => received.push(action));
-
-        const { ws, playerId } = await connectAndJoin(server);
-        const action = { type: 'test:move', playerId, tick: 7, payload: { x: 99 } };
-        ws.send(
-            JSON.stringify({
-                type: 'ACTION',
-                tick: 7,
-                action,
-                checksum: crc32Json(action) + 1, // deliberately wrong
-            } satisfies ClientMessage),
-        );
-
-        await new Promise<void>((resolve) => setTimeout(resolve, 30));
-
-        expect(received).toHaveLength(0);
-        ws.close();
-    });
-
-    it('sends REJECT with reason crc_mismatch and correct tick when checksum is tampered', async () => {
-        const server = makeServer();
-        await server.ready();
-        new MessageRouter(server);
-
-        const { ws, playerId } = await connectAndJoin(server);
-        const action = { type: 'test:fire', playerId, tick: 12, payload: {} };
-
-        const reject = await new Promise<ServerMessage>((resolve) => {
-            ws.once('message', (raw) => {
-                const parsed = JSON.parse(
-                    Array.isArray(raw)
-                        ? Buffer.concat(raw).toString('utf8')
-                        : raw instanceof ArrayBuffer
-                          ? Buffer.from(raw).toString('utf8')
-                          : raw.toString('utf8'),
-                ) as ServerMessage;
-                resolve(parsed);
-            });
-            ws.send(
-                JSON.stringify({
-                    type: 'ACTION',
-                    tick: 12,
-                    action,
-                    checksum: 0, // wrong checksum
-                } satisfies ClientMessage),
-            );
+        bus.emit(playerOne, {
+            type: 'ACTION',
+            tick: action.tick,
+            action,
+            checksum: crc32Json(action),
         });
 
-        expect(reject.type).toBe('REJECT');
-        if (reject.type === 'REJECT') {
-            expect(reject.reason).toBe('crc_mismatch');
-            expect(reject.tick).toBe(12);
-        }
-        ws.close();
+        expect(received).toEqual([{ from: playerOne, action }]);
+        expect(bus.sentMessages).toHaveLength(0);
+    });
+
+    it('does not forward ACTION to callbacks when checksum is tampered', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const action = makeAction();
+        const received: EngineAction[] = [];
+        router.onActionReceived((_from, routedAction) => received.push(routedAction));
+
+        bus.emit(playerOne, {
+            type: 'ACTION',
+            tick: action.tick,
+            action,
+            checksum: crc32Json(action) + 1,
+        });
+
+        expect(received).toHaveLength(0);
+    });
+
+    it('sends REJECT with reason crc_mismatch and correct tick when checksum is tampered', () => {
+        const bus = new FakeMessageBus();
+        new MessageRouter(bus);
+        const action = makeAction();
+
+        bus.emit(playerOne, {
+            type: 'ACTION',
+            tick: 12,
+            action,
+            checksum: 0,
+        });
+
+        expect(bus.sentMessages).toEqual([
+            {
+                playerId: playerOne,
+                message: { type: 'REJECT', reason: 'crc_mismatch', tick: 12 },
+            },
+        ]);
     });
 });
