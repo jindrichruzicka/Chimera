@@ -179,7 +179,7 @@ export class WsClientTransport implements ClientTransport {
                 break;
 
             default:
-                // WELCOME handled by ServerConnection; PONG, DELTA, REJECT, REVEAL ignored
+                // WELCOME handled by ServerConnection; DELTA, REJECT, REVEAL ignored
                 break;
         }
     }
