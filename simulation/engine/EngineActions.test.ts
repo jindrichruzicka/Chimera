@@ -262,6 +262,40 @@ describe('engine:end_turn definition', () => {
         const frozen = Object.freeze({ ...snapshot });
         expect(() => definition().reduce(frozen, {}, hostId, stubCtx)).not.toThrow();
     });
+
+    // WARN-2 regression: activePlayerId removed from players while turnClock still references it.
+
+    it('validate returns { ok: false, reason: "active_player_not_in_game" } when turnClock.activePlayerId is absent from state.players', () => {
+        const removedId = toPlayerId('p-removed');
+        // makeTurnSnapshot only adds hostId, guestId, p3 — p-removed is not present.
+        const snapshot: BaseGameSnapshot = {
+            ...makeTurnSnapshot(removedId, 30_000),
+            turnClock: { activePlayerId: removedId, deadlineMs: 30_000 },
+            players: {
+                [hostId]: { id: hostId },
+                [guestId]: { id: guestId },
+                // removedId intentionally absent
+            },
+        };
+        const result = definition().validate({}, snapshot, removedId, stubCtx);
+        expect(result).toEqual({ ok: false, reason: 'active_player_not_in_game' });
+    });
+
+    it('reduce returns state unchanged as defensive guard when activePlayerId is not in state.players', () => {
+        const removedId = toPlayerId('p-removed');
+        const snapshot: BaseGameSnapshot = {
+            ...makeTurnSnapshot(hostId, 30_000),
+            turnClock: { activePlayerId: removedId, deadlineMs: 30_000 },
+            players: {
+                [hostId]: { id: hostId },
+                [guestId]: { id: guestId },
+                // removedId intentionally absent
+            },
+        };
+        // validate() would reject this envelope; test the defensive reduce path directly.
+        const next = definition().reduce(snapshot, {}, removedId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
 });
 
 // ─── registerEngineActions ────────────────────────────────────────────────────

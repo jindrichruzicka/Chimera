@@ -149,17 +149,51 @@ export interface HistoryContext {
 }
 
 /**
+ * Opaque branded type for the per-viewer snapshot delivered by Stage 7 of
+ * `ActionPipeline.process()` via `BroadcastContext.broadcast`.
+ *
+ * `GameSnapshot` (or any subtype) must NEVER be assigned to this type without
+ * an explicit projection step (Invariant #1). The only authorised cast site in
+ * `simulation/` is inside `ActionPipeline` Stage 7, guarded by a TODO(F26)
+ * comment. External callers (e.g. `StateBroadcaster`) should import
+ * `ViewerSnapshot` and use `toViewerSnapshot` at the wiring point.
+ *
+ * Zero runtime overhead — the brand field exists only in the type system.
+ */
+export type ViewerSnapshot = Readonly<Record<string, unknown>> & {
+    readonly __chimera_viewer_snapshot: true;
+};
+
+/**
+ * Converts a projected per-viewer record to the opaque `ViewerSnapshot` brand.
+ *
+ * This is the **only** authorised cast site for `ViewerSnapshot` within
+ * `simulation/`. Callers must ensure the supplied `projected` value is a
+ * properly projected viewer-safe record — not a raw `GameSnapshot`. Until
+ * `StateProjector` lands in F26, the caller in `ActionPipeline` Stage 7
+ * documents the gap with a `TODO(F26)` comment.
+ */
+export const toViewerSnapshot = (projected: Readonly<Record<string, unknown>>): ViewerSnapshot =>
+    projected as ViewerSnapshot;
+
+/**
  * Narrow context for pipeline stages that broadcast state to players.
  *
- * Typed as opaque `Readonly<Record<string, unknown>>` until `PlayerSnapshot`
- * is formalised in F26. Stage 7 (broadcast) uses this to push per-player
- * views without depending on the renderer's snapshot shape.
+ * Typed as opaque `ViewerSnapshot` until `PlayerSnapshot` is formalised in
+ * F26. Stage 7 (broadcast) uses this to push per-player views without
+ * depending on the renderer's snapshot shape.
+ *
+ * INVARIANT #1: `GameSnapshot` must NEVER be passed directly as a
+ * `ViewerSnapshot`. The wiring point is responsible for applying a
+ * `StateProjector` before calling broadcast. Use `toViewerSnapshot` only at
+ * the authorised cast site inside `ActionPipeline` Stage 7, with a
+ * `TODO(F26)` marker.
  *
  * Invariant #12: each pipeline stage receives only the context it needs.
  */
 export interface BroadcastContext {
     /** Opaque until PlayerSnapshot is formalised in F26. */
-    readonly broadcast?: (snapshot: Readonly<Record<string, unknown>>, to: PlayerId) => void;
+    readonly broadcast?: (snapshot: ViewerSnapshot, to: PlayerId) => void;
 }
 
 /**

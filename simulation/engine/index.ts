@@ -29,6 +29,7 @@ export type {
     UndoContext,
     HistoryContext,
     BroadcastContext,
+    ViewerSnapshot,
     DebugContext,
     PipelineContext,
     ActionDefinition,
@@ -36,7 +37,7 @@ export type {
     SimulationClientRole,
 } from './types.js';
 
-export { playerId } from './types.js';
+export { playerId, toViewerSnapshot } from './types.js';
 
 export type { DeterministicRng } from './DeterministicRng.js';
 export { createRng } from './DeterministicRng.js';

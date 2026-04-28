@@ -26,6 +26,7 @@ import type {
     PlayerId,
     ReduceContext,
 } from './types.js';
+import { toViewerSnapshot } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { createRng } from './DeterministicRng.js';
 import { ActionSchemaError } from './StateReducer.js';
@@ -225,13 +226,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         //            undo/redo memento construction.
 
         // ── Stage 7 — snapshot broadcast ───────────────────────────────────
-        // Stub: broadcasts the raw nextState (cast as opaque) per player.
-        // Real per-viewer projection via StateProjector lands in F26.
+        // TODO(F26): replace toViewerSnapshot cast with real StateProjector
+        // projection so each player receives only their own view of the state
+        // (Invariant #1 — GameSnapshot must never leave the main process as-is).
+        const viewerSnapshot = toViewerSnapshot(nextState as Readonly<Record<string, unknown>>);
         for (const pid of Object.keys(nextState.players)) {
-            this.#broadcastContext?.broadcast?.(
-                nextState as Readonly<Record<string, unknown>>,
-                pid as PlayerId,
-            );
+            this.#broadcastContext?.broadcast?.(viewerSnapshot, pid as PlayerId);
         }
 
         return nextState;

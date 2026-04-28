@@ -429,9 +429,11 @@ export async function main(): Promise<void> {
             // HostTransport once a session is hosted.  Return a teardown
             // so LobbyManager can clean up on closeLobby() (BLOCK-4 fix).
             const broadcaster = new StateBroadcaster(transport, lobbyLogger);
-            // TODO(F15): pass broadcaster.broadcast to simulationHost
+            // TODO(F26): wire broadcaster.broadcast as BroadcastContext into ActionPipeline
+            // once StateProjector is ready; projection must happen before broadcast
+            // (Invariant #1 — GameSnapshot must never leave the main process as-is).
             return () => {
-                // TODO(F15): broadcaster will expose a dispose() method; call it here.
+                // TODO(F26): call broadcaster.dispose() once StateBroadcaster exposes a cleanup method.
                 void broadcaster;
             };
         },

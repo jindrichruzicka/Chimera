@@ -12,7 +12,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { makeStubRng } from './__test-support__/stubs.js';
-import { playerId as toPlayerId } from './types.js';
+import { playerId as toPlayerId, toViewerSnapshot } from './types.js';
 
 import type {
     EntityId,
@@ -35,6 +35,7 @@ import type {
     BroadcastContext,
     DebugContext,
     PipelineContext,
+    ViewerSnapshot,
 } from './types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -395,7 +396,7 @@ describe('BroadcastContext', () => {
                 calls.push([snapshot, to]);
             },
         };
-        ctx.broadcast?.({ tick: 1 }, toPlayerId('p1'));
+        ctx.broadcast?.(toViewerSnapshot({ tick: 1 }), toPlayerId('p1'));
         expect(calls).toHaveLength(1);
         expect(calls[0]![1]).toBe('p1');
     });
@@ -414,7 +415,7 @@ describe('BroadcastContext', () => {
                 capturedTo = to;
             },
         };
-        ctx.broadcast?.({ foo: 'bar', tick: 42 }, toPlayerId('p2'));
+        ctx.broadcast?.(toViewerSnapshot({ foo: 'bar', tick: 42 }), toPlayerId('p2'));
         expect(capturedSnapshot).toStrictEqual({ foo: 'bar', tick: 42 });
         expect(capturedTo).toBe('p2');
     });
@@ -534,7 +535,7 @@ describe('PipelineContext', () => {
             },
         };
         const broadCtx: BroadcastContext = pipelineCtx;
-        broadCtx.broadcast?.({}, toPlayerId('p1'));
+        broadCtx.broadcast?.(toViewerSnapshot({}), toPlayerId('p1'));
         expect(called).toBe(true);
     });
 
@@ -556,5 +557,31 @@ describe('PipelineContext', () => {
         const debugCtx: DebugContext = pipelineCtx;
         debugCtx.debugObserver?.(0, snap);
         expect(called).toBe(true);
+    });
+});
+
+// ─── ViewerSnapshot / toViewerSnapshot (WARN-3) ───────────────────────────────
+
+describe('ViewerSnapshot and toViewerSnapshot', () => {
+    it('toViewerSnapshot is a function', () => {
+        expect(typeof toViewerSnapshot).toBe('function');
+    });
+
+    it('toViewerSnapshot returns the same object reference', () => {
+        const raw: Readonly<Record<string, unknown>> = { tick: 1, seed: 2 };
+        const vs = toViewerSnapshot(raw);
+        expect(vs).toBe(raw);
+    });
+
+    it('BroadcastContext.broadcast accepts a ViewerSnapshot value produced by toViewerSnapshot', () => {
+        const captured: ViewerSnapshot[] = [];
+        const ctx: BroadcastContext = {
+            broadcast: (snap) => captured.push(snap),
+        };
+        const pid = toPlayerId('p1');
+        const raw: Readonly<Record<string, unknown>> = { tick: 0, phase: 'test' };
+        ctx.broadcast?.(toViewerSnapshot(raw), pid);
+        expect(captured).toHaveLength(1);
+        expect(captured[0]).toBe(raw);
     });
 });

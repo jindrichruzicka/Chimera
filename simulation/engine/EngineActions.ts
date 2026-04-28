@@ -142,6 +142,11 @@ const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
         if (state.turnClock !== undefined && playerId !== state.turnClock.activePlayerId) {
             return { ok: false, reason: 'not_active_player' };
         }
+        // WARN-2: reject when activePlayerId has been removed from state.players.
+        // indexOf would silently return -1 and reduce would pick players[0] instead.
+        if (state.turnClock !== undefined && !(state.turnClock.activePlayerId in state.players)) {
+            return { ok: false, reason: 'active_player_not_in_game' };
+        }
         return { ok: true };
     },
 
@@ -156,7 +161,14 @@ const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
         }
 
         const currentIndex = playerIds.indexOf(state.turnClock.activePlayerId);
-        const nextPlayerId = playerIds[(currentIndex + 1 + playerIds.length) % playerIds.length];
+        // Defensive guard: activePlayerId is no longer in state.players.
+        // validate() must reject before reaching here; this guard catches any
+        // caller that bypasses the pipeline.
+        if (currentIndex < 0) {
+            return state;
+        }
+
+        const nextPlayerId = playerIds[(currentIndex + 1) % playerIds.length];
         if (nextPlayerId === undefined) {
             return state;
         }

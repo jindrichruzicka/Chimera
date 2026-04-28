@@ -150,7 +150,8 @@ export class LobbyManager {
         // Unsubscribe handles so closeLobby() can tear them down cleanly.
         this.subscriptions.push(
             session.transport.onActionReceived((_from, _action) => {
-                // TODO(F15): simulationHost.enqueueAction(from, action)
+                // TODO(F21): enqueue received action on the live SimulationHost
+                // once SimulationHost exists; see §4.20 (RealtimeTicker / action-loop).
             }),
             session.transport.onSideChannelReceived((from, msg) => {
                 if (msg.kind !== 'profile') {
