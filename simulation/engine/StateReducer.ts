@@ -78,7 +78,7 @@ export class StateReducer<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     apply(state: Readonly<TState>, action: ActionEnvelope, ctx: ReduceContext): TState {
         const def = this.#registry.resolve(action.type);
 
-        let parsedPayload: Record<string, unknown>;
+        let parsedPayload: object;
         try {
             parsedPayload = def.parsePayload(action.payload);
         } catch (err) {

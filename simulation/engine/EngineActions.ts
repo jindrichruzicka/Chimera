@@ -34,38 +34,38 @@ import type { ActionRegistry } from './ActionRegistry.js';
  * `seed` is the per-tick RNG seed derived by the host at tick advance time.
  * All arithmetic fields are integers (invariant #42).
  *
- * Intersected with `Record<string, unknown>` so the type satisfies the
- * `TPayload extends Record<string, unknown>` constraint on `ActionDefinition`.
+ * Plain interface — no `Record<string, unknown>` intersection required now that
+ * `TPayload extends object` is the constraint on `ActionDefinition`.
  */
-export type EngineTickPayload = Record<string, unknown> & {
+export interface EngineTickPayload {
     readonly seed: number;
-};
+}
 
 /**
  * Payload for `engine:end_turn`.
  * `deadlineMs` optionally overrides the next turn deadline using integer time.
  * The acting player is identified by the envelope.
  */
-export type EngineEndTurnPayload = Record<string, unknown> & {
+export interface EngineEndTurnPayload {
     readonly deadlineMs?: number;
-};
+}
 
 /**
  * Payload for `engine:save` and `engine:load`.
  * `slotId` is the qualified slot identifier `'<gameId>/<slotName>'`.
  */
-export type EngineSaveLoadPayload = Record<string, unknown> & {
+export interface EngineSaveLoadPayload {
     readonly slotId: string;
-};
+}
 
 /**
  * Payload for `engine:undo` and `engine:redo`.
  * `steps` is the number of actions to undo/redo; defaults to 1 if absent.
  * Must be a positive integer when present (invariant #42).
  */
-export type EngineUndoRedoPayload = Record<string, unknown> & {
+export interface EngineUndoRedoPayload {
     readonly steps: number;
-};
+}
 
 /**
  * Payload for `engine:sync_request`.
@@ -391,7 +391,7 @@ export const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayl
  * call `registry.registerEngineAction()`. Game code and renderer code must
  * never touch this path.
  */
-export const EngineActions: readonly ActionDefinition<Record<string, unknown>>[] = [
+export const EngineActions: readonly ActionDefinition<object>[] = [
     engineTickDefinition,
     engineEndTurnDefinition,
     engineSaveDefinition,

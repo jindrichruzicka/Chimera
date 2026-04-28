@@ -186,7 +186,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         const def = this.#registry.resolve(action.type);
 
         // ── Stage 2 — schema validation (parse) ────────────────────────────
-        let parsedPayload: Record<string, unknown>;
+        let parsedPayload: object;
         try {
             parsedPayload = def.parsePayload(action.payload);
         } catch (err) {

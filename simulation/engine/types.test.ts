@@ -151,12 +151,15 @@ describe('EngineAction', () => {
         expect(action.tick).toBe(3);
     });
 
-    it('supports typed generic parameters', () => {
-        interface MovePayload extends Record<string, unknown> {
-            x: number;
-            y: number;
+    it('supports typed generic parameters with a plain interface payload', () => {
+        // PlainMovePayload is a plain interface — no Record<string, unknown> intersection.
+        // Before relaxing TPayload to `object` this would fail typecheck with
+        // "Index signature for type 'string' is missing in type 'PlainMovePayload'".
+        interface PlainMovePayload {
+            readonly x: number;
+            readonly y: number;
         }
-        const action: TypedAction<'mygame:move', MovePayload> = {
+        const action: TypedAction<'mygame:move', PlainMovePayload> = {
             type: 'mygame:move',
             playerId: toPlayerId('p1'),
             tick: 1,
@@ -254,6 +257,36 @@ describe('ActionDefinition', () => {
         };
 
         expect(def.predictable).toBe(true);
+    });
+
+    it('accepts a plain interface payload without Record<string, unknown> intersection', () => {
+        // PlainPayload is a plain interface — not intersected with Record<string, unknown>.
+        // Before relaxing TPayload to `object` this would fail typecheck with
+        // "Index signature for type 'string' is missing in type 'PlainPayload'".
+        interface PlainPayload {
+            readonly value: number;
+        }
+        const def: ActionDefinition<PlainPayload> = {
+            type: 'test:plain',
+            parsePayload: (raw) => {
+                const v = (raw as { value?: unknown }).value;
+                if (typeof v !== 'number') throw new Error('invalid');
+                return { value: v };
+            },
+            validate: () => ({ ok: true }),
+            reduce: (state) => state,
+        };
+        const ctx: ReduceContext = { rng: makeStubRng(0.5) };
+        const snap: BaseGameSnapshot = {
+            tick: 0,
+            seed: 0,
+            players: {},
+            entities: {},
+            phase: 'test' as GamePhase,
+            events: [],
+        };
+        const result = def.validate({ value: 42 }, snap, toPlayerId('p1'), ctx);
+        expect(result.ok).toBe(true);
     });
 
     it('reduce does not mutate the input state', () => {

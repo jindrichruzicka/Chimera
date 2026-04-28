@@ -83,7 +83,7 @@ const ENGINE_NAMESPACE = 'engine:' as const;
  * (F03 T4) and must never be called from games/* or renderer/*.
  */
 export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
-    readonly #definitions = new Map<string, ActionDefinition<Record<string, unknown>, TState>>();
+    readonly #definitions = new Map<string, ActionDefinition<object, TState>>();
 
     /**
      * Register a game-defined ActionDefinition.
@@ -93,9 +93,7 @@ export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      * duplicate registrations are a development-time misconfiguration and
      * produce a console warning in dev builds only.
      */
-    register<TPayload extends Record<string, unknown>>(
-        definition: ActionDefinition<TPayload, TState>,
-    ): void {
+    register<TPayload extends object>(definition: ActionDefinition<TPayload, TState>): void {
         if (definition.type.startsWith(ENGINE_NAMESPACE)) {
             throw new NamespaceCollisionError(definition.type);
         }
@@ -112,7 +110,7 @@ export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      *
      * Invariant: only called from simulation/engine/EngineActions.ts.
      */
-    registerEngineAction<TPayload extends Record<string, unknown>>(
+    registerEngineAction<TPayload extends object>(
         definition: ActionDefinition<TPayload, TState>,
     ): void {
         this.#definitions.set(definition.type, definition);
@@ -124,7 +122,7 @@ export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      * Throws `UnknownActionTypeError` if the type has not been registered.
      * Called by ActionPipeline at Stage 1 (resolve) for every incoming action.
      */
-    resolve(type: string): ActionDefinition<Record<string, unknown>, TState> {
+    resolve(type: string): ActionDefinition<object, TState> {
         const definition = this.#definitions.get(type);
         if (definition === undefined) {
             throw new UnknownActionTypeError(type);

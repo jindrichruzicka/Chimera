@@ -64,7 +64,7 @@ interface PlayerSnapshot {
 // Generic wire envelope — the only shape the engine transport layer cares about
 interface EngineAction<
     TType extends string = string,
-    TPayload extends Record<string, unknown> = Record<string, unknown>,
+    TPayload extends object = Record<string, unknown>,
 > {
     readonly type: TType; // namespaced: 'engine:end_turn', 'tactics:move_unit'
     readonly playerId: PlayerId;
@@ -73,7 +73,7 @@ interface EngineAction<
 }
 
 // Convenience helper for game developers
-type TypedAction<T extends string, P extends Record<string, unknown>> = EngineAction<T, P>;
+type TypedAction<T extends string, P extends object> = EngineAction<T, P>;
 
 // Reserved engine action types — always prefixed 'engine:'; never overridable by games
 type EngineReservedType =
@@ -92,7 +92,7 @@ type EngineReservedType =
 ```typescript
 // Strategy per action type; games supply these objects to ActionRegistry
 interface ActionDefinition<
-    TPayload extends Record<string, unknown>,
+    TPayload extends object,
     TState extends BaseGameSnapshot = BaseGameSnapshot,
 > {
     readonly type: string;
@@ -129,10 +129,8 @@ interface ReduceContext {
 
 ```typescript
 interface ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
-    register<TPayload extends Record<string, unknown>>(
-        definition: ActionDefinition<TPayload, TState>,
-    ): void;
-    resolve(type: string): ActionDefinition<Record<string, unknown>, TState>; // throws UnknownActionTypeError
+    register<TPayload extends object>(definition: ActionDefinition<TPayload, TState>): void;
+    resolve(type: string): ActionDefinition<object, TState>; // throws UnknownActionTypeError
     registeredTypes(): readonly string[];
 }
 ```
@@ -314,9 +312,9 @@ Floats are permitted inside the renderer (camera, animation, UI) but must never 
 import { ActionDefinition, ValidationResult } from '@chimera/simulation/engine';
 import { TacticsSnapshot } from '../state/GameSnapshot';
 
-interface MoveUnitPayload extends Record<string, unknown> {
-    entityId: string;
-    to: { x: number; y: number };
+interface MoveUnitPayload {
+    readonly entityId: string;
+    readonly to: { readonly x: number; readonly y: number };
 }
 
 const MoveUnitAction: ActionDefinition<MoveUnitPayload, TacticsSnapshot> = {

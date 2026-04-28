@@ -246,7 +246,7 @@ export interface PipelineContext
  */
 export interface EngineAction<
     TType extends string = string,
-    TPayload extends Record<string, unknown> = Record<string, unknown>,
+    TPayload extends object = Record<string, unknown>,
 > {
     readonly type: TType;
     readonly playerId: PlayerId;
@@ -260,7 +260,7 @@ export interface EngineAction<
  * Usage:
  *   type MoveUnitAction = TypedAction<'mygame:move_unit', MoveUnitPayload>;
  */
-export type TypedAction<T extends string, P extends Record<string, unknown>> = EngineAction<T, P>;
+export type TypedAction<T extends string, P extends object> = EngineAction<T, P>;
 
 /**
  * The exclusive inbound representation at the transport boundary — opaque form
@@ -344,7 +344,7 @@ export interface ReduceContext {
  *              defaults to `BaseGameSnapshot`.
  */
 export interface ActionDefinition<
-    TPayload extends Record<string, unknown>,
+    TPayload extends object,
     TState extends BaseGameSnapshot = BaseGameSnapshot,
 > {
     readonly type: string;
