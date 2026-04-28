@@ -29,6 +29,9 @@ function parsePayloadOrThrow(
     try {
         return parsePayload(payload);
     } catch (err) {
+        // @chimera-review: StateReducer is the sole authoritative throw site for ActionSchemaError.
+        // All callers must route through parsePayloadOrThrow(); this is the one permitted site.
+        // eslint-disable-next-line no-restricted-syntax
         throw new ActionSchemaError(type, err instanceof Error ? err : new Error(String(err)));
     }
 }

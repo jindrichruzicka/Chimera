@@ -115,6 +115,16 @@ export default tseslint.config(
                     message:
                         'performance.now is forbidden in simulation/ and ai/. Use snapshot.tick.',
                 },
+                // Invariant — ActionSchemaError must only be thrown from StateReducer.ts.
+                // Prevents re-introduction of the duplicated try/catch that was
+                // centralised in refactor(simulation): centralize parsePayload schema wrapping.
+                // Use StateReducer.parsePayloadOrThrow() instead.
+                // StateReducer.ts itself is exempted via @chimera-review + eslint-disable-next-line.
+                {
+                    selector: "ThrowStatement > NewExpression[callee.name='ActionSchemaError']",
+                    message:
+                        'ActionSchemaError must only be thrown in simulation/engine/StateReducer.ts. Use StateReducer.parsePayloadOrThrow() to route schema errors through the single authoritative site.',
+                },
             ],
             'no-restricted-imports': [
                 'error',
