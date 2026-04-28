@@ -10,7 +10,7 @@ Architecture reference: [`docs/architecture-overview.md`](docs/architecture-over
 
 ## Status
 
-Early scaffolding. The architecture document is the authoritative baseline; the first implementation milestone (M1 — Skeleton) is in progress.
+**v0.2.0** — M1 (Skeleton) and M2 (Networked Lobby) are complete. Two Electron instances can discover each other, connect over a local WebSocket, and synchronise lobby state with full player profiles and pass-and-play support. M3 (Action Registry + Game Loop + Undo/Redo) is next.
 
 ## Getting started
 
@@ -33,20 +33,38 @@ Project layout (landed so far):
 ```
 electron/
 ├── main/
-│   ├── index.ts        # App entry: BrowserWindow creation + lifecycle (§3)
-│   ├── ipc-handlers.ts # chimera:system|game|lobby|saves|settings:* IPC handlers
-│   └── index.test.ts   # Unit tests (vitest)
+│   ├── index.ts              # App entry: BrowserWindow creation + lifecycle (§3)
+│   ├── ipc-handlers.ts       # chimera:system|game|lobby|saves|settings|profile:* IPC handlers
+│   ├── lobby-manager.ts      # LobbyManager — host/join/leave with injected MultiplayerProvider
+│   ├── state-broadcaster.ts  # StateBroadcaster — snapshot fanout over HostTransport
+│   └── *.test.ts
 └── preload/
-    ├── api.ts          # contextBridge.exposeInMainWorld('__chimera', …)
-    ├── {system,game,lobby,saves,settings}-api.ts
+    ├── api.ts                # contextBridge.exposeInMainWorld('__chimera', …)
+    ├── {system,game,lobby,saves,settings,profile}-api.ts
     └── *.test.ts
+networking/
+└── provider/
+    └── local/                # LocalWebSocketProvider (LobbyServer, WsHostTransport,
+                              #   MessageRouter, ServerConnection, WsClientTransport)
 renderer/
 ├── app/
-│   ├── layout.tsx      # Next.js App Router root layout
-│   ├── page.tsx        # Main-menu shell; M1 boot-smoke of preload bridge
-│   └── bootSmoke.ts    # Pure helper: logs window.__chimera.system.platform()
-├── next.config.ts      # Static export (renderer/out)
-└── tsconfig.json       # Extends root; jsx: preserve + DOM lib
+│   ├── layout.tsx            # Root layout with ConnectionStatusIndicator
+│   ├── page.tsx              # Main-menu shell
+│   └── lobby/
+│       └── page.tsx          # Lobby UI — host/join/leave, PlayerList, SeatSwitcher
+├── state/
+│   ├── lobbyStore.ts         # Zustand lobby store (players, ready states, connection)
+│   └── profileStore.ts       # Zustand profile store (local and remote profiles)
+├── next.config.ts            # Static export (renderer/out)
+└── tsconfig.json             # Extends root; jsx: preserve + DOM lib
+shared/
+├── messages.ts               # Typed wire protocol: ClientMessage / ServerMessage
+├── crc32.ts                  # CRC32 checksum for action envelopes
+└── messages-schemas.ts       # Zod schemas for all wire messages
+simulation/
+└── profile/                  # ProfileSchema, ProfileRepository, FileProfileRepository,
+                              #   InMemoryProfileRepository, ProfileManager, PlayerDirectory,
+                              #   ProfileSanitizer
 ```
 
 ## Features
