@@ -33,6 +33,7 @@ export type {
     HistoryContext,
     BroadcastContext,
     ViewerSnapshot,
+    UndoMeta,
     DebugContext,
     PipelineContext,
     ActionDefinition,

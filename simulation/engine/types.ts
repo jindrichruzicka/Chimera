@@ -176,6 +176,22 @@ export const toViewerSnapshot = (projected: Readonly<Record<string, unknown>>): 
     projected as ViewerSnapshot;
 
 /**
+ * Per-viewer undo/redo eligibility injected into every broadcast snapshot.
+ *
+ * Architecture: §4.5, §7 — canUndo / canRedo propagation (issue #361).
+ * Derived at Stage 7 broadcast time from `UndoManager.canUndo(viewerId)` /
+ * `canRedo(viewerId)`. Defaults to `false` for both fields when `undoManager`
+ * is absent from `PipelineContext`.
+ *
+ * Invariant #7: `undoMeta` is derived at broadcast time — it is NOT stored
+ * on `GameSnapshot`.
+ */
+export interface UndoMeta {
+    readonly canUndo: boolean;
+    readonly canRedo: boolean;
+}
+
+/**
  * Narrow context for pipeline stages that broadcast state to players.
  *
  * Typed as opaque `ViewerSnapshot` until `PlayerSnapshot` is formalised in

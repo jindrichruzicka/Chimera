@@ -24,6 +24,8 @@ import type {
     PipelineContext,
     PlayerId,
     ReduceContext,
+    UndoMeta,
+    ViewerSnapshot,
 } from './types.js';
 import { toViewerSnapshot } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
@@ -226,11 +228,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 // The double cast is required because `BaseGameSnapshot` lacks an index
                 // signature while `toViewerSnapshot` expects `Record<string, unknown>`.
                 // The same pattern is used at Stage 7 for `TState`. (TODO(F26))
-                const viewerSnapshot = toViewerSnapshot(
-                    reconstructed as unknown as Readonly<Record<string, unknown>>,
-                );
+                const rawRecord = reconstructed as unknown as Readonly<Record<string, unknown>>;
                 for (const pid of Object.keys(reconstructed.players)) {
-                    this.#context.broadcast?.(viewerSnapshot, pid as PlayerId);
+                    const viewerId = pid as PlayerId;
+                    const viewerSnapshot = this.#makeViewerRecord(rawRecord, viewerId, undoManager);
+                    this.#context.broadcast?.(viewerSnapshot, viewerId);
                 }
             }
 
@@ -273,13 +275,16 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // changes. If "always broadcast" semantics are ever required (e.g. for
         // sync-on-join), revisit this guard here and in StateBroadcaster (F26).
         //
-        // TODO(F26): replace toViewerSnapshot cast with real StateProjector
-        // projection so each player receives only their own view of the state
-        // (Invariant #1 — GameSnapshot must never leave the main process as-is).
+        // TODO(F26): replace #makeViewerRecord with a real StateProjector call so
+        // each player receives only their own view of the state, and undoMeta is
+        // folded into the single projection — avoiding a separate spread per viewer.
+        // (Invariant #1 — GameSnapshot must never leave the main process as-is.)
         if (nextState !== snapshot) {
-            const viewerSnapshot = toViewerSnapshot(nextState as Readonly<Record<string, unknown>>);
+            const rawRecord = nextState as Readonly<Record<string, unknown>>;
             for (const pid of Object.keys(nextState.players)) {
-                this.#context?.broadcast?.(viewerSnapshot, pid as PlayerId);
+                const viewerId = pid as PlayerId;
+                const viewerSnapshot = this.#makeViewerRecord(rawRecord, viewerId);
+                this.#context?.broadcast?.(viewerSnapshot, viewerId);
             }
         }
 
@@ -322,6 +327,30 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 : {}),
         };
         return ctx;
+    }
+
+    /**
+     * Builds the per-viewer broadcast record from the raw state record.
+     *
+     * Merges `undoMeta` derived from `undoManager` (or `#context.undoManager`
+     * when `undoManager` is not supplied) into the record for the given viewer.
+     * Both fields default to `false` when no `UndoManager` is available.
+     *
+     * TODO(F26): Replace this method with a `StateProjector` call so the
+     * per-player projection and `undoMeta` injection happen in one pass —
+     * eliminating the per-viewer spread allocation at the pipeline hot path.
+     */
+    #makeViewerRecord(
+        rawRecord: Readonly<Record<string, unknown>>,
+        viewerId: PlayerId,
+        undoManager?: PipelineContext['undoManager'],
+    ): ViewerSnapshot {
+        const mgr = undoManager ?? this.#context?.undoManager;
+        const undoMeta: UndoMeta = {
+            canUndo: mgr?.canUndo(viewerId) ?? false,
+            canRedo: mgr?.canRedo(viewerId) ?? false,
+        };
+        return toViewerSnapshot({ ...rawRecord, undoMeta });
     }
 }
 

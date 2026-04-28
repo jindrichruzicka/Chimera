@@ -666,12 +666,17 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         const p = new ActionPipeline(registry, { context });
         const snapshot = makeSnapshotWithPlayers(5, [PID]);
         const action = makeEnvelope(5, ADVANCE_TYPE);
-        const next = p.process(snapshot, action);
+        p.process(snapshot, action);
 
         expect(capturedSnapshots).toHaveLength(1);
-        // The broadcast receives the next state (tick incremented to 6).
+        // The broadcast receives the next state (tick incremented to 6), plus
+        // injected undoMeta. It is a distinct object (not the same reference as
+        // next) because Stage 7 spreads the snapshot to attach per-viewer undoMeta.
         expect((capturedSnapshots[0] as { tick: number }).tick).toBe(6);
-        expect(capturedSnapshots[0]).toBe(next);
+        expect((capturedSnapshots[0] as { undoMeta: unknown }).undoMeta).toEqual({
+            canUndo: false,
+            canRedo: false,
+        });
     });
 
     // ── Improvement 1: context also carries db to #buildReduceContext ─────────
@@ -976,5 +981,230 @@ describe('ActionPipeline — Stage 6: history record for normal actions', () => 
         const snapshot = makeSnapshot(0);
         const action = makeEnvelope(0);
         expect(() => p.process(snapshot, action)).not.toThrow();
+    });
+});
+
+// ─── Stage 7 — undoMeta injection into broadcast snapshots (issue #361) ───────
+
+describe('ActionPipeline — Stage 7: undoMeta injected into broadcast snapshots', () => {
+    const PID2 = toPlayerId('p2');
+
+    const ADVANCE_TYPE = 'game:advance-undo-meta';
+    const advanceDef: ActionDefinition<Record<string, never>> = {
+        type: ADVANCE_TYPE,
+        parsePayload: () => ({}),
+        validate: () => ({ ok: true }),
+        reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+    };
+
+    const makeSnapshotWithPlayers = (
+        tick: number,
+        playerIds: readonly PlayerId[],
+    ): BaseGameSnapshot => ({
+        tick,
+        seed: 1,
+        players: Object.fromEntries(playerIds.map((id) => [id, { id }])),
+        entities: {},
+        phase: 'test' as BaseGameSnapshot['phase'],
+        events: [],
+    });
+
+    const makeUndoManagerStub = (options?: {
+        canUndo?: (pid: PlayerId) => boolean;
+        canRedo?: (pid: PlayerId) => boolean;
+        undoResult?: BaseGameSnapshot;
+        redoResult?: BaseGameSnapshot;
+    }): NonNullable<PipelineContext['undoManager']> => ({
+        canUndo: vi.fn((pid: PlayerId) => options?.canUndo?.(pid) ?? false),
+        canRedo: vi.fn((pid: PlayerId) => options?.canRedo?.(pid) ?? false),
+        undo: vi.fn(
+            (_playerId: PlayerId, _steps?: number) =>
+                options?.undoResult ?? makeSnapshotWithPlayers(3, [PID]),
+        ),
+        redo: vi.fn(
+            (_playerId: PlayerId, _steps?: number) =>
+                options?.redoResult ?? makeSnapshotWithPlayers(4, [PID]),
+        ),
+    });
+
+    beforeEach(() => {
+        if (!registry.has(ADVANCE_TYPE)) {
+            registry.register(advanceDef);
+        }
+        if (!registry.has('engine:undo')) {
+            registry.registerEngineAction(engineUndoDefinition);
+        }
+        if (!registry.has('engine:redo')) {
+            registry.registerEngineAction(engineRedoDefinition);
+        }
+    });
+
+    // ── Normal action — undoMeta derived per viewer ───────────────────────────
+
+    it('broadcast snapshot contains undoMeta with canUndo=false, canRedo=false when undoManager is absent', () => {
+        const capturedSnapshots: Readonly<Record<string, unknown>>[] = [];
+        const p = new ActionPipeline(registry, {
+            context: {
+                broadcast: (snap) => {
+                    capturedSnapshots.push(snap);
+                },
+            },
+        });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        p.process(snapshot, makeEnvelope(0, ADVANCE_TYPE));
+
+        expect(capturedSnapshots).toHaveLength(1);
+        const undoMeta = (capturedSnapshots[0] as { undoMeta: unknown }).undoMeta;
+        expect(undoMeta).toEqual({ canUndo: false, canRedo: false });
+    });
+
+    it('broadcast snapshot contains undoMeta reflecting undoManager.canUndo/canRedo for that viewer', () => {
+        const capturedByPlayer = new Map<PlayerId, Readonly<Record<string, unknown>>>();
+        const undoManager = makeUndoManagerStub({
+            canUndo: (pid) => pid === PID,
+            canRedo: (pid) => pid === PID2,
+        });
+        const p = new ActionPipeline(registry, {
+            context: {
+                undoManager,
+                broadcast: (snap, to) => {
+                    capturedByPlayer.set(to, snap);
+                },
+            },
+        });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID, PID2]);
+        p.process(snapshot, makeEnvelope(0, ADVANCE_TYPE));
+
+        const p1snap = capturedByPlayer.get(PID) as {
+            undoMeta: { canUndo: boolean; canRedo: boolean };
+        };
+        const p2snap = capturedByPlayer.get(PID2) as {
+            undoMeta: { canUndo: boolean; canRedo: boolean };
+        };
+
+        expect(p1snap.undoMeta).toEqual({ canUndo: true, canRedo: false });
+        expect(p2snap.undoMeta).toEqual({ canUndo: false, canRedo: true });
+    });
+
+    it('calls undoManager.canUndo and canRedo with the viewer PlayerId for each viewer', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, {
+            context: {
+                undoManager,
+                broadcast: vi.fn(),
+            },
+        });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID, PID2]);
+        p.process(snapshot, makeEnvelope(0, ADVANCE_TYPE));
+
+        expect(undoManager.canUndo).toHaveBeenCalledWith(PID);
+        expect(undoManager.canUndo).toHaveBeenCalledWith(PID2);
+        expect(undoManager.canRedo).toHaveBeenCalledWith(PID);
+        expect(undoManager.canRedo).toHaveBeenCalledWith(PID2);
+    });
+
+    it('each viewer receives a distinct broadcast call (undoMeta is per-viewer, not shared)', () => {
+        const capturedSnapshots: Readonly<Record<string, unknown>>[] = [];
+        const undoManager = makeUndoManagerStub({
+            canUndo: (pid) => pid === PID,
+            canRedo: () => false,
+        });
+        const p = new ActionPipeline(registry, {
+            context: {
+                undoManager,
+                broadcast: (snap) => {
+                    capturedSnapshots.push(snap);
+                },
+            },
+        });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID, PID2]);
+        p.process(snapshot, makeEnvelope(0, ADVANCE_TYPE));
+
+        expect(capturedSnapshots).toHaveLength(2);
+        const p1 = capturedSnapshots.find(
+            (s) => (s as { undoMeta: { canUndo: boolean } }).undoMeta?.canUndo === true,
+        );
+        const p2 = capturedSnapshots.find(
+            (s) => (s as { undoMeta: { canUndo: boolean } }).undoMeta?.canUndo === false,
+        );
+        expect(p1).toBeDefined();
+        expect(p2).toBeDefined();
+    });
+
+    // ── Stage 3 undo/redo short-circuit — undoMeta also injected ─────────────
+
+    it('broadcast snapshot after engine:undo contains undoMeta reflecting updated canUndo/canRedo', () => {
+        const reconstructed = makeSnapshotWithPlayers(3, [PID]);
+        const capturedSnapshots: Readonly<Record<string, unknown>>[] = [];
+        // After undo, canRedo becomes true and canUndo is false
+        const undoManager = makeUndoManagerStub({
+            undoResult: reconstructed,
+            canUndo: () => false,
+            canRedo: () => true,
+        });
+        const p = new ActionPipeline(registry, {
+            context: {
+                undoManager,
+                broadcast: (snap) => {
+                    capturedSnapshots.push(snap);
+                },
+            },
+        });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        p.process(snapshot, makeEnvelope(0, 'engine:undo'));
+
+        expect(capturedSnapshots).toHaveLength(1);
+        const undoMeta = (capturedSnapshots[0] as { undoMeta: unknown }).undoMeta;
+        expect(undoMeta).toEqual({ canUndo: false, canRedo: true });
+    });
+
+    it('broadcast snapshot after engine:redo contains undoMeta reflecting updated canUndo/canRedo', () => {
+        const reconstructed = makeSnapshotWithPlayers(4, [PID]);
+        const capturedSnapshots: Readonly<Record<string, unknown>>[] = [];
+        const undoManager = makeUndoManagerStub({
+            redoResult: reconstructed,
+            canUndo: () => true,
+            canRedo: () => false,
+        });
+        const p = new ActionPipeline(registry, {
+            context: {
+                undoManager,
+                broadcast: (snap) => {
+                    capturedSnapshots.push(snap);
+                },
+            },
+        });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        p.process(snapshot, makeEnvelope(0, 'engine:redo'));
+
+        expect(capturedSnapshots).toHaveLength(1);
+        const undoMeta = (capturedSnapshots[0] as { undoMeta: unknown }).undoMeta;
+        expect(undoMeta).toEqual({ canUndo: true, canRedo: false });
+    });
+
+    it('broadcast snapshot after undo short-circuit contains undoMeta = false/false when undoManager absent (impossible path — guard)', () => {
+        // When undoManager is absent, Stage 3 short-circuit never fires.
+        // This test verifies normal action flow still yields undoMeta false/false without undoManager.
+        const capturedSnapshots: Readonly<Record<string, unknown>>[] = [];
+        const p = new ActionPipeline(registry, {
+            context: {
+                broadcast: (snap) => {
+                    capturedSnapshots.push(snap);
+                },
+            },
+        });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        p.process(snapshot, makeEnvelope(0, ADVANCE_TYPE));
+
+        expect(capturedSnapshots).toHaveLength(1);
+        const undoMeta = (capturedSnapshots[0] as { undoMeta: unknown }).undoMeta;
+        expect(undoMeta).toEqual({ canUndo: false, canRedo: false });
     });
 });
