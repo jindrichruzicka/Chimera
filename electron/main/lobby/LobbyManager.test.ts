@@ -1164,7 +1164,7 @@ describe('LobbyManager — PROFILE_UPDATE side-channel', () => {
         await manager.closeLobby();
     });
 
-    it('6th PROFILE_UPDATE within 5 s returns REJECT { reason: "rate_limit" } without updating directory', async () => {
+    it('2nd PROFILE_UPDATE within 5 s is rate-limited (1 per 5 s per client) — returns REJECT { reason: "rate_limit" } without updating directory', async () => {
         const provider = makeProvider();
         const directory = new PlayerDirectory();
         const manager = makeManager(provider, directory);
@@ -1186,12 +1186,14 @@ describe('LobbyManager — PROFILE_UPDATE side-channel', () => {
         const updateProfile = makeValidProfile({ displayName: 'CarolUpdated' });
 
         // Send 6 PROFILE_UPDATEs in rapid succession.
-        // The 1st is admitted (no prior timestamp); 2nd–6th are rate-limited.
+        // Rate limit is 1 per 5 s per client: the 1st is admitted (no prior
+        // timestamp); every subsequent update within the same 5 s window
+        // (2nd–6th here) must be rejected with reason: 'rate_limit'.
         for (let i = 0; i < 6; i++) {
             clientSession.transport.sendSideChannel({ kind: 'profile', payload: updateProfile });
         }
 
-        // 6th (and all subsequent within 5 s) must be rejected with rate_limit
+        // All 5 rate-limited attempts (2nd–6th) must be rejected with rate_limit
         const rateLimitRejects = receivedMessages.filter(
             (m) =>
                 m.kind === 'profile_reject' &&
