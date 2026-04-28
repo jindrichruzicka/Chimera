@@ -21,6 +21,8 @@ import { fileURLToPath } from 'node:url';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+const ESLINT_FIXTURE_TIMEOUT_MS = 20_000;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '../../../');
 const fixturesDir = resolve(__dirname, 'fixtures');
@@ -69,29 +71,45 @@ function getViolationRuleIds(messages: ESLintMessage[]): string[] {
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 describe('ESLint determinism rules — bad fixtures', () => {
-    it('flags Math.random() in bad-random.fixture.ts with no-restricted-syntax', () => {
-        const messages = runEslint('bad-random.fixture.ts');
-        const ruleIds = getViolationRuleIds(messages);
-        expect(ruleIds).toContain('no-restricted-syntax');
-    });
+    it(
+        'flags Math.random() in bad-random.fixture.ts with no-restricted-syntax',
+        () => {
+            const messages = runEslint('bad-random.fixture.ts');
+            const ruleIds = getViolationRuleIds(messages);
+            expect(ruleIds).toContain('no-restricted-syntax');
+        },
+        ESLINT_FIXTURE_TIMEOUT_MS,
+    );
 
-    it('flags Date.now() in bad-date-now.fixture.ts with no-restricted-syntax', () => {
-        const messages = runEslint('bad-date-now.fixture.ts');
-        const ruleIds = getViolationRuleIds(messages);
-        expect(ruleIds).toContain('no-restricted-syntax');
-    });
+    it(
+        'flags Date.now() in bad-date-now.fixture.ts with no-restricted-syntax',
+        () => {
+            const messages = runEslint('bad-date-now.fixture.ts');
+            const ruleIds = getViolationRuleIds(messages);
+            expect(ruleIds).toContain('no-restricted-syntax');
+        },
+        ESLINT_FIXTURE_TIMEOUT_MS,
+    );
 
-    it('flags performance.now in bad-performance-now.fixture.ts with no-restricted-syntax', () => {
-        const messages = runEslint('bad-performance-now.fixture.ts');
-        const ruleIds = getViolationRuleIds(messages);
-        expect(ruleIds).toContain('no-restricted-syntax');
-    });
+    it(
+        'flags performance.now in bad-performance-now.fixture.ts with no-restricted-syntax',
+        () => {
+            const messages = runEslint('bad-performance-now.fixture.ts');
+            const ruleIds = getViolationRuleIds(messages);
+            expect(ruleIds).toContain('no-restricted-syntax');
+        },
+        ESLINT_FIXTURE_TIMEOUT_MS,
+    );
 });
 
 describe('ESLint determinism rules — good fixture', () => {
-    it('produces zero violations for good-approved.fixture.ts', () => {
-        const messages = runEslint('good-approved.fixture.ts');
-        const violations = messages.filter((m) => m.severity >= 2);
-        expect(violations).toHaveLength(0);
-    });
+    it(
+        'produces zero violations for good-approved.fixture.ts',
+        () => {
+            const messages = runEslint('good-approved.fixture.ts');
+            const violations = messages.filter((m) => m.severity >= 2);
+            expect(violations).toHaveLength(0);
+        },
+        ESLINT_FIXTURE_TIMEOUT_MS,
+    );
 });

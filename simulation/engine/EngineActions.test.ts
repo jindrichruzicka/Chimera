@@ -37,6 +37,23 @@ const stubCtx = { rng: makeStubRng(0.5) };
 const hostId = toPlayerId('p1');
 const guestId = toPlayerId('p2');
 
+const makeTurnSnapshot = (activePlayerId: PlayerId, deadlineMs?: number): BaseGameSnapshot => ({
+    ...makeSnapshot(),
+    players: {
+        [hostId]: { id: hostId },
+        [guestId]: { id: guestId },
+        [toPlayerId('p3')]: { id: toPlayerId('p3') },
+    },
+    ...(deadlineMs === undefined
+        ? {}
+        : {
+              turnClock: {
+                  activePlayerId,
+                  deadlineMs,
+              },
+          }),
+});
+
 // ─── EngineActions array ──────────────────────────────────────────────────────
 
 describe('EngineActions array', () => {
@@ -187,20 +204,61 @@ describe('engine:end_turn definition', () => {
         expect(parsed).toEqual({});
     });
 
-    it('validate returns ok: true', () => {
-        const snapshot = makeSnapshot();
+    it('parsePayload accepts an integer deadlineMs override', () => {
+        const parsed = definition().parsePayload({ deadlineMs: 45_000 });
+        expect(parsed).toEqual({ deadlineMs: 45_000 });
+    });
+
+    it('parsePayload rejects a non-integer deadlineMs override', () => {
+        expect(() => definition().parsePayload({ deadlineMs: 1.5 })).toThrow(TypeError);
+    });
+
+    it('validate returns ok: true for the active player', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
         const result = definition().validate({}, snapshot, hostId, stubCtx);
         expect(result.ok).toBe(true);
     });
 
-    it('reduce returns snapshot unchanged (stub)', () => {
+    it('validate rejects a non-active dispatcher with reason not_active_player', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const result = definition().validate({}, snapshot, guestId, stubCtx);
+        expect(result).toEqual({ ok: false, reason: 'not_active_player' });
+    });
+
+    it('reduce advances activePlayerId in round-robin insertion order', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+        expect(next).not.toBe(snapshot);
+        expect(next.turnClock).toEqual({ activePlayerId: guestId, deadlineMs: 30_000 });
+    });
+
+    it('reduce wraps activePlayerId back to the first player', () => {
+        const thirdPlayerId = toPlayerId('p3');
+        const snapshot = makeTurnSnapshot(thirdPlayerId, 30_000);
+        const next = definition().reduce(snapshot, {}, thirdPlayerId, stubCtx);
+        expect(next.turnClock).toEqual({ activePlayerId: hostId, deadlineMs: 30_000 });
+    });
+
+    it('reduce is a no-op when turnClock is absent', () => {
         const snapshot = makeSnapshot();
         const next = definition().reduce(snapshot, {}, hostId, stubCtx);
         expect(next).toBe(snapshot);
     });
 
+    it('reduce updates deadlineMs when the payload provides an override', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const next = definition().reduce(snapshot, { deadlineMs: 45_000 }, hostId, stubCtx);
+        expect(next.turnClock).toEqual({ activePlayerId: guestId, deadlineMs: 45_000 });
+    });
+
+    it('reduce keeps deadlineMs unchanged when the payload omits it', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+        expect(next.turnClock?.deadlineMs).toBe(30_000);
+    });
+
     it('reduce does not mutate the input snapshot', () => {
-        const snapshot = makeSnapshot();
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
         const frozen = Object.freeze({ ...snapshot });
         expect(() => definition().reduce(frozen, {}, hostId, stubCtx)).not.toThrow();
     });

@@ -43,9 +43,12 @@ export type EngineTickPayload = Record<string, unknown> & {
 
 /**
  * Payload for `engine:end_turn`.
- * No payload fields required — the acting player is identified by the envelope.
+ * `deadlineMs` optionally overrides the next turn deadline using integer time.
+ * The acting player is identified by the envelope.
  */
-export type EngineEndTurnPayload = Record<string, never>;
+export type EngineEndTurnPayload = Record<string, unknown> & {
+    readonly deadlineMs?: number;
+};
 
 /**
  * Payload for `engine:save` and `engine:load`.
@@ -111,25 +114,60 @@ const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
 // ─── engine:end_turn ──────────────────────────────────────────────────────────
 
 /**
- * Stub `ActionDefinition` for `engine:end_turn`.
+ * `ActionDefinition` for `engine:end_turn`.
  *
- * Signals the end of the current player's turn. No payload fields required.
- * The reducer is a no-op stub for M1 — full turn-advance logic belongs to F15.
+ * Signals the end of the current player's turn.
+ * When `turnClock` is configured, advances the active player in round-robin
+ * insertion order and optionally overrides the next deadline.
  */
 const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
     type: 'engine:end_turn',
 
-    parsePayload(_raw: Readonly<Record<string, unknown>>): EngineEndTurnPayload {
-        return {};
+    parsePayload(raw: Readonly<Record<string, unknown>>): EngineEndTurnPayload {
+        if (raw['deadlineMs'] === undefined) {
+            return {};
+        }
+
+        if (!Number.isInteger(raw['deadlineMs'])) {
+            throw new TypeError(
+                'engine:end_turn payload must have an integer "deadlineMs" field when provided; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+
+        return { deadlineMs: raw['deadlineMs'] as number };
     },
 
-    validate(_payload, _state, _playerId, _ctx): ValidationResult {
+    validate(_payload, state, playerId, _ctx): ValidationResult {
+        if (state.turnClock !== undefined && playerId !== state.turnClock.activePlayerId) {
+            return { ok: false, reason: 'not_active_player' };
+        }
         return { ok: true };
     },
 
-    reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineEndTurnPayload): BaseGameSnapshot {
-        // Stub: returns snapshot unchanged. Full turn-advance logic lands in F15.
-        return state;
+    reduce(state: Readonly<BaseGameSnapshot>, payload: EngineEndTurnPayload): BaseGameSnapshot {
+        if (state.turnClock === undefined) {
+            return state;
+        }
+
+        const playerIds = Object.values(state.players).map((playerState) => playerState.id);
+        if (playerIds.length === 0) {
+            return state;
+        }
+
+        const currentIndex = playerIds.indexOf(state.turnClock.activePlayerId);
+        const nextPlayerId = playerIds[(currentIndex + 1 + playerIds.length) % playerIds.length];
+        if (nextPlayerId === undefined) {
+            return state;
+        }
+
+        return {
+            ...state,
+            turnClock: {
+                activePlayerId: nextPlayerId,
+                deadlineMs: payload.deadlineMs ?? state.turnClock.deadlineMs,
+            },
+        };
     },
 } satisfies ActionDefinition<EngineEndTurnPayload>;
 
