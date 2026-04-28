@@ -1,5 +1,6 @@
 ---
-description: 'Implement a GitHub issue end-to-end: branch, TDD cycle, push. Does NOT merge — use /implement-issue-merge to merge after review. Usage: /implement-issue <issue-number>'
+description: 'Implement a GitHub issue end-to-end: branch, TDD cycle, and merge to main. Same as /implement-issue but also runs the merge script after the gate passes. Usage: /implement-issue-merge <issue-number>'
+argument-hint: '<issue-number>'
 ---
 
 Given issue number `{{issue-number}}`:
@@ -32,18 +33,18 @@ Work through the full red → green → refactor cycle:
 2. Implement minimum code to make tests green
 3. Refactor under green
 
-## Step 4 — Push and report
+## Step 4 — Merge
 
-Once all acceptance criteria are met and the full gate passes (`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`), push the branch:
+Once all acceptance criteria are met and the full gate passes (`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`), load and follow `.github/skills/git/merge/SKILL.md`.
+
+Run the merge script:
 
 ```bash
-bash .github/skills/git/commit-and-push/scripts/commit-and-push.sh
+bash .github/skills/git/merge/scripts/check-and-merge.sh
 ```
 
-Report back with:
+After a successful merge, close the issue:
 
-- Branch name and HEAD commit SHA
-- Which acceptance criteria were addressed
-- Any open questions or known gaps
-
-Do **not** merge. Use `/implement-issue-merge {{issue-number}}` to merge after review.
+```bash
+gh issue close {{issue-number}} --repo jindrichruzicka/Chimera --comment "Implemented and merged."
+```

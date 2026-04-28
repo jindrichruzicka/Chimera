@@ -1,5 +1,5 @@
 ---
-description: 'Review the current branch for merge readiness and merge if approved. Runs the full 8-step code review procedure.'
+description: 'Review the current branch for merge readiness. Emits a findings report and waits for explicit merge approval. Does NOT merge automatically — use /review-branch-merge to approve and merge. Runs the full 8-step code review procedure.'
 ---
 
 Load `.github/agents/chimera-code-reviewer.agent.md` and execute its full review procedure against the current branch.
@@ -16,8 +16,6 @@ The procedure covers:
 8. **Step 7** — Security
 9. **Step 8** — Performance
 
-Emit the findings report in the format defined in the agent. If all checks pass, run the merge script:
+Emit the findings report in the format defined in the agent.
 
-```bash
-bash .github/skills/git/merge/scripts/check-and-merge.sh
-```
+**Do NOT run the merge script.** After emitting the report, stop and wait for explicit merge approval from the user. Indicate clearly at the end of the report whether the branch is merge-ready and remind the user to reply with approval to proceed.
