@@ -26,6 +26,7 @@ function makeSnapshot(tick: number): BaseGameSnapshot {
         entities: {},
         phase: 'playing' as BaseGameSnapshot['phase'],
         events: [],
+        turnNumber: 0,
     };
 }
 

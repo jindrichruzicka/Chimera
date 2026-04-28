@@ -175,6 +175,7 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
 
         return {
             ...state,
+            turnNumber: state.turnNumber + 1,
             turnClock: {
                 activePlayerId: nextPlayerId,
                 deadlineMs: payload.deadlineMs ?? state.turnClock.deadlineMs,

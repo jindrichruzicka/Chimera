@@ -40,6 +40,7 @@ const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
     entities: {},
     phase: 'waiting' as BaseGameSnapshot['phase'],
     events: [],
+    turnNumber: 0,
     ...(hostPlayerId !== undefined && { hostPlayerId }),
 });
 
@@ -271,6 +272,41 @@ describe('engine:end_turn definition', () => {
         const snapshot = makeTurnSnapshot(hostId, 30_000);
         const frozen = Object.freeze({ ...snapshot });
         expect(() => definition().reduce(frozen, {}, hostId, stubCtx)).not.toThrow();
+    });
+
+    // WARN-2 (review): turnNumber is the authoritative turn counter on
+    // BaseGameSnapshot. The reducer must increment it by 1 whenever the turn
+    // actually advances (turnClock present and a next active player exists).
+    // Early-return paths (no turnClock, empty players, defensive activePlayer
+    // guard) must NOT increment turnNumber because no turn has elapsed.
+
+    it('reduce increments turnNumber by 1 when turnClock advances', () => {
+        const snapshot: BaseGameSnapshot = {
+            ...makeTurnSnapshot(hostId, 30_000),
+            turnNumber: 7,
+        };
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+        expect(next.turnNumber).toBe(8);
+    });
+
+    it('reduce leaves turnNumber unchanged on the no-turnClock early return', () => {
+        const snapshot: BaseGameSnapshot = { ...makeSnapshot(), turnNumber: 7 };
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+        expect(next.turnNumber).toBe(7);
+    });
+
+    it('reduce leaves turnNumber unchanged on the defensive missing-active-player guard', () => {
+        const removedId = toPlayerId('p-removed');
+        const snapshot: BaseGameSnapshot = {
+            ...makeTurnSnapshot(hostId, 30_000),
+            turnClock: { activePlayerId: removedId, deadlineMs: 30_000 },
+            players: { [hostId]: { id: hostId }, [guestId]: { id: guestId } },
+            turnNumber: 7,
+        };
+        const next = definition().reduce(snapshot, {}, removedId, stubCtx);
+        expect(next).toBe(snapshot);
+        expect(next.turnNumber).toBe(7);
     });
 
     // WARN-2 regression: activePlayerId removed from players while turnClock still references it.

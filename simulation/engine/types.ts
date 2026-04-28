@@ -102,6 +102,22 @@ export interface BaseGameSnapshot {
     readonly events: readonly GameEvent[];
     readonly turnClock?: { readonly activePlayerId: PlayerId; readonly deadlineMs: number };
     /**
+     * Monotonic per-game turn counter. Increments by 1 inside
+     * `engine:end_turn.reduce` whenever the active player advances; never
+     * decrements. Distinct from `tick`, which advances on every action — for
+     * games with multi-action turns `tick` runs faster than `turnNumber`.
+     *
+     * Used by:
+     *   - `ActionHistoryEntry.turnNumber` so history entries align with the
+     *     real turn boundary recorded by `TurnMemento.turnNumber` (Invariant #45).
+     *   - `ActionHistory.pruneTo(snapshot.turnNumber - TURN_MEMENTO_RETENTION)`
+     *     so the bounded retention window measures turns, not ticks.
+     *
+     * Always an integer (Invariant #42/#44). Initial state must set this to
+     * 0 explicitly; there is no implicit default.
+     */
+    readonly turnNumber: number;
+    /**
      * The player ID of the session host.
      * Required for engine:save and engine:load host-only validation (invariant #25).
      * Optional here because single-player and test fixtures may omit it.

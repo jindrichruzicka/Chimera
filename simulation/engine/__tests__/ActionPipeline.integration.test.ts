@@ -32,6 +32,7 @@ function makeSnapshot(options?: {
         entities: {},
         phase: 'waiting' as BaseGameSnapshot['phase'],
         events: [],
+        turnNumber: 0,
         ...(options?.hostPlayerId === undefined ? {} : { hostPlayerId: options.hostPlayerId }),
         ...(options?.turnClock === undefined ? {} : { turnClock: options.turnClock }),
     };

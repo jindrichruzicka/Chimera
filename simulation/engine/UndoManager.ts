@@ -60,9 +60,11 @@ export interface TurnMemento {
     /**
      * The tick value of the snapshot when the memento was captured (= state.tick at turn start).
      *
-     * Note: `BaseGameSnapshot.tick` is monotonic per applied action, not per turn.
-     * A dedicated `turnNumber` field will be added to `BaseGameSnapshot` in a later task;
-     * until then this field records the tick as a proxy for the turn boundary.
+     * Note: `BaseGameSnapshot.tick` is monotonic per applied action and is
+     * recorded here for diagnostic / debugging use. The authoritative turn
+     * counter is `BaseGameSnapshot.turnNumber`, which advances only on
+     * `engine:end_turn`; `tickAtTurnStart` is intentionally a tick value, not
+     * a turn number.
      */
     readonly tickAtTurnStart: number;
     /** The player whose turn start this memento represents. */

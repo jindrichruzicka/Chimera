@@ -275,7 +275,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             // Stage 6 equivalent — record undo/redo in history so it appears in replay.
             this.#context.history?.append({
                 tickApplied: snapshot.tick,
-                turnNumber: snapshot.tick,
+                turnNumber: snapshot.turnNumber,
                 action,
             });
 
@@ -320,11 +320,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
         // ── Stage 6 — history record ────────────────────────────────────────
         // Append the action envelope to the history so the undo/redo subsystem
-        // can reconstruct the action sequence for a turn. turnNumber uses
-        // snapshot.tick as a proxy until a dedicated field lands on BaseGameSnapshot.
+        // can reconstruct the action sequence for a turn. turnNumber is the
+        // dedicated turn counter on BaseGameSnapshot — it advances only on
+        // engine:end_turn while tick advances on every reduce.
         this.#context?.history?.append({
             tickApplied: snapshot.tick,
-            turnNumber: snapshot.tick,
+            turnNumber: snapshot.turnNumber,
             action,
         });
 
@@ -375,7 +376,9 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
             // Prune action history regardless of turnClock presence —
             // history is a per-tick log and the bound applies uniformly.
-            this.#context?.history?.pruneTo(snapshot.tick - TURN_MEMENTO_RETENTION);
+            // Cutoff uses the post-reduce turnNumber so the new turn boundary
+            // is reflected before pruning.
+            this.#context?.history?.pruneTo(nextState.turnNumber - TURN_MEMENTO_RETENTION);
         }
 
         return nextState;

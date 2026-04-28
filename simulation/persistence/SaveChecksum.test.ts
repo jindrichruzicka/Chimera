@@ -25,6 +25,7 @@ function makeBody(): SaveBody {
             entities: {},
             phase: 'playing' as GamePhase,
             events: [],
+            turnNumber: 0,
         },
         deltaActions: [],
         pendingCommitments: {},

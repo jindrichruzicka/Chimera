@@ -35,13 +35,14 @@ import { playerId as toPlayerId } from './types.js';
 const P1 = toPlayerId('player-1');
 const P2 = toPlayerId('player-2');
 
-const makeSnapshot = (tick = 0): BaseGameSnapshot => ({
+const makeSnapshot = (tick = 0, turnNumber = 0): BaseGameSnapshot => ({
     tick,
     seed: 42,
     players: {},
     entities: {},
     phase: 'playing' as BaseGameSnapshot['phase'],
     events: [],
+    turnNumber,
 });
 
 const makeEnvelope = (type: string, tick = 0): ActionEnvelope => ({

@@ -39,6 +39,7 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
             entities: {},
             phase: 'playing' as GamePhase,
             events: [],
+            turnNumber: 0,
         },
         deltaActions: [],
         pendingCommitments: {},

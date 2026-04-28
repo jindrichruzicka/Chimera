@@ -48,13 +48,14 @@ import {
 
 const PID = toPlayerId('p1');
 
-const makeSnapshot = (tick = 0): BaseGameSnapshot => ({
+const makeSnapshot = (tick = 0, turnNumber = 0): BaseGameSnapshot => ({
     tick,
     seed: 1,
     players: {},
     entities: {},
     phase: 'test' as BaseGameSnapshot['phase'],
     events: [],
+    turnNumber,
 });
 
 const makeEnvelope = (
@@ -567,6 +568,7 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         entities: {},
         phase: 'test' as BaseGameSnapshot['phase'],
         events: [],
+        turnNumber: 0,
     });
 
     beforeEach(() => {
@@ -803,6 +805,21 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
         expect(entry.action).toBe(action);
     });
 
+    it('appends the undo ActionEnvelope to history with turnNumber = snapshot.turnNumber (NOT snapshot.tick)', () => {
+        const appendSpy = vi.fn();
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, {
+            context: { undoManager, history: { append: appendSpy, pruneTo: vi.fn() } },
+        });
+
+        // Distinct tick (5) and turnNumber (2).
+        const snapshot = makeSnapshot(5, 2);
+        const action = makeEnvelope(5, 'engine:undo');
+        p.process(snapshot, action);
+
+        expect(appendSpy.mock.calls[0]![0].turnNumber).toBe(2);
+    });
+
     it('broadcasts the reconstructed snapshot to all players when it differs from input', () => {
         const reconstructed: BaseGameSnapshot = {
             tick: 3,
@@ -811,6 +828,7 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
             entities: {},
             phase: 'test' as BaseGameSnapshot['phase'],
             events: [],
+            turnNumber: 0,
         };
         const undoManager = makeUndoManagerStub({ undoResult: reconstructed });
         const broadcastSpy = vi.fn();
@@ -960,6 +978,24 @@ describe('ActionPipeline — Stage 6: history record for normal actions', () => 
         expect(appendSpy.mock.calls[0]![0].tickApplied).toBe(9);
     });
 
+    // WARN-2 (review): turnNumber on the history entry must be sourced from
+    // BaseGameSnapshot.turnNumber, not from snapshot.tick. tick measures
+    // simulation steps; turnNumber measures turns. Using tick as a proxy
+    // collapsed prune semantics for games whose tick != turnNumber.
+    it('passes turnNumber equal to snapshot.turnNumber (NOT snapshot.tick) to history.append', () => {
+        const appendSpy = vi.fn();
+        const p = new ActionPipeline(registry, {
+            context: { history: { append: appendSpy, pruneTo: vi.fn() } },
+        });
+
+        // Distinct tick (9) and turnNumber (3) — proves which field is read.
+        const snapshot = makeSnapshot(9, 3);
+        const action = makeEnvelope(9);
+        p.process(snapshot, action);
+
+        expect(appendSpy.mock.calls[0]![0].turnNumber).toBe(3);
+    });
+
     it('passes the original ActionEnvelope to history.append', () => {
         const appendSpy = vi.fn();
         const p = new ActionPipeline(registry, {
@@ -1013,6 +1049,7 @@ describe('ActionPipeline — Stage 7: undoMeta injected into broadcast snapshots
         entities: {},
         phase: 'test' as BaseGameSnapshot['phase'],
         events: [],
+        turnNumber: 0,
     });
 
     const makeUndoManagerStub = (options?: {
@@ -1312,7 +1349,7 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         expect(callOrder).toEqual(['broadcast', 'clearUndoHistory']);
     });
 
-    it('calls history.pruneTo(snapshot.tick - TURN_MEMENTO_RETENTION) after engine:end_turn so action history stays bounded', () => {
+    it('calls history.pruneTo(nextState.turnNumber - TURN_MEMENTO_RETENTION) after engine:end_turn so action history stays bounded', () => {
         const pruneSpy = vi.fn();
         const undoManager = makeUndoManagerStub();
         const p = new ActionPipeline(registry, {
@@ -1322,14 +1359,16 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
             },
         });
 
-        // Process a couple of normal actions so history has entries to prune,
-        // then end the turn and verify pruneTo is called with the documented cutoff.
-        const snapshot = makeSnapshot(7);
+        // The local END_TURN stub returns `{...state}` (turnNumber unchanged),
+        // so cutoff = nextState.turnNumber - TURN_MEMENTO_RETENTION
+        //          = 9 - 4
+        //          = 5.
+        // Using a non-zero turnNumber proves the pipeline reads turnNumber
+        // and not snapshot.tick (WARN-2 from F16 review).
+        const snapshot = makeSnapshot(7, 9);
         p.process(snapshot, makeEnvelope(7, 'engine:end_turn'));
 
-        // tickAtTurnStart proxy uses snapshot.tick; cutoff matches the architecture
-        // documentation in TURN_MEMENTO_RETENTION (= 4).
-        expect(pruneSpy).toHaveBeenCalledExactlyOnceWith(7 - 4);
+        expect(pruneSpy).toHaveBeenCalledExactlyOnceWith(9 - 4);
     });
 
     it('does NOT call pruneTo when history is absent', () => {

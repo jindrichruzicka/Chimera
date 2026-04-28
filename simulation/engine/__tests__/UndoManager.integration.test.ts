@@ -40,6 +40,7 @@ const makeBaseSnapshot = (tick = 0): BaseGameSnapshot => ({
     entities: {},
     phase: 'playing' as BaseGameSnapshot['phase'],
     events: [],
+    turnNumber: 0,
 });
 
 /**

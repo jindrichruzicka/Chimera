@@ -43,6 +43,7 @@ function makeFileAtVersion(schemaVersion: number): SaveFile {
             entities: {},
             phase: 'playing' as GamePhase,
             events: [],
+            turnNumber: 0,
         },
         deltaActions: [],
         pendingCommitments: {},
