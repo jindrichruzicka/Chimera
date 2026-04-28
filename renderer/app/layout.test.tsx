@@ -3,10 +3,15 @@
 // Tests for the root layout CSP meta tag (WARN-1 / #193).
 // @vitest-environment jsdom
 
-import { render } from '@testing-library/react';
 import React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RootLayout from './layout';
+
+function renderLayoutDocument(): Document {
+    const markup = `<!DOCTYPE html>${renderToStaticMarkup(<RootLayout>{null}</RootLayout>)}`;
+    return new DOMParser().parseFromString(markup, 'text/html');
+}
 
 beforeEach(() => {
     Object.defineProperty(window, '__chimera', {
@@ -26,10 +31,10 @@ afterEach(() => {
 
 describe('RootLayout', () => {
     it('renders a Content-Security-Policy meta tag in the document head', () => {
-        render(<RootLayout>{null}</RootLayout>);
+        const renderedDocument = renderLayoutDocument();
 
         const metaList = Array.from(
-            document.querySelectorAll('meta[http-equiv="Content-Security-Policy"]'),
+            renderedDocument.querySelectorAll('meta[http-equiv="Content-Security-Policy"]'),
         );
         expect(metaList.length).toBeGreaterThan(0);
 
@@ -40,9 +45,9 @@ describe('RootLayout', () => {
     });
 
     it('mounts ConnectionStatusIndicator so status is visible on every route', () => {
-        render(<RootLayout>{null}</RootLayout>);
+        const renderedDocument = renderLayoutDocument();
 
-        const node = document.querySelector('[data-testid="connection-status"]');
+        const node = renderedDocument.querySelector('[data-testid="connection-status"]');
         expect(node).toBeTruthy();
     });
 });
