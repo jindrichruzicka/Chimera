@@ -625,28 +625,18 @@ describe('engine:undo definition', () => {
         expect(result.ok).toBe(true);
     });
 
-    // Improvement 2: pre-emptive undoManager checks so F16 is a one-line addition.
+    // Stage 3 of `ActionPipeline` owns undo authorisation via `UndoManager`.
+    // The definition's `validate` is reached only when no `undoManager` is
+    // wired (early bring-up); it must therefore be a permissive no-op so the
+    // policy lives in exactly one place.
 
-    it('validate returns { ok: false, reason: "undo_not_available" } when undoManager is present and canUndo returns false', () => {
+    it('validate returns ok: true even when undoManager.canUndo would return false (Stage 3 owns the decision)', () => {
         const snapshot = makeSnapshot();
         const ctx: ReduceContext = {
             rng: makeStubRng(0.5),
             undoManager: {
                 canUndo: (_pid: PlayerId) => false,
                 canRedo: (_pid: PlayerId) => true,
-            },
-        };
-        const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);
-        expect(result).toEqual({ ok: false, reason: 'undo_not_available' });
-    });
-
-    it('validate returns ok: true when undoManager is present and canUndo returns true', () => {
-        const snapshot = makeSnapshot();
-        const ctx: ReduceContext = {
-            rng: makeStubRng(0.5),
-            undoManager: {
-                canUndo: (_pid: PlayerId) => true,
-                canRedo: (_pid: PlayerId) => false,
             },
         };
         const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);
@@ -721,28 +711,18 @@ describe('engine:redo definition', () => {
         expect(result.ok).toBe(true);
     });
 
-    // Improvement 2: pre-emptive undoManager checks so F16 is a one-line addition.
+    // Stage 3 of `ActionPipeline` owns redo authorisation via `UndoManager`.
+    // The definition's `validate` is reached only when no `undoManager` is
+    // wired (early bring-up); it must therefore be a permissive no-op so the
+    // policy lives in exactly one place.
 
-    it('validate returns { ok: false, reason: "redo_not_available" } when undoManager is present and canRedo returns false', () => {
+    it('validate returns ok: true even when undoManager.canRedo would return false (Stage 3 owns the decision)', () => {
         const snapshot = makeSnapshot();
         const ctx: ReduceContext = {
             rng: makeStubRng(0.5),
             undoManager: {
                 canUndo: (_pid: PlayerId) => true,
                 canRedo: (_pid: PlayerId) => false,
-            },
-        };
-        const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);
-        expect(result).toEqual({ ok: false, reason: 'redo_not_available' });
-    });
-
-    it('validate returns ok: true when undoManager is present and canRedo returns true', () => {
-        const snapshot = makeSnapshot();
-        const ctx: ReduceContext = {
-            rng: makeStubRng(0.5),
-            undoManager: {
-                canUndo: (_pid: PlayerId) => false,
-                canRedo: (_pid: PlayerId) => true,
             },
         };
         const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);

@@ -278,10 +278,16 @@ export const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
 /**
  * Stub `ActionDefinition` for `engine:undo`.
  *
- * Requests that the simulation rewind by `steps` actions (default: 1).
- * Both `validate` and `reduce` are no-op stubs for now — full undo logic
- * lands in a later milestone. Invariant #7: undo enters the pipeline
- * normally; there is no side-door undo path.
+ * Authorisation and reconstruction live entirely in Stage 3 of
+ * `ActionPipeline` via `UndoContext.undoManager`. When `undoManager` is
+ * present, the pipeline short-circuits and `validate`/`reduce` are never
+ * called — `UndoNotAllowedError` flows out of the manager directly.
+ *
+ * The `validate`/`reduce` stubs below are reached only when no `undoManager`
+ * is wired into `PipelineContext` (e.g. during early bring-up). They are
+ * intentionally permissive no-ops to avoid duplicating Stage 3's policy.
+ *
+ * Invariant #7: undo enters the pipeline normally; there is no side-door path.
  */
 export const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
     type: 'engine:undo',
@@ -299,10 +305,9 @@ export const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
         return { steps: raw['steps'] as number };
     },
 
-    validate(_payload, _state, playerId, ctx): ValidationResult {
-        if (ctx.undoManager !== undefined && !ctx.undoManager.canUndo(playerId)) {
-            return { ok: false, reason: 'undo_not_available' };
-        }
+    validate(): ValidationResult {
+        // Stage 3 owns undo authorisation when an `undoManager` is wired.
+        // Without one, undo is a no-op (no history to consult) and we accept.
         return { ok: true };
     },
 
@@ -317,8 +322,15 @@ export const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
 /**
  * Stub `ActionDefinition` for `engine:redo`.
  *
- * Requests that the simulation reapply `steps` previously undone actions
- * (default: 1). Both `validate` and `reduce` are no-op stubs for now.
+ * Authorisation and reconstruction live entirely in Stage 3 of
+ * `ActionPipeline` via `UndoContext.undoManager`. When `undoManager` is
+ * present, the pipeline short-circuits and `validate`/`reduce` are never
+ * called — `UndoNotAllowedError` flows out of the manager directly.
+ *
+ * The `validate`/`reduce` stubs below are reached only when no `undoManager`
+ * is wired into `PipelineContext` (e.g. during early bring-up). They are
+ * intentionally permissive no-ops to avoid duplicating Stage 3's policy.
+ *
  * Invariant #7: redo enters the pipeline normally; there is no side-door path.
  */
 export const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
@@ -337,10 +349,9 @@ export const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
         return { steps: raw['steps'] as number };
     },
 
-    validate(_payload, _state, playerId, ctx): ValidationResult {
-        if (ctx.undoManager !== undefined && !ctx.undoManager.canRedo(playerId)) {
-            return { ok: false, reason: 'redo_not_available' };
-        }
+    validate(): ValidationResult {
+        // Stage 3 owns redo authorisation when an `undoManager` is wired.
+        // Without one, redo is a no-op (no history to consult) and we accept.
         return { ok: true };
     },
 

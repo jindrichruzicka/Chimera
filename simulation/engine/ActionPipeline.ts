@@ -223,12 +223,13 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             });
 
             // Stage 7 — broadcast reconstructed snapshot to all viewers.
+            // TODO(F26): replace `toViewerRecord` + `#makeViewerRecord` with a real
+            // `StateProjector` call so each player receives only their own view of
+            // the state and `undoMeta` is folded into the single projection — avoiding
+            // a separate spread per viewer. The same TODO marker exists below the
+            // normal Stage 7 path; both must be replaced together.
             if (reconstructed !== snapshot) {
-                // Safety: `reconstructed` is a `BaseGameSnapshot` (plain data object).
-                // The double cast is required because `BaseGameSnapshot` lacks an index
-                // signature while `toViewerSnapshot` expects `Record<string, unknown>`.
-                // The same pattern is used at Stage 7 for `TState`. (TODO(F26))
-                const rawRecord = reconstructed as unknown as Readonly<Record<string, unknown>>;
+                const rawRecord = toViewerRecord(reconstructed);
                 for (const pid of Object.keys(reconstructed.players)) {
                     const viewerId = pid as PlayerId;
                     const viewerSnapshot = this.#makeViewerRecord(rawRecord, viewerId, undoManager);
@@ -275,17 +276,33 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // changes. If "always broadcast" semantics are ever required (e.g. for
         // sync-on-join), revisit this guard here and in StateBroadcaster (F26).
         //
-        // TODO(F26): replace #makeViewerRecord with a real StateProjector call so
-        // each player receives only their own view of the state, and undoMeta is
-        // folded into the single projection — avoiding a separate spread per viewer.
-        // (Invariant #1 — GameSnapshot must never leave the main process as-is.)
+        // TODO(F26): replace `toViewerRecord` + `#makeViewerRecord` with a real
+        // `StateProjector` call so each player receives only their own view of the
+        // state and `undoMeta` is folded into the single projection — avoiding a
+        // per-viewer spread allocation. (Invariant #1 — `GameSnapshot` must never
+        // leave the main process as-is.) The same TODO exists in the Stage 3
+        // short-circuit broadcast path above; both must be replaced together.
         if (nextState !== snapshot) {
-            const rawRecord = nextState as Readonly<Record<string, unknown>>;
+            const rawRecord = toViewerRecord(nextState);
             for (const pid of Object.keys(nextState.players)) {
                 const viewerId = pid as PlayerId;
                 const viewerSnapshot = this.#makeViewerRecord(rawRecord, viewerId);
                 this.#context?.broadcast?.(viewerSnapshot, viewerId);
             }
+        }
+
+        // ── Post-Stage-5 turn-lifecycle hook ───────────────────────────────
+        // After a successful `engine:end_turn` reduce, clear the player's undo
+        // history so the `crossTurnUndo: false` policy default holds in
+        // production. This must run AFTER Stage 7 so the broadcast snapshot
+        // still carries the player's pre-clear `undoMeta` for that final tick.
+        //
+        // `saveTurnMemento` for the next active player is NOT performed here —
+        // it depends on `state.turnClock` semantics that the host may extend
+        // (e.g. simultaneous-turn games) and therefore belongs in the host
+        // wiring layer, not the generic pipeline.
+        if (action.type === 'engine:end_turn' && this.#context?.undoManager !== undefined) {
+            this.#context.undoManager.clearUndoHistory(action.playerId);
         }
 
         return nextState;
@@ -371,3 +388,27 @@ const NOOP_LOGGER: Logger = {
         return this;
     },
 };
+
+// ─── Internal cast helper ─────────────────────────────────────────────────────
+
+/**
+ * Reinterprets a `BaseGameSnapshot` (or subtype) as a viewer record so the
+ * pipeline can spread `undoMeta` into per-player broadcast payloads without
+ * triggering a TS index-signature error on every call site.
+ *
+ * This is the **only** place in `simulation/` that performs the
+ * `BaseGameSnapshot → Record<string, unknown>` reinterpretation. Both Stage 3
+ * (undo/redo short-circuit) and Stage 7 (normal broadcast) call into it so a
+ * future `StateProjector` implementation (F26) can replace this single helper.
+ *
+ * Safety: `BaseGameSnapshot` is a plain data object with `string`-keyed fields,
+ * so the reinterpretation is structurally sound. The double cast is required
+ * because `BaseGameSnapshot` lacks an explicit index signature.
+ *
+ * INVARIANT #1: this function does NOT brand the value as `ViewerSnapshot`.
+ * Callers must pass through `#makeViewerRecord` → `toViewerSnapshot` so the
+ * brand is applied only after a per-viewer projection (currently a no-op
+ * spread that injects `undoMeta`).
+ */
+const toViewerRecord = (state: Readonly<BaseGameSnapshot>): Readonly<Record<string, unknown>> =>
+    state as unknown as Readonly<Record<string, unknown>>;

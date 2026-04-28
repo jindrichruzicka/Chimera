@@ -1208,3 +1208,97 @@ describe('ActionPipeline — Stage 7: undoMeta injected into broadcast snapshots
         expect(undoMeta).toEqual({ canUndo: false, canRedo: false });
     });
 });
+
+// ─── Post-Stage-5 — turn lifecycle: engine:end_turn clears undo history ──────
+
+describe('ActionPipeline — engine:end_turn clears undoManager history (post-Stage-5 hook)', () => {
+    /**
+     * After a successful reduce of `engine:end_turn`, the pipeline must call
+     * `undoManager.clearUndoHistory(action.playerId)` so the
+     * `crossTurnUndo: false` policy default holds in production. Without this
+     * hook the undo subsystem accumulates per-player state forever even if a
+     * host is wired up correctly otherwise.
+     *
+     * We register a minimal `engine:end_turn` stub here (no `turnClock`
+     * coupling) — the real `engineEndTurnDefinition` is exercised in
+     * EngineActions.test.ts. This isolates the hook contract from the reducer.
+     */
+    const END_TURN: ActionDefinition<Record<string, never>> = {
+        type: 'engine:end_turn',
+        parsePayload: () => ({}),
+        validate: () => ({ ok: true }),
+        // Return a new reference so Stage 7 broadcast fires (parity with real reducer).
+        reduce: (state) => ({ ...state }),
+    };
+
+    const makeUndoManagerStub = (): NonNullable<PipelineContext['undoManager']> => ({
+        canUndo: vi.fn(() => false),
+        canRedo: vi.fn(() => false),
+        undo: vi.fn(),
+        redo: vi.fn(),
+        clearUndoHistory: vi.fn(),
+    });
+
+    beforeEach(() => {
+        registry.registerEngineAction(END_TURN);
+    });
+
+    it('calls undoManager.clearUndoHistory(playerId) after engine:end_turn reduces', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        p.process(snapshot, makeEnvelope(0, 'engine:end_turn'));
+
+        expect(undoManager.clearUndoHistory).toHaveBeenCalledExactlyOnceWith(PID);
+    });
+
+    it('does NOT call clearUndoHistory for actions other than engine:end_turn', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        p.process(snapshot, makeEnvelope(0, 'game:noop'));
+
+        expect(undoManager.clearUndoHistory).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when undoManager is absent and engine:end_turn is processed', () => {
+        const p = new ActionPipeline(registry, { context: {} });
+
+        const snapshot = makeSnapshot(0);
+        expect(() => p.process(snapshot, makeEnvelope(0, 'engine:end_turn'))).not.toThrow();
+    });
+
+    it('clears undo history AFTER Stage 7 broadcast so the broadcast undoMeta still reflects pre-clear state', () => {
+        // Capture the order: broadcast must happen before clearUndoHistory; otherwise
+        // the broadcast snapshot would carry post-clear (always false/false) undoMeta
+        // even though the player still had a valid pre-end-turn history.
+        const callOrder: string[] = [];
+        const undoManager: NonNullable<PipelineContext['undoManager']> = {
+            canUndo: vi.fn(() => true),
+            canRedo: vi.fn(() => false),
+            undo: vi.fn(),
+            redo: vi.fn(),
+            clearUndoHistory: vi.fn(() => {
+                callOrder.push('clearUndoHistory');
+            }),
+        };
+        const p = new ActionPipeline(registry, {
+            context: {
+                undoManager,
+                broadcast: () => {
+                    callOrder.push('broadcast');
+                },
+            },
+        });
+
+        const snapshot: BaseGameSnapshot = {
+            ...makeSnapshot(0),
+            players: { [PID]: { id: PID } },
+        };
+        p.process(snapshot, makeEnvelope(0, 'engine:end_turn'));
+
+        expect(callOrder).toEqual(['broadcast', 'clearUndoHistory']);
+    });
+});
