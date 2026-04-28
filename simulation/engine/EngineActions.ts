@@ -3,19 +3,23 @@
  *
  * Reserved engine action definitions for the Chimera simulation core.
  *
- * Defines `ActionDefinition` entries for the four M1-required engine-reserved
- * action types: `engine:tick`, `engine:end_turn`, `engine:save`, and
- * `engine:load`. These are the only callers of the engine-internal
- * `registerEngineAction()` bypass on `ActionRegistry`.
+ * Defines `ActionDefinition` entries for the seven M1/M3-required engine-reserved
+ * action types: `engine:tick`, `engine:end_turn`, `engine:save`, `engine:load`,
+ * `engine:undo`, `engine:redo`, and `engine:sync_request`. These are the only
+ * callers of the engine-internal `registerEngineAction()` bypass on `ActionRegistry`.
  *
  * Architecture reference: §4.2, §4.7
- * Task: F03 / T4 (issue #27)
+ * Task: F03 / T4 (issue #27), issue #350
  *
  * Invariants upheld:
  *   #2 — Engine reserved actions are the only mechanism for cross-cutting
  *         tick/turn lifecycle mutations. EngineActions is the sole caller of
  *         ActionRegistry.registerEngineAction().
  *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
+ *   #7 — engine:undo and engine:redo are EngineAction types; they enter the
+ *         pipeline normally. There is no side-door undo path.
+ *   #11 — The engine: namespace is reserved; definitions are registered only
+ *          via registerEngineAction().
  *   #43 — validate() and reduce() use only ReduceContext. No Math.random() or
  *          Date.now() calls.
  */
@@ -50,6 +54,21 @@ export type EngineEndTurnPayload = Record<string, never>;
 export type EngineSaveLoadPayload = Record<string, unknown> & {
     readonly slotId: string;
 };
+
+/**
+ * Payload for `engine:undo` and `engine:redo`.
+ * `steps` is the number of actions to undo/redo; defaults to 1 if absent.
+ * Must be a positive integer when present (invariant #42).
+ */
+export type EngineUndoRedoPayload = Record<string, unknown> & {
+    readonly steps: number;
+};
+
+/**
+ * Payload for `engine:sync_request`.
+ * No payload fields — requests a full state snapshot from the host.
+ */
+export type EngineSyncRequestPayload = Record<string, never>;
 
 // ─── engine:tick ──────────────────────────────────────────────────────────────
 
@@ -204,10 +223,109 @@ const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
     },
 } satisfies ActionDefinition<EngineSaveLoadPayload>;
 
+// ─── engine:undo ──────────────────────────────────────────────────────────────
+
+/**
+ * Stub `ActionDefinition` for `engine:undo`.
+ *
+ * Requests that the simulation rewind by `steps` actions (default: 1).
+ * Both `validate` and `reduce` are no-op stubs for now — full undo logic
+ * lands in a later milestone. Invariant #7: undo enters the pipeline
+ * normally; there is no side-door undo path.
+ */
+const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
+    type: 'engine:undo',
+
+    parsePayload(raw: Readonly<Record<string, unknown>>): EngineUndoRedoPayload {
+        if (raw['steps'] === undefined) {
+            return { steps: 1 };
+        }
+        if (!Number.isInteger(raw['steps']) || (raw['steps'] as number) <= 0) {
+            throw new TypeError(
+                'engine:undo payload "steps" must be a positive integer when present; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+        return { steps: raw['steps'] as number };
+    },
+
+    validate(_payload, _state, _playerId, _ctx): ValidationResult {
+        return { ok: true };
+    },
+
+    reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineUndoRedoPayload): BaseGameSnapshot {
+        // Stub: returns snapshot unchanged. Full undo logic to be implemented later.
+        return state;
+    },
+} satisfies ActionDefinition<EngineUndoRedoPayload>;
+
+// ─── engine:redo ──────────────────────────────────────────────────────────────
+
+/**
+ * Stub `ActionDefinition` for `engine:redo`.
+ *
+ * Requests that the simulation reapply `steps` previously undone actions
+ * (default: 1). Both `validate` and `reduce` are no-op stubs for now.
+ * Invariant #7: redo enters the pipeline normally; there is no side-door path.
+ */
+const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
+    type: 'engine:redo',
+
+    parsePayload(raw: Readonly<Record<string, unknown>>): EngineUndoRedoPayload {
+        if (raw['steps'] === undefined) {
+            return { steps: 1 };
+        }
+        if (!Number.isInteger(raw['steps']) || (raw['steps'] as number) <= 0) {
+            throw new TypeError(
+                'engine:redo payload "steps" must be a positive integer when present; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+        return { steps: raw['steps'] as number };
+    },
+
+    validate(_payload, _state, _playerId, _ctx): ValidationResult {
+        return { ok: true };
+    },
+
+    reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineUndoRedoPayload): BaseGameSnapshot {
+        // Stub: returns snapshot unchanged. Full redo logic to be implemented later.
+        return state;
+    },
+} satisfies ActionDefinition<EngineUndoRedoPayload>;
+
+// ─── engine:sync_request ──────────────────────────────────────────────────────
+
+/**
+ * Stub `ActionDefinition` for `engine:sync_request`.
+ *
+ * Requests a full state snapshot from the host. No payload fields required.
+ * Both `validate` and `reduce` are no-op stubs.
+ */
+const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayload> = {
+    type: 'engine:sync_request',
+
+    parsePayload(_raw: Readonly<Record<string, unknown>>): EngineSyncRequestPayload {
+        return {};
+    },
+
+    validate(_payload, _state, _playerId, _ctx): ValidationResult {
+        return { ok: true };
+    },
+
+    reduce(
+        state: Readonly<BaseGameSnapshot>,
+        _payload: EngineSyncRequestPayload,
+    ): BaseGameSnapshot {
+        // Stub: returns snapshot unchanged.
+        return state;
+    },
+} satisfies ActionDefinition<EngineSyncRequestPayload>;
+
 // ─── EngineActions ────────────────────────────────────────────────────────────
 
 /**
- * The complete set of M1-required engine-reserved action definitions.
+ * The complete set of M1/M3-required engine-reserved action definitions.
  *
  * This array is the single source of truth for which `engine:` action types
  * are registered at engine initialisation. Add new engine action definitions
@@ -222,6 +340,9 @@ export const EngineActions: readonly ActionDefinition<Record<string, unknown>>[]
     engineEndTurnDefinition,
     engineSaveDefinition,
     engineLoadDefinition,
+    engineUndoDefinition,
+    engineRedoDefinition,
+    engineSyncRequestDefinition,
 ] as const;
 
 // ─── registerEngineActions ────────────────────────────────────────────────────

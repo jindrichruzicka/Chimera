@@ -45,8 +45,8 @@ describe('EngineActions array', () => {
         expect(EngineActions.length).toBeGreaterThan(0);
     });
 
-    it('contains exactly four definitions', () => {
-        expect(EngineActions).toHaveLength(4);
+    it('contains exactly seven definitions', () => {
+        expect(EngineActions).toHaveLength(7);
     });
 
     it('contains an engine:tick definition', () => {
@@ -66,6 +66,21 @@ describe('EngineActions array', () => {
 
     it('contains an engine:load definition', () => {
         const definition = EngineActions.find((d) => d.type === 'engine:load');
+        expect(definition).toBeDefined();
+    });
+
+    it('contains an engine:undo definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:undo');
+        expect(definition).toBeDefined();
+    });
+
+    it('contains an engine:redo definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:redo');
+        expect(definition).toBeDefined();
+    });
+
+    it('contains an engine:sync_request definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:sync_request');
         expect(definition).toBeDefined();
     });
 });
@@ -261,11 +276,14 @@ describe('registerEngineActions', () => {
         expect(registry.has('engine:load')).toBe(true);
     });
 
-    it('all four engine: types appear in registeredTypes()', () => {
+    it('all seven engine: types appear in registeredTypes()', () => {
         registerEngineActions(registry);
         const types = registry.registeredTypes();
         expect(types).toContain('engine:save');
         expect(types).toContain('engine:load');
+        expect(types).toContain('engine:undo');
+        expect(types).toContain('engine:redo');
+        expect(types).toContain('engine:sync_request');
     });
 });
 
@@ -454,4 +472,169 @@ describe('engine:load definition', () => {
     it.todo(
         'dispatching engine:load should result in the simulation state being replaced (post-pipeline wiring — F18)',
     );
+});
+
+// ─── engine:undo definition ───────────────────────────────────────────────────
+
+describe('engine:undo definition', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:undo');
+        if (!d) throw new Error('engine:undo not found');
+        return d;
+    };
+
+    it('has type string "engine:undo"', () => {
+        expect(definition().type).toBe('engine:undo');
+    });
+
+    it('parsePayload accepts an empty payload and defaults steps to 1', () => {
+        const parsed = definition().parsePayload({});
+        expect(parsed).toEqual({ steps: 1 });
+    });
+
+    it('parsePayload accepts { steps: 3 } and returns it unchanged', () => {
+        const parsed = definition().parsePayload({ steps: 3 });
+        expect(parsed).toEqual({ steps: 3 });
+    });
+
+    it('parsePayload accepts { steps: 1 } (minimum valid positive integer)', () => {
+        expect(() => definition().parsePayload({ steps: 1 })).not.toThrow();
+    });
+
+    it('parsePayload throws TypeError when steps is 0 (not positive)', () => {
+        expect(() => definition().parsePayload({ steps: 0 })).toThrow(TypeError);
+    });
+
+    it('parsePayload throws TypeError when steps is negative', () => {
+        expect(() => definition().parsePayload({ steps: -1 })).toThrow(TypeError);
+    });
+
+    it('parsePayload throws TypeError when steps is a non-integer float', () => {
+        expect(() => definition().parsePayload({ steps: 1.5 })).toThrow(TypeError);
+    });
+
+    it('parsePayload throws TypeError when steps is not a number', () => {
+        expect(() => definition().parsePayload({ steps: 'bad' })).toThrow(TypeError);
+    });
+
+    it('validate returns ok: true (placeholder)', () => {
+        const snapshot = makeSnapshot();
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, stubCtx);
+        expect(result.ok).toBe(true);
+    });
+
+    it('reduce returns snapshot unchanged (stub)', () => {
+        const snapshot = makeSnapshot();
+        const next = definition().reduce(snapshot, { steps: 1 }, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
+
+    it('reduce does not mutate the input snapshot', () => {
+        const snapshot = makeSnapshot();
+        const frozen = Object.freeze({ ...snapshot });
+        expect(() => definition().reduce(frozen, { steps: 1 }, hostId, stubCtx)).not.toThrow();
+    });
+});
+
+// ─── engine:redo definition ───────────────────────────────────────────────────
+
+describe('engine:redo definition', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:redo');
+        if (!d) throw new Error('engine:redo not found');
+        return d;
+    };
+
+    it('has type string "engine:redo"', () => {
+        expect(definition().type).toBe('engine:redo');
+    });
+
+    it('parsePayload accepts an empty payload and defaults steps to 1', () => {
+        const parsed = definition().parsePayload({});
+        expect(parsed).toEqual({ steps: 1 });
+    });
+
+    it('parsePayload accepts { steps: 5 } and returns it unchanged', () => {
+        const parsed = definition().parsePayload({ steps: 5 });
+        expect(parsed).toEqual({ steps: 5 });
+    });
+
+    it('parsePayload accepts { steps: 1 } (minimum valid positive integer)', () => {
+        expect(() => definition().parsePayload({ steps: 1 })).not.toThrow();
+    });
+
+    it('parsePayload throws TypeError when steps is 0 (not positive)', () => {
+        expect(() => definition().parsePayload({ steps: 0 })).toThrow(TypeError);
+    });
+
+    it('parsePayload throws TypeError when steps is negative', () => {
+        expect(() => definition().parsePayload({ steps: -2 })).toThrow(TypeError);
+    });
+
+    it('parsePayload throws TypeError when steps is a non-integer float', () => {
+        expect(() => definition().parsePayload({ steps: 2.5 })).toThrow(TypeError);
+    });
+
+    it('parsePayload throws TypeError when steps is not a number', () => {
+        expect(() => definition().parsePayload({ steps: true })).toThrow(TypeError);
+    });
+
+    it('validate returns ok: true (placeholder)', () => {
+        const snapshot = makeSnapshot();
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, stubCtx);
+        expect(result.ok).toBe(true);
+    });
+
+    it('reduce returns snapshot unchanged (stub)', () => {
+        const snapshot = makeSnapshot();
+        const next = definition().reduce(snapshot, { steps: 1 }, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
+
+    it('reduce does not mutate the input snapshot', () => {
+        const snapshot = makeSnapshot();
+        const frozen = Object.freeze({ ...snapshot });
+        expect(() => definition().reduce(frozen, { steps: 1 }, hostId, stubCtx)).not.toThrow();
+    });
+});
+
+// ─── engine:sync_request definition ──────────────────────────────────────────
+
+describe('engine:sync_request definition', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:sync_request');
+        if (!d) throw new Error('engine:sync_request not found');
+        return d;
+    };
+
+    it('has type string "engine:sync_request"', () => {
+        expect(definition().type).toBe('engine:sync_request');
+    });
+
+    it('parsePayload accepts an empty payload {}', () => {
+        expect(() => definition().parsePayload({})).not.toThrow();
+    });
+
+    it('parsePayload returns empty object', () => {
+        const parsed = definition().parsePayload({});
+        expect(parsed).toEqual({});
+    });
+
+    it('validate returns ok: true (placeholder)', () => {
+        const snapshot = makeSnapshot();
+        const result = definition().validate({}, snapshot, hostId, stubCtx);
+        expect(result.ok).toBe(true);
+    });
+
+    it('reduce returns snapshot unchanged (stub)', () => {
+        const snapshot = makeSnapshot();
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
+
+    it('reduce does not mutate the input snapshot', () => {
+        const snapshot = makeSnapshot();
+        const frozen = Object.freeze({ ...snapshot });
+        expect(() => definition().reduce(frozen, {}, hostId, stubCtx)).not.toThrow();
+    });
 });
