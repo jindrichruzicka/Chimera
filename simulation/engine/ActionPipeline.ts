@@ -18,7 +18,14 @@
  */
 
 import type { Logger } from '@chimera/shared/logging.js';
-import type { ActionEnvelope, BaseGameSnapshot, ContentDatabase, ReduceContext } from './types.js';
+import type {
+    ActionEnvelope,
+    BaseGameSnapshot,
+    BroadcastContext,
+    ContentDatabase,
+    PlayerId,
+    ReduceContext,
+} from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { createRng } from './DeterministicRng.js';
 import { ActionSchemaError } from './StateReducer.js';
@@ -138,6 +145,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
     readonly #registry: ActionRegistry<TState>;
     readonly #logger: Logger;
     readonly #db: ContentDatabase | undefined;
+    readonly #broadcastContext: BroadcastContext | undefined;
     /**
      * Tracks current re-entrant dispatch depth. Starts at 0 (top-level call);
      * incremented by the dispatch closure before each nested process() call and
@@ -148,11 +156,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
     constructor(
         registry: ActionRegistry<TState>,
-        options?: { logger?: Logger; db?: ContentDatabase },
+        options?: { logger?: Logger; db?: ContentDatabase; broadcastContext?: BroadcastContext },
     ) {
         this.#registry = registry;
         this.#logger = options?.logger ?? NOOP_LOGGER;
         this.#db = options?.db;
+        this.#broadcastContext = options?.broadcastContext;
     }
 
     /**
@@ -215,10 +224,15 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         //            Record the ActionEnvelope and the pre/post snapshots for
         //            undo/redo memento construction.
 
-        // ── Stage 7 — snapshot broadcast (no-op stub) ─────────────────────
-        // TODO(F15/F26): project nextState per viewer via StateProjector and
-        //                broadcast each PlayerSnapshot to its recipient via
-        //                BroadcastContext.broadcast().
+        // ── Stage 7 — snapshot broadcast ───────────────────────────────────
+        // Stub: broadcasts the raw nextState (cast as opaque) per player.
+        // Real per-viewer projection via StateProjector lands in F26.
+        for (const pid of Object.keys(nextState.players)) {
+            this.#broadcastContext?.broadcast?.(
+                nextState as Readonly<Record<string, unknown>>,
+                pid as PlayerId,
+            );
+        }
 
         return nextState;
     }

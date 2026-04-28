@@ -34,6 +34,7 @@ import type {
     PlayerId,
     ActionDefinition,
     ReduceContext,
+    BroadcastContext,
 } from './types.js';
 import { playerId as toPlayerId } from './types.js';
 import { createContentDatabase } from '../content/index.js';
@@ -533,5 +534,116 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
         expect(() =>
             dbPipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:query-db')),
         ).not.toThrow();
+    });
+});
+
+// ─── Stage 7 — BroadcastContext wiring (issue #353) ───────────────────────────
+
+describe('ActionPipeline — Stage 7: BroadcastContext wiring', () => {
+    const PID2 = toPlayerId('p2');
+    const PID3 = toPlayerId('p3');
+
+    const makeSnapshotWithPlayers = (
+        tick: number,
+        playerIds: readonly PlayerId[],
+    ): BaseGameSnapshot => ({
+        tick,
+        seed: 1,
+        players: Object.fromEntries(playerIds.map((id) => [id, { id }])),
+        entities: {},
+        phase: 'test' as BaseGameSnapshot['phase'],
+        events: [],
+    });
+
+    it('constructor accepts an optional broadcastContext option without throwing', () => {
+        const broadcastContext: BroadcastContext = {
+            broadcast: vi.fn(),
+        };
+        expect(() => new ActionPipeline(registry, { broadcastContext })).not.toThrow();
+    });
+
+    it('Stage 7 silently skips broadcast when no broadcastContext is provided', () => {
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        const action = makeEnvelope(0);
+        // No broadcastContext in constructor — must not throw and must return state.
+        expect(() => pipeline.process(snapshot, action)).not.toThrow();
+    });
+
+    it('Stage 7 silently skips broadcast when broadcastContext.broadcast is absent', () => {
+        const broadcastContext: BroadcastContext = {};
+        const p = new ActionPipeline(registry, { broadcastContext });
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        const action = makeEnvelope(0);
+        expect(() => p.process(snapshot, action)).not.toThrow();
+    });
+
+    it('calls broadcast once per player when one player is in nextState.players', () => {
+        const broadcast = vi.fn();
+        const broadcastContext: BroadcastContext = { broadcast };
+        const p = new ActionPipeline(registry, { broadcastContext });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        const action = makeEnvelope(0);
+        p.process(snapshot, action);
+
+        expect(broadcast).toHaveBeenCalledTimes(1);
+        expect(broadcast).toHaveBeenCalledWith(expect.any(Object), PID);
+    });
+
+    it('calls broadcast once per player when multiple players are in nextState.players', () => {
+        const broadcast = vi.fn();
+        const broadcastContext: BroadcastContext = { broadcast };
+        const p = new ActionPipeline(registry, { broadcastContext });
+
+        const snapshot = makeSnapshotWithPlayers(0, [PID, PID2, PID3]);
+        const action = makeEnvelope(0);
+        p.process(snapshot, action);
+
+        expect(broadcast).toHaveBeenCalledTimes(3);
+        const calledPlayerIds = broadcast.mock.calls.map((call) => call[1] as PlayerId);
+        expect(calledPlayerIds).toContain(PID);
+        expect(calledPlayerIds).toContain(PID2);
+        expect(calledPlayerIds).toContain(PID3);
+    });
+
+    it('does not call broadcast when nextState.players is empty', () => {
+        const broadcast = vi.fn();
+        const broadcastContext: BroadcastContext = { broadcast };
+        const p = new ActionPipeline(registry, { broadcastContext });
+
+        // makeSnapshot has empty players
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0);
+        p.process(snapshot, action);
+
+        expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    it('passes the next state (as opaque object) as the first argument to broadcast', () => {
+        const capturedSnapshots: Readonly<Record<string, unknown>>[] = [];
+        const broadcastContext: BroadcastContext = {
+            broadcast: (snapshot) => {
+                capturedSnapshots.push(snapshot);
+            },
+        };
+
+        // Define an action that increments tick so nextState differs from snapshot.
+        const advanceDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:advance-for-broadcast',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+        };
+        registry.register(advanceDef);
+
+        const p = new ActionPipeline(registry, { broadcastContext });
+        const snapshot = makeSnapshotWithPlayers(5, [PID]);
+        const action = makeEnvelope(5, 'game:advance-for-broadcast');
+        const next = p.process(snapshot, action);
+
+        expect(capturedSnapshots).toHaveLength(1);
+        // The broadcast receives the next state (tick incremented to 6).
+        expect((capturedSnapshots[0] as { tick: number }).tick).toBe(6);
+        expect(capturedSnapshots[0]).toBe(next);
     });
 });
