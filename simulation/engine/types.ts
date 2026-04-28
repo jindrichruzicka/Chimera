@@ -109,20 +109,90 @@ export interface BaseGameSnapshot {
     readonly hostPlayerId?: PlayerId;
 }
 
+// ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────
+
+/**
+ * Narrow context for pipeline stages that need undo/redo awareness.
+ *
+ * Full `UndoManager` implementation lands in F16. This interface carries the
+ * minimal canUndo/canRedo query contract so that Stage 3 (intercept) can
+ * check undo eligibility without depending on the full `UndoManager` class.
+ *
+ * Invariant #12: each pipeline stage receives only the context it needs.
+ */
+export interface UndoContext {
+    /** Stub shape; full UndoManager lands in F16. */
+    readonly undoManager?: {
+        canUndo(playerId: PlayerId): boolean;
+        canRedo(playerId: PlayerId): boolean;
+    };
+}
+
+/**
+ * Narrow context for pipeline stages that append to action history.
+ *
+ * Full `ActionHistory` implementation (with TurnMemento-bounded pruning)
+ * lands in F16. This stub allows Stage 6 (record) to append entries
+ * without pulling in the full history subsystem.
+ *
+ * Invariant #12: each pipeline stage receives only the context it needs.
+ */
+export interface HistoryContext {
+    /** Stub shape; full ActionHistory lands in F16. */
+    readonly history?: {
+        append(entry: {
+            readonly tickApplied: number;
+            readonly turnNumber: number;
+            readonly action: ActionEnvelope;
+        }): void;
+    };
+}
+
+/**
+ * Narrow context for pipeline stages that broadcast state to players.
+ *
+ * Typed as opaque `Readonly<Record<string, unknown>>` until `PlayerSnapshot`
+ * is formalised in F26. Stage 7 (broadcast) uses this to push per-player
+ * views without depending on the renderer's snapshot shape.
+ *
+ * Invariant #12: each pipeline stage receives only the context it needs.
+ */
+export interface BroadcastContext {
+    /** Opaque until PlayerSnapshot is formalised in F26. */
+    readonly broadcast?: (snapshot: Readonly<Record<string, unknown>>, to: PlayerId) => void;
+}
+
+/**
+ * Narrow context for pipeline stages that emit debug observations.
+ *
+ * Allows the runtime debug layer (§4.26) to inspect every tick/snapshot pair
+ * without the pipeline having a hard dependency on the debug subsystem.
+ *
+ * Invariant #12: each pipeline stage receives only the context it needs.
+ */
+export interface DebugContext {
+    readonly debugObserver?: (tick: number, snapshot: Readonly<BaseGameSnapshot>) => void;
+}
+
 // ─── PipelineContext ─────────────────────────────────────────────────────────
 
 /**
- * Stub of the orchestrator-level pipeline context (§4.7).
+ * Orchestrator-level pipeline context (§4.7).
  *
- * The full `PipelineContext` extends `UndoContext`, `HistoryContext`,
- * `BroadcastContext`, and `DebugContext` — those fields land with F15/F16.
- * This stub carries only the fields available now so that `ActionPipeline`
- * can forward `db` into `ReduceContext` per-call (invariant #46).
+ * Extends all four role-specific sub-contexts (`UndoContext`, `HistoryContext`,
+ * `BroadcastContext`, `DebugContext`) satisfying the Interface Segregation
+ * contract: each pipeline stage receives the narrowest context it needs.
  *
  * Game code NEVER receives `PipelineContext` directly — it receives the
  * narrower `ReduceContext` from which game-agnostic fields are stripped.
+ *
+ * Invariant #12: `ActionPipeline` steps — each stage receives only the narrow
+ * context it needs.
+ * Invariant #2: `applyAction`/`definition.reduce` are pure — game code always
+ * receives `ReduceContext`, never `PipelineContext`.
  */
-export interface PipelineContext {
+export interface PipelineContext
+    extends UndoContext, HistoryContext, BroadcastContext, DebugContext {
     /** Optional content database; absent for games that declare no content. */
     readonly db?: ContentDatabase;
 }
