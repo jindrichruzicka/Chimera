@@ -34,7 +34,7 @@ import type {
     PlayerId,
     ActionDefinition,
     ReduceContext,
-    BroadcastContext,
+    PipelineContext,
 } from './types.js';
 import { playerId as toPlayerId } from './types.js';
 import { createContentDatabase } from '../content/index.js';
@@ -487,7 +487,7 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
         };
         const dbRegistry = new ActionRegistry();
         dbRegistry.register(spyDef);
-        const dbPipeline = new ActionPipeline(dbRegistry, { db });
+        const dbPipeline = new ActionPipeline(dbRegistry, { context: { db } });
         dbPipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:spy-db-validate-wired'));
         expect(capturedCtxValues[0]).toBe(db);
     });
@@ -508,7 +508,7 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
         };
         const dbRegistry = new ActionRegistry();
         dbRegistry.register(spyDef);
-        const dbPipeline = new ActionPipeline(dbRegistry, { db });
+        const dbPipeline = new ActionPipeline(dbRegistry, { context: { db } });
         dbPipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:spy-db-reduce-wired'));
         expect(capturedCtxValues[0]).toBe(db);
     });
@@ -530,18 +530,27 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
         };
         const dbRegistry = new ActionRegistry();
         dbRegistry.register(spyDef);
-        const dbPipeline = new ActionPipeline(dbRegistry, { db });
+        const dbPipeline = new ActionPipeline(dbRegistry, { context: { db } });
         expect(() =>
             dbPipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:query-db')),
         ).not.toThrow();
     });
 });
 
-// ─── Stage 7 — BroadcastContext wiring (issue #353) ───────────────────────────
+// ─── Stage 7 — PipelineContext wiring (issue #353, F15-hardening) ────────────
 
-describe('ActionPipeline — Stage 7: BroadcastContext wiring', () => {
+describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
     const PID2 = toPlayerId('p2');
     const PID3 = toPlayerId('p3');
+
+    /** Helper: registers a state-advancing action that returns a NEW snapshot reference. */
+    const ADVANCE_TYPE = 'game:advance-stage7';
+    const advanceDef: ActionDefinition<Record<string, never>> = {
+        type: ADVANCE_TYPE,
+        parsePayload: () => ({}),
+        validate: () => ({ ok: true }),
+        reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+    };
 
     const makeSnapshotWithPlayers = (
         tick: number,
@@ -555,35 +564,60 @@ describe('ActionPipeline — Stage 7: BroadcastContext wiring', () => {
         events: [],
     });
 
-    it('constructor accepts an optional broadcastContext option without throwing', () => {
-        const broadcastContext: BroadcastContext = {
-            broadcast: vi.fn(),
-        };
-        expect(() => new ActionPipeline(registry, { broadcastContext })).not.toThrow();
+    beforeEach(() => {
+        // Register the state-advancing action so Stage 7 tests can produce
+        // a nextState !== snapshot reference.
+        if (!registry.has(ADVANCE_TYPE)) {
+            registry.register(advanceDef);
+        }
     });
 
-    it('Stage 7 silently skips broadcast when no broadcastContext is provided', () => {
+    // ── Improvement 1: constructor now accepts context?: PipelineContext ──────
+
+    it('constructor accepts an optional context option without throwing', () => {
+        const context: PipelineContext = {
+            broadcast: vi.fn(),
+        };
+        expect(() => new ActionPipeline(registry, { context })).not.toThrow();
+    });
+
+    it('Stage 7 silently skips broadcast when no context is provided', () => {
         const snapshot = makeSnapshotWithPlayers(0, [PID]);
-        const action = makeEnvelope(0);
-        // No broadcastContext in constructor — must not throw and must return state.
+        const action = makeEnvelope(0, ADVANCE_TYPE);
+        // No context in constructor — must not throw and must return state.
         expect(() => pipeline.process(snapshot, action)).not.toThrow();
     });
 
-    it('Stage 7 silently skips broadcast when broadcastContext.broadcast is absent', () => {
-        const broadcastContext: BroadcastContext = {};
-        const p = new ActionPipeline(registry, { broadcastContext });
+    it('Stage 7 silently skips broadcast when context.broadcast is absent', () => {
+        const context: PipelineContext = {};
+        const p = new ActionPipeline(registry, { context });
         const snapshot = makeSnapshotWithPlayers(0, [PID]);
-        const action = makeEnvelope(0);
+        const action = makeEnvelope(0, ADVANCE_TYPE);
         expect(() => p.process(snapshot, action)).not.toThrow();
+    });
+
+    // ── Improvement 3: Stage 7 skips broadcast when nextState === snapshot ────
+
+    it('Stage 7 does NOT call broadcast when nextState === snapshot (same reference)', () => {
+        const broadcast = vi.fn();
+        const context: PipelineContext = { broadcast };
+        const p = new ActionPipeline(registry, { context });
+
+        // game:noop returns the same reference — no new state produced.
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+        const action = makeEnvelope(0); // game:noop
+        p.process(snapshot, action);
+
+        expect(broadcast).not.toHaveBeenCalled();
     });
 
     it('calls broadcast once per player when one player is in nextState.players', () => {
         const broadcast = vi.fn();
-        const broadcastContext: BroadcastContext = { broadcast };
-        const p = new ActionPipeline(registry, { broadcastContext });
+        const context: PipelineContext = { broadcast };
+        const p = new ActionPipeline(registry, { context });
 
         const snapshot = makeSnapshotWithPlayers(0, [PID]);
-        const action = makeEnvelope(0);
+        const action = makeEnvelope(0, ADVANCE_TYPE);
         p.process(snapshot, action);
 
         expect(broadcast).toHaveBeenCalledTimes(1);
@@ -592,11 +626,11 @@ describe('ActionPipeline — Stage 7: BroadcastContext wiring', () => {
 
     it('calls broadcast once per player when multiple players are in nextState.players', () => {
         const broadcast = vi.fn();
-        const broadcastContext: BroadcastContext = { broadcast };
-        const p = new ActionPipeline(registry, { broadcastContext });
+        const context: PipelineContext = { broadcast };
+        const p = new ActionPipeline(registry, { context });
 
         const snapshot = makeSnapshotWithPlayers(0, [PID, PID2, PID3]);
-        const action = makeEnvelope(0);
+        const action = makeEnvelope(0, ADVANCE_TYPE);
         p.process(snapshot, action);
 
         expect(broadcast).toHaveBeenCalledTimes(3);
@@ -608,42 +642,42 @@ describe('ActionPipeline — Stage 7: BroadcastContext wiring', () => {
 
     it('does not call broadcast when nextState.players is empty', () => {
         const broadcast = vi.fn();
-        const broadcastContext: BroadcastContext = { broadcast };
-        const p = new ActionPipeline(registry, { broadcastContext });
+        const context: PipelineContext = { broadcast };
+        const p = new ActionPipeline(registry, { context });
 
-        // makeSnapshot has empty players
+        // makeSnapshot has empty players — advance action still produces new ref
+        // but players is empty so the broadcast loop never fires.
         const snapshot = makeSnapshot(0);
-        const action = makeEnvelope(0);
+        const action = makeEnvelope(0, ADVANCE_TYPE);
         p.process(snapshot, action);
 
         expect(broadcast).not.toHaveBeenCalled();
     });
 
-    it('passes the next state (as opaque object) as the first argument to broadcast', () => {
+    it('passes the next state (as opaque ViewerSnapshot) as the first argument to broadcast', () => {
         const capturedSnapshots: Readonly<Record<string, unknown>>[] = [];
-        const broadcastContext: BroadcastContext = {
+        const context: PipelineContext = {
             broadcast: (snapshot) => {
                 capturedSnapshots.push(snapshot);
             },
         };
 
-        // Define an action that increments tick so nextState differs from snapshot.
-        const advanceDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:advance-for-broadcast',
-            parsePayload: () => ({}),
-            validate: () => ({ ok: true }),
-            reduce: (state) => ({ ...state, tick: state.tick + 1 }),
-        };
-        registry.register(advanceDef);
-
-        const p = new ActionPipeline(registry, { broadcastContext });
+        const p = new ActionPipeline(registry, { context });
         const snapshot = makeSnapshotWithPlayers(5, [PID]);
-        const action = makeEnvelope(5, 'game:advance-for-broadcast');
+        const action = makeEnvelope(5, ADVANCE_TYPE);
         const next = p.process(snapshot, action);
 
         expect(capturedSnapshots).toHaveLength(1);
         // The broadcast receives the next state (tick incremented to 6).
         expect((capturedSnapshots[0] as { tick: number }).tick).toBe(6);
         expect(capturedSnapshots[0]).toBe(next);
+    });
+
+    // ── Improvement 1: context also carries db to #buildReduceContext ─────────
+
+    it('constructor accepts context with db without throwing', () => {
+        const db = createContentDatabase([]);
+        const context: PipelineContext = { db };
+        expect(() => new ActionPipeline(registry, { context })).not.toThrow();
     });
 });

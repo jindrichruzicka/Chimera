@@ -16,9 +16,19 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ActionRegistry } from './ActionRegistry.js';
-import { EngineActions, registerEngineActions } from './EngineActions.js';
+import {
+    EngineActions,
+    registerEngineActions,
+    engineTickDefinition,
+    engineEndTurnDefinition,
+    engineSaveDefinition,
+    engineLoadDefinition,
+    engineUndoDefinition,
+    engineRedoDefinition,
+    engineSyncRequestDefinition,
+} from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
-import type { BaseGameSnapshot, PlayerId } from './types.js';
+import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
 import { playerId as toPlayerId } from './types.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────────
@@ -615,6 +625,40 @@ describe('engine:undo definition', () => {
         expect(result.ok).toBe(true);
     });
 
+    // Improvement 2: pre-emptive undoManager checks so F16 is a one-line addition.
+
+    it('validate returns { ok: false, reason: "undo_not_available" } when undoManager is present and canUndo returns false', () => {
+        const snapshot = makeSnapshot();
+        const ctx: ReduceContext = {
+            rng: makeStubRng(0.5),
+            undoManager: {
+                canUndo: (_pid: PlayerId) => false,
+                canRedo: (_pid: PlayerId) => true,
+            },
+        };
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);
+        expect(result).toEqual({ ok: false, reason: 'undo_not_available' });
+    });
+
+    it('validate returns ok: true when undoManager is present and canUndo returns true', () => {
+        const snapshot = makeSnapshot();
+        const ctx: ReduceContext = {
+            rng: makeStubRng(0.5),
+            undoManager: {
+                canUndo: (_pid: PlayerId) => true,
+                canRedo: (_pid: PlayerId) => false,
+            },
+        };
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);
+        expect(result.ok).toBe(true);
+    });
+
+    it('validate returns ok: true when undoManager is absent (stub path — F16)', () => {
+        const snapshot = makeSnapshot();
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, stubCtx);
+        expect(result.ok).toBe(true);
+    });
+
     it('reduce returns snapshot unchanged (stub)', () => {
         const snapshot = makeSnapshot();
         const next = definition().reduce(snapshot, { steps: 1 }, hostId, stubCtx);
@@ -677,6 +721,40 @@ describe('engine:redo definition', () => {
         expect(result.ok).toBe(true);
     });
 
+    // Improvement 2: pre-emptive undoManager checks so F16 is a one-line addition.
+
+    it('validate returns { ok: false, reason: "redo_not_available" } when undoManager is present and canRedo returns false', () => {
+        const snapshot = makeSnapshot();
+        const ctx: ReduceContext = {
+            rng: makeStubRng(0.5),
+            undoManager: {
+                canUndo: (_pid: PlayerId) => true,
+                canRedo: (_pid: PlayerId) => false,
+            },
+        };
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);
+        expect(result).toEqual({ ok: false, reason: 'redo_not_available' });
+    });
+
+    it('validate returns ok: true when undoManager is present and canRedo returns true', () => {
+        const snapshot = makeSnapshot();
+        const ctx: ReduceContext = {
+            rng: makeStubRng(0.5),
+            undoManager: {
+                canUndo: (_pid: PlayerId) => false,
+                canRedo: (_pid: PlayerId) => true,
+            },
+        };
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, ctx);
+        expect(result.ok).toBe(true);
+    });
+
+    it('validate returns ok: true when undoManager is absent (stub path — F16)', () => {
+        const snapshot = makeSnapshot();
+        const result = definition().validate({ steps: 1 }, snapshot, hostId, stubCtx);
+        expect(result.ok).toBe(true);
+    });
+
     it('reduce returns snapshot unchanged (stub)', () => {
         const snapshot = makeSnapshot();
         const next = definition().reduce(snapshot, { steps: 1 }, hostId, stubCtx);
@@ -728,5 +806,52 @@ describe('engine:sync_request definition', () => {
         const snapshot = makeSnapshot();
         const frozen = Object.freeze({ ...snapshot });
         expect(() => definition().reduce(frozen, {}, hostId, stubCtx)).not.toThrow();
+    });
+});
+
+// ─── Individual named exports (Improvement 4) ────────────────────────────────
+
+describe('individual engine action definition named exports', () => {
+    it('engineTickDefinition is a named export with type engine:tick', () => {
+        expect(engineTickDefinition.type).toBe('engine:tick');
+    });
+
+    it('engineEndTurnDefinition is a named export with type engine:end_turn', () => {
+        expect(engineEndTurnDefinition.type).toBe('engine:end_turn');
+    });
+
+    it('engineSaveDefinition is a named export with type engine:save', () => {
+        expect(engineSaveDefinition.type).toBe('engine:save');
+    });
+
+    it('engineLoadDefinition is a named export with type engine:load', () => {
+        expect(engineLoadDefinition.type).toBe('engine:load');
+    });
+
+    it('engineUndoDefinition is a named export with type engine:undo', () => {
+        expect(engineUndoDefinition.type).toBe('engine:undo');
+    });
+
+    it('engineRedoDefinition is a named export with type engine:redo', () => {
+        expect(engineRedoDefinition.type).toBe('engine:redo');
+    });
+
+    it('engineSyncRequestDefinition is a named export with type engine:sync_request', () => {
+        expect(engineSyncRequestDefinition.type).toBe('engine:sync_request');
+    });
+
+    it('all individually exported definitions are in the EngineActions array', () => {
+        const individualDefs = [
+            engineTickDefinition,
+            engineEndTurnDefinition,
+            engineSaveDefinition,
+            engineLoadDefinition,
+            engineUndoDefinition,
+            engineRedoDefinition,
+            engineSyncRequestDefinition,
+        ];
+        for (const def of individualDefs) {
+            expect(EngineActions.some((d) => d === def)).toBe(true);
+        }
     });
 });

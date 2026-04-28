@@ -82,7 +82,7 @@ export type EngineSyncRequestPayload = Record<string, never>;
  * integer (the per-tick RNG seed). The reducer is a no-op stub for M1 —
  * full clock advancement belongs to F04 / F21.
  */
-const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
+export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
     type: 'engine:tick',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineTickPayload {
@@ -120,7 +120,7 @@ const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
  * When `turnClock` is configured, advances the active player in round-robin
  * insertion order and optionally overrides the next deadline.
  */
-const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
+export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
     type: 'engine:end_turn',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineEndTurnPayload {
@@ -193,7 +193,7 @@ const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
  * The reducer is a no-op stub — actual persistence is handled by SaveManager
  * in the main process after the action clears the pipeline.
  */
-const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
+export const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
     type: 'engine:save',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineSaveLoadPayload {
@@ -238,7 +238,7 @@ const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
  * The reducer is a no-op stub — actual state replacement is handled by
  * SaveManager.restoreFromSave() in the main process.
  */
-const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
+export const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
     type: 'engine:load',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineSaveLoadPayload {
@@ -283,7 +283,7 @@ const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
  * lands in a later milestone. Invariant #7: undo enters the pipeline
  * normally; there is no side-door undo path.
  */
-const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
+export const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
     type: 'engine:undo',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineUndoRedoPayload {
@@ -299,7 +299,10 @@ const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
         return { steps: raw['steps'] as number };
     },
 
-    validate(_payload, _state, _playerId, _ctx): ValidationResult {
+    validate(_payload, _state, playerId, ctx): ValidationResult {
+        if (ctx.undoManager !== undefined && !ctx.undoManager.canUndo(playerId)) {
+            return { ok: false, reason: 'undo_not_available' };
+        }
         return { ok: true };
     },
 
@@ -318,7 +321,7 @@ const engineUndoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
  * (default: 1). Both `validate` and `reduce` are no-op stubs for now.
  * Invariant #7: redo enters the pipeline normally; there is no side-door path.
  */
-const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
+export const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
     type: 'engine:redo',
 
     parsePayload(raw: Readonly<Record<string, unknown>>): EngineUndoRedoPayload {
@@ -334,7 +337,10 @@ const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
         return { steps: raw['steps'] as number };
     },
 
-    validate(_payload, _state, _playerId, _ctx): ValidationResult {
+    validate(_payload, _state, playerId, ctx): ValidationResult {
+        if (ctx.undoManager !== undefined && !ctx.undoManager.canRedo(playerId)) {
+            return { ok: false, reason: 'redo_not_available' };
+        }
         return { ok: true };
     },
 
@@ -352,7 +358,7 @@ const engineRedoDefinition: ActionDefinition<EngineUndoRedoPayload> = {
  * Requests a full state snapshot from the host. No payload fields required.
  * Both `validate` and `reduce` are no-op stubs.
  */
-const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayload> = {
+export const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayload> = {
     type: 'engine:sync_request',
 
     parsePayload(_raw: Readonly<Record<string, unknown>>): EngineSyncRequestPayload {

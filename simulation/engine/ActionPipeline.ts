@@ -21,8 +21,7 @@ import type { Logger } from '@chimera/shared/logging.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
-    BroadcastContext,
-    ContentDatabase,
+    PipelineContext,
     PlayerId,
     ReduceContext,
 } from './types.js';
@@ -135,18 +134,20 @@ export class RecursiveDispatchError extends Error {
  *   4. Authorization       — def.validate(); throws ActionUnauthorizedError.
  *   5. Reduce              — def.reduce() via StateReducer; produces nextState.
  *   6. History record      — no-op stub (F16).
- *   7. Snapshot broadcast  — no-op stub (F15/F26).
+ *   7. Snapshot broadcast  — fires only when nextState !== snapshot (F26).
  *
  * Constructor:
- *   `new ActionPipeline(registry, { logger? })`
+ *   `new ActionPipeline(registry, { logger?, context? })`
+ *   `context` is an optional `PipelineContext` carrying all role-specific
+ *   sub-contexts (db, undoManager, broadcast, debugObserver, history).
+ *   Stages destructure only the narrow sub-context they need.
  *   The `logger` is optional and defaults to a noop. Pass any `Logger` from
  *   `shared/logging.ts` — the pipeline never creates its own logger.
  */
 export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #registry: ActionRegistry<TState>;
     readonly #logger: Logger;
-    readonly #db: ContentDatabase | undefined;
-    readonly #broadcastContext: BroadcastContext | undefined;
+    readonly #context: PipelineContext | undefined;
     /**
      * Tracks current re-entrant dispatch depth. Starts at 0 (top-level call);
      * incremented by the dispatch closure before each nested process() call and
@@ -157,12 +158,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
     constructor(
         registry: ActionRegistry<TState>,
-        options?: { logger?: Logger; db?: ContentDatabase; broadcastContext?: BroadcastContext },
+        options?: { logger?: Logger; context?: PipelineContext },
     ) {
         this.#registry = registry;
         this.#logger = options?.logger ?? NOOP_LOGGER;
-        this.#db = options?.db;
-        this.#broadcastContext = options?.broadcastContext;
+        this.#context = options?.context;
     }
 
     /**
@@ -226,12 +226,20 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         //            undo/redo memento construction.
 
         // ── Stage 7 — snapshot broadcast ───────────────────────────────────
+        // Policy: broadcast is skipped when nextState === snapshot (same reference).
+        // All current stub engine actions (engine:tick, engine:undo, etc.) return the
+        // same reference, so no network traffic is generated until state actually
+        // changes. If "always broadcast" semantics are ever required (e.g. for
+        // sync-on-join), revisit this guard here and in StateBroadcaster (F26).
+        //
         // TODO(F26): replace toViewerSnapshot cast with real StateProjector
         // projection so each player receives only their own view of the state
         // (Invariant #1 — GameSnapshot must never leave the main process as-is).
-        const viewerSnapshot = toViewerSnapshot(nextState as Readonly<Record<string, unknown>>);
-        for (const pid of Object.keys(nextState.players)) {
-            this.#broadcastContext?.broadcast?.(viewerSnapshot, pid as PlayerId);
+        if (nextState !== snapshot) {
+            const viewerSnapshot = toViewerSnapshot(nextState as Readonly<Record<string, unknown>>);
+            for (const pid of Object.keys(nextState.players)) {
+                this.#context?.broadcast?.(viewerSnapshot, pid as PlayerId);
+            }
         }
 
         return nextState;
@@ -247,6 +255,8 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      * `dispatch` is the re-entrant pipeline entry point. Depth is tracked on
      * the pipeline instance (synchronous only). Exceeding `MAX_NESTED_DISPATCH`
      * throws `RecursiveDispatchError`.
+     *
+     * `db` and `undoManager` are threaded from `#context` when present.
      *
      * NOTE: Only `engine:tick` (F21 timers) may call `ctx.dispatch()`.
      *       Game reducers must NOT call it.
@@ -265,11 +275,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                     this.#depth--;
                 }
             },
+            ...(this.#context?.db !== undefined ? { db: this.#context.db } : {}),
+            ...(this.#context?.undoManager !== undefined
+                ? { undoManager: this.#context.undoManager }
+                : {}),
         };
-        // Only set db when provided — required by exactOptionalPropertyTypes.
-        if (this.#db !== undefined) {
-            return { ...ctx, db: this.#db };
-        }
         return ctx;
     }
 }

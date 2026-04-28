@@ -304,6 +304,12 @@ export interface ValidationResult {
  * `db`  — optional content database placeholder until F05 wires `ContentDatabase`.
  *          Games that declare no content never receive a `db`.
  *
+ * `undoManager` — optional undo eligibility query surface, populated by
+ *          `ActionPipeline` from `PipelineContext.undoManager` when provided (F16).
+ *          Absent until F16 lands. `engine:undo` / `engine:redo` validate() check
+ *          it to surface pre-emptive rejection consistent with the
+ *          `ActionUnauthorizedError` path used by `engine:end_turn` and `engine:save`.
+ *
  * `dispatch` — optional re-entrant dispatch function. ONLY `engine:tick` may call
  *              this (§4.20, F21) to fire timer-triggered sub-actions from inside a
  *              reducer. Game reducers MUST NOT call it. The pipeline bounds nesting
@@ -314,6 +320,11 @@ export interface ValidationResult {
 export interface ReduceContext {
     readonly rng: DeterministicRng;
     readonly db?: ContentDatabase;
+    /** Populated from PipelineContext.undoManager by ActionPipeline (F16). */
+    readonly undoManager?: {
+        canUndo(playerId: PlayerId): boolean;
+        canRedo(playerId: PlayerId): boolean;
+    };
     readonly dispatch?: (
         state: Readonly<BaseGameSnapshot>,
         action: ActionEnvelope,

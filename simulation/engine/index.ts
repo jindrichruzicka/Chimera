@@ -53,7 +53,17 @@ export {
 
 export type { EngineTickPayload, EngineEndTurnPayload } from './EngineActions.js';
 
-export { EngineActions, registerEngineActions } from './EngineActions.js';
+export {
+    EngineActions,
+    registerEngineActions,
+    engineTickDefinition,
+    engineEndTurnDefinition,
+    engineSaveDefinition,
+    engineLoadDefinition,
+    engineUndoDefinition,
+    engineRedoDefinition,
+    engineSyncRequestDefinition,
+} from './EngineActions.js';
 
 export { StateReducer, ActionSchemaError } from './StateReducer.js';
 
