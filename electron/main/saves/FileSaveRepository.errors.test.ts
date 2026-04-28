@@ -12,7 +12,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     JsonSaveSerializer,
-    SaveMigrator,
+    createDefaultMigrator,
     SaveNotFoundError,
 } from '@chimera/simulation/persistence/index.js';
 import { FileSaveRepository } from './FileSaveRepository.js';
@@ -58,7 +58,7 @@ function makeEnoent(filePath: string): NodeJS.ErrnoException {
 }
 
 function makeRepo(): FileSaveRepository {
-    return new FileSaveRepository(new JsonSaveSerializer(), new SaveMigrator(), '/fake/base');
+    return new FileSaveRepository(new JsonSaveSerializer(), createDefaultMigrator(), '/fake/base');
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

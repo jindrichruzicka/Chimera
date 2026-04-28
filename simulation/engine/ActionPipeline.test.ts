@@ -1371,6 +1371,38 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         expect(pruneSpy).toHaveBeenCalledExactlyOnceWith(9 - 4);
     });
 
+    // I1 from code review of eca8acb: the prior test uses a local END_TURN stub
+    // that does NOT increment turnNumber, so it cannot distinguish between reading
+    // snapshot.turnNumber vs nextState.turnNumber. This test uses the real
+    // engineEndTurnDefinition with a turnClock so turnNumber actually advances,
+    // proving pruneTo receives the POST-reduce value.
+    it('pruneTo cutoff uses the POST-reduce turnNumber when turnClock advances (real engineEndTurnDefinition)', () => {
+        const pruneSpy = vi.fn();
+        const realRegistry = new ActionRegistry();
+        realRegistry.registerEngineAction(engineEndTurnDefinition);
+
+        const PID2 = toPlayerId('p2');
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(realRegistry, {
+            context: {
+                undoManager,
+                history: { append: vi.fn(), pruneTo: pruneSpy },
+            },
+        });
+
+        // turnNumber starts at 9. After engine:end_turn.reduce, it becomes 10.
+        // So pruneTo must be called with 10 - TURN_MEMENTO_RETENTION (= 4) = 6,
+        // NOT 9 - 4 = 5 (which would be the wrong pre-reduce value).
+        const snapshot: BaseGameSnapshot = {
+            ...makeSnapshot(0, 9),
+            players: { [PID]: { id: PID }, [PID2]: { id: PID2 } },
+            turnClock: { activePlayerId: PID, deadlineMs: 30_000 },
+        };
+        p.process(snapshot, makeEnvelope(0, 'engine:end_turn'));
+
+        expect(pruneSpy).toHaveBeenCalledExactlyOnceWith(10 - 4);
+    });
+
     it('does NOT call pruneTo when history is absent', () => {
         const undoManager = makeUndoManagerStub();
         const p = new ActionPipeline(registry, { context: { undoManager } });

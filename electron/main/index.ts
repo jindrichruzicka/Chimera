@@ -22,7 +22,10 @@ import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
-import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
+import {
+    JsonSaveSerializer,
+    createDefaultMigrator,
+} from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
@@ -373,7 +376,7 @@ export async function main(): Promise<void> {
     const saveManager = new SaveManager(
         new FileSaveRepository(
             new JsonSaveSerializer(),
-            new SaveMigrator(),
+            createDefaultMigrator(),
             path.join(userData, 'saves'),
         ),
         userData,

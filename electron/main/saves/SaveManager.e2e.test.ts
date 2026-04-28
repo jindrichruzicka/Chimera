@@ -15,7 +15,10 @@ import * as os from 'node:os';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
+import {
+    JsonSaveSerializer,
+    createDefaultMigrator,
+} from '@chimera/simulation/persistence/index.js';
 import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
 import { FileSaveRepository } from './FileSaveRepository.js';
 import { SaveManager } from './SaveManager.js';
@@ -38,7 +41,7 @@ const stubLogger: Logger = {
 
 function makeManager(savesDir: string, dataDir: string): SaveManager {
     return new SaveManager(
-        new FileSaveRepository(new JsonSaveSerializer(), new SaveMigrator(), savesDir),
+        new FileSaveRepository(new JsonSaveSerializer(), createDefaultMigrator(), savesDir),
         dataDir,
         stubLogger,
     );

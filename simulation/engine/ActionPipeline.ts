@@ -378,6 +378,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             // history is a per-tick log and the bound applies uniformly.
             // Cutoff uses the post-reduce turnNumber so the new turn boundary
             // is reflected before pruning.
+            //
+            // Note: for games without a turnClock the engine:end_turn reducer
+            // returns the input reference unchanged (early return), so
+            // nextState.turnNumber === snapshot.turnNumber and the cutoff is
+            // identical to the previous call — pruneTo is idempotent in that
+            // case and no entries are incorrectly evicted.
             this.#context?.history?.pruneTo(nextState.turnNumber - TURN_MEMENTO_RETENTION);
         }
 

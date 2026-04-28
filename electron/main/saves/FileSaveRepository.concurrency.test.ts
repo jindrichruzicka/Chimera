@@ -25,7 +25,7 @@ function resetCounters(): void {
 // Minimal valid JSON that JsonSaveSerializer.deserialize can parse.
 const FAKE_SAVE_JSON = JSON.stringify({
     header: {
-        schemaVersion: 1,
+        schemaVersion: 2,
         engineVersion: '0.1.0',
         gameId: 'tactics',
         gameVersion: '0.1.0',
@@ -41,6 +41,7 @@ const FAKE_SAVE_JSON = JSON.stringify({
         entities: {},
         phase: 'playing',
         events: [],
+        turnNumber: 0,
     },
     deltaActions: [],
     pendingCommitments: {},
@@ -73,12 +74,15 @@ vi.mock('fs/promises', () => {
 
 import * as fsMocked from 'fs/promises';
 import { FileSaveRepository, LIST_CONCURRENCY } from './FileSaveRepository.js';
-import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
+import {
+    JsonSaveSerializer,
+    createDefaultMigrator,
+} from '@chimera/simulation/persistence/index.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeRepo(): FileSaveRepository {
-    return new FileSaveRepository(new JsonSaveSerializer(), new SaveMigrator(), '/fake/base');
+    return new FileSaveRepository(new JsonSaveSerializer(), createDefaultMigrator(), '/fake/base');
 }
 
 function makeEntries(count: number): string[] {

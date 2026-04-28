@@ -18,7 +18,7 @@
 
 import { describe, expect, it } from 'vitest';
 import type { SaveRepository } from '../SaveRepository.js';
-import { SaveNotFoundError } from '../SaveMigrator.js';
+import { CURRENT_SCHEMA_VERSION, SaveNotFoundError } from '../SaveMigrator.js';
 import type { SaveFile } from '../SaveFile.js';
 import type { GamePhase } from '../../engine/types.js';
 
@@ -32,7 +32,7 @@ import type { GamePhase } from '../../engine/types.js';
 export function makeFile(gameId: string, slotId: string, savedAt = 1_700_000_000_000): SaveFile {
     return {
         header: {
-            schemaVersion: 1,
+            schemaVersion: CURRENT_SCHEMA_VERSION,
             engineVersion: '0.1.0',
             gameId,
             gameVersion: '0.1.0',
@@ -83,7 +83,7 @@ export function runSaveRepositoryContractTests(name: string, factory: () => Save
             expect(slots[0]?.savedAt).toBe(1_700_000_000_000);
             expect(slots[0]?.turnNumber).toBe(1);
             expect(slots[0]?.playerNames).toStrictEqual(['Alice', 'Bob']);
-            expect(slots[0]?.schemaVersion).toBe(1);
+            expect(slots[0]?.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
         });
 
         it('list returns entries sorted by savedAt descending', async () => {

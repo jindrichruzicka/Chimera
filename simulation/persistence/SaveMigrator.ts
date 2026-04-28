@@ -23,7 +23,7 @@ import type { SaveFile } from './SaveFile.js';
  * of its nested types, and add a corresponding `SaveMigration` so that
  * older saves are automatically upgraded.
  */
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 // ─── SaveMigration interface ──────────────────────────────────────────────────
 
@@ -215,4 +215,50 @@ export class SaveMigrationError extends Error {
         this.name = 'SaveMigrationError';
         Object.setPrototypeOf(this, new.target.prototype);
     }
+}
+
+// ─── Built-in migrations ───────────────────────────────────────────────────────────────────
+
+/**
+ * v1 → v2: adds `checkpoint.turnNumber` (default 0) to saves written before
+ * `BaseGameSnapshot.turnNumber` was introduced in the engine.
+ *
+ * Without this migration an old save would deserialize with
+ * `checkpoint.turnNumber === undefined`, turning every subsequent
+ * `engine:end_turn.reduce` into `NaN + 1` and silently disabling the
+ * `pruneTo` retention bound.
+ *
+ * Register this migration in the wiring point (`electron/main/index.ts`)
+ * before the first call to `SaveMigrator.migrate()`.
+ */
+export const checkpointTurnNumberMigration: SaveMigration = {
+    fromVersion: 1,
+    apply(file: SaveFile): SaveFile {
+        // Cast via `unknown` because v1 saves legitimately predate the
+        // `turnNumber` field on `BaseGameSnapshot`; the static `SaveFile`
+        // type asserts the field is present, but a v1 input may not have it.
+        // Widening to `Record<string, unknown>` lets us probe and add the
+        // field safely without introducing `any`.
+        const checkpoint = file.checkpoint as unknown as Record<string, unknown>;
+        if ('turnNumber' in checkpoint) {
+            return file;
+        }
+        return {
+            ...file,
+            checkpoint: { ...checkpoint, turnNumber: 0 } as SaveFile['checkpoint'],
+        };
+    },
+};
+
+/**
+ * Returns a fresh `SaveMigrator` with all built-in schema migrations
+ * pre-registered in order.
+ *
+ * Use this factory everywhere a migrator is needed (wiring point and tests)
+ * so callers do not need to know which individual migrations exist.
+ */
+export function createDefaultMigrator(): SaveMigrator {
+    const migrator = new SaveMigrator();
+    migrator.register(checkpointTurnNumberMigration);
+    return migrator;
 }

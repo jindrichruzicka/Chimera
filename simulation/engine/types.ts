@@ -108,12 +108,12 @@ export interface BaseGameSnapshot {
      * games with multi-action turns `tick` runs faster than `turnNumber`.
      *
      * Used by:
-     *   - `ActionHistoryEntry.turnNumber` so history entries align with the
-     *     real turn boundary recorded by `TurnMemento.turnNumber` (Invariant #45).
+     *   - `ActionHistoryEntry.turnNumber` so each history entry is stamped with
+     *     the turn during which it was recorded (Invariants #42/#44 — integer).
      *   - `ActionHistory.pruneTo(snapshot.turnNumber - TURN_MEMENTO_RETENTION)`
      *     so the bounded retention window measures turns, not ticks.
      *
-     * Always an integer (Invariant #42/#44). Initial state must set this to
+     * Always an integer (Invariants #42/#44). Initial state must set this to
      * 0 explicitly; there is no implicit default.
      */
     readonly turnNumber: number;

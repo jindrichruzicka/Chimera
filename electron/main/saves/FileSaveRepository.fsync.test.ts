@@ -9,7 +9,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { JsonSaveSerializer, SaveMigrator } from '@chimera/simulation/persistence/index.js';
+import {
+    JsonSaveSerializer,
+    createDefaultMigrator,
+} from '@chimera/simulation/persistence/index.js';
 import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
 import { FileSaveRepository } from './FileSaveRepository.js';
 
@@ -61,7 +64,7 @@ describe('FileSaveRepository — fsync ordering (invariant #23)', () => {
     it('save() calls fh.sync() before fs.rename() to ensure bytes reach disk before rename', async () => {
         const repo = new FileSaveRepository(
             new JsonSaveSerializer(),
-            new SaveMigrator(),
+            createDefaultMigrator(),
             '/fake/base',
         );
         const file = makeFile('tactics', 'fsync-order');

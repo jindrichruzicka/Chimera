@@ -15,7 +15,7 @@ import * as path from 'path';
 import { afterEach, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
     JsonSaveSerializer,
-    SaveMigrator,
+    createDefaultMigrator,
     SaveNotFoundError,
     SaveIntegrityError,
 } from '@chimera/simulation/persistence/index.js';
@@ -32,7 +32,7 @@ async function makeTmpDir(): Promise<string> {
 }
 
 function makeRepo(baseDir: string): FileSaveRepository {
-    return new FileSaveRepository(new JsonSaveSerializer(), new SaveMigrator(), baseDir);
+    return new FileSaveRepository(new JsonSaveSerializer(), createDefaultMigrator(), baseDir);
 }
 
 // ── Shared contract tests ────────────────────────────────────────────────────

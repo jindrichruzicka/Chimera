@@ -229,3 +229,96 @@ describe('JsonSaveSerializer — security', () => {
         ).resolves.toStrictEqual(file);
     });
 });
+
+// ─── JsonSaveSerializer — checkpoint.turnNumber validation (B1 from eca8acb review) ──
+//
+// The Zod checkpoint schema must declare turnNumber as a required integer so
+// that saves written before BaseGameSnapshot.turnNumber was introduced are
+// rejected at parse-time rather than silently producing undefined — which would
+// propagate NaN through engine:end_turn.reduce and pruneTo arithmetic.
+
+describe('JsonSaveSerializer — checkpoint.turnNumber schema enforcement', () => {
+    // Helper to build the minimal valid JSON string for a save file but with
+    // a custom checkpoint object so we can probe the schema boundary.
+    function makeRawWithCheckpoint(checkpoint: Record<string, unknown>): string {
+        return JSON.stringify({
+            header: {
+                schemaVersion: 1,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 1,
+                playerNames: [],
+            },
+            checkpoint,
+            deltaActions: [],
+            pendingCommitments: {},
+        });
+    }
+
+    it('rejects with SaveParseError when checkpoint.turnNumber is absent', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = makeRawWithCheckpoint({
+            tick: 1,
+            seed: 42,
+            phase: 'playing',
+            players: {},
+            entities: {},
+            events: [],
+            // turnNumber deliberately omitted
+        });
+
+        await expect(serializer.deserialize(raw)).rejects.toBeInstanceOf(SaveParseError);
+    });
+
+    it('rejects with SaveParseError when checkpoint.turnNumber is a float', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = makeRawWithCheckpoint({
+            tick: 1,
+            seed: 42,
+            phase: 'playing',
+            players: {},
+            entities: {},
+            events: [],
+            turnNumber: 1.5,
+        });
+
+        await expect(serializer.deserialize(raw)).rejects.toBeInstanceOf(SaveParseError);
+    });
+
+    it('rejects with SaveParseError when checkpoint.turnNumber is a string', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = makeRawWithCheckpoint({
+            tick: 1,
+            seed: 42,
+            phase: 'playing',
+            players: {},
+            entities: {},
+            events: [],
+            turnNumber: '3',
+        });
+
+        await expect(serializer.deserialize(raw)).rejects.toBeInstanceOf(SaveParseError);
+    });
+
+    it('round-trips checkpoint.turnNumber correctly through serialize/deserialize', async () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile({
+            checkpoint: {
+                tick: 5,
+                seed: 99,
+                players: {},
+                entities: {},
+                phase: 'playing' as GamePhase,
+                events: [],
+                turnNumber: 7,
+            },
+        });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect((result.checkpoint as unknown as Record<string, unknown>)['turnNumber']).toBe(7);
+    });
+});

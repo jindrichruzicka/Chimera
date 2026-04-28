@@ -14,6 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     CURRENT_SCHEMA_VERSION,
+    checkpointTurnNumberMigration,
     SaveMigrationError,
     SaveMigrator,
     SaveNotFoundError,
@@ -53,8 +54,71 @@ function makeFileAtVersion(schemaVersion: number): SaveFile {
 // ─── CURRENT_SCHEMA_VERSION ───────────────────────────────────────────────────
 
 describe('CURRENT_SCHEMA_VERSION', () => {
-    it('equals 1', () => {
-        expect(CURRENT_SCHEMA_VERSION).toBe(1);
+    it('equals 2', () => {
+        expect(CURRENT_SCHEMA_VERSION).toBe(2);
+    });
+});
+
+// ─── checkpointTurnNumberMigration (v1 → v2) ─────────────────────────────────
+//
+// B1 from code review of eca8acb: the checkpoint schema must validate
+// BaseGameSnapshot.turnNumber so that an old save (v1, no turnNumber field)
+// is upgraded rather than being accepted with an implicit undefined.
+
+describe('checkpointTurnNumberMigration (v1 → v2)', () => {
+    it('is a SaveMigration with fromVersion 1', () => {
+        expect(checkpointTurnNumberMigration.fromVersion).toBe(1);
+    });
+
+    it('sets checkpoint.turnNumber to 0 when the v1 file lacks the field', () => {
+        // Simulate a v1 save file that predates turnNumber on BaseGameSnapshot.
+        const v1File = makeFileAtVersion(1);
+        // Cast to unknown so we can delete the field that did not exist in v1.
+        const checkpointWithoutTurnNumber = { ...v1File.checkpoint } as Record<string, unknown>;
+        delete checkpointWithoutTurnNumber['turnNumber'];
+        const legacyFile = {
+            ...v1File,
+            checkpoint: checkpointWithoutTurnNumber,
+        } as unknown as SaveFile;
+
+        const upgraded = checkpointTurnNumberMigration.apply(legacyFile);
+
+        expect((upgraded.checkpoint as unknown as Record<string, unknown>)['turnNumber']).toBe(0);
+    });
+
+    it('preserves an existing checkpoint.turnNumber when the field is already present', () => {
+        const v1FileWithTurnNumber = makeFileAtVersion(1);
+        // Already has turnNumber: 0 in the fixture.
+        const upgraded = checkpointTurnNumberMigration.apply(v1FileWithTurnNumber);
+
+        expect((upgraded.checkpoint as unknown as Record<string, unknown>)['turnNumber']).toBe(0);
+    });
+
+    it('does not mutate the input file', () => {
+        const v1File = makeFileAtVersion(1);
+        const originalCheckpoint = v1File.checkpoint;
+
+        checkpointTurnNumberMigration.apply(v1File);
+
+        expect(v1File.checkpoint).toBe(originalCheckpoint);
+    });
+
+    it('SaveMigrator applies the migration: v1 file without turnNumber is upgraded to v2 with turnNumber 0', () => {
+        const migrator = new SaveMigrator();
+        migrator.register(checkpointTurnNumberMigration);
+
+        const v1File = makeFileAtVersion(1);
+        const checkpointWithoutTurnNumber = { ...v1File.checkpoint } as Record<string, unknown>;
+        delete checkpointWithoutTurnNumber['turnNumber'];
+        const legacyFile = {
+            ...v1File,
+            checkpoint: checkpointWithoutTurnNumber,
+        } as unknown as SaveFile;
+
+        const result = migrator.migrate(legacyFile);
+
+        expect(result.header.schemaVersion).toBe(2);
+        expect((result.checkpoint as unknown as Record<string, unknown>)['turnNumber']).toBe(0);
     });
 });
 
