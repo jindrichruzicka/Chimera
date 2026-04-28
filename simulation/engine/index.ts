@@ -10,6 +10,7 @@
  *   - T5 (§4.7): ActionPipeline, StateReducer, StaleActionError,
  *                ActionSchemaError, ActionUnauthorizedError, RecursiveDispatchError,
  *                MAX_NESTED_DISPATCH
+ *   - F16 (§4.5): UndoPolicy, DEFAULT_UNDO_POLICY
  */
 
 export type {
@@ -74,3 +75,6 @@ export {
     RecursiveDispatchError,
     MAX_NESTED_DISPATCH,
 } from './ActionPipeline.js';
+
+export type { UndoPolicy } from './UndoPolicy.js';
+export { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
