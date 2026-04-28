@@ -340,10 +340,20 @@ describe('SimulationHostRole and SimulationClientRole', () => {
 describe('UndoContext', () => {
     it('can be constructed with an undoManager stub', () => {
         const pid = toPlayerId('p1');
+        const snap: BaseGameSnapshot = {
+            tick: 0,
+            seed: 1,
+            players: {},
+            entities: {},
+            phase: 'test' as GamePhase,
+            events: [],
+        };
         const ctx: UndoContext = {
             undoManager: {
                 canUndo: (_playerId) => false,
                 canRedo: (_playerId) => false,
+                undo: (_playerId) => snap,
+                redo: (_playerId) => snap,
             },
         };
         expect(ctx.undoManager?.canUndo(pid)).toBe(false);
@@ -357,10 +367,20 @@ describe('UndoContext', () => {
 
     it('undoManager.canUndo and canRedo accept PlayerId and return boolean', () => {
         const pid = toPlayerId('p2');
+        const snap: BaseGameSnapshot = {
+            tick: 0,
+            seed: 1,
+            players: {},
+            entities: {},
+            phase: 'test' as GamePhase,
+            events: [],
+        };
         const ctx: UndoContext = {
             undoManager: {
                 canUndo: (id) => id === toPlayerId('p2'),
                 canRedo: (_id) => true,
+                undo: (_playerId) => snap,
+                redo: (_playerId) => snap,
             },
         };
         expect(ctx.undoManager?.canUndo(pid)).toBe(true);
@@ -513,9 +533,22 @@ describe('PipelineContext', () => {
 
     it('can be constructed with all sub-context fields present', () => {
         const db = {} as ContentDatabase;
+        const snap: BaseGameSnapshot = {
+            tick: 0,
+            seed: 1,
+            players: {},
+            entities: {},
+            phase: 'test' as GamePhase,
+            events: [],
+        };
         const ctx: PipelineContext = {
             db,
-            undoManager: { canUndo: () => false, canRedo: () => false },
+            undoManager: {
+                canUndo: () => false,
+                canRedo: () => false,
+                undo: () => snap,
+                redo: () => snap,
+            },
             history: { append: () => undefined },
             broadcast: () => undefined,
             debugObserver: () => undefined,
@@ -537,8 +570,21 @@ describe('PipelineContext', () => {
     });
 
     it('is structurally assignable to UndoContext', () => {
+        const snap: BaseGameSnapshot = {
+            tick: 0,
+            seed: 1,
+            players: {},
+            entities: {},
+            phase: 'test' as GamePhase,
+            events: [],
+        };
         const pipelineCtx: PipelineContext = {
-            undoManager: { canUndo: () => true, canRedo: () => false },
+            undoManager: {
+                canUndo: () => true,
+                canRedo: () => false,
+                undo: () => snap,
+                redo: () => snap,
+            },
         };
         const undoCtx: UndoContext = pipelineCtx;
         expect(undoCtx.undoManager?.canUndo(toPlayerId('p1'))).toBe(true);

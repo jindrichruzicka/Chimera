@@ -114,31 +114,30 @@ export interface BaseGameSnapshot {
 /**
  * Narrow context for pipeline stages that need undo/redo awareness.
  *
- * Full `UndoManager` implementation lands in F16. This interface carries the
- * minimal canUndo/canRedo query contract so that Stage 3 (intercept) can
- * check undo eligibility without depending on the full `UndoManager` class.
+ * Stage 3 (intercept) reads `undoManager` to call `undo()` / `redo()` and
+ * to check eligibility via `canUndo` / `canRedo`. Game code receives only
+ * `ReduceContext.undoManager` which exposes the narrower query-only surface.
  *
  * Invariant #12: each pipeline stage receives only the context it needs.
  */
 export interface UndoContext {
-    /** Stub shape; full UndoManager lands in F16. */
     readonly undoManager?: {
         canUndo(playerId: PlayerId): boolean;
         canRedo(playerId: PlayerId): boolean;
+        undo(playerId: PlayerId, steps?: number): BaseGameSnapshot;
+        redo(playerId: PlayerId, steps?: number): BaseGameSnapshot;
     };
 }
 
 /**
  * Narrow context for pipeline stages that append to action history.
  *
- * Full `ActionHistory` implementation (with TurnMemento-bounded pruning)
- * lands in F16. This stub allows Stage 6 (record) to append entries
- * without pulling in the full history subsystem.
+ * Stage 6 (record) uses this to append `ActionHistoryEntry`-shaped objects
+ * so the history subsystem can reconstruct the action sequence for undo/redo.
  *
  * Invariant #12: each pipeline stage receives only the context it needs.
  */
 export interface HistoryContext {
-    /** Stub shape; full ActionHistory lands in F16. */
     readonly history?: {
         append(entry: {
             readonly tickApplied: number;

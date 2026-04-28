@@ -130,10 +130,10 @@ export class RecursiveDispatchError extends Error {
  * Stage order (immutable — invariant #2):
  *   1. Tick validation     — envelope.tick must equal snapshot.tick; throws StaleActionError.
  *   2. Schema validation   — def.parsePayload(); throws ActionSchemaError.
- *   3. Undo/redo intercept — no-op stub (F16).
+ *   3. Undo/redo intercept — engine:undo/redo are short-circuited via UndoManager (F16).
  *   4. Authorization       — def.validate(); throws ActionUnauthorizedError.
  *   5. Reduce              — def.reduce() via StateReducer; produces nextState.
- *   6. History record      — no-op stub (F16).
+ *   6. History record      — appends ActionEnvelope to HistoryContext (F16).
  *   7. Snapshot broadcast  — fires only when nextState !== snapshot (F26).
  *
  * Constructor:
@@ -192,10 +192,50 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             action.payload,
         );
 
-        // ── Stage 3 — undo/redo intercept (no-op stub) ────────────────────
-        // TODO(F16): intercept engine:undo / engine:redo via UndoManager.
-        //            Short-circuit here and return the undo/redo state directly
-        //            without reaching Stage 5.
+        // ── Stage 3 — undo/redo intercept ────────────────────────────────────
+        // When the action is engine:undo or engine:redo and an UndoManager is
+        // present, Stage 3 short-circuits Stages 4–5. The reconstructed state is
+        // returned directly after recording in history (Stage 6 equivalent) and
+        // broadcasting to viewers (Stage 7).
+        //
+        // When undoManager is absent, the action falls through to Stage 4 and
+        // is handled as a normal EngineAction (Invariant #7).
+        if (
+            (action.type === 'engine:undo' || action.type === 'engine:redo') &&
+            this.#context?.undoManager !== undefined
+        ) {
+            const undoRedoPayload = parsedPayload as { readonly steps: number };
+            const { steps } = undoRedoPayload;
+            const undoManager = this.#context.undoManager;
+
+            const reconstructed: BaseGameSnapshot =
+                action.type === 'engine:undo'
+                    ? undoManager.undo(action.playerId, steps)
+                    : undoManager.redo(action.playerId, steps);
+
+            // Stage 6 equivalent — record undo/redo in history so it appears in replay.
+            this.#context.history?.append({
+                tickApplied: snapshot.tick,
+                turnNumber: snapshot.tick,
+                action,
+            });
+
+            // Stage 7 — broadcast reconstructed snapshot to all viewers.
+            if (reconstructed !== snapshot) {
+                // Safety: `reconstructed` is a `BaseGameSnapshot` (plain data object).
+                // The double cast is required because `BaseGameSnapshot` lacks an index
+                // signature while `toViewerSnapshot` expects `Record<string, unknown>`.
+                // The same pattern is used at Stage 7 for `TState`. (TODO(F26))
+                const viewerSnapshot = toViewerSnapshot(
+                    reconstructed as unknown as Readonly<Record<string, unknown>>,
+                );
+                for (const pid of Object.keys(reconstructed.players)) {
+                    this.#context.broadcast?.(viewerSnapshot, pid as PlayerId);
+                }
+            }
+
+            return reconstructed as TState;
+        }
 
         // ── Stage 4 — authorization (validate) ────────────────────────────
         // Build the ReduceContext that validate() and reduce() both receive.
@@ -216,10 +256,15 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             tick: action.tick,
         });
 
-        // ── Stage 6 — history record (no-op stub) ─────────────────────────
-        // TODO(F16): append to ActionHistory via HistoryContext.
-        //            Record the ActionEnvelope and the pre/post snapshots for
-        //            undo/redo memento construction.
+        // ── Stage 6 — history record ────────────────────────────────────────
+        // Append the action envelope to the history so the undo/redo subsystem
+        // can reconstruct the action sequence for a turn. turnNumber uses
+        // snapshot.tick as a proxy until a dedicated field lands on BaseGameSnapshot.
+        this.#context?.history?.append({
+            tickApplied: snapshot.tick,
+            turnNumber: snapshot.tick,
+            action,
+        });
 
         // ── Stage 7 — snapshot broadcast ───────────────────────────────────
         // Policy: broadcast is skipped when nextState === snapshot (same reference).

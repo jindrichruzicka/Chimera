@@ -38,6 +38,7 @@ import type {
 } from './types.js';
 import { playerId as toPlayerId } from './types.js';
 import { createContentDatabase } from '../content/index.js';
+import { engineUndoDefinition, engineRedoDefinition } from './EngineActions.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────
 
@@ -679,5 +680,301 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         const db = createContentDatabase([]);
         const context: PipelineContext = { db };
         expect(() => new ActionPipeline(registry, { context })).not.toThrow();
+    });
+});
+
+// ─── Stage 3 — engine:undo / engine:redo interception (F16) ──────────────────
+
+describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager', () => {
+    const undoResultSnapshot = makeSnapshot(3);
+    const redoResultSnapshot = makeSnapshot(4);
+
+    const makeUndoManagerStub = (options?: {
+        undoResult?: BaseGameSnapshot;
+        redoResult?: BaseGameSnapshot;
+    }): NonNullable<PipelineContext['undoManager']> => ({
+        canUndo: vi.fn(() => true),
+        canRedo: vi.fn(() => true),
+        undo: vi.fn(
+            (_playerId: PlayerId, _steps?: number) => options?.undoResult ?? undoResultSnapshot,
+        ),
+        redo: vi.fn(
+            (_playerId: PlayerId, _steps?: number) => options?.redoResult ?? redoResultSnapshot,
+        ),
+    });
+
+    beforeEach(() => {
+        registry.registerEngineAction(engineUndoDefinition);
+        registry.registerEngineAction(engineRedoDefinition);
+    });
+
+    it('returns the snapshot from undoManager.undo() when action type is engine:undo', () => {
+        const expectedState = makeSnapshot(2);
+        const undoManager = makeUndoManagerStub({ undoResult: expectedState });
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0, 'engine:undo');
+        const result = p.process(snapshot, action);
+
+        expect(result).toBe(expectedState);
+    });
+
+    it('calls undoManager.undo() with the action playerId and parsed steps', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        const action: ActionEnvelope = {
+            type: 'engine:undo',
+            playerId: PID,
+            tick: 0,
+            payload: { steps: 2 },
+        };
+        p.process(snapshot, action);
+
+        expect(undoManager.undo).toHaveBeenCalledWith(PID, 2);
+    });
+
+    it('calls undoManager.undo() with steps=1 when payload has no steps field', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        const action: ActionEnvelope = {
+            type: 'engine:undo',
+            playerId: PID,
+            tick: 0,
+            payload: {},
+        };
+        p.process(snapshot, action);
+
+        expect(undoManager.undo).toHaveBeenCalledWith(PID, 1);
+    });
+
+    it('does NOT call validate() or reduce() when engine:undo is intercepted at Stage 3', () => {
+        const validateSpy = vi.fn(() => ({ ok: true as const }));
+        const reduceSpy = vi.fn((state: Readonly<BaseGameSnapshot>) => state);
+        const spyUndoDef: ActionDefinition<{ readonly steps: number }> = {
+            type: 'engine:undo',
+            parsePayload: (raw) => engineUndoDefinition.parsePayload(raw),
+            validate: validateSpy,
+            reduce: reduceSpy,
+        };
+        const spyRegistry = new ActionRegistry();
+        spyRegistry.registerEngineAction(spyUndoDef);
+
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(spyRegistry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0, 'engine:undo');
+        p.process(snapshot, action);
+
+        expect(validateSpy).not.toHaveBeenCalled();
+        expect(reduceSpy).not.toHaveBeenCalled();
+    });
+
+    it('appends the undo ActionEnvelope to history with tickApplied = snapshot.tick', () => {
+        const appendSpy = vi.fn();
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, {
+            context: { undoManager, history: { append: appendSpy } },
+        });
+
+        const snapshot = makeSnapshot(5);
+        const action = makeEnvelope(5, 'engine:undo');
+        p.process(snapshot, action);
+
+        expect(appendSpy).toHaveBeenCalledOnce();
+        const entry = appendSpy.mock.calls[0]![0];
+        expect(entry.tickApplied).toBe(5);
+        expect(entry.action).toBe(action);
+    });
+
+    it('broadcasts the reconstructed snapshot to all players when it differs from input', () => {
+        const reconstructed: BaseGameSnapshot = {
+            tick: 3,
+            seed: 1,
+            players: { [PID]: { id: PID } },
+            entities: {},
+            phase: 'test' as BaseGameSnapshot['phase'],
+            events: [],
+        };
+        const undoManager = makeUndoManagerStub({ undoResult: reconstructed });
+        const broadcastSpy = vi.fn();
+        const p = new ActionPipeline(registry, {
+            context: { undoManager, broadcast: broadcastSpy },
+        });
+
+        const snapshot = makeSnapshot(5); // different reference from reconstructed
+        const action = makeEnvelope(5, 'engine:undo');
+        p.process(snapshot, action);
+
+        expect(broadcastSpy).toHaveBeenCalledTimes(1);
+        expect(broadcastSpy).toHaveBeenCalledWith(expect.any(Object), PID);
+    });
+
+    it('does NOT broadcast when reconstructed snapshot is the same reference as input', () => {
+        const snapshot = makeSnapshot(5);
+        const undoManager = makeUndoManagerStub({ undoResult: snapshot });
+        const broadcastSpy = vi.fn();
+        const p = new ActionPipeline(registry, {
+            context: { undoManager, broadcast: broadcastSpy },
+        });
+
+        const action = makeEnvelope(5, 'engine:undo');
+        p.process(snapshot, action);
+
+        expect(broadcastSpy).not.toHaveBeenCalled();
+    });
+
+    it('falls through to Stage 4 when context.undoManager is absent', () => {
+        const p = new ActionPipeline(registry, { context: {} });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0, 'engine:undo');
+        // engineUndoDefinition.validate checks canUndo via ctx.undoManager — absent so ok: true
+        // engineUndoDefinition.reduce returns snapshot unchanged
+        const result = p.process(snapshot, action);
+
+        expect(result).toBe(snapshot);
+    });
+
+    it('falls through to Stage 4 when no context is provided at all', () => {
+        const p = new ActionPipeline(registry);
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0, 'engine:undo');
+        const result = p.process(snapshot, action);
+
+        expect(result).toBe(snapshot);
+    });
+
+    it('returns the snapshot from undoManager.redo() when action type is engine:redo', () => {
+        const expectedState = makeSnapshot(7);
+        const undoManager = makeUndoManagerStub({ redoResult: expectedState });
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0, 'engine:redo');
+        const result = p.process(snapshot, action);
+
+        expect(result).toBe(expectedState);
+    });
+
+    it('calls undoManager.redo() with the action playerId and parsed steps', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        const action: ActionEnvelope = {
+            type: 'engine:redo',
+            playerId: PID,
+            tick: 0,
+            payload: { steps: 3 },
+        };
+        p.process(snapshot, action);
+
+        expect(undoManager.redo).toHaveBeenCalledWith(PID, 3);
+    });
+
+    it('does NOT call validate() or reduce() when engine:redo is intercepted at Stage 3', () => {
+        const validateSpy = vi.fn(() => ({ ok: true as const }));
+        const reduceSpy = vi.fn((state: Readonly<BaseGameSnapshot>) => state);
+        const spyRedoDef: ActionDefinition<{ readonly steps: number }> = {
+            type: 'engine:redo',
+            parsePayload: (raw) => engineRedoDefinition.parsePayload(raw),
+            validate: validateSpy,
+            reduce: reduceSpy,
+        };
+        const spyRegistry = new ActionRegistry();
+        spyRegistry.registerEngineAction(spyRedoDef);
+
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(spyRegistry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0, 'engine:redo');
+        p.process(snapshot, action);
+
+        expect(validateSpy).not.toHaveBeenCalled();
+        expect(reduceSpy).not.toHaveBeenCalled();
+    });
+
+    it('appends the redo ActionEnvelope to history with tickApplied = snapshot.tick', () => {
+        const appendSpy = vi.fn();
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, {
+            context: { undoManager, history: { append: appendSpy } },
+        });
+
+        const snapshot = makeSnapshot(7);
+        const action = makeEnvelope(7, 'engine:redo');
+        p.process(snapshot, action);
+
+        expect(appendSpy).toHaveBeenCalledOnce();
+        const entry = appendSpy.mock.calls[0]![0];
+        expect(entry.tickApplied).toBe(7);
+        expect(entry.action).toBe(action);
+    });
+});
+
+// ─── Stage 6 — history record for normal actions (F16) ───────────────────────
+
+describe('ActionPipeline — Stage 6: history record for normal actions', () => {
+    it('appends the ActionEnvelope to history after reducing a normal action', () => {
+        const appendSpy = vi.fn();
+        const p = new ActionPipeline(registry, {
+            context: { history: { append: appendSpy } },
+        });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0);
+        p.process(snapshot, action);
+
+        expect(appendSpy).toHaveBeenCalledOnce();
+    });
+
+    it('passes tickApplied equal to snapshot.tick to history.append', () => {
+        const appendSpy = vi.fn();
+        const p = new ActionPipeline(registry, {
+            context: { history: { append: appendSpy } },
+        });
+
+        const snapshot = makeSnapshot(9);
+        const action = makeEnvelope(9);
+        p.process(snapshot, action);
+
+        expect(appendSpy.mock.calls[0]![0].tickApplied).toBe(9);
+    });
+
+    it('passes the original ActionEnvelope to history.append', () => {
+        const appendSpy = vi.fn();
+        const p = new ActionPipeline(registry, {
+            context: { history: { append: appendSpy } },
+        });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0);
+        p.process(snapshot, action);
+
+        expect(appendSpy.mock.calls[0]![0].action).toBe(action);
+    });
+
+    it('silently skips history record when context.history is absent', () => {
+        const p = new ActionPipeline(registry, { context: {} });
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0);
+        expect(() => p.process(snapshot, action)).not.toThrow();
+    });
+
+    it('silently skips history record when no context is provided', () => {
+        const p = new ActionPipeline(registry);
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0);
+        expect(() => p.process(snapshot, action)).not.toThrow();
     });
 });
