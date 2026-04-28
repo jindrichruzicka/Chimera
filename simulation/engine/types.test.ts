@@ -354,6 +354,8 @@ describe('UndoContext', () => {
                 canRedo: (_playerId) => false,
                 undo: (_playerId) => snap,
                 redo: (_playerId) => snap,
+                clearUndoHistory: (_playerId) => undefined,
+                saveTurnMemento: (_state, _playerId) => undefined,
             },
         };
         expect(ctx.undoManager?.canUndo(pid)).toBe(false);
@@ -381,6 +383,8 @@ describe('UndoContext', () => {
                 canRedo: (_id) => true,
                 undo: (_playerId) => snap,
                 redo: (_playerId) => snap,
+                clearUndoHistory: (_playerId) => undefined,
+                saveTurnMemento: (_state, _playerId) => undefined,
             },
         };
         expect(ctx.undoManager?.canUndo(pid)).toBe(true);
@@ -398,6 +402,7 @@ describe('HistoryContext', () => {
                 append: (entry) => {
                     appended.push(entry);
                 },
+                pruneTo: (_cutoff) => undefined,
             },
         };
         const action: ActionEnvelope = {
@@ -423,6 +428,7 @@ describe('HistoryContext', () => {
                 append: (entry) => {
                     received = entry;
                 },
+                pruneTo: (_cutoff) => undefined,
             },
         };
         const action: ActionEnvelope = {
@@ -548,8 +554,10 @@ describe('PipelineContext', () => {
                 canRedo: () => false,
                 undo: () => snap,
                 redo: () => snap,
+                clearUndoHistory: () => undefined,
+                saveTurnMemento: () => undefined,
             },
-            history: { append: () => undefined },
+            history: { append: () => undefined, pruneTo: () => undefined },
             broadcast: () => undefined,
             debugObserver: () => undefined,
         };
@@ -584,6 +592,8 @@ describe('PipelineContext', () => {
                 canRedo: () => false,
                 undo: () => snap,
                 redo: () => snap,
+                clearUndoHistory: () => undefined,
+                saveTurnMemento: () => undefined,
             },
         };
         const undoCtx: UndoContext = pipelineCtx;
@@ -593,7 +603,7 @@ describe('PipelineContext', () => {
     it('is structurally assignable to HistoryContext', () => {
         const appended: unknown[] = [];
         const pipelineCtx: PipelineContext = {
-            history: { append: (e) => appended.push(e) },
+            history: { append: (e) => appended.push(e), pruneTo: () => undefined },
         };
         const histCtx: HistoryContext = pipelineCtx;
         const action: ActionEnvelope = {

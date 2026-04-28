@@ -28,6 +28,7 @@ Run [check-and-merge.sh](./scripts/check-and-merge.sh) which performs the follow
 4. **No downmerged main commits** — the branch must not contain merge commits that brought `main` back into it. Rebase, never merge-down.
 5. **First commit has a body** — the oldest commit on the branch (relative to `main`) must have a non-empty commit body describing what was done and why.
 6. **All subsequent commits are `fixup!` commits** — every commit after the first must start with `fixup!` in the subject line.
+7. **Pre-merge gate is green** — `pnpm format:check`, `pnpm lint`, `pnpm typecheck`, and `pnpm test` must all exit `0` against the current branch state.
 
 If **any** check fails: print all problems, exit non-zero, and **do not touch `main`**.
 

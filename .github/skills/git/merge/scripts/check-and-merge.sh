@@ -106,6 +106,39 @@ fi
 info "All checks passed."
 echo
 
+# ─── 8b. Pre-merge gate: format / lint / typecheck / tests ────────────────────
+# Catches regressions before they reach main. A green local checkout is not
+# sufficient because previous merges may have introduced drift; we re-run the
+# full gate against the current branch state. If any check fails the merge is
+# aborted with the same severity as a structural problem above.
+info "Running pre-merge gate (format:check, lint, typecheck, test)..."
+GATE_FAILED=()
+run_gate_step() {
+  local label="$1"; shift
+  if ! "$@" >/dev/null 2>&1; then
+    GATE_FAILED+=("$label")
+  fi
+}
+run_gate_step "pnpm format:check" pnpm format:check
+run_gate_step "pnpm lint"         pnpm lint
+run_gate_step "pnpm typecheck"    pnpm typecheck
+run_gate_step "pnpm test"         pnpm test
+
+if [[ ${#GATE_FAILED[@]} -gt 0 ]]; then
+  echo
+  error "Pre-merge gate failed:"
+  for step in "${GATE_FAILED[@]}"; do
+    echo -e "  ${RED}✗${RESET} ${step}"
+  done
+  echo
+  warn "Run the failing command manually to see the full output, fix the issues,"
+  warn "commit a fixup, and re-run this script."
+  exit 1
+fi
+
+info "Pre-merge gate passed."
+echo
+
 # ─── 9. Autosquash interactive rebase onto main ───────────────────────────────
 info "Rebasing '${CURRENT}' onto 'origin/${MAIN}' (autosquash)..."
 # GIT_SEQUENCE_EDITOR=true skips the interactive editor entirely when autosquash

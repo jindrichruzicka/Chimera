@@ -38,7 +38,11 @@ import type {
 } from './types.js';
 import { playerId as toPlayerId } from './types.js';
 import { createContentDatabase } from '../content/index.js';
-import { engineUndoDefinition, engineRedoDefinition } from './EngineActions.js';
+import {
+    engineUndoDefinition,
+    engineRedoDefinition,
+    engineEndTurnDefinition,
+} from './EngineActions.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────
 
@@ -706,6 +710,8 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
         redo: vi.fn(
             (_playerId: PlayerId, _steps?: number) => options?.redoResult ?? redoResultSnapshot,
         ),
+        clearUndoHistory: vi.fn(),
+        saveTurnMemento: vi.fn(),
     });
 
     beforeEach(() => {
@@ -784,7 +790,7 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
         const appendSpy = vi.fn();
         const undoManager = makeUndoManagerStub();
         const p = new ActionPipeline(registry, {
-            context: { undoManager, history: { append: appendSpy } },
+            context: { undoManager, history: { append: appendSpy, pruneTo: vi.fn() } },
         });
 
         const snapshot = makeSnapshot(5);
@@ -911,7 +917,7 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
         const appendSpy = vi.fn();
         const undoManager = makeUndoManagerStub();
         const p = new ActionPipeline(registry, {
-            context: { undoManager, history: { append: appendSpy } },
+            context: { undoManager, history: { append: appendSpy, pruneTo: vi.fn() } },
         });
 
         const snapshot = makeSnapshot(7);
@@ -931,7 +937,7 @@ describe('ActionPipeline — Stage 6: history record for normal actions', () => 
     it('appends the ActionEnvelope to history after reducing a normal action', () => {
         const appendSpy = vi.fn();
         const p = new ActionPipeline(registry, {
-            context: { history: { append: appendSpy } },
+            context: { history: { append: appendSpy, pruneTo: vi.fn() } },
         });
 
         const snapshot = makeSnapshot(0);
@@ -944,7 +950,7 @@ describe('ActionPipeline — Stage 6: history record for normal actions', () => 
     it('passes tickApplied equal to snapshot.tick to history.append', () => {
         const appendSpy = vi.fn();
         const p = new ActionPipeline(registry, {
-            context: { history: { append: appendSpy } },
+            context: { history: { append: appendSpy, pruneTo: vi.fn() } },
         });
 
         const snapshot = makeSnapshot(9);
@@ -957,7 +963,7 @@ describe('ActionPipeline — Stage 6: history record for normal actions', () => 
     it('passes the original ActionEnvelope to history.append', () => {
         const appendSpy = vi.fn();
         const p = new ActionPipeline(registry, {
-            context: { history: { append: appendSpy } },
+            context: { history: { append: appendSpy, pruneTo: vi.fn() } },
         });
 
         const snapshot = makeSnapshot(0);
@@ -1025,6 +1031,8 @@ describe('ActionPipeline — Stage 7: undoMeta injected into broadcast snapshots
             (_playerId: PlayerId, _steps?: number) =>
                 options?.redoResult ?? makeSnapshotWithPlayers(4, [PID]),
         ),
+        clearUndoHistory: vi.fn(),
+        saveTurnMemento: vi.fn(),
     });
 
     beforeEach(() => {
@@ -1237,6 +1245,7 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         undo: vi.fn(),
         redo: vi.fn(),
         clearUndoHistory: vi.fn(),
+        saveTurnMemento: vi.fn(),
     });
 
     beforeEach(() => {
@@ -1283,6 +1292,7 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
             clearUndoHistory: vi.fn(() => {
                 callOrder.push('clearUndoHistory');
             }),
+            saveTurnMemento: vi.fn(),
         };
         const p = new ActionPipeline(registry, {
             context: {
@@ -1300,5 +1310,70 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         p.process(snapshot, makeEnvelope(0, 'engine:end_turn'));
 
         expect(callOrder).toEqual(['broadcast', 'clearUndoHistory']);
+    });
+
+    it('calls history.pruneTo(snapshot.tick - TURN_MEMENTO_RETENTION) after engine:end_turn so action history stays bounded', () => {
+        const pruneSpy = vi.fn();
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, {
+            context: {
+                undoManager,
+                history: { append: vi.fn(), pruneTo: pruneSpy },
+            },
+        });
+
+        // Process a couple of normal actions so history has entries to prune,
+        // then end the turn and verify pruneTo is called with the documented cutoff.
+        const snapshot = makeSnapshot(7);
+        p.process(snapshot, makeEnvelope(7, 'engine:end_turn'));
+
+        // tickAtTurnStart proxy uses snapshot.tick; cutoff matches the architecture
+        // documentation in TURN_MEMENTO_RETENTION (= 4).
+        expect(pruneSpy).toHaveBeenCalledExactlyOnceWith(7 - 4);
+    });
+
+    it('does NOT call pruneTo when history is absent', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0);
+        expect(() => p.process(snapshot, makeEnvelope(0, 'engine:end_turn'))).not.toThrow();
+    });
+
+    it('saves a turn memento for the new active player when state.turnClock advances', () => {
+        // Use the real engine:end_turn definition so turnClock advances correctly.
+        const realRegistry = new ActionRegistry();
+        realRegistry.registerEngineAction(engineEndTurnDefinition);
+
+        const PID2 = toPlayerId('p2');
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(realRegistry, { context: { undoManager } });
+
+        const snapshot: BaseGameSnapshot = {
+            ...makeSnapshot(0),
+            players: { [PID]: { id: PID }, [PID2]: { id: PID2 } },
+            turnClock: { activePlayerId: PID, deadlineMs: 30_000 },
+        };
+        p.process(snapshot, makeEnvelope(0, 'engine:end_turn'));
+
+        // Memento captures the post-end_turn snapshot for the new active player (p2).
+        expect(undoManager.saveTurnMemento).toHaveBeenCalledOnce();
+        const [savedState, savedPid] = (
+            undoManager.saveTurnMemento as unknown as {
+                mock: { calls: [BaseGameSnapshot, PlayerId][] };
+            }
+        ).mock.calls[0]!;
+        expect(savedPid).toBe(PID2);
+        expect(savedState.turnClock?.activePlayerId).toBe(PID2);
+    });
+
+    it('does NOT call saveTurnMemento when state.turnClock is absent (no active-player concept)', () => {
+        const undoManager = makeUndoManagerStub();
+        const p = new ActionPipeline(registry, { context: { undoManager } });
+
+        const snapshot = makeSnapshot(0); // no turnClock
+        p.process(snapshot, makeEnvelope(0, 'engine:end_turn'));
+
+        expect(undoManager.saveTurnMemento).not.toHaveBeenCalled();
     });
 });

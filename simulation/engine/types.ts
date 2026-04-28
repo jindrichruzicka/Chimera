@@ -115,8 +115,11 @@ export interface BaseGameSnapshot {
  * Narrow context for pipeline stages that need undo/redo awareness.
  *
  * Stage 3 (intercept) reads `undoManager` to call `undo()` / `redo()` and
- * to check eligibility via `canUndo` / `canRedo`. Game code receives only
- * `ReduceContext.undoManager` which exposes the narrower query-only surface.
+ * to check eligibility via `canUndo` / `canRedo`. The post-Stage-7
+ * turn-lifecycle hook reads `clearUndoHistory` (after `engine:end_turn`) and
+ * `saveTurnMemento` (for the new active player when `state.turnClock` is
+ * configured). Game code receives only `ReduceContext.undoManager` which
+ * exposes the narrower query-only surface (`canUndo` / `canRedo`).
  *
  * Invariant #12: each pipeline stage receives only the context it needs.
  */
@@ -126,6 +129,19 @@ export interface UndoContext {
         canRedo(playerId: PlayerId): boolean;
         undo(playerId: PlayerId, steps?: number): BaseGameSnapshot;
         redo(playerId: PlayerId, steps?: number): BaseGameSnapshot;
+        /**
+         * Clears the per-player undo state. Called by the pipeline after a
+         * successful `engine:end_turn` reduce to enforce the
+         * `crossTurnUndo: false` policy default.
+         */
+        clearUndoHistory(playerId: PlayerId): void;
+        /**
+         * Captures a turn-start memento for the supplied state and player.
+         * Called by the pipeline after `engine:end_turn` advances
+         * `state.turnClock.activePlayerId` so the new active player has a
+         * reconstruction baseline. Skipped when `state.turnClock` is absent.
+         */
+        saveTurnMemento(state: BaseGameSnapshot, playerId: PlayerId): void;
     };
 }
 
@@ -134,6 +150,10 @@ export interface UndoContext {
  *
  * Stage 6 (record) uses this to append `ActionHistoryEntry`-shaped objects
  * so the history subsystem can reconstruct the action sequence for undo/redo.
+ * The post-Stage-7 turn-lifecycle hook uses `pruneTo` (after `engine:end_turn`)
+ * to evict entries older than the retention window so the bounded ring of
+ * `TURN_MEMENTO_RETENTION` turns is enforced in production without requiring
+ * a host wrapper.
  *
  * Invariant #12: each pipeline stage receives only the context it needs.
  */
@@ -144,6 +164,13 @@ export interface HistoryContext {
             readonly turnNumber: number;
             readonly action: ActionEnvelope;
         }): void;
+        /**
+         * Removes all entries whose `turnNumber` is strictly less than
+         * `cutoff`. The pipeline supplies
+         * `snapshot.tick - TURN_MEMENTO_RETENTION` as the cutoff after a
+         * successful `engine:end_turn` reduce.
+         */
+        pruneTo(cutoff: number): void;
     };
 }
 

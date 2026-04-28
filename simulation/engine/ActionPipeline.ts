@@ -31,6 +31,7 @@ import { toViewerSnapshot } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { createRng } from './DeterministicRng.js';
 import { StateReducer } from './StateReducer.js';
+import { TURN_MEMENTO_RETENTION } from './UndoManager.js';
 export { ActionSchemaError, StateReducer } from './StateReducer.js';
 
 // ─── Engine constant ──────────────────────────────────────────────────────────
@@ -291,18 +292,32 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             }
         }
 
-        // ── Post-Stage-5 turn-lifecycle hook ───────────────────────────────
-        // After a successful `engine:end_turn` reduce, clear the player's undo
-        // history so the `crossTurnUndo: false` policy default holds in
-        // production. This must run AFTER Stage 7 so the broadcast snapshot
-        // still carries the player's pre-clear `undoMeta` for that final tick.
-        //
-        // `saveTurnMemento` for the next active player is NOT performed here —
-        // it depends on `state.turnClock` semantics that the host may extend
-        // (e.g. simultaneous-turn games) and therefore belongs in the host
-        // wiring layer, not the generic pipeline.
-        if (action.type === 'engine:end_turn' && this.#context?.undoManager !== undefined) {
-            this.#context.undoManager.clearUndoHistory(action.playerId);
+        // ── Post-Stage-7 turn-lifecycle hook ───────────────────────────────
+        // After a successful `engine:end_turn` reduce we must:
+        //   1. Clear the prior active player's undo history so the
+        //      `crossTurnUndo: false` policy default holds in production.
+        //   2. Record a turn memento for the NEW active player so the next
+        //      turn has a baseline to undo back to (host wiring — WARN-1).
+        //   3. Prune the bounded action history to `TURN_MEMENTO_RETENTION`
+        //      turns of retention so memory stays bounded under long sessions.
+        // All of this runs AFTER Stage 7 so the broadcast snapshot still
+        // carries the player's pre-clear `undoMeta` for the final tick.
+        if (action.type === 'engine:end_turn') {
+            this.#context?.undoManager?.clearUndoHistory(action.playerId);
+
+            // Save a memento for the new active player whenever turnClock
+            // advanced (i.e. the action actually changed state). Games that
+            // do not configure `turnClock` opt out of memento bookkeeping.
+            if (nextState !== snapshot && nextState.turnClock !== undefined) {
+                this.#context?.undoManager?.saveTurnMemento(
+                    nextState,
+                    nextState.turnClock.activePlayerId,
+                );
+            }
+
+            // Prune action history regardless of turnClock presence —
+            // history is a per-tick log and the bound applies uniformly.
+            this.#context?.history?.pruneTo(snapshot.tick - TURN_MEMENTO_RETENTION);
         }
 
         return nextState;
@@ -411,4 +426,4 @@ const NOOP_LOGGER: Logger = {
  * spread that injects `undoMeta`).
  */
 const toViewerRecord = (state: Readonly<BaseGameSnapshot>): Readonly<Record<string, unknown>> =>
-    state as unknown as Readonly<Record<string, unknown>>;
+    state;
