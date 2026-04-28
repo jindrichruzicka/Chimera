@@ -414,10 +414,19 @@ export const EngineActions: readonly ActionDefinition<object>[] = [
  * This is the ONLY caller of `registry.registerEngineAction()`. Game code
  * and renderer code must never call `registerEngineAction()` directly.
  *
+ * Generic over `TState extends BaseGameSnapshot` so that a concrete-snapshot
+ * registry (e.g. `ActionRegistry<TacticsSnapshot>`) can be passed without a
+ * cast at the call site (issue #38, §4.7).
+ *
  * @param registry - The `ActionRegistry` instance to populate.
  */
-export function registerEngineActions(registry: ActionRegistry): void {
+export function registerEngineActions<TState extends BaseGameSnapshot>(
+    registry: ActionRegistry<TState>,
+): void {
     for (const definition of EngineActions) {
-        registry.registerEngineAction(definition);
+        // @chimera-review: engine stubs operate only on BaseGameSnapshot fields and return state
+        // unchanged — safe to widen to ActionRegistry<TState extends BaseGameSnapshot>; cast
+        // localised here so no call site requires an unsafe assertion. §4.7 / invariant #2.
+        registry.registerEngineAction(definition as unknown as ActionDefinition<object, TState>);
     }
 }

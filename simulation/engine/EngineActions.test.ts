@@ -14,7 +14,7 @@
  *   - registry.has("engine:tick") returns true after registration
  */
 
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, expectTypeOf } from 'vitest';
 import { ActionRegistry } from './ActionRegistry.js';
 import {
     EngineActions,
@@ -853,5 +853,48 @@ describe('individual engine action definition named exports', () => {
         for (const def of individualDefs) {
             expect(EngineActions.some((d) => d === def)).toBe(true);
         }
+    });
+});
+
+// ─── registerEngineActions — generic TState constraint (issue #38) ─────────────
+
+/**
+ * Concrete snapshot subtype used only in the type-level test below.
+ * Represents what any game-specific snapshot (e.g. TacticsSnapshot) would look like.
+ */
+interface ConcreteSnapshot extends BaseGameSnapshot {
+    readonly extra: number;
+}
+
+describe('registerEngineActions — generic TState constraint (issue #38)', () => {
+    it('accepts an ActionRegistry<ConcreteSnapshot> without a cast (compile-time)', () => {
+        // This is a compile-time assertion: if the function signature is not generic,
+        // TypeScript would fail to compile this call.
+        // After the fix (generic signature), this must compile with zero cast.
+        const concreteRegistry = new ActionRegistry<ConcreteSnapshot>();
+        registerEngineActions(concreteRegistry);
+        expect(concreteRegistry.has('engine:tick')).toBe(true);
+        expect(concreteRegistry.has('engine:end_turn')).toBe(true);
+    });
+
+    it('the first parameter type of registerEngineActions is ActionRegistry<TState> for any TState', () => {
+        // expectTypeOf confirms the inferred overload accepts a concrete subtype registry.
+        type ConcreteRegistry = ActionRegistry<ConcreteSnapshot>;
+        expectTypeOf(registerEngineActions<ConcreteSnapshot>)
+            .parameter(0)
+            .toEqualTypeOf<ConcreteRegistry>();
+    });
+
+    it('all seven engine actions are registered into a concrete-subtype registry', () => {
+        const concreteRegistry = new ActionRegistry<ConcreteSnapshot>();
+        registerEngineActions(concreteRegistry);
+        const types = concreteRegistry.registeredTypes();
+        expect(types).toContain('engine:tick');
+        expect(types).toContain('engine:end_turn');
+        expect(types).toContain('engine:save');
+        expect(types).toContain('engine:load');
+        expect(types).toContain('engine:undo');
+        expect(types).toContain('engine:redo');
+        expect(types).toContain('engine:sync_request');
     });
 });
