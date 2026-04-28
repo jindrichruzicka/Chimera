@@ -27,7 +27,7 @@
 
 import { describe, it, expect } from 'vitest';
 
-import { InMemoryMultiplayerProvider } from './in-memory/InMemoryMultiplayerProvider.js';
+import { InMemoryMultiplayerProvider } from './InMemoryMultiplayerProvider.js';
 import { SteamNetworkProvider } from './steam/SteamNetworkProvider.js';
 import { isBrowsable, playerId as toPlayerId } from './MultiplayerProvider.js';
 
