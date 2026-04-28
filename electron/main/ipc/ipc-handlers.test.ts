@@ -33,6 +33,8 @@ import {
     PROFILE_DIRECTORY_CHANGED_CHANNEL,
     PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
     PROFILE_GET_LOCAL_CHANNEL,
+    PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
+    PROFILE_SWITCH_SLOT_CHANNEL,
     PROFILE_UPDATE_LOCAL_CHANNEL,
     type GameHandlersIpcMain,
     type GameHandlerEvent,
@@ -1439,6 +1441,8 @@ describe('registerProfileHandlers', () => {
                 PROFILE_GET_LOCAL_CHANNEL,
                 PROFILE_UPDATE_LOCAL_CHANNEL,
                 PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
+                PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
+                PROFILE_SWITCH_SLOT_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(PROFILE_DIRECTORY_CHANGED_CHANNEL)).toBe(false);
@@ -1470,6 +1474,8 @@ describe('registerProfileHandlers', () => {
             updateLocal: vi
                 .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
                 .mockReturnValue(expectedProfile),
+            listLocalSlots: vi.fn(async () => []),
+            switchLocalSlot: vi.fn(async () => expectedProfile),
         };
         registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
 
@@ -1488,6 +1494,8 @@ describe('registerProfileHandlers', () => {
             updateLocal: vi
                 .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
                 .mockReturnValue(makeProfile({ displayName: 'Charlie' })),
+            listLocalSlots: vi.fn(async () => []),
+            switchLocalSlot: vi.fn(async () => makeProfile()),
         };
         registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
 
@@ -1508,6 +1516,8 @@ describe('registerProfileHandlers', () => {
             updateLocal: vi
                 .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
                 .mockReturnValue(makeProfile()),
+            listLocalSlots: vi.fn(async () => []),
+            switchLocalSlot: vi.fn(async () => makeProfile()),
         };
         registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
 
@@ -1574,6 +1584,99 @@ describe('registerProfileHandlers', () => {
         expect(handler).toBeDefined();
 
         const result = await Promise.resolve(handler?.({}, { displayName: 'Eve' }));
+        expect(result).toBeUndefined();
+    });
+
+    it('chimera:profile:list-local-slots returns empty array when no profileManager provided', async () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_LIST_LOCAL_SLOTS_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(handler?.({}));
+        expect(result).toStrictEqual([]);
+    });
+
+    it('chimera:profile:list-local-slots returns profileManager.listLocalSlots() when manager provided', async () => {
+        const stub = makeProfileIpcMainStub();
+        const slots = [
+            { localProfileId: 'local-a', displayName: 'Alice' },
+            { localProfileId: 'local-b', displayName: 'Bob' },
+        ];
+        const profileManager = {
+            currentAttestation: vi.fn<() => PlayerProfile>().mockReturnValue(makeProfile()),
+            updateLocal: vi
+                .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
+                .mockReturnValue(makeProfile()),
+            listLocalSlots: vi.fn(async () => slots),
+            switchLocalSlot: vi.fn(async () => makeProfile()),
+        };
+        registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
+
+        const handler = stub.handled.get(PROFILE_LIST_LOCAL_SLOTS_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const result = await Promise.resolve(handler?.({}));
+        expect(result).toStrictEqual(slots);
+        expect(profileManager.listLocalSlots).toHaveBeenCalledOnce();
+    });
+
+    it('chimera:profile:switch-slot registers an invoke handler', () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        expect(stub.handled.has(PROFILE_SWITCH_SLOT_CHANNEL)).toBe(true);
+    });
+
+    it('chimera:profile:switch-slot calls profileManager.switchLocalSlot with the provided id', async () => {
+        const stub = makeProfileIpcMainStub();
+        const expected = makeProfile({ displayName: 'Bob' });
+        const profileManager = {
+            currentAttestation: vi.fn<() => PlayerProfile>().mockReturnValue(expected),
+            updateLocal: vi
+                .fn<(patch: Partial<PlayerProfile>) => PlayerProfile>()
+                .mockReturnValue(expected),
+            listLocalSlots: vi.fn(async () => []),
+            switchLocalSlot: vi.fn(async (_id: string) => expected),
+        };
+        registerProfileHandlers({ ipcMain: stub.ipcMain, profileManager });
+
+        const handler = stub.handled.get(PROFILE_SWITCH_SLOT_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}, { localProfileId: 'local-b' }));
+
+        expect(profileManager.switchLocalSlot).toHaveBeenCalledOnce();
+        expect(profileManager.switchLocalSlot).toHaveBeenCalledWith('local-b');
+    });
+
+    it('chimera:profile:switch-slot rejects with IpcRequestValidationError when localProfileId is missing', () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_SWITCH_SLOT_CHANNEL);
+        expect(handler).toBeDefined();
+
+        expect(() => handler?.({}, {})).toThrow(IpcRequestValidationError);
+    });
+
+    it('chimera:profile:switch-slot rejects with IpcRequestValidationError when localProfileId is empty', () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_SWITCH_SLOT_CHANNEL);
+
+        expect(() => handler?.({}, { localProfileId: '' })).toThrow(IpcRequestValidationError);
+    });
+
+    it('chimera:profile:switch-slot is a no-op when no profileManager is provided', async () => {
+        const stub = makeProfileIpcMainStub();
+        registerProfileHandlers({ ipcMain: stub.ipcMain });
+
+        const handler = stub.handled.get(PROFILE_SWITCH_SLOT_CHANNEL);
+        const result = await Promise.resolve(handler?.({}, { localProfileId: 'local-a' }));
+
         expect(result).toBeUndefined();
     });
 });

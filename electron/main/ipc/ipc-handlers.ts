@@ -52,6 +52,8 @@ import {
     PROFILE_DIRECTORY_CHANGED_CHANNEL,
     PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
     PROFILE_GET_LOCAL_CHANNEL,
+    PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
+    PROFILE_SWITCH_SLOT_CHANNEL,
     PROFILE_UPDATE_LOCAL_CHANNEL,
 } from '../../preload/apis/profile-api.js';
 import type {
@@ -74,6 +76,7 @@ import {
     PlayerIdSchema,
     SaveRequestSchema,
     SlotIdSchema,
+    SwitchLocalSlotRequestSchema,
     UserSettingsPatchSchema,
     parseInvokeRequest,
 } from './ipc-schemas.js';
@@ -117,6 +120,8 @@ export {
     PROFILE_DIRECTORY_CHANGED_CHANNEL,
     PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
     PROFILE_GET_LOCAL_CHANNEL,
+    PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
+    PROFILE_SWITCH_SLOT_CHANNEL,
     PROFILE_UPDATE_LOCAL_CHANNEL,
 };
 
@@ -769,6 +774,12 @@ export interface ProfileManagerPort {
     currentAttestation(): PlayerProfile;
     /** Builds a candidate update (no disk write). Returns the candidate. */
     updateLocal(patch: Partial<Omit<PlayerProfile, 'localProfileId'>>): PlayerProfile;
+    /** Lists all local profile slots on this machine (pass-and-play §4.24). */
+    listLocalSlots(): Promise<
+        readonly { readonly localProfileId: string; readonly displayName: string }[]
+    >;
+    /** Switches the active local profile to the given slot (pass-and-play §4.24). */
+    switchLocalSlot(localProfileId: string): Promise<PlayerProfile>;
 }
 
 /**
@@ -833,6 +844,8 @@ export function registerProfileHandlers(options: RegisterProfileHandlersOptions)
             PROFILE_GET_LOCAL_CHANNEL,
             PROFILE_UPDATE_LOCAL_CHANNEL,
             PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
+            PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
+            PROFILE_SWITCH_SLOT_CHANNEL,
         ],
     });
 
@@ -861,5 +874,27 @@ export function registerProfileHandlers(options: RegisterProfileHandlersOptions)
         // No directory wired yet — return an empty record for the renderer's
         // getLobbyDirectory() contract.
         return {};
+    });
+
+    ipcMain.handle(PROFILE_LIST_LOCAL_SLOTS_CHANNEL, () => {
+        if (options.profileManager !== undefined) {
+            return options.profileManager.listLocalSlots();
+        }
+        // No manager wired yet — return an empty array so the renderer's
+        // Promise<readonly LocalProfileSlot[]> contract is honest.
+        return [];
+    });
+
+    ipcMain.handle(PROFILE_SWITCH_SLOT_CHANNEL, (_event, payload) => {
+        const { localProfileId } = parseInvokeRequest(
+            SwitchLocalSlotRequestSchema,
+            PROFILE_SWITCH_SLOT_CHANNEL,
+            payload,
+        );
+        if (options.profileManager !== undefined) {
+            return options.profileManager.switchLocalSlot(localProfileId);
+        }
+        // No manager wired yet — no-op; renderer's Promise<void> contract is honest.
+        return undefined;
     });
 }

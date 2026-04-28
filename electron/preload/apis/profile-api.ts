@@ -11,6 +11,7 @@
 
 import type {
     EngineProfile,
+    LocalProfileSlot,
     PlayerProfile,
     PlayerId,
     ProfileAPI,
@@ -20,6 +21,7 @@ import type { PushListenerPort } from '../shared/listener.js';
 import { subscribePush } from '../shared/listener.js';
 import {
     LobbyDirectorySchema,
+    LocalProfileSlotListSchema,
     PlayerProfileSchema,
     parseInvokeResponse,
 } from '../shared/schemas.js';
@@ -41,6 +43,12 @@ export const PROFILE_GET_LOBBY_DIRECTORY_CHANNEL = 'chimera:profile:get-lobby-di
  * whenever the lobby directory changes (player joins/leaves/updates profile).
  */
 export const PROFILE_DIRECTORY_CHANGED_CHANNEL = 'chimera:profile:directory-changed';
+
+/** `ipcRenderer.invoke` target for {@link ProfileAPI.listLocalSlots}. */
+export const PROFILE_LIST_LOCAL_SLOTS_CHANNEL = 'chimera:profile:list-local-slots';
+
+/** `ipcRenderer.invoke` target for {@link ProfileAPI.switchLocalSlot}. */
+export const PROFILE_SWITCH_SLOT_CHANNEL = 'chimera:profile:switch-slot';
 
 // ─── Port interface ───────────────────────────────────────────────────────────
 
@@ -97,6 +105,24 @@ export function createProfileApi(ipc: ProfileApiIpcPort): ProfileAPI {
                 PROFILE_DIRECTORY_CHANGED_CHANNEL,
                 listener,
             );
+        },
+
+        listLocalSlots(): Promise<readonly LocalProfileSlot[]> {
+            return ipc
+                .invoke(PROFILE_LIST_LOCAL_SLOTS_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(
+                        LocalProfileSlotListSchema,
+                        PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
+                        value,
+                    ),
+                );
+        },
+
+        switchLocalSlot(localProfileId: string): Promise<void> {
+            return ipc
+                .invoke(PROFILE_SWITCH_SLOT_CHANNEL, { localProfileId })
+                .then(() => undefined);
         },
     };
 }

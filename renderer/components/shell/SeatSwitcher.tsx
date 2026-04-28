@@ -1,17 +1,15 @@
 // renderer/components/shell/SeatSwitcher.tsx
 //
-// Pass-and-play seat switcher. Renders one button per local seat and invokes
-// the typed preload bridge to switch active seat.
+// Pass-and-play seat switcher. Renders one button per local profile slot and
+// calls profile.updateLocal() to attest the newly selected profile.
 
 import React from 'react';
-import { useLobbyUiStore } from '../../state/lobbyUiStore';
-import { useSeatSwitch } from './useSeatSwitch';
+import { useProfileSwitcher } from './useProfileSwitcher';
 
 export function SeatSwitcher() {
-    const localSeatIds = useLobbyUiStore((state) => state.localSeatIds);
-    const seatSwitchApi = useSeatSwitch();
+    const { slots, switchToProfile } = useProfileSwitcher();
 
-    if (localSeatIds.length <= 1) {
+    if (slots.length <= 1) {
         return null;
     }
 
@@ -19,16 +17,16 @@ export function SeatSwitcher() {
         <div data-testid="seat-switcher" style={{ marginBottom: '1rem' }}>
             <h2>Switch Seat</h2>
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                {localSeatIds.map((playerId) => (
+                {slots.map((slot) => (
                     <button
-                        key={playerId}
-                        data-testid={`seat-btn-${playerId}`}
+                        key={slot.localProfileId}
+                        data-testid={`seat-btn-${slot.localProfileId}`}
                         onClick={() => {
-                            void seatSwitchApi.switchSeat(playerId);
+                            void switchToProfile(slot.localProfileId);
                         }}
                         style={{ padding: '0.5rem 0.75rem' }}
                     >
-                        {playerId}
+                        {slot.displayName}
                     </button>
                 ))}
             </div>

@@ -25,6 +25,7 @@ import { z } from 'zod';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import type {
     ActionRejection,
+    LocalProfileSlot,
     LobbyInfo,
     PlayerProfile,
     ResolvedSettings,
@@ -188,3 +189,16 @@ export const PlayerProfileSchema = z.object({
  * `chimera:profile:get-lobby-directory`.
  */
 export const LobbyDirectorySchema = z.record(z.string(), PlayerProfileSchema);
+
+/**
+ * Schema for a single {@link LocalProfileSlot} entry returned by
+ * `chimera:profile:list-local-slots`.
+ */
+export const LocalProfileSlotSchema = z.object({
+    localProfileId: z.string(),
+    displayName: z.string(),
+});
+
+/** Schema for the array returned by `chimera:profile:list-local-slots`. */
+export const LocalProfileSlotListSchema: z.ZodType<readonly LocalProfileSlot[]> =
+    z.array(LocalProfileSlotSchema);

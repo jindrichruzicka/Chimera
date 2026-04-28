@@ -223,6 +223,15 @@ export interface EngineProfile {
  */
 export type PlayerProfile = EngineProfile;
 
+/**
+ * A lightweight entry returned by {@link ProfileAPI.listLocalSlots}.
+ * Used by `SeatSwitcher` to populate pass-and-play seat choices.
+ */
+export interface LocalProfileSlot {
+    readonly localProfileId: string;
+    readonly displayName: string;
+}
+
 /** F14 — Player Profiles and Directory (§4.24). */
 export interface ProfileAPI {
     /** Returns this machine's local player profile. */
@@ -230,6 +239,8 @@ export interface ProfileAPI {
     /**
      * Update this machine's local profile.
      * Mid-lobby updates use the attest-first flow (§4.24).
+     * The patch may not include `localProfileId` — the primary key is
+     * immutable. Use `switchLocalSlot()` to change the active local profile.
      */
     updateLocal(patch: Partial<EngineProfile>): Promise<void>;
     /** Returns all profiles known in the current lobby (keyed by PlayerId). */
@@ -241,6 +252,17 @@ export interface ProfileAPI {
     onDirectoryChanged(
         listener: (directory: Readonly<Record<PlayerId, PlayerProfile>>) => void,
     ): Unsubscribe;
+    /**
+     * List all local profile slots on this machine.
+     * Used by `SeatSwitcher` for pass-and-play multi-seat support (§4.24).
+     */
+    listLocalSlots(): Promise<readonly LocalProfileSlot[]>;
+    /**
+     * Switch the active local profile to the given slot.
+     * Used by `SeatSwitcher` — fires `chimera:profile:switch-slot` which
+     * calls `ProfileManager.switchLocalSlot()` on the main side (§4.24).
+     */
+    switchLocalSlot(localProfileId: string): Promise<void>;
 }
 
 /** Stub. Expanded in F44 — Replay System (§4.28). */

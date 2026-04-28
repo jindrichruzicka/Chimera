@@ -5,6 +5,10 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import LobbyPage from './page';
+import type {
+    LocalProfileSlot,
+    ProfileSwitcherApi,
+} from '../../components/shell/useProfileSwitcher';
 
 interface MockLobbyStoreState {
     readonly lobbyState: {
@@ -29,6 +33,15 @@ interface MockLobbyUiStoreState {
 let mockLocalSeatIds: readonly string[] = [];
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
+let mockProfileSlots: readonly LocalProfileSlot[] = [];
+const mockSwitchToProfile = vi.fn(async () => undefined);
+
+vi.mock('../../components/shell/useProfileSwitcher', () => ({
+    useProfileSwitcher: (): ProfileSwitcherApi => ({
+        slots: mockProfileSlots,
+        switchToProfile: mockSwitchToProfile,
+    }),
+}));
 
 vi.mock('../../state/lobbyStore', () => ({
     useLobbyStore: (selector: (state: MockLobbyStoreState) => unknown) =>
@@ -79,6 +92,8 @@ describe('LobbyPage pending actions', () => {
         mockLocalSeatIds = [];
         mockLocalPlayerId = null;
         mockLobbyState = null;
+        mockProfileSlots = [];
+        mockSwitchToProfile.mockReset();
 
         Object.defineProperty(window, '__chimera', {
             value: {
@@ -140,7 +155,10 @@ describe('LobbyPage pending actions', () => {
     });
 
     it('does not render SeatSwitcher outside an active session', () => {
-        mockLocalSeatIds = ['p1', 'p2'];
+        mockProfileSlots = [
+            { localProfileId: 'local-a', displayName: 'Alice' },
+            { localProfileId: 'local-b', displayName: 'Bob' },
+        ];
         mockLobbyState = null;
 
         render(<LobbyPage />);
@@ -148,8 +166,11 @@ describe('LobbyPage pending actions', () => {
         expect(screen.queryByTestId('seat-switcher')).toBeNull();
     });
 
-    it('renders SeatSwitcher when session exists and there is more than one local seat', () => {
-        mockLocalSeatIds = ['p1', 'p2'];
+    it('renders SeatSwitcher when session exists and there is more than one local slot', () => {
+        mockProfileSlots = [
+            { localProfileId: 'local-a', displayName: 'Alice' },
+            { localProfileId: 'local-b', displayName: 'Bob' },
+        ];
         mockLobbyState = {
             info: {
                 sessionId: 'session-1',
@@ -162,12 +183,12 @@ describe('LobbyPage pending actions', () => {
         render(<LobbyPage />);
 
         expect(screen.getByTestId('seat-switcher')).toBeTruthy();
-        expect(screen.getByTestId('seat-btn-p1')).toBeTruthy();
-        expect(screen.getByTestId('seat-btn-p2')).toBeTruthy();
+        expect(screen.getByTestId('seat-btn-local-a')).toBeTruthy();
+        expect(screen.getByTestId('seat-btn-local-b')).toBeTruthy();
     });
 
-    it('does not render SeatSwitcher when there is only one local seat', () => {
-        mockLocalSeatIds = ['p1'];
+    it('does not render SeatSwitcher when there is only one local slot', () => {
+        mockProfileSlots = [{ localProfileId: 'local-a', displayName: 'Alice' }];
 
         render(<LobbyPage />);
 

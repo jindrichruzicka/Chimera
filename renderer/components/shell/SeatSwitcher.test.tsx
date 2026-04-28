@@ -5,30 +5,22 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SeatSwitcher } from './SeatSwitcher';
+import type { LocalProfileSlot, ProfileSwitcherApi } from './useProfileSwitcher';
 
-const switchSeat = vi.fn(async () => undefined);
+const switchToProfile = vi.fn(async () => undefined);
+let mockSlots: readonly LocalProfileSlot[] = [];
 
-vi.mock('./useSeatSwitch', () => ({
-    useSeatSwitch: () => ({
-        switchSeat,
+vi.mock('./useProfileSwitcher', () => ({
+    useProfileSwitcher: (): ProfileSwitcherApi => ({
+        slots: mockSlots,
+        switchToProfile,
     }),
-}));
-
-interface MockLobbyStoreState {
-    readonly localSeatIds: readonly string[];
-}
-
-let mockLocalSeatIds: readonly string[] = [];
-
-vi.mock('../../state/lobbyUiStore', () => ({
-    useLobbyUiStore: (selector: (state: MockLobbyStoreState) => unknown) =>
-        selector({ localSeatIds: mockLocalSeatIds }),
 }));
 
 describe('SeatSwitcher', () => {
     beforeEach(() => {
-        mockLocalSeatIds = [];
-        switchSeat.mockReset();
+        mockSlots = [];
+        switchToProfile.mockReset();
     });
 
     afterEach(() => {
@@ -36,35 +28,58 @@ describe('SeatSwitcher', () => {
         vi.restoreAllMocks();
     });
 
-    it('renders one button per local seat', () => {
-        mockLocalSeatIds = ['p1', 'p2', 'p3'];
+    it('renders one button per local profile slot returned by listLocalSlots', () => {
+        mockSlots = [
+            { localProfileId: 'local-a', displayName: 'Alice' },
+            { localProfileId: 'local-b', displayName: 'Bob' },
+            { localProfileId: 'local-c', displayName: 'Charlie' },
+        ];
 
         render(<SeatSwitcher />);
 
         expect(screen.getByTestId('seat-switcher')).toBeTruthy();
-        expect(screen.getByTestId('seat-btn-p1')).toBeTruthy();
-        expect(screen.getByTestId('seat-btn-p2')).toBeTruthy();
-        expect(screen.getByTestId('seat-btn-p3')).toBeTruthy();
+        expect(screen.getByTestId('seat-btn-local-a')).toBeTruthy();
+        expect(screen.getByTestId('seat-btn-local-b')).toBeTruthy();
+        expect(screen.getByTestId('seat-btn-local-c')).toBeTruthy();
     });
 
-    it('calls useSeatSwitch().switchSeat with the selected playerId', () => {
-        mockLocalSeatIds = ['p1', 'p2'];
+    it('renders each slot button with its displayName', () => {
+        mockSlots = [
+            { localProfileId: 'local-a', displayName: 'Alice' },
+            { localProfileId: 'local-b', displayName: 'Bob' },
+        ];
 
         render(<SeatSwitcher />);
 
-        fireEvent.click(screen.getByTestId('seat-btn-p2'));
-
-        expect(switchSeat).toHaveBeenCalledWith('p2');
+        expect(screen.getByText('Alice')).toBeTruthy();
+        expect(screen.getByText('Bob')).toBeTruthy();
     });
 
-    it('does not render when there is one or fewer local seats', () => {
-        mockLocalSeatIds = ['p1'];
-        const rendered = render(<SeatSwitcher />);
-        expect(screen.queryByTestId('seat-switcher')).toBeNull();
+    it('calls switchToProfile with the selected localProfileId on click', () => {
+        mockSlots = [
+            { localProfileId: 'local-a', displayName: 'Alice' },
+            { localProfileId: 'local-b', displayName: 'Bob' },
+        ];
 
-        rendered.rerender(<SeatSwitcher />);
-        mockLocalSeatIds = [];
-        rendered.rerender(<SeatSwitcher />);
+        render(<SeatSwitcher />);
+
+        fireEvent.click(screen.getByTestId('seat-btn-local-b'));
+
+        expect(switchToProfile).toHaveBeenCalledWith('local-b');
+    });
+
+    it('does not render when only one local slot exists', () => {
+        mockSlots = [{ localProfileId: 'local-a', displayName: 'Alice' }];
+
+        render(<SeatSwitcher />);
+
+        expect(screen.queryByTestId('seat-switcher')).toBeNull();
+    });
+
+    it('does not render when there are no slots', () => {
+        mockSlots = [];
+
+        render(<SeatSwitcher />);
 
         expect(screen.queryByTestId('seat-switcher')).toBeNull();
     });

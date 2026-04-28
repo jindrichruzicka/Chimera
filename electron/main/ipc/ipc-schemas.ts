@@ -230,6 +230,14 @@ export const RendererLogEntrySchema = z.object({
 // ─── Profile domain schemas ───────────────────────────────────────────────────
 
 /**
+ * Schema for the `{ localProfileId: string }` payload accepted by
+ * `chimera:profile:switch-slot`.
+ */
+export const SwitchLocalSlotRequestSchema = z.object({
+    localProfileId: NonEmptyStringSchema,
+});
+
+/**
  * Zod schema for the {@link AvatarSource} discriminated union received in an
  * `updateLocal` patch payload. Mirrors the client-side `AvatarSourceSchema`
  * in `electron/preload/shared/schemas.ts` — defined independently here

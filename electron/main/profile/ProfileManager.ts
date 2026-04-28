@@ -162,4 +162,31 @@ export class ProfileManager {
     discardCandidate(): void {
         this.candidate = null;
     }
+
+    /**
+     * Lists all local profile slots available on this machine.
+     *
+     * Delegates directly to the repository — no candidate or current-profile
+     * state is involved.  Returns an empty array when the repository has no
+     * profiles yet.
+     */
+    listLocalSlots(): Promise<
+        readonly { readonly localProfileId: string; readonly displayName: string }[]
+    > {
+        return this.repository.listLocalSlots();
+    }
+
+    /**
+     * Loads the profile identified by `id` and activates it as the current
+     * profile (pass-and-play seat switch, §4.24).
+     *
+     * Identical to `getLocal` in effect — exists as a separate method so call
+     * sites that mean "switch seat" are distinguishable from call sites that
+     * mean "load profile on boot".
+     *
+     * Throws `ProfileNotFoundError` when the requested profile does not exist.
+     */
+    async switchLocalSlot(id: LocalProfileId): Promise<PlayerProfile> {
+        return this.getLocal(id);
+    }
 }

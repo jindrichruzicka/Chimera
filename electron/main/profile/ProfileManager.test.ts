@@ -229,4 +229,78 @@ describe('ProfileManager', () => {
         const persisted = await repo.load(localProfileId('p1'));
         expect(persisted?.displayName).toBe('Alice');
     });
+
+    // ── listLocalSlots ────────────────────────────────────────────────────────
+
+    it('listLocalSlots returns an empty array when the repository has no profiles', async () => {
+        const manager = new ProfileManager(new InMemoryProfileRepository());
+        const slots = await manager.listLocalSlots();
+        expect(slots).toEqual([]);
+    });
+
+    it('listLocalSlots returns one entry per saved profile with localProfileId and displayName', async () => {
+        const repo = new InMemoryProfileRepository();
+        await repo.save(makeProfile('p1', 'Alice'));
+        await repo.save(makeProfile('p2', 'Bob'));
+
+        const manager = new ProfileManager(repo);
+        const slots = await manager.listLocalSlots();
+
+        expect(slots).toHaveLength(2);
+        const ids = slots.map((s) => s.localProfileId);
+        expect(ids).toContain('p1');
+        expect(ids).toContain('p2');
+        const names = slots.map((s) => s.displayName);
+        expect(names).toContain('Alice');
+        expect(names).toContain('Bob');
+    });
+
+    it('listLocalSlots does not require an active profile (no getLocal call needed)', async () => {
+        const repo = new InMemoryProfileRepository();
+        await repo.save(makeProfile('p1', 'Alice'));
+
+        const manager = new ProfileManager(repo);
+        // Deliberately skip getLocal() — must not throw
+        await expect(manager.listLocalSlots()).resolves.toHaveLength(1);
+    });
+
+    // ── switchLocalSlot ───────────────────────────────────────────────────────
+
+    it('switchLocalSlot loads the requested profile and sets it as the active current profile', async () => {
+        const repo = new InMemoryProfileRepository();
+        await repo.save(makeProfile('p1', 'Alice'));
+        await repo.save(makeProfile('p2', 'Bob'));
+
+        const manager = new ProfileManager(repo);
+        // Start with p1 active
+        await manager.getLocal(localProfileId('p1'));
+        expect(manager.currentAttestation().displayName).toBe('Alice');
+
+        // Switch to p2
+        const switched = await manager.switchLocalSlot(localProfileId('p2'));
+
+        expect(switched.localProfileId).toBe(localProfileId('p2'));
+        expect(switched.displayName).toBe('Bob');
+        expect(manager.currentAttestation().displayName).toBe('Bob');
+    });
+
+    it('switchLocalSlot throws ProfileNotFoundError when the requested localProfileId does not exist', async () => {
+        const repo = new InMemoryProfileRepository();
+        const manager = new ProfileManager(repo);
+
+        await expect(manager.switchLocalSlot(localProfileId('nobody'))).rejects.toThrow(
+            ProfileNotFoundError,
+        );
+    });
+
+    it('switchLocalSlot does not require a prior getLocal call', async () => {
+        const repo = new InMemoryProfileRepository();
+        await repo.save(makeProfile('p1', 'Alice'));
+
+        // No getLocal() called first — switchLocalSlot starts from a cold manager
+        const manager = new ProfileManager(repo);
+        const switched = await manager.switchLocalSlot(localProfileId('p1'));
+
+        expect(switched.displayName).toBe('Alice');
+    });
 });

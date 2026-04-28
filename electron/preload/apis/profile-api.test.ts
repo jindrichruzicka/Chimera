@@ -4,12 +4,14 @@ import {
     PROFILE_DIRECTORY_CHANGED_CHANNEL,
     PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
     PROFILE_GET_LOCAL_CHANNEL,
+    PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
+    PROFILE_SWITCH_SLOT_CHANNEL,
     PROFILE_UPDATE_LOCAL_CHANNEL,
     createProfileApi,
     type ProfileApiIpcPort,
 } from './profile-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
-import type { EngineProfile, PlayerProfile, PlayerId } from '../api-types.js';
+import type { EngineProfile, LocalProfileSlot, PlayerProfile, PlayerId } from '../api-types.js';
 import type { IpcListener } from '../shared/listener.js';
 
 // ─── IPC stub ─────────────────────────────────────────────────────────────────
@@ -278,6 +280,76 @@ describe('createProfileApi', () => {
 
             unsubA();
             expect(stub.listeners.get(PROFILE_DIRECTORY_CHANGED_CHANNEL)?.size).toBe(1);
+        });
+    });
+
+    describe('listLocalSlots()', () => {
+        it('invokes chimera:profile:list-local-slots with no extra args', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(PROFILE_LIST_LOCAL_SLOTS_CHANNEL, []);
+            const api = createProfileApi(stub.port);
+
+            await api.listLocalSlots();
+
+            expect(stub.invocations).toEqual([
+                { channel: PROFILE_LIST_LOCAL_SLOTS_CHANNEL, args: [] },
+            ]);
+        });
+
+        it('resolves to the slot array returned by main', async () => {
+            const stub = makeIpcStub();
+            const slots: LocalProfileSlot[] = [
+                { localProfileId: 'local-a', displayName: 'Alice' },
+                { localProfileId: 'local-b', displayName: 'Bob' },
+            ];
+            stub.invokeResults.set(PROFILE_LIST_LOCAL_SLOTS_CHANNEL, slots);
+            const api = createProfileApi(stub.port);
+
+            const result = await api.listLocalSlots();
+
+            expect(result).toStrictEqual(slots);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a non-array', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(PROFILE_LIST_LOCAL_SLOTS_CHANNEL, 'not-an-array');
+            const api = createProfileApi(stub.port);
+
+            await expect(api.listLocalSlots()).rejects.toBeInstanceOf(PreloadIpcValidationError);
+        });
+
+        it('rejects with PreloadIpcValidationError when an element is missing localProfileId', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(PROFILE_LIST_LOCAL_SLOTS_CHANNEL, [
+                { displayName: 'Alice' }, // missing localProfileId
+            ]);
+            const api = createProfileApi(stub.port);
+
+            await expect(api.listLocalSlots()).rejects.toBeInstanceOf(PreloadIpcValidationError);
+        });
+    });
+
+    describe('switchLocalSlot()', () => {
+        it('invokes chimera:profile:switch-slot with localProfileId as the first argument', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(PROFILE_SWITCH_SLOT_CHANNEL, undefined);
+            const api = createProfileApi(stub.port);
+
+            await api.switchLocalSlot('local-b');
+
+            expect(stub.invocations).toEqual([
+                { channel: PROFILE_SWITCH_SLOT_CHANNEL, args: [{ localProfileId: 'local-b' }] },
+            ]);
+        });
+
+        it('resolves to void (undefined)', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(PROFILE_SWITCH_SLOT_CHANNEL, undefined);
+            const api = createProfileApi(stub.port);
+
+            const result = await api.switchLocalSlot('local-b');
+
+            expect(result).toBeUndefined();
         });
     });
 });
