@@ -83,4 +83,10 @@ export type { UndoPolicy } from './UndoPolicy.js';
 export { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
 
 export type { TurnMemento, ActionHistoryEntry, ActionHistory, UndoManager } from './UndoManager.js';
-export { UndoNotAllowedError, InMemoryActionHistory, InMemoryUndoManager } from './UndoManager.js';
+export {
+    UndoNotAllowedError,
+    InMemoryActionHistory,
+    InMemoryUndoManager,
+    TURN_MEMENTO_RETENTION,
+    MAX_ACTION_HISTORY_ENTRIES,
+} from './UndoManager.js';

@@ -23,9 +23,30 @@
  *          injected caller's responsibility, enforced by test doubles.
  */
 
+import type { Logger } from '@chimera/shared/logging.js';
 import type { BaseGameSnapshot, ActionEnvelope, PlayerId } from './types.js';
 import { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
 import type { UndoPolicy } from './UndoPolicy.js';
+
+// ─── ActionHistory constants ──────────────────────────────────────────────────
+
+/**
+ * Number of turns of undo history retained by the engine.
+ * Entries whose `turnNumber` is more than `TURN_MEMENTO_RETENTION` turns in the
+ * past are evicted by `pruneTo(currentTurn - TURN_MEMENTO_RETENTION)`.
+ *
+ * Architecture: §4.5, Invariant #45
+ */
+export const TURN_MEMENTO_RETENTION = 4;
+
+/**
+ * Safety-net upper bound on the number of entries in `InMemoryActionHistory`.
+ * When `append()` would exceed this cap it evicts the oldest entry and emits
+ * an `action-history:overflow` warn log.
+ *
+ * Architecture: §4.5, Invariant #45
+ */
+export const MAX_ACTION_HISTORY_ENTRIES = 10_000;
 
 // ─── Data types ───────────────────────────────────────────────────────────────
 
@@ -166,22 +187,71 @@ export class UndoNotAllowedError extends Error {
  * controls what gets appended).
  */
 export class InMemoryActionHistory implements ActionHistory {
+    /**
+     * Underlying storage. Live entries occupy `[head, entries.length)`.
+     * Slots `[0, head)` are tombstoned (already evicted) and reclaimed during
+     * `#compactIfNeeded()`. Using a head cursor keeps overflow eviction in
+     * `append()` and prefix removal in `pruneTo()` at O(1) amortised — the
+     * O(n) `Array.shift()` / `Array.splice(0, k)` calls are eliminated from
+     * the simulation hot path.
+     */
     private readonly entries: ActionHistoryEntry[] = [];
+    private head = 0;
+    private readonly logger: Logger | undefined;
+    private readonly maxEntries: number;
+
+    constructor(options?: {
+        readonly logger?: Logger;
+        /**
+         * Override the overflow cap — intended for unit tests only.
+         * Production callers should not set this; it defaults to
+         * `MAX_ACTION_HISTORY_ENTRIES`.
+         */
+        readonly maxEntries?: number;
+    }) {
+        this.logger = options?.logger;
+        this.maxEntries = options?.maxEntries ?? MAX_ACTION_HISTORY_ENTRIES;
+    }
 
     append(entry: ActionHistoryEntry): void {
+        if (this.#size() >= this.maxEntries) {
+            this.head++;
+            this.logger?.warn('action-history:overflow', {
+                capacity: this.maxEntries,
+            });
+        }
         this.entries.push(entry);
+        this.#compactIfNeeded();
     }
 
     sinceLastMemento(): readonly ActionHistoryEntry[] {
-        return [...this.entries];
+        return this.entries.slice(this.head);
     }
 
     pruneTo(cutoff: number): void {
-        const firstKept = this.entries.findIndex((e) => e.turnNumber >= cutoff);
-        if (firstKept === -1) {
-            this.entries.length = 0;
-        } else {
-            this.entries.splice(0, firstKept);
+        // Advance the head past any entries whose turnNumber is below the cutoff.
+        // O(k) where k is the number of evicted entries — never re-touches
+        // already-live elements, unlike `splice(0, k)`.
+        while (this.head < this.entries.length && this.entries[this.head]!.turnNumber < cutoff) {
+            this.head++;
+        }
+        this.#compactIfNeeded();
+    }
+
+    #size(): number {
+        return this.entries.length - this.head;
+    }
+
+    /**
+     * Reclaim tombstoned slots when they grow beyond the live region.
+     * Bounded amortised cost: total work across N appends is O(N) because
+     * each entry is copied at most once before being dropped permanently.
+     * Total memory is bounded by `2 * maxEntries`.
+     */
+    #compactIfNeeded(): void {
+        if (this.head > 0 && this.head >= this.entries.length - this.head) {
+            this.entries.splice(0, this.head);
+            this.head = 0;
         }
     }
 }
