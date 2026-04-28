@@ -216,7 +216,8 @@ interface PipelineContext extends UndoContext, HistoryContext, BroadcastContext,
 
 ```typescript
 interface TurnMemento {
-    turnNumber: number;
+    /** Tick value of the snapshot when the memento was captured (= state.tick at turn start). */
+    tickAtTurnStart: number;
     playerId: PlayerId;
     snapshotAtTurnStart: GameSnapshot;
 }
@@ -229,8 +230,9 @@ interface ActionHistoryEntry {
 
 interface UndoManager {
     saveTurnMemento(state: GameSnapshot, playerId: PlayerId): void;
-    undo(steps?: number): GameSnapshot;
-    redo(steps?: number): GameSnapshot;
+    /** `playerId` identifies whose memento to use as the replay base. */
+    undo(playerId: PlayerId, steps?: number): GameSnapshot;
+    redo(playerId: PlayerId, steps?: number): GameSnapshot;
     canUndo(playerId: PlayerId): boolean;
     canRedo(playerId: PlayerId): boolean;
     setPolicy(policy: UndoPolicy): void;

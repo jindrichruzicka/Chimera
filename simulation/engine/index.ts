@@ -10,7 +10,9 @@
  *   - T5 (§4.7): ActionPipeline, StateReducer, StaleActionError,
  *                ActionSchemaError, ActionUnauthorizedError, RecursiveDispatchError,
  *                MAX_NESTED_DISPATCH
- *   - F16 (§4.5): UndoPolicy, DEFAULT_UNDO_POLICY
+ *   - F16 (§4.5): UndoPolicy, DEFAULT_UNDO_POLICY,
+ *                TurnMemento, ActionHistoryEntry, ActionHistory, UndoManager,
+ *                UndoNotAllowedError, InMemoryActionHistory, InMemoryUndoManager
  */
 
 export type {
@@ -78,3 +80,6 @@ export {
 
 export type { UndoPolicy } from './UndoPolicy.js';
 export { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
+
+export type { TurnMemento, ActionHistoryEntry, ActionHistory, UndoManager } from './UndoManager.js';
+export { UndoNotAllowedError, InMemoryActionHistory, InMemoryUndoManager } from './UndoManager.js';
