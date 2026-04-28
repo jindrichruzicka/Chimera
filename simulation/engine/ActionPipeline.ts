@@ -126,6 +126,19 @@ export class RecursiveDispatchError extends Error {
 // ─── ActionPipeline ───────────────────────────────────────────────────────────
 
 /**
+ * Internal mutable twin of `ReduceContext`.
+ *
+ * Strips `readonly` from every field so `#ctx.rng` can be re-assigned before
+ * each `process()` invocation without allocating a new object. All other fields
+ * (`db`, `undoManager`, `dispatch`) are set once at construction and never change.
+ *
+ * IMPORTANT: `#ctx` is an internal implementation detail and MUST NEVER escape
+ * the `process()` stack frame. It is cast to `ReduceContext` (the readonly public
+ * interface) when passed to `ActionDefinition.validate()` and `reduce()`.
+ */
+type MutableReduceContext = { -readonly [K in keyof ReduceContext]: ReduceContext[K] };
+
+/**
  * Invariant 7-stage pipeline that is the sole authoritative mutation point for
  * all game state. Every `ActionEnvelope` must travel through all 7 stages in
  * fixed sequential order. No stage may be skipped or reordered.
@@ -158,6 +171,23 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      * async reducers.
      */
     #depth = 0;
+    /**
+     * Re-entrant dispatch function hoisted to a private field so the same
+     * closure is reused across every `process()` call (issue #36).
+     *
+     * Only `engine:tick` (F21 timers) may call this. Game reducers must NOT.
+     */
+    readonly #dispatchFn: NonNullable<ReduceContext['dispatch']>;
+    /**
+     * Mutable singleton context handed to `validate()` and `reduce()`.
+     *
+     * Only `rng` is updated per call (re-seeded from `snapshot.seed` and
+     * `snapshot.tick` at the top of each `process()` invocation). All other
+     * fields are constant after construction.
+     *
+     * IMPORTANT: This object MUST NEVER escape the `process()` stack frame.
+     */
+    readonly #ctx: MutableReduceContext;
 
     constructor(
         registry: ActionRegistry<TState>,
@@ -166,6 +196,32 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         this.#registry = registry;
         this.#logger = options?.logger ?? NOOP_LOGGER;
         this.#context = options?.context;
+
+        // Hoist the dispatch closure once — same body as before, rooted on the
+        // instance so #depth tracking works correctly for re-entrant calls.
+        this.#dispatchFn = (dispatchState, dispatchAction) => {
+            if (this.#depth >= MAX_NESTED_DISPATCH) {
+                throw new RecursiveDispatchError(this.#depth);
+            }
+            this.#depth++;
+            try {
+                return this.process(dispatchState as Readonly<TState>, dispatchAction);
+            } finally {
+                this.#depth--;
+            }
+        };
+
+        // Build the reusable context object. `rng` is a placeholder — it is
+        // re-assigned at the start of every `process()` call before any
+        // validate/reduce invocation reads it.
+        this.#ctx = {
+            rng: createRng(0, 0),
+            dispatch: this.#dispatchFn,
+            ...(this.#context?.db !== undefined ? { db: this.#context.db } : {}),
+            ...(this.#context?.undoManager !== undefined
+                ? { undoManager: this.#context.undoManager }
+                : {}),
+        };
     }
 
     /**
@@ -242,9 +298,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         }
 
         // ── Stage 4 — authorization (validate) ────────────────────────────
-        // Build the ReduceContext that validate() and reduce() both receive.
-        // dispatch is a closure over `this` so it can enforce the depth limit.
-        const ctx: ReduceContext = this.#buildReduceContext(snapshot);
+        // Re-seed the shared context for this invocation. `#ctx` is reused
+        // across calls (issue #36) — only `rng` varies per (seed, tick) pair.
+        // IMPORTANT: #ctx must never escape this stack frame.
+        this.#ctx.rng = createRng(snapshot.seed, snapshot.tick);
+        const ctx: ReduceContext = this.#ctx;
 
         const result = def.validate(parsedPayload, snapshot, action.playerId, ctx);
         if (!result.ok) {
@@ -321,44 +379,6 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         }
 
         return nextState;
-    }
-
-    /**
-     * Build the `ReduceContext` for a single `process()` invocation.
-     *
-     * `rng` is a seeded `DeterministicRng` derived from `(snapshot.seed, snapshot.tick)`
-     * via `createRng`. Each `process()` call gets a fresh RNG seeded from the canonical
-     * (seed, tick) pair — ensuring deterministic, reproducible draws for every action.
-     *
-     * `dispatch` is the re-entrant pipeline entry point. Depth is tracked on
-     * the pipeline instance (synchronous only). Exceeding `MAX_NESTED_DISPATCH`
-     * throws `RecursiveDispatchError`.
-     *
-     * `db` and `undoManager` are threaded from `#context` when present.
-     *
-     * NOTE: Only `engine:tick` (F21 timers) may call `ctx.dispatch()`.
-     *       Game reducers must NOT call it.
-     */
-    #buildReduceContext(snapshot: Readonly<BaseGameSnapshot>): ReduceContext {
-        const ctx: ReduceContext = {
-            rng: createRng(snapshot.seed, snapshot.tick),
-            dispatch: (dispatchState, dispatchAction) => {
-                if (this.#depth >= MAX_NESTED_DISPATCH) {
-                    throw new RecursiveDispatchError(this.#depth);
-                }
-                this.#depth++;
-                try {
-                    return this.process(dispatchState as Readonly<TState>, dispatchAction);
-                } finally {
-                    this.#depth--;
-                }
-            },
-            ...(this.#context?.db !== undefined ? { db: this.#context.db } : {}),
-            ...(this.#context?.undoManager !== undefined
-                ? { undoManager: this.#context.undoManager }
-                : {}),
-        };
-        return ctx;
     }
 
     /**

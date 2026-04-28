@@ -1377,3 +1377,135 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         expect(undoManager.saveTurnMemento).not.toHaveBeenCalled();
     });
 });
+
+// ─── Issue #36 — hoist dispatch closure; reuse ReduceContext per pipeline ────
+
+describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceContext', () => {
+    /**
+     * Acceptance criteria from issue #36:
+     *   1. No new `dispatch` closure is created per `process()` call.
+     *   2. No new `ReduceContext` object is created per `process()` call.
+     *   3. ctx.rng is correctly re-seeded before each call (correctness guard).
+     *   4. validate() and reduce() receive the same ctx within one call.
+     */
+
+    it('ctx.dispatch is the same function reference on every process() call (no new closure per call)', () => {
+        const capturedDispatches: NonNullable<ReduceContext['dispatch']>[] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:capture-dispatch-36',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                if (ctx.dispatch) capturedDispatches.push(ctx.dispatch);
+                return state;
+            },
+        };
+        const r = new ActionRegistry();
+        r.register(spyDef);
+        const p = new ActionPipeline(r);
+
+        p.process(makeSnapshot(0), makeEnvelope(0, 'game:capture-dispatch-36'));
+        p.process(makeSnapshot(0), makeEnvelope(0, 'game:capture-dispatch-36'));
+
+        expect(capturedDispatches).toHaveLength(2);
+        expect(capturedDispatches[0]).toBe(capturedDispatches[1]);
+    });
+
+    it('the ReduceContext object passed to reduce() is the same instance on every process() call (no new object per call)', () => {
+        const capturedCtxs: ReduceContext[] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:capture-ctx-36',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                capturedCtxs.push(ctx);
+                return state;
+            },
+        };
+        const r = new ActionRegistry();
+        r.register(spyDef);
+        const p = new ActionPipeline(r);
+
+        p.process(makeSnapshot(0), makeEnvelope(0, 'game:capture-ctx-36'));
+        p.process(makeSnapshot(0), makeEnvelope(0, 'game:capture-ctx-36'));
+
+        expect(capturedCtxs).toHaveLength(2);
+        expect(capturedCtxs[0]).toBe(capturedCtxs[1]);
+    });
+
+    it('validate() and reduce() receive the same ctx object within a single process() call', () => {
+        const capturedFromValidate: ReduceContext[] = [];
+        const capturedFromReduce: ReduceContext[] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:capture-ctx-val-red-36',
+            parsePayload: () => ({}),
+            validate: (_payload, _state, _playerId, ctx) => {
+                capturedFromValidate.push(ctx);
+                return { ok: true };
+            },
+            reduce: (state, _payload, _playerId, ctx) => {
+                capturedFromReduce.push(ctx);
+                return state;
+            },
+        };
+        const r = new ActionRegistry();
+        r.register(spyDef);
+        const p = new ActionPipeline(r);
+
+        p.process(makeSnapshot(0), makeEnvelope(0, 'game:capture-ctx-val-red-36'));
+
+        expect(capturedFromValidate).toHaveLength(1);
+        expect(capturedFromReduce).toHaveLength(1);
+        expect(capturedFromValidate[0]).toBe(capturedFromReduce[0]);
+    });
+
+    it('ctx.rng is correctly re-seeded for each process() call even when context is reused (correctness guard)', () => {
+        const capturedFirstFloats: number[] = [];
+        const spyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:capture-rng-36',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                capturedFirstFloats.push(ctx.rng.float());
+                return state;
+            },
+        };
+        const r = new ActionRegistry();
+        r.register(spyDef);
+        const p = new ActionPipeline(r);
+
+        // Same seed, different ticks → different rng initialisation → different first float
+        p.process(makeSnapshot(0), makeEnvelope(0, 'game:capture-rng-36'));
+        p.process(makeSnapshot(1), makeEnvelope(1, 'game:capture-rng-36'));
+
+        expect(capturedFirstFloats).toHaveLength(2);
+        // (seed=1, tick=0) vs (seed=1, tick=1) must produce different initial draws
+        expect(capturedFirstFloats[0]).not.toBe(capturedFirstFloats[1]);
+    });
+
+    it('ctx.dispatch in the reused context is still functional (re-entrant dispatch still throws RecursiveDispatchError)', () => {
+        const recursiveDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:recursive-36',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                if (ctx.dispatch) {
+                    return ctx.dispatch(state, {
+                        type: 'game:recursive-36',
+                        playerId: PID,
+                        tick: state.tick,
+                        payload: {},
+                    });
+                }
+                return state;
+            },
+        };
+        const r = new ActionRegistry();
+        r.register(recursiveDef);
+        const p = new ActionPipeline(r);
+
+        expect(() => p.process(makeSnapshot(0), makeEnvelope(0, 'game:recursive-36'))).toThrow(
+            RecursiveDispatchError,
+        );
+    });
+});
