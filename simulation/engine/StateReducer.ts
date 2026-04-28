@@ -21,6 +21,18 @@
 import type { ActionEnvelope, BaseGameSnapshot, ReduceContext } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 
+function parsePayloadOrThrow(
+    type: string,
+    parsePayload: (payload: Record<string, unknown>) => object,
+    payload: Readonly<Record<string, unknown>>,
+): object {
+    try {
+        return parsePayload(payload);
+    } catch (err) {
+        throw new ActionSchemaError(type, err instanceof Error ? err : new Error(String(err)));
+    }
+}
+
 // ─── ActionSchemaError ────────────────────────────────────────────────────────
 
 /**
@@ -67,6 +79,14 @@ export class StateReducer<TState extends BaseGameSnapshot = BaseGameSnapshot> {
         this.#registry = registry;
     }
 
+    static parsePayloadOrThrow(
+        type: string,
+        parsePayload: (payload: Record<string, unknown>) => object,
+        payload: Readonly<Record<string, unknown>>,
+    ): object {
+        return parsePayloadOrThrow(type, parsePayload, payload);
+    }
+
     /**
      * Resolve the `ActionDefinition` for `action.type`, parse its payload,
      * and apply the reducer to produce the next state.
@@ -78,15 +98,11 @@ export class StateReducer<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     apply(state: Readonly<TState>, action: ActionEnvelope, ctx: ReduceContext): TState {
         const def = this.#registry.resolve(action.type);
 
-        let parsedPayload: object;
-        try {
-            parsedPayload = def.parsePayload(action.payload);
-        } catch (err) {
-            throw new ActionSchemaError(
-                action.type,
-                err instanceof Error ? err : new Error(String(err)),
-            );
-        }
+        const parsedPayload = parsePayloadOrThrow(
+            action.type,
+            (payload) => def.parsePayload(payload),
+            action.payload,
+        );
 
         return def.reduce(state, parsedPayload, action.playerId, ctx);
     }

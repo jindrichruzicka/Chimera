@@ -28,7 +28,7 @@ import type {
 import { toViewerSnapshot } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { createRng } from './DeterministicRng.js';
-import { ActionSchemaError } from './StateReducer.js';
+import { StateReducer } from './StateReducer.js';
 export { ActionSchemaError, StateReducer } from './StateReducer.js';
 
 // ─── Engine constant ──────────────────────────────────────────────────────────
@@ -186,15 +186,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         const def = this.#registry.resolve(action.type);
 
         // ── Stage 2 — schema validation (parse) ────────────────────────────
-        let parsedPayload: object;
-        try {
-            parsedPayload = def.parsePayload(action.payload);
-        } catch (err) {
-            throw new ActionSchemaError(
-                action.type,
-                err instanceof Error ? err : new Error(String(err)),
-            );
-        }
+        const parsedPayload = StateReducer.parsePayloadOrThrow(
+            action.type,
+            (payload) => def.parsePayload(payload),
+            action.payload,
+        );
 
         // ── Stage 3 — undo/redo intercept (no-op stub) ────────────────────
         // TODO(F16): intercept engine:undo / engine:redo via UndoManager.
