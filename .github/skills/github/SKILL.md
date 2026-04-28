@@ -1,7 +1,7 @@
 ---
 name: github
-description: 'GitHub project management meta-skill for the Chimera engine. Delegates to focused sub-skills for milestones, labels, issues, and bootstrapping. Use when: managing GitHub project state, creating issues, bootstrapping milestones, closing issues after merge.'
-argument-hint: "Operation type (e.g. 'create-milestone', 'create-issue', 'bootstrap-milestone', 'close-issue', 'list-issues')"
+description: 'GitHub project management meta-skill for the Chimera engine. Delegates to focused sub-skills for milestones, labels, issues, bootstrapping, and releases. Use when: managing GitHub project state, creating issues, bootstrapping milestones, closing issues after merge, cutting a versioned release.'
+argument-hint: "Operation type (e.g. 'create-milestone', 'create-issue', 'bootstrap-milestone', 'close-issue', 'list-issues', 'create-release')"
 user-invocable: true
 ---
 
@@ -83,6 +83,16 @@ Lists and queries GitHub issues with filters (milestone, label, state, search).
 
 ---
 
+### 🚢 Create Release
+
+Cuts a versioned release from a completed milestone: verifies all issues are closed, determines the SemVer version, updates README and CHANGELOG, bumps `package.json`, runs the full pre-release gate, commits, tags, pushes, creates the GitHub release, and closes the milestone.
+
+**Use when:** Shipping a milestone, cutting a release tag, publishing a new version to GitHub Releases
+
+**Load:** `.github/skills/github/create-release/SKILL.md`
+
+---
+
 ## Workflow Examples
 
 ### Bootstrap M1 from scratch
@@ -145,67 +155,19 @@ gh issue close <ISSUE_NUMBER> --repo $GH_REPO --comment "Implemented in $(git re
 
 ## Procedure: Create a GitHub Release
 
-Use this procedure when cutting a version release for a completed milestone. The **Chimera Release Manager** agent runs this procedure automatically; it is documented here as the canonical reference.
+Use the dedicated **create-release sub-skill** — it supersedes this inline procedure.
 
-### 1. Resolve milestone and gather closed issues
-
-```bash
-# Resolve milestone numeric ID by title prefix
-M_ID=$(gh api repos/$GH_REPO/milestones --jq \
-  '.[] | select(.title | startswith("<MILESTONE_PREFIX>")) | .number')
-
-# List all closed issues under the milestone
-gh issue list --repo $GH_REPO \
-  --state closed \
-  --milestone "$M_ID" \
-  --json number,title,labels \
-  --jq '.[] | "#\(.number) \(.title)"'
+```
+Load and follow: .github/skills/github/create-release/SKILL.md
 ```
 
-### 2. Update CHANGELOG.md
+Or invoke via prompt:
 
-Read `CHANGELOG.md` and populate a new `## [<VERSION>] — <YYYY-MM-DD>` section above the previous release, keeping `## [Unreleased]` at the top (always empty until the next cycle). Only include non-empty `### Added`, `### Changed`, `### Deprecated`, `### Removed`, `### Fixed`, `### Security` subsections. Append version comparison links at the bottom:
-
-```markdown
-[<VERSION>]: https://github.com/jindrichruzicka/Chimera/releases/tag/v<VERSION>
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v<VERSION>...HEAD
+```
+/create-release <milestone-designator>
 ```
 
-Commit and merge the changelog on a `feature/release-<VERSION>` branch using `check-and-merge.sh`.
-
-### 3. Tag main
-
-```bash
-git checkout main && git pull origin main
-git tag -a "v<VERSION>" -m "Release v<VERSION> — <MILESTONE_TITLE>"
-git push origin "v<VERSION>"
-```
-
-### 4. Create the GitHub release
-
-Use `.github/skills/github/assets/release-template.md` as the notes template:
-
-```bash
-gh release create "v<VERSION>" \
-  --repo $GH_REPO \
-  --title "v<VERSION> — <MILESTONE_TITLE>" \
-  --notes-file /tmp/release-body.md \
-  --target main
-
-# Verify
-gh release view "v<VERSION>" --repo $GH_REPO \
-  --json name,tagName,publishedAt,url \
-  --jq '"Release \(.name) published at \(.publishedAt)\nURL: \(.url)"'
-```
-
-### 5. Close the GitHub milestone
-
-```bash
-gh api repos/$GH_REPO/milestones/$M_ID \
-  --method PATCH \
-  --field state=closed \
-  --jq '"Milestone \(.title) closed."'
-```
+The sub-skill covers: milestone validation, open-issue check, SemVer determination (with user confirmation), README review and update, CHANGELOG promotion, `package.json` bump, full pre-release gate, release commit, annotated tag, GitHub release creation, and milestone closure.
 
 ---
 
