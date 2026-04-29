@@ -18,11 +18,9 @@ import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
 import { createNoopLogger } from '../logging/logger.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type {
-    HostTransport,
-    PlayerSnapshot,
-    PlayerId,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { HostTransport, PlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { toViewerSnapshot } from '@chimera/simulation/engine/types.js';
+import type { ViewerSnapshot } from '@chimera/simulation/engine/types.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -40,8 +38,8 @@ function makeTransport(): HostTransport {
     };
 }
 
-function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
-    return {
+function makeSnapshot(viewerId: PlayerId): ViewerSnapshot {
+    return toViewerSnapshot({
         tick: 1,
         viewerId,
         players: {},
@@ -49,7 +47,7 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         phase: 'playing',
         events: [],
         undoMeta: { canUndo: false, canRedo: false },
-    };
+    });
 }
 
 const PLAYER_A = toPlayerId('player-a');

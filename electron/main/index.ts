@@ -30,11 +30,15 @@ import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
+import { buildHostSessionPipeline } from './runtime/HostSessionPipeline.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
+import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import type { PlayerId } from '@chimera/simulation/engine/types.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -419,6 +423,12 @@ export async function main(): Promise<void> {
     // use the same authoritative local-seat context.
     const lobbyLogger = logger.child({ module: 'lobby-manager' });
 
+    // Shared ActionRegistry for all hosted sessions.  Engine actions are
+    // always registered; game-specific actions (tactics, etc.) will be added
+    // here when F18+ lands.  The registry is immutable after this point.
+    const gameRegistry = new ActionRegistry();
+    registerEngineActions(gameRegistry);
+
     // ProfileGate is the sole caller of ProfileSanitizer.admit().
     // Constructed here (the DIP wiring point) and injected into LobbyManager
     // so LobbyManager stays a pure orchestrator (Invariant #61).
@@ -428,16 +438,37 @@ export async function main(): Promise<void> {
         new LocalWebSocketProvider(),
         lobbyLogger,
         (transport) => {
-            // Shallow wiring: StateBroadcaster constructed with the live
-            // HostTransport once a session is hosted.  Return a teardown
-            // so LobbyManager can clean up on closeLobby() (BLOCK-4 fix).
+            // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
+            // and InMemoryUndoManager) for the hosted session (issue #364).
+            // Each hosted session gets a fresh history and undoManager so
+            // undo state never bleeds between sessions.
             const broadcaster = new StateBroadcaster(transport, lobbyLogger);
-            // TODO(F26): wire broadcaster.broadcast as BroadcastContext into ActionPipeline
-            // once StateProjector is ready; projection must happen before broadcast
-            // (Invariant #1 — GameSnapshot must never leave the main process as-is).
+            const { pipeline, clearUndoHistory } = buildHostSessionPipeline(
+                gameRegistry,
+                (snap, to) => broadcaster.broadcast(snap, to),
+            );
+
+            // Track active players so clearUndoHistory can release their
+            // per-player undo memory when the session closes.
+            const activePlayers = new Set<PlayerId>();
+            const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
+                activePlayers.add(pid);
+            });
+            const unsubLeft = transport.onPlayerLeft((pid) => {
+                activePlayers.delete(pid);
+            });
+
+            // TODO(F21): wire pipeline into transport.onActionReceived so that
+            // incoming EngineActions flow through the pipeline.  Currently the
+            // pipeline is constructed and ready but not yet driven by transport.
+            void pipeline;
+
+            // TODO(F26): call broadcaster.dispose() once StateBroadcaster
+            // exposes a cleanup method.
             return () => {
-                // TODO(F26): call broadcaster.dispose() once StateBroadcaster exposes a cleanup method.
-                void broadcaster;
+                unsubJoined();
+                unsubLeft();
+                clearUndoHistory([...activePlayers]);
             };
         },
         undefined,

@@ -14,7 +14,9 @@
  * Task: F11-T02 (issue #239)
  *
  * Invariants upheld:
- *   #1  — Only PlayerSnapshot handled; no reference to GameSnapshot.
+ *   #1  — Accepts ViewerSnapshot (the projected boundary type); no reference to
+ *          GameSnapshot.  The internal cast to PlayerSnapshot is safe pre-F26
+ *          because no projection is applied yet (TODO(F26)).
  *   #2  — Zero imports from networking/provider/local/, ws, or DOM APIs.
  *   #67 — Constructed with injected Logger child; no console.* calls.
  */
@@ -24,6 +26,7 @@ import type {
     PlayerSnapshot,
     PlayerId,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { ViewerSnapshot } from '@chimera/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
 
 /**
@@ -44,17 +47,23 @@ export class StateBroadcaster {
     }
 
     /**
-     * Forward a projected `PlayerSnapshot` to the specified viewer.
+     * Forward a projected viewer snapshot to the specified player via the
+     * `HostTransport`.
      *
-     * Called by `ActionPipeline` Stage 7 for each connected player with their
-     * individual projected snapshot.  LocalWebSocketProvider serialises and
-     * writes the payload to the ws socket internally — this module is fully
-     * transport-agnostic.
+     * Accepts the `ViewerSnapshot` brand produced by `ActionPipeline` Stage 7
+     * so the `BroadcastContext.broadcast` signature is satisfied without an
+     * unsafe cast at every call site.
      *
-     * TODO(F26): apply StateProjector obfuscation before forwarding.
+     * The cast to `PlayerSnapshot` here is safe pre-F26: no projection is
+     * applied yet (Invariant #1), so `ViewerSnapshot` is structurally
+     * identical to `PlayerSnapshot`.  A `StateProjector` (F26) will replace
+     * this cast once obfuscation logic is wired.
+     *
+     * TODO(F26): apply StateProjector and remove the `as unknown as` cast.
      */
-    broadcast(snapshot: PlayerSnapshot, viewerId: PlayerId): void {
-        this.log.debug('broadcast', { viewerId, tick: snapshot.tick });
-        this.transport.sendSnapshot(viewerId, snapshot);
+    broadcast(snapshot: ViewerSnapshot, viewerId: PlayerId): void {
+        const playerSnapshot = snapshot as unknown as PlayerSnapshot;
+        this.log.debug('broadcast', { viewerId, tick: playerSnapshot.tick });
+        this.transport.sendSnapshot(viewerId, playerSnapshot);
     }
 }
