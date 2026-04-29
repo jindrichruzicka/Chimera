@@ -92,3 +92,6 @@ export {
 } from './UndoManager.js';
 
 export { ClientPredictor, NonPredictableActionError } from './prediction/ClientPredictor.js';
+
+export { ReconcileBuffer, MAX_BUFFER_DEPTH } from './prediction/ReconcileBuffer.js';
+export type { ReconcileBufferOptions } from './prediction/ReconcileBuffer.js';
