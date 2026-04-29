@@ -1,0 +1,23 @@
+# Build outputs and compiled artifacts
+dist/
+build/
+out/
+.next/
+
+# Dependencies
+node_modules/
+
+# Test coverage reports
+coverage/
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Dev runtime data
+.dev-userdata/
+
+# Logs
+*.log
+
+# Lock files (no coding value)
+pnpm-lock.yaml

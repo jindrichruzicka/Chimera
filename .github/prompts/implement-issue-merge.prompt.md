@@ -1,5 +1,5 @@
 ---
-description: 'Implement a GitHub issue end-to-end: branch, TDD cycle, and merge to main. Same as /implement-issue but also runs the merge script after the gate passes. Usage: /implement-issue-merge <issue-number>'
+description: 'Implement a GitHub issue end-to-end: branch, TDD cycle, and merge. Usage: /implement-issue-merge <issue-number>'
 argument-hint: '<issue-number>'
 ---
 

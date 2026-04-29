@@ -1,6 +1,6 @@
 ---
 name: github
-description: 'GitHub project management meta-skill for the Chimera engine. Delegates to focused sub-skills for milestones, labels, issues, bootstrapping, and releases. Use when: managing GitHub project state, creating issues, bootstrapping milestones, closing issues after merge, cutting a versioned release.'
+description: 'Use when creating or managing GitHub milestones, issues, or releases. How: load the matching sub-skill (create-issue, create-milestone, bootstrap-milestone, close-issue, create-release).'
 argument-hint: "Operation type (e.g. 'create-milestone', 'create-issue', 'bootstrap-milestone', 'close-issue', 'list-issues', 'create-release')"
 user-invocable: true
 ---

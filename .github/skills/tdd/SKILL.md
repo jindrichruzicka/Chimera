@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: "Red-green-refactor TDD cycle for the Chimera engine. Use when: writing any new code, adding a feature, fixing a bug, implementing a task issue, hearing 'TDD', 'red green refactor', 'write failing test', 'test first', 'vitest', or any request to implement something with tests."
+description: 'Use when implementing any new code or bug fix. How: write failing test first, implement minimum to green, refactor under green — never commit without a prior failing test.'
 ---
 
 # TDD Skill

@@ -1,5 +1,5 @@
 ---
-description: 'Given a text report from a code/feature review and a GitHub feature review issue URL or number, parse the report findings and create detailed GitHub issues for each finding, linked as sub-issues of the parent feature review issue. Usage: /create-issues-feature-review <feature-review-issue> <review-report>'
+description: 'Parse review findings and create GitHub issues linked to the parent feature review issue. Usage: /create-issues-feature-review <feature-review-issue> <review-report>'
 argument-hint: '<feature-review-issue-url-or-number> <review-report>'
 ---
 

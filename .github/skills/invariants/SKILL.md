@@ -1,6 +1,6 @@
 ---
 name: invariants
-description: "Chimera invariant checker. Run mechanical Appendix B checks automatically. Trigger phrases: 'invariant check', 'check invariants', 'run invariant script', 'verify invariants', 'invariant violations'. Use when: starting a code review, before merging a branch, or whenever a developer wants to self-check their changes against the architecture invariants."
+description: 'Use when checking for architecture invariant violations before committing or merging. How: run `bash .github/skills/invariants/scripts/check-invariants.sh` and fix any reported violations.'
 argument-hint: '(optional) subdirectory to scope the check, e.g. simulation/ or ai/'
 ---
 

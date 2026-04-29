@@ -1,5 +1,5 @@
 ---
-description: 'Review the current branch for merge readiness. Emits a findings report and waits for explicit merge approval. Does NOT merge automatically — use /review-branch-merge to approve and merge. Runs the full 8-step code review procedure.'
+description: 'Review the current branch for merge readiness. Emits findings report, does NOT merge. Usage: /review-branch'
 ---
 
 Load `.github/agents/chimera-code-reviewer.agent.md` and execute its full review procedure against the current branch.

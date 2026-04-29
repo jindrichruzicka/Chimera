@@ -11,8 +11,8 @@ Given feature designator `{{feature-designator}}`:
 ## Step 2 — Read source of truth
 
 1. `docs/ROADMAP.md` — locate feature row matching `{{feature-designator}}`.
-2. Relevant `docs/architecture-overview.md` §X.Y referenced by that feature.
-3. Relevant `docs/core-components/` doc if one exists.
+2. Relevant `docs/core-components/` doc if one exists.
+3. Relevant arch §X.Y for that feature.
 
 Extract: feature title, milestone (M1/…), module label, §X.Y, all §12 checklist items for this feature, all Appendix B invariants touched, explicit non-goals/deferred items.
 

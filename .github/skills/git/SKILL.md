@@ -1,6 +1,6 @@
 ---
 name: git
-description: 'Git operations skillset for the Chimera engine. Contains sub-skills for all git workflows: creating branches from GitHub issues, merging branches, managing history, and enforcing commit standards. Use when: starting work on a task or bug issue, merging feature/fix/refactor branches, validating branch structure, performing autosquash rebases, resolving conflicts, landing completed work on main. Delegates to the appropriate sub-skill based on the requested operation.'
+description: 'Use when branching, committing, pushing, or merging. How: run the relevant sub-skill script (create-branch, commit-and-push, merge, pull-latest).'
 ---
 
 # Git Skillset

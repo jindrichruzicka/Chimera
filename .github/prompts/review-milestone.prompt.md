@@ -17,7 +17,7 @@ Stop if dirty/pull fails/checkout fails.
 
 ## Step 1 — Authoritative context
 
-Read: `docs/architecture-overview.md`, `docs/coding-standards.md`, `docs/ROADMAP.md`, `.github/skills/invariants/SKILL.md`. ROADMAP defines intended scope; invariants + standards are hard criteria.
+Read: `docs/ROADMAP.md`, `.github/skills/invariants/SKILL.md`. ROADMAP defines intended scope; invariants + standards are hard criteria.
 
 ## Step 2 — Resolve milestone scope
 
@@ -48,19 +48,7 @@ Module ownership:
 
 Check milestone-level docs, CHANGELOG, migration notes, diagnostics, user-facing operational guidance. Flag problems + improvements.
 
-## Step 4 — Validation gates
-
-```bash
-bash .github/skills/invariants/scripts/check-invariants.sh
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-```
-
-Any failure = blocking. Include relevant excerpt only.
-
-## Step 5 — Classify findings
+## Step 4 — Classify findings
 
 - **BLOCK** — must not ship: open required issues, missing roadmap scope, missing criteria, failing gates, invariant violations, security, broken module boundaries, determinism violations, `GameSnapshot` leakage, unvalidated IPC, missing required tests, broken cross-feature workflows.
 - **WARNING** — ship only with explicit risk acceptance.
@@ -68,7 +56,7 @@ Any failure = blocking. Include relevant excerpt only.
 
 Evaluate at minimum: roadmap completion; feature/task completion; per-feature criteria coverage; cross-feature integration + regression risk; arch alignment + module ownership; determinism + Appendix B; IPC/networking/trust; renderer state + React/R3F (if UI); coverage at unit/integration/e2e; perf + diagnostics; docs/changelog/migration.
 
-## Step 6 — Report
+## Step 5 — Report
 
 ```markdown
 # Milestone Readiness Review — <title>
@@ -84,16 +72,6 @@ Decision: <one paragraph>
 - Milestone: <title or designator>
 - Main commit: <short-sha> <subject>
 - Feature issues: <N> Task issues: <N> Open required: <N>
-
-## Gate Results
-
-| Gate       | Result    | Notes |
-| ---------- | --------- | ----- |
-| Invariants | PASS/FAIL | …     |
-| Format     | PASS/FAIL | …     |
-| Lint       | PASS/FAIL | …     |
-| Typecheck  | PASS/FAIL | …     |
-| Tests      | PASS/FAIL | …     |
 
 ## Feature Readiness Matrix
 

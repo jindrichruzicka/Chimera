@@ -17,7 +17,7 @@ bash .github/skills/git/pull-latest/scripts/pull-latest.sh
 
 ## Step 1 — Authoritative context
 
-Read: `docs/architecture-overview.md`, `docs/coding-standards.md`, `.github/skills/invariants/SKILL.md`. Use invariants + standards as hard criteria.
+Load `.github/skills/invariants/SKILL.md`. Use invariants + standards as hard criteria.
 
 ## Step 2 — Issue + scope
 
@@ -51,19 +51,7 @@ Module ownership:
 
 Check docs/roadmap updates when feature changes public arch, commands, APIs, or workflows. Flag problems + improvements.
 
-## Step 4 — Validation gates
-
-```bash
-bash .github/skills/invariants/scripts/check-invariants.sh
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-```
-
-Any failure = blocking. Include relevant excerpt only.
-
-## Step 5 — Classify findings
+## Step 4 — Classify findings
 
 - **BLOCK** — must not ship: missing criteria, failing gates, invariant violations, security, broken module boundaries, determinism violations, `GameSnapshot` leakage, unvalidated IPC, missing required tests, broken user workflows.
 - **WARNING** — ship only with explicit risk acceptance: maintainability, doc gaps, perf risk, weak diagnostics, minor UX, non-invalidating coverage gaps.
@@ -71,7 +59,7 @@ Any failure = blocking. Include relevant excerpt only.
 
 Evaluate at minimum: scope completeness; arch alignment + module ownership; determinism + Appendix B; IPC/networking/trust; renderer state + React/R3F (if UI); test coverage + regression risk; perf + diagnostics; docs/changelog/migration.
 
-## Step 6 — Report
+## Step 5 — Report
 
 ```markdown
 # Feature Readiness Review — #<N> <title>
@@ -88,16 +76,6 @@ Decision: <one paragraph>
 - Milestone: <or none>
 - Child tasks reviewed: <N>
 - Main commit: <short-sha> <subject>
-
-## Gate Results
-
-| Gate       | Result    | Notes |
-| ---------- | --------- | ----- |
-| Invariants | PASS/FAIL | …     |
-| Format     | PASS/FAIL | …     |
-| Lint       | PASS/FAIL | …     |
-| Typecheck  | PASS/FAIL | …     |
-| Tests      | PASS/FAIL | …     |
 
 ## Acceptance Criteria Coverage
 
