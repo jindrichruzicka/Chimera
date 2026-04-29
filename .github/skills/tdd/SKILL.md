@@ -5,95 +5,53 @@ description: "Red-green-refactor TDD cycle for the Chimera engine. Use when: wri
 
 # TDD Skill
 
-Every implementation task in Chimera follows a strict **red → green → refactor** cycle. Writing tests first is not optional.
+Strict red → green → refactor. Tests first is not optional.
 
----
+## Cycle
 
-## The Five-Step TDD Cycle
+1. **Read contract** — relevant interface(s) in `docs/architecture-overview.md`. The interface is the spec; tests are executable spec.
+2. **Write failing tests first** — `<Module>.test.ts` co-located with future source. Import the not-yet-existing module; write `describe`/`it`. Run `pnpm test:watch`; confirm **red** ("cannot find module" or assertion fail). A test that's green before implementation is defective — fix or delete.
+3. **Implement minimum to green** — just enough for the failing test. No gold-plating. No code without a test.
+4. **Refactor under green** — `pnpm test:watch`; rerun after every refactor step.
+5. **Never skip steps**. Commit body must mention "Tests written first" or "Red confirmed".
 
-### Step 1 — Understand the contract first
+## Locations
 
-Read the relevant interface(s) from `docs/architecture-overview.md`. The interface is the specification — tests express that specification in executable form. Do not write a single line of production code until you know what the module must do.
+| Concern           | Convention                                                                       |
+| ----------------- | -------------------------------------------------------------------------------- |
+| Unit              | `<Module>.test.ts(x)` co-located                                                 |
+| Integration       | `<package>/__tests__/<name>.test.ts`                                             |
+| Doubles           | `<package>/__test-support__/` (fakes/stubs only)                                 |
+| Runner            | Vitest (`vitest.config.mts`); `pnpm test:watch`                                  |
+| Property          | fast-check (projection/determinism/commitment)                                   |
+| Component         | RTL + jsdom (`// @vitest-environment jsdom`)                                     |
+| Forbidden in unit | Real FS/network/IPC; use `InMemorySaveRepository`, `InMemoryMultiplayerProvider` |
 
-### Step 2 — Write failing tests before any implementation
+## Coverage by Situation
 
-For each piece of behaviour being added:
+| Situation            | Cover                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| `ActionDefinition`   | `validate()` rejects all illegal payloads; `reduce()` produces exact next state; no input mutation |
+| `simulation/` module | factory contract; happy path; every error type; boundary values                                    |
+| Renderer component   | loading state; resolved state; correct `sendAction` on interaction                                 |
+| Zustand store        | defaults; each mutation; selectors                                                                 |
+| IPC handler          | valid → response; invalid → documented rejection shape                                             |
+| Bug fix              | reproduction test red first, then fix                                                              |
 
-1. Create the test file (`<Module>.test.ts` co-located with the future source file).
-2. Import the module path that will exist once implemented (it will fail to resolve — that is expected).
-3. Write `describe` / `it` blocks that express the behaviour in plain language.
-4. Run the test suite and confirm every new test is **red**:
+## Simulation: Zero Mocks
 
-```bash
-pnpm test:watch
-```
-
-A test must fail with "cannot find module" or a clear assertion failure. **A test that starts green before implementation is a defective test — fix or delete it.**
-
-### Step 3 — Implement the minimum code to turn each test green
-
-Write just enough production code to make the currently-failing test pass, then move to the next test. Do not write code that no test exercises yet. No gold-plating.
-
-### Step 4 — Refactor under green
-
-Once all tests pass, clean up: extract helpers, rename for clarity, remove duplication. Re-run tests after every refactor step to confirm they stay green.
-
-```bash
-pnpm test:watch
-```
-
-### Step 5 — Do not skip steps
-
-Committing implementation code before a test exists for it is a workflow violation. The commit message body must mention "Tests written first" or "Red confirmed".
-
----
-
-## Test File Location and Toolchain
-
-| Concern             | Convention                                                                                                     |
-| ------------------- | -------------------------------------------------------------------------------------------------------------- |
-| Unit tests          | `<Module>.test.ts` / `<Module>.test.tsx` co-located with the source file                                       |
-| Integration tests   | `<package>/__tests__/<name>.test.ts`                                                                           |
-| Test doubles        | `<package>/__test-support__/` — fakes and stubs only                                                           |
-| Runner              | **Vitest** (`vitest.config.mts` at repo root) — run with `pnpm test:watch`                                     |
-| Property tests      | **fast-check** for projection, determinism, and commitment invariants                                          |
-| Component tests     | **React Testing Library** in `jsdom` — add `// @vitest-environment jsdom` at the top of the file               |
-| Never in unit tests | Real filesystem, real network, real Electron IPC — use `InMemorySaveRepository`, `InMemoryMultiplayerProvider` |
-
----
-
-## Per-Situation Coverage Table
-
-| Situation                | What to cover                                                                                                                                                  |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| New `ActionDefinition`   | `validate()` rejects every illegal payload variant; `reduce()` produces the exact expected next state; `reduce()` does not mutate the input snapshot.          |
-| New `simulation/` module | Constructor/factory contract; happy path; every documented error type thrown under the right conditions; boundary values.                                      |
-| New renderer component   | Renders loading state while `useAsset` returns `null`; renders correctly with resolved data; dispatches the right `sendAction` call on user interaction.       |
-| New Zustand store        | Initialises with documented default values; each mutation method produces the correct state; selectors return the right derived value.                         |
-| New IPC handler          | Integration test: call handler with valid input → assert correct IPC response; call with invalid input → assert rejection shape matches documented error type. |
-| Bug fix                  | Write a test that reproduces the bug **first**, confirm it is red, then fix the code.                                                                          |
-
----
-
-## Simulation Unit Tests Are Pure Functions — No Mocks Needed
-
-Simulation tests require **zero mocks**. The pure reducer pattern means every test is a function call with plain inputs and plain output assertions:
+Pure-reducer pattern → tests are direct function calls:
 
 ```typescript
-// Good — no mocks, no DI frameworks, no spies
 const next = pipeline.process(makeBaseSnapshot({ tick: 5 }), action, 'p1');
 expect(next.tick).toBe(6);
 ```
 
-If you feel the need to mock something inside `simulation/`, that is a signal the code under test has a hidden dependency it should not have. Remove the dependency rather than adding a mock.
+Need a mock inside `simulation/`? The code has a hidden dependency. Remove the dependency.
 
----
+## Red Confirmation
 
-## Red Confirmation Checklist
-
-Before proceeding to Step 3 (implementation), verify:
-
-- [ ] Test file exists and imports the not-yet-created module path
-- [ ] `pnpm test:watch` shows the new test(s) as **FAIL** with a meaningful failure message
-- [ ] No new test is accidentally green before implementation
-- [ ] Test names describe the expected behaviour in plain language
+- [ ] Test file imports the not-yet-created module
+- [ ] `pnpm test:watch` shows new tests **FAIL** with meaningful message
+- [ ] No accidental green
+- [ ] Test names describe behaviour in plain language

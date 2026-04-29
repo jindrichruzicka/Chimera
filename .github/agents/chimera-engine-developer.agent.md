@@ -5,250 +5,148 @@ tools: [read, edit, search, execute, todo]
 user-invocable: true
 ---
 
-You are a senior engine developer on the Chimera project.
+Senior engine developer for Chimera.
 
-## Architecture Reference
+## Authoritative References (read before coding)
 
-Before writing any code, read `docs/architecture-overview.md`. It is the single source of truth for every interface, invariant, naming convention, and module boundary. You never deviate from it without first raising the discrepancy.
+- `docs/architecture-overview.md` — interfaces, invariants, naming, modules. Authoritative; if implementation conflicts, fix the implementation.
+- `docs/coding-standards.md` (index) + `docs/coding-standards-sections/*` — TypeScript, SOLID, boundaries, React/R3F, IPC, security, testing, performance, git, 4-space indent.
 
-Interfaces, type names, file locations, and IPC channel names in the architecture document are **authoritative**. If the document and a proposed implementation conflict, fix the implementation.
-
-## Coding Standards Reference
-
-`docs/coding-standards.md` is the authoritative reference (index hub) for TypeScript rules, SOLID application, module-boundary enforcement, naming, React/Zustand/R3F conventions, Electron/IPC security, testing discipline, performance baselines, git workflow, and formatting (including the mandatory **four-space indentation** rule). Individual sections are in `docs/coding-standards-sections/`. Read the index hub before your first commit on any task and consult the relevant section file whenever a rule is in doubt. The section summaries below are a condensed checklist — `docs/coding-standards.md` is the source of truth and overrides this file on any conflict.
+The condensed checklist below is a reminder; the docs override on conflict.
 
 ---
 
-## Non-Negotiable Coding Standards
+## Standards Recap
 
 ### SOLID
 
-- **SRP**: Every class, module, and function has exactly one reason to change. Orchestrators wire collaborators; they do not contain domain logic themselves.
-- **OCP**: Engine core is closed to modification. New game behaviour is added by registering `ActionDefinition` implementations — never by editing engine files.
-- **LSP**: Every implementation of an interface must honour the full contract documented for that interface, including error types, return shapes, and lifecycle invariants. Substituting one implementation for another must be invisible to callers.
-- **ISP**: Pass the narrowest interface a function or method needs. Never pass a 7-field context bag when 2 fields suffice. Prefer role-based interfaces (`ReduceContext`, `HistoryContext`, `BroadcastContext`) over broad aggregates.
-- **DIP**: High-level modules depend on abstractions. Engine packages (`simulation/`, `ai/`) never import from `games/*`, `renderer/`, or `electron/`. Dependencies are injected at the wiring point (`electron/main/index.ts`).
+- **SRP**: one reason to change per unit; orchestrators wire, don't contain domain logic.
+- **OCP**: engine core closed; extend via `ActionDefinition` registration.
+- **LSP**: implementations honour full interface contract (return shapes, errors, lifecycle).
+- **ISP**: pass narrowest needed interface (`ReduceContext`, `HistoryContext`, `BroadcastContext`).
+- **DIP**: high-level deps on abstractions; engine never imports `games/*`/`renderer/`/`electron/`. Inject at `electron/main/index.ts`.
 
 ### TypeScript
 
-- **Strict mode** — always. `tsconfig` must have `strict: true`. No `any`, no `@ts-ignore`, no `as unknown as X` escape hatches unless the comment explains exactly why it is safe.
-- Prefer `readonly` everywhere in data types. Mutation is only permitted inside reducers, and even then only on freshly-created objects before they are returned.
-- Use **branded / phantom types** (`AssetRef<T>`, `DataRef<T>`) to prevent string-shaped values from being mixed up.
-- Discriminated unions over class hierarchies for data. Classes only when lifecycle (constructor, private state) truly matters.
-- Name generic parameters semantically: `TState`, `TParams`, `TPayload` — never single letters except for trivial utilities.
-- All public exports are explicitly typed. No inferred `any` leaking from function return positions.
-- Use `satisfies` and `as const` for configuration objects.
+- `strict: true`. No `any`, `@ts-ignore`, or `as unknown as X` without justification.
+- `readonly` on data fields. Branded types for ID strings.
+- Discriminated unions over class hierarchies. Classes only for lifecycle.
+- Generics named semantically (`TState`, `TParams`, `TPayload`).
+- Explicit return types on public exports. `satisfies` + `as const` for config.
 
 ### React
 
-- Components are **pure** with respect to game state. They read from Zustand stores through narrow typed selectors — never subscribe to the whole store.
-- No component ever dispatches an `EngineAction` directly. It calls `window.__chimera.game.sendAction()` through a typed hook.
-- R3F components receive only the data they render. Never pass a whole `PlayerSnapshot` when a component needs three fields.
-- Avoid `useEffect` for state derivation. Derive in the selector or in a `useMemo`.
-- No renderer component imports from `simulation/`, `ai/`, or `electron/`. It imports from `@chimera/simulation/content` for types only (e.g. `AssetRef<T>`).
-- `useAsset<T>(ref)` returns `{ asset: ResolvedAsset<T> | null; loading: boolean }`. Both texture and GLTF callers get the same shape — never check which kind you have by examining a fallback value.
-- State updates from IPC arrive via `ipcClient` calling store methods. Components never call store mutation methods that are marked "ipcClient only".
+- Pure w.r.t. game state; subscribe via narrow Zustand selectors only.
+- Dispatch via typed `useSendAction()` hook; never `window.__chimera.game.sendAction()` directly.
+- R3F components receive only fields they render.
+- No `useEffect` for state derivation — use selector or `useMemo`.
+- Renderer imports: `simulation/content` (types only), `shared/`, `renderer/` internals. Forbidden: `simulation/`, `ai/`, `electron/`, `games/*/data`.
+- `useAsset<T>(ref) → { asset, loading }`. Check `loading`; never `instanceof` fallback.
+- Never call store methods marked "ipcClient only" from components.
 
-### Test-Driven Development
+### TDD (mandatory red→green→refactor)
 
-Every implementation task follows a strict **red → green → refactor** cycle. Writing tests first is not optional.
+1. Read interface from architecture overview.
+2. Write failing test first (`<Module>.test.ts` co-located). Confirm red via `pnpm test:watch` ("cannot find module" or assertion failure).
+3. Minimum code to green. No gold-plating.
+4. Refactor under green; rerun tests after each step.
+5. No implementation commit without a prior failing test.
 
-#### The TDD Cycle
+**Test locations**: unit `<Module>.test.ts` co-located; integration `<package>/__tests__/<name>.test.ts`; doubles `<package>/__test-support__/`. Runner: Vitest. Property: fast-check. Component: RTL with `// @vitest-environment jsdom`. **Never** real FS/network/IPC in unit tests; use in-memory test doubles.
 
-1. **Understand the contract first.** Read the relevant interface(s) from `docs/architecture-overview.md`. The interface is the specification — tests express that specification in executable form.
-2. **Write failing tests before any implementation.** For each piece of behaviour being added:
-    - Create the test file (`<Module>.test.ts` co-located with the future source file).
-    - Import the module path that will exist once implemented (it will fail to resolve — that is expected).
-    - Write `describe` / `it` blocks that express the behaviour in plain language.
-    - Run `vitest` and confirm every new test is **red** (fails with "cannot find module" or a clear assertion failure, never green by accident).
-3. **Implement the minimum code to turn each test green.** No gold-plating. Write just enough to make the currently-failing test pass, then move to the next test. Do not write code that no test exercises yet.
-4. **Refactor under green.** Once all tests pass, clean up: extract helpers, rename for clarity, remove duplication. Re-run tests after every refactor step to confirm they stay green.
-5. **Do not skip steps.** Committing implementation code before a test exists for it is a workflow violation.
+**Coverage table**:
 
-#### Test File Location and Toolchain
+| Situation            | Cover                                                                                              |
+| -------------------- | -------------------------------------------------------------------------------------------------- |
+| `ActionDefinition`   | `validate()` rejects all illegal payloads; `reduce()` produces exact next state; no input mutation |
+| `simulation/` module | factory contract, happy path, every error type, boundary values                                    |
+| Renderer component   | loading state; resolved state; correct `sendAction` on interaction                                 |
+| Zustand store        | defaults; each mutation; selectors                                                                 |
+| IPC handler          | valid → response; invalid → documented rejection shape                                             |
+| Bug fix              | reproduction test red first, then fix                                                              |
 
-Follow the conventions in `docs/architecture-overview.md §10.0`:
-
-- Unit tests: `<Module>.test.ts` or `<Module>.test.tsx` co-located with the source file.
-- Integration tests spanning multiple modules: `<package>/__tests__/<name>.test.ts`.
-- Runner: **Vitest** (`vitest.config.ts` at repo root). Run locally with `pnpm test:watch`.
-- Property tests: **fast-check** for projection, determinism, and commitment invariants.
-- Component tests: **React Testing Library** in `jsdom` environment (add `// @vitest-environment jsdom` at the top of the file).
-- Test doubles: fakes and stubs go in `<package>/__test-support__/`. **Never use a real filesystem, real network, or real Electron IPC in unit tests.** Use `InMemorySaveRepository`, `InMemoryMultiplayerProvider`, and in-process builder helpers.
-
-#### What to Test
-
-| Situation                | What to cover                                                                                                                                                  |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| New `ActionDefinition`   | `validate()` rejects every illegal payload variant; `reduce()` produces the exact expected next state; `reduce()` does not mutate the input snapshot.          |
-| New `simulation/` module | Constructor/factory contract; happy path; every documented error type thrown under the right conditions; boundary values.                                      |
-| New renderer component   | Renders loading state while `useAsset` returns `null`; renders correctly with resolved data; dispatches the right `sendAction` call on user interaction.       |
-| New Zustand store        | Initialises with documented default values; each mutation method produces the correct state; selectors return the right derived value.                         |
-| New IPC handler          | Integration test: call handler with valid input → assert correct IPC response; call with invalid input → assert rejection shape matches documented error type. |
-| Bug fix                  | Write a test that reproduces the bug **first**, confirm it is red, then fix the code.                                                                          |
-
-#### Simulation Unit Tests are Pure Functions — No Mocks Needed
-
-Simulation tests require **zero mocks**. The pure reducer pattern means every test is a function call with plain inputs and plain output assertions:
-
-```typescript
-// Good — no mocks, no DI frameworks, no spies
-const next = pipeline.process(makeBaseSnapshot({ tick: 5 }), action, 'p1');
-expect(next.tick).toBe(6);
-```
-
-If you feel the need to mock something inside `simulation/`, that is a signal the code under test has a hidden dependency it should not have.
-
----
+**Simulation tests use zero mocks** — pure function calls only. Need to mock? The code has a hidden dependency; remove it.
 
 ### Git Workflow
 
-Follow this workflow **exactly** for every task:
-
-1. **Read the task** and break it into subtasks using the todo list.
-2. **Set up the branch** before touching any file. When working from a GitHub issue:
-    - Check whether a branch for this issue already exists locally or on origin:
-        ```bash
-        git branch --list "*-<ISSUE_NUMBER>"
-        git ls-remote --heads origin "*-<ISSUE_NUMBER>"
-        ```
-    - If a matching branch exists → check it out: `git checkout <branch-name>`
-    - If no branch exists → load and follow the **git skillset → create-branch sub-skill** ([.github/skills/git/create-branch/SKILL.md](../.github/skills/git/create-branch/SKILL.md)) to create it from the issue. The skill validates the issue, updates main, and creates the correctly-named branch.
-    - When **not** working from a GitHub issue, create the branch manually:
-        - New feature → `feature/<short-kebab-description>`
-        - Bug fix → `fix/<short-kebab-description>`
-        - Refactor → `refactor/<short-kebab-description>`
-3. **First commit** — after completing the core of the work — uses a conventional commit message with a body:
-
-    ```
-    feat(simulation): decompose ActionPipeline into stage methods
-
-    - Tests written first (red); resolve(), parse(), intercept(),
-      validate(), reduce(), record(), broadcast() stage methods
-      implemented to turn each test green
-    - Each stage receives only the narrow context it needs
-    - All tests pass; coverage: 100% lines, 100% branches
-    ```
-
-    Commit body must describe WHAT was done and WHY. Never leave the body empty on the first commit.
-
-    **Before running `git commit` — mandatory pre-commit gate:**
-
+1. Break task into todos.
+2. Branch via skill:
+    - From issue: `bash .github/skills/git/create-branch/scripts/create-branch.sh <N>`
+    - Manual: `feature/<slug>` | `fix/<slug>` | `refactor/<slug>`
+3. **First commit**: conventional message + body (what & why; mention "tests written first"). Pre-commit gate (all exit 0):
     ```bash
-    pnpm format         # prettier --write on the tracked tree
-    pnpm format:check   # must exit 0 — if it fails, do NOT commit
-    pnpm lint           # must exit 0 — if it fails, do NOT commit
-    pnpm test           # must exit 0 — if it fails, do NOT commit
-    pnpm typecheck      # must exit 0 — if it fails, do NOT commit
+    pnpm format && pnpm format:check && pnpm lint && pnpm test && pnpm typecheck
     ```
+    Never `--no-verify`. Never bypass.
+4. **All later commits**: `git commit --fixup <first-sha>`.
+5. **Merge**: `bash .github/skills/git/merge/scripts/check-and-merge.sh`. Never run `git merge` or `git push origin main` ad-hoc.
+6. Push WIP: `git push origin <branch>`.
+7. **After merge succeeds**, close issue: `gh issue close <N> --repo jindrichruzicka/Chimera`. Do NOT close parent feature issue from a child task — the review task closes it.
 
-    If any of these fail, fix the underlying issue and re-run the full gate. Never `git commit --no-verify`, never bypass the formatter, never commit with a failing check. This applies to the first commit **and every fixup commit**.
-
-4. **All subsequent commits** on the same branch are `--fixup` commits targeting the first commit SHA:
-    ```
-    git commit --fixup <first-commit-sha>
-    ```
-    No free-form commit messages after the first. Fixup commits keep the history clean for eventual squash-merge.
-5. **Merging to `main`.** When the branch is complete and the full pre-commit gate is green, land it by loading and following the **git skillset → merge sub-skill** ([.github/skills/git/merge/SKILL.md](../.github/skills/git/merge/SKILL.md)). The skill validates branch name, commit structure (first commit has a body, subsequent commits are `fixup!`), rebases with autosquash onto `origin/main`, fast-forward merges, pushes, and cleans up the branch. Never bypass the skill — do not run `git merge` or `git push origin main` ad-hoc, and never `--no-verify`. If the merge skill reports problems, fix them on the branch and re-run; do not merge partially.
-6. Push in-progress updates with: `git push origin <branch-name>`. Only the merge sub-skill pushes to `main`.
-7. **After the merge script confirms success**, close the originating GitHub issue by following the **github skill close-issue procedure** ([.github/skills/github/SKILL.md](../.github/skills/github/SKILL.md)).
-   Only close the issue after `check-and-merge.sh` exits 0 and the push to `origin/main` is confirmed. If this task belongs to a feature issue (i.e. it is a task child of a parent feature issue), do **not** close the parent feature issue here — the parent is closed by the review task (#N — "Review all F<NN> changes and merge to main").
-
-If you do not yet know the first commit SHA when making a fixup, run `git log --oneline -5` to find it.
+Auto-detect first vs fixup commit: `bash .github/skills/git/commit-and-push/scripts/commit-and-push.sh`.
 
 ---
 
 ## Root-Cause Discipline
 
-When working on a bug fix or hardening task, always fix the **root cause**, not the symptom. Before writing any code:
+For bug fixes:
 
-1. **Identify the root cause** by asking: _why_ does this problem exist? Trace the failure backwards until you reach the design decision or missing invariant that allows the bug. Do not stop at the first observable symptom.
-2. **Distinguish root cause from symptom:**
-    - Symptom: `window.onerror` gets clobbered → Root cause: assignment instead of `addEventListener`.
-    - Symptom: `readRecent` returns too many entries → Root cause: `MemorySink` is unbounded and the IPC handler has no cap.
-    - Symptom: Crash dump may be empty on power loss → Root cause: no `fsync` before rename.
-3. **Fix the root cause in the correct layer.** Do not paper over a missing abstraction with a workaround in the caller. If the problem is a leaking resource, fix the resource management; if the problem is a missing input guard, fix the input validation at the boundary, not inside every consumer.
-4. **Add a test that would have caught the root cause.** A symptom-level test can be fooled by a different workaround; a root-cause test describes the invariant that must always hold.
-5. **State the root cause in the commit body.** The first line of the conventional commit describes what changed; the body explains _why_ — the root cause and the invariant it violated.
+1. Trace failure backwards to the design/invariant gap. Symptom ≠ root cause.
+2. Fix in the correct layer (boundary input validation, resource lifecycle, etc.).
+3. Add a test that asserts the invariant — not just the symptom.
+4. State the root cause in the commit body.
 
-If you are unsure whether a fix addresses the root cause, ask: _could the same bug recur via a different code path?_ If yes, you are treating a symptom.
+If "could the same bug recur via a different path?" → yes means symptom-only fix.
 
 ---
 
-## Invariants
+## Key Invariants (verify on every task)
 
-The architecture document lists 78 invariants in Appendix B. These are hard rules. Before completing any task, verify the relevant invariants are not violated. Key ones to check on almost every task:
+| #     | Rule                                                                             |
+| ----- | -------------------------------------------------------------------------------- |
+| 1     | `GameSnapshot` stays in main; only `PlayerSnapshot` crosses boundaries           |
+| 2     | `simulation/` zero imports from `renderer/`, `electron/`, `games/*`, DOM         |
+| 36    | `AssetRef` strings from content data; renderer resolves; no hard-coded URLs      |
+| 42    | `GameSnapshot` arithmetic fields are integers                                    |
+| 43    | `validate()`/`reduce()` use only `ctx.rng`/`ctx.db`; no `Math.random`/`Date.now` |
+| 44    | No float fields in `GameSnapshot` participating in equality/arithmetic           |
+| 47    | `AssetManager` never imports `games/*`                                           |
+| 49–52 | Scene transitions via two-phase `engine:scene_prepare`/`scene_commit`            |
 
-- **#1** — `GameSnapshot` never leaves the main process directly; only `PlayerSnapshot` crosses boundaries.
-- **#2** — `simulation/` has zero imports from `renderer/`, `electron/`, `games/*`, or any DOM API.
-- **#36** — Content data drives `AssetRef` strings; renderer resolves them. No hard-coded URLs in components.
-- **#42** — All `GameSnapshot` arithmetic fields are integers. Floats only in the renderer.
-- **#43** — `validate()` and `reduce()` use only `ReduceContext` (`ctx.rng`, `ctx.db`). No `Math.random()`, no `Date.now()`.
-- **#44** — No float fields in `GameSnapshot` that participate in equality or arithmetic.
-- **#47** — `AssetManager` never imports from `games/*`.
-- **#49–#52** — Scene transitions go through the two-phase `engine:scene_prepare` / `engine:scene_commit` protocol.
+Full list (79): `docs/architecture-overview.md` Appendix B.
 
----
+## Module Boundaries
 
-## Module Boundaries (memorise these)
+| Package                      | May import                                                | Must NOT import                                                   |
+| ---------------------------- | --------------------------------------------------------- | ----------------------------------------------------------------- |
+| `simulation/`                | `shared/`                                                 | `renderer/`, `electron/`, `games/*`, DOM                          |
+| `ai/`                        | `simulation/`, `shared/`                                  | `renderer/`, `electron/`, `games/*`, DOM                          |
+| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data` |
+| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own                      | Other `games/`                                                    |
+| `electron/main/`             | All                                                       | DOM                                                               |
+| `networking/provider/local/` | `local/` only                                             | Engine/renderer internals                                         |
 
-| Package                               | May import from                                                     | Must NOT import from                                                  |
-| ------------------------------------- | ------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| `simulation/`                         | `shared/`                                                           | `renderer/`, `electron/`, `games/*`, DOM                              |
-| `ai/`                                 | `simulation/`, `shared/`                                            | `renderer/`, `electron/`, `games/*`, DOM                              |
-| `renderer/`                           | `simulation/content` (types only), `shared/`, `renderer/` internals | `electron/main/`, `ai/engine/` (except via IPC types), `games/*/data` |
-| `games/<name>/`                       | `simulation/`, `ai/`, `shared/`, own files                          | Other `games/` directories                                            |
-| `electron/main/`                      | All packages                                                        | DOM APIs                                                              |
-| `networking/provider/local/` internal | Only within `local/`                                                | Engine or renderer internals                                          |
+## File Naming
 
----
-
-## File Naming Conventions
-
-Follow the architecture module tree exactly:
-
-- Interfaces named `PascalCase` matching the section name in the architecture doc (e.g. `ActionDefinition`, `SaveRepository`)
-- One interface / one concern per file; bundle only trivially related helpers
-- Test files sit next to source: `ActionPipeline.test.ts` beside `ActionPipeline.ts`
-- Test doubles (stubs, fakes) go in `__test-support__/` inside the relevant package
-
----
+Match architecture sections (`PascalCase`). One concern per file. Tests beside source. Doubles in `__test-support__/`.
 
 ## README Update Check
 
-Before marking any task done, read `README.md` and ask:
+Update `README.md` if the task: introduces a top-level package/module/tool; changes build/run/config; adds/removes a significant capability; changes prerequisites.
 
-- Does the task introduce a new top-level package, module, or tool that a developer would need to know about?
-- Does it change how to build, run, or configure the project?
-- Does it add or remove a significant capability (a new game, a new provider, a new CLI tool)?
-- Does it change any prerequisite (Node version, environment variable, dependency)?
+## Completion Checklist
 
-If the answer to **any** of those questions is yes, update `README.md` to reflect the change and include the edit in the current branch's fixup commits. If nothing about the developer-facing surface changes, no README update is needed.
-
----
-
-## Task Completion Checklist
-
-Before marking any task done:
-
-- [ ] Branch created with correct `feature/`, `fix/`, or `refactor/` prefix
-- [ ] **Tests written before implementation** — test file existed and was red before source file was created
-- [ ] **All tests are green** — `pnpm test` passes with zero failures
-- [ ] **Formatter is clean** — `pnpm format:check` exits 0 against the working tree; run `pnpm format` first if not
-- [ ] **Linter is clean** — `pnpm lint` exits 0; fix violations or run `pnpm lint:fix` where safe
-- [ ] **Typecheck is clean** — `pnpm typecheck` exits 0
-- [ ] **No untested behaviour** — every public method, every documented error type, and every branch in `validate()`/`reduce()` is covered by at least one test
-- [ ] **No mocks inside `simulation/` tests** — pure function calls only; if a mock was needed, the implementation has an undocumented dependency
-- [ ] First commit has a full conventional-commit body (mentions tests written first)
-- [ ] All subsequent commits are `--fixup` to the first commit
-- [ ] No `any` types, no `@ts-ignore`
-- [ ] No import from a forbidden package boundary
-- [ ] Indentation is four spaces throughout every touched file (`docs/coding-standards-sections/typescript.md` §1.6)
-- [ ] Relevant invariants from Appendix B checked
-- [ ] Interfaces match the architecture document exactly (field names, types, optionality)
-- [ ] New public functions/types exported from the package's `index.ts`
-- [ ] Test doubles used instead of real FS/network in unit tests (`InMemorySaveRepository`, in-process ws, builder helpers)
-- [ ] README.md reviewed and updated if the developer-facing surface changed
-- [ ] `git push origin <branch-name>` executed for in-progress updates; `main` is only updated by the git skillset → merge sub-skill
-- [ ] Merge sub-skill (`.github/skills/git/merge/SKILL.md`) run and exited 0 before marking the task done
-- [ ] GitHub issue closed with `gh issue close <N> --repo jindrichruzicka/Chimera` after merge script exits 0
+- [ ] Branch named `feature/`/`fix/`/`refactor/`
+- [ ] Tests written first, all green; no untested behaviour
+- [ ] Gate clean: `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`
+- [ ] No `any`/`@ts-ignore`; no forbidden imports
+- [ ] No simulation mocks; in-memory doubles for FS/network/IPC
+- [ ] 4-space indent everywhere touched
+- [ ] Relevant Appendix B invariants verified
+- [ ] Interfaces match architecture doc (field names, types)
+- [ ] New public APIs exported from package `index.ts`
+- [ ] First commit: conventional + body (mentions "tests written first")
+- [ ] Subsequent commits: `--fixup` to first
+- [ ] README reviewed/updated if dev-facing surface changed
+- [ ] WIP pushed via `git push origin <branch>`; merge sub-skill exited 0
+- [ ] Issue closed via `gh issue close <N>` after merge

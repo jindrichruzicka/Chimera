@@ -4,72 +4,56 @@ applyTo: 'simulation/**,ai/**'
 
 # Simulation & AI Layer — Rules
 
-These rules apply to every file under `simulation/` and `ai/`. They are hard constraints; violations are **BLOCK** findings at review.
+Hard constraints; violations are **BLOCK**.
 
-## Module Boundaries (Invariant #2)
+## Module Boundaries (Inv #2)
 
-`simulation/` and `ai/` may import from:
+May import: `shared/`; each other (`ai/` may import `simulation/`).
 
-- `shared/`
-- Each other (`ai/` may import `simulation/`)
+NEVER import: `renderer/`, `electron/`, `games/*`, DOM (`window`/`document`/`navigator`/`localStorage`), Three.js or any graphics lib.
 
-`simulation/` and `ai/` must **NEVER** import from:
+## Determinism (Inv #43, #44)
 
-- `renderer/`
-- `electron/`
-- `games/*`
-- Any DOM API (`window`, `document`, `navigator`, `localStorage`, etc.)
-- Three.js or any graphics library
+Forbidden inside `simulation/`/`ai/` (esp. `validate()`/`reduce()`):
 
-## Determinism Rules (Invariants #43, #44)
+- `Math.random()` → use `ctx.rng`
+- `Date.now()` / `performance.now()` → use `snapshot.tick`
+- `new Date()`
 
-**NEVER** call any of the following inside `simulation/` or `ai/` code, especially inside `validate()` or `reduce()`:
+No float fields in `GameSnapshot` or sub-objects participating in equality/arithmetic — all arithmetic fields integer (Inv #44).
 
-- `Math.random()` — use `ctx.rng` from `ReduceContext` instead
-- `Date.now()` — use `snapshot.tick` for simulation time instead
-- `performance.now()` — same; forbidden in simulation
-- `new Date()` — forbidden inside reducers
+## State Mutation
 
-**NEVER** add float fields to `GameSnapshot` or any of its sub-objects that participate in equality checks or arithmetic. All arithmetic fields in `GameSnapshot` must be integers (Invariant #44).
+- `validate()` and `reduce()` are **pure**; do not mutate the input `snapshot`.
+- Mutate only freshly-constructed objects before returning.
+- No `Object.assign(existing, …)` — return `{ ...existing, field: newValue }`.
 
-## State Mutation Rules
+## IPC Boundary (Inv #1)
 
-- `validate()` and `reduce()` must be **pure functions**. They must not mutate their input `snapshot` argument.
-- Mutation is only permitted on freshly-constructed objects before they are returned from `reduce()`.
-- Do not use `Object.assign(existingObject, ...)` — return a new object: `{ ...existing, field: newValue }`.
+`GameSnapshot` never leaves main. Only `PlayerSnapshot` crosses IPC/WebSocket. `simulation/` must not import from `electron/`.
 
-## IPC Boundary (Invariant #1)
+## TypeScript
 
-`GameSnapshot` must **never leave the main process**. Only `PlayerSnapshot` crosses IPC or WebSocket boundaries.
+- `strict: true`; no `any`/`@ts-ignore` without `@ts-expect-error: <reason>`.
+- `readonly` on every `GameSnapshot` field/sub-type.
+- Generics: `TState extends BaseGameSnapshot`, `TPayload`, `TParams`.
+- Branded IDs: `PlayerId`, `ActionType`, `AssetRef<T>`.
 
-- Do not expose `GameSnapshot` from any function that is called on the IPC path.
-- `simulation/` must not import from `electron/` — this boundary must be observed in both directions.
+## Testing — Zero Mocks
 
-## TypeScript in This Layer
+Pure-reducer means every test is a direct function call:
 
-- `strict: true` — no `any`, no `@ts-ignore` without a `@ts-expect-error: <reason>` comment.
-- `readonly` on every field of `GameSnapshot` and all sub-types.
-- Generic parameters named semantically: `TState extends BaseGameSnapshot`, `TPayload`, `TParams`.
-- Branded types for all string-shaped identifiers: `PlayerId`, `ActionType`, `AssetRef<T>`.
+```typescript
+const next = pipeline.process(makeBaseSnapshot({ tick: 5 }), action, 'p1');
+expect(next.tick).toBe(6);
+```
 
-## Testing Rules
+Need to mock inside `simulation/`? Hidden dependency — remove it. Doubles in `__test-support__/` only.
 
-- Simulation tests require **zero mocks**. The pure reducer pattern means every test is a plain function call:
+## ESLint Enforced
 
-    ```typescript
-    const next = pipeline.process(makeBaseSnapshot({ tick: 5 }), action, 'p1');
-    expect(next.tick).toBe(6);
-    ```
+- `no-restricted-globals` — `Math.random`/`Date.now` in `simulation/`/`games/*/actions/`
+- `no-restricted-imports` — `renderer/`/`electron/`/`games/*` from `simulation/`
+- `chimera/no-restricted-globals` — `window`/`document`/`navigator` in `simulation/`/`ai/`
 
-- If you feel the need to mock something inside `simulation/`, that signals a hidden dependency the code must not have.
-- Test doubles live in `__test-support__/` — never in the source files.
-
-## ESLint Reminders
-
-The following ESLint rules actively enforce the above in CI:
-
-- `no-restricted-globals` — blocks `Math.random` / `Date.now` inside `simulation/` and `games/*/actions/`
-- `no-restricted-imports` — blocks `renderer/`, `electron/`, `games/*` imports from `simulation/`
-- `chimera/no-restricted-globals` — blocks `window`, `document`, `navigator` inside `simulation/` and `ai/`
-
-Any `// eslint-disable` requires a `@chimera-review: <reason>` comment on the preceding line.
+`// eslint-disable` requires `@chimera-review: <reason>` on the preceding line.

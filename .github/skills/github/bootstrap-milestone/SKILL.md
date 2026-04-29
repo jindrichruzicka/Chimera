@@ -6,71 +6,52 @@ argument-hint: 'Milestone identifier (e.g. "M1" or "M2")'
 
 # Bootstrap Milestone Skill
 
-Bootstraps a complete GitHub milestone from the architecture overview: creates the milestone, all required labels, feature issues, and task issues in the correct dependency order.
-
-## When to Use
-
-- Setting up M1, M2, or M3 from scratch
-- Decomposing architecture sections into GitHub issues
-- Creating the full issue backlog for a release
-- Initializing a new milestone before starting implementation work
-
----
+Creates a full milestone backlog from the architecture: milestone → labels → feature issues → task issues, in dependency order.
 
 ## Procedure
 
-### Step 1 — Read the architecture
+### 1. Read architecture
 
-Read the relevant sections from `docs/architecture-overview.md`:
+`docs/architecture-overview.md`:
 
-- **M1:** §4.1-4.15 (Core Engine), §12.1 (M1 checklist)
-- **M2:** §4.16-4.25 (Multiplayer), §12.2 (M2 checklist)
-- **M3:** §4.26-4.35 (AI & Content), §12.3 (M3 checklist)
+- M1: §4.1–4.15 (Core Engine), §12.1 checklist
+- M2: §4.16–4.25 (Multiplayer), §12.2 checklist
+- M3: §4.26–4.35 (AI & Content), §12.3 checklist
 
-### Step 2 — Check existing state
+### 2. Check existing state
 
 ```bash
 export GH_REPO=jindrichruzicka/Chimera
-
-# Check existing milestones
 gh api repos/$GH_REPO/milestones --jq '.[] | "\(.number) \(.title)"'
-
-# Check existing issues for this milestone
 gh issue list --repo $GH_REPO --state open --label "milestone:<M>" --json number,title
 ```
 
-### Step 3 — Resolve milestone number
+### 3. Resolve / create milestone
 
 ```bash
 M_ID=$(gh api repos/$GH_REPO/milestones --jq '.[] | select(.title | startswith("M<N>")) | .number')
 ```
 
-If the milestone doesn't exist yet, create it using the [create-milestone skill](./create-milestone/SKILL.md).
+If missing, use [create-milestone skill](../create-milestone/SKILL.md).
 
-### Step 4 — Create labels
+### 4. Create labels
 
-Create all required labels using the [create-labels skill](./create-labels/SKILL.md):
+Use [create-labels skill](../create-labels/SKILL.md). At minimum:
 
 ```bash
-# Milestone label
 gh label create "milestone:M1" --color "6b3ea1" --description "Core Engine (M1)" --repo $GH_REPO || true
-
-# Type labels
 gh label create "feature" --color "0e8a16" --description "Feature issue" --repo $GH_REPO || true
 gh label create "task" --color "0075ca" --description "Task/implementation issue" --repo $GH_REPO || true
-
-# Module labels (as needed)
 gh label create "simulation" --color "0596ca" --description "Simulation core" --repo $GH_REPO || true
-gh label create "renderer" --color "0596ca" --description "React/R3F renderer" --repo $GH_REPO || true
+gh label create "renderer"   --color "0596ca" --description "React/R3F renderer" --repo $GH_REPO || true
 ```
 
-### Step 5 — Present decomposition to user
+### 5. Present decomposition (USER APPROVAL REQUIRED)
 
-**Before creating any issues, present the planned decomposition:**
+Before creating any issues, show:
 
 ```
 Milestone: M1 — Core Engine
-============================
 
 Feature Issues:
   #1: Save/Load System (§4.11)
@@ -78,101 +59,60 @@ Feature Issues:
   #3: Renderer Bootstrap (§4.13)
 
 Task Issues:
-  Under #1 (Save/Load):
-    - Implement SaveRepository interface
-    - Implement InMemorySaveRepository
-    - Implement FileSaveRepository
-    - Add save/load actions to ActionPipeline
-    - Write integration tests
+  Under #1: Implement SaveRepository / InMemorySaveRepository / FileSaveRepository / save-load actions / integration tests
+  Under #2: Settings schema / SettingsStore / settings UI / persistence
+  Under #3: AssetManager / useAsset / R3F scene components / IPC bridge
 
-  Under #2 (Settings):
-    - Implement Settings schema
-    - Implement SettingsStore
-    - Wire settings UI components
-    - Add settings persistence
-
-  Under #3 (Renderer):
-    - Implement AssetManager
-    - Implement useAsset hook
-    - Create R3F scene components
-    - Wire IPC bridge
-
-Total: 3 feature issues, 11 task issues
-
-Proceed? (y/n)
+Total: 3 features, 11 tasks. Proceed? (y/n)
 ```
 
-**Wait for user approval before creating any issues.**
+Wait for approval.
 
-### Step 6 — Create feature issues
+### 6. Create feature issues
 
-Create feature issues in dependency order using the [create-issue skill](./create-issue/SKILL.md). Record each issue number:
+In dependency order, via [create-issue skill](../create-issue/SKILL.md). Record numbers:
 
 ```bash
-# Feature 1: Save/Load
-FEATURE_SAVELOAD=$(gh issue create \
-  --repo $GH_REPO \
+FEATURE_SAVELOAD=$(gh issue create --repo $GH_REPO \
   --title "Save/Load System (§4.11)" \
   --label "feature,milestone:M1,simulation" \
   --milestone "M1 — Core Engine" \
   --body-file /tmp/feature-save-load.md \
   --json number --jq '.number')
-
-echo "Created feature issue #$FEATURE_SAVELOAD"
 ```
 
-### Step 7 — Create task issues
+### 7. Create task issues
 
-Create task issues under each feature, referencing the parent:
+Each body **must include `Part of #$FEATURE_SAVELOAD`** on line 1.
 
 ```bash
-# Task under Save/Load feature
-gh issue create \
-  --repo $GH_REPO \
+gh issue create --repo $GH_REPO \
   --title "Implement SaveRepository interface" \
   --label "task,milestone:M1,simulation" \
   --milestone "M1 — Core Engine" \
-  --body-file /tmp/task-save-repo.md \
-  --json number --jq '.number'
+  --body-file /tmp/task-save-repo.md
 ```
 
-The task body must include `Part of #$FEATURE_SAVELOAD` on line 1.
-
-### Step 8 — Verify all issues
+### 8. Verify
 
 ```bash
-# List all issues under the milestone
-gh issue list --repo $GH_REPO --state open --milestone "M1 — Core Engine" --json number,title --jq '.[] | "#\(.number) \(.title)"'
-
-# Verify at milestone URL
-echo "Check: https://github.com/jindrichruzicka/Chimera/milestone/$M_ID"
+gh issue list --repo $GH_REPO --state open --milestone "M1 — Core Engine" \
+  --json number,title --jq '.[] | "#\(.number) \(.title)"'
 ```
 
-### Step 9 — Report summary
+URL: `https://github.com/jindrichruzicka/Chimera/milestone/$M_ID`.
+
+### 9. Report
 
 ```
-✅ Milestone bootstrapped successfully
-
-Milestone: M1 — Core Engine (#$M_ID)
-Feature Issues: 3
-Task Issues: 11
-
-| Feature         | Issue | Tasks |
-| --------------- | ----- | ----- |
-| Save/Load §4.11 | #12   | 5     |
-| Settings §4.12  | #13   | 3     |
-| Renderer §4.13  | #14   | 3     |
-
-Next steps:
-  - Review issues at: https://github.com/jindrichruzicka/Chimera/milestone/$M_ID
-  - Start implementation with: .github/skills/git/create-branch/SKILL.md
+✅ Milestone bootstrapped — M1 — Core Engine (#$M_ID)
+Features: N · Tasks: N
+Next: bash .github/skills/git/create-branch/scripts/create-branch.sh <task-N>
 ```
 
----
+## Rules
 
-## Notes
-
-- **Always present the decomposition first** — never create issues without user approval
-- **Create features before tasks** — tasks need the feature issue number for `Part of #N`
-- **Verify milestone assignment** — check both label and milestone field are set
-- **Follow architecture order** — create issues in dependency order (§4.1 before §4.2, etc.)
+- **Always present decomposition first** — never auto-create.
+- **Features before tasks** — tasks need parent issue number.
+- **Verify both label AND milestone field** are set.
+- **Architecture order** — §4.1 before §4.2 etc.
