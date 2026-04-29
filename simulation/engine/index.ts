@@ -90,3 +90,5 @@ export {
     TURN_MEMENTO_RETENTION,
     MAX_ACTION_HISTORY_ENTRIES,
 } from './UndoManager.js';
+
+export { ClientPredictor, NonPredictableActionError } from './prediction/ClientPredictor.js';
