@@ -62,6 +62,7 @@ import type {
     PlayerProfile,
     PlayerId,
     ResolvedSettings,
+    SaveRequest,
     SaveSlotMeta,
     UserSettings,
 } from '../../preload/api-types.js';
@@ -490,10 +491,45 @@ export interface SavesHandlersIpcMain {
     handle(channel: string, handler: SavesInvokeHandler): unknown;
 }
 
+/**
+ * Narrow port the saves IPC handlers depend on. Mirrors the renderer-facing
+ * `SavesAPI` minus `onSlotUpdate` (which is the renderer's subscription
+ * surface, not a main-side method). The port is responsible for converting
+ * any internal `SaveSlotMeta` shape (e.g. the simulation/persistence one
+ * with `turnNumber`/`playerNames`) into the preload `SaveSlotMeta` shape
+ * before returning — the IPC handler does not perform that mapping.
+ *
+ * Wired in `electron/main/index.ts` from the live `SaveManager`. Tests
+ * inject a fake to keep the IPC handler unit tests free of repository,
+ * filesystem, and Electron internals.
+ */
+export interface SavesIpcPort {
+    list(gameId: string): Promise<SaveSlotMeta[]>;
+    save(request: SaveRequest): Promise<SaveSlotMeta>;
+    load(slotId: string): Promise<void>;
+    delete(slotId: string): Promise<void>;
+}
+
 export interface RegisterSavesHandlersOptions {
     readonly ipcMain: SavesHandlersIpcMain;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
+    /**
+     * Live saves coordinator. When absent, the handlers fall back to the
+     * stub behaviour required by F03/F04 smoke tests (so the renderer's
+     * typed Promises do not reject before persistence is wired).
+     *
+     * TODO(follow-up): once F03/F04 test fixtures migrate to an in-process
+     * SavesIpcPort fake, make this required and remove STUB_SAVE_SLOT.
+     */
+    readonly saves?: SavesIpcPort;
+    /**
+     * Push `chimera:saves:slot-update` to all renderer windows after a
+     * successful `save` or `delete`. The handler computes the refreshed
+     * slot list (via `saves.list`) before invoking this callback. When
+     * absent, no broadcast — and no extra list call — is performed.
+     */
+    readonly broadcastSlotsChanged?: (gameId: string, slots: SaveSlotMeta[]) => void;
 }
 
 /**
@@ -510,24 +546,39 @@ const STUB_SAVE_SLOT: SaveSlotMeta = {
 };
 
 /**
- * Register every `chimera:saves:*` main-side channel. These are deliberate
- * stubs — actual persistence (filesystem, metadata indexing, autosave
- * cadence) lands in F06/F18.
+ * Register every `chimera:saves:*` main-side channel.
  *
- * `chimera:saves:slot-update` is intentionally absent: it is a one-way
- * push from main → renderer via `webContents.send` after every save /
- * delete / autosave. There is no invoke handler for that channel.
+ * When `options.saves` is provided, requests are delegated to that port and
+ * — after every successful `save` / `delete` — `broadcastSlotsChanged` is
+ * invoked with the refreshed slot list so the renderer's
+ * `chimera:saves:slot-update` push channel can be fired by the wiring code.
+ * When `options.saves` is absent, the handlers fall back to the stub
+ * responses required by the F03/F04 smoke tests so the renderer's typed
+ * Promises do not reject before persistence is wired.
+ *
+ * `chimera:saves:slot-update` is intentionally absent from this
+ * registration: it is a one-way push from main → renderer via
+ * `webContents.send`. There is no invoke handler for that channel.
  *
  * Host-only enforcement (§4.1: `SavesAPI` is host-only) is the
- * responsibility of the real handlers in F06/F18 — the stubs merely keep
- * the renderer's typed Promises from rejecting before persistence
- * exists.
+ * responsibility of the live coordinator (`SaveManager` + wiring) — the
+ * IPC layer validates payload shape only.
  *
  * Invariant 5: channel constants come from `preload/saves-api.ts`; there
  * is no parallel list in this file to drift out of sync.
+ *
+ * Invariant 23: the IPC handler never bypasses the repository abstraction;
+ * persistence flows exclusively through `options.saves` (which delegates
+ * to `SaveRepository`).
+ *
+ * Invariant 25: every IPC input is validated with a Zod schema before any
+ * port call — invalid payloads throw before the repository is touched.
+ *
+ * Invariant 37: this module imports zero concrete repository classes; the
+ * `SavesIpcPort` is built and injected by the wiring layer.
  */
 export function registerSavesHandlers(options: RegisterSavesHandlersOptions): void {
-    const { ipcMain } = options;
+    const { ipcMain, saves, broadcastSlotsChanged } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:saves:* handlers', {
         channels: [
@@ -536,39 +587,93 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
             SAVES_LOAD_CHANNEL,
             SAVES_DELETE_CHANNEL,
         ],
+        wired: saves !== undefined,
     });
 
     ipcMain.handle(SAVES_LIST_CHANNEL, (_event, gameId) => {
-        parseInvokeRequest(GameIdSchema, SAVES_LIST_CHANNEL, gameId);
-        // Stub. Real listing (scan save directory + read metadata) lands
-        // in F06/F18. An empty array honours the preload's
+        const validated = parseInvokeRequest(GameIdSchema, SAVES_LIST_CHANNEL, gameId);
+        if (saves !== undefined) {
+            return saves.list(validated);
+        }
+        // Stub. An empty array honours the preload's
         // `Promise<SaveSlotMeta[]>` contract without claiming slots that
         // do not exist.
         return [] as SaveSlotMeta[];
     });
 
-    ipcMain.handle(SAVES_SAVE_CHANNEL, (_event, request) => {
-        parseInvokeRequest(SaveRequestSchema, SAVES_SAVE_CHANNEL, request);
-        // Stub. Real persistence lands in F06/F18. Returning a placeholder
-        // keeps the preload's `Promise<SaveSlotMeta>` contract honest.
-        return STUB_SAVE_SLOT;
+    ipcMain.handle(SAVES_SAVE_CHANNEL, async (_event, request) => {
+        const validated = parseInvokeRequest(SaveRequestSchema, SAVES_SAVE_CHANNEL, request);
+        if (saves === undefined) {
+            // Stub. Returning a placeholder keeps the preload's
+            // `Promise<SaveSlotMeta>` contract honest.
+            return STUB_SAVE_SLOT;
+        }
+        const meta = await saves.save(validated);
+        if (broadcastSlotsChanged !== undefined) {
+            try {
+                const refreshed = await saves.list(validated.gameId);
+                broadcastSlotsChanged(validated.gameId, refreshed);
+            } catch (err) {
+                logger.warn('saves:save — post-save list/broadcast failed; save was persisted', {
+                    gameId: validated.gameId,
+                    error: err,
+                });
+            }
+        }
+        return meta;
     });
 
-    ipcMain.handle(SAVES_LOAD_CHANNEL, (_event, slotId) => {
-        parseInvokeRequest(SlotIdSchema, SAVES_LOAD_CHANNEL, slotId);
-        // Stub. Real load (read slot, seed simulation, broadcast snapshot)
-        // lands in F06/F18. Returning `undefined` satisfies the preload's
-        // `Promise<void>` contract.
+    ipcMain.handle(SAVES_LOAD_CHANNEL, async (_event, slotId) => {
+        const validated = parseInvokeRequest(SlotIdSchema, SAVES_LOAD_CHANNEL, slotId);
+        if (saves !== undefined) {
+            await saves.load(validated);
+        }
+        // Returning `undefined` satisfies the preload's `Promise<void>`
+        // contract regardless of whether the port is wired.
         return undefined;
     });
 
-    ipcMain.handle(SAVES_DELETE_CHANNEL, (_event, slotId) => {
-        parseInvokeRequest(SlotIdSchema, SAVES_DELETE_CHANNEL, slotId);
-        // Stub. Real delete (remove slot file, emit slot-update) lands in
-        // F06/F18. Returning `undefined` satisfies the preload's
-        // `Promise<void>` contract.
+    ipcMain.handle(SAVES_DELETE_CHANNEL, async (_event, slotId) => {
+        const validated = parseInvokeRequest(SlotIdSchema, SAVES_DELETE_CHANNEL, slotId);
+        if (saves === undefined) {
+            return undefined;
+        }
+        await saves.delete(validated);
+        if (broadcastSlotsChanged !== undefined) {
+            try {
+                const gameId = parseGameIdFromSlotId(validated);
+                if (gameId !== null) {
+                    const refreshed = await saves.list(gameId);
+                    broadcastSlotsChanged(gameId, refreshed);
+                } else {
+                    logger.warn('saves:delete — slotId has no gameId prefix; skipping broadcast', {
+                        slotId: validated,
+                    });
+                }
+            } catch (err) {
+                logger.warn('saves:delete — post-delete list/broadcast failed; slot was deleted', {
+                    slotId: validated,
+                    error: err,
+                });
+            }
+        }
         return undefined;
     });
+}
+
+/**
+ * Extract the `gameId` from a qualified slot identifier of the documented
+ * form `'<gameId>/<slotName>'`. Returns `null` if the input does not
+ * contain a `/` separator — this should never happen for slot IDs minted
+ * by the repository, but the IPC boundary cannot rely on that and must
+ * degrade gracefully (no broadcast) rather than throw.
+ */
+function parseGameIdFromSlotId(slotId: string): string | null {
+    const idx = slotId.indexOf('/');
+    if (idx <= 0) {
+        return null;
+    }
+    return slotId.slice(0, idx);
 }
 
 /**

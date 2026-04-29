@@ -47,6 +47,7 @@ import {
     type ProfileInvokeHandler,
     type SavesHandlersIpcMain,
     type SavesInvokeHandler,
+    type SavesIpcPort,
     type SettingsHandlersIpcMain,
     type SettingsInvokeHandler,
     type SystemHandlersAppHost,
@@ -65,6 +66,7 @@ import type {
     JoinLobbyParams,
     PlayerProfile,
     SaveRequest,
+    SaveSlotMeta,
     UserSettings,
 } from '../../preload/api-types.js';
 
@@ -590,6 +592,245 @@ describe('registerSavesHandlers', () => {
             ].sort(),
         );
         expect(stub.handled.has(SAVES_SLOT_UPDATE_CHANNEL)).toBe(false);
+    });
+
+    describe('with injected SavesIpcPort', () => {
+        const sampleMeta: SaveSlotMeta = {
+            slotId: 'sample-game/slot-1',
+            gameId: 'sample-game',
+            tick: 42,
+            savedAt: 1_700_000_000_000,
+            label: 'autosave',
+        };
+        const refreshedMeta: SaveSlotMeta = {
+            slotId: 'sample-game/slot-2',
+            gameId: 'sample-game',
+            tick: 50,
+            savedAt: 1_700_000_001_000,
+        };
+
+        function makeFakePort(overrides?: Partial<SavesIpcPort>): {
+            readonly port: SavesIpcPort;
+            readonly listCalls: string[];
+            readonly saveCalls: SaveRequest[];
+            readonly loadCalls: string[];
+            readonly deleteCalls: string[];
+            // Mutable so individual tests can swap the post-mutation list.
+            slotsByGameId: Map<string, SaveSlotMeta[]>;
+        } {
+            const listCalls: string[] = [];
+            const saveCalls: SaveRequest[] = [];
+            const loadCalls: string[] = [];
+            const deleteCalls: string[] = [];
+            const slotsByGameId = new Map<string, SaveSlotMeta[]>([['sample-game', [sampleMeta]]]);
+            const port: SavesIpcPort = {
+                list: (gameId) => {
+                    listCalls.push(gameId);
+                    return Promise.resolve(slotsByGameId.get(gameId) ?? []);
+                },
+                save: (request) => {
+                    saveCalls.push(request);
+                    return Promise.resolve(sampleMeta);
+                },
+                load: (slotId) => {
+                    loadCalls.push(slotId);
+                    return Promise.resolve();
+                },
+                delete: (slotId) => {
+                    deleteCalls.push(slotId);
+                    return Promise.resolve();
+                },
+                ...overrides,
+            };
+            return { port, listCalls, saveCalls, loadCalls, deleteCalls, slotsByGameId };
+        }
+
+        it('list delegates to port and returns its SaveSlotMeta[]', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+
+            const handler = stub.handled.get(SAVES_LIST_CHANNEL);
+            const result = await Promise.resolve(handler?.({}, 'sample-game'));
+
+            expect(result).toEqual([sampleMeta]);
+            expect(fake.listCalls).toEqual(['sample-game']);
+        });
+
+        it('save delegates to port, then broadcasts slot-update with refreshed list', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            const broadcasts: { gameId: string; slots: SaveSlotMeta[] }[] = [];
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                broadcastSlotsChanged: (gameId, slots) => {
+                    broadcasts.push({ gameId, slots });
+                },
+            });
+
+            // Simulate that after the save completes, the port returns a
+            // longer slot list when re-queried (refreshed view).
+            fake.slotsByGameId.set('sample-game', [sampleMeta, refreshedMeta]);
+
+            const request: SaveRequest = { gameId: 'sample-game', label: 'autosave' };
+            const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
+            const result = await Promise.resolve(handler?.({}, request));
+
+            expect(result).toEqual(sampleMeta);
+            expect(fake.saveCalls).toEqual([request]);
+            expect(fake.listCalls).toEqual(['sample-game']);
+            expect(broadcasts).toEqual([
+                { gameId: 'sample-game', slots: [sampleMeta, refreshedMeta] },
+            ]);
+        });
+
+        it('load delegates to port and resolves to undefined', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+
+            const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
+            const result = await Promise.resolve(handler?.({}, 'sample-game/slot-1'));
+
+            expect(result).toBeUndefined();
+            expect(fake.loadCalls).toEqual(['sample-game/slot-1']);
+        });
+
+        it('delete delegates to port, then broadcasts slot-update with refreshed list', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            const broadcasts: { gameId: string; slots: SaveSlotMeta[] }[] = [];
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                broadcastSlotsChanged: (gameId, slots) => {
+                    broadcasts.push({ gameId, slots });
+                },
+            });
+
+            // After delete, the slot list is empty for that game.
+            fake.slotsByGameId.set('sample-game', []);
+
+            const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
+            const result = await Promise.resolve(handler?.({}, 'sample-game/slot-1'));
+
+            expect(result).toBeUndefined();
+            expect(fake.deleteCalls).toEqual(['sample-game/slot-1']);
+            // gameId for refresh is parsed from the qualified slotId prefix.
+            expect(fake.listCalls).toEqual(['sample-game']);
+            expect(broadcasts).toEqual([{ gameId: 'sample-game', slots: [] }]);
+        });
+
+        it('rejects invalid list input before calling the port', () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+
+            const handler = stub.handled.get(SAVES_LIST_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(fake.listCalls).toEqual([]);
+        });
+
+        it('rejects invalid save input before calling the port', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+
+            const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, { gameId: '' }))).rejects.toThrow(
+                IpcRequestValidationError,
+            );
+            expect(fake.saveCalls).toEqual([]);
+            expect(fake.listCalls).toEqual([]);
+        });
+
+        it('rejects invalid load input before calling the port', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+
+            const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, ''))).rejects.toThrow(
+                IpcRequestValidationError,
+            );
+            expect(fake.loadCalls).toEqual([]);
+        });
+
+        it('rejects invalid delete input before calling the port', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+
+            const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, ''))).rejects.toThrow(
+                IpcRequestValidationError,
+            );
+            expect(fake.deleteCalls).toEqual([]);
+            expect(fake.listCalls).toEqual([]);
+        });
+
+        it('does not broadcast on save when broadcastSlotsChanged is absent', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+
+            const request: SaveRequest = { gameId: 'sample-game' };
+            const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
+            await Promise.resolve(handler?.({}, request));
+
+            // The port still receives the save call, but no slot list refresh
+            // is performed when there is no broadcast subscriber to inform.
+            expect(fake.saveCalls).toEqual([request]);
+            expect(fake.listCalls).toEqual([]);
+        });
+
+        it('save resolves with meta even when post-save list() throws', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort({
+                list: () => Promise.reject(new Error('list failure')),
+            });
+            const broadcasts: unknown[] = [];
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                broadcastSlotsChanged: (_, slots) => {
+                    broadcasts.push(slots);
+                },
+            });
+
+            const request: SaveRequest = { gameId: 'sample-game' };
+            const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
+            const result = await Promise.resolve(handler?.({}, request));
+
+            // Handler resolves with the saved meta — the failed list/broadcast
+            // must not surface as a rejection to the renderer.
+            expect(result).toEqual(sampleMeta);
+            expect(broadcasts).toEqual([]);
+        });
+
+        it('delete resolves even when post-delete list() throws', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort({
+                list: () => Promise.reject(new Error('list failure')),
+            });
+            const broadcasts: unknown[] = [];
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                broadcastSlotsChanged: (_, slots) => {
+                    broadcasts.push(slots);
+                },
+            });
+
+            const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
+            const result = await Promise.resolve(handler?.({}, 'sample-game/slot-1'));
+
+            // Handler resolves to undefined — the failed list/broadcast must
+            // not surface as a rejection to the renderer.
+            expect(result).toBeUndefined();
+            expect(broadcasts).toEqual([]);
+        });
     });
 });
 

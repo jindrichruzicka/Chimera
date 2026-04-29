@@ -20,6 +20,7 @@ import {
 import { registerCrashReporter } from './logging/crash-reporter.js';
 import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
+import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
 import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
@@ -28,6 +29,7 @@ import {
 } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
+import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline } from './runtime/HostSessionPipeline.js';
@@ -504,11 +506,40 @@ export async function main(): Promise<void> {
         logger: logger.child({ module: 'lobby' }),
     });
 
-    // Register the `chimera:saves:*` channels as stubs. Real save
-    // persistence (SaveRepository, slot indexing, autosave cadence)
-    // lands in F06/F18; wiring stubs here keeps the renderer's typed
-    // Promises from rejecting before persistence exists.
-    registerSavesHandlers({ ipcMain, logger: logger.child({ module: 'saves' }) });
+    // Register the `chimera:saves:*` channels backed by SaveManager.
+    // The adapter converts the simulation-side SaveSlotMeta into the
+    // preload-side shape, and `broadcastSlotsChanged` pushes the refreshed
+    // slot list via `chimera:saves:slot-update` after every save / delete
+    // so all open renderer windows stay coherent (§4.11, invariant #37).
+    //
+    // `captureSaveFile` is the F18 hook that snapshots the running
+    // simulation. Until SimulationHost exposes a state-capture API, the
+    // hook rejects with a clear error so the renderer's `saves.save(...)`
+    // promise surfaces the missing wiring rather than silently writing a
+    // half-built file.
+    const savesLogger = logger.child({ module: 'saves' });
+    registerSavesHandlers({
+        ipcMain,
+        logger: savesLogger,
+        saves: createSavesIpcPort({
+            saveManager,
+            captureSaveFile: () =>
+                Promise.reject(
+                    new Error(
+                        'saves:save not yet wired to SimulationHost (F18). ' +
+                            'IPC handler reached but no live game-state capture is available.',
+                    ),
+                ),
+            logger: savesLogger,
+        }),
+        broadcastSlotsChanged: (_gameId, slots) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(SAVES_SLOT_UPDATE_CHANNEL, slots);
+                }
+            });
+        },
+    });
 
     // Register the `chimera:settings:*` channels backed by SettingsManager.
     // FileSettingsRepository persists user overrides under `<userData>/settings/`.
