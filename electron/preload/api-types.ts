@@ -370,6 +370,18 @@ export interface GameAPI {
     onActionRejected(cb: (rejection: ActionRejection) => void): Unsubscribe;
     /** Local multi-seat (pass-and-play): switch the active viewer for the current renderer. */
     switchActiveSeat(playerId: PlayerId): Promise<void>;
+    /**
+     * Returns the set of action type strings whose `ActionDefinition.predictable`
+     * field is `true` in the main-process `ActionRegistry`.
+     *
+     * Called once at renderer bootstrap so the prediction bridge can decide
+     * which `sendAction()` calls enqueue an optimistic prediction. The result
+     * is cached by `bootstrapGameStore` — there is no per-action round-trip.
+     *
+     * Returns an empty array when no `ActionRegistry` is available (e.g. before
+     * a game session is active, or on builds that omit the prediction module).
+     */
+    getPredictableActionTypes(): Promise<readonly string[]>;
 }
 
 // ─── lobby namespace ──────────────────────────────────────────────────────────

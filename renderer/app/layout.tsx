@@ -7,6 +7,7 @@
 
 import type { ReactNode } from 'react';
 import React from 'react';
+import { GameStoreBootstrap } from './GameStoreBootstrap';
 import { SettingsBootstrap } from './SettingsBootstrap';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </head>
             <body>
                 <SettingsBootstrap />
+                <GameStoreBootstrap />
                 <ConnectionStatusIndicator />
                 <RootErrorBoundary>{children}</RootErrorBoundary>
                 {/* ToastHost will be added here as a sibling in §4.30 */}

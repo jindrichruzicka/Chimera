@@ -98,7 +98,14 @@ chimera/
 │   │   ├── StateBroadcaster.ts      # Projects snapshot per player; calls HostTransport.sendSnapshot()
 │   │   ├── DeterministicRng.ts      # Seeded PRNG derived from (snapshot.seed, tick); passed via ReduceContext
 │   │   ├── GameTimer.ts             # Tick-based deterministic timer registry; TimerManager helper; see §4.20
-│   │   └── FixedPoint.ts            # Q32.32 fixed-point integer math (mul, div, sqrt, sin, cos); see §4.31
+│   │   ├── FixedPoint.ts            # Q32.32 fixed-point integer math (mul, div, sqrt, sin, cos); see §4.31
+│   │   ├── prediction/              # Optional — real-time games only; turn-based games omit this module
+│   │   │   ├── ClientPredictor.ts   # Optimistic local application of own actions (predictable: true)
+│   │   │   └── ReconcileBuffer.ts   # Replays unconfirmed actions on top of authoritative snapshots
+│   │   └── projection/              # StateProjector + commitment scheme — planned (post-M3)
+│   │       ├── StateProjector.ts    # (GameSnapshot, PlayerId) → PlayerSnapshot
+│   │       ├── VisibilityRules.ts   # Per-game interface: field/entity visibility rules
+│   │       └── CommitmentScheme.ts  # SHA-256 commitments for hidden-until-revealed values
 │   ├── content/                      # OPTIONAL — games with no static content omit this
 │   │   ├── DataRef.ts               # DataRef<T> branded type; buildRef() / parseRef() helpers
 │   │   ├── AssetRef.ts              # AssetRef<T> branded type — phantom-typed path string; zero renderer deps
@@ -130,13 +137,6 @@ chimera/
 │   │   ├── SnapshotInspector.ts     # Facade: query API — get/reconstruct/diff snapshots; project to a PlayerId
 │   │   ├── SnapshotDiff.ts          # Structural diff of two GameSnapshots (added/changed/removed fields)
 │   │   └── DebugProtocol.ts         # Typed request/response message shapes for debug IPC channel
-│   ├── prediction/                  # Optional — real-time games only; turn-based games omit this
-│   │   ├── ClientPredictor.ts       # Optimistic local application of own actions (predictable: true)
-│   │   └── ReconcileBuffer.ts       # Replays unconfirmed actions on top of authoritative snapshots
-│   ├── projection/
-│   │   ├── StateProjector.ts        # (GameSnapshot, PlayerId) → PlayerSnapshot
-│   │   ├── VisibilityRules.ts       # Per-game interface: field/entity visibility rules
-│   │   └── CommitmentScheme.ts      # SHA-256 commitments for hidden-until-revealed values
 │   └── index.ts                     # Public API of simulation engine
 │
 ├── games/                           # One subdirectory per game built on Chimera

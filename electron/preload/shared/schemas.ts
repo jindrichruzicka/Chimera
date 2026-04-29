@@ -202,3 +202,10 @@ export const LocalProfileSlotSchema = z.object({
 /** Schema for the array returned by `chimera:profile:list-local-slots`. */
 export const LocalProfileSlotListSchema: z.ZodType<readonly LocalProfileSlot[]> =
     z.array(LocalProfileSlotSchema);
+
+/**
+ * Schema for the `readonly string[]` returned by
+ * `chimera:game:predictable-action-types`. Each element is the
+ * `ActionDefinition.type` string of a predictable action.
+ */
+export const PredictableActionTypesSchema: z.ZodType<readonly string[]> = z.array(z.string());

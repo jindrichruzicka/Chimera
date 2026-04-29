@@ -26,7 +26,11 @@ import type {
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
-import { ActionRejectionSchema } from '../shared/schemas.js';
+import {
+    ActionRejectionSchema,
+    parseInvokeResponse,
+    PredictableActionTypesSchema,
+} from '../shared/schemas.js';
 
 /** `ipcRenderer.send` target for {@link GameAPI.sendAction}. */
 export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
@@ -51,6 +55,14 @@ export const GAME_ACTION_REJECTED_CHANNEL = 'chimera:game:action-rejected';
 
 /** `ipcRenderer.invoke` target for {@link GameAPI.switchActiveSeat}. */
 export const GAME_SWITCH_SEAT_CHANNEL = 'chimera:game:switch-seat';
+
+/**
+ * `ipcRenderer.invoke` target for {@link GameAPI.getPredictableActionTypes}.
+ * Main returns the filtered list of action type strings whose
+ * `ActionDefinition.predictable` is `true` in the active `ActionRegistry`.
+ * Returns an empty array when no registry is available.
+ */
+export const GAME_PREDICTABLE_TYPES_CHANNEL = 'chimera:game:predictable-action-types';
 
 /**
  * Back-compat alias for {@link IpcListener}. Retained so test files that
@@ -98,5 +110,15 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
         switchActiveSeat: async (playerId: PlayerId): Promise<void> => {
             await ipc.invoke(GAME_SWITCH_SEAT_CHANNEL, playerId);
         },
+        getPredictableActionTypes: (): Promise<readonly string[]> =>
+            ipc
+                .invoke(GAME_PREDICTABLE_TYPES_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(
+                        PredictableActionTypesSchema,
+                        GAME_PREDICTABLE_TYPES_CHANNEL,
+                        value,
+                    ),
+                ),
     };
 }

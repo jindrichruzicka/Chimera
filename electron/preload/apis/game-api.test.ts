@@ -4,6 +4,7 @@ import {
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
+    GAME_PREDICTABLE_TYPES_CHANNEL,
     createGameApi,
     type GameApiIpcPort,
     type GameApiListener,
@@ -274,6 +275,63 @@ describe('createGameApi', () => {
             }
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('getPredictableActionTypes()', () => {
+        it('invokes chimera:game:predictable-action-types with no argument', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(GAME_PREDICTABLE_TYPES_CHANNEL, []);
+            const api = createGameApi(stub.port);
+
+            await api.getPredictableActionTypes();
+
+            expect(stub.invocations).toEqual([
+                { channel: GAME_PREDICTABLE_TYPES_CHANNEL, arg: undefined },
+            ]);
+        });
+
+        it('resolves to the string array returned by main', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(GAME_PREDICTABLE_TYPES_CHANNEL, [
+                'tactics:move',
+                'tactics:rotate',
+            ]);
+            const api = createGameApi(stub.port);
+
+            const result = await api.getPredictableActionTypes();
+
+            expect(result).toEqual(['tactics:move', 'tactics:rotate']);
+        });
+
+        it('resolves to an empty array when main returns nothing (no registry)', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(GAME_PREDICTABLE_TYPES_CHANNEL, []);
+            const api = createGameApi(stub.port);
+
+            const result = await api.getPredictableActionTypes();
+
+            expect(result).toEqual([]);
+        });
+
+        it('throws PreloadIpcValidationError when main returns a non-array', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(GAME_PREDICTABLE_TYPES_CHANNEL, 42);
+            const api = createGameApi(stub.port);
+
+            await expect(api.getPredictableActionTypes()).rejects.toThrow(
+                PreloadIpcValidationError,
+            );
+        });
+
+        it('throws PreloadIpcValidationError when main returns an array containing non-strings', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(GAME_PREDICTABLE_TYPES_CHANNEL, ['ok', 99, null]);
+            const api = createGameApi(stub.port);
+
+            await expect(api.getPredictableActionTypes()).rejects.toThrow(
+                PreloadIpcValidationError,
+            );
         });
     });
 });

@@ -285,4 +285,46 @@ describe('ReconcileBuffer', () => {
             expect(MAX_BUFFER_DEPTH).toBe(32);
         });
     });
+
+    describe('options.maxBufferDepth', () => {
+        it('overrides the default depth limit with a custom value', () => {
+            const warnMessages: string[] = [];
+            const stubLogger = {
+                trace: () => undefined,
+                debug: () => undefined,
+                info: () => undefined,
+                warn: (msg: string) => {
+                    warnMessages.push(msg);
+                },
+                error: () => undefined,
+                fatal: () => undefined,
+                child: () => stubLogger,
+            };
+
+            // Use a tiny depth of 2 so we don't need 32 enqueues to test eviction
+            const buffer = new ReconcileBuffer<TestSnapshot>({
+                logger: stubLogger,
+                maxBufferDepth: 2,
+            });
+
+            buffer.enqueue(makeAction('test:move', 1));
+            buffer.enqueue(makeAction('test:move', 2));
+            expect(buffer.pendingCount).toBe(2);
+            expect(warnMessages).toHaveLength(0);
+
+            // Third enqueue should evict the oldest
+            buffer.enqueue(makeAction('test:move', 3));
+            expect(buffer.pendingCount).toBe(2);
+            expect(warnMessages).toHaveLength(1);
+            expect(warnMessages[0]).toMatch(/evict/i);
+        });
+
+        it('pendingCount never exceeds the custom depth after repeated enqueues', () => {
+            const buffer = new ReconcileBuffer<TestSnapshot>({ maxBufferDepth: 3 });
+            for (let i = 0; i < 10; i++) {
+                buffer.enqueue(makeAction('test:move', i));
+            }
+            expect(buffer.pendingCount).toBe(3);
+        });
+    });
 });

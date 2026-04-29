@@ -46,6 +46,12 @@ export interface ReconcileBufferOptions {
      * is evicted. If omitted, evictions are silent.
      */
     readonly logger?: Logger;
+    /**
+     * Override the maximum number of unconfirmed actions the buffer will hold.
+     * Defaults to `MAX_BUFFER_DEPTH` (32). Lower values make depth-limit
+     * behaviour reachable in tests without enqueuing 32 actions.
+     */
+    readonly maxBufferDepth?: number;
 }
 
 // ─── ReconcileBuffer ──────────────────────────────────────────────────────────
@@ -73,9 +79,11 @@ export interface ReconcileBufferOptions {
 export class ReconcileBuffer<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #queue: EngineAction[] = [];
     readonly #logger: Logger | undefined;
+    readonly #maxDepth: number;
 
     constructor(options: ReconcileBufferOptions = {}) {
         this.#logger = options.logger;
+        this.#maxDepth = options.maxBufferDepth ?? MAX_BUFFER_DEPTH;
     }
 
     // ── pendingCount ──────────────────────────────────────────────────────────
@@ -98,11 +106,11 @@ export class ReconcileBuffer<TState extends BaseGameSnapshot = BaseGameSnapshot>
      * log entry is emitted via the injected logger (if present).
      */
     enqueue(action: EngineAction): void {
-        if (this.#queue.length >= MAX_BUFFER_DEPTH) {
+        if (this.#queue.length >= this.#maxDepth) {
             const evicted = this.#queue.shift();
             this.#logger?.warn(
                 'ReconcileBuffer: buffer depth limit exceeded; evicting oldest unconfirmed action',
-                { maxBufferDepth: MAX_BUFFER_DEPTH, evictedActionType: evicted?.type },
+                { maxBufferDepth: this.#maxDepth, evictedActionType: evicted?.type },
             );
         }
         this.#queue.push(action);
