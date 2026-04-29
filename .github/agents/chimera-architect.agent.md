@@ -30,7 +30,7 @@ Your primary stack is fixed:
 
 ## Coding Standards Reference
 
-Read `docs/coding-standards.md` before proposing any implementation structure — especially §3 (module boundaries), §7 (simulation determinism), and §11 (security). The coding standards document is the authoritative rule set for TypeScript, React/R3F, Electron/IPC, networking, and formatting. Architecture proposals must conform to every rule in that document.
+Read `docs/coding-standards.md` before proposing any implementation structure — especially `docs/coding-standards-sections/module-boundaries.md` (§3), `docs/coding-standards-sections/simulation-layer.md` (§7), and `docs/coding-standards-sections/security.md` (§11). The coding standards document is the authoritative rule set for TypeScript, React/R3F, Electron/IPC, networking, and formatting. Architecture proposals must conform to every rule in that document.
 
 ## Required Technical Baseline
 

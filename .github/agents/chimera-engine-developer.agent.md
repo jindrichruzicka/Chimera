@@ -15,7 +15,7 @@ Interfaces, type names, file locations, and IPC channel names in the architectur
 
 ## Coding Standards Reference
 
-`docs/coding-standards.md` is the authoritative reference for TypeScript rules, SOLID application, module-boundary enforcement, naming, React/Zustand/R3F conventions, Electron/IPC security, testing discipline, performance baselines, git workflow, and formatting (including the mandatory **four-space indentation** rule). Read it before your first commit on any task and re-consult it whenever a rule is in doubt. The section summaries below are a condensed checklist — `docs/coding-standards.md` is the source of truth and overrides this file on any conflict.
+`docs/coding-standards.md` is the authoritative reference (index hub) for TypeScript rules, SOLID application, module-boundary enforcement, naming, React/Zustand/R3F conventions, Electron/IPC security, testing discipline, performance baselines, git workflow, and formatting (including the mandatory **four-space indentation** rule). Individual sections are in `docs/coding-standards-sections/`. Read the index hub before your first commit on any task and consult the relevant section file whenever a rule is in doubt. The section summaries below are a condensed checklist — `docs/coding-standards.md` is the source of truth and overrides this file on any conflict.
 
 ---
 
@@ -243,7 +243,7 @@ Before marking any task done:
 - [ ] All subsequent commits are `--fixup` to the first commit
 - [ ] No `any` types, no `@ts-ignore`
 - [ ] No import from a forbidden package boundary
-- [ ] Indentation is four spaces throughout every touched file (`docs/coding-standards.md` §1.6)
+- [ ] Indentation is four spaces throughout every touched file (`docs/coding-standards-sections/typescript.md` §1.6)
 - [ ] Relevant invariants from Appendix B checked
 - [ ] Interfaces match the architecture document exactly (field names, types, optionality)
 - [ ] New public functions/types exported from the package's `index.ts`

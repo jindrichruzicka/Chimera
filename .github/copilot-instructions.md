@@ -5,7 +5,7 @@
 Always read these two documents before writing or reviewing any code:
 
 - [`docs/architecture-overview.md`](../docs/architecture-overview.md) — interfaces, invariants, module structure, IPC contracts, naming conventions
-- [`docs/coding-standards.md`](../docs/coding-standards.md) — TypeScript rules, SOLID, module boundaries, React/R3F, Electron/IPC security, testing, performance, git workflow
+- [`docs/coding-standards.md`](../docs/coding-standards.md) — Index hub: TypeScript rules, SOLID, module boundaries, React/R3F, Electron/IPC security, testing, performance, git workflow. Individual sections are in [`docs/coding-standards-sections/`](../docs/coding-standards-sections/).
 
 These documents take precedence over anything in this file if they conflict.
 

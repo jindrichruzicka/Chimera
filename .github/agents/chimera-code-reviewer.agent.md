@@ -33,7 +33,7 @@ If a fix is not purely mechanical — if it requires a judgement call, touches l
 ### Step 0 — Load context
 
 1. Read `docs/architecture-overview.md` in full. All interface names, invariants, module boundaries, and naming conventions come from there.
-2. Read `docs/coding-standards.md` in full. This is the authoritative rule set for TypeScript, React, R3F, simulation, Electron/IPC, networking, error handling, security, testing, and performance. Every review step below maps to a section in that document.
+2. Read `docs/coding-standards.md` in full. This is the authoritative index hub for TypeScript, React, R3F, simulation, Electron/IPC, networking, error handling, security, testing, and performance. Individual sections live in `docs/coding-standards-sections/`. Every review step below maps to a section in that document.
 3. Identify the current branch: `git rev-parse --abbrev-ref HEAD`
 4. Get all commits on this branch relative to `main`:
     ```bash
@@ -50,7 +50,7 @@ If a fix is not purely mechanical — if it requires a judgement call, touches l
 
 ### Step 1 — Architecture alignment
 
-Reference: `docs/architecture-overview.md §3`, `docs/coding-standards.md §4` (naming), `docs/coding-standards.md §3` (module boundaries).
+Reference: `docs/architecture-overview.md §3`, `docs/coding-standards-sections/file-symbol-naming.md` (§4 naming), `docs/coding-standards-sections/module-boundaries.md` (§3 module boundaries).
 
 For each changed file:
 
@@ -63,7 +63,7 @@ Flag any divergence as a **BLOCK** finding.
 
 ### Step 2 — Module boundary enforcement
 
-Reference: `docs/coding-standards.md §3`.
+Reference: `docs/coding-standards-sections/module-boundaries.md` (§3).
 
 Check every `import` statement in changed files against this table:
 
@@ -80,7 +80,7 @@ Any forbidden import is a **BLOCK** finding.
 
 ### Step 3 — SOLID principles
 
-Reference: `docs/coding-standards.md §2`.
+Reference: `docs/coding-standards-sections/solid-principles.md` (§2).
 
 Evaluate each changed class, interface, and module:
 
@@ -100,7 +100,7 @@ Evaluate each changed class, interface, and module:
 
 ### Step 4 — TypeScript standards
 
-Reference: `docs/coding-standards.md §1`.
+Reference: `docs/coding-standards-sections/typescript.md` (§1).
 
 Scan the diff for:
 
@@ -114,7 +114,7 @@ Scan the diff for:
 
 ### Step 5 — React and R3F standards
 
-Reference: `docs/coding-standards.md §5`, `docs/coding-standards.md §6`.
+Reference: `docs/coding-standards-sections/react-zustand.md` (§5), `docs/coding-standards-sections/react-three-fiber.md` (§6).
 
 For any changed `.tsx` files:
 
@@ -128,7 +128,7 @@ For any changed `.tsx` files:
 
 ### Step 6 — Simulation determinism invariants
 
-Reference: `docs/coding-standards.md §7`.
+Reference: `docs/coding-standards-sections/simulation-layer.md` (§7).
 
 **First, run the mechanical invariant checker and include its full output in the findings report:**
 
@@ -148,7 +148,7 @@ For any changes touching `simulation/`, `ai/`, or `games/*/actions/`:
 
 ### Step 7 — Security
 
-Reference: `docs/coding-standards.md §11`.
+Reference: `docs/coding-standards-sections/security.md` (§11).
 
 Note: the `check-invariants.sh` script run in Step 6 also covers the **Snapshot leakage** check (invariant #3 — `GameSnapshot` imported in `electron/preload/` or `renderer/`). Any violation it reports for `[invariant-3]` is a BLOCK finding here too.
 
@@ -165,7 +165,7 @@ Flag security findings as **BLOCK** regardless of severity.
 
 ### Step 8 — Performance
 
-Reference: `docs/coding-standards.md §13`.
+Reference: `docs/coding-standards-sections/performance.md` (§13).
 
 Look for obvious performance regressions:
 
