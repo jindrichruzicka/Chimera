@@ -12,6 +12,7 @@ import {
 } from './profile-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
 import type { EngineProfile, LocalProfileSlot, PlayerProfile, PlayerId } from '../api-types.js';
+import { playerId } from '../api-types.js';
 import type { IpcListener } from '../shared/listener.js';
 
 // ─── IPC stub ─────────────────────────────────────────────────────────────────
@@ -182,7 +183,7 @@ describe('createProfileApi', () => {
         it('resolves to the directory record returned by main', async () => {
             const stub = makeIpcStub();
             const profile = makeProfile();
-            const expected = makeDirectory([['player-1', profile]]);
+            const expected = makeDirectory([[playerId('player-1'), profile]]);
             stub.invokeResults.set(PROFILE_GET_LOBBY_DIRECTORY_CHANNEL, expected);
             const api = createProfileApi(stub.port);
 
@@ -212,7 +213,7 @@ describe('createProfileApi', () => {
         it('rejects with PreloadIpcValidationError when a profile entry is malformed', async () => {
             const stub = makeIpcStub();
             stub.invokeResults.set(PROFILE_GET_LOBBY_DIRECTORY_CHANNEL, {
-                'player-1': { displayName: 'Broken' }, // missing localProfileId, avatar, locale
+                [playerId('player-1')]: { displayName: 'Broken' }, // missing localProfileId, avatar, locale
             });
             const api = createProfileApi(stub.port);
 
@@ -240,7 +241,7 @@ describe('createProfileApi', () => {
 
             api.onDirectoryChanged(callback);
 
-            const directory = makeDirectory([['p1', makeProfile()]]);
+            const directory = makeDirectory([[playerId('p1'), makeProfile()]]);
             const listener = [...(stub.listeners.get(PROFILE_DIRECTORY_CHANGED_CHANNEL) ?? [])][0];
             listener?.({ sender: 'fake-webcontents' }, directory);
 
@@ -271,7 +272,7 @@ describe('createProfileApi', () => {
             const unsubA = api.onDirectoryChanged(cbA);
             api.onDirectoryChanged(cbB);
 
-            const directory = makeDirectory([['p1', makeProfile()]]);
+            const directory = makeDirectory([[playerId('p1'), makeProfile()]]);
             const listeners = [...(stub.listeners.get(PROFILE_DIRECTORY_CHANGED_CHANNEL) ?? [])];
             listeners.forEach((l) => l({ sender: 'fake' }, directory));
 

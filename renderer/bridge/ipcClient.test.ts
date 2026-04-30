@@ -17,21 +17,22 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { createIpcClient, type IpcGamePort, type IpcPredictionStore } from './ipcClient.js';
-import type { EngineAction, PlayerSnapshot } from '../../electron/preload/api-types.js';
+import type { EngineAction, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import { playerId, gamePhase } from '@chimera/electron/preload/api-types.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 function makeAction(tick: number, type = 'test:move'): EngineAction {
-    return { type, playerId: 'p1', tick, payload: {} };
+    return { type, playerId: playerId('p1'), tick, payload: {} };
 }
 
 function makeSnapshot(tick: number): PlayerSnapshot {
     return {
         tick,
-        viewerId: 'p1',
+        viewerId: playerId('p1'),
         players: {},
         entities: {},
-        phase: 'playing',
+        phase: gamePhase('playing'),
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },

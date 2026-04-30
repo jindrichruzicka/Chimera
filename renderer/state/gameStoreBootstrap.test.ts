@@ -24,7 +24,8 @@ import type {
     PlayerSnapshot,
     EngineAction,
     ActionRejection,
-} from '../../electron/preload/api-types.js';
+} from '@chimera/electron/preload/api-types.js';
+import { playerId, gamePhase } from '@chimera/electron/preload/api-types.js';
 import { bootstrapGameStore } from './gameStoreBootstrap.js';
 import { createGameStore } from './gameStore.js';
 import { createIpcClient } from '../bridge/ipcClient.js';
@@ -34,10 +35,10 @@ import { createIpcClient } from '../bridge/ipcClient.js';
 function makeSnapshot(tick: number): PlayerSnapshot {
     return {
         tick,
-        viewerId: 'p1',
+        viewerId: playerId('p1'),
         players: {},
         entities: {},
-        phase: 'playing',
+        phase: gamePhase('playing'),
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
@@ -45,7 +46,7 @@ function makeSnapshot(tick: number): PlayerSnapshot {
 }
 
 function makeAction(tick: number, type = 'test:move'): EngineAction {
-    return { type, playerId: 'p1', tick, payload: {} };
+    return { type, playerId: playerId('p1'), tick, payload: {} };
 }
 
 type SnapshotListener = (snapshot: PlayerSnapshot) => void;

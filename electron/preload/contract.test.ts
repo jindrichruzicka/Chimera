@@ -16,7 +16,7 @@
 // the `__chimera` key and never a `__chimeraDebug` key.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { toSlotId } from './api-types.js';
+import { toSlotId, playerId, gamePhase } from './api-types.js';
 import type { ActionRejection, ChimeraAPI, EngineAction, PlayerSnapshot } from './api-types.js';
 
 // ─── Electron module mock ────────────────────────────────────────────────────
@@ -167,7 +167,7 @@ describe('window.__chimera.game — contract', () => {
     it('sendAction() forwards the payload verbatim to chimera:game:send-action', () => {
         const action: EngineAction = {
             type: 'example',
-            playerId: 'p1',
+            playerId: playerId('p1'),
             tick: 7,
             payload: { key: 'value' },
         };
@@ -179,9 +179,11 @@ describe('window.__chimera.game — contract', () => {
     });
 
     it('switchActiveSeat() invokes chimera:game:switch-seat with the playerId', async () => {
-        await api.game.switchActiveSeat('p2');
+        await api.game.switchActiveSeat(playerId('p2'));
 
-        expect(invokeCalls).toEqual([{ channel: 'chimera:game:switch-seat', args: ['p2'] }]);
+        expect(invokeCalls).toEqual([
+            { channel: 'chimera:game:switch-seat', args: [playerId('p2')] },
+        ]);
     });
 
     it('onSnapshot() registers on chimera:game:snapshot; Unsubscribe removes the listener', () => {
@@ -194,10 +196,10 @@ describe('window.__chimera.game — contract', () => {
 
         const snapshot: PlayerSnapshot = {
             tick: 3,
-            viewerId: 'p1',
+            viewerId: playerId('p1'),
             players: {},
             entities: {},
-            phase: 'main',
+            phase: gamePhase('main'),
             events: [],
             commitments: {},
             undoMeta: { canUndo: false, canRedo: false },

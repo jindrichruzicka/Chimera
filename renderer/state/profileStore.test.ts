@@ -8,6 +8,7 @@ import {
     useProfileDirectory,
     useProfileStore,
 } from './profileStore';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { makeDirectory } from './__test-support__/profileFixtures';
 
 describe('profileStore', () => {
@@ -39,7 +40,7 @@ describe('profileStore', () => {
         useProfileStore.getState().setLocalProfileId('local-b');
 
         const { result } = renderHook(() => useLocalProfile());
-        expect(result.current).toEqual(directory['playerB']);
+        expect(result.current).toEqual(directory[playerId('playerB')]);
     });
 
     it('useLocalProfile() returns null when no profile matches localProfileId', () => {

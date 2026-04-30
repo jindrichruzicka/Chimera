@@ -17,6 +17,7 @@ import type {
     Unsubscribe,
     LobbyState,
 } from '../../electron/preload/api-types';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { bootstrapLobbyStore } from './lobbyStoreBootstrap';
 import { useLobbyStore } from './lobbyStore';
 import { useLobbyUiStore } from './lobbyUiStore';
@@ -132,7 +133,9 @@ describe('bootstrapLobbyStore()', () => {
         });
         const systemApi = makeSystemApi();
 
-        useLobbyUiStore.getState().setLocalLobbyContext('player-1', ['player-1']);
+        useLobbyUiStore
+            .getState()
+            .setLocalLobbyContext(playerId('player-1'), [playerId('player-1')]);
 
         bootstrapLobbyStore(lobbyApi, systemApi);
         expect(capturedLobbyUpdate).toBeDefined();
@@ -145,7 +148,7 @@ describe('bootstrapLobbyStore()', () => {
             },
             players: [
                 {
-                    playerId: 'player-1',
+                    playerId: playerId('player-1'),
                     displayName: 'Player One',
                     ready: false,
                 },
@@ -169,7 +172,12 @@ describe('bootstrapLobbyStore()', () => {
         const systemApi = makeSystemApi();
 
         // Establish that the local player is player-1
-        useLobbyUiStore.getState().setLocalLobbyContext('player-1', ['player-1', 'player-2']);
+        useLobbyUiStore
+            .getState()
+            .setLocalLobbyContext(playerId('player-1'), [
+                playerId('player-1'),
+                playerId('player-2'),
+            ]);
 
         bootstrapLobbyStore(lobbyApi, systemApi);
         expect(capturedLobbyUpdate).toBeDefined();
@@ -201,7 +209,12 @@ describe('bootstrapLobbyStore()', () => {
         // Set some initial lobby state
         const initialState = makeLobbyState();
         useLobbyStore.getState().applyLobbyState(initialState);
-        useLobbyUiStore.getState().setLocalLobbyContext('player-1', ['player-1', 'player-2']);
+        useLobbyUiStore
+            .getState()
+            .setLocalLobbyContext(playerId('player-1'), [
+                playerId('player-1'),
+                playerId('player-2'),
+            ]);
         expect(useLobbyStore.getState().lobbyState).toBe(initialState);
 
         // Trigger disconnection

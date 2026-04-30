@@ -25,6 +25,7 @@ import type {
     LobbyAPI,
     LobbyInfo,
     LobbyState,
+    PlayerId,
     Unsubscribe,
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
@@ -85,7 +86,7 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 .invoke(LOBBY_JOIN_CHANNEL, params)
                 .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
         leave: (): Promise<void> => ipc.invoke(LOBBY_LEAVE_CHANNEL).then(() => undefined),
-        getLocalPlayerId: (): Promise<string | null> =>
+        getLocalPlayerId: (): Promise<PlayerId | null> =>
             ipc
                 .invoke(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL)
                 .then((value) =>

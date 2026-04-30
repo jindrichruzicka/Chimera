@@ -18,17 +18,18 @@
 
 import { describe, it, expect } from 'vitest';
 import { createGameStore, useGameStore } from './gameStore.js';
-import type { EngineAction, PlayerSnapshot } from '../../electron/preload/api-types.js';
+import type { EngineAction, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import { playerId, gamePhase } from '@chimera/electron/preload/api-types.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
 function makeSnapshot(tick: number, canUndo = false, canRedo = false): PlayerSnapshot {
     return {
         tick,
-        viewerId: 'p1',
+        viewerId: playerId('p1'),
         players: {},
         entities: {},
-        phase: 'playing',
+        phase: gamePhase('playing'),
         events: [],
         commitments: {},
         undoMeta: { canUndo, canRedo },
@@ -38,7 +39,7 @@ function makeSnapshot(tick: number, canUndo = false, canRedo = false): PlayerSna
 function makeAction(tick: number, type = 'test:move'): EngineAction {
     return {
         type,
-        playerId: 'p1',
+        playerId: playerId('p1'),
         tick,
         payload: {},
     };

@@ -16,20 +16,49 @@ import type { LogEntry } from '@chimera/shared/logging.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { CommitmentId } from '@chimera/simulation/persistence/index.js';
+import type { PlayerId, EntityId, GamePhase } from '@chimera/simulation/engine/types.js';
+import { playerId, entityId, gamePhase } from '@chimera/simulation/engine/types.js';
 
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
 /** Opaque player identifier. Canonical branded type: simulation/ (F03). */
-export type PlayerId = string;
+export type { PlayerId };
 
 /** Opaque entity identifier. Canonical branded type: simulation/ (F03). */
-export type EntityId = string;
+export type { EntityId };
 
 /** Opaque commitment identifier. Canonical branded type: simulation/persistence (F27). */
 export type { CommitmentId };
 
 /** Current phase of the game state machine. Canonical: simulation/ (F03). */
-export type GamePhase = string;
+export type { GamePhase };
+
+/**
+ * Constructs a branded {@link PlayerId} from a raw string.
+ *
+ * This is the single authorised cast site for PlayerId in the preload layer.
+ * All production code and test helpers must call this instead of
+ * writing `raw as PlayerId` directly.
+ */
+export { playerId };
+
+/**
+ * Constructs a branded {@link EntityId} from a raw string.
+ *
+ * This is the single authorised cast site for EntityId in the preload layer.
+ * All production code and test helpers must call this instead of
+ * writing `raw as EntityId` directly.
+ */
+export { entityId };
+
+/**
+ * Constructs a branded {@link GamePhase} from a raw string.
+ *
+ * This is the single authorised cast site for GamePhase in the preload layer.
+ * All production code and test helpers must call this instead of
+ * writing `raw as GamePhase` directly.
+ */
+export { gamePhase };
 
 /**
  * Opaque save-slot identifier. Branded to prevent accidental mixing with

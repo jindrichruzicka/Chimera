@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { LogEntry, LogErrorInfo } from '@chimera/shared/logging.js';
 import { getSeatSwitchBridge, useSeatSwitch } from './useSeatSwitch';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 
 describe('getSeatSwitchBridge', () => {
     it('returns null when game/lobby/logs bridge namespaces are unavailable', () => {
@@ -52,10 +53,12 @@ describe('useSeatSwitch', () => {
 
     it('delegates seat switching through the typed game API', async () => {
         const switchActiveSeat = vi.fn(async () => undefined);
-        const getLocalPlayerId = vi.fn(async () => 'p2');
+        const getLocalPlayerId = vi.fn(async () => playerId('p2'));
         const emit = vi.fn();
 
-        useLobbyUiStore.getState().setLocalLobbyContext('p1', ['p1', 'p2']);
+        useLobbyUiStore
+            .getState()
+            .setLocalLobbyContext(playerId('p1'), [playerId('p1'), playerId('p2')]);
 
         Object.defineProperty(globalThis, '__chimera', {
             configurable: true,
@@ -82,11 +85,11 @@ describe('useSeatSwitch', () => {
         });
 
         const { result } = renderHook(() => useSeatSwitch());
-        await result.current.switchSeat('p2');
+        await result.current.switchSeat(playerId('p2'));
 
-        expect(switchActiveSeat).toHaveBeenCalledWith('p2');
+        expect(switchActiveSeat).toHaveBeenCalledWith(playerId('p2'));
         expect(getLocalPlayerId).toHaveBeenCalledOnce();
-        expect(useLobbyUiStore.getState().localPlayerId).toBe('p2');
+        expect(useLobbyUiStore.getState().localPlayerId).toBe(playerId('p2'));
         expect(emit).not.toHaveBeenCalled();
     });
 
@@ -123,7 +126,7 @@ describe('useSeatSwitch', () => {
         });
 
         const { result } = renderHook(() => useSeatSwitch());
-        await expect(result.current.switchSeat('p2')).resolves.toBeUndefined();
+        await expect(result.current.switchSeat(playerId('p2'))).resolves.toBeUndefined();
 
         expect(emit).toHaveBeenCalledWith(
             expect.objectContaining<Partial<LogEntry>>({

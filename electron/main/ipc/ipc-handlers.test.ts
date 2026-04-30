@@ -60,7 +60,7 @@ import { LobbyManager } from '../lobby/LobbyManager.js';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
 import type { LobbyInfo } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
-import { toSlotId } from '../../preload/api-types.js';
+import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     ActionRejection,
     EngineAction,
@@ -243,7 +243,7 @@ describe('registerGameHandlers', () => {
 
         const action: EngineAction = {
             type: 'noop',
-            playerId: 'p1',
+            playerId: playerId('p1'),
             tick: 0,
             payload: {},
         };

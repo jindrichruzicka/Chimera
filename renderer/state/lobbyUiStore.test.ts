@@ -5,6 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { createLobbyUiStore } from './lobbyUiStore';
 
 describe('lobbyUiStore', () => {
@@ -18,9 +19,9 @@ describe('lobbyUiStore', () => {
     it('sets and clears local lobby context', () => {
         const store = createLobbyUiStore();
 
-        store.getState().setLocalLobbyContext('p1', ['p1', 'p2']);
-        expect(store.getState().localPlayerId).toBe('p1');
-        expect(store.getState().localSeatIds).toEqual(['p1', 'p2']);
+        store.getState().setLocalLobbyContext(playerId('p1'), [playerId('p1'), playerId('p2')]);
+        expect(store.getState().localPlayerId).toBe(playerId('p1'));
+        expect(store.getState().localSeatIds).toEqual([playerId('p1'), playerId('p2')]);
 
         store.getState().clearLocalLobbyContext();
         expect(store.getState().localPlayerId).toBeNull();

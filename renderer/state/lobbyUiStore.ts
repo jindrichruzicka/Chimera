@@ -8,7 +8,7 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { PlayerId } from '@chimera/shared/messages-schemas.js';
+import type { PlayerId } from '@chimera/electron/preload/api-types.js';
 
 export interface LobbyUiStoreState {
     /** Local player identity used for renderer-only affordances. */

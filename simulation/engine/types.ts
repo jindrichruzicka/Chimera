@@ -45,12 +45,30 @@ export const playerId = (raw: string): PlayerId => raw as PlayerId;
 export type EntityId = string & { readonly __brand: 'EntityId' };
 
 /**
+ * Constructs a branded {@link EntityId} from a raw string.
+ *
+ * This is the single authorised cast site for the EntityId brand in
+ * simulation/. Test helpers and production code must call this instead of
+ * writing `raw as EntityId` directly.
+ */
+export const entityId = (raw: string): EntityId => raw as EntityId;
+
+/**
  * Current phase of the game state machine.
  * Games define their own phase strings; the engine treats this as an opaque
  * string. Typed as a branded alias to prevent accidental assignment of
  * arbitrary strings without intent.
  */
 export type GamePhase = string & { readonly __brand: 'GamePhase' };
+
+/**
+ * Constructs a branded {@link GamePhase} from a raw string.
+ *
+ * This is the single authorised cast site for the GamePhase brand in
+ * simulation/. Test helpers and production code must call this instead of
+ * writing `raw as GamePhase` directly.
+ */
+export const gamePhase = (raw: string): GamePhase => raw as GamePhase;
 
 // ─── Base state shapes ───────────────────────────────────────────────────────
 

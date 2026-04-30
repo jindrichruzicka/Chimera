@@ -17,7 +17,7 @@
 // `electron/preload/schemas.ts`.
 
 import { z } from 'zod';
-import { toSlotId } from '../../preload/api-types.js';
+import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     EngineAction,
     HostLobbyParams,
@@ -120,7 +120,7 @@ export const SlotIdSchema = z
     .transform(toSlotId);
 
 /** Schema for a single `playerId` argument (e.g. `chimera:game:switch-seat`). */
-export const PlayerIdSchema = NonEmptyStringSchema;
+export const PlayerIdSchema = NonEmptyStringSchema.transform(playerId);
 
 /** Schema for {@link HostLobbyParams} accepted by `chimera:lobby:host`. */
 export const HostLobbyParamsSchema = z.object({
@@ -191,7 +191,7 @@ export const UserSettingsPatchSchema: z.ZodType<UserSettings> = z
  */
 export const EngineActionSchema = z.object({
     type: NonEmptyStringSchema,
-    playerId: NonEmptyStringSchema,
+    playerId: PlayerIdSchema,
     tick: z.number().int().nonnegative(),
     payload: z.record(z.string(), z.unknown()),
 }) satisfies z.ZodType<EngineAction>;

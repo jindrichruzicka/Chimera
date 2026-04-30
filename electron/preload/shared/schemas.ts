@@ -23,7 +23,7 @@
 
 import { z } from 'zod';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
-import { toSlotId } from '../api-types.js';
+import { toSlotId, playerId } from '../api-types.js';
 import type {
     ActionRejection,
     CrashRecoveryStatus,
@@ -32,6 +32,7 @@ import type {
     PlayerProfile,
     ResolvedSettings,
     SaveSlotMeta,
+    PlayerId,
 } from '../api-types.js';
 import type { PlatformInfo } from '../apis/system-api.js';
 
@@ -108,7 +109,10 @@ export const LobbyInfoSchema = z.object({
 }) satisfies z.ZodType<LobbyInfo>;
 
 /** Schema for `chimera:lobby:get-local-player-id` invoke result. */
-export const LocalPlayerIdSchema = z.string().nullable();
+export const LocalPlayerIdSchema: z.ZodType<PlayerId | null> = z
+    .string()
+    .transform(playerId)
+    .nullable();
 
 /**
  * Schema for a single {@link SaveSlotMeta} returned by `chimera:saves:save`.

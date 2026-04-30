@@ -5,7 +5,9 @@ import type {
     LobbyAPI,
     LobbyInfo,
     SystemAPI,
+    PlayerId,
 } from '@chimera/electron/preload/api-types.js';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 interface ChimeraBridge {
@@ -31,9 +33,9 @@ const MISSING_BRIDGE_ERROR = 'Chimera API not available';
 const MISSING_LOCAL_PLAYER_ID_ERROR = 'Chimera local player identity not available';
 
 function mergeLocalSeatIds(
-    localPlayerId: string,
-    existingLocalSeatIds: readonly string[],
-): readonly string[] {
+    localPlayerId: PlayerId,
+    existingLocalSeatIds: readonly PlayerId[],
+): readonly PlayerId[] {
     if (existingLocalSeatIds.length === 0) {
         return [localPlayerId];
     }
@@ -67,7 +69,7 @@ export function useLobbyApi(): LobbyApi {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
                 const info = await bridge.lobby.host(params);
-                const hostId = info.hostId;
+                const hostId = playerId(info.hostId);
                 const existingLocalSeatIds = useLobbyUiStore.getState().localSeatIds;
                 useLobbyUiStore
                     .getState()

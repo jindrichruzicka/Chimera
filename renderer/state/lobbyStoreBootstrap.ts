@@ -20,6 +20,7 @@ import type {
     SystemAPI,
     Unsubscribe,
 } from '../../electron/preload/api-types';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { useLobbyStore } from './lobbyStore';
 import { useLobbyUiStore } from './lobbyUiStore';
 
@@ -30,7 +31,7 @@ function syncLocalSeatsFromLobbyState(lobbyState: LobbyState): void {
         return;
     }
 
-    const lobbyPlayerIds = lobbyState.players.map((player) => player.playerId);
+    const lobbyPlayerIds = lobbyState.players.map((player) => playerId(player.playerId));
 
     if (!lobbyPlayerIds.includes(localPlayerId)) {
         useLobbyUiStore.getState().clearLocalLobbyContext();

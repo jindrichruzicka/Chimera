@@ -5,6 +5,7 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 
 describe('getLobbyBridge', () => {
     it('returns null when chimera bridge is unavailable', () => {
@@ -150,13 +151,15 @@ describe('useLobbyApi', () => {
             },
         });
 
-        useLobbyUiStore.getState().setLocalLobbyContext('p1', ['p1', 'p2']);
+        useLobbyUiStore
+            .getState()
+            .setLocalLobbyContext(playerId('p1'), [playerId('p1'), playerId('p2')]);
 
         const { result } = renderHook(() => useLobbyApi());
         await result.current.host({ gameId: 'tactics', maxPlayers: 4 });
 
-        expect(useLobbyUiStore.getState().localPlayerId).toBe('p1');
-        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['p1', 'p2']);
+        expect(useLobbyUiStore.getState().localPlayerId).toBe(playerId('p1'));
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual([playerId('p1'), playerId('p2')]);
     });
 
     it('preserves host and join local seat context without collapsing to a single seat', async () => {
@@ -240,13 +243,21 @@ describe('useLobbyApi', () => {
             },
         });
 
-        useLobbyUiStore.getState().setLocalLobbyContext('player-2', ['player-2', 'player-3']);
+        useLobbyUiStore
+            .getState()
+            .setLocalLobbyContext(playerId('player-2'), [
+                playerId('player-2'),
+                playerId('player-3'),
+            ]);
 
         const { result } = renderHook(() => useLobbyApi());
         await result.current.join({ address: 'abc' });
 
-        expect(useLobbyUiStore.getState().localPlayerId).toBe('player-2');
-        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-2', 'player-3']);
+        expect(useLobbyUiStore.getState().localPlayerId).toBe(playerId('player-2'));
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual([
+            playerId('player-2'),
+            playerId('player-3'),
+        ]);
     });
 
     it('rejects join when authoritative local identity is unavailable', async () => {

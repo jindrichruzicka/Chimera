@@ -11,6 +11,7 @@ import {
 } from './game-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
 import type { ActionRejection, EngineAction, PlayerSnapshot } from '../api-types.js';
+import { playerId, gamePhase } from '../api-types.js';
 
 /**
  * Recording stub for the narrow `GameApiIpcPort` slice. Captures every call
@@ -54,7 +55,7 @@ function makeIpcStub(): {
 function makeAction(): EngineAction {
     return {
         type: 'noop',
-        playerId: 'p1',
+        playerId: playerId('p1'),
         tick: 0,
         payload: {},
     };
@@ -64,10 +65,10 @@ function makeAction(): EngineAction {
 function makeSnapshot(): PlayerSnapshot {
     return {
         tick: 7,
-        viewerId: 'p1',
+        viewerId: playerId('p1'),
         players: {},
         entities: {},
-        phase: 'setup',
+        phase: gamePhase('setup'),
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
@@ -101,9 +102,11 @@ describe('createGameApi', () => {
             const stub = makeIpcStub();
             const api = createGameApi(stub.port);
 
-            await api.switchActiveSeat('p2');
+            await api.switchActiveSeat(playerId('p2'));
 
-            expect(stub.invocations).toEqual([{ channel: GAME_SWITCH_SEAT_CHANNEL, arg: 'p2' }]);
+            expect(stub.invocations).toEqual([
+                { channel: GAME_SWITCH_SEAT_CHANNEL, arg: playerId('p2') },
+            ]);
         });
 
         it('resolves to void once the main-side handler replies', async () => {
@@ -111,7 +114,7 @@ describe('createGameApi', () => {
             stub.invokeResults.set(GAME_SWITCH_SEAT_CHANNEL, undefined);
             const api = createGameApi(stub.port);
 
-            await expect(api.switchActiveSeat('p1')).resolves.toBeUndefined();
+            await expect(api.switchActiveSeat(playerId('p1'))).resolves.toBeUndefined();
         });
     });
 
