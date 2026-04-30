@@ -242,10 +242,15 @@ interface UndoManager {
 }
 
 interface ActionHistory {
+    /**
+     * Append a new entry to the history. If the history exceeds MAX_ACTION_HISTORY_ENTRIES,
+     * the oldest entry is evicted and an `action-history:overflow` warn is emitted with the
+     * entry count and the most-recent memento's turn number.
+     */
     append(entry: ActionHistoryEntry): void;
     sinceLastMemento(): readonly ActionHistoryEntry[];
     /**
-     * Remove every ActionHistoryEntry whose turnNumber < cutoff.
+     * Remove every ActionHistoryEntry whose turnNumber < cutoff (strict <, never <=).
      * Idempotent: calling pruneTo with an identical or lower cutoff is a no-op.
      * @param cutoff — typically currentTurn - TURN_MEMENTO_RETENTION (invariant 45)
      */
