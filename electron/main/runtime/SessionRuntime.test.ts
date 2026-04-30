@@ -68,6 +68,16 @@ describe('SessionRuntime', () => {
         expect(runtime.getSnapshot()).toBe(next);
     });
 
+    it('exposes the gameId from constructor options via a public getter', () => {
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot: makeSnapshot(0),
+            applyAction: vi.fn(),
+        });
+        expect(runtime.gameId).toBe('tactics');
+    });
+
     it('applyRestoredFile replaces the snapshot with the file checkpoint', () => {
         const initial = makeSnapshot(0);
         const restored = makeSnapshot(99, [P1, P2]);

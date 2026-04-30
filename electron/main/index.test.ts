@@ -13,6 +13,7 @@ const {
     mockSaveManagerClearFlag,
     mockSaveManagerMarkExit,
     mockSaveManagerCheckCrash,
+    mockSaveManagerAutoSave,
     capturedSaveManagerRepoClassName,
 } = vi.hoisted(() => ({
     mockSaveManagerClearFlag: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
@@ -20,6 +21,7 @@ const {
     mockSaveManagerCheckCrash: vi.fn<(ids: readonly string[]) => Promise<null>>(() =>
         Promise.resolve(null),
     ),
+    mockSaveManagerAutoSave: vi.fn<(file: unknown) => Promise<void>>(() => Promise.resolve()),
     // Stores the constructor name of the first arg passed to SaveManager
     // for the BLOCK-1 assertion (avoids importing the real class).
     capturedSaveManagerRepoClassName: { value: '' },
@@ -32,6 +34,7 @@ vi.mock('./saves/SaveManager.js', () => ({
             clearCleanExitFlag: mockSaveManagerClearFlag,
             markCleanExit: mockSaveManagerMarkExit,
             checkCrashRecovery: mockSaveManagerCheckCrash,
+            autoSave: mockSaveManagerAutoSave,
         };
     }),
 }));
@@ -524,6 +527,7 @@ describe('main', () => {
         mockSaveManagerMarkExit.mockClear();
         mockSaveManagerCheckCrash.mockClear();
         mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
+        mockSaveManagerAutoSave.mockClear();
         mockRegisterCrashReporter.mockClear();
         capturedSaveManagerRepoClassName.value = '';
         capturedSettingsBroadcastFn.current = null;
@@ -682,12 +686,55 @@ describe('main', () => {
         expect(options?.autosave).toBeDefined();
     });
 
-    it('autosave callback resolves without throwing (TODO F18 stub)', async () => {
+    it('autosave callback resolves without throwing when no session is active (null activeSession)', async () => {
         await main();
 
         const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
         expect(options?.autosave).toBeDefined();
         await expect(options?.autosave?.()).resolves.toBeUndefined();
+    });
+
+    it('autosave callback calls saveManager.autoSave with a SaveFile when activeSession is active', async () => {
+        mockLobbyManagerCtor.mockClear();
+        await main();
+
+        // Extract the onSessionHosted callback (3rd arg, index 2) passed to LobbyManager.
+        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((transport: {
+                  onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                  onPlayerLeft(cb: (id: string) => void): () => void;
+                  onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+              }) => () => void)
+            | undefined;
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        // Provide a minimal fake transport so onSessionHosted can set activeSession.
+        const fakeTransport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+        onSessionHosted?.(fakeTransport);
+
+        // Now the autosave callback should route through the active session.
+        const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
+        await options?.autosave?.();
+
+        expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
+        const calledWithFile = mockSaveManagerAutoSave.mock.calls[0]?.[0] as {
+            header: { gameId: string };
+        };
+        expect(calledWithFile?.header?.gameId).toBe('tactics');
+    });
+
+    it('autosave callback does not call saveManager.autoSave when no session is active', async () => {
+        await main();
+
+        // No onSessionHosted called → activeSession remains null.
+        const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
+        await options?.autosave?.();
+
+        expect(mockSaveManagerAutoSave).not.toHaveBeenCalled();
     });
 
     it('calls checkCrashRecovery with ["tactics"] as knownGameIds (BLOCK-2)', async () => {

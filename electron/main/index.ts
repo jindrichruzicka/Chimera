@@ -398,12 +398,14 @@ export async function main(): Promise<void> {
             pinoSink.flushSync();
         },
         getSnapshot: () => null, // F14 wires the live snapshot when simulation is running
-        autosave: () => {
-            // Crash-time autosave is deferred (#386): activeSession is not yet
-            // reachable from this closure. SaveManager.autoSave() will be wired
-            // when issue #386 lands.
-            crashLogger.warn('autosave not yet wired; crash may lose unsaved game state');
-            return Promise.resolve();
+        autosave: async () => {
+            if (activeSession === null) {
+                crashLogger.warn('autosave skipped: no active session at crash time');
+                return;
+            }
+            await saveManager.autoSave(
+                activeSession.captureSaveFile({ gameId: activeSession.gameId }),
+            );
         },
     });
 

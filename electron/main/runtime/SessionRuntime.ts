@@ -88,17 +88,22 @@ export interface SessionRuntimeOptions {
  */
 export class SessionRuntime {
     private snapshot: BaseGameSnapshot;
-    private readonly gameId: string;
+    private readonly _gameId: string;
     private readonly gameVersion: string;
     private readonly applyActionFn: ApplyActionFn;
     private readonly now: () => number;
 
     constructor(options: SessionRuntimeOptions) {
         this.snapshot = options.initialSnapshot;
-        this.gameId = options.gameId;
+        this._gameId = options.gameId;
         this.gameVersion = options.gameVersion;
         this.applyActionFn = options.applyAction;
         this.now = options.now ?? Date.now;
+    }
+
+    /** The game identifier for this session (e.g. `'tactics'`). */
+    get gameId(): string {
+        return this._gameId;
     }
 
     /**
@@ -147,7 +152,7 @@ export class SessionRuntime {
             header: {
                 schemaVersion: CURRENT_SCHEMA_VERSION,
                 engineVersion: HOST_ENGINE_VERSION,
-                gameId: this.gameId,
+                gameId: this._gameId,
                 gameVersion: this.gameVersion,
                 slotId,
                 savedAt: this.now(),
