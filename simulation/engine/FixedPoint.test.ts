@@ -20,6 +20,10 @@ import {
     lt,
     gt,
     eq,
+    sqrt,
+    sin,
+    cos,
+    atan2,
 } from './FixedPoint.js';
 
 describe('FixedPoint', () => {
@@ -358,6 +362,152 @@ describe('FixedPoint', () => {
 
         it('eq(fromInt(-5), fromInt(5)) is false', () => {
             expect(eq(fromInt(-5), fromInt(5))).toBe(false);
+        });
+    });
+
+    describe('sqrt', () => {
+        it('sqrt(FP_ONE) === FP_ONE', () => {
+            expect(sqrt(FP_ONE)).toBe(FP_ONE);
+        });
+
+        it('sqrt(FP_ZERO) === FP_ZERO', () => {
+            expect(sqrt(FP_ZERO)).toBe(FP_ZERO);
+        });
+
+        it('sqrt(fromInt(4)) === fromInt(2)', () => {
+            const result = sqrt(fromInt(4));
+            expect(toFloat(result)).toBeCloseTo(2, 4);
+        });
+
+        it('sqrt(fromInt(9)) === fromInt(3)', () => {
+            const result = sqrt(fromInt(9));
+            expect(toFloat(result)).toBeCloseTo(3, 4);
+        });
+
+        it('sqrt(fromInt(2)) approximates √2', () => {
+            const result = sqrt(fromInt(2));
+            expect(toFloat(result)).toBeCloseTo(Math.sqrt(2), 4);
+        });
+
+        it('sqrt(FP_HALF) approximates √0.5', () => {
+            const result = sqrt(FP_HALF);
+            expect(toFloat(result)).toBeCloseTo(Math.sqrt(0.5), 4);
+        });
+
+        it('sqrt throws RangeError for negative input', () => {
+            expect(() => sqrt(fromInt(-1))).toThrowError(RangeError);
+        });
+
+        it('sqrt throws RangeError for -FP_ONE', () => {
+            expect(() => sqrt(-FP_ONE)).toThrowError('FixedPoint: sqrt of negative number');
+        });
+    });
+
+    describe('sin', () => {
+        it('sin(FP_ZERO) === FP_ZERO', () => {
+            expect(sin(FP_ZERO)).toBe(FP_ZERO);
+        });
+
+        it('sin(FP_PI) approximates 0', () => {
+            const result = sin(FP_PI);
+            expect(toFloat(result)).toBeCloseTo(0, 3);
+        });
+
+        it('sin(FP_PI / 2) approximates 1', () => {
+            const halfPi = FP_PI / 2n;
+            const result = sin(halfPi);
+            expect(toFloat(result)).toBeCloseTo(1, 3);
+        });
+
+        it('sin(FP_PI / 6) approximates 0.5', () => {
+            const sixthPi = FP_PI / 6n;
+            const result = sin(sixthPi);
+            expect(toFloat(result)).toBeCloseTo(0.5, 3);
+        });
+
+        it('sin(-FP_PI / 2) approximates -1', () => {
+            const negHalfPi = -(FP_PI / 2n);
+            const result = sin(negHalfPi);
+            expect(toFloat(result)).toBeCloseTo(-1, 3);
+        });
+
+        it('sin(-3*FP_PI/4) approximates -√2/2 (regression: lower-half symmetry)', () => {
+            const negThreeQuarterPi = -(FP_PI * 3n) / 4n;
+            const result = sin(negThreeQuarterPi);
+            expect(toFloat(result)).toBeCloseTo(-Math.sqrt(2) / 2, 3);
+        });
+
+        it('sin(-2*FP_PI/3) approximates -√3/2', () => {
+            const neg2ThirdsPi = -(FP_PI * 2n) / 3n;
+            const result = sin(neg2ThirdsPi);
+            expect(toFloat(result)).toBeCloseTo(-Math.sqrt(3) / 2, 3);
+        });
+    });
+
+    describe('cos', () => {
+        it('cos(FP_ZERO) === FP_ONE', () => {
+            expect(cos(FP_ZERO)).toBe(FP_ONE);
+        });
+
+        it('cos(FP_PI) approximates -1', () => {
+            const result = cos(FP_PI);
+            expect(toFloat(result)).toBeCloseTo(-1, 3);
+        });
+
+        it('cos(FP_PI / 2) approximates 0', () => {
+            const halfPi = FP_PI / 2n;
+            const result = cos(halfPi);
+            expect(toFloat(result)).toBeCloseTo(0, 3);
+        });
+
+        it('cos(FP_PI / 3) approximates 0.5', () => {
+            const thirdPi = FP_PI / 3n;
+            const result = cos(thirdPi);
+            expect(toFloat(result)).toBeCloseTo(0.5, 3);
+        });
+
+        it('sin^2 + cos^2 === 1 for various angles', () => {
+            const angles = [FP_ZERO, FP_PI / 6n, FP_PI / 4n, FP_PI / 3n, FP_PI / 2n, FP_PI];
+            for (const a of angles) {
+                const s = toFloat(sin(a));
+                const c = toFloat(cos(a));
+                expect(s * s + c * c).toBeCloseTo(1, 3);
+            }
+        });
+    });
+
+    describe('atan2', () => {
+        it('atan2(FP_ZERO, FP_ZERO) === FP_ZERO', () => {
+            expect(atan2(FP_ZERO, FP_ZERO)).toBe(FP_ZERO);
+        });
+
+        it('atan2(FP_ZERO, FP_ONE) === FP_ZERO', () => {
+            expect(atan2(FP_ZERO, FP_ONE)).toBe(FP_ZERO);
+        });
+
+        it('atan2(FP_ONE, FP_ONE) approximates π/4', () => {
+            const result = atan2(FP_ONE, FP_ONE);
+            expect(toFloat(result)).toBeCloseTo(Math.PI / 4, 3);
+        });
+
+        it('atan2(FP_ONE, FP_ZERO) approximates π/2', () => {
+            const result = atan2(FP_ONE, FP_ZERO);
+            expect(toFloat(result)).toBeCloseTo(Math.PI / 2, 3);
+        });
+
+        it('atan2(FP_ZERO, -FP_ONE) approximates π', () => {
+            const result = atan2(FP_ZERO, -FP_ONE);
+            expect(toFloat(result)).toBeCloseTo(Math.PI, 3);
+        });
+
+        it('atan2(-FP_ONE, FP_ZERO) approximates -π/2', () => {
+            const result = atan2(-FP_ONE, FP_ZERO);
+            expect(toFloat(result)).toBeCloseTo(-Math.PI / 2, 3);
+        });
+
+        it('atan2(-FP_ONE, -FP_ONE) approximates -3π/4', () => {
+            const result = atan2(-FP_ONE, -FP_ONE);
+            expect(toFloat(result)).toBeCloseTo((-3 * Math.PI) / 4, 3);
         });
     });
 });

@@ -39,6 +39,7 @@ export const FP_ZERO: FixedPoint;
 export const FP_ONE: FixedPoint;
 export const FP_HALF: FixedPoint;
 export const FP_PI: FixedPoint;
+export const FP_HALF_PI: FixedPoint;
 export const FP_TAU: FixedPoint;
 ```
 
