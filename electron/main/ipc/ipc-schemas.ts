@@ -17,6 +17,7 @@
 // `electron/preload/schemas.ts`.
 
 import { z } from 'zod';
+import { toSlotId } from '../../preload/api-types.js';
 import type {
     EngineAction,
     HostLobbyParams,
@@ -95,8 +96,28 @@ export const NonEmptyStringSchema = z.string().min(1);
 /** Schema for a single `gameId` argument (e.g. `chimera:saves:list`). */
 export const GameIdSchema = NonEmptyStringSchema;
 
-/** Schema for a single `slotId` argument (e.g. `chimera:saves:load`). */
-export const SlotIdSchema = NonEmptyStringSchema;
+/**
+ * Pattern for a single slot-ID component (`gameId` or `slotName`).
+ * Mirrors `SLOT_COMPONENT_RE` in `FileSaveRepository` — duplicated
+ * intentionally so the IPC schema layer has no import dependency on
+ * the save-persistence layer.
+ */
+const SLOT_COMPONENT_PAT = '[a-z0-9][a-z0-9_-]{0,63}';
+
+/**
+ * Schema for a single qualified `slotId` argument (e.g. `chimera:saves:load`).
+ * Must be `'<gameId>/<slotName>'` — each component matching
+ * `^[a-z0-9][a-z0-9_-]{0,63}$`.  Enforcing the structure here means
+ * `parseGameIdFromSlotId` in the handler can assume validity and never
+ * silently degrade to "no broadcast".
+ */
+export const SlotIdSchema = z
+    .string()
+    .regex(
+        new RegExp(`^${SLOT_COMPONENT_PAT}\\/${SLOT_COMPONENT_PAT}$`),
+        'slotId must be "<gameId>/<slotName>" — each component: ^[a-z0-9][a-z0-9_-]{0,63}$',
+    )
+    .transform(toSlotId);
 
 /** Schema for a single `playerId` argument (e.g. `chimera:game:switch-seat`). */
 export const PlayerIdSchema = NonEmptyStringSchema;
@@ -119,12 +140,17 @@ export const LobbyReadyStateSchema = z.boolean();
  * Schema for {@link SaveRequest} accepted by `chimera:saves:save`.
  * Typed via an explicit cast — see the schema header for why `satisfies`
  * cannot be used with `exactOptionalPropertyTypes` + `.optional()`.
+ * `as unknown as` is needed for two reasons: (1) `slotId?: SlotId` (branded)
+ * prevents `as z.ZodType<SaveRequest>` — the double-cast is safe here because
+ * SlotIdSchema validates the qualified format on the load/delete channels;
+ * save accepts any non-empty string hint; and (2) the `label?: string` field
+ * triggers the `exactOptionalPropertyTypes` + `.optional()` incompatibility.
  */
 export const SaveRequestSchema: z.ZodType<SaveRequest> = z.object({
     gameId: NonEmptyStringSchema,
     slotId: NonEmptyStringSchema.optional(),
     label: z.string().optional(),
-}) as z.ZodType<SaveRequest>;
+}) as unknown as z.ZodType<SaveRequest>;
 
 /**
  * Maximum allowed nesting depth for a {@link UserSettings} patch.

@@ -32,10 +32,11 @@
  *   #67 — Constructed with an injected logger.
  */
 
-import type {
-    SaveSlotMeta as PreloadSaveSlotMeta,
-    SaveRequest,
-    CrashRecoveryStatus,
+import {
+    toSlotId,
+    type SaveSlotMeta as PreloadSaveSlotMeta,
+    type SaveRequest,
+    type CrashRecoveryStatus,
 } from '../../preload/api-types.js';
 import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
 import type { SaveSlotMeta as SimSaveSlotMeta } from '@chimera/simulation/persistence/SaveRepository.js';
@@ -139,7 +140,7 @@ export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpc
  */
 function toPreloadMeta(meta: SimSaveSlotMeta): PreloadSaveSlotMeta {
     return {
-        slotId: meta.slotId,
+        slotId: toSlotId(meta.slotId),
         gameId: meta.gameId,
         tick: meta.turnNumber,
         savedAt: meta.savedAt,

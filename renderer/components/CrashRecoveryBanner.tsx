@@ -16,12 +16,13 @@
 // `networking/`. Bridge access is routed through useSavesApi/getSavesBridge.
 
 import React, { useEffect, useState } from 'react';
+import type { SlotId } from '@chimera/electron/preload/api-types.js';
 import { useSavesApi } from '../app/saves/useSavesApi';
 
 type BannerState =
     | { readonly phase: 'checking' }
     | { readonly phase: 'hidden' }
-    | { readonly phase: 'visible'; readonly slotId: string };
+    | { readonly phase: 'visible'; readonly slotId: SlotId };
 
 export function CrashRecoveryBanner(): React.ReactElement | null {
     const api = useSavesApi();

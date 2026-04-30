@@ -8,6 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { HOST_ENGINE_VERSION, SessionRuntime, type ApplyActionFn } from './SessionRuntime.js';
+import { toSlotId } from '../../preload/api-types.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
@@ -125,7 +126,7 @@ describe('SessionRuntime', () => {
         it('produces a SaveFile whose header reflects the current snapshot and request', () => {
             const file = makeRuntime().captureSaveFile({
                 gameId: 'tactics',
-                slotId: 'quicksave',
+                slotId: toSlotId('quicksave'),
             });
 
             expect(file.header).toEqual({
@@ -163,7 +164,10 @@ describe('SessionRuntime', () => {
             });
 
             runtime.applyAction(dummyEnvelope);
-            const file = runtime.captureSaveFile({ gameId: 'tactics', slotId: 'after-action' });
+            const file = runtime.captureSaveFile({
+                gameId: 'tactics',
+                slotId: toSlotId('after-action'),
+            });
 
             expect(file.header.turnNumber).toBe(initial.turnNumber + 1);
             expect(file.checkpoint).toBe(runtime.getSnapshot());

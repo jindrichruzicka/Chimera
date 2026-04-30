@@ -11,14 +11,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { SavesAPI, SaveSlotMeta, Unsubscribe } from '../../electron/preload/api-types';
+import { toSlotId } from '@chimera/electron/preload/api-types.js';
+import type { SavesAPI, SaveSlotMeta, Unsubscribe } from '@chimera/electron/preload/api-types.js';
 import { bootstrapSaveStore } from './saveStoreBootstrap';
 import { useSaveStore } from './saveStore';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeSlot(slotId: string, tick = 1): SaveSlotMeta {
-    return { slotId, gameId: 'tactics', tick, savedAt: 1_000_000 };
+    return { slotId: toSlotId(slotId), gameId: 'tactics', tick, savedAt: 1_000_000 };
 }
 
 function makeSavesApi(

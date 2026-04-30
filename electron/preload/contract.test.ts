@@ -16,6 +16,7 @@
 // the `__chimera` key and never a `__chimeraDebug` key.
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { toSlotId } from './api-types.js';
 import type { ActionRejection, ChimeraAPI, EngineAction, PlayerSnapshot } from './api-types.js';
 
 // ─── Electron module mock ────────────────────────────────────────────────────
@@ -315,12 +316,12 @@ describe('window.__chimera.saves — contract', () => {
     });
 
     it('load() invokes chimera:saves:load with the slotId', async () => {
-        await api.saves.load('slot-a');
+        await api.saves.load(toSlotId('slot-a'));
         expect(invokeCalls).toEqual([{ channel: 'chimera:saves:load', args: ['slot-a'] }]);
     });
 
     it('delete() invokes chimera:saves:delete with the slotId', async () => {
-        await api.saves.delete('slot-a');
+        await api.saves.delete(toSlotId('slot-a'));
         expect(invokeCalls).toEqual([{ channel: 'chimera:saves:delete', args: ['slot-a'] }]);
     });
 

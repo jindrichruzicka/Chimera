@@ -30,6 +30,26 @@ export type CommitmentId = string;
 /** Current phase of the game state machine. Canonical: simulation/ (F03). */
 export type GamePhase = string;
 
+/**
+ * Opaque save-slot identifier. Branded to prevent accidental mixing with
+ * other string-shaped values (e.g. gameId, playerId, session tokens).
+ *
+ * Use {@link toSlotId} to construct a value from a raw string.
+ */
+export type SlotId = string & { readonly __brand: 'SlotId' };
+
+/**
+ * Constructs a branded {@link SlotId} from a raw string.
+ *
+ * This is the single authorised cast site for the SlotId brand.
+ * All production code and test helpers must call this instead of
+ * writing `raw as SlotId` directly.
+ *
+ * @remarks No format validation is performed; use {@link SlotIdSchema} to validate
+ * the qualified format at the IPC boundary.
+ */
+export const toSlotId = (raw: string): SlotId => raw as SlotId;
+
 // ─── Simulation domain stubs ──────────────────────────────────────────────────
 // All superseded by simulation/snapshot.ts (F03).
 
@@ -141,17 +161,35 @@ export interface LobbyListEntry {
 
 /** Metadata for a single save slot. */
 export interface SaveSlotMeta {
-    readonly slotId: string;
+    readonly slotId: SlotId;
     readonly gameId: string;
     readonly tick: number;
     readonly savedAt: number;
     readonly label?: string;
 }
 
-/** Parameters for writing a save slot. */
+/**
+ * Parameters for writing a save slot.
+ *
+ * **Intentional Type Semantic Overload (TypeScript §1.3):**
+ * `slotId` is typed as `SlotId` (branded) to express intent and enable type-safe
+ * slot referencing in load/delete contexts. However, at the IPC schema boundary
+ * (`electron/main/ipc/ipc-schemas.ts`), the `SaveRequestSchema` validates `slotId`
+ * as `NonEmptyStringSchema` — meaning any non-empty string is accepted at runtime
+ * for the save operation (bare slot name hints), while load/delete channels enforce
+ * the fully-qualified `SlotId` format via `SlotIdSchema`.
+ *
+ * **Rationale:** During save, we allow users to optionally supply a human-readable
+ * slot name hint (any non-empty string). During load/delete, we require the exact
+ * qualified SlotId format. The brand at the type level ensures the renderer and
+ * main process stay in sync on semantics; runtime validation is context-specific.
+ *
+ * No runtime hazard: the main process SaveManager internally uses the fully-qualified
+ * SlotId for all repository operations and never trusts the bare hint directly.
+ */
 export interface SaveRequest {
     readonly gameId: string;
-    readonly slotId?: string;
+    readonly slotId?: SlotId;
     readonly label?: string;
 }
 
@@ -167,7 +205,7 @@ export interface SaveRequest {
  */
 export interface CrashRecoveryStatus {
     readonly needsRecovery: boolean;
-    readonly slotId: string | null;
+    readonly slotId: SlotId | null;
 }
 
 // ─── Settings domain stubs ────────────────────────────────────────────────────
@@ -427,8 +465,8 @@ export interface LobbyDiscoveryAPI {
 export interface SavesAPI {
     list(gameId: string): Promise<SaveSlotMeta[]>;
     save(request: SaveRequest): Promise<SaveSlotMeta>;
-    load(slotId: string): Promise<void>;
-    delete(slotId: string): Promise<void>;
+    load(slotId: SlotId): Promise<void>;
+    delete(slotId: SlotId): Promise<void>;
     /** Fires after save / delete / autosave. */
     onSlotUpdate(cb: (slots: SaveSlotMeta[]) => void): Unsubscribe;
     /**

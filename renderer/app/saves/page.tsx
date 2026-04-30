@@ -21,7 +21,8 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import type { SaveSlotMeta } from '@chimera/electron/preload/api-types.js';
+import { toSlotId } from '@chimera/electron/preload/api-types.js';
+import type { SaveSlotMeta, SlotId } from '@chimera/electron/preload/api-types.js';
 import { useSaveStore } from '../../state/saveStore.js';
 import { useSavesApi } from './useSavesApi.js';
 
@@ -30,8 +31,8 @@ import { useSavesApi } from './useSavesApi.js';
 interface SaveSlotRowProps {
     readonly slot: SaveSlotMeta;
     readonly onSave: (slot: SaveSlotMeta) => void;
-    readonly onLoad: (slotId: string) => void;
-    readonly onDelete: (slotId: string) => void;
+    readonly onLoad: (slotId: SlotId) => void;
+    readonly onDelete: (slotId: SlotId) => void;
 }
 
 function SaveSlotRow({ slot, onSave, onLoad, onDelete }: SaveSlotRowProps): React.ReactElement {
@@ -95,7 +96,7 @@ function SaveSlotRow({ slot, onSave, onLoad, onDelete }: SaveSlotRowProps): Reac
 
 interface NewSaveFormProps {
     readonly gameId: string;
-    readonly onNewSave: (gameId: string, slotId: string | undefined) => void;
+    readonly onNewSave: (gameId: string, slotId: SlotId | undefined) => void;
 }
 
 function NewSaveForm({ gameId, onNewSave }: NewSaveFormProps): React.ReactElement {
@@ -104,7 +105,7 @@ function NewSaveForm({ gameId, onNewSave }: NewSaveFormProps): React.ReactElemen
     const handleSubmit = (e: React.FormEvent): void => {
         e.preventDefault();
         const trimmed = slotId.trim();
-        onNewSave(gameId, trimmed !== '' ? trimmed : undefined);
+        onNewSave(gameId, trimmed !== '' ? toSlotId(trimmed) : undefined);
         setSlotId('');
     };
 
@@ -164,21 +165,21 @@ export default function SavesPage(): React.ReactElement {
     );
 
     const handleLoad = useCallback(
-        (slotId: string): void => {
+        (slotId: SlotId): void => {
             void runSavesAction('Load', () => savesApi.load(slotId));
         },
         [savesApi, runSavesAction],
     );
 
     const handleDelete = useCallback(
-        (slotId: string): void => {
+        (slotId: SlotId): void => {
             void runSavesAction('Delete', () => savesApi.delete(slotId));
         },
         [savesApi, runSavesAction],
     );
 
     const handleNewSave = useCallback(
-        (gameId: string, slotId: string | undefined): void => {
+        (gameId: string, slotId: SlotId | undefined): void => {
             const request = slotId !== undefined ? { gameId, slotId } : { gameId };
             void runSavesAction('Save', () => savesApi.save(request));
         },

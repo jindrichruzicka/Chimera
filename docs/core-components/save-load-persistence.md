@@ -32,7 +32,7 @@ interface SaveFileHeader {
     readonly engineVersion: string; // Chimera semver
     readonly gameId: string;
     readonly gameVersion: string;
-    readonly slotId: string; // 'autosave', 'quicksave', 'slot-2'
+    readonly slotId: string; // plain string in simulation/; toSlotId() converts at SavesIpcAdapter boundary
     readonly savedAt: number; // Unix ms timestamp
     readonly turnNumber: number;
     readonly playerNames: string[];
@@ -87,7 +87,7 @@ export class CompressedSaveSerializer implements SaveSerializer {
 
 ```typescript
 export interface SaveSlotMeta {
-    readonly slotId: string;
+    readonly slotId: string; // plain string in simulation/; toSlotId() converts at SavesIpcAdapter boundary
     readonly gameId: string;
     readonly savedAt: number;
     readonly turnNumber: number;

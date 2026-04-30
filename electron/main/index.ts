@@ -21,6 +21,7 @@ import { registerCrashReporter } from './logging/crash-reporter.js';
 import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
+import { toSlotId } from '../preload/api-types.js';
 import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
@@ -436,7 +437,7 @@ export async function main(): Promise<void> {
     const crashRecoveryStatus =
         autosaveMeta === null
             ? { needsRecovery: false, slotId: null }
-            : { needsRecovery: true, slotId: autosaveMeta.slotId };
+            : { needsRecovery: true, slotId: toSlotId(autosaveMeta.slotId) };
 
     // Flush the async Pino sink on graceful shutdown so buffered log entries
     // reach disk before the process exits (§4.27).

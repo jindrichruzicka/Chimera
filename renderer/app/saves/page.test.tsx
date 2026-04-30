@@ -16,13 +16,14 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SavesPage from './page';
+import { toSlotId } from '@chimera/electron/preload/api-types';
 import type { SaveSlotMeta } from '@chimera/electron/preload/api-types';
 
 // ── Mock window.__chimera.saves ───────────────────────────────────────────────
 
 const mockSave = vi.fn(
     async (): Promise<SaveSlotMeta> => ({
-        slotId: 'slot-1',
+        slotId: toSlotId('slot-1'),
         gameId: 'tactics',
         tick: 1,
         savedAt: 1_000_000,
@@ -64,7 +65,7 @@ vi.mock('../../state/saveStore', () => ({
 
 function makeSlot(slotId: string, overrides: Partial<SaveSlotMeta> = {}): SaveSlotMeta {
     return {
-        slotId,
+        slotId: toSlotId(slotId),
         gameId: 'tactics',
         tick: 5,
         savedAt: 1_714_000_000_000,

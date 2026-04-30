@@ -68,22 +68,37 @@ describe('parseInvokeRequest', () => {
     });
 });
 
-describe('GameIdSchema / SlotIdSchema / PlayerIdSchema (non-empty strings)', () => {
-    it.each([GameIdSchema, SlotIdSchema, PlayerIdSchema])(
-        'accepts any non-empty string',
-        (schema) => {
-            expect(schema.safeParse('sample-game').success).toBe(true);
-        },
-    );
+describe('GameIdSchema / PlayerIdSchema (non-empty strings)', () => {
+    it.each([GameIdSchema, PlayerIdSchema])('accepts any non-empty string', (schema) => {
+        expect(schema.safeParse('sample-game').success).toBe(true);
+    });
 
-    it.each([GameIdSchema, SlotIdSchema, PlayerIdSchema])('rejects an empty string', (schema) => {
+    it.each([GameIdSchema, PlayerIdSchema])('rejects an empty string', (schema) => {
         expect(schema.safeParse('').success).toBe(false);
     });
 
-    it.each([GameIdSchema, SlotIdSchema, PlayerIdSchema])('rejects non-string inputs', (schema) => {
+    it.each([GameIdSchema, PlayerIdSchema])('rejects non-string inputs', (schema) => {
         expect(schema.safeParse(42).success).toBe(false);
         expect(schema.safeParse(null).success).toBe(false);
         expect(schema.safeParse(undefined).success).toBe(false);
+    });
+});
+
+describe('SlotIdSchema (qualified slot identifier)', () => {
+    it.each(['tactics/autosave', 'my-game/slot-1', 'g/s', 'sample-game/quicksave'])(
+        'accepts a well-formed "<gameId>/<slotName>": %s',
+        (id) => expect(SlotIdSchema.safeParse(id).success).toBe(true),
+    );
+
+    it.each(['tactics', '/autosave', 'tactics/', 'TACTICS/slot', 'tactics/slot/extra', ''])(
+        'rejects a malformed slotId: %s',
+        (id) => expect(SlotIdSchema.safeParse(id).success).toBe(false),
+    );
+
+    it('rejects non-string inputs', () => {
+        expect(SlotIdSchema.safeParse(42).success).toBe(false);
+        expect(SlotIdSchema.safeParse(null).success).toBe(false);
+        expect(SlotIdSchema.safeParse(undefined).success).toBe(false);
     });
 });
 

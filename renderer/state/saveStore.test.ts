@@ -15,13 +15,14 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createSaveStore, useSaveStore } from './saveStore';
-import type { SaveSlotMeta } from '../../electron/preload/api-types';
+import { toSlotId } from '@chimera/electron/preload/api-types.js';
+import type { SaveSlotMeta } from '@chimera/electron/preload/api-types.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 function makeSlot(slotId: string, overrides: Partial<SaveSlotMeta> = {}): SaveSlotMeta {
     return {
-        slotId,
+        slotId: toSlotId(slotId),
         gameId: 'tactics',
         tick: 1,
         savedAt: 1_000_000,

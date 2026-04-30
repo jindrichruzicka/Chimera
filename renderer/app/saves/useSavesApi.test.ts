@@ -12,6 +12,7 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSavesBridge, useSavesApi } from './useSavesApi';
+import { toSlotId } from '@chimera/electron/preload/api-types';
 import type {
     CrashRecoveryStatus,
     SaveRequest,
@@ -57,15 +58,15 @@ describe('useSavesApi', () => {
     it('throws when calling save without preload bridge', async () => {
         const { result } = renderHook(() => useSavesApi());
 
-        await expect(result.current.save({ gameId: 'tactics', slotId: 'slot-1' })).rejects.toThrow(
-            'Chimera saves API not available',
-        );
+        await expect(
+            result.current.save({ gameId: 'tactics', slotId: toSlotId('slot-1') }),
+        ).rejects.toThrow('Chimera saves API not available');
     });
 
     it('throws when calling load without preload bridge', async () => {
         const { result } = renderHook(() => useSavesApi());
 
-        await expect(result.current.load('slot-1')).rejects.toThrow(
+        await expect(result.current.load(toSlotId('slot-1'))).rejects.toThrow(
             'Chimera saves API not available',
         );
     });
@@ -73,14 +74,14 @@ describe('useSavesApi', () => {
     it('throws when calling delete without preload bridge', async () => {
         const { result } = renderHook(() => useSavesApi());
 
-        await expect(result.current.delete('slot-1')).rejects.toThrow(
+        await expect(result.current.delete(toSlotId('slot-1'))).rejects.toThrow(
             'Chimera saves API not available',
         );
     });
 
     it('delegates save through the bridge', async () => {
         const mockSlotMeta: SaveSlotMeta = {
-            slotId: 'slot-1',
+            slotId: toSlotId('slot-1'),
             gameId: 'tactics',
             tick: 1,
             savedAt: 1_000_000,
@@ -101,7 +102,7 @@ describe('useSavesApi', () => {
         });
 
         const { result } = renderHook(() => useSavesApi());
-        const request: SaveRequest = { gameId: 'tactics', slotId: 'slot-1' };
+        const request: SaveRequest = { gameId: 'tactics', slotId: toSlotId('slot-1') };
         const returned = await result.current.save(request);
 
         expect(mockSave).toHaveBeenCalledWith(request);
@@ -125,9 +126,9 @@ describe('useSavesApi', () => {
         });
 
         const { result } = renderHook(() => useSavesApi());
-        await result.current.load('slot-1');
+        await result.current.load(toSlotId('slot-1'));
 
-        expect(mockLoad).toHaveBeenCalledWith('slot-1');
+        expect(mockLoad).toHaveBeenCalledWith(toSlotId('slot-1'));
     });
 
     it('delegates delete through the bridge', async () => {
@@ -147,9 +148,9 @@ describe('useSavesApi', () => {
         });
 
         const { result } = renderHook(() => useSavesApi());
-        await result.current.delete('slot-2');
+        await result.current.delete(toSlotId('slot-2'));
 
-        expect(mockDelete).toHaveBeenCalledWith('slot-2');
+        expect(mockDelete).toHaveBeenCalledWith(toSlotId('slot-2'));
     });
 
     it('throws when calling checkCrashRecovery without preload bridge', async () => {
@@ -161,7 +162,10 @@ describe('useSavesApi', () => {
     });
 
     it('delegates checkCrashRecovery through the bridge', async () => {
-        const mockStatus: CrashRecoveryStatus = { needsRecovery: true, slotId: 'slot-crash-1' };
+        const mockStatus: CrashRecoveryStatus = {
+            needsRecovery: true,
+            slotId: toSlotId('slot-crash-1'),
+        };
         const mockCheck = vi.fn(async () => mockStatus);
 
         Object.defineProperty(globalThis, '__chimera', {

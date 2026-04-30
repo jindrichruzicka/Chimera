@@ -21,6 +21,7 @@ import type {
     SaveRequest,
     SaveSlotMeta,
     SavesAPI,
+    SlotId,
 } from '@chimera/electron/preload/api-types.js';
 
 // ── Bridge accessor ───────────────────────────────────────────────────────────
@@ -49,8 +50,8 @@ export function getSavesBridge(source: unknown = globalThis): SavesAPI | null {
 
 export interface SavesApi {
     save(request: SaveRequest): Promise<SaveSlotMeta>;
-    load(slotId: string): Promise<void>;
-    delete(slotId: string): Promise<void>;
+    load(slotId: SlotId): Promise<void>;
+    delete(slotId: SlotId): Promise<void>;
     checkCrashRecovery(): Promise<CrashRecoveryStatus>;
 }
 
@@ -76,7 +77,7 @@ export function useSavesApi(): SavesApi {
                 return api.save(request);
             },
 
-            async load(slotId: string): Promise<void> {
+            async load(slotId: SlotId): Promise<void> {
                 const api = getSavesBridge();
                 if (!api) {
                     throw new Error(MISSING_BRIDGE_ERROR);
@@ -84,7 +85,7 @@ export function useSavesApi(): SavesApi {
                 return api.load(slotId);
             },
 
-            async delete(slotId: string): Promise<void> {
+            async delete(slotId: SlotId): Promise<void> {
                 const api = getSavesBridge();
                 if (!api) {
                     throw new Error(MISSING_BRIDGE_ERROR);

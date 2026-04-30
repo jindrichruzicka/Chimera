@@ -11,6 +11,7 @@ import {
     type SavesApiListener,
 } from './saves-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
+import { toSlotId } from '../api-types.js';
 import type { SaveRequest, SaveSlotMeta } from '../api-types.js';
 
 /**
@@ -47,7 +48,7 @@ function makeIpcStub(): {
 }
 
 function makeSlot(id: string): SaveSlotMeta {
-    return { slotId: id, gameId: 'sample-game', tick: 42, savedAt: 1_700_000_000 };
+    return { slotId: toSlotId(id), gameId: 'sample-game', tick: 42, savedAt: 1_700_000_000 };
 }
 
 describe('createSavesApi', () => {
@@ -103,7 +104,7 @@ describe('createSavesApi', () => {
             const stub = makeIpcStub();
             const api = createSavesApi(stub.port);
 
-            await expect(api.load('slot-a')).resolves.toBeUndefined();
+            await expect(api.load(toSlotId('slot-a'))).resolves.toBeUndefined();
             expect(stub.invocations).toEqual([{ channel: SAVES_LOAD_CHANNEL, arg: 'slot-a' }]);
         });
     });
@@ -113,7 +114,7 @@ describe('createSavesApi', () => {
             const stub = makeIpcStub();
             const api = createSavesApi(stub.port);
 
-            await expect(api.delete('slot-a')).resolves.toBeUndefined();
+            await expect(api.delete(toSlotId('slot-a'))).resolves.toBeUndefined();
             expect(stub.invocations).toEqual([{ channel: SAVES_DELETE_CHANNEL, arg: 'slot-a' }]);
         });
     });

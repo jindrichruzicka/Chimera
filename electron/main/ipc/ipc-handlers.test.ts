@@ -60,6 +60,7 @@ import { LobbyManager } from '../lobby/LobbyManager.js';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
 import type { LobbyInfo } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { toSlotId } from '../../preload/api-types.js';
 import type {
     ActionRejection,
     EngineAction,
@@ -540,7 +541,7 @@ function makeNoopSavesPort(): SavesIpcPort {
         list: () => Promise.resolve([]),
         save: () =>
             Promise.resolve({
-                slotId: '',
+                slotId: toSlotId(''),
                 gameId: '',
                 tick: 0,
                 savedAt: 0,
@@ -579,7 +580,7 @@ describe('registerSavesHandlers', () => {
 
         const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
         expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.({}, 'slot-a'))).resolves.toBeUndefined();
+        await expect(Promise.resolve(handler?.({}, 'sample-game/slot-a'))).resolves.toBeUndefined();
     });
 
     it('registers chimera:saves:delete as an invoke handler resolving to undefined', async () => {
@@ -588,7 +589,7 @@ describe('registerSavesHandlers', () => {
 
         const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
         expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.({}, 'slot-a'))).resolves.toBeUndefined();
+        await expect(Promise.resolve(handler?.({}, 'sample-game/slot-a'))).resolves.toBeUndefined();
     });
 
     it('registers exactly the saves request channels (slot-update is push-only, not registered here)', () => {
@@ -614,7 +615,7 @@ describe('registerSavesHandlers', () => {
         const port: SavesIpcPort = {
             ...makeNoopSavesPort(),
             checkCrashRecovery: () =>
-                Promise.resolve({ needsRecovery: true, slotId: 'tactics/autosave' }),
+                Promise.resolve({ needsRecovery: true, slotId: toSlotId('tactics/autosave') }),
         };
         registerSavesHandlers({ ipcMain: stub.ipcMain, saves: port });
 
@@ -628,14 +629,14 @@ describe('registerSavesHandlers', () => {
 
     describe('with injected SavesIpcPort', () => {
         const sampleMeta: SaveSlotMeta = {
-            slotId: 'sample-game/slot-1',
+            slotId: toSlotId('sample-game/slot-1'),
             gameId: 'sample-game',
             tick: 42,
             savedAt: 1_700_000_000_000,
             label: 'autosave',
         };
         const refreshedMeta: SaveSlotMeta = {
-            slotId: 'sample-game/slot-2',
+            slotId: toSlotId('sample-game/slot-2'),
             gameId: 'sample-game',
             tick: 50,
             savedAt: 1_700_000_001_000,
@@ -1235,6 +1236,22 @@ describe('inbound IPC request validation', () => {
         await expect(Promise.resolve().then(() => deleteHandler?.({}, ''))).rejects.toBeInstanceOf(
             IpcRequestValidationError,
         );
+    });
+
+    it('chimera:saves:load and chimera:saves:delete reject a bare (unqualified) slotId', async () => {
+        const stub = makeSavesIpcMainStub();
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        const loadHandler = stub.handled.get(SAVES_LOAD_CHANNEL);
+        const deleteHandler = stub.handled.get(SAVES_DELETE_CHANNEL);
+
+        // A slot ID without the '<gameId>/' prefix must be rejected at the IPC
+        // boundary by SlotIdSchema, not silently degrade to "no broadcast".
+        await expect(
+            Promise.resolve().then(() => loadHandler?.({}, 'autosave')),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
+        await expect(
+            Promise.resolve().then(() => deleteHandler?.({}, 'autosave')),
+        ).rejects.toBeInstanceOf(IpcRequestValidationError);
     });
 
     it('chimera:settings:get and chimera:settings:reset reject an empty gameId', async () => {

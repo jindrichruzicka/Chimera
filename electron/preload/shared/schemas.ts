@@ -23,6 +23,7 @@
 
 import { z } from 'zod';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import { toSlotId } from '../api-types.js';
 import type {
     ActionRejection,
     CrashRecoveryStatus,
@@ -113,14 +114,18 @@ export const LocalPlayerIdSchema = z.string().nullable();
  * Schema for a single {@link SaveSlotMeta} returned by `chimera:saves:save`.
  * Typed via a `z.ZodType<SaveSlotMeta>` cast — see the schema header for why
  * `satisfies` cannot be used with `exactOptionalPropertyTypes` + `.optional()`.
+ * `as unknown as` is needed for two reasons: (1) `label?: string` requires the
+ * double-step cast due to `exactOptionalPropertyTypes` + `.optional()`; and
+ * (2) the `SlotId` brand on `slotId` makes the inferred Zod output type
+ * incompatible with `z.ZodType<SaveSlotMeta>` without the intermediate cast.
  */
 export const SaveSlotMetaSchema: z.ZodType<SaveSlotMeta> = z.object({
-    slotId: z.string(),
+    slotId: z.string().transform(toSlotId),
     gameId: z.string(),
     tick: z.number(),
     savedAt: z.number(),
     label: z.string().optional(),
-}) as z.ZodType<SaveSlotMeta>;
+}) as unknown as z.ZodType<SaveSlotMeta>;
 
 /** Schema for the array returned by `chimera:saves:list`. */
 export const SaveSlotListSchema: z.ZodType<readonly SaveSlotMeta[]> = z.array(SaveSlotMetaSchema);
@@ -131,7 +136,7 @@ export const SaveSlotListSchema: z.ZodType<readonly SaveSlotMeta[]> = z.array(Sa
  */
 export const CrashRecoveryStatusSchema = z.object({
     needsRecovery: z.boolean(),
-    slotId: z.string().nullable(),
+    slotId: z.string().transform(toSlotId).nullable(),
 }) satisfies z.ZodType<CrashRecoveryStatus>;
 
 /**

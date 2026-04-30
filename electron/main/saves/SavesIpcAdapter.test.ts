@@ -14,6 +14,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
+import { toSlotId } from '../../preload/api-types.js';
 import type { SaveSlotMeta as PreloadSaveSlotMeta, SaveRequest } from '../../preload/api-types.js';
 import { InMemorySaveRepository } from '@chimera/simulation/persistence/InMemorySaveRepository.js';
 import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
@@ -98,13 +99,13 @@ describe('createSavesIpcPort', () => {
             const beta = result[0]!;
             const alpha = result[1]!;
             expect(beta).toMatchObject({
-                slotId: 'tactics/beta',
+                slotId: toSlotId('tactics/beta'),
                 gameId: TACTICS,
                 tick: 11,
                 savedAt: 1_700_000_001_000,
             } satisfies PreloadSaveSlotMeta);
             expect(alpha).toMatchObject({
-                slotId: 'tactics/alpha',
+                slotId: toSlotId('tactics/alpha'),
                 gameId: TACTICS,
                 tick: 7,
                 savedAt: 1_700_000_000_000,
@@ -125,7 +126,7 @@ describe('createSavesIpcPort', () => {
 
             expect(captured).toEqual([request]);
             expect(meta).toMatchObject({
-                slotId: 'tactics/quicksave',
+                slotId: toSlotId('tactics/quicksave'),
                 gameId: TACTICS,
                 tick: 5,
                 savedAt: 1_700_000_002_000,
@@ -145,11 +146,13 @@ describe('createSavesIpcPort', () => {
     describe('load', () => {
         it('delegates to the manager and resolves to undefined', async () => {
             await repo.save(makeFile('alpha', 1_700_000_000_000, 7));
-            await expect(port.load('tactics/alpha')).resolves.toBeUndefined();
+            await expect(port.load(toSlotId('tactics/alpha'))).resolves.toBeUndefined();
         });
 
         it('propagates SaveNotFoundError when the slot does not exist', async () => {
-            await expect(port.load('tactics/missing')).rejects.toBeInstanceOf(SaveNotFoundError);
+            await expect(port.load(toSlotId('tactics/missing'))).rejects.toBeInstanceOf(
+                SaveNotFoundError,
+            );
         });
 
         it('invokes applyRestoredFile with the loaded SaveFile when supplied', async () => {
@@ -165,7 +168,7 @@ describe('createSavesIpcPort', () => {
                 crashRecoveryStatus: { needsRecovery: false, slotId: null },
             });
 
-            await restorePort.load('tactics/alpha');
+            await restorePort.load(toSlotId('tactics/alpha'));
 
             expect(restored).toHaveLength(1);
             expect(restored[0]?.header.slotId).toBe('alpha');
@@ -176,12 +179,14 @@ describe('createSavesIpcPort', () => {
     describe('delete', () => {
         it('delegates to the manager and resolves to undefined', async () => {
             await repo.save(makeFile('alpha', 1_700_000_000_000, 7));
-            await expect(port.delete('tactics/alpha')).resolves.toBeUndefined();
+            await expect(port.delete(toSlotId('tactics/alpha'))).resolves.toBeUndefined();
             expect(await repo.has('tactics/alpha')).toBe(false);
         });
 
         it('propagates SaveNotFoundError when the slot does not exist', async () => {
-            await expect(port.delete('tactics/missing')).rejects.toBeInstanceOf(SaveNotFoundError);
+            await expect(port.delete(toSlotId('tactics/missing'))).rejects.toBeInstanceOf(
+                SaveNotFoundError,
+            );
         });
     });
 
@@ -204,7 +209,7 @@ describe('createSavesIpcPort', () => {
                 saveManager: manager,
                 captureSaveFile: () => Promise.reject(new Error('not used')),
                 logger: createNoopLogger(),
-                crashRecoveryStatus: { needsRecovery: true, slotId: 'tactics/autosave' },
+                crashRecoveryStatus: { needsRecovery: true, slotId: toSlotId('tactics/autosave') },
             });
             await expect(crashPort.checkCrashRecovery()).resolves.toEqual({
                 needsRecovery: true,

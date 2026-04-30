@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { CrashRecoveryStatus } from '@chimera/electron/preload/api-types';
+import { toSlotId } from '@chimera/electron/preload/api-types';
 import { CrashRecoveryBanner } from './CrashRecoveryBanner';
 
 interface SavesBridgeFixture {
@@ -37,7 +38,7 @@ afterEach(() => {
 
 describe('CrashRecoveryBanner', () => {
     it('renders the banner when checkCrashRecovery resolves with needsRecovery: true', async () => {
-        installSavesBridge({ needsRecovery: true, slotId: 'slot-crash-1' });
+        installSavesBridge({ needsRecovery: true, slotId: toSlotId('slot-crash-1') });
 
         render(<CrashRecoveryBanner />);
 
@@ -58,7 +59,7 @@ describe('CrashRecoveryBanner', () => {
     });
 
     it('"Resume last session" button calls window.__chimera.saves.load with the correct slot ID', async () => {
-        const slotId = 'slot-crash-42';
+        const slotId = toSlotId('slot-crash-42');
         const { loadSpy } = installSavesBridge({ needsRecovery: true, slotId });
 
         render(<CrashRecoveryBanner />);
@@ -71,7 +72,10 @@ describe('CrashRecoveryBanner', () => {
     });
 
     it('"Start fresh" button dismisses the banner without calling load', async () => {
-        const { loadSpy } = installSavesBridge({ needsRecovery: true, slotId: 'slot-crash-1' });
+        const { loadSpy } = installSavesBridge({
+            needsRecovery: true,
+            slotId: toSlotId('slot-crash-1'),
+        });
 
         render(<CrashRecoveryBanner />);
 
@@ -83,7 +87,7 @@ describe('CrashRecoveryBanner', () => {
     });
 
     it('banner is dismissed after "Resume last session" is clicked', async () => {
-        installSavesBridge({ needsRecovery: true, slotId: 'slot-crash-1' });
+        installSavesBridge({ needsRecovery: true, slotId: toSlotId('slot-crash-1') });
 
         render(<CrashRecoveryBanner />);
 

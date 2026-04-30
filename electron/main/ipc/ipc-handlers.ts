@@ -66,6 +66,7 @@ import type {
     ResolvedSettings,
     SaveRequest,
     SaveSlotMeta,
+    SlotId,
     UserSettings,
 } from '../../preload/api-types.js';
 import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
@@ -509,8 +510,8 @@ export interface SavesHandlersIpcMain {
 export interface SavesIpcPort {
     list(gameId: string): Promise<SaveSlotMeta[]>;
     save(request: SaveRequest): Promise<SaveSlotMeta>;
-    load(slotId: string): Promise<void>;
-    delete(slotId: string): Promise<void>;
+    load(slotId: SlotId): Promise<void>;
+    delete(slotId: SlotId): Promise<void>;
     /**
      * Check whether the previous session ended unclean and an autosave is
      * available to recover from. Pure read; never mutates persistence.
@@ -614,14 +615,8 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
         if (broadcastSlotsChanged !== undefined) {
             try {
                 const gameId = parseGameIdFromSlotId(validated);
-                if (gameId !== null) {
-                    const refreshed = await saves.list(gameId);
-                    broadcastSlotsChanged(gameId, refreshed);
-                } else {
-                    logger.warn('saves:delete — slotId has no gameId prefix; skipping broadcast', {
-                        slotId: validated,
-                    });
-                }
+                const refreshed = await saves.list(gameId);
+                broadcastSlotsChanged(gameId, refreshed);
             } catch (err) {
                 logger.warn('saves:delete — post-delete list/broadcast failed; slot was deleted', {
                     slotId: validated,
@@ -637,15 +632,16 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
 
 /**
  * Extract the `gameId` from a qualified slot identifier of the documented
- * form `'<gameId>/<slotName>'`. Returns `null` if the input does not
- * contain a `/` separator — this should never happen for slot IDs minted
- * by the repository, but the IPC boundary cannot rely on that and must
- * degrade gracefully (no broadcast) rather than throw.
+ * form `'<gameId>/<slotName>'`.  `SlotIdSchema` enforces the format at the
+ * IPC boundary, so a missing `'/'` is an invariant violation — we throw
+ * rather than degrade silently.
  */
-function parseGameIdFromSlotId(slotId: string): string | null {
+function parseGameIdFromSlotId(slotId: string): string {
     const idx = slotId.indexOf('/');
     if (idx <= 0) {
-        return null;
+        throw new Error(
+            `Invariant violation: slotId without '/' reached parseGameIdFromSlotId: ${slotId}`,
+        );
     }
     return slotId.slice(0, idx);
 }
