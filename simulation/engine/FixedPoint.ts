@@ -54,3 +54,56 @@ export function toFloat(x: FixedPoint): number {
 export function toInt(x: FixedPoint): number {
     return Number(x >> SHIFT);
 }
+
+// ── Arithmetic ─────────────────────────────────────────────────────────────
+
+/** Q32.32 addition. */
+export function add(a: FixedPoint, b: FixedPoint): FixedPoint {
+    return a + b;
+}
+
+/** Q32.32 subtraction. */
+export function sub(a: FixedPoint, b: FixedPoint): FixedPoint {
+    return a - b;
+}
+
+/** Q32.32 multiplication: `(a * b) >> 32`. */
+export function mul(a: FixedPoint, b: FixedPoint): FixedPoint {
+    return (a * b) >> SHIFT;
+}
+
+/**
+ * Q32.32 division: `(a << 32) / b`.
+ * @throws {RangeError} when `b` is zero.
+ */
+export function div(a: FixedPoint, b: FixedPoint): FixedPoint {
+    if (b === 0n) throw new RangeError('FixedPoint: division by zero');
+    return (a << SHIFT) / b;
+}
+
+/** Negation. */
+export function neg(a: FixedPoint): FixedPoint {
+    return -a;
+}
+
+/** Absolute value. */
+export function abs(a: FixedPoint): FixedPoint {
+    return a < 0n ? -a : a;
+}
+
+// ── Comparisons ────────────────────────────────────────────────────────────
+
+/** Less-than comparison. */
+export function lt(a: FixedPoint, b: FixedPoint): boolean {
+    return a < b;
+}
+
+/** Greater-than comparison. */
+export function gt(a: FixedPoint, b: FixedPoint): boolean {
+    return a > b;
+}
+
+/** Equality comparison. */
+export function eq(a: FixedPoint, b: FixedPoint): boolean {
+    return a === b;
+}
