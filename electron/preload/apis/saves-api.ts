@@ -13,10 +13,21 @@
 // the preload bridge simply forwards calls and has no opinion about who is
 // allowed to issue them.
 
-import type { SaveRequest, SaveSlotMeta, SavesAPI, Unsubscribe } from '../api-types.js';
+import type {
+    CrashRecoveryStatus,
+    SaveRequest,
+    SaveSlotMeta,
+    SavesAPI,
+    Unsubscribe,
+} from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush } from '../shared/listener.js';
-import { SaveSlotListSchema, SaveSlotMetaSchema, parseInvokeResponse } from '../shared/schemas.js';
+import {
+    CrashRecoveryStatusSchema,
+    SaveSlotListSchema,
+    SaveSlotMetaSchema,
+    parseInvokeResponse,
+} from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SavesAPI.list}. */
 export const SAVES_LIST_CHANNEL = 'chimera:saves:list';
@@ -35,6 +46,9 @@ export const SAVES_DELETE_CHANNEL = 'chimera:saves:delete';
  * full slot list via `webContents.send` after every save / delete / autosave.
  */
 export const SAVES_SLOT_UPDATE_CHANNEL = 'chimera:saves:slot-update';
+
+/** `ipcRenderer.invoke` target for {@link SavesAPI.checkCrashRecovery}. */
+export const SAVES_CHECK_CRASH_RECOVERY_CHANNEL = 'chimera:saves:check-crash-recovery';
 
 /**
  * Back-compat alias for {@link IpcListener}. Retained so test files that
@@ -91,5 +105,15 @@ export function createSavesApi(ipc: SavesApiIpcPort): SavesAPI {
         },
         onSlotUpdate: (cb: (slots: SaveSlotMeta[]) => void): Unsubscribe =>
             subscribePush<SaveSlotMeta[]>(ipc, SAVES_SLOT_UPDATE_CHANNEL, cb),
+        checkCrashRecovery: (): Promise<CrashRecoveryStatus> =>
+            ipc
+                .invoke(SAVES_CHECK_CRASH_RECOVERY_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(
+                        CrashRecoveryStatusSchema,
+                        SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
+                        value,
+                    ),
+                ),
     };
 }

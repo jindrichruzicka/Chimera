@@ -12,7 +12,12 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSavesBridge, useSavesApi } from './useSavesApi';
-import type { SaveRequest, SaveSlotMeta, SavesAPI } from '@chimera/electron/preload/api-types';
+import type {
+    CrashRecoveryStatus,
+    SaveRequest,
+    SaveSlotMeta,
+    SavesAPI,
+} from '@chimera/electron/preload/api-types';
 
 // ── getSavesBridge ────────────────────────────────────────────────────────────
 
@@ -32,6 +37,7 @@ describe('getSavesBridge', () => {
             load: vi.fn(),
             delete: vi.fn(),
             onSlotUpdate: vi.fn(),
+            checkCrashRecovery: vi.fn(),
         };
 
         const bridge = getSavesBridge({ __chimera: { saves } });
@@ -144,6 +150,39 @@ describe('useSavesApi', () => {
         await result.current.delete('slot-2');
 
         expect(mockDelete).toHaveBeenCalledWith('slot-2');
+    });
+
+    it('throws when calling checkCrashRecovery without preload bridge', async () => {
+        const { result } = renderHook(() => useSavesApi());
+
+        await expect(result.current.checkCrashRecovery()).rejects.toThrow(
+            'Chimera saves API not available',
+        );
+    });
+
+    it('delegates checkCrashRecovery through the bridge', async () => {
+        const mockStatus: CrashRecoveryStatus = { needsRecovery: true, slotId: 'slot-crash-1' };
+        const mockCheck = vi.fn(async () => mockStatus);
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                saves: {
+                    save: vi.fn(),
+                    load: vi.fn(async () => undefined),
+                    delete: vi.fn(async () => undefined),
+                    list: vi.fn(async () => []),
+                    onSlotUpdate: vi.fn(() => () => undefined),
+                    checkCrashRecovery: mockCheck,
+                },
+            },
+        });
+
+        const { result } = renderHook(() => useSavesApi());
+        const returned = await result.current.checkCrashRecovery();
+
+        expect(mockCheck).toHaveBeenCalledOnce();
+        expect(returned).toBe(mockStatus);
     });
 
     it('returns a stable reference across re-renders', () => {

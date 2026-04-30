@@ -16,7 +16,12 @@
  */
 
 import { useMemo } from 'react';
-import type { SaveRequest, SaveSlotMeta, SavesAPI } from '@chimera/electron/preload/api-types.js';
+import type {
+    CrashRecoveryStatus,
+    SaveRequest,
+    SaveSlotMeta,
+    SavesAPI,
+} from '@chimera/electron/preload/api-types.js';
 
 // ── Bridge accessor ───────────────────────────────────────────────────────────
 
@@ -46,6 +51,7 @@ export interface SavesApi {
     save(request: SaveRequest): Promise<SaveSlotMeta>;
     load(slotId: string): Promise<void>;
     delete(slotId: string): Promise<void>;
+    checkCrashRecovery(): Promise<CrashRecoveryStatus>;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -84,6 +90,14 @@ export function useSavesApi(): SavesApi {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
                 return api.delete(slotId);
+            },
+
+            async checkCrashRecovery(): Promise<CrashRecoveryStatus> {
+                const api = getSavesBridge();
+                if (!api) {
+                    throw new Error(MISSING_BRIDGE_ERROR);
+                }
+                return api.checkCrashRecovery();
             },
         }),
         [],
