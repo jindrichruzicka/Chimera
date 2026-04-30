@@ -5,7 +5,11 @@ export type {
     ResolvedSettings,
     UserSettings,
 } from './SettingsSchema';
-export { ENGINE_DEFAULTS, engineSettingsZodShape } from './SettingsSchema';
+export {
+    ENGINE_DEFAULTS,
+    SettingsNamespaceCollisionError,
+    engineSettingsZodShape,
+} from './SettingsSchema';
 export { SettingsMerger, SettingsValidationError } from './SettingsMerger';
 export type { SettingsRepository } from './SettingsRepository';
 export { InMemorySettingsRepository } from './InMemorySettingsRepository';

@@ -976,7 +976,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
         mgr.registerSchema({
             gameId: 'wired-game',
             defaults: ENGINE_DEFAULTS,
-            zodSchema: engineSchema,
+            schema: engineSchema,
         });
 
         registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
@@ -1024,7 +1024,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
         mgr.registerSchema({
             gameId: 'wired-game',
             defaults: ENGINE_DEFAULTS,
-            zodSchema: engineSchema,
+            schema: engineSchema,
         });
 
         registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
@@ -1074,7 +1074,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
         mgr.registerSchema({
             gameId: 'wired-game',
             defaults: ENGINE_DEFAULTS,
-            zodSchema: engineSchema,
+            schema: engineSchema,
         });
 
         registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
@@ -1407,7 +1407,7 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
         mgr.registerSchema({
             gameId: 'block4-game',
             defaults: (await import('@chimera/simulation/settings/index.js')).ENGINE_DEFAULTS,
-            zodSchema: engineSchema,
+            schema: engineSchema,
         });
 
         registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
@@ -1460,7 +1460,7 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
         mgr.registerSchema({
             gameId: 'block4-game',
             defaults: ENGINE_DEFAULTS,
-            zodSchema: engineSchema,
+            schema: engineSchema,
         });
         registerSettingsHandlers({ ipcMain: stub.ipcMain, settingsManager: mgr });
 

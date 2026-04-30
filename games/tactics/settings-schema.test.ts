@@ -40,9 +40,9 @@ describe('tacticsSettingsSchema', () => {
 
 // ── Zod schema validation ─────────────────────────────────────────────────────
 
-describe('tacticsSettingsSchema.zodSchema', () => {
+describe('tacticsSettingsSchema.schema', () => {
     it('accepts valid animationSpeed values', () => {
-        const result = tacticsSettingsSchema.zodSchema.safeParse({
+        const result = tacticsSettingsSchema.schema.safeParse({
             ...TACTICS_DEFAULTS,
             animationSpeed: 'fast',
         });
@@ -50,7 +50,7 @@ describe('tacticsSettingsSchema.zodSchema', () => {
     });
 
     it('rejects invalid animationSpeed', () => {
-        const result = tacticsSettingsSchema.zodSchema.safeParse({
+        const result = tacticsSettingsSchema.schema.safeParse({
             ...TACTICS_DEFAULTS,
             animationSpeed: 'turbo',
         });
@@ -58,7 +58,7 @@ describe('tacticsSettingsSchema.zodSchema', () => {
     });
 
     it('rejects negative aiThinkingDelayMs', () => {
-        const result = tacticsSettingsSchema.zodSchema.safeParse({
+        const result = tacticsSettingsSchema.schema.safeParse({
             ...TACTICS_DEFAULTS,
             aiThinkingDelayMs: -1,
         });
@@ -66,7 +66,7 @@ describe('tacticsSettingsSchema.zodSchema', () => {
     });
 
     it('rejects aiThinkingDelayMs above 5000', () => {
-        const result = tacticsSettingsSchema.zodSchema.safeParse({
+        const result = tacticsSettingsSchema.schema.safeParse({
             ...TACTICS_DEFAULTS,
             aiThinkingDelayMs: 5001,
         });
@@ -74,7 +74,7 @@ describe('tacticsSettingsSchema.zodSchema', () => {
     });
 
     it('accepts aiThinkingDelayMs of 0', () => {
-        const result = tacticsSettingsSchema.zodSchema.safeParse({
+        const result = tacticsSettingsSchema.schema.safeParse({
             ...TACTICS_DEFAULTS,
             aiThinkingDelayMs: 0,
         });
@@ -82,7 +82,7 @@ describe('tacticsSettingsSchema.zodSchema', () => {
     });
 
     it('accepts aiThinkingDelayMs of 5000', () => {
-        const result = tacticsSettingsSchema.zodSchema.safeParse({
+        const result = tacticsSettingsSchema.schema.safeParse({
             ...TACTICS_DEFAULTS,
             aiThinkingDelayMs: 5000,
         });

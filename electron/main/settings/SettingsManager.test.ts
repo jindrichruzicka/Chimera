@@ -8,8 +8,12 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
 import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
-import { ENGINE_DEFAULTS, InMemorySettingsRepository } from '@chimera/simulation/settings/index.js';
-import { SettingsManager, SettingsNamespaceCollisionError } from './SettingsManager.js';
+import {
+    ENGINE_DEFAULTS,
+    InMemorySettingsRepository,
+    SettingsNamespaceCollisionError,
+} from '@chimera/simulation/settings/index.js';
+import { SettingsManager } from './SettingsManager.js';
 
 // ── Test helpers ──────────────────────────────────────────────────────────────
 
@@ -41,7 +45,7 @@ const engineSchema = z.object({
 const engineSettingsSchema: GameSettingsSchema<EngineSettings> = {
     gameId: 'test-game',
     defaults: ENGINE_DEFAULTS,
-    zodSchema: engineSchema,
+    schema: engineSchema,
 };
 
 interface ExtSettings extends EngineSettings {
@@ -59,7 +63,7 @@ const extSchema = z.object({
 const extSettingsSchema: GameSettingsSchema<ExtSettings> = {
     gameId: 'ext-game',
     defaults: { ...ENGINE_DEFAULTS, showGrid: true },
-    zodSchema: extSchema,
+    schema: extSchema,
 };
 
 function makeManager(): SettingsManager {
@@ -89,7 +93,7 @@ describe('SettingsManager.registerSchema()', () => {
         const pureEngineSchema: GameSettingsSchema<EngineSettings> = {
             gameId: 'bad-game',
             defaults: { ...ENGINE_DEFAULTS },
-            zodSchema: engineSchema,
+            schema: engineSchema,
         };
         expect(() => mgr.registerSchema(pureEngineSchema)).not.toThrow(); // pure engine keys are fine
     });

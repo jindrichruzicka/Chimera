@@ -62,14 +62,32 @@ export const ENGINE_DEFAULTS: EngineSettings = {
     },
 } as const;
 
+// ─── Namespace collision guard ────────────────────────────────────────────────
+
+/**
+ * Thrown by `SettingsManager.registerSchema()` when a game-defined settings key
+ * shadows one of the four reserved engine namespace keys
+ * (`audio`, `display`, `gameplay`, `controls`).
+ *
+ * Enforces Invariant #35.
+ */
+export class SettingsNamespaceCollisionError extends Error {
+    public override readonly name = 'SettingsNamespaceCollisionError';
+
+    constructor(message: string) {
+        super(message);
+        Object.setPrototypeOf(this, SettingsNamespaceCollisionError.prototype);
+    }
+}
+
 // ─── Game-specific schema declaration ────────────────────────────────────────
 
 export interface GameSettingsSchema<T extends EngineSettings> {
     readonly gameId: string;
     /** Complete set of game defaults (engine fields + game fields). */
     readonly defaults: T;
-    /** Zod schema for parse / strip / validate. */
-    readonly zodSchema: z.ZodType<T>;
+    /** Zod schema for parse / strip / validate at runtime. */
+    readonly schema: z.ZodType<T>;
 }
 
 // ─── Runtime types ───────────────────────────────────────────────────────────

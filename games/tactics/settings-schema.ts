@@ -54,5 +54,5 @@ const tacticsZodSchema = z.object({
 export const tacticsSettingsSchema: GameSettingsSchema<TacticsSettings> = {
     gameId: 'tactics',
     defaults: TACTICS_DEFAULTS,
-    zodSchema: tacticsZodSchema,
+    schema: tacticsZodSchema,
 };

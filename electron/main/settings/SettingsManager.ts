@@ -23,7 +23,11 @@ import type {
     SettingsRepository,
     UserSettings,
 } from '@chimera/simulation/settings/index.js';
-import { ENGINE_DEFAULTS, SettingsMerger } from '@chimera/simulation/settings/index.js';
+import {
+    ENGINE_DEFAULTS,
+    SettingsNamespaceCollisionError,
+    SettingsMerger,
+} from '@chimera/simulation/settings/index.js';
 
 /** Top-level engine namespace keys that game schemas must not shadow (invariant #35). */
 const ENGINE_NAMESPACE_KEYS = new Set(['audio', 'display', 'gameplay', 'controls']);
@@ -59,17 +63,9 @@ function mergeUserOverrides(
     return result;
 }
 
-/**
- * Thrown by `registerSchema()` when:
- * (a) a schema for the same gameId is registered twice, or
- * (b) the schema's game-specific keys shadow an engine namespace key.
- */
-export class SettingsNamespaceCollisionError extends Error {
-    constructor(message: string) {
-        super(message);
-        this.name = 'SettingsNamespaceCollisionError';
-    }
-}
+// SettingsNamespaceCollisionError is defined in simulation/settings/SettingsSchema.ts
+// and re-exported from simulation/settings/index.ts — imported above.
+export { SettingsNamespaceCollisionError } from '@chimera/simulation/settings/index.js';
 
 /** Optional broadcast callback type — avoids importing Electron in this module. */
 export type BroadcastFn = (gameId: string, settings: ResolvedSettings) => void;
@@ -132,7 +128,7 @@ export class SettingsManager {
         let userOverrides: UserSettings = rawOverrides;
         if (schema !== undefined && Object.keys(rawOverrides).length > 0) {
             try {
-                userOverrides = SettingsMerger.validatePatch(schema.zodSchema, rawOverrides);
+                userOverrides = SettingsMerger.validatePatch(schema.schema, rawOverrides);
             } catch {
                 this.logger?.warn(
                     'Stored settings for game failed schema validation; falling back to defaults.',
@@ -163,14 +159,14 @@ export class SettingsManager {
         if (schema === undefined) {
             return patch;
         }
-        return SettingsMerger.validatePatch(schema.zodSchema, patch);
+        return SettingsMerger.validatePatch(schema.schema, patch);
     }
 
     async updateSettings(gameId: string, patch: Partial<UserSettings>): Promise<ResolvedSettings> {
         const schema = this.schemas.get(gameId);
         // WARN-2 fix: use the return value (validated, stripped patch)
         const validatedPatch =
-            schema !== undefined ? SettingsMerger.validatePatch(schema.zodSchema, patch) : patch;
+            schema !== undefined ? SettingsMerger.validatePatch(schema.schema, patch) : patch;
 
         const currentOverrides = await this.repo.load(gameId);
         // BLOCK-1 fix: merge the validated patch into existing OVERRIDES only,
