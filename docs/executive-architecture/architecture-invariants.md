@@ -126,7 +126,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **44.** All numeric fields of `GameSnapshot` that participate in arithmetic, comparison, or checksums must be integers (including fixed-point representations of money, percentages, and fine-grained positions). Floating-point is forbidden in simulation state.
 
-**45.** `ActionHistory` is bounded by `TurnMemento`. Retention is `TURN_MEMENTO_RETENTION = 4` turns (entries with `turnNumber < currentTurn - TURN_MEMENTO_RETENTION` are evicted by `pruneTo`). A `MAX_ACTION_HISTORY_ENTRIES = 10_000` safety-net cap guards against pruning bugs: on overflow, `append()` evicts oldest entries AND emits an `action-history:overflow` warn log.
+**45.** `ActionHistory` is bounded by `TurnMemento`. Retention is `TURN_MEMENTO_RETENTION = 4` turns (entries with `turnNumber < currentTurn - TURN_MEMENTO_RETENTION` are evicted by `pruneTo`). `pruneTo(cutoff: number)` is idempotent: calling it repeatedly with an identical or lower cutoff is a no-op; the comparison is strict `<`, never `<=`. A `MAX_ACTION_HISTORY_ENTRIES = 10_000` safety-net cap guards against pruning bugs: on overflow, `append()` evicts oldest entries AND emits an `action-history:overflow` warn log.
 
 **46.** `ContentDatabase` is optional. Games that declare no content (e.g. Tic Tac Toe) pass no `db` to `PipelineContext`, and `ReduceContext.db` is `undefined` for them. `validate()` and `reduce()` must tolerate `ctx.db` being `undefined` if the game opts out.
 

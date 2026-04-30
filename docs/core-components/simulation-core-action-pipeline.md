@@ -9,6 +9,8 @@ tags: [simulation, action-pipeline, determinism, undo-redo, rng, engine-core]
 > §4.2, §4.2.1, and §4.7 of the Chimera architecture.
 > Related: [Electron Shell](electron-shell-ipc-bridge.md) · [Undo/Redo Policy](undo-redo-policy.md) · [State Projection](state-projection-interfaces.md) · [Content Database](content-database-data-refs.md) · [AI Framework](ai-framework-agent-system.md)
 
+**Note:** Content from `architecture-overview.md` §4.2.1 (Determinism Foundations) has been consolidated here. Related invariants (especially idempotency and pruneTo semantics) are in [architecture-invariants.md](./architecture-invariants.md#invariant-45).
+
 ---
 
 ## State Types
@@ -242,7 +244,12 @@ interface UndoManager {
 interface ActionHistory {
     append(entry: ActionHistoryEntry): void;
     sinceLastMemento(): readonly ActionHistoryEntry[];
-    pruneTo(cutoff: number): void; // cutoff = currentTurn - TURN_MEMENTO_RETENTION
+    /**
+     * Remove every ActionHistoryEntry whose turnNumber < cutoff.
+     * Idempotent: calling pruneTo with an identical or lower cutoff is a no-op.
+     * @param cutoff — typically currentTurn - TURN_MEMENTO_RETENTION (invariant 45)
+     */
+    pruneTo(cutoff: number): void;
 }
 ```
 
