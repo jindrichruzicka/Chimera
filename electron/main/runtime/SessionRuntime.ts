@@ -132,6 +132,10 @@ export class SessionRuntime {
      */
     applyRestoredFile(file: SaveFile): void {
         this.snapshot = file.checkpoint;
+        // TODO(invariant-26): restore file.pendingCommitments into CommitmentScheme
+        // when CommitmentScheme lands in M5 (F26–F29, issues #371/#379).
+        // Until then, saves carry pendingCommitments: {} and REVEAL flows are not
+        // yet reachable, so no REVEAL message can misbehave post-load.
     }
 
     /**
@@ -161,6 +165,8 @@ export class SessionRuntime {
             },
             checkpoint: this.snapshot,
             deltaActions: [],
+            // TODO(invariant-26): capture CommitmentScheme state here when M5
+            // (F26–F29, issues #371/#379) lands so restored saves carry live commitments.
             pendingCommitments: {},
         };
     }

@@ -80,11 +80,11 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **23.** `FileSaveRepository.save()` always writes to a `.tmp` file and renames atomically. A save must never partially overwrite a previous valid save file.
 
-**24.** `SimulationHost.restoreFromSave()` is the only entry point for replacing the live `GameSnapshot` from a file. No other code path may overwrite the running simulation state from disk.
+**24.** `SessionRuntime.applyRestoredFile()` is the only entry point for replacing the live `GameSnapshot` from a file. The two-step load flow is: (1) `SaveManager.restoreFromSave()` reads and migrates the file from disk into a `SaveFile`, then (2) `SessionRuntime.applyRestoredFile(file)` replaces the live snapshot. No other code path may overwrite the running simulation state from disk.
 
 **25.** `engine:save` and `engine:load` are validated `EngineAction` types — only the designated host player may dispatch them. Client-originated save/load actions are rejected by `validate()` before reaching the reducer.
 
-**26.** `SaveFile.pendingCommitments` must be restored into `CommitmentScheme` on load. A loaded game without restored commitments must not process any `REVEAL` messages until commitments are present.
+**26.** `SaveFile.pendingCommitments` must be restored into `CommitmentScheme` on load. A loaded game without restored commitments must not process any `REVEAL` messages until commitments are present. _(Deferred — `CommitmentScheme` lands in M5 F26–F29. See issues #371 and #379. The wiring point is marked with `TODO(invariant-26)` in `SessionRuntime.applyRestoredFile` and `captureSaveFile`.)_
 
 **27.** `CHIMERA_DEBUG` must never appear in the production packaging configuration. The production build must assert `IS_DEBUG_MODE === false` at startup and refuse to start if `process.env.CHIMERA_DEBUG` is set in a `NODE_ENV=production` process.
 
