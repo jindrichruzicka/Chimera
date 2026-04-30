@@ -95,3 +95,17 @@ export { ClientPredictor, NonPredictableActionError } from './prediction/ClientP
 
 export { ReconcileBuffer, MAX_BUFFER_DEPTH } from './prediction/ReconcileBuffer.js';
 export type { ReconcileBufferOptions } from './prediction/ReconcileBuffer.js';
+
+export type { FixedPoint } from './FixedPoint.js';
+export {
+    FP_ZERO,
+    FP_ONE,
+    FP_HALF,
+    FP_PI,
+    FP_TAU,
+    fromInt,
+    fromRatio,
+    fromFloat,
+    toFloat,
+    toInt,
+} from './FixedPoint.js';
