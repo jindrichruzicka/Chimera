@@ -21,7 +21,7 @@
 
 import { useEffect } from 'react';
 import { bootstrapGameStore } from '../state/gameStoreBootstrap';
-import type { GameAPI } from '../../electron/preload/api-types';
+import type { GameAPI } from '@chimera/electron/preload/api-types.js';
 
 export function GameStoreBootstrap(): null {
     useEffect(() => {

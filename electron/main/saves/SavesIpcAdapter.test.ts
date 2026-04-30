@@ -77,6 +77,7 @@ describe('createSavesIpcPort', () => {
                 return nextCaptured;
             },
             logger: createNoopLogger(),
+            crashRecoveryStatus: { needsRecovery: false, slotId: null },
         });
     });
 
@@ -150,6 +151,26 @@ describe('createSavesIpcPort', () => {
         it('propagates SaveNotFoundError when the slot does not exist', async () => {
             await expect(port.load('tactics/missing')).rejects.toBeInstanceOf(SaveNotFoundError);
         });
+
+        it('invokes applyRestoredFile with the loaded SaveFile when supplied', async () => {
+            await repo.save(makeFile('alpha', 1_700_000_000_000, 7));
+            const restored: SaveFile[] = [];
+            const restorePort = createSavesIpcPort({
+                saveManager: manager,
+                captureSaveFile: () => Promise.reject(new Error('not used')),
+                applyRestoredFile: (file) => {
+                    restored.push(file);
+                },
+                logger: createNoopLogger(),
+                crashRecoveryStatus: { needsRecovery: false, slotId: null },
+            });
+
+            await restorePort.load('tactics/alpha');
+
+            expect(restored).toHaveLength(1);
+            expect(restored[0]?.header.slotId).toBe('alpha');
+            expect(restored[0]?.header.gameId).toBe(TACTICS);
+        });
     });
 
     describe('delete', () => {
@@ -161,6 +182,34 @@ describe('createSavesIpcPort', () => {
 
         it('propagates SaveNotFoundError when the slot does not exist', async () => {
             await expect(port.delete('tactics/missing')).rejects.toBeInstanceOf(SaveNotFoundError);
+        });
+    });
+
+    describe('checkCrashRecovery', () => {
+        it('returns the captured crash-recovery status verbatim (clean exit)', async () => {
+            const cleanPort = createSavesIpcPort({
+                saveManager: manager,
+                captureSaveFile: () => Promise.reject(new Error('not used')),
+                logger: createNoopLogger(),
+                crashRecoveryStatus: { needsRecovery: false, slotId: null },
+            });
+            await expect(cleanPort.checkCrashRecovery()).resolves.toEqual({
+                needsRecovery: false,
+                slotId: null,
+            });
+        });
+
+        it('returns the captured crash-recovery status verbatim (autosave found)', async () => {
+            const crashPort = createSavesIpcPort({
+                saveManager: manager,
+                captureSaveFile: () => Promise.reject(new Error('not used')),
+                logger: createNoopLogger(),
+                crashRecoveryStatus: { needsRecovery: true, slotId: 'tactics/autosave' },
+            });
+            await expect(crashPort.checkCrashRecovery()).resolves.toEqual({
+                needsRecovery: true,
+                slotId: 'tactics/autosave',
+            });
         });
     });
 });

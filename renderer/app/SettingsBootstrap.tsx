@@ -11,7 +11,7 @@
 
 import { useEffect } from 'react';
 import { bootstrapSettingsStore } from '../state/settingsStoreBootstrap';
-import type { SettingsAPI } from '../../electron/preload/api-types';
+import type { SettingsAPI } from '@chimera/electron/preload/api-types.js';
 
 export function SettingsBootstrap(): null {
     useEffect(() => {

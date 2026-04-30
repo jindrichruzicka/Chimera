@@ -213,7 +213,7 @@ export const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
         playerId: string,
         _ctx,
     ): ValidationResult {
-        if (state.hostPlayerId !== undefined && playerId !== state.hostPlayerId) {
+        if (state.hostPlayerId === undefined || playerId !== state.hostPlayerId) {
             return {
                 ok: false,
                 reason: 'engine:save may only be dispatched by the host player (invariant #25)',
@@ -224,7 +224,6 @@ export const engineSaveDefinition: ActionDefinition<EngineSaveLoadPayload> = {
 
     reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineSaveLoadPayload): BaseGameSnapshot {
         // Stub: returns snapshot unchanged. Actual save is performed by SaveManager.
-        // TODO(F18): wire post-pipeline save/load side-effect handler
         return state;
     },
 } satisfies ActionDefinition<EngineSaveLoadPayload>;
@@ -258,7 +257,7 @@ export const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
         playerId: string,
         _ctx,
     ): ValidationResult {
-        if (state.hostPlayerId !== undefined && playerId !== state.hostPlayerId) {
+        if (state.hostPlayerId === undefined || playerId !== state.hostPlayerId) {
             return {
                 ok: false,
                 reason: 'engine:load may only be dispatched by the host player (invariant #25)',
@@ -269,7 +268,6 @@ export const engineLoadDefinition: ActionDefinition<EngineSaveLoadPayload> = {
 
     reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineSaveLoadPayload): BaseGameSnapshot {
         // Stub: returns snapshot unchanged. Actual load is performed by SaveManager.
-        // TODO(F18): wire post-pipeline save/load side-effect handler
         return state;
     },
 } satisfies ActionDefinition<EngineSaveLoadPayload>;

@@ -33,6 +33,7 @@ import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline } from './runtime/HostSessionPipeline.js';
+import { SessionRuntime } from './runtime/SessionRuntime.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
@@ -40,7 +41,7 @@ import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { BaseGameSnapshot, GamePhase, PlayerId } from '@chimera/simulation/engine/types.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -319,6 +320,35 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
  * Renderer entry follows issue #3:
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
+/**
+ * Build a fresh, valid {@link BaseGameSnapshot} for a newly-hosted session.
+ *
+ * Used by the `onSessionHosted` callback to seed the {@link SessionRuntime}
+ * before any action has been processed.  Game-specific reducers replace the
+ * snapshot on first action — this seed only needs to satisfy the engine's
+ * structural invariants:
+ *
+ *   - Integer fields (Invariants #42/#44): `tick=0`, `turnNumber=0`,
+ *     `seed` is a 32-bit unsigned integer derived from `Date.now()` so each
+ *     hosted session gets a distinct, reproducible RNG sequence.
+ *   - Empty records for `players` and `entities` so the first reducer can
+ *     freely add entries without colliding with placeholders.
+ *   - Phase `'lobby'` because the session has just been hosted and no
+ *     game-specific phase has been entered yet.
+ */
+function createInitialBaseSnapshot(): BaseGameSnapshot {
+    return {
+        tick: 0,
+        // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).
+        seed: Date.now() >>> 0,
+        players: {},
+        entities: {},
+        phase: 'lobby' as GamePhase,
+        events: [],
+        turnNumber: 0,
+    };
+}
+
 export async function main(): Promise<void> {
     // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
     if (process.env['CHIMERA_DEV_HARNESS'] === '1' && process.env.NODE_ENV === 'production') {
@@ -369,8 +399,9 @@ export async function main(): Promise<void> {
         },
         getSnapshot: () => null, // F14 wires the live snapshot when simulation is running
         autosave: () => {
-            // TODO(F18): replace with real SaveManager.autosave(...) once the active
-            // game state is accessible in the crash handler.
+            // Crash-time autosave is deferred (#386): activeSession is not yet
+            // reachable from this closure. SaveManager.autoSave() will be wired
+            // when issue #386 lands.
             crashLogger.warn('autosave not yet wired; crash may lose unsaved game state');
             return Promise.resolve();
         },
@@ -391,14 +422,19 @@ export async function main(): Promise<void> {
 
     // Wire the SaveManager lifecycle: checks crash recovery, clears the flag,
     // and registers the before-quit handler. Returns wasCleanExit for the IPC
-    // channel so the renderer can prompt crash-recovery on startup.
-    const { wasCleanExit } = await registerSaveManagerLifecycle({
+    // channel so the renderer can prompt crash-recovery on startup, and
+    // autosaveMeta for the chimera:saves:check-crash-recovery handler.
+    const { wasCleanExit, autosaveMeta } = await registerSaveManagerLifecycle({
         app,
         saveManager,
         // 'tactics' is the only game registered at M1. When F18 adds more games,
         // extend this array to match the registerSchema(...) calls below.
         knownGameIds: ['tactics'],
     });
+    const crashRecoveryStatus =
+        autosaveMeta === null
+            ? { needsRecovery: false, slotId: null }
+            : { needsRecovery: true, slotId: autosaveMeta.slotId };
 
     // Flush the async Pino sink on graceful shutdown so buffered log entries
     // reach disk before the process exits (§4.27).
@@ -436,6 +472,17 @@ export async function main(): Promise<void> {
     // so LobbyManager stays a pure orchestrator (Invariant #61).
     const profileGate = createProfileGate(new PlayerDirectory());
 
+    // The single live `SessionRuntime` for the currently-hosted session, or
+    // `null` when no session is running.  Wired by the `onSessionHosted`
+    // callback below and consumed by the saves IPC adapter to capture
+    // SaveFiles (BLOCK-3) and apply restored files (WARN-2).
+    let activeSession: SessionRuntime | null = null;
+
+    // M1: only `'tactics'` is registered.  Stamped on captured save files
+    // and used as the qualified slot prefix.
+    const HOSTED_GAME_ID = 'tactics';
+    const HOSTED_GAME_VERSION = '0.1.0';
+
     const lobbyManager = new LobbyManager(
         new LocalWebSocketProvider(),
         lobbyLogger,
@@ -445,10 +492,38 @@ export async function main(): Promise<void> {
             // Each hosted session gets a fresh history and undoManager so
             // undo state never bleeds between sessions.
             const broadcaster = new StateBroadcaster(transport, lobbyLogger);
-            const { pipeline, clearUndoHistory } = buildHostSessionPipeline(
+
+            // Build a SessionRuntime around the freshly-created pipeline so
+            // the host-side `processAction` flow updates a single live
+            // snapshot reference.  `captureSaveFile` (BLOCK-3) and
+            // `applyRestoredFile` (WARN-2) read/write through this runtime.
+            const initialSnapshot = createInitialBaseSnapshot();
+            // `pipeline`, `processAction`, and `clearUndoHistory` come from
+            // the same factory; `processAction` adds the autosave fire-and-
+            // forget hook on top of `pipeline.process` (Issue #375).
+            const { processAction, clearUndoHistory } = buildHostSessionPipeline(
                 gameRegistry,
                 (snap, to) => broadcaster.broadcast(snap, to),
+                {
+                    gameId: HOSTED_GAME_ID,
+                    savePort: {
+                        autoSave: async (gameId: string): Promise<void> => {
+                            if (activeSession === null) return;
+                            const file = activeSession.captureSaveFile({ gameId });
+                            await saveManager.autoSave(file);
+                        },
+                    },
+                    logger: lobbyLogger,
+                },
             );
+
+            const sessionRuntime = new SessionRuntime({
+                gameId: HOSTED_GAME_ID,
+                gameVersion: HOSTED_GAME_VERSION,
+                initialSnapshot,
+                applyAction: processAction,
+            });
+            activeSession = sessionRuntime;
 
             // Track active players so clearUndoHistory can release their
             // per-player undo memory when the session closes.
@@ -460,17 +535,33 @@ export async function main(): Promise<void> {
                 activePlayers.delete(pid);
             });
 
-            // TODO(F21): wire pipeline into transport.onActionReceived so that
-            // incoming EngineActions flow through the pipeline.  Currently the
-            // pipeline is constructed and ready but not yet driven by transport.
-            void pipeline;
+            // Drive the pipeline with every received `EngineAction`.  Each
+            // action mutates the SessionRuntime's live snapshot via the
+            // pipeline's `processAction`, and `engine:end_turn` triggers
+            // autosave fire-and-forget (Issue #375).  Errors here are
+            // swallowed so a single misbehaving client cannot crash the
+            // host event loop; the pipeline already logs invalid actions.
+            const unsubAction = transport.onActionReceived((_from, action) => {
+                try {
+                    sessionRuntime.applyAction(action);
+                } catch (err) {
+                    lobbyLogger.warn('hosted session: applyAction threw', {
+                        actionType: action.type,
+                        error: err instanceof Error ? err.message : String(err),
+                    });
+                }
+            });
 
             // TODO(F26): call broadcaster.dispose() once StateBroadcaster
             // exposes a cleanup method.
             return () => {
                 unsubJoined();
                 unsubLeft();
+                unsubAction();
                 clearUndoHistory([...activePlayers]);
+                if (activeSession === sessionRuntime) {
+                    activeSession = null;
+                }
             };
         },
         undefined,
@@ -512,25 +603,48 @@ export async function main(): Promise<void> {
     // slot list via `chimera:saves:slot-update` after every save / delete
     // so all open renderer windows stay coherent (§4.11, invariant #37).
     //
-    // `captureSaveFile` is the F18 hook that snapshots the running
-    // simulation. Until SimulationHost exposes a state-capture API, the
-    // hook rejects with a clear error so the renderer's `saves.save(...)`
-    // promise surfaces the missing wiring rather than silently writing a
-    // half-built file.
+    // `captureSaveFile` reads the live snapshot from the active
+    // `SessionRuntime` (see `onSessionHosted` above) and stamps a
+    // `SaveFile` header.  When no session is active (e.g. `saves:save`
+    // invoked from the lobby pre-host) the call rejects so the renderer
+    // can surface the error rather than silently writing a half-built
+    // file.
+    //
+    // `applyRestoredFile` writes the loaded `SaveFile.checkpoint` back into
+    // the active session's snapshot (Invariant #24, WARN-2 fix).  When no
+    // session is active the call is silently skipped — load can be
+    // triggered before host start (e.g. "Resume last session" flow) and
+    // the snapshot will be applied when the next session is hosted.
     const savesLogger = logger.child({ module: 'saves' });
     registerSavesHandlers({
         ipcMain,
         logger: savesLogger,
         saves: createSavesIpcPort({
             saveManager,
-            captureSaveFile: () =>
-                Promise.reject(
-                    new Error(
-                        'saves:save not yet wired to SimulationHost (F18). ' +
-                            'IPC handler reached but no live game-state capture is available.',
-                    ),
-                ),
+            captureSaveFile: (request) => {
+                if (activeSession === null) {
+                    return Promise.reject(
+                        new Error(
+                            'saves:save invoked with no active hosted session — ' +
+                                'start a game before saving.',
+                        ),
+                    );
+                }
+                return Promise.resolve(activeSession.captureSaveFile(request));
+            },
+            applyRestoredFile: (file) => {
+                if (activeSession === null) {
+                    savesLogger.warn(
+                        'saves:load received before any session was hosted; ' +
+                            'snapshot will not be applied to the live session.',
+                        { slotId: file.header.slotId },
+                    );
+                    return;
+                }
+                activeSession.applyRestoredFile(file);
+            },
             logger: savesLogger,
+            crashRecoveryStatus,
         }),
         broadcastSlotsChanged: (_gameId, slots) => {
             BrowserWindow.getAllWindows().forEach((win) => {

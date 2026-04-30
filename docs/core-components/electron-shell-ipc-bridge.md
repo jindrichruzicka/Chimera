@@ -86,17 +86,38 @@ interface LobbyAPI {
 ```typescript
 interface SavesAPI {
     /** List all save slots for the current game. */
-    list(): Promise<SaveSlotMeta[]>;
+    list(gameId: string): Promise<SaveSlotMeta[]>;
     /** Save current state to slot. */
-    save(slot: string, label?: string): Promise<void>;
+    save(request: SaveRequest): Promise<SaveSlotMeta>;
     /** Load a save slot. Main process replaces simulation state. */
-    load(slot: string): Promise<void>;
+    load(slotId: string): Promise<void>;
     /** Permanently delete a slot. */
-    delete(slot: string): Promise<void>;
-    /** Subscribe to slot list changes (autosave creates/updates slots). */
-    onSlotsChanged(listener: (slots: SaveSlotMeta[]) => void): () => void;
+    delete(slotId: string): Promise<void>;
+    /**
+     * Cached crash-recovery status captured once at app startup
+     * (before the clean-exit flag is cleared).  `needsRecovery: true`
+     * means the previous session crashed and the autosave at
+     * `slotId` is available to resume from.
+     */
+    checkCrashRecovery(): Promise<CrashRecoveryStatus>;
+    /**
+     * Subscribe to slot-list updates pushed via
+     * `chimera:saves:slot-update` after every save / delete.  The
+     * callback receives the full refreshed `SaveSlotMeta[]` for the
+     * currently active game.
+     */
+    onSlotUpdate(listener: (slots: SaveSlotMeta[]) => void): () => void;
 }
 ```
+
+Channels:
+
+- `chimera:saves:list` — invoke
+- `chimera:saves:save` — invoke
+- `chimera:saves:load` — invoke
+- `chimera:saves:delete` — invoke
+- `chimera:saves:check-crash-recovery` — invoke
+- `chimera:saves:slot-update` — push (main → renderer)
 
 ---
 

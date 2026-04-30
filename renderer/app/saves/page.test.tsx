@@ -153,7 +153,7 @@ describe('SavesPage — Save action', () => {
 
         render(<SavesPage />);
 
-        fireEvent.click(screen.getByRole('button', { name: /save/i }));
+        fireEvent.click(screen.getByRole('button', { name: 'Save my-slot' }));
 
         expect(mockSave).toHaveBeenCalledTimes(1);
         expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ slotId: 'my-slot' }));
@@ -195,7 +195,7 @@ describe('SavesPage — multiple slots button targeting', () => {
 
         render(<SavesPage />);
 
-        const saveButtons = screen.getAllByRole('button', { name: /save/i });
+        const saveButtons = screen.getAllByRole('button', { name: /^save slot-/i });
         fireEvent.click(saveButtons[1]!);
 
         expect(mockSave).toHaveBeenCalledWith(
@@ -225,5 +225,141 @@ describe('SavesPage — multiple slots button targeting', () => {
         fireEvent.click(deleteButtons[1]!);
 
         expect(mockDelete).toHaveBeenCalledWith('slot-b');
+    });
+});
+
+describe('SavesPage — error reporting', () => {
+    it('renders an alert with the failure message when save rejects', async () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-1')];
+        mockSave.mockRejectedValueOnce(new Error('no active session'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /save slot-1/i }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('Save failed');
+        expect(alert.textContent).toContain('no active session');
+    });
+
+    it('renders an alert when load rejects', async () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-1')];
+        mockLoad.mockRejectedValueOnce(new Error('save not found'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /load slot-1/i }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('Load failed');
+        expect(alert.textContent).toContain('save not found');
+    });
+
+    it('clears the alert on the next successful action', async () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-1')];
+        mockSave.mockRejectedValueOnce(new Error('boom'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /save slot-1/i }));
+        await screen.findByRole('alert');
+
+        fireEvent.click(screen.getByRole('button', { name: /load slot-1/i }));
+
+        // Allow the promise microtask chain to settle.
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(screen.queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('SavesPage — new save form', () => {
+    it('renders a "New Save" button when slot list is empty', () => {
+        mockIsLoading = false;
+        mockSlots = [];
+
+        render(<SavesPage />);
+
+        expect(screen.getByRole('button', { name: /new save/i })).toBeTruthy();
+    });
+
+    it('renders a "New Save" button when slot list is populated', () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-1')];
+
+        render(<SavesPage />);
+
+        expect(screen.getByRole('button', { name: /new save/i })).toBeTruthy();
+    });
+
+    it('calls saves.save with gameId only when slotId input is empty', async () => {
+        mockIsLoading = false;
+        mockSlots = [];
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
+
+        expect(mockSave).toHaveBeenCalledTimes(1);
+        expect(mockSave).toHaveBeenCalledWith({ gameId: 'tactics' });
+    });
+
+    it('calls saves.save with the provided slotId', async () => {
+        mockIsLoading = false;
+        mockSlots = [];
+
+        render(<SavesPage />);
+
+        fireEvent.change(screen.getByRole('textbox', { name: /slot id/i }), {
+            target: { value: 'my-manual-slot' },
+        });
+        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
+
+        expect(mockSave).toHaveBeenCalledWith({ gameId: 'tactics', slotId: 'my-manual-slot' });
+    });
+
+    it('derives gameId from existing slots', async () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-a', { gameId: 'tactics' })];
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
+
+        expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ gameId: 'tactics' }));
+    });
+
+    it('clears the slotId input after a successful new save', async () => {
+        mockIsLoading = false;
+        mockSlots = [];
+
+        render(<SavesPage />);
+
+        const input = screen.getByRole('textbox', { name: /slot id/i });
+        fireEvent.change(input, { target: { value: 'my-slot' } });
+        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
+
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect((input as HTMLInputElement).value).toBe('');
+    });
+
+    it('shows an error alert when new save fails', async () => {
+        mockIsLoading = false;
+        mockSlots = [];
+        mockSave.mockRejectedValueOnce(new Error('no active session'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
+
+        const alert = await screen.findByRole('alert');
+        expect(alert.textContent).toContain('Save failed');
+        expect(alert.textContent).toContain('no active session');
     });
 });

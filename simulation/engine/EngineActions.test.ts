@@ -477,15 +477,15 @@ describe('engine:save definition', () => {
         expect(result.ok).toBe(false);
     });
 
-    it('validate returns ok: true when hostPlayerId is undefined (single-player, invariant #25)', () => {
-        const snapshot = makeSnapshot(); // no hostPlayerId → single-player mode
+    it('validate returns ok: false when hostPlayerId is undefined (invariant #25 — guard must not be vacuous)', () => {
+        const snapshot = makeSnapshot(); // no hostPlayerId → session not yet stamped
         const result = definition().validate(
             { slotId: 'tactics/autosave' },
             snapshot,
             hostId,
             stubCtx,
         );
-        expect(result.ok).toBe(true);
+        expect(result.ok).toBe(false);
     });
 
     it('validate returns ok: false when hostPlayerId is set and dispatching player is not the host', () => {
@@ -512,9 +512,8 @@ describe('engine:save definition', () => {
             definition().reduce(frozen, { slotId: 'tactics/autosave' }, hostId, stubCtx),
         ).not.toThrow();
     });
-    // TODO(F18): post-pipeline save wiring is not yet implemented.
     it.todo(
-        'dispatching engine:save should result in a file being written to the repository (post-pipeline wiring — F18)',
+        'dispatching engine:save should result in a file being written to the repository (post-pipeline wiring)',
     );
 });
 
@@ -570,15 +569,15 @@ describe('engine:load definition', () => {
         expect(result.ok).toBe(false);
     });
 
-    it('validate returns ok: true when hostPlayerId is undefined (single-player, invariant #25)', () => {
-        const snapshot = makeSnapshot(); // no hostPlayerId → single-player mode
+    it('validate returns ok: false when hostPlayerId is undefined (invariant #25 — guard must not be vacuous)', () => {
+        const snapshot = makeSnapshot(); // no hostPlayerId → session not yet stamped
         const result = definition().validate(
             { slotId: 'tactics/slot-1' },
             snapshot,
             hostId,
             stubCtx,
         );
-        expect(result.ok).toBe(true);
+        expect(result.ok).toBe(false);
     });
 
     it('validate returns ok: false when hostPlayerId is set and dispatching player is not the host', () => {
@@ -606,9 +605,8 @@ describe('engine:load definition', () => {
         ).not.toThrow();
     });
 
-    // TODO(F18): post-pipeline load wiring is not yet implemented.
     it.todo(
-        'dispatching engine:load should result in the simulation state being replaced (post-pipeline wiring — F18)',
+        'dispatching engine:load should result in the simulation state being replaced (post-pipeline wiring)',
     );
 });
 

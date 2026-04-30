@@ -32,7 +32,11 @@
  *   #67 — Constructed with an injected logger.
  */
 
-import type { SaveSlotMeta as PreloadSaveSlotMeta, SaveRequest } from '../../preload/api-types.js';
+import type {
+    SaveSlotMeta as PreloadSaveSlotMeta,
+    SaveRequest,
+    CrashRecoveryStatus,
+} from '../../preload/api-types.js';
 import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
 import type { SaveSlotMeta as SimSaveSlotMeta } from '@chimera/simulation/persistence/SaveRepository.js';
 import type { SavesIpcPort } from '../ipc/ipc-handlers.js';
@@ -48,10 +52,41 @@ import type { SaveManager } from './SaveManager.js';
  */
 export type SaveFileCapture = (request: SaveRequest) => Promise<SaveFile>;
 
+/**
+ * Apply a previously persisted {@link SaveFile} to the running simulation.
+ *
+ * Lives in F18 / SimulationHost wiring — the adapter is intentionally
+ * agnostic of how state is restored so this module remains testable
+ * without spinning up a host.  When no session is active, callers should
+ * skip restoration silently (loading a save before any game is running
+ * is a renderer-driven flow that ends with the next host start).
+ */
+export type SaveFileRestore = (file: SaveFile) => void;
+
 export interface CreateSavesIpcPortOptions {
     readonly saveManager: SaveManager;
     readonly captureSaveFile: SaveFileCapture;
+    /**
+     * Called after `SaveManager.load(slotId)` resolves with the loaded
+     * {@link SaveFile}.  Production wires this to
+     * `SessionRuntime.applyRestoredFile(file)` so the live snapshot is
+     * replaced by the restored checkpoint (Invariant #24).  When omitted,
+     * load behaves as a pure file fetch — useful for tests and for the
+     * pre-host startup window before any session exists.
+     */
+    readonly applyRestoredFile?: SaveFileRestore;
     readonly logger: Logger;
+    /**
+     * Cached result of {@link SaveManager.checkCrashRecovery} captured once at
+     * application startup (before the clean-exit flag is cleared).  Served
+     * verbatim by every `chimera:saves:check-crash-recovery` invocation —
+     * re-running the underlying check would always return `null` because the
+     * flag has been cleared by then.
+     *
+     * `null` means the previous session exited cleanly (or no autosave was
+     * found); a non-null value carries the autosave's qualified slot ID.
+     */
+    readonly crashRecoveryStatus: CrashRecoveryStatus;
 }
 
 /**
@@ -60,7 +95,8 @@ export interface CreateSavesIpcPortOptions {
  * `electron/main/index.ts`.
  */
 export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpcPort {
-    const { saveManager, captureSaveFile, logger } = options;
+    const { saveManager, captureSaveFile, applyRestoredFile, logger, crashRecoveryStatus } =
+        options;
     const log = logger.child({ module: 'saves-ipc-adapter' });
 
     return {
@@ -79,14 +115,19 @@ export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpc
             return mergeLabel(toPreloadMeta(meta), request.label);
         },
         load: async (slotId) => {
-            await saveManager.load(slotId);
+            const file = await saveManager.restoreFromSave(slotId);
+            if (applyRestoredFile !== undefined) {
+                applyRestoredFile(file);
+                log.info('save restored', { slotId });
+            }
             // The preload contract returns void; the renderer's role is
-            // limited to triggering the load. State application onto the
-            // running simulation is handled outside the IPC layer.
+            // limited to triggering the load.
         },
         delete: async (slotId) => {
             await saveManager.delete(slotId);
         },
+        checkCrashRecovery: (): Promise<CrashRecoveryStatus> =>
+            Promise.resolve(crashRecoveryStatus),
     };
 }
 

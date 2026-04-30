@@ -17,6 +17,7 @@ import {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
+    SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
     SETTINGS_CHANGE_CHANNEL,
     SETTINGS_GET_CHANNEL,
     SETTINGS_RESET_CHANNEL,
@@ -529,48 +530,61 @@ function makeSavesIpcMainStub(): {
     return { ipcMain, handled };
 }
 
+/**
+ * Minimal `SavesIpcPort` whose every method is a no-op stub that resolves
+ * with the canonical empty result.  Used by tests that exercise channel
+ * registration and Zod validation without modelling a real save flow.
+ */
+function makeNoopSavesPort(): SavesIpcPort {
+    return {
+        list: () => Promise.resolve([]),
+        save: () =>
+            Promise.resolve({
+                slotId: '',
+                gameId: '',
+                tick: 0,
+                savedAt: 0,
+            } satisfies SaveSlotMeta),
+        load: () => Promise.resolve(),
+        delete: () => Promise.resolve(),
+        checkCrashRecovery: () => Promise.resolve({ needsRecovery: false, slotId: null }),
+    };
+}
+
 describe('registerSavesHandlers', () => {
-    it('registers chimera:saves:list as an invoke handler resolving to an empty array (stub)', async () => {
+    it('registers chimera:saves:list as an invoke handler delegating to the port', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
 
         const handler = stub.handled.get(SAVES_LIST_CHANNEL);
         expect(handler).toBeDefined();
-
-        // Stub contract (F06/F18 replaces with real persistence): an empty
-        // array preserves the preload's `Promise<SaveSlotMeta[]>` shape
-        // without claiming slots that do not exist.
         await expect(Promise.resolve(handler?.({}, 'sample-game'))).resolves.toEqual([]);
     });
 
-    it('registers chimera:saves:save as an invoke handler accepting a SaveRequest (stub)', async () => {
+    it('registers chimera:saves:save as an invoke handler accepting a SaveRequest', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
 
         const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
         expect(handler).toBeDefined();
 
         const request: SaveRequest = { gameId: 'sample-game', label: 'autosave' };
-        // Stub must resolve (not reject) so the preload's `Promise<SaveSlotMeta>`
-        // signature is satisfied. Exact shape is asserted at the
-        // implementation boundary; here we only prove the handler accepts
-        // the payload without throwing.
         const result = await Promise.resolve(handler?.({}, request));
         expect(result).toBeDefined();
     });
 
-    it('registers chimera:saves:load as an invoke handler resolving to undefined (stub)', async () => {
+    it('registers chimera:saves:load as an invoke handler resolving to undefined', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
 
         const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
         expect(handler).toBeDefined();
         await expect(Promise.resolve(handler?.({}, 'slot-a'))).resolves.toBeUndefined();
     });
 
-    it('registers chimera:saves:delete as an invoke handler resolving to undefined (stub)', async () => {
+    it('registers chimera:saves:delete as an invoke handler resolving to undefined', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
 
         const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
         expect(handler).toBeDefined();
@@ -579,7 +593,7 @@ describe('registerSavesHandlers', () => {
 
     it('registers exactly the saves request channels (slot-update is push-only, not registered here)', () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
 
         // `chimera:saves:slot-update` is a one-way push from main → renderer
         // via `webContents.send`. It must NOT appear as an invoke handler.
@@ -589,9 +603,27 @@ describe('registerSavesHandlers', () => {
                 SAVES_LIST_CHANNEL,
                 SAVES_LOAD_CHANNEL,
                 SAVES_SAVE_CHANNEL,
+                SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(SAVES_SLOT_UPDATE_CHANNEL)).toBe(false);
+    });
+
+    it('registers chimera:saves:check-crash-recovery delegating to the port', async () => {
+        const stub = makeSavesIpcMainStub();
+        const port: SavesIpcPort = {
+            ...makeNoopSavesPort(),
+            checkCrashRecovery: () =>
+                Promise.resolve({ needsRecovery: true, slotId: 'tactics/autosave' }),
+        };
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: port });
+
+        const handler = stub.handled.get(SAVES_CHECK_CRASH_RECOVERY_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.({}))).resolves.toEqual({
+            needsRecovery: true,
+            slotId: 'tactics/autosave',
+        });
     });
 
     describe('with injected SavesIpcPort', () => {
@@ -640,6 +672,7 @@ describe('registerSavesHandlers', () => {
                     deleteCalls.push(slotId);
                     return Promise.resolve();
                 },
+                checkCrashRecovery: () => Promise.resolve({ needsRecovery: false, slotId: null }),
                 ...overrides,
             };
             return { port, listCalls, saveCalls, loadCalls, deleteCalls, slotsByGameId };
@@ -1166,7 +1199,7 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:saves:list rejects a non-string or empty gameId', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
         const handler = stub.handled.get(SAVES_LIST_CHANNEL);
 
         await expect(Promise.resolve().then(() => handler?.({}, ''))).rejects.toBeInstanceOf(
@@ -1179,7 +1212,7 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:saves:save rejects a malformed SaveRequest', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
         const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
 
         await expect(Promise.resolve().then(() => handler?.({}, {}))).rejects.toBeInstanceOf(
@@ -1192,7 +1225,7 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:saves:load and chimera:saves:delete reject an empty slotId', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain });
+        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
         const loadHandler = stub.handled.get(SAVES_LOAD_CHANNEL);
         const deleteHandler = stub.handled.get(SAVES_DELETE_CHANNEL);
 

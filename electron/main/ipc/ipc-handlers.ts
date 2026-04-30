@@ -42,6 +42,7 @@ import {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
+    SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
 } from '../../preload/apis/saves-api.js';
 import {
     SETTINGS_CHANGE_CHANNEL,
@@ -59,6 +60,7 @@ import {
 } from '../../preload/apis/profile-api.js';
 import type {
     ActionRejection,
+    CrashRecoveryStatus,
     PlayerProfile,
     PlayerId,
     ResolvedSettings,
@@ -114,6 +116,7 @@ export {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
+    SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
     SETTINGS_CHANGE_CHANNEL,
     SETTINGS_GET_CHANNEL,
     SETTINGS_RESET_CHANNEL,
@@ -508,6 +511,11 @@ export interface SavesIpcPort {
     save(request: SaveRequest): Promise<SaveSlotMeta>;
     load(slotId: string): Promise<void>;
     delete(slotId: string): Promise<void>;
+    /**
+     * Check whether the previous session ended unclean and an autosave is
+     * available to recover from. Pure read; never mutates persistence.
+     */
+    checkCrashRecovery(): Promise<CrashRecoveryStatus>;
 }
 
 export interface RegisterSavesHandlersOptions {
@@ -515,14 +523,11 @@ export interface RegisterSavesHandlersOptions {
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
     /**
-     * Live saves coordinator. When absent, the handlers fall back to the
-     * stub behaviour required by F03/F04 smoke tests (so the renderer's
-     * typed Promises do not reject before persistence is wired).
-     *
-     * TODO(follow-up): once F03/F04 test fixtures migrate to an in-process
-     * SavesIpcPort fake, make this required and remove STUB_SAVE_SLOT.
+     * Live saves coordinator. Required — every saves IPC request is
+     * delegated to this port. Production wires the real
+     * {@link SavesIpcPort} backed by `SaveManager`; tests inject a fake.
      */
-    readonly saves?: SavesIpcPort;
+    readonly saves: SavesIpcPort;
     /**
      * Push `chimera:saves:slot-update` to all renderer windows after a
      * successful `save` or `delete`. The handler computes the refreshed
@@ -533,28 +538,12 @@ export interface RegisterSavesHandlersOptions {
 }
 
 /**
- * Placeholder `SaveSlotMeta` returned by the save stub. Real values are
- * produced by the `SaveRepository` in F06/F18. The shape must match
- * `SaveSlotMeta` from `preload/api.ts` so the preload's typed cast is
- * honest.
- */
-const STUB_SAVE_SLOT: SaveSlotMeta = {
-    slotId: '',
-    gameId: '',
-    tick: 0,
-    savedAt: 0,
-};
-
-/**
  * Register every `chimera:saves:*` main-side channel.
  *
- * When `options.saves` is provided, requests are delegated to that port and
- * — after every successful `save` / `delete` — `broadcastSlotsChanged` is
- * invoked with the refreshed slot list so the renderer's
- * `chimera:saves:slot-update` push channel can be fired by the wiring code.
- * When `options.saves` is absent, the handlers fall back to the stub
- * responses required by the F03/F04 smoke tests so the renderer's typed
- * Promises do not reject before persistence is wired.
+ * Requests are delegated to `options.saves` and — after every successful
+ * `save` / `delete` — `broadcastSlotsChanged` is invoked with the refreshed
+ * slot list so the renderer's `chimera:saves:slot-update` push channel can
+ * be fired by the wiring code.
  *
  * `chimera:saves:slot-update` is intentionally absent from this
  * registration: it is a one-way push from main → renderer via
@@ -586,28 +575,17 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
             SAVES_SAVE_CHANNEL,
             SAVES_LOAD_CHANNEL,
             SAVES_DELETE_CHANNEL,
+            SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
         ],
-        wired: saves !== undefined,
     });
 
     ipcMain.handle(SAVES_LIST_CHANNEL, (_event, gameId) => {
         const validated = parseInvokeRequest(GameIdSchema, SAVES_LIST_CHANNEL, gameId);
-        if (saves !== undefined) {
-            return saves.list(validated);
-        }
-        // Stub. An empty array honours the preload's
-        // `Promise<SaveSlotMeta[]>` contract without claiming slots that
-        // do not exist.
-        return [] as SaveSlotMeta[];
+        return saves.list(validated);
     });
 
     ipcMain.handle(SAVES_SAVE_CHANNEL, async (_event, request) => {
         const validated = parseInvokeRequest(SaveRequestSchema, SAVES_SAVE_CHANNEL, request);
-        if (saves === undefined) {
-            // Stub. Returning a placeholder keeps the preload's
-            // `Promise<SaveSlotMeta>` contract honest.
-            return STUB_SAVE_SLOT;
-        }
         const meta = await saves.save(validated);
         if (broadcastSlotsChanged !== undefined) {
             try {
@@ -625,19 +603,13 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
 
     ipcMain.handle(SAVES_LOAD_CHANNEL, async (_event, slotId) => {
         const validated = parseInvokeRequest(SlotIdSchema, SAVES_LOAD_CHANNEL, slotId);
-        if (saves !== undefined) {
-            await saves.load(validated);
-        }
-        // Returning `undefined` satisfies the preload's `Promise<void>`
-        // contract regardless of whether the port is wired.
+        await saves.load(validated);
+        // Returning `undefined` satisfies the preload's `Promise<void>`.
         return undefined;
     });
 
     ipcMain.handle(SAVES_DELETE_CHANNEL, async (_event, slotId) => {
         const validated = parseInvokeRequest(SlotIdSchema, SAVES_DELETE_CHANNEL, slotId);
-        if (saves === undefined) {
-            return undefined;
-        }
         await saves.delete(validated);
         if (broadcastSlotsChanged !== undefined) {
             try {
@@ -659,6 +631,8 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
         }
         return undefined;
     });
+
+    ipcMain.handle(SAVES_CHECK_CRASH_RECOVERY_CHANNEL, () => saves.checkCrashRecovery());
 }
 
 /**
