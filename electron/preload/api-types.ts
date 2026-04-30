@@ -18,6 +18,7 @@ import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRe
 import type { CommitmentId } from '@chimera/simulation/persistence/index.js';
 import type { PlayerId, EntityId, GamePhase } from '@chimera/simulation/engine/types.js';
 import { playerId, entityId, gamePhase } from '@chimera/simulation/engine/types.js';
+import type { EngineSettings } from '@chimera/simulation/settings/SettingsSchema.js';
 
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
@@ -240,6 +241,24 @@ export interface CrashRecoveryStatus {
 
 // ─── Settings domain stubs ────────────────────────────────────────────────────
 // Superseded by simulation/ settings module (F07).
+
+/**
+ * Engine-wide settings structure.
+ * Canonical: simulation/settings/SettingsSchema.ts (F07).
+ */
+export type { EngineSettings };
+
+/** Engine audio settings sub-shape. Canonical: simulation/settings/SettingsSchema.ts. */
+export type AudioSettings = EngineSettings['audio'];
+
+/** Engine display settings sub-shape. Canonical: simulation/settings/SettingsSchema.ts. */
+export type DisplaySettings = EngineSettings['display'];
+
+/** Engine gameplay settings sub-shape. Canonical: simulation/settings/SettingsSchema.ts. */
+export type GameplaySettings = EngineSettings['gameplay'];
+
+/** Engine controls settings sub-shape. Canonical: simulation/settings/SettingsSchema.ts. */
+export type ControlsSettings = EngineSettings['controls'];
 
 /** Fully merged settings tree (engine defaults + game defaults + user overrides). */
 export type ResolvedSettings = Record<string, unknown>;
