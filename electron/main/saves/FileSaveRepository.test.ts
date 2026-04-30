@@ -16,8 +16,10 @@ import { afterEach, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
     JsonSaveSerializer,
     createDefaultMigrator,
+    CURRENT_SCHEMA_VERSION,
     SaveNotFoundError,
     SaveIntegrityError,
+    SaveSchemaTooNewError,
 } from '@chimera/simulation/persistence/index.js';
 import {
     runSaveRepositoryContractTests,
@@ -312,5 +314,71 @@ describe('FileSaveRepository — integrity checksum', () => {
 
         // Should load without throwing
         await expect(repo.load('tactics/autosave')).resolves.toMatchObject(file);
+    });
+});
+
+// ── SaveSchemaTooNewError — propagated through load() (invariant #41) ─────────
+//
+// FileSaveRepository.load() calls SaveMigrator.migrate(); if the save file
+// was written by a newer engine version, the migrator throws
+// SaveSchemaTooNewError. Verify the repository propagates it rather than
+// swallowing or re-wrapping it.
+
+describe('FileSaveRepository — SaveSchemaTooNewError propagation', () => {
+    let tmpDir: string;
+
+    beforeEach(async () => {
+        tmpDir = await makeTmpDir();
+    });
+
+    afterEach(async () => {
+        await fs.rm(tmpDir, { recursive: true, force: true });
+    });
+
+    it('load throws SaveSchemaTooNewError when the save file has a future schema version', async () => {
+        const repo = makeRepo(tmpDir);
+        // Build a file whose schemaVersion is newer than this engine supports.
+        const futureVersion = CURRENT_SCHEMA_VERSION + 1;
+        const file = {
+            ...makeFile('tactics', 'future-save'),
+            header: { ...makeFile('tactics', 'future-save').header, schemaVersion: futureVersion },
+        };
+
+        // Bypass FileSaveRepository.save() (which attaches a checksum) and write
+        // the file directly via the serializer so the raw future version is on disk.
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        const filePath = path.join(dir, 'future-save.chimera');
+        const serializer = new JsonSaveSerializer();
+        await fs.writeFile(filePath, await serializer.serialize(file));
+
+        await expect(repo.load('tactics/future-save')).rejects.toBeInstanceOf(
+            SaveSchemaTooNewError,
+        );
+    });
+
+    it('SaveSchemaTooNewError from load() carries fileVersion and engineVersion', async () => {
+        const repo = makeRepo(tmpDir);
+        const futureVersion = CURRENT_SCHEMA_VERSION + 3;
+        const file = {
+            ...makeFile('tactics', 'future-save'),
+            header: { ...makeFile('tactics', 'future-save').header, schemaVersion: futureVersion },
+        };
+
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        const filePath = path.join(dir, 'future-save.chimera');
+        const serializer = new JsonSaveSerializer();
+        await fs.writeFile(filePath, await serializer.serialize(file));
+
+        try {
+            await repo.load('tactics/future-save');
+            expect.fail('Expected SaveSchemaTooNewError');
+        } catch (err) {
+            expect(err).toBeInstanceOf(SaveSchemaTooNewError);
+            const typed = err as SaveSchemaTooNewError;
+            expect(typed.fileVersion).toBe(futureVersion);
+            expect(typed.engineVersion).toBe(CURRENT_SCHEMA_VERSION);
+        }
     });
 });
