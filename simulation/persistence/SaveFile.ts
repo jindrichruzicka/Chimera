@@ -29,6 +29,20 @@ import type { BaseGameSnapshot, EngineAction } from '../engine/types.js';
 export type CommitmentId = string & { readonly __brand: 'CommitmentId' };
 
 /**
+ * Constructs a branded {@link CommitmentId} from a raw string.
+ *
+ * This is the single authorised cast site for the CommitmentId brand.
+ * All production code and test helpers must call this instead of
+ * writing `raw as CommitmentId` directly.
+ *
+ * @remarks No format validation is performed; validation of commitment IDs
+ * is deferred to the F27 commitment scheme implementation.
+ */
+export function toCommitmentId(raw: string): CommitmentId {
+    return raw as CommitmentId;
+}
+
+/**
  * Opaque commitment envelope stub. Holds the SHA-256 hash of a value
  * that will be revealed later (anti-cheat commitment scheme, §8).
  *

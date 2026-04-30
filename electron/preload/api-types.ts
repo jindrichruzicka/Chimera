@@ -15,6 +15,7 @@
 import type { LogEntry } from '@chimera/shared/logging.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { CommitmentId } from '@chimera/simulation/persistence/index.js';
 
 // ─── Primitive aliases ────────────────────────────────────────────────────────
 
@@ -24,8 +25,8 @@ export type PlayerId = string;
 /** Opaque entity identifier. Canonical branded type: simulation/ (F03). */
 export type EntityId = string;
 
-/** Opaque commitment identifier. Canonical branded type: simulation/ (F27). */
-export type CommitmentId = string;
+/** Opaque commitment identifier. Canonical branded type: simulation/persistence (F27). */
+export type { CommitmentId };
 
 /** Current phase of the game state machine. Canonical: simulation/ (F03). */
 export type GamePhase = string;
