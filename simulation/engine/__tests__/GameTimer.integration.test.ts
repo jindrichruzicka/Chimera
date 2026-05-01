@@ -23,7 +23,7 @@
 
 import { beforeEach, describe, expect, it } from 'vitest';
 import type { Logger } from '@chimera/shared/logging.js';
-import { ActionPipeline, MAX_NESTED_DISPATCH, RecursiveDispatchError } from '../ActionPipeline.js';
+import { ActionPipeline, ForbiddenDispatchError } from '../ActionPipeline.js';
 import { ActionRegistry } from '../ActionRegistry.js';
 import { registerEngineActions } from '../EngineActions.js';
 import type { TimerId, TimerRegistry } from '../GameTimer.js';
@@ -78,8 +78,10 @@ describe('GameTimer integration — re-entrant dispatch depth guard', () => {
         const registry = new ActionRegistry();
         registerEngineActions(registry);
 
-        // Register a recursive action that calls ctx.dispatch() immediately.
-        // This will be used by timers to trigger the recursion depth check.
+        // Register a game action that attempts to call ctx.dispatch() immediately.
+        // Used by timers to verify ForbiddenDispatchError enforcement (Invariant #89).
+        // This action deliberately tests the enforcement — production game actions
+        // MUST NOT call ctx.dispatch(); only engine:tick may do so.
         const recursiveActionDef: ActionDefinition<Record<string, unknown>> = {
             type: 'game:recursive_self_dispatch',
             parsePayload: (raw) => raw,
@@ -90,11 +92,8 @@ describe('GameTimer integration — re-entrant dispatch depth guard', () => {
                 playerId: PlayerId,
                 ctx,
             ) {
-                // NOTE: Intentionally violates Invariant #89 to test its enforcement.
-                // Production game actions MUST NOT call ctx.dispatch() — only engine:tick
-                // may do so. This fake action exists solely to construct the recursive
-                // dispatch-depth chain required to trigger the RecursiveDispatchError guard.
-                // Do NOT copy this pattern into production game code.
+                // Attempt to call ctx.dispatch() from a game reducer —
+                // this now throws ForbiddenDispatchError (issue #35, Invariant #89).
                 if (isReduceContext(ctx) && ctx.dispatch !== undefined) {
                     const envelope = makeEnvelope('game:recursive_self_dispatch', playerId);
                     return ctx.dispatch(state, envelope);
@@ -107,24 +106,11 @@ describe('GameTimer integration — re-entrant dispatch depth guard', () => {
         pipeline = new ActionPipeline(registry);
     });
 
-    it('throws RecursiveDispatchError when a timer-fired action triggers nesting beyond MAX_NESTED_DISPATCH', () => {
-        // Create a timer that fires 'game:recursive_self_dispatch'.
-        // When engine:tick advances the timer, it will call ctx.dispatch() to fire the action.
-        // The action's reduce() will immediately call ctx.dispatch() again, creating recursion.
-        //
-        // The depth chain:
-        //   0. process(engine:tick) — top-level, depth=0
-        //   1. engine:tick reduce calls ctx.dispatch(recursive_self_dispatch) — depth=1
-        //   2. recursive_self_dispatch reduce calls ctx.dispatch(recursive_self_dispatch) — depth=2
-        //   3-17. repeat — depth=3..17
-        //   18. At depth=17, next dispatch() check sees depth >= MAX_NESTED_DISPATCH and throws
-        //
-        // So we need MAX_NESTED_DISPATCH+1 = 17 ctx.dispatch() depth levels to exceed the limit.
-        // This is built via a single timer: engine:tick dispatches the timer's action (depth 1),
-        // that action calls ctx.dispatch() (depth 2), and so on recursively — entirely through
-        // dispatch calls, not additional timer fires.
-
-        // Timer fires game:recursive_self_dispatch
+    it('timer-fired game action calling ctx.dispatch throws ForbiddenDispatchError', () => {
+        // A timer fires 'game:recursive_self_dispatch'. When engine:tick advances
+        // the timer and dispatches the action, the action's reduce() tries to call
+        // ctx.dispatch() — which is forbidden for game reducers (Invariant #89).
+        // ForbiddenDispatchError is thrown immediately, at depth 1.
         const snapshot = makeSnapshot({
             timers: {
                 ['recursive-timer' as TimerId]: {
@@ -138,17 +124,12 @@ describe('GameTimer integration — re-entrant dispatch depth guard', () => {
             },
         });
 
-        // When engine:tick advances, it calls TimerManager.advance(), which returns
-        // the fired action. Then engine:tick calls ctx.dispatch() for each fired action.
-        // Inside the dispatched action's reduce(), if it has access to ctx.dispatch,
-        // it calls it again (our test action does this).
-        // This chain of dispatches will eventually exceed MAX_NESTED_DISPATCH.
         const tickEnvelope = makeEnvelope('engine:tick', hostId, { seed: 7 });
 
-        expect(() => pipeline.process(snapshot, tickEnvelope)).toThrow(RecursiveDispatchError);
+        expect(() => pipeline.process(snapshot, tickEnvelope)).toThrow(ForbiddenDispatchError);
     });
 
-    it('RecursiveDispatchError includes the depth that was exceeded', () => {
+    it('ForbiddenDispatchError from timer-fired game action includes the offending action type', () => {
         const snapshot = makeSnapshot({
             timers: {
                 ['recursive-timer' as TimerId]: {
@@ -166,14 +147,13 @@ describe('GameTimer integration — re-entrant dispatch depth guard', () => {
 
         try {
             pipeline.process(snapshot, tickEnvelope);
-            throw new Error('expected RecursiveDispatchError but process() succeeded');
+            throw new Error('expected ForbiddenDispatchError but process() succeeded');
         } catch (err) {
-            if (!(err instanceof RecursiveDispatchError)) {
+            if (!(err instanceof ForbiddenDispatchError)) {
                 throw err;
             }
-            // The error should record the depth at which the limit was exceeded
-            // (which is MAX_NESTED_DISPATCH or just beyond).
-            expect(err.depth).toBeGreaterThanOrEqual(MAX_NESTED_DISPATCH);
+            expect(err.code).toBe('FORBIDDEN_DISPATCH');
+            expect(err.actionType).toBe('game:recursive_self_dispatch');
         }
     });
 });

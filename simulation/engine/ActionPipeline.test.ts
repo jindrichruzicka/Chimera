@@ -25,6 +25,7 @@ import {
     ActionSchemaError,
     ActionUnauthorizedError,
     RecursiveDispatchError,
+    ForbiddenDispatchError,
     MAX_NESTED_DISPATCH,
 } from './ActionPipeline.js';
 import { ActionRegistry, UnknownActionTypeError } from './ActionRegistry.js';
@@ -367,45 +368,78 @@ describe('ActionPipeline — Stages 6 & 7: no-op stubs', () => {
 // ─── Re-entrant dispatch depth guard ──────────────────────────────────────────
 
 describe('ActionPipeline — re-entrant dispatch depth guard', () => {
-    it('throws RecursiveDispatchError when nesting depth exceeds MAX_NESTED_DISPATCH', () => {
-        // A reducer that immediately re-dispatches the same action via ctx.dispatch.
+    it('throws RecursiveDispatchError when nesting depth exceeds MAX_NESTED_DISPATCH (engine:tick)', () => {
+        // An engine:tick reducer that immediately re-dispatches engine:tick via ctx.dispatch.
+        // Only engine:tick may call ctx.dispatch (§4.20, invariant #89).
         // This creates unlimited recursion unless the depth guard fires.
-        const recursiveDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:recursive',
-            parsePayload: () => ({}),
+        const recursiveTickDef: ActionDefinition<{ seed: number }> = {
+            type: 'engine:tick',
+            parsePayload: (raw) => ({ seed: raw['seed'] as number }),
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
                 if (isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
-                        type: 'game:recursive',
+                        type: 'engine:tick',
                         playerId: PID,
                         tick: state.tick,
-                        payload: {},
+                        payload: { seed: 0 },
                     });
                 }
                 return state;
             },
         };
-        registry.register(recursiveDef);
+        const r = new ActionRegistry();
+        r.registerEngineAction(recursiveTickDef);
+        const p = new ActionPipeline(r);
 
         const snapshot = makeSnapshot(0);
-        const action = makeEnvelope(0, 'game:recursive');
-        expect(() => pipeline.process(snapshot, action)).toThrow(RecursiveDispatchError);
+        const action = makeEnvelope(0, 'engine:tick', { seed: 0 });
+        expect(() => p.process(snapshot, action)).toThrow(RecursiveDispatchError);
     });
 
-    it('allows exactly MAX_NESTED_DISPATCH levels of re-entrant dispatch', () => {
+    it('allows exactly MAX_NESTED_DISPATCH levels of re-entrant dispatch (engine:tick)', () => {
         let callCount = 0;
 
-        // A reducer that dispatches a second (non-recursive) action.
-        const counterDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:counter',
-            parsePayload: () => ({}),
+        // An engine:tick reducer that dispatches engine:tick up to MAX_NESTED_DISPATCH times.
+        const counterTickDef: ActionDefinition<{ seed: number }> = {
+            type: 'engine:tick',
+            parsePayload: (raw) => ({ seed: raw['seed'] as number }),
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
                 callCount++;
                 if (callCount <= MAX_NESTED_DISPATCH && isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
-                        type: 'game:counter',
+                        type: 'engine:tick',
+                        playerId: PID,
+                        tick: state.tick,
+                        payload: { seed: 0 },
+                    });
+                }
+                return state;
+            },
+        };
+        const r = new ActionRegistry();
+        r.registerEngineAction(counterTickDef);
+        const p = new ActionPipeline(r);
+
+        const snapshot = makeSnapshot(0);
+        const action = makeEnvelope(0, 'engine:tick', { seed: 0 });
+        // Exactly MAX_NESTED_DISPATCH dispatches — should not throw.
+        expect(() => p.process(snapshot, action)).not.toThrow(RecursiveDispatchError);
+    });
+
+    it('game reducer calling ctx.dispatch() throws ForbiddenDispatchError', () => {
+        // Game reducers must NOT call ctx.dispatch — it is gated to engine:tick only.
+        // A well-written game reducer will not even try; this test guards against
+        // naive or accidental attempts after isReduceContext() narrowing.
+        const callerDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:dispatch-caller',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                if (isReduceContext(ctx) && ctx.dispatch) {
+                    return ctx.dispatch(state, {
+                        type: 'game:dispatch-caller',
                         playerId: PID,
                         tick: state.tick,
                         payload: {},
@@ -414,12 +448,39 @@ describe('ActionPipeline — re-entrant dispatch depth guard', () => {
                 return state;
             },
         };
-        registry.register(counterDef);
+        registry.register(callerDef);
 
         const snapshot = makeSnapshot(0);
-        const action = makeEnvelope(0, 'game:counter');
-        // Exactly MAX_NESTED_DISPATCH dispatches — should not throw.
-        expect(() => pipeline.process(snapshot, action)).not.toThrow(RecursiveDispatchError);
+        const action = makeEnvelope(0, 'game:dispatch-caller');
+        expect(() => pipeline.process(snapshot, action)).toThrow(ForbiddenDispatchError);
+    });
+
+    it('game reducer ctx.dispatch stub carries FORBIDDEN_DISPATCH code', () => {
+        let caughtError: unknown;
+        const callerDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:forbidden-code',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                if (isReduceContext(ctx) && ctx.dispatch) {
+                    try {
+                        return ctx.dispatch(state, {
+                            type: 'game:forbidden-code',
+                            playerId: PID,
+                            tick: state.tick,
+                            payload: {},
+                        });
+                    } catch (e) {
+                        caughtError = e;
+                    }
+                }
+                return state;
+            },
+        };
+        registry.register(callerDef);
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:forbidden-code'));
+        expect(caughtError).toBeInstanceOf(ForbiddenDispatchError);
+        expect((caughtError as ForbiddenDispatchError).code).toBe('FORBIDDEN_DISPATCH');
     });
 });
 
@@ -1559,30 +1620,31 @@ describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceC
         expect(capturedFirstFloats[0]).not.toBe(capturedFirstFloats[1]);
     });
 
-    it('ctx.dispatch in the reused context is still functional (re-entrant dispatch still throws RecursiveDispatchError)', () => {
-        const recursiveDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:recursive-36',
-            parsePayload: () => ({}),
+    it('ctx.dispatch in the reused context is still functional for engine:tick (re-entrant dispatch still throws RecursiveDispatchError)', () => {
+        // engine:tick is the only action that may call ctx.dispatch (§4.20, invariant #89).
+        const recursiveTickDef: ActionDefinition<{ seed: number }> = {
+            type: 'engine:tick',
+            parsePayload: (raw) => ({ seed: raw['seed'] as number }),
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
                 if (isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
-                        type: 'game:recursive-36',
+                        type: 'engine:tick',
                         playerId: PID,
                         tick: state.tick,
-                        payload: {},
+                        payload: { seed: 0 },
                     });
                 }
                 return state;
             },
         };
         const r = new ActionRegistry();
-        r.register(recursiveDef);
+        r.registerEngineAction(recursiveTickDef);
         const p = new ActionPipeline(r);
 
-        expect(() => p.process(makeSnapshot(0), makeEnvelope(0, 'game:recursive-36'))).toThrow(
-            RecursiveDispatchError,
-        );
+        expect(() =>
+            p.process(makeSnapshot(0), makeEnvelope(0, 'engine:tick', { seed: 0 })),
+        ).toThrow(RecursiveDispatchError);
     });
 });
 
@@ -1607,27 +1669,28 @@ describe('ActionPipeline — ctx.dispatchDepth in ReduceContext', () => {
 
     it('ctx.dispatchDepth increments with each level of re-entrant dispatch', () => {
         const depths: number[] = [];
-        // test-only: this fixture exercises ctx.dispatch() to verify depth counting.
-        // Only engine:tick may call ctx.dispatch() in production (§4.20, invariant #89).
-        const depthRecorderDef: ActionDefinition<Record<string, never>> = {
-            type: 'game:depth_recorder',
-            parsePayload: () => ({}),
+        // engine:tick is the only action that may call ctx.dispatch() (§4.20, invariant #89).
+        const depthRecorderDef: ActionDefinition<{ seed: number }> = {
+            type: 'engine:tick',
+            parsePayload: (raw) => ({ seed: raw['seed'] as number }),
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
                 depths.push(ctx.dispatchDepth);
                 if (ctx.dispatchDepth < 2 && isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
-                        type: 'game:depth_recorder',
+                        type: 'engine:tick',
                         playerId: PID,
                         tick: state.tick,
-                        payload: {},
+                        payload: { seed: 0 },
                     });
                 }
                 return state;
             },
         };
-        registry.register(depthRecorderDef);
-        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:depth_recorder'));
+        const r = new ActionRegistry();
+        r.registerEngineAction(depthRecorderDef);
+        const p = new ActionPipeline(r);
+        p.process(makeSnapshot(0), makeEnvelope(0, 'engine:tick', { seed: 0 }));
         expect(depths).toEqual([0, 1, 2]);
     });
 

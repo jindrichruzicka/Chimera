@@ -88,7 +88,29 @@ export class ActionUnauthorizedError extends Error {
     }
 }
 
-// ─── ActionPipeline ───────────────────────────────────────────────────────────
+/**
+ * Thrown by the `ctx.dispatch` stub injected into `ReduceContext` when an
+ * action type other than `'engine:tick'` attempts to call `ctx.dispatch()`.
+ *
+ * Only `engine:tick` may trigger re-entrant dispatch (§4.20, F21, Invariant #89).
+ * Game reducers that call `ctx.dispatch` are violating the ISP contract and
+ * will receive this error immediately — before any recursive pipeline call.
+ */
+export class ForbiddenDispatchError extends Error {
+    readonly code = 'FORBIDDEN_DISPATCH' as const;
+    readonly actionType: string;
+
+    constructor(actionType: string) {
+        super(
+            `ForbiddenDispatchError: action "${actionType}" called ctx.dispatch(), ` +
+                `but only "engine:tick" may use ctx.dispatch (§4.20, Invariant #89). ` +
+                `Game reducers must not call ctx.dispatch directly.`,
+        );
+        this.name = 'ForbiddenDispatchError';
+        this.actionType = actionType;
+        Object.setPrototypeOf(this, new.target.prototype);
+    }
+}
 
 /**
  * Internal mutable twin of `ReduceContext`.
@@ -144,6 +166,17 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
      */
     readonly #dispatchFn: NonNullable<ReduceContext['dispatch']>;
     /**
+     * Forbidden dispatch stub injected into `ctx.dispatch` for every action
+     * type other than `'engine:tick'` (issue #35, Invariant #89).
+     *
+     * Throws `ForbiddenDispatchError` immediately when called, providing a
+     * developer-friendly message that identifies the offending action type.
+     * The action type is captured per-call via `#currentActionType`.
+     */
+    readonly #forbiddenDispatchFn: NonNullable<ReduceContext['dispatch']>;
+    /** Tracks the action type currently being processed, used by `#forbiddenDispatchFn`. */
+    #currentActionType = '';
+    /**
      * Mutable singleton context handed to `validate()` and `reduce()`.
      *
      * `rng` and `dispatchDepth` are updated per call — `rng` is re-seeded from
@@ -165,25 +198,46 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
         // Hoist the dispatch closure once — same body as before, rooted on the
         // instance so #depth tracking works correctly for re-entrant calls.
+        // Save/restore #ctx.dispatch and #currentActionType around the nested
+        // process() call so the outer context's dispatch is not clobbered when
+        // a fired game action's process() sets #ctx.dispatch = forbiddenStub
+        // (issue #35 — #ctx is a shared mutable singleton).
         this.#dispatchFn = (dispatchState, dispatchAction) => {
             if (this.#depth >= MAX_NESTED_DISPATCH) {
                 throw new RecursiveDispatchError(this.#depth);
             }
             this.#depth++;
+            // Save the current dispatch and action type so nested process() calls
+            // (which overwrite #ctx.dispatch for the nested action) do not clobber
+            // the outer engine:tick context (issue #35 — #ctx is a shared singleton).
+            // Fallback to #forbiddenDispatchFn (always non-null) satisfies the
+            // exactOptionalPropertyTypes constraint on #ctx.dispatch.
+            const savedDispatch = this.#ctx.dispatch ?? this.#forbiddenDispatchFn;
+            const savedActionType = this.#currentActionType;
             try {
                 return this.process(dispatchState as Readonly<TState>, dispatchAction);
             } finally {
                 this.#depth--;
+                this.#ctx.dispatch = savedDispatch;
+                this.#currentActionType = savedActionType;
             }
+        };
+
+        // Forbidden stub — throws ForbiddenDispatchError for any non-engine:tick action.
+        // Captures the current action type at throw time via #currentActionType.
+        this.#forbiddenDispatchFn = () => {
+            throw new ForbiddenDispatchError(this.#currentActionType);
         };
 
         // Build the reusable context object. `rng` and `dispatchDepth` are
         // placeholders — both are updated at the start of every `process()` call
         // before any validate/reduce invocation reads them.
+        // `dispatch` defaults to the forbidden stub; `process()` will replace it
+        // with `#dispatchFn` when the action type is 'engine:tick'.
         this.#ctx = {
             rng: createRng(0, 0),
             dispatchDepth: 0,
-            dispatch: this.#dispatchFn,
+            dispatch: this.#forbiddenDispatchFn,
             logger: this.#logger,
             ...(this.#context?.db !== undefined ? { db: this.#context.db } : {}),
             ...(this.#context?.undoManager !== undefined
@@ -269,9 +323,14 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // Re-seed the shared context for this invocation. `#ctx` is reused
         // across calls (issue #36) — `rng` varies per (seed, tick) pair and
         // `dispatchDepth` mirrors the current re-entrant depth so reducers can
-        // inspect it. IMPORTANT: #ctx must never escape this stack frame.
+        // inspect it. `dispatch` is gated to 'engine:tick' only (issue #35,
+        // Invariant #89) — all other action types receive the forbidden stub.
+        // IMPORTANT: #ctx must never escape this stack frame.
         this.#ctx.rng = createRng(snapshot.seed, snapshot.tick);
         this.#ctx.dispatchDepth = this.#depth;
+        this.#currentActionType = action.type;
+        this.#ctx.dispatch =
+            action.type === 'engine:tick' ? this.#dispatchFn : this.#forbiddenDispatchFn;
         const ctx: ReduceContext = this.#ctx;
 
         const result = def.validate(parsedPayload, snapshot, action.playerId, ctx);
