@@ -32,21 +32,9 @@ import type { ActionRegistry } from './ActionRegistry.js';
 import { createRng } from './DeterministicRng.js';
 import { StateReducer } from './StateReducer.js';
 import { TURN_MEMENTO_RETENTION } from './UndoManager.js';
+import { MAX_NESTED_DISPATCH, RecursiveDispatchError } from './RecursiveDispatchError.js';
 export { ActionSchemaError, StateReducer } from './StateReducer.js';
-
-// ─── Engine constant ──────────────────────────────────────────────────────────
-
-/**
- * Maximum number of nested re-entrant `ctx.dispatch()` calls permitted inside
- * a single top-level `ActionPipeline.process()` invocation.
- *
- * Exceeding this limit indicates a cyclic timer chain or a game logic bug.
- * The pipeline throws `RecursiveDispatchError` at depth `MAX_NESTED_DISPATCH + 1`.
- *
- * Only `engine:tick` (F21 timer dispatch) may call `ctx.dispatch()`.
- * Game reducers must schedule work via `TimerManager.create()` instead.
- */
-export const MAX_NESTED_DISPATCH = 16;
+export { MAX_NESTED_DISPATCH, RecursiveDispatchError } from './RecursiveDispatchError.js';
 
 // ─── Error classes ────────────────────────────────────────────────────────────
 
@@ -96,29 +84,6 @@ export class ActionUnauthorizedError extends Error {
         this.name = 'ActionUnauthorizedError';
         this.type = type;
         this.reason = reason;
-        Object.setPrototypeOf(this, new.target.prototype);
-    }
-}
-
-/**
- * Thrown by `ActionPipeline.process()` when a re-entrant `ctx.dispatch()` call
- * causes the nesting depth to exceed `MAX_NESTED_DISPATCH`.
- *
- * Indicates a cyclic timer chain or an `engine:tick` reducer that dispatches
- * without a base case. Fix the offending reducer — do NOT increase the limit.
- */
-export class RecursiveDispatchError extends Error {
-    readonly code = 'RECURSIVE_DISPATCH' as const;
-    readonly depth: number;
-
-    constructor(depth: number) {
-        super(
-            `RecursiveDispatchError: re-entrant dispatch depth (${depth}) exceeded ` +
-                `MAX_NESTED_DISPATCH = ${MAX_NESTED_DISPATCH}. ` +
-                `Only engine:tick may call ctx.dispatch(); check for cyclic timer chains.`,
-        );
-        this.name = 'RecursiveDispatchError';
-        this.depth = depth;
         Object.setPrototypeOf(this, new.target.prototype);
     }
 }
@@ -181,9 +146,10 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
     /**
      * Mutable singleton context handed to `validate()` and `reduce()`.
      *
-     * Only `rng` is updated per call (re-seeded from `snapshot.seed` and
-     * `snapshot.tick` at the top of each `process()` invocation). All other
-     * fields are constant after construction.
+     * `rng` and `dispatchDepth` are updated per call — `rng` is re-seeded from
+     * `snapshot.seed` and `snapshot.tick`; `dispatchDepth` mirrors `#depth` so
+     * reducers can inspect the current nesting level. All other fields are
+     * constant after construction.
      *
      * IMPORTANT: This object MUST NEVER escape the `process()` stack frame.
      */
@@ -211,11 +177,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             }
         };
 
-        // Build the reusable context object. `rng` is a placeholder — it is
-        // re-assigned at the start of every `process()` call before any
-        // validate/reduce invocation reads it.
+        // Build the reusable context object. `rng` and `dispatchDepth` are
+        // placeholders — both are updated at the start of every `process()` call
+        // before any validate/reduce invocation reads them.
         this.#ctx = {
             rng: createRng(0, 0),
+            dispatchDepth: 0,
             dispatch: this.#dispatchFn,
             ...(this.#context?.db !== undefined ? { db: this.#context.db } : {}),
             ...(this.#context?.undoManager !== undefined
@@ -299,9 +266,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
         // ── Stage 4 — authorization (validate) ────────────────────────────
         // Re-seed the shared context for this invocation. `#ctx` is reused
-        // across calls (issue #36) — only `rng` varies per (seed, tick) pair.
-        // IMPORTANT: #ctx must never escape this stack frame.
+        // across calls (issue #36) — `rng` varies per (seed, tick) pair and
+        // `dispatchDepth` mirrors the current re-entrant depth so reducers can
+        // inspect it. IMPORTANT: #ctx must never escape this stack frame.
         this.#ctx.rng = createRng(snapshot.seed, snapshot.tick);
+        this.#ctx.dispatchDepth = this.#depth;
         const ctx: ReduceContext = this.#ctx;
 
         const result = def.validate(parsedPayload, snapshot, action.playerId, ctx);

@@ -1580,3 +1580,84 @@ describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceC
         );
     });
 });
+
+// ─── ctx.dispatchDepth ────────────────────────────────────────────────────────
+
+describe('ActionPipeline — ctx.dispatchDepth in ReduceContext', () => {
+    it('ctx.dispatchDepth is 0 at the top-level process() call', () => {
+        let capturedDepth: number | undefined;
+        const depthSpyDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:depth_spy',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                capturedDepth = ctx.dispatchDepth;
+                return state;
+            },
+        };
+        registry.register(depthSpyDef);
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:depth_spy'));
+        expect(capturedDepth).toBe(0);
+    });
+
+    it('ctx.dispatchDepth increments with each level of re-entrant dispatch', () => {
+        const depths: number[] = [];
+        // test-only: this fixture exercises ctx.dispatch() to verify depth counting.
+        // Only engine:tick may call ctx.dispatch() in production (§4.20, invariant #89).
+        const depthRecorderDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:depth_recorder',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                depths.push(ctx.dispatchDepth);
+                if (ctx.dispatchDepth < 2 && ctx.dispatch) {
+                    return ctx.dispatch(state, {
+                        type: 'game:depth_recorder',
+                        playerId: PID,
+                        tick: state.tick,
+                        payload: {},
+                    });
+                }
+                return state;
+            },
+        };
+        registry.register(depthRecorderDef);
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:depth_recorder'));
+        expect(depths).toEqual([0, 1, 2]);
+    });
+
+    it('ctx.dispatchDepth resets to 0 after the outer process() call completes', () => {
+        const capturedDepths: number[] = [];
+        const resetCheckDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:reset_check',
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state, _payload, _playerId, ctx) => {
+                capturedDepths.push(ctx.dispatchDepth);
+                return state;
+            },
+        };
+        registry.register(resetCheckDef);
+        // First top-level call
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:reset_check'));
+        // Second top-level call — depth must reset to 0, not carry over from the first
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:reset_check'));
+        expect(capturedDepths).toEqual([0, 0]);
+    });
+
+    it('ctx.dispatchDepth is accessible in validate() as well as reduce()', () => {
+        let capturedValidateDepth: number | undefined;
+        const validateDepthDef: ActionDefinition<Record<string, never>> = {
+            type: 'game:validate_depth',
+            parsePayload: () => ({}),
+            validate: (_payload, _state, _playerId, ctx) => {
+                capturedValidateDepth = ctx.dispatchDepth;
+                return { ok: true };
+            },
+            reduce: (state) => state,
+        };
+        registry.register(validateDepthDef);
+        pipeline.process(makeSnapshot(0), makeEnvelope(0, 'game:validate_depth'));
+        expect(capturedValidateDepth).toBe(0);
+    });
+});

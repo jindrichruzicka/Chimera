@@ -16,7 +16,7 @@ Principal architect for Chimera — multiplayer multiplatform desktop game engin
 3. Networking adapts simulation — not source of truth.
 4. `contextIsolation:true`, `nodeIntegration:false`.
 5. No authority-critical logic renderer-only.
-6. Conform to Appendix B invariants (#1 `GameSnapshot` stays in main; #2 no DOM in `simulation/`; #42–44 integer fields; #43 no `Math.random`/`Date.now` in simulation).
+6. Conform to [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md) (#1 `GameSnapshot` stays in main; #2 no DOM in `simulation/`; #42–44 integer fields; #43 no `Math.random`/`Date.now` in simulation).
 
 ## Output (per task)
 

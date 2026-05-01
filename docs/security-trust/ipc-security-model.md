@@ -55,7 +55,7 @@ When adding or modifying a namespace, follow all six steps:
 3. **Register the main-process handler in `electron/main/ipc-handlers.ts`** with explicit input validation at the first line of each handler.
 4. **If the surface accepts structured payload**: write a Zod (or equivalent) schema and reject before touching any manager.
 5. **If the surface can influence gameplay**: confirm it goes through `ActionPipeline` — never through a direct manager mutation.
-6. **Add at least one invariant in Appendix B** capturing the trust rule and link from the namespace description.
+6. **Add at least one invariant in [Architecture Invariants](../executive-architecture/architecture-invariants.md)** capturing the trust rule and link from the namespace description.
 
 ---
 

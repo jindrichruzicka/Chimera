@@ -67,7 +67,7 @@ function makeAction(type: string, playerId: PlayerId = toPlayerId('p1')): Engine
 }
 
 function makeStubCtx(): ReduceContext {
-    return { rng: makeStubRng() };
+    return { rng: makeStubRng(), dispatchDepth: 0 };
 }
 
 /** Creates a predictable ActionDefinition that increments snapshot.value by 1. */

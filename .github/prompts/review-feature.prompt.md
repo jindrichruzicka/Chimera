@@ -57,7 +57,7 @@ Check docs/roadmap updates when feature changes public arch, commands, APIs, or 
 - **WARNING** — ship only with explicit risk acceptance: maintainability, doc gaps, perf risk, weak diagnostics, minor UX, non-invalidating coverage gaps.
 - **IMPROVEMENT** — non-blocking follow-up.
 
-Evaluate at minimum: scope completeness; arch alignment + module ownership; determinism + Appendix B; IPC/networking/trust; renderer state + React/R3F (if UI); test coverage + regression risk; perf + diagnostics; docs/changelog/migration.
+Evaluate at minimum: scope completeness; arch alignment + module ownership; determinism + [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md); IPC/networking/trust; renderer state + React/R3F (if UI); test coverage + regression risk; perf + diagnostics; docs/changelog/migration.
 
 ## Step 5 — Report
 

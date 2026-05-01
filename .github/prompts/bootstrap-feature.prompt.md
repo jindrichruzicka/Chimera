@@ -14,7 +14,7 @@ Given feature designator `{{feature-designator}}`:
 2. Relevant `docs/core-components/` doc if one exists.
 3. Relevant arch §X.Y for that feature.
 
-Extract: feature title, milestone (M1/…), module label, §X.Y, all §12 checklist items for this feature, all Appendix B invariants touched, explicit non-goals/deferred items.
+Extract: feature title, milestone (M1/…), module label, §X.Y, all §12 checklist items for this feature, all [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md) touched, explicit non-goals/deferred items.
 
 ## Step 3 — Check existing GitHub state
 

@@ -227,7 +227,7 @@ export function registerCleanExitIpc(options: RegisterCleanExitIpcOptions): void
  * Construct the primary renderer `BrowserWindow` and load the Next.js static
  * export (`renderer/out/index.html`).
  *
- * Security invariants (see architecture overview, Appendix B #3 and #4):
+ * Security invariants (see docs/executive-architecture/architecture-invariants.md, Invariants #3 and #4):
  *   - `nodeIntegration` MUST be `false`
  *   - `contextIsolation` MUST be `true`
  *

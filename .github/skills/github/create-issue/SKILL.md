@@ -70,7 +70,7 @@ Omitting (2) → issue won't appear at `github.com/.../milestone/<N>`.
 **Body:**
 
 - Tasks: `Part of #<feature-issue-number>` on line 1.
-- Tasks: at least one `Invariant` line if touching Appendix B.
+- Tasks: at least one `Invariant` line if touching [Architecture Invariants](../../../../docs/executive-architecture/architecture-invariants.md).
 - Module label ∈ `simulation`/`networking`/`renderer`/`electron`/`ai`/`testing`/`tooling`.
 - Replace ALL `<placeholders>`.
 

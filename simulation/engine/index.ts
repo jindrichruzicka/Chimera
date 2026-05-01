@@ -71,13 +71,9 @@ export {
 
 export { StateReducer, ActionSchemaError } from './StateReducer.js';
 
-export {
-    ActionPipeline,
-    StaleActionError,
-    ActionUnauthorizedError,
-    RecursiveDispatchError,
-    MAX_NESTED_DISPATCH,
-} from './ActionPipeline.js';
+export { ActionPipeline, StaleActionError, ActionUnauthorizedError } from './ActionPipeline.js';
+
+export { RecursiveDispatchError, MAX_NESTED_DISPATCH } from './RecursiveDispatchError.js';
 
 export type { UndoPolicy } from './UndoPolicy.js';
 export { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';

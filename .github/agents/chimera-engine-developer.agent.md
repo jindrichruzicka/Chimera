@@ -39,7 +39,7 @@ Test locations: unit co-located `<Module>.test.ts`; integration `<pkg>/__tests__
 | 42–44 | `GameSnapshot` fields are integers; no floats in equality/arithmetic             |
 | 43    | `validate()`/`reduce()` use only `ctx.rng`/`ctx.db`; no `Math.random`/`Date.now` |
 
-Full list (79 invariants): Appendix B of architecture-overview.md.
+Full list (89 invariants): [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md).
 
 ## Module Boundaries
 
@@ -56,6 +56,6 @@ Full list (79 invariants): Appendix B of architecture-overview.md.
 - [ ] Tests written first, all green
 - [ ] Gate clean: `pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`
 - [ ] No `any`/`@ts-ignore`; no forbidden imports; no simulation mocks
-- [ ] Appendix B invariants verified; interfaces match arch doc
+- [ ] [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md) verified; interfaces match arch doc
 - [ ] First commit conventional + body; subsequent commits `--fixup`
 - [ ] Issue closed after merge

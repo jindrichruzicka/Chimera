@@ -6,7 +6,7 @@ argument-hint: '(optional) subdirectory to scope the check, e.g. simulation/ or 
 
 # Invariants Skill
 
-Runs mechanical subset of [Appendix B invariants](../../../docs/architecture-overview.md#appendix-b----key-invariants-never-violate-78-total) against the working tree.
+Runs mechanical subset of [Architecture Invariants](../../../docs/executive-architecture/architecture-invariants.md) against the working tree.
 
 ## Run
 

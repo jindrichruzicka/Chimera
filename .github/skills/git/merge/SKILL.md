@@ -38,7 +38,7 @@ Autosquash collapses `fixup!`s non-interactively.
 
 **Conflicts**:
 
-1. Resolve preferring branch intent + Appendix B invariants.
+1. Resolve preferring branch intent + [Architecture Invariants](../../../../docs/executive-architecture/architecture-invariants.md).
 2. `git add <file>` → `git rebase --continue`.
 3. If unsafe: `git rebase --abort`, report, stop.
 

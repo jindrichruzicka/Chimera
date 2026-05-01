@@ -369,7 +369,7 @@ export interface ValidationResult {
  * `ActionDefinition.reduce()`.
  *
  * This interface is INTENTIONALLY minimal. Adding fields is an architectural
- * change requiring a dedicated Appendix B invariant. Do NOT plumb manager
+ * change requiring a dedicated invariant in docs/executive-architecture/architecture-invariants.md. Do NOT plumb manager
  * references, loggers, wall-clock time, or network state through here.
  *
  * `rng` — seeded `DeterministicRng` instance derived from `(snapshot.seed, snapshot.tick)`
@@ -405,6 +405,20 @@ export interface ReduceContext {
         state: Readonly<BaseGameSnapshot>,
         action: ActionEnvelope,
     ) => BaseGameSnapshot;
+    /**
+     * Re-entrant dispatch nesting depth. Zero for the top-level
+     * `ActionPipeline.process()` call; incremented by one for each nested
+     * `ctx.dispatch()` invocation. Bounded by `MAX_NESTED_DISPATCH` (§4.7,
+     * §4.20). Only `engine:tick` may call `ctx.dispatch()`.
+     *
+     * NOTE: This value reflects the depth at the entry of the current `process()`
+     * invocation. Within a reducer frame, after a nested `dispatch()` returns,
+     * this field may appear stale mid-execution (the depth guard itself is always
+     * enforced correctly inside `#dispatchFn`). Game code should read
+     * `ctx.dispatchDepth` only at the start of the reducer, not after calling
+     * `ctx.dispatch()` from within the same frame.
+     */
+    readonly dispatchDepth: number;
 }
 
 // ─── ActionDefinition ─────────────────────────────────────────────────────────

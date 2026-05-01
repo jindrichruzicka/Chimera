@@ -182,7 +182,8 @@ export function buildHostSessionPipeline(
         entries: readonly ActionHistoryEntry[],
     ): BaseGameSnapshot =>
         entries.reduce(
-            (s, e) => reducer.apply(s, e.action, { rng: createRng(s.seed, s.tick) }),
+            (s, e) =>
+                reducer.apply(s, e.action, { rng: createRng(s.seed, s.tick), dispatchDepth: 0 }),
             base,
         );
 

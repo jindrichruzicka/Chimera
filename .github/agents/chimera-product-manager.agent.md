@@ -35,7 +35,7 @@ Milestone (GitHub Milestone)
 2. Imperative titles: "Implement `FileSaveRepository`".
 3. Traceability: feature → `> Architecture: §X.Y`; task → `> Part of #N`.
 4. `## Acceptance Criteria` mandatory — bullet, testable.
-5. Labels mandatory: `milestone:<name>`, `feature`/`task`, module, `invariant` (if Appendix B).
+5. Labels mandatory: `milestone:<name>`, `feature`/`task`, module, `invariant` (if touching [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md)).
 6. **Last task per feature** = `"Review all F<NN> changes and merge to main"` (invokes Code Reviewer, lists invariants).
 
 ## Workflow

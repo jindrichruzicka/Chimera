@@ -318,6 +318,7 @@ describe('ActionRegistry integration', () => {
         const payload = resolved.parsePayload({ amount: 5 });
         const result = resolved.validate(payload, {} as BaseGameSnapshot, pid, {
             rng: makeStubRng(0.5),
+            dispatchDepth: 0,
         });
         expect(result.ok).toBe(true);
     });

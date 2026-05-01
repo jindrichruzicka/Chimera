@@ -120,8 +120,19 @@ interface ActionDefinition<
 
 // Handed to validate() and reduce(). Deliberately narrow — do not widen ad-hoc.
 interface ReduceContext {
-    readonly db?: ContentDatabase; // Absent for games that declare no content
     readonly rng: DeterministicRng; // Seeded from (state.seed, state.tick)
+    readonly db?: ContentDatabase; // Absent for games that declare no content
+    readonly undoManager?: {
+        // Populated by ActionPipeline (F16)
+        canUndo(playerId: PlayerId): boolean;
+        canRedo(playerId: PlayerId): boolean;
+    };
+    readonly dispatch?: (
+        // Only engine:tick may call this (§4.20, F21)
+        state: Readonly<BaseGameSnapshot>,
+        action: ActionEnvelope,
+    ) => BaseGameSnapshot;
+    readonly dispatchDepth: number; // Nesting depth; 0 at top-level call
 }
 ```
 

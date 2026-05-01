@@ -44,7 +44,7 @@ const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
     ...(hostPlayerId !== undefined && { hostPlayerId }),
 });
 
-const stubCtx = { rng: makeStubRng(0.5) };
+const stubCtx = { rng: makeStubRng(0.5), dispatchDepth: 0 };
 const hostId = toPlayerId('p1');
 const guestId = toPlayerId('p2');
 
@@ -668,6 +668,7 @@ describe('engine:undo definition', () => {
         const snapshot = makeSnapshot();
         const ctx: ReduceContext = {
             rng: makeStubRng(0.5),
+            dispatchDepth: 0,
             undoManager: {
                 canUndo: (_pid: PlayerId) => false,
                 canRedo: (_pid: PlayerId) => true,
@@ -754,6 +755,7 @@ describe('engine:redo definition', () => {
         const snapshot = makeSnapshot();
         const ctx: ReduceContext = {
             rng: makeStubRng(0.5),
+            dispatchDepth: 0,
             undoManager: {
                 canUndo: (_pid: PlayerId) => true,
                 canRedo: (_pid: PlayerId) => false,

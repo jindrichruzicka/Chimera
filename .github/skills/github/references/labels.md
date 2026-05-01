@@ -31,5 +31,5 @@ gh label create "testing"         --color "f9d0c4" --description "Unit / integra
 gh label create "tooling"         --color "f9d0c4" --description "tools/ scripts, CI, lint, build"           --repo $GH_REPO || true
 
 # Cross-cutting
-gh label create "invariant"       --color "e99695" --description "Touches or enforces an Appendix B invariant" --repo $GH_REPO || true
+gh label create "invariant"       --color "e99695" --description "Touches or enforces an architecture invariant" --repo $GH_REPO || true
 ```

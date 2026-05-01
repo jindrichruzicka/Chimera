@@ -54,7 +54,7 @@ Check milestone-level docs, CHANGELOG, migration notes, diagnostics, user-facing
 - **WARNING** — ship only with explicit risk acceptance.
 - **IMPROVEMENT** — non-blocking.
 
-Evaluate at minimum: roadmap completion; feature/task completion; per-feature criteria coverage; cross-feature integration + regression risk; arch alignment + module ownership; determinism + Appendix B; IPC/networking/trust; renderer state + React/R3F (if UI); coverage at unit/integration/e2e; perf + diagnostics; docs/changelog/migration.
+Evaluate at minimum: roadmap completion; feature/task completion; per-feature criteria coverage; cross-feature integration + regression risk; arch alignment + module ownership; determinism + [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md); IPC/networking/trust; renderer state + React/R3F (if UI); coverage at unit/integration/e2e; perf + diagnostics; docs/changelog/migration.
 
 ## Step 5 — Report
 

@@ -22,7 +22,7 @@ webPreferences: {
 }
 ```
 
-These settings are **Invariants 3 and 4** in `docs/architecture-overview.md` Appendix B. Any new `BrowserWindow` without them is a **BLOCK** finding.
+These settings are **Invariants 3 and 4** in [Architecture Invariants](../executive-architecture/architecture-invariants.md). Any new `BrowserWindow` without them is a **BLOCK** finding.
 
 ## 8.2 Preload surface
 

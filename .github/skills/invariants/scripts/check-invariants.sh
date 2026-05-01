@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # .github/skills/invariants/scripts/check-invariants.sh
 #
-# Mechanical subset of Appendix B invariant checks.
+# Mechanical subset of Architecture Invariant checks (docs/executive-architecture/architecture-invariants.md).
 #
 # Exit 0  → no violations found.
 # Exit 1  → violations found; each printed as:

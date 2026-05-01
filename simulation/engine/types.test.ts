@@ -207,18 +207,18 @@ describe('ValidationResult', () => {
 
 describe('ReduceContext', () => {
     it('can be constructed with only rng (db is optional)', () => {
-        const ctx: ReduceContext = { rng: makeStubRng(0.5) };
+        const ctx: ReduceContext = { rng: makeStubRng(0.5), dispatchDepth: 0 };
         expect(ctx.rng.float()).toBe(0.5);
     });
 
     it('can be constructed with both rng and db', () => {
         const db = {} as ContentDatabase;
-        const ctx: ReduceContext = { rng: makeStubRng(0.1), db };
+        const ctx: ReduceContext = { rng: makeStubRng(0.1), db, dispatchDepth: 0 };
         expect(ctx.db).toBeDefined();
     });
 
     it('rng.float() returns a number', () => {
-        const ctx: ReduceContext = { rng: makeStubRng(0.7) };
+        const ctx: ReduceContext = { rng: makeStubRng(0.7), dispatchDepth: 0 };
         const result: number = ctx.rng.float();
         expect(typeof result).toBe('number');
     });
@@ -279,7 +279,7 @@ describe('ActionDefinition', () => {
             validate: () => ({ ok: true }),
             reduce: (state) => state,
         };
-        const ctx: ReduceContext = { rng: makeStubRng(0.5) };
+        const ctx: ReduceContext = { rng: makeStubRng(0.5), dispatchDepth: 0 };
         const snap: BaseGameSnapshot = {
             tick: 0,
             seed: 0,
@@ -318,7 +318,7 @@ describe('ActionDefinition', () => {
             turnNumber: 0,
         };
 
-        const ctx: ReduceContext = { rng: makeStubRng(0) };
+        const ctx: ReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
         const next = def.reduce(initial, {}, toPlayerId('p1'), ctx);
 
         expect(next).not.toBe(initial);
