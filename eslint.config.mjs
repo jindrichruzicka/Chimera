@@ -2,6 +2,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
+import chimeraPlugin from './tools/eslint-plugin-chimera/plugin.cjs';
 
 /**
  * Chimera ESLint configuration (flat config, ESLint 9).
@@ -15,7 +16,6 @@ import prettier from 'eslint-config-prettier';
  *
  * Explicitly deferred (tracked under roadmap F04 / F20):
  *   - `chimera/no-restricted-globals` custom rule
- *   - `chimera/no-fromfloat-in-simulation` custom rule
  *   These require the `FixedPoint` module and `simulation/` tree to exist
  *   before they can be implemented and tested.
  */
@@ -31,6 +31,8 @@ export default tseslint.config(
             '**/*.d.ts',
             // Fixture files used by ESLint smoke tests; they intentionally violate lint rules.
             'simulation/engine/__tests__/fixtures/**',
+            // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
+            'tools/eslint-plugin-chimera/plugin.cjs',
         ],
     },
 
@@ -170,7 +172,7 @@ export default tseslint.config(
 
     // Config / tooling JS files — no type-aware linting.
     {
-        files: ['*.js', '*.mjs', '*.cjs', 'eslint.config.js'],
+        files: ['*.js', '*.mjs', '*.cjs', '**/*.cjs', 'eslint.config.js'],
         ...tseslint.configs.disableTypeChecked,
     },
 
@@ -201,6 +203,33 @@ export default tseslint.config(
                     ],
                 },
             ],
+        },
+    },
+
+    // Invariant #76 — fromFloat() is only permitted at content-load time.
+    // Enabled for simulation/**; overridden to 'off' for the loaders exemption path.
+    // Rule implementation: tools/eslint-plugin-chimera/rules/no-fromfloat-in-simulation.ts
+    // Issue: #400
+    {
+        files: ['simulation/**/*.{ts,tsx}'],
+        plugins: { chimera: chimeraPlugin },
+        rules: {
+            'chimera/no-fromfloat-in-simulation': 'error',
+        },
+    },
+    {
+        files: ['simulation/content/loaders/**/*.{ts,tsx}'],
+        rules: {
+            'chimera/no-fromfloat-in-simulation': 'off',
+        },
+    },
+    // Test files inside simulation/ may call fromFloat() to exercise the function
+    // under test. They are not hot simulation paths (Invariant #76 applies to
+    // validate()/reduce() calls, not test code).
+    {
+        files: ['simulation/**/*.test.{ts,tsx}', 'simulation/**/*.spec.{ts,tsx}'],
+        rules: {
+            'chimera/no-fromfloat-in-simulation': 'off',
         },
     },
 
