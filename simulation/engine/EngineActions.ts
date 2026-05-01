@@ -25,7 +25,10 @@
  */
 
 import type { ActionDefinition, BaseGameSnapshot, ValidationResult } from './types.js';
+import { isReduceContext } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
+import { TimerManager } from './GameTimer.js';
+import { ActionUnauthorizedError } from './ActionPipeline.js';
 
 // ─── Payload types ────────────────────────────────────────────────────────────
 
@@ -105,9 +108,70 @@ export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
         return { ok: true };
     },
 
-    reduce(state: Readonly<BaseGameSnapshot>, _payload: EngineTickPayload): BaseGameSnapshot {
-        // Stub: returns snapshot unchanged. Full tick logic lands in F04 / F21.
-        return state;
+    reduce(
+        state: Readonly<BaseGameSnapshot>,
+        _payload: EngineTickPayload,
+        playerId,
+        ctx,
+    ): BaseGameSnapshot {
+        // ── Advance timers (§4.20, Invariant #55) ───────────────────────────────────────
+        // TimerManager.advance() is called exactly once per outer engine:tick
+        // and is the ONLY caller of advance() (Invariant #55).
+        const orig = state.timers;
+        const { next, fired } = TimerManager.advance(orig ?? {});
+
+        // Early-return guards: preserve reference equality so the Stage-7
+        // broadcast guard can skip viewer snapshots on no-op ticks.
+        //
+        // 1. Legacy/new sessions (state.timers === undefined): if no timer
+        //    fired there is nothing to allocate — return the original state.
+        //    Object.fromEntries() inside advance() always produces a fresh {},
+        //    so without this guard every legacy fixture's first tick would
+        //    needlessly trigger a broadcast.
+        //
+        // 2a. Fast path (O(1)): when advance() finds all timers inactive, it returns
+        //     next === orig (same registry reference). We can return immediately
+        //     without the O(n) key scan below (WARN-1 optimization).
+        //
+        // 2b. Slow path: when any timer is active, advance() always produces new
+        //     object references (Object.fromEntries + per-timer spread), so
+        //     next !== orig is guaranteed. No content scan needed.
+        if (fired.length === 0) {
+            if (orig === undefined) return state;
+            if (next === orig) return state;
+        }
+
+        let nextState: BaseGameSnapshot = { ...state, timers: next };
+
+        // ── Dispatch fired timer actions (Stages 1–5; Stages 6+7 suppressed by depth guard) ──
+        // New or cancelled timers created by child actions do NOT fire in this
+        // tick — advance() was already called above and its result is fixed.
+        if (isReduceContext(ctx) && ctx.dispatch !== undefined) {
+            for (const firedAction of fired) {
+                const envelope = {
+                    type: firedAction.actionType,
+                    playerId,
+                    tick: nextState.tick,
+                    payload: firedAction.payload,
+                };
+                try {
+                    nextState = ctx.dispatch(nextState, envelope);
+                } catch (err) {
+                    if (err instanceof ActionUnauthorizedError) {
+                        // Non-fatal: log and continue — outer tick must not abort.
+                        ctx.logger?.warn('timer fired action rejected by validate()', {
+                            timerId: firedAction.timerId,
+                            actionType: firedAction.actionType,
+                            reason: err.reason,
+                        });
+                    } else {
+                        throw err;
+                    }
+                }
+            }
+        }
+
+        return nextState;
     },
 } satisfies ActionDefinition<EngineTickPayload>;
 

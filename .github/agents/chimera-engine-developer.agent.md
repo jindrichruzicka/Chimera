@@ -39,7 +39,7 @@ Test locations: unit co-located `<Module>.test.ts`; integration `<pkg>/__tests__
 | 42–44 | `GameSnapshot` fields are integers; no floats in equality/arithmetic             |
 | 43    | `validate()`/`reduce()` use only `ctx.rng`/`ctx.db`; no `Math.random`/`Date.now` |
 
-Full list (89 invariants): [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md).
+Full list (90 invariants): [Architecture Invariants](../../docs/executive-architecture/architecture-invariants.md).
 
 ## Module Boundaries
 

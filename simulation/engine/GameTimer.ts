@@ -47,9 +47,17 @@ export type TimerRegistry = Record<TimerId, GameTimer>;
 // ─── Fired action shape ───────────────────────────────────────────────────────
 
 export interface FiredTimerAction {
+    readonly timerId: TimerId;
     readonly actionType: string;
     readonly payload: Record<string, unknown>;
 }
+
+/**
+ * Shared frozen empty array for the all-inactive fast path.
+ * Reused on every call where no timers are active, eliminating O(n) allocation.
+ * Mitigation for WARN-1 (GameTimer.ts, advance() method).
+ */
+const EMPTY_FIRED: readonly FiredTimerAction[] = Object.freeze([]);
 
 // ─── TimerManager ────────────────────────────────────────────────────────────
 
@@ -101,11 +109,29 @@ export const TimerManager = {
      * Inactive timers are skipped — neither decremented nor fired.
      *
      * Pure. Called ONLY by the engine:tick reducer (Invariant #55).
+     *
+     * Fast path: if all timers are inactive (or registry is empty), returns the
+     * input registry reference unchanged and a stable EMPTY_FIRED array, avoiding
+     * O(n) allocation. Mitigates WARN-1 (GameTimer.ts, advance() method).
      */
     advance(registry: TimerRegistry): {
         next: TimerRegistry;
         fired: readonly FiredTimerAction[];
     } {
+        // Fast path: check if any timer is active.
+        // If not, return registry unchanged and reuse frozen empty array.
+        let hasActive = false;
+        for (const timer of Object.values(registry)) {
+            if (timer.active) {
+                hasActive = true;
+                break;
+            }
+        }
+        if (!hasActive) {
+            return { next: registry, fired: EMPTY_FIRED };
+        }
+
+        // Slow path: process active timers
         const nextEntries: [TimerId, GameTimer][] = [];
         const fired: FiredTimerAction[] = [];
 
@@ -121,7 +147,7 @@ export const TimerManager = {
 
             if (decremented <= 0) {
                 // Timer fires
-                fired.push({ actionType: timer.actionType, payload: timer.payload });
+                fired.push({ timerId, actionType: timer.actionType, payload: timer.payload });
 
                 if (timer.intervalTicks === 0) {
                     // One-shot: mark inactive

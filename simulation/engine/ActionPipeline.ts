@@ -184,6 +184,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             rng: createRng(0, 0),
             dispatchDepth: 0,
             dispatch: this.#dispatchFn,
+            logger: this.#logger,
             ...(this.#context?.db !== undefined ? { db: this.#context.db } : {}),
             ...(this.#context?.undoManager !== undefined
                 ? { undoManager: this.#context.undoManager }
@@ -292,18 +293,29 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // can reconstruct the action sequence for a turn. turnNumber is the
         // dedicated turn counter on BaseGameSnapshot — it advances only on
         // engine:end_turn while tick advances on every reduce.
-        this.#context?.history?.append({
-            tickApplied: snapshot.tick,
-            turnNumber: snapshot.turnNumber,
-            action,
-        });
+        //
+        // Skipped for nested dispatches (this.#depth > 0): ActionHistory records
+        // only the outer engine:tick frame. Replays re-derive timer fires from
+        // TimerRegistry state (§4.20, Invariant #55).
+        if (this.#depth === 0) {
+            this.#context?.history?.append({
+                tickApplied: snapshot.tick,
+                turnNumber: snapshot.turnNumber,
+                action,
+            });
+        }
 
         // ── Stage 7 — snapshot broadcast ───────────────────────────────────
         // Policy: broadcast is skipped when nextState === snapshot (same reference).
-        // All current stub engine actions (engine:tick, engine:undo, etc.) return the
-        // same reference, so no network traffic is generated until state actually
-        // changes. If "always broadcast" semantics are ever required (e.g. for
-        // sync-on-join), revisit this guard here and in StateBroadcaster (F26).
+        // Engine actions MUST preserve reference equality when state does not actually
+        // change (e.g., engine:tick on idle ticks with no timers returns snapshot unchanged).
+        // This prevents spurious network broadcasts. If "always broadcast" semantics are
+        // ever required (e.g. for sync-on-join), revisit this guard here and in
+        // StateBroadcaster (F26).
+        //
+        // Skipped for nested dispatches (this.#depth > 0): only the outer action's
+        // final state is broadcast. Timer-fired sub-actions accumulate into the
+        // outer state; a single broadcast of the outer engine:tick result follows.
         //
         // TODO(F26): replace `toViewerRecord` + `#makeViewerRecord` with a real
         // `StateProjector` call so each player receives only their own view of the
@@ -311,7 +323,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // per-viewer spread allocation. (Invariant #1 — `GameSnapshot` must never
         // leave the main process as-is.) The same TODO exists in the Stage 3
         // short-circuit broadcast path above; both must be replaced together.
-        if (nextState !== snapshot) {
+        if (this.#depth === 0 && nextState !== snapshot) {
             const rawRecord = toViewerRecord(nextState);
             for (const pid of Object.keys(nextState.players)) {
                 const viewerId = pid as PlayerId;

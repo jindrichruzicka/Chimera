@@ -60,12 +60,16 @@ describe('ActionPipeline integration with engine-reserved actions', () => {
         pipeline = new ActionPipeline(registry);
     });
 
-    it('passes engine:tick through the complete pipeline without throwing and returns the stub state unchanged', () => {
+    it('passes engine:tick through the complete pipeline without throwing on a no-timers snapshot', () => {
         const snapshot = makeSnapshot();
 
         const next = pipeline.process(snapshot, makeEnvelope('engine:tick', hostId, { seed: 7 }));
 
+        // No timers in the registry → no-op tick: reduce returns the same state
+        // reference (WARN-1 regression), so timers remains undefined through
+        // any downstream pipeline stages.
         expect(next).toBe(snapshot);
+        expect(next.timers).toBeUndefined();
     });
 
     it('advances engine:end_turn to the next active player when turnClock is configured', () => {

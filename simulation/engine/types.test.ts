@@ -718,6 +718,30 @@ describe('GameReduceContext', () => {
         const ctx: GameReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
         expect('dispatch' in ctx).toBe(false);
     });
+
+    it('does not expose logger — game code cannot reach the engine-internal field', () => {
+        const ctx: GameReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
+        // Type-level guarantee: GameReduceContext has no `logger` key. The
+        // runtime check mirrors the dispatch case above.
+        expect('logger' in ctx).toBe(false);
+        const _shouldNotCompile: GameReduceContext = {
+            rng: makeStubRng(0),
+            dispatchDepth: 0,
+            // @ts-expect-error — `logger` must not be assignable on GameReduceContext.
+            logger: {
+                trace: () => undefined,
+                debug: () => undefined,
+                info: () => undefined,
+                warn: () => undefined,
+                error: () => undefined,
+                fatal: () => undefined,
+                child: function () {
+                    return this;
+                },
+            },
+        };
+        void _shouldNotCompile;
+    });
 });
 
 // ─── isReduceContext ──────────────────────────────────────────────────────────

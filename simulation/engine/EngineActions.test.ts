@@ -30,6 +30,9 @@ import {
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
 import { playerId as toPlayerId } from './types.js';
+import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
+import { ActionUnauthorizedError } from './ActionPipeline.js';
+import type { Logger } from '@chimera/shared/logging.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────────
 
@@ -180,16 +183,289 @@ describe('engine:tick definition', () => {
         expect(result.ok).toBe(true);
     });
 
-    it('reduce returns snapshot unchanged (stub)', () => {
+    it('reduce with state.timers undefined returns the same state reference (no allocation)', () => {
         const snapshot = makeSnapshot();
         const next = definition().reduce(snapshot, { seed: 7 }, hostId, stubCtx);
         expect(next).toBe(snapshot);
+        expect(next.timers).toBeUndefined();
     });
 
     it('reduce does not mutate the input snapshot', () => {
         const snapshot = makeSnapshot();
         const frozen = Object.freeze({ ...snapshot });
         expect(() => definition().reduce(frozen, { seed: 7 }, hostId, stubCtx)).not.toThrow();
+    });
+});
+
+// ─── engine:tick — timer wiring (§4.20) ──────────────────────────────────────
+
+/**
+ * Minimal timer factory for tick-wiring tests.
+ * Avoids duplicating GameTimer.test.ts fixtures.
+ */
+function makeTickTimer(overrides: Partial<GameTimer> = {}): GameTimer {
+    return {
+        id: 'tmr-1' as TimerId,
+        remainingTicks: 3,
+        intervalTicks: 0,
+        actionType: 'game:test_action',
+        payload: {},
+        active: true,
+        ...overrides,
+    };
+}
+
+function makeTimerSnapshot(timers: TimerRegistry): BaseGameSnapshot {
+    return { ...makeSnapshot(), timers };
+}
+
+/**
+ * Capturing logger fake — records warn calls without network or I/O.
+ * A fake (not a mock): real behaviour, observable state.
+ */
+function makeCapturingLogger(): {
+    logger: Logger;
+    warns: { msg: string; ctx?: Record<string, unknown> }[];
+} {
+    const warns: { msg: string; ctx?: Record<string, unknown> }[] = [];
+    const logger: Logger = {
+        trace: () => undefined,
+        debug: () => undefined,
+        info: () => undefined,
+        warn: (msg: string, ctx?: Record<string, unknown>) => {
+            if (ctx !== undefined) {
+                warns.push({ msg, ctx });
+            } else {
+                warns.push({ msg });
+            }
+        },
+        error: () => undefined,
+        fatal: () => undefined,
+        child: function () {
+            return this;
+        },
+    };
+    return { logger, warns };
+}
+
+describe('engine:tick — timer wiring (§4.20)', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:tick');
+        if (!d) throw new Error('engine:tick not found');
+        return d;
+    };
+
+    it('advance is called: a 2-tick timer is decremented to remainingTicks 1', () => {
+        const timer = makeTickTimer({ id: 'tmr-1' as TimerId, remainingTicks: 2 });
+        const snapshot = makeTimerSnapshot({ ['tmr-1' as TimerId]: timer });
+        const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+        expect(next.timers?.['tmr-1' as TimerId]?.remainingTicks).toBe(1);
+    });
+
+    it('advance is called exactly once: all timers in registry are decremented together', () => {
+        const timerA = makeTickTimer({ id: 'tmr-a' as TimerId, remainingTicks: 3 });
+        const timerB = makeTickTimer({ id: 'tmr-b' as TimerId, remainingTicks: 5 });
+        const snapshot = makeTimerSnapshot({
+            ['tmr-a' as TimerId]: timerA,
+            ['tmr-b' as TimerId]: timerB,
+        });
+        const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+        expect(next.timers?.['tmr-a' as TimerId]?.remainingTicks).toBe(2);
+        expect(next.timers?.['tmr-b' as TimerId]?.remainingTicks).toBe(4);
+    });
+
+    it('fired actions are dispatched via ctx.dispatch in the order returned by advance()', () => {
+        const dispatched: string[] = [];
+        const dispatchCtx: ReduceContext = {
+            ...stubCtx,
+            dispatch: (state, action) => {
+                dispatched.push(action.type);
+                return state;
+            },
+        };
+        const timerA = makeTickTimer({
+            id: 'tmr-a' as TimerId,
+            remainingTicks: 1,
+            actionType: 'game:action_a',
+        });
+        const timerB = makeTickTimer({
+            id: 'tmr-b' as TimerId,
+            remainingTicks: 1,
+            actionType: 'game:action_b',
+        });
+        const snapshot = makeTimerSnapshot({
+            ['tmr-a' as TimerId]: timerA,
+            ['tmr-b' as TimerId]: timerB,
+        });
+        definition().reduce(snapshot, { seed: 1 }, hostId, dispatchCtx);
+        expect(dispatched).toHaveLength(2);
+        expect(dispatched).toEqual(['game:action_a', 'game:action_b']);
+    });
+
+    it('tick is non-fatal: completes normally when a fired action fails validation', () => {
+        const throwingDispatch: ReduceContext = {
+            ...stubCtx,
+            dispatch: (_state, _action) => {
+                throw new ActionUnauthorizedError('game:test_action', 'test_reason');
+            },
+        };
+        const timer = makeTickTimer({ id: 'tmr-1' as TimerId, remainingTicks: 1 });
+        const snapshot = makeTimerSnapshot({ ['tmr-1' as TimerId]: timer });
+        expect(() =>
+            definition().reduce(snapshot, { seed: 1 }, hostId, throwingDispatch),
+        ).not.toThrow();
+    });
+
+    it('tick logs warn with {timerId, actionType, reason} when fired action fails validation', () => {
+        const { logger, warns } = makeCapturingLogger();
+        const throwingDispatch: ReduceContext = {
+            ...stubCtx,
+            logger,
+            dispatch: (_state, _action) => {
+                throw new ActionUnauthorizedError('game:test_action', 'not_allowed');
+            },
+        };
+        const timer = makeTickTimer({
+            id: 'tmr-warn' as TimerId,
+            remainingTicks: 1,
+            actionType: 'game:test_action',
+        });
+        const snapshot = makeTimerSnapshot({ ['tmr-warn' as TimerId]: timer });
+        definition().reduce(snapshot, { seed: 1 }, hostId, throwingDispatch);
+        expect(warns).toHaveLength(1);
+        expect(warns[0]?.ctx).toMatchObject({
+            timerId: 'tmr-warn',
+            actionType: 'game:test_action',
+            reason: 'not_allowed',
+        });
+    });
+
+    it('non-validation errors from ctx.dispatch are re-thrown (outer tick fails)', () => {
+        const throwingDispatch: ReduceContext = {
+            ...stubCtx,
+            dispatch: (_state, _action) => {
+                throw new Error('unexpected error');
+            },
+        };
+        const timer = makeTickTimer({ id: 'tmr-1' as TimerId, remainingTicks: 1 });
+        const snapshot = makeTimerSnapshot({ ['tmr-1' as TimerId]: timer });
+        expect(() => definition().reduce(snapshot, { seed: 1 }, hostId, throwingDispatch)).toThrow(
+            'unexpected error',
+        );
+    });
+
+    it('new timers created inside a fired-action reducer do not fire in the same tick', () => {
+        // The fired action's reduce creates a new timer (remainingTicks: 1) in the returned state.
+        // That timer should NOT fire in the current tick because advance() was already called.
+        let newTimerId: TimerId | undefined;
+        const dispatchCtx: ReduceContext = {
+            ...stubCtx,
+            dispatch: (state, _action) => {
+                // Simulate fired action creating a new timer in state
+                newTimerId = 'tmr-new' as TimerId;
+                return {
+                    ...state,
+                    timers: {
+                        ...state.timers,
+                        ['tmr-new' as TimerId]: makeTickTimer({
+                            id: 'tmr-new' as TimerId,
+                            remainingTicks: 1,
+                        }),
+                    },
+                };
+            },
+        };
+        const timer = makeTickTimer({ id: 'tmr-fire' as TimerId, remainingTicks: 1 });
+        const snapshot = makeTimerSnapshot({ ['tmr-fire' as TimerId]: timer });
+        const next = definition().reduce(snapshot, { seed: 1 }, hostId, dispatchCtx);
+        // tmr-new was created by the fired action — it should NOT have fired
+        // (advance() was already called before this timer existed in state)
+        expect(next.timers?.['tmr-new' as TimerId]?.active).toBe(true);
+        expect(next.timers?.['tmr-new' as TimerId]?.remainingTicks).toBe(1);
+        expect(newTimerId).toBeDefined();
+    });
+
+    it('dispatched envelope carries the outer tick playerId', () => {
+        let capturedPlayerId: PlayerId | undefined;
+        const dispatchCtx: ReduceContext = {
+            ...stubCtx,
+            dispatch: (state, action) => {
+                capturedPlayerId = action.playerId;
+                return state;
+            },
+        };
+        const timer = makeTickTimer({ id: 'tmr-1' as TimerId, remainingTicks: 1 });
+        const snapshot = makeTimerSnapshot({ ['tmr-1' as TimerId]: timer });
+        definition().reduce(snapshot, { seed: 1 }, hostId, dispatchCtx);
+        expect(capturedPlayerId).toBe(hostId);
+    });
+
+    it('dispatched envelope carries the current tick from state', () => {
+        let capturedTick: number | undefined;
+        const dispatchCtx: ReduceContext = {
+            ...stubCtx,
+            dispatch: (state, action) => {
+                capturedTick = action.tick;
+                return state;
+            },
+        };
+        const timer = makeTickTimer({ id: 'tmr-1' as TimerId, remainingTicks: 1 });
+        const snapshot = { ...makeTimerSnapshot({ ['tmr-1' as TimerId]: timer }), tick: 7 };
+        definition().reduce(snapshot, { seed: 1 }, hostId, dispatchCtx);
+        expect(capturedTick).toBe(7);
+    });
+
+    // ── WARN-1 regression: no spurious allocation for all-inactive registries ──
+
+    it('returns same state reference when registry has only inactive timers (no-op tick)', () => {
+        // Inactive timers (e.g. spent one-shots) must not cause a new state object
+        // to be allocated — Stage-7 broadcast guard relies on reference equality.
+        const inactiveTimer = makeTickTimer({ id: 'tmr-spent' as TimerId, active: false });
+        const snapshot = makeTimerSnapshot({ ['tmr-spent' as TimerId]: inactiveTimer });
+        const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
+
+    it('returns same state reference when registry has multiple inactive timers', () => {
+        const timerA = makeTickTimer({ id: 'tmr-a' as TimerId, active: false });
+        const timerB = makeTickTimer({ id: 'tmr-b' as TimerId, active: false });
+        const snapshot = makeTimerSnapshot({
+            ['tmr-a' as TimerId]: timerA,
+            ['tmr-b' as TimerId]: timerB,
+        });
+        const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+        expect(next).toBe(snapshot);
+    });
+
+    it('does NOT return same reference when an active timer is decremented (state changed)', () => {
+        // Sanity-check: an active timer ticking down must produce a new state object.
+        const activeTimer = makeTickTimer({
+            id: 'tmr-active' as TimerId,
+            remainingTicks: 5,
+            active: true,
+        });
+        const snapshot = makeTimerSnapshot({ ['tmr-active' as TimerId]: activeTimer });
+        const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+        expect(next).not.toBe(snapshot);
+    });
+
+    it('uses O(1) fast path when advance() returns next === orig (WARN-1)', () => {
+        // Performance guard: when all timers are inactive, TimerManager.advance()
+        // returns the same registry reference (next === orig) without allocating.
+        // EngineActions should skip the O(n) key-scan loop and return immediately.
+        // This test verifies the fast-path behavior even with a large registry.
+        const largeRegistry: TimerRegistry = {};
+        for (let i = 0; i < 100; i++) {
+            largeRegistry[`tmr-${i}` as unknown as TimerId] = makeTickTimer({
+                id: `tmr-${i}` as unknown as TimerId,
+                active: false,
+            });
+        }
+        const snapshot = makeTimerSnapshot(largeRegistry);
+        const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+        // Must return same state reference — this ensures no O(n) allocation occurred
+        // and the Stage-7 broadcast guard can skip viewer snapshots.
+        expect(next).toBe(snapshot);
     });
 });
 

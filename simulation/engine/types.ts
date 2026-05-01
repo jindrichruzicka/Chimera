@@ -18,6 +18,9 @@
 import type { DeterministicRng } from './DeterministicRng.js';
 import type { ContentDatabase } from '../content/index.js';
 export type { ContentDatabase } from '../content/index.js';
+import type { TimerRegistry } from './GameTimer.js';
+export type { TimerRegistry } from './GameTimer.js';
+import type { Logger } from '@chimera/shared/logging.js';
 
 // ─── Primitive branded identifiers ───────────────────────────────────────────
 
@@ -141,6 +144,14 @@ export interface BaseGameSnapshot {
      * Optional here because single-player and test fixtures may omit it.
      */
     readonly hostPlayerId?: PlayerId;
+    /**
+     * Tick-driven timer registry (§4.20, Invariant #54).
+     * All active timers are advanced exactly once per `engine:tick` via
+     * `TimerManager.advance()`. Serialised with saves and replayed deterministically.
+     * Optional for backward compatibility with existing fixtures; treat absent as
+     * an empty registry `{}`.
+     */
+    readonly timers?: TimerRegistry;
 }
 
 // ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────
@@ -418,6 +429,18 @@ export interface ReduceContext extends GameReduceContext {
         state: Readonly<BaseGameSnapshot>,
         action: ActionEnvelope,
     ) => BaseGameSnapshot;
+    /**
+     * Optional structured logger for engine-internal diagnostics (§4.20, F21).
+     *
+     * Populated by `ActionPipeline` from its injected logger. Used exclusively
+     * by the `engine:tick` reducer to emit `warn`-level entries for timer-fired
+     * actions that fail validation (non-fatal rejection pattern).
+     *
+     * Engine-internal — not visible on the public `GameReduceContext` surface.
+     * Game reducers cannot reach this field; `engine:tick` (and any future
+     * engine-only action) accesses it after narrowing via `isReduceContext()`.
+     */
+    readonly logger?: Logger;
 }
 
 /**

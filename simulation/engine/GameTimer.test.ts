@@ -173,7 +173,11 @@ describe('TimerManager.advance', () => {
         const { fired } = TimerManager.advance(registry);
 
         expect(fired).toHaveLength(1);
-        expect(fired[0]).toEqual({ actionType: 'game:heal', payload: { amount: 5 } });
+        expect(fired[0]).toEqual({
+            timerId: 'timer-1',
+            actionType: 'game:heal',
+            payload: { amount: 5 },
+        });
     });
 
     it('marks a one-shot timer inactive after firing', () => {
@@ -208,7 +212,11 @@ describe('TimerManager.advance', () => {
         const { fired, next } = TimerManager.advance(registry);
 
         expect(fired).toHaveLength(1);
-        expect(fired[0]).toEqual({ actionType: 'game:dot', payload: { dmg: 10 } });
+        expect(fired[0]).toEqual({
+            timerId: 'timer-1',
+            actionType: 'game:dot',
+            payload: { dmg: 10 },
+        });
         expect(next['timer-1' as TimerId]?.active).toBe(true);
     });
 
@@ -269,5 +277,71 @@ describe('TimerManager.advance', () => {
         const { fired } = TimerManager.advance(registry);
 
         expect(fired).toHaveLength(0);
+    });
+
+    it('includes timerId in each fired action (invariant #54 traceability)', () => {
+        const registry = makeRegistry([
+            makeTimer({
+                id: 'timer-trace' as TimerId,
+                remainingTicks: 1,
+                actionType: 'game:heal',
+                payload: { amount: 5 },
+            }),
+        ]);
+        const { fired } = TimerManager.advance(registry);
+
+        expect(fired).toHaveLength(1);
+        expect(fired[0]?.timerId).toBe('timer-trace');
+    });
+
+    it('includes correct timerId for each of multiple fired actions', () => {
+        const registry = makeRegistry([
+            makeTimer({
+                id: 'timer-a' as TimerId,
+                remainingTicks: 1,
+                actionType: 'game:a',
+                payload: {},
+            }),
+            makeTimer({
+                id: 'timer-b' as TimerId,
+                remainingTicks: 1,
+                actionType: 'game:b',
+                payload: {},
+            }),
+        ]);
+        const { fired } = TimerManager.advance(registry);
+
+        expect(fired).toHaveLength(2);
+        const timerIds = fired.map((f) => f.timerId).sort();
+        expect(timerIds).toEqual(['timer-a', 'timer-b']);
+    });
+
+    it('returns same registry reference when all timers are inactive (fast path)', () => {
+        const registry = makeRegistry([
+            makeTimer({ id: 'timer-1' as TimerId, active: false }),
+            makeTimer({ id: 'timer-2' as TimerId, active: false }),
+        ]);
+        const { next } = TimerManager.advance(registry);
+
+        // Identity check: should be the same object reference (no allocation)
+        expect(next).toBe(registry);
+    });
+
+    it('returns stable frozen fired array reference when all timers are inactive', () => {
+        const registry = makeRegistry([makeTimer({ id: 'timer-1' as TimerId, active: false })]);
+        const { fired: fired1 } = TimerManager.advance(registry);
+        const { fired: fired2 } = TimerManager.advance(registry);
+
+        // Both should be the exact same reference (not just equal)
+        expect(fired1).toBe(fired2);
+        expect(fired1).toHaveLength(0);
+    });
+
+    it('returns same registry reference for empty registry (fast path)', () => {
+        const registry: TimerRegistry = {};
+        const { next } = TimerManager.advance(registry);
+
+        // Identity check: should be the same empty object reference
+        expect(next).toBe(registry);
     });
 });

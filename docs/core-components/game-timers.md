@@ -41,6 +41,7 @@ export interface GameTimer {
 export type TimerRegistry = Record<TimerId, GameTimer>;
 
 export interface FiredTimerAction {
+    readonly timerId: TimerId;
     readonly actionType: string;
     readonly payload: Record<string, unknown>;
 }
@@ -79,9 +80,23 @@ export const TimerManager = {
 ```typescript
 // The engine:tick reducer calls advance() before game-defined logic
 const { next, fired } = TimerManager.advance(state.timers);
-let nextState: GameSnapshot = { ...state, timers: next };
-for (const { actionType, payload } of fired) {
-    nextState = ctx.dispatch(actionType, payload, state.activePlayerId, nextState);
+let nextState: BaseGameSnapshot = { ...state, timers: next };
+for (const { timerId, actionType, payload } of fired) {
+    const envelope = { type: actionType, playerId, tick: nextState.tick, payload };
+    try {
+        nextState = ctx.dispatch(nextState, envelope);
+    } catch (err) {
+        if (err instanceof ActionUnauthorizedError) {
+            // Non-fatal: log timerId for diagnostics and continue — outer tick must not abort.
+            ctx.logger?.warn('timer fired action rejected by validate()', {
+                timerId,
+                actionType,
+                reason: err.reason,
+            });
+        } else {
+            throw err;
+        }
+    }
 }
 return nextState;
 ```

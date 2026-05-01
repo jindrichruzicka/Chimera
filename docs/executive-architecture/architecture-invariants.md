@@ -1,12 +1,12 @@
 ---
 title: 'Architecture Invariants'
-description: 'All 89 numbered invariants that must never be violated in the Chimera engine. Violations are BLOCK findings at review. Thematically indexed for quick navigation.'
+description: 'All 90 numbered invariants that must never be violated in the Chimera engine. Violations are BLOCK findings at review. Thematically indexed for quick navigation.'
 tags: [invariants, architecture, rules, constraints, review-gate]
 ---
 
 # Architecture Invariants
 
-> These 89 invariants are the hard rules of the Chimera engine. A single violation is a BLOCK finding.
+> These 90 invariants are the hard rules of the Chimera engine. A single violation is a BLOCK finding.
 > Related: [System Overview](system-overview-and-context.md) · [Module Boundaries](module-boundaries-file-tree.md)
 
 ---
@@ -17,7 +17,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 | -------------------------------------- | -------------------------------------------------------------------------------------- |
 | **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                               |
 | **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78      |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89                                          |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                      |
 | **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                             |
 | **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                 |
 | **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                             |
@@ -223,6 +223,8 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **88.** `MatchShell` wraps every active screen in a `<React.Suspense>` boundary. No game screen component may assume it renders without a Suspense ancestor.
 
 **89.** `ctx.dispatch()` nesting depth is bounded by `MAX_NESTED_DISPATCH = 16`. `ActionPipeline` throws `RecursiveDispatchError` when this ceiling is exceeded. Only `engine:tick` may call `ctx.dispatch()`. This bound is reflected in `ReduceContext.dispatchDepth` and is invariant-backed per the ReduceContext JSDoc contract (lines 366–421 of `types.ts`): adding fields to `ReduceContext` requires a dedicated invariant in this document.
+
+**90.** `ReduceContext.logger?: Logger` is engine-internal diagnostics surface, populated by `ActionPipeline` from its injected `Logger` instance. It is intentionally absent from the public `GameReduceContext` interface (Invariant #12, ISP) and is reachable only after a deliberate `isReduceContext()` narrowing call. Use is restricted to engine-reserved actions: today only `engine:tick` (which emits `warn`-level entries when a timer-fired action is rejected by `validate()` — non-fatal, see §4.20). Game reducers must never read or write this field; any future engine-reserved action that uses it must update this invariant.
 
 ---
 
