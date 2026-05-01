@@ -34,9 +34,10 @@ import type {
     PlayerId,
     ActionDefinition,
     ReduceContext,
+    GameReduceContext,
     PipelineContext,
 } from './types.js';
-import { playerId as toPlayerId } from './types.js';
+import { playerId as toPlayerId, isReduceContext } from './types.js';
 import { createContentDatabase } from '../content/index.js';
 import {
     engineUndoDefinition,
@@ -373,7 +374,7 @@ describe('ActionPipeline — re-entrant dispatch depth guard', () => {
             parsePayload: () => ({}),
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
-                if (ctx.dispatch) {
+                if (isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
                         type: 'game:recursive',
                         playerId: PID,
@@ -401,7 +402,7 @@ describe('ActionPipeline — re-entrant dispatch depth guard', () => {
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
                 callCount++;
-                if (callCount <= MAX_NESTED_DISPATCH && ctx.dispatch) {
+                if (callCount <= MAX_NESTED_DISPATCH && isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
                         type: 'game:counter',
                         playerId: PID,
@@ -1467,7 +1468,7 @@ describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceC
             parsePayload: () => ({}),
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
-                if (ctx.dispatch) capturedDispatches.push(ctx.dispatch);
+                if (isReduceContext(ctx) && ctx.dispatch) capturedDispatches.push(ctx.dispatch);
                 return state;
             },
         };
@@ -1483,7 +1484,7 @@ describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceC
     });
 
     it('the ReduceContext object passed to reduce() is the same instance on every process() call (no new object per call)', () => {
-        const capturedCtxs: ReduceContext[] = [];
+        const capturedCtxs: GameReduceContext[] = [];
         const spyDef: ActionDefinition<Record<string, never>> = {
             type: 'game:capture-ctx-36',
             parsePayload: () => ({}),
@@ -1505,8 +1506,8 @@ describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceC
     });
 
     it('validate() and reduce() receive the same ctx object within a single process() call', () => {
-        const capturedFromValidate: ReduceContext[] = [];
-        const capturedFromReduce: ReduceContext[] = [];
+        const capturedFromValidate: GameReduceContext[] = [];
+        const capturedFromReduce: GameReduceContext[] = [];
         const spyDef: ActionDefinition<Record<string, never>> = {
             type: 'game:capture-ctx-val-red-36',
             parsePayload: () => ({}),
@@ -1560,7 +1561,7 @@ describe('ActionPipeline — issue #36: hoist dispatch closure and reuse ReduceC
             parsePayload: () => ({}),
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
-                if (ctx.dispatch) {
+                if (isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
                         type: 'game:recursive-36',
                         playerId: PID,
@@ -1610,7 +1611,7 @@ describe('ActionPipeline — ctx.dispatchDepth in ReduceContext', () => {
             validate: () => ({ ok: true }),
             reduce: (state, _payload, _playerId, ctx) => {
                 depths.push(ctx.dispatchDepth);
-                if (ctx.dispatchDepth < 2 && ctx.dispatch) {
+                if (ctx.dispatchDepth < 2 && isReduceContext(ctx) && ctx.dispatch) {
                     return ctx.dispatch(state, {
                         type: 'game:depth_recorder',
                         playerId: PID,

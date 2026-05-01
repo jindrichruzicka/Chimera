@@ -28,6 +28,7 @@ import type {
     ValidationResult,
     ContentDatabase,
     ReduceContext,
+    GameReduceContext,
     SimulationHostRole,
     SimulationClientRole,
     UndoContext,
@@ -37,6 +38,7 @@ import type {
     PipelineContext,
     ViewerSnapshot,
 } from './types.js';
+import { isReduceContext } from './types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -684,5 +686,79 @@ describe('ViewerSnapshot and toViewerSnapshot', () => {
         ctx.broadcast?.(toViewerSnapshot(raw), pid);
         expect(captured).toHaveLength(1);
         expect(captured[0]).toBe(raw);
+    });
+});
+
+// ─── GameReduceContext ────────────────────────────────────────────────────────
+
+describe('GameReduceContext', () => {
+    it('can be constructed with only rng and dispatchDepth', () => {
+        const ctx: GameReduceContext = { rng: makeStubRng(0.5), dispatchDepth: 0 };
+        expect(ctx.rng.float()).toBe(0.5);
+    });
+
+    it('can be constructed with rng, db, and dispatchDepth', () => {
+        const db = {} as ContentDatabase;
+        const ctx: GameReduceContext = { rng: makeStubRng(0.1), db, dispatchDepth: 0 };
+        expect(ctx.db).toBeDefined();
+    });
+
+    it('ReduceContext is assignable to GameReduceContext', () => {
+        const rc: ReduceContext = { rng: makeStubRng(0.3), dispatchDepth: 0 };
+        const grc: GameReduceContext = rc;
+        expect(grc.rng.float()).toBe(0.3);
+    });
+
+    it('has dispatchDepth required field', () => {
+        const ctx: GameReduceContext = { rng: makeStubRng(0), dispatchDepth: 5 };
+        expect(ctx.dispatchDepth).toBe(5);
+    });
+
+    it('does not expose dispatch — game code cannot reach the engine-internal field', () => {
+        const ctx: GameReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
+        expect('dispatch' in ctx).toBe(false);
+    });
+});
+
+// ─── isReduceContext ──────────────────────────────────────────────────────────
+
+describe('isReduceContext', () => {
+    it('returns true when ctx has dispatch field', () => {
+        const rc: ReduceContext = {
+            rng: makeStubRng(0),
+            dispatchDepth: 0,
+            dispatch: (_s, _a) => _s,
+        };
+        expect(isReduceContext(rc)).toBe(true);
+    });
+
+    it('returns false when ctx does not have dispatch field', () => {
+        const grc: GameReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
+        expect(isReduceContext(grc)).toBe(false);
+    });
+
+    it('narrows ctx to ReduceContext making dispatch accessible', () => {
+        const rc: ReduceContext = {
+            rng: makeStubRng(0),
+            dispatchDepth: 0,
+            dispatch: (_s, _a) => _s,
+        };
+        if (isReduceContext(rc)) {
+            expect(rc.dispatch).toBeDefined();
+        } else {
+            throw new Error('Expected isReduceContext to return true');
+        }
+    });
+
+    it('returns false for a GameReduceContext without dispatch even if undoManager is present', () => {
+        const grc: GameReduceContext = {
+            rng: makeStubRng(0),
+            dispatchDepth: 0,
+            undoManager: {
+                canUndo: () => true,
+                canRedo: () => false,
+            },
+        };
+        expect(isReduceContext(grc)).toBe(false);
     });
 });

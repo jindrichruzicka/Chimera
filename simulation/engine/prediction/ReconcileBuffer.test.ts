@@ -38,7 +38,7 @@ import type {
     ActionDefinition,
     BaseGameSnapshot,
     EngineAction,
-    ReduceContext,
+    GameReduceContext,
     PlayerId,
     ValidationResult,
 } from '../types.js';
@@ -77,7 +77,7 @@ function makeAction(
     };
 }
 
-function makeStubCtx(): ReduceContext {
+function makeStubCtx(): GameReduceContext {
     return { rng: makeStubRng(), dispatchDepth: 0 };
 }
 

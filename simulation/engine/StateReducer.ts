@@ -18,7 +18,7 @@
  * Architecture reference: §4.7
  */
 
-import type { ActionEnvelope, BaseGameSnapshot, ReduceContext } from './types.js';
+import type { ActionEnvelope, BaseGameSnapshot, GameReduceContext } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 
 function parsePayloadOrThrow(
@@ -98,7 +98,7 @@ export class StateReducer<TState extends BaseGameSnapshot = BaseGameSnapshot> {
      *   - `UnknownActionTypeError` if `action.type` is not registered.
      *   - `ActionSchemaError` if `parsePayload` throws.
      */
-    apply(state: Readonly<TState>, action: ActionEnvelope, ctx: ReduceContext): TState {
+    apply(state: Readonly<TState>, action: ActionEnvelope, ctx: GameReduceContext): TState {
         const def = this.#registry.resolve(action.type);
 
         const parsedPayload = parsePayloadOrThrow(

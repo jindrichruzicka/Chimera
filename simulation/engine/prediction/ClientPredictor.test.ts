@@ -31,7 +31,7 @@ import type {
     ActionDefinition,
     BaseGameSnapshot,
     EngineAction,
-    ReduceContext,
+    GameReduceContext,
     PlayerId,
     ValidationResult,
 } from '../types.js';
@@ -66,7 +66,7 @@ function makeAction(type: string, playerId: PlayerId = toPlayerId('p1')): Engine
     };
 }
 
-function makeStubCtx(): ReduceContext {
+function makeStubCtx(): GameReduceContext {
     return { rng: makeStubRng(), dispatchDepth: 0 };
 }
 
@@ -141,7 +141,7 @@ describe('NonPredictableActionError', () => {
 
 describe('ClientPredictor', () => {
     let registry: ActionRegistry<TestSnapshot>;
-    let ctx: ReduceContext;
+    let ctx: GameReduceContext;
     let predictor: ClientPredictor<TestSnapshot>;
 
     beforeEach(() => {

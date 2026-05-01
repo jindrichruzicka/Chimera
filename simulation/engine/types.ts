@@ -362,38 +362,29 @@ export interface ValidationResult {
     readonly reason?: string;
 }
 
-// ─── ReduceContext ────────────────────────────────────────────────────────────
+// ─── GameReduceContext ────────────────────────────────────────────────────────
 
 /**
- * Narrow context handed to `ActionDefinition.validate()` and
+ * Public game-facing context handed to `ActionDefinition.validate()` and
  * `ActionDefinition.reduce()`.
  *
- * This interface is INTENTIONALLY minimal. Adding fields is an architectural
- * change requiring a dedicated invariant in docs/executive-architecture/architecture-invariants.md. Do NOT plumb manager
- * references, loggers, wall-clock time, or network state through here.
+ * This interface is the ISP-compliant narrow surface for game code (§4.7,
+ * Invariant #12). It intentionally excludes engine-internal fields such as
+ * `dispatch`. Adding fields requires a dedicated invariant in
+ * docs/executive-architecture/architecture-invariants.md.
  *
  * `rng` — seeded `DeterministicRng` instance derived from `(snapshot.seed, snapshot.tick)`
- *          by `ActionPipeline.#buildReduceContext`. Game code MUST use `ctx.rng.*` for all
- *          randomness; `Math.random()` is blocked by the `chimera/no-restricted-globals`
- *          ESLint rule (F04).
+ *          by `ActionPipeline`. Game code MUST use `ctx.rng.*` for all randomness.
  *
- * `db`  — optional content database placeholder until F05 wires `ContentDatabase`.
- *          Games that declare no content never receive a `db`.
+ * `db`  — optional content database. Games that declare no content never receive a `db`.
  *
- * `undoManager` — optional undo eligibility query surface, populated by
- *          `ActionPipeline` from `PipelineContext.undoManager` when provided (F16).
- *          Absent until F16 lands. `engine:undo` / `engine:redo` validate() check
- *          it to surface pre-emptive rejection consistent with the
- *          `ActionUnauthorizedError` path used by `engine:end_turn` and `engine:save`.
+ * `undoManager` — optional undo eligibility query surface populated by `ActionPipeline`
+ *          from `PipelineContext.undoManager` when provided (F16).
  *
- * `dispatch` — optional re-entrant dispatch function. ONLY `engine:tick` may call
- *              this (§4.20, F21) to fire timer-triggered sub-actions from inside a
- *              reducer. Game reducers MUST NOT call it. The pipeline bounds nesting
- *              depth to `MAX_NESTED_DISPATCH = 16`; exceeding it throws
- *              `RecursiveDispatchError`. Absent until `ActionPipeline` provides it
- *              at Stage 5 (F03/T5).
+ * `dispatchDepth` — re-entrant dispatch nesting depth. Zero for the top-level call;
+ *          readable by game code per Invariant #89.
  */
-export interface ReduceContext {
+export interface GameReduceContext {
     readonly rng: DeterministicRng;
     readonly db?: ContentDatabase;
     /** Populated from PipelineContext.undoManager by ActionPipeline (F16). */
@@ -401,25 +392,41 @@ export interface ReduceContext {
         canUndo(playerId: PlayerId): boolean;
         canRedo(playerId: PlayerId): boolean;
     };
-    readonly dispatch?: (
-        state: Readonly<BaseGameSnapshot>,
-        action: ActionEnvelope,
-    ) => BaseGameSnapshot;
     /**
      * Re-entrant dispatch nesting depth. Zero for the top-level
      * `ActionPipeline.process()` call; incremented by one for each nested
      * `ctx.dispatch()` invocation. Bounded by `MAX_NESTED_DISPATCH` (§4.7,
-     * §4.20). Only `engine:tick` may call `ctx.dispatch()`.
-     *
-     * NOTE: This value reflects the depth at the entry of the current `process()`
-     * invocation. Within a reducer frame, after a nested `dispatch()` returns,
-     * this field may appear stale mid-execution (the depth guard itself is always
-     * enforced correctly inside `#dispatchFn`). Game code should read
-     * `ctx.dispatchDepth` only at the start of the reducer, not after calling
-     * `ctx.dispatch()` from within the same frame.
+     * §4.20). Game code may read this value but must never call `ctx.dispatch()`
+     * directly (Invariant #89).
      */
     readonly dispatchDepth: number;
 }
+
+// ─── ReduceContext ────────────────────────────────────────────────────────────
+
+/**
+ * Engine-internal context. Extends `GameReduceContext` with `dispatch?` which
+ * is ONLY accessible to `engine:tick` (§4.20, F21). Game code receives
+ * `GameReduceContext` via `ActionDefinition.validate/reduce` and cannot reach
+ * `dispatch` without a deliberate `isReduceContext()` narrowing call.
+ *
+ * Use `isReduceContext(ctx)` to narrow a `GameReduceContext` to `ReduceContext`
+ * inside engine actions that legitimately need `dispatch`.
+ */
+export interface ReduceContext extends GameReduceContext {
+    readonly dispatch?: (
+        state: Readonly<BaseGameSnapshot>,
+        action: ActionEnvelope,
+    ) => BaseGameSnapshot;
+}
+
+/**
+ * Type guard that narrows a `GameReduceContext` to the engine-internal
+ * `ReduceContext` when the context carries the `dispatch` field.
+ *
+ * Only `engine:tick` should call this. Game code must never use `dispatch`.
+ */
+export const isReduceContext = (ctx: GameReduceContext): ctx is ReduceContext => 'dispatch' in ctx;
 
 // ─── ActionDefinition ─────────────────────────────────────────────────────────
 
@@ -455,7 +462,7 @@ export interface ActionDefinition<
         payload: TPayload,
         state: Readonly<TState>,
         playerId: PlayerId,
-        ctx: ReduceContext,
+        ctx: GameReduceContext,
     ): ValidationResult;
 
     /**
@@ -467,7 +474,7 @@ export interface ActionDefinition<
         state: Readonly<TState>,
         payload: TPayload,
         playerId: PlayerId,
-        ctx: ReduceContext,
+        ctx: GameReduceContext,
     ): TState;
 
     /**

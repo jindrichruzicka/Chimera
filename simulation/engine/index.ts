@@ -28,6 +28,7 @@ export type {
     TypedAction,
     ActionEnvelope,
     ValidationResult,
+    GameReduceContext,
     ReduceContext,
     UndoContext,
     HistoryContext,
@@ -41,7 +42,7 @@ export type {
     SimulationClientRole,
 } from './types.js';
 
-export { playerId, toViewerSnapshot } from './types.js';
+export { isReduceContext, playerId, toViewerSnapshot } from './types.js';
 
 export type { DeterministicRng } from './DeterministicRng.js';
 export { createRng } from './DeterministicRng.js';

@@ -23,7 +23,7 @@
  */
 
 import type { ActionRegistry } from '../ActionRegistry.js';
-import type { BaseGameSnapshot, EngineAction, ReduceContext } from '../types.js';
+import type { BaseGameSnapshot, EngineAction, GameReduceContext } from '../types.js';
 
 // ─── NonPredictableActionError ────────────────────────────────────────────────
 
@@ -75,9 +75,9 @@ export class NonPredictableActionError extends Error {
  */
 export class ClientPredictor<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #registry: ActionRegistry<TState>;
-    readonly #ctx: ReduceContext;
+    readonly #ctx: GameReduceContext;
 
-    constructor(registry: ActionRegistry<TState>, ctx: ReduceContext) {
+    constructor(registry: ActionRegistry<TState>, ctx: GameReduceContext) {
         this.#registry = registry;
         this.#ctx = ctx;
     }
