@@ -15,6 +15,7 @@ import { describe, expect, it } from 'vitest';
 import {
     CURRENT_SCHEMA_VERSION,
     checkpointTurnNumberMigration,
+    createDefaultMigrator,
     SaveMigrationError,
     SaveMigrator,
     SaveNotFoundError,
@@ -45,6 +46,7 @@ function makeFileAtVersion(schemaVersion: number): SaveFile {
             phase: 'playing' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         },
         deltaActions: [],
         pendingCommitments: {},
@@ -54,8 +56,8 @@ function makeFileAtVersion(schemaVersion: number): SaveFile {
 // ─── CURRENT_SCHEMA_VERSION ───────────────────────────────────────────────────
 
 describe('CURRENT_SCHEMA_VERSION', () => {
-    it('equals 2', () => {
-        expect(CURRENT_SCHEMA_VERSION).toBe(2);
+    it('equals 3', () => {
+        expect(CURRENT_SCHEMA_VERSION).toBe(3);
     });
 });
 
@@ -104,8 +106,7 @@ describe('checkpointTurnNumberMigration (v1 → v2)', () => {
     });
 
     it('SaveMigrator applies the migration: v1 file without turnNumber is upgraded to v2 with turnNumber 0', () => {
-        const migrator = new SaveMigrator();
-        migrator.register(checkpointTurnNumberMigration);
+        const migrator = createDefaultMigrator();
 
         const v1File = makeFileAtVersion(1);
         const checkpointWithoutTurnNumber = { ...v1File.checkpoint } as Record<string, unknown>;
@@ -117,8 +118,12 @@ describe('checkpointTurnNumberMigration (v1 → v2)', () => {
 
         const result = migrator.migrate(legacyFile);
 
-        expect(result.header.schemaVersion).toBe(2);
+        // After applying all migrations, file should be at v3
+        expect(result.header.schemaVersion).toBe(3);
         expect((result.checkpoint as unknown as Record<string, unknown>)['turnNumber']).toBe(0);
+        expect((result.checkpoint as unknown as Record<string, unknown>)['timers']).toStrictEqual(
+            {},
+        );
     });
 });
 

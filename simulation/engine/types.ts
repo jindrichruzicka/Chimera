@@ -148,10 +148,10 @@ export interface BaseGameSnapshot {
      * Tick-driven timer registry (§4.20, Invariant #54).
      * All active timers are advanced exactly once per `engine:tick` via
      * `TimerManager.advance()`. Serialised with saves and replayed deterministically.
-     * Optional for backward compatibility with existing fixtures; treat absent as
-     * an empty registry `{}`.
+     * Never undefined; defaults to `{}` when loading saves created before timers
+     * were introduced (see SaveMigrator v1→v2).
      */
-    readonly timers?: TimerRegistry;
+    readonly timers: TimerRegistry;
 }
 
 // ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────

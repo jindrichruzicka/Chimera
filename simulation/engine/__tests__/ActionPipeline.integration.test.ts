@@ -33,6 +33,7 @@ function makeSnapshot(options?: {
         phase: 'waiting' as BaseGameSnapshot['phase'],
         events: [],
         turnNumber: 0,
+        timers: {},
         ...(options?.hostPlayerId === undefined ? {} : { hostPlayerId: options.hostPlayerId }),
         ...(options?.turnClock === undefined ? {} : { turnClock: options.turnClock }),
     };
@@ -66,10 +67,10 @@ describe('ActionPipeline integration with engine-reserved actions', () => {
         const next = pipeline.process(snapshot, makeEnvelope('engine:tick', hostId, { seed: 7 }));
 
         // No timers in the registry → no-op tick: reduce returns the same state
-        // reference (WARN-1 regression), so timers remains undefined through
+        // reference (WARN-1 regression), so timers remains an empty object through
         // any downstream pipeline stages.
         expect(next).toBe(snapshot);
-        expect(next.timers).toBeUndefined();
+        expect(next.timers).toStrictEqual({});
     });
 
     it('advances engine:end_turn to the next active player when turnClock is configured', () => {

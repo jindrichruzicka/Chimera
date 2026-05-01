@@ -41,6 +41,7 @@ const makeBaseSnapshot = (tick = 0): BaseGameSnapshot => ({
     phase: 'playing' as BaseGameSnapshot['phase'],
     events: [],
     turnNumber: 0,
+    timers: {},
 });
 
 /**

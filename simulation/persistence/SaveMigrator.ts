@@ -23,7 +23,7 @@ import type { SaveFile } from './SaveFile.js';
  * of its nested types, and add a corresponding `SaveMigration` so that
  * older saves are automatically upgraded.
  */
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // ─── SaveMigration interface ──────────────────────────────────────────────────
 
@@ -251,6 +251,36 @@ export const checkpointTurnNumberMigration: SaveMigration = {
 };
 
 /**
+ * Migration from schema v2 to v3: ensure every checkpoint has a timers registry.
+ *
+ * Saves written before timers were introduced (and thus at v2 after the v1->v2
+ * migration) should have timers: {} added as the default empty registry.
+ * This ensures that `BaseGameSnapshot.timers` is never undefined after load
+ * (Invariant #54, issue #407).
+ *
+ * Register this migration in the wiring point (`electron/main/index.ts`)
+ * before the first call to `SaveMigrator.migrate()`.
+ */
+export const checkpointTimersMigration: SaveMigration = {
+    fromVersion: 2,
+    apply(file: SaveFile): SaveFile {
+        // Cast via `unknown` because v2 saves legitimately predate the
+        // `timers` field on `BaseGameSnapshot`; the static `SaveFile`
+        // type asserts the field is present, but a v2 input may not have it.
+        // Widening to `Record<string, unknown>` lets us probe and add the
+        // field safely without introducing `any`.
+        const checkpoint = file.checkpoint as unknown as Record<string, unknown>;
+        if ('timers' in checkpoint && checkpoint['timers'] !== undefined) {
+            return file;
+        }
+        return {
+            ...file,
+            checkpoint: { ...checkpoint, timers: {} } as SaveFile['checkpoint'],
+        };
+    },
+};
+
+/**
  * Returns a fresh `SaveMigrator` with all built-in schema migrations
  * pre-registered in order.
  *
@@ -260,5 +290,6 @@ export const checkpointTurnNumberMigration: SaveMigration = {
 export function createDefaultMigrator(): SaveMigrator {
     const migrator = new SaveMigrator();
     migrator.register(checkpointTurnNumberMigration);
+    migrator.register(checkpointTimersMigration);
     return migrator;
 }

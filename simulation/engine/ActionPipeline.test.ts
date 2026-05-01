@@ -57,6 +57,7 @@ const makeSnapshot = (tick = 0, turnNumber = 0): BaseGameSnapshot => ({
     phase: 'test' as BaseGameSnapshot['phase'],
     events: [],
     turnNumber,
+    timers: {},
 });
 
 const makeEnvelope = (
@@ -570,6 +571,7 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         phase: 'test' as BaseGameSnapshot['phase'],
         events: [],
         turnNumber: 0,
+        timers: {},
     });
 
     beforeEach(() => {
@@ -830,6 +832,7 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
             phase: 'test' as BaseGameSnapshot['phase'],
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         const undoManager = makeUndoManagerStub({ undoResult: reconstructed });
         const broadcastSpy = vi.fn();
@@ -1051,6 +1054,7 @@ describe('ActionPipeline — Stage 7: undoMeta injected into broadcast snapshots
         phase: 'test' as BaseGameSnapshot['phase'],
         events: [],
         turnNumber: 0,
+        timers: {},
     });
 
     const makeUndoManagerStub = (options?: {

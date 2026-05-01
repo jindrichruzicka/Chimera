@@ -27,6 +27,7 @@ function makeSnapshot(tick: number): BaseGameSnapshot {
         phase: 'playing' as BaseGameSnapshot['phase'],
         events: [],
         turnNumber: 0,
+        timers: {},
     };
 }
 

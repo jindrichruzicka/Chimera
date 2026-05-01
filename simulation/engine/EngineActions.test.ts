@@ -44,6 +44,7 @@ const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
     phase: 'waiting' as BaseGameSnapshot['phase'],
     events: [],
     turnNumber: 0,
+    timers: {},
     ...(hostPlayerId !== undefined && { hostPlayerId }),
 });
 
@@ -183,11 +184,11 @@ describe('engine:tick definition', () => {
         expect(result.ok).toBe(true);
     });
 
-    it('reduce with state.timers undefined returns the same state reference (no allocation)', () => {
+    it('reduce with empty timer registry returns the same state reference (no allocation)', () => {
         const snapshot = makeSnapshot();
         const next = definition().reduce(snapshot, { seed: 7 }, hostId, stubCtx);
         expect(next).toBe(snapshot);
-        expect(next.timers).toBeUndefined();
+        expect(next.timers).toStrictEqual({});
     });
 
     it('reduce does not mutate the input snapshot', () => {

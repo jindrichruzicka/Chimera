@@ -49,6 +49,7 @@ export function makeFile(gameId: string, slotId: string, savedAt = 1_700_000_000
             phase: 'playing' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         },
         deltaActions: [],
         pendingCommitments: {},

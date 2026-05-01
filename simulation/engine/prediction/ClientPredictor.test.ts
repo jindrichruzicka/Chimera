@@ -52,6 +52,7 @@ function makeBaseSnapshot(overrides: Partial<TestSnapshot> = {}): TestSnapshot {
         phase: 'playing' as TestSnapshot['phase'],
         events: [],
         turnNumber: 0,
+        timers: {},
         value: 0,
         ...overrides,
     };

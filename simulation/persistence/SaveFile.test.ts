@@ -14,12 +14,31 @@ import { describe, expect, it } from 'vitest';
 import { JsonSaveSerializer, MAX_SAVE_SIZE_CHARS } from './JsonSaveSerializer.js';
 import { SaveParseError } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
-import type { GamePhase } from '../engine/types.js';
+import type { GamePhase, BaseGameSnapshot } from '../engine/types.js';
 import { playerId as toPlayerId } from '../engine/types.js';
+import type { GameTimer, TimerId } from '../engine/GameTimer.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
+    const defaultCheckpoint: Partial<BaseGameSnapshot> = {
+        tick: 5,
+        seed: 99,
+        players: {},
+        entities: {},
+        phase: 'playing' as GamePhase,
+        events: [],
+        turnNumber: 0,
+        timers: {},
+    };
+
+    const { checkpoint: checkpointOverride, ...restOverrides } = overrides;
+    const mergedCheckpoint = {
+        ...defaultCheckpoint,
+        ...checkpointOverride,
+        timers: checkpointOverride?.timers ?? {},
+    } as BaseGameSnapshot;
+
     return {
         header: {
             schemaVersion: 1,
@@ -31,18 +50,10 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
             turnNumber: 3,
             playerNames: ['Alice', 'Bob'],
         },
-        checkpoint: {
-            tick: 5,
-            seed: 99,
-            players: {},
-            entities: {},
-            phase: 'playing' as GamePhase,
-            events: [],
-            turnNumber: 0,
-        },
+        checkpoint: mergedCheckpoint,
         deltaActions: [],
         pendingCommitments: {},
-        ...overrides,
+        ...restOverrides,
     };
 }
 
@@ -314,11 +325,114 @@ describe('JsonSaveSerializer — checkpoint.turnNumber schema enforcement', () =
                 phase: 'playing' as GamePhase,
                 events: [],
                 turnNumber: 7,
+                timers: {},
             },
         });
 
         const result = await serializer.deserialize(await serializer.serialize(file));
 
         expect((result.checkpoint as unknown as Record<string, unknown>)['turnNumber']).toBe(7);
+    });
+});
+
+// ─── JsonSaveSerializer — GameTimer serialization (issue #407) ──────────────
+
+describe('JsonSaveSerializer — GameTimer serialization', () => {
+    it('round-trips checkpoint.timers with populated GameTimer entries', async () => {
+        const serializer = new JsonSaveSerializer();
+        const timer1: GameTimer = {
+            id: 'tmr-entity-1-action-fire' as TimerId,
+            remainingTicks: 5,
+            intervalTicks: 0,
+            actionType: 'entity:fire',
+            payload: { targetId: 'e2' },
+            active: true,
+        };
+        const timer2: GameTimer = {
+            id: 'tmr-entity-2-action-move' as TimerId,
+            remainingTicks: 10,
+            intervalTicks: 3,
+            actionType: 'entity:move',
+            payload: { dx: 1, dy: 0 },
+            active: false,
+        };
+        const file = makeSaveFile({
+            checkpoint: {
+                tick: 5,
+                seed: 99,
+                players: {},
+                entities: {},
+                phase: 'playing' as GamePhase,
+                events: [],
+                turnNumber: 0,
+                timers: {
+                    [timer1.id]: timer1,
+                    [timer2.id]: timer2,
+                },
+            },
+        });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.checkpoint.timers).toStrictEqual({
+            [timer1.id]: timer1,
+            [timer2.id]: timer2,
+        });
+    });
+
+    it('round-trips checkpoint.timers as empty registry', async () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile({
+            checkpoint: {
+                tick: 5,
+                seed: 99,
+                players: {},
+                entities: {},
+                phase: 'playing' as GamePhase,
+                events: [],
+                turnNumber: 0,
+                timers: {},
+            },
+        });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.checkpoint.timers).toStrictEqual({});
+    });
+
+    it('deserialize accepts a save file with missing timers field (backward compatibility)', async () => {
+        const serializer = new JsonSaveSerializer();
+        // Construct a save file JSON that explicitly has no timers field
+        const jsonWithoutTimers = JSON.stringify({
+            header: {
+                schemaVersion: 1,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 1,
+                playerNames: ['Alice'],
+            },
+            checkpoint: {
+                tick: 5,
+                seed: 99,
+                phase: 'playing',
+                players: {},
+                entities: {},
+                events: [],
+                turnNumber: 0,
+                // timers deliberately omitted
+            },
+            deltaActions: [],
+            pendingCommitments: {},
+        });
+
+        // JsonSaveSerializer should accept the file without timers field
+        // Migration will add timers: {} later in the SaveRepository flow
+        const result = await serializer.deserialize(jsonWithoutTimers);
+
+        expect(result.header.schemaVersion).toBe(1);
+        expect(result.checkpoint).toBeDefined();
     });
 });

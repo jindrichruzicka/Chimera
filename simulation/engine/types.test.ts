@@ -108,6 +108,7 @@ describe('BaseGameSnapshot', () => {
             phase: 'setup' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         expect(snapshot.tick).toBe(0);
         expect(snapshot.seed).toBe(12345);
@@ -123,6 +124,7 @@ describe('BaseGameSnapshot', () => {
             phase: 'playing' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
             turnClock: { activePlayerId: pid, deadlineMs: 30_000 },
         };
         expect(snapshot.turnClock?.activePlayerId).toBe('p1');
@@ -137,6 +139,7 @@ describe('BaseGameSnapshot', () => {
             phase: 'playing' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         expect(snapshot.turnClock).toBeUndefined();
     });
@@ -290,6 +293,7 @@ describe('ActionDefinition', () => {
             phase: 'test' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         const result = def.validate({ value: 42 }, snap, toPlayerId('p1'), ctx);
         expect(result.ok).toBe(true);
@@ -318,6 +322,7 @@ describe('ActionDefinition', () => {
             phase: 'playing' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
 
         const ctx: ReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
@@ -355,6 +360,7 @@ describe('UndoContext', () => {
             phase: 'test' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         const ctx: UndoContext = {
             undoManager: {
@@ -385,6 +391,7 @@ describe('UndoContext', () => {
             phase: 'test' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         const ctx: UndoContext = {
             undoManager: {
@@ -507,6 +514,7 @@ describe('DebugContext', () => {
             phase: 'playing' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         ctx.debugObserver?.(3, snap);
         expect(observations).toHaveLength(1);
@@ -533,6 +541,7 @@ describe('DebugContext', () => {
             phase: 'end' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         ctx.debugObserver?.(7, snap);
         expect(capturedTick).toBe(7);
@@ -558,6 +567,7 @@ describe('PipelineContext', () => {
             phase: 'test' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         const ctx: PipelineContext = {
             db,
@@ -598,6 +608,7 @@ describe('PipelineContext', () => {
             phase: 'test' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         const pipelineCtx: PipelineContext = {
             undoManager: {
@@ -651,6 +662,7 @@ describe('PipelineContext', () => {
             phase: 'idle' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         };
         const pipelineCtx: PipelineContext = {
             debugObserver: () => {

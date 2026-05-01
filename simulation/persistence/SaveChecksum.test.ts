@@ -26,6 +26,7 @@ function makeBody(): SaveBody {
             phase: 'playing' as GamePhase,
             events: [],
             turnNumber: 0,
+            timers: {},
         },
         deltaActions: [],
         pendingCommitments: {},

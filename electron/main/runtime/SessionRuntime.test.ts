@@ -30,6 +30,7 @@ function makeSnapshot(tick: number, ids: readonly PlayerId[] = [P1]): BaseGameSn
         phase: 'playing' as BaseGameSnapshot['phase'],
         events: [],
         turnNumber: tick,
+        timers: {},
     };
 }
 

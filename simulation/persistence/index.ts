@@ -19,6 +19,7 @@ export { JsonSaveSerializer } from './JsonSaveSerializer.js';
 export {
     CURRENT_SCHEMA_VERSION,
     checkpointTurnNumberMigration,
+    checkpointTimersMigration,
     createDefaultMigrator,
     SaveMigrationError,
     SaveMigrator,

@@ -64,6 +64,7 @@ const SaveFileSchema = z.object({
         entities: z.record(z.string(), z.unknown()),
         events: z.array(z.unknown()),
         turnNumber: z.number().int(),
+        timers: z.record(z.string(), z.unknown()).optional(),
     }),
     deltaActions: z.array(z.unknown()),
     pendingCommitments: z.record(z.string(), z.unknown()),

@@ -31,6 +31,7 @@ const makeSnapshot = (tick = 0, turnNumber = 0): BaseGameSnapshot => ({
     phase: 'test' as BaseGameSnapshot['phase'],
     events: [],
     turnNumber,
+    timers: {},
 });
 
 const makeEnvelope = (

@@ -347,6 +347,7 @@ function createInitialBaseSnapshot(): BaseGameSnapshot {
         phase: 'lobby' as GamePhase,
         events: [],
         turnNumber: 0,
+        timers: {},
     };
 }
 

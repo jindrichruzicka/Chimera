@@ -47,6 +47,7 @@ function makeBaseSnapshot(tick = 0, playerIds: readonly PlayerId[] = [P1]): Base
         phase: 'playing' as BaseGameSnapshot['phase'],
         events: [],
         turnNumber: 0,
+        timers: {},
     };
 }
 
@@ -68,6 +69,7 @@ function makeSnapshotWithTurnClock(
         phase: 'playing' as BaseGameSnapshot['phase'],
         events: [],
         turnNumber: 0,
+        timers: {},
         turnClock: { activePlayerId, deadlineMs: 60_000 },
     };
 }
