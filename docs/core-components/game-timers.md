@@ -107,6 +107,8 @@ return nextState;
 
 Timer-driven actions re-enter the pipeline from inside `engine:tick.reduce()`. Four rules govern this:
 
+> **Note (Invariant #90, ISP):** `ctx.dispatch()` is intentionally absent from the public `GameReduceContext` interface that game reducers receive. Only the engine-internal `ReduceContext` (accessible after `isReduceContext()` narrowing) has `dispatch`. Game action authors must not attempt to call `dispatch()` directly.
+
 1. **Partial pipeline only.** `ctx.dispatch()` runs Stage 4 (validate) and Stage 5 (reduce). Does NOT invoke Stage 6 (history append), Stage 7 (broadcast), or the debug observer. `ActionHistory` records only the outer `engine:tick` frame. Replays re-derive timer fires from `TimerRegistry` state.
 
 2. **Bounded recursion.** Nested-dispatch depth is tracked on `ReduceContext`. Exceeding `MAX_NESTED_DISPATCH = 16` throws `RecursiveDispatchError`.

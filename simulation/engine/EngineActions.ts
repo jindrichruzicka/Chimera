@@ -117,28 +117,22 @@ export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
         // ── Advance timers (§4.20, Invariant #55) ───────────────────────────────────────
         // TimerManager.advance() is called exactly once per outer engine:tick
         // and is the ONLY caller of advance() (Invariant #55).
+        // state.timers is guaranteed non-undefined by SaveMigrator v2→v3 (Invariant #54).
         const orig = state.timers;
-        const { next, fired } = TimerManager.advance(orig ?? {});
+        const { next, fired } = TimerManager.advance(orig);
 
         // Early-return guards: preserve reference equality so the Stage-7
         // broadcast guard can skip viewer snapshots on no-op ticks.
         //
-        // 1. Legacy/new sessions (state.timers === undefined): if no timer
-        //    fired there is nothing to allocate — return the original state.
-        //    Object.fromEntries() inside advance() always produces a fresh {},
-        //    so without this guard every legacy fixture's first tick would
-        //    needlessly trigger a broadcast.
+        // Fast path (O(1)): when advance() finds all timers inactive, it returns
+        // next === orig (same registry reference). We can return immediately
+        // without the O(n) key scan below (WARN-1 optimization).
         //
-        // 2a. Fast path (O(1)): when advance() finds all timers inactive, it returns
-        //     next === orig (same registry reference). We can return immediately
-        //     without the O(n) key scan below (WARN-1 optimization).
-        //
-        // 2b. Slow path: when any timer is active, advance() always produces new
-        //     object references (Object.fromEntries + per-timer spread), so
-        //     next !== orig is guaranteed. No content scan needed.
-        if (fired.length === 0) {
-            if (orig === undefined) return state;
-            if (next === orig) return state;
+        // Slow path: when any timer is active, advance() always produces new
+        // object references (Object.fromEntries + per-timer spread), so
+        // next !== orig is guaranteed. No content scan needed.
+        if (fired.length === 0 && next === orig) {
+            return state;
         }
 
         let nextState: BaseGameSnapshot = { ...state, timers: next };
