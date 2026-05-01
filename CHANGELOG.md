@@ -7,6 +7,18 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-05-01
+
+### Added
+
+- Full ActionPipeline Integration — 7-stage pipeline complete (`validate → auth → intercept → reduce → history → project → broadcast`); `UnknownActionTypeError`, `ActionSchemaError`, `ValidationResult`; `PipelineContext` constructor; `engine:` namespace collision guard; Stage 7 skip on undo/redo (F15)
+- UndoManager and Turn Memento — `UndoManager`, `InMemoryUndoManager`, `TurnMemento`, `ActionHistory` (with `TurnMemento`-bounded pruning), `UndoPolicy` + `DEFAULT_UNDO_POLICY`; `engine:undo` / `engine:redo` intercepted at Stage 3; `canUndo` / `canRedo` reflected in `PlayerSnapshot.undoMeta` (F16)
+- Client Prediction — `ClientPredictor` and `ReconcileBuffer`; wired into `ipcClient.sendAction()`; limited to `predictable: true`, own-player-only actions; reconciles on authoritative snapshot receipt (F17)
+- Save Manager IPC and SaveScreen UI — `chimera:saves:*` IPC handlers (`listSaves`, `saveGame`, `loadGame`, `deleteSave`, `onSlotUpdate`); `saveStore` Zustand slice; `saves/page.tsx` SaveScreen; `CrashRecoveryBanner` with "Resume last session" prompt; autosave wired to `engine:end_turn`; `SaveRepository` contract test suite (F18)
+- Settings UI — `settings/page.tsx` with engine-wide and game-specific settings fields; wired to `window.__chimera.settings.update()` / `reset()`; `settingsStore` keeps UI live via `onChange` subscription (F19)
+- Fixed-Point Math — `FixedPoint` (Q32.32 `bigint`); full arithmetic suite (`add`, `sub`, `mul`, `div`), comparisons, `sqrt`, `sin`, `cos`, `atan2`; conversion helpers (`fromInt`, `fromRatio`, `fromFloat`, `toFloat`, `toInt`); constants `FP_ZERO`, `FP_ONE`, `FP_HALF`, `FP_PI`, `FP_HALF_PI`, `FP_TWO_PI`; `chimera/no-fromfloat-in-simulation` ESLint rule; golden-vector determinism test suite (F20)
+- Game Timers — `GameTimer`, `TimerRegistry`, `TimerManager` (`create`, `cancel`, `advance`); `TimerManager.advance()` wired into `engine:tick` reducer via bounded re-entrant `ctx.dispatch()` (`MAX_NESTED_DISPATCH = 16`); `snapshot.timers` serialised in saves; `GameReduceContext` ISP split enforcing dispatch visibility (F21)
+
 ## [0.2.0] — 2026-04-28
 
 ### Added
@@ -44,6 +56,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover
 - Crash dump write guarded against circular refs and oversized payloads; `process.exit(1)` after fatal crash dump
 
+[0.3.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.1.0
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.3.0...HEAD

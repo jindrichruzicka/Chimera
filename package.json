@@ -1,6 +1,6 @@
 {
     "name": "chimera",
-    "version": "0.2.0",
+    "version": "0.3.0",
     "private": true,
     "description": "Host-authoritative, multiplatform multiplayer game engine built on Electron + React Three Fiber.",
     "license": "UNLICENSED",

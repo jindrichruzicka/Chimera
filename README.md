@@ -10,7 +10,7 @@ Architecture reference: [`docs/architecture-overview.md`](docs/architecture-over
 
 ## Status
 
-**v0.2.0** — M1 (Skeleton) and M2 (Networked Lobby) are complete. Two Electron instances can discover each other, connect over a local WebSocket, and synchronise lobby state with full player profiles and pass-and-play support. M3 (Action Registry + Game Loop + Undo/Redo) is next.
+**v0.3.0** — M1 (Skeleton), M2 (Networked Lobby), and M3 (Action Registry + Game Loop + Undo/Redo) are complete. The full 7-stage `ActionPipeline` is live, undo/redo works end-to-end via `UndoManager` + `TurnMemento`, client-side prediction reconciles against authoritative snapshots, game state persists and migrates across saves, settings survive app restart, deterministic Q32.32 fixed-point math is in place, and tick-based game timers serialise through saves. M4 (State Projection + Obfuscation) is next.
 
 ## Getting started
 
@@ -50,11 +50,18 @@ renderer/
 ├── app/
 │   ├── layout.tsx            # Root layout with ConnectionStatusIndicator
 │   ├── page.tsx              # Main-menu shell
-│   └── lobby/
-│       └── page.tsx          # Lobby UI — host/join/leave, PlayerList, SeatSwitcher
+│   ├── lobby/
+│   │   └── page.tsx          # Lobby UI — host/join/leave, PlayerList, SeatSwitcher
+│   ├── saves/
+│   │   └── page.tsx          # Save/Load screen — slot list, save, load, delete, crash-recovery banner
+│   └── settings/
+│       └── page.tsx          # Settings UI — engine-wide + game-specific fields
 ├── state/
+│   ├── gameStore.ts          # Zustand game store (snapshot, optimistic patch)
 │   ├── lobbyStore.ts         # Zustand lobby store (players, ready states, connection)
-│   └── profileStore.ts       # Zustand profile store (local and remote profiles)
+│   ├── profileStore.ts       # Zustand profile store (local and remote profiles)
+│   ├── saveStore.ts          # Zustand save store (slot list, active slot)
+│   └── settingsStore.ts      # Zustand settings store (engine + game settings)
 ├── next.config.ts            # Static export (renderer/out)
 └── tsconfig.json             # Extends root; jsx: preserve + DOM lib
 shared/
@@ -62,9 +69,23 @@ shared/
 ├── crc32.ts                  # CRC32 checksum for action envelopes
 └── messages-schemas.ts       # Zod schemas for all wire messages
 simulation/
-└── profile/                  # ProfileSchema, ProfileRepository, FileProfileRepository,
-                              #   InMemoryProfileRepository, ProfileManager, PlayerDirectory,
-                              #   ProfileSanitizer
+├── engine/
+│   ├── ActionPipeline.ts         # 7-stage pipeline (validate → auth → intercept → reduce → history → project → broadcast)
+│   ├── ActionRegistry.ts         # Game-action + engine-action registration; namespace collision guard
+│   ├── EngineActions.ts          # engine:undo, redo, end_turn, sync_request, save, load, tick
+│   ├── UndoManager.ts            # UndoManager, TurnMemento, ActionHistory, InMemoryUndoManager
+│   ├── UndoPolicy.ts             # UndoPolicy interface + DEFAULT_UNDO_POLICY
+│   ├── FixedPoint.ts             # Q32.32 bigint — full arithmetic + sqrt/sin/cos/atan2 + constants
+│   ├── GameTimer.ts              # GameTimer, TimerRegistry, TimerManager (bounded re-entrant dispatch)
+│   └── prediction/
+│       ├── ClientPredictor.ts    # Optimistic local state for predictable:true actions
+│       └── ReconcileBuffer.ts    # Reconciliation on authoritative snapshot receipt
+├── persistence/                  # JsonSaveSerializer, CompressedSaveSerializer, FileSaveRepository,
+│                                 #   InMemorySaveRepository, SaveMigrator, SaveManager
+├── profile/                      # ProfileSchema, ProfileRepository, FileProfileRepository,
+│                                 #   InMemoryProfileRepository, ProfileManager, PlayerDirectory,
+│                                 #   ProfileSanitizer
+└── settings/                     # SettingsManager, FileSettingsRepository, SettingsSchema
 ```
 
 ## Features
