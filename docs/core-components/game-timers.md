@@ -22,12 +22,12 @@ Tick-based, deterministic timers that live entirely inside `GameSnapshot` and tr
 ```typescript
 // simulation/engine/GameTimer.ts
 
-export type TimerId = string;
+export type TimerId = string & { readonly __brand: 'TimerId' };
 
 export interface GameTimer {
     readonly id: TimerId;
     /** Ticks remaining until next fire. Decremented by TimerManager.advance(). */
-    remainingTicks: number;
+    readonly remainingTicks: number;
     /**
      * 0 = one-shot: fires once when remainingTicks reaches 0, then marks inactive.
      * N = interval: resets remainingTicks to N after each fire.
@@ -35,10 +35,15 @@ export interface GameTimer {
     readonly intervalTicks: number;
     readonly actionType: string;
     readonly payload: Record<string, unknown>;
-    active: boolean;
+    readonly active: boolean;
 }
 
 export type TimerRegistry = Record<TimerId, GameTimer>;
+
+export interface FiredTimerAction {
+    readonly actionType: string;
+    readonly payload: Record<string, unknown>;
+}
 ```
 
 `TimerRegistry` is stored as `snapshot.timers: TimerRegistry`. Serialises naturally in saves and replays deterministically (all counters are integer ticks).
@@ -62,7 +67,7 @@ export const TimerManager = {
      */
     advance(registry: TimerRegistry): {
         next: TimerRegistry;
-        fired: ReadonlyArray<{ actionType: string; payload: Record<string, unknown> }>;
+        fired: readonly FiredTimerAction[];
     },
 };
 ```

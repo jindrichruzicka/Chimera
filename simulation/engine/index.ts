@@ -109,3 +109,6 @@ export {
     toFloat,
     toInt,
 } from './FixedPoint.js';
+
+export type { TimerId, GameTimer, TimerRegistry, FiredTimerAction } from './GameTimer.js';
+export { TimerManager } from './GameTimer.js';
