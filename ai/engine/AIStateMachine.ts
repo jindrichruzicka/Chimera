@@ -18,6 +18,7 @@ import type { AIState } from './AIState.js';
 import type { AIParams, PlayerSnapshot } from './AITypes.js';
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler } from './CommandScheduler.js';
+import type { Logger } from '@chimera/shared/logging.js';
 
 // ─── AIStateMachine interface ─────────────────────────────────────────────────
 
@@ -94,6 +95,11 @@ export class AIStateMachineImpl<
     private _currentState: AIState<TParams> | null = null;
     /** Single-slot deferred-transition buffer (Invariant #19). */
     private pendingTransition: string | null = null;
+    private readonly logger: Logger | undefined;
+
+    constructor(options?: { readonly logger?: Logger }) {
+        this.logger = options?.logger;
+    }
 
     // ── Fix 2: stable wrapped-context proxy (Performance §13) ─────────────────
     // Live tick args are stored here for the duration of tick(); nulled in finally.
@@ -178,10 +184,10 @@ export class AIStateMachineImpl<
     ): void {
         if (this.pendingTransition !== null) {
             // Invariant #19: last-wins; warn and overwrite
-            console.warn(
-                `[AIStateMachine] Multiple transitions requested in one tick: ` +
-                    `discarding '${this.pendingTransition}', keeping '${stateName}'`,
-            );
+            this.logger?.warn('ai-state-machine:transition-overwrite', {
+                discarded: this.pendingTransition,
+                kept: stateName,
+            });
         }
         this.pendingTransition = stateName;
     }

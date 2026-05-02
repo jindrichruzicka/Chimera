@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Logger } from '@chimera/shared/logging.js';
 import type { AIState } from './AIState.js';
 import { AIStateMachineImpl, type AIStateMachine } from './AIStateMachine.js';
 import type { CommandContext } from './CommandContext.js';
@@ -39,6 +40,16 @@ const makeScheduler = <TParams extends AIParams = AIParams>(
 const makeContext = (): CommandContext => ({
     dispatch: vi.fn(),
     transitionState: vi.fn(),
+});
+
+const makeNoopLogger = (): Logger => ({
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn().mockReturnThis() as Logger['child'],
 });
 
 const makeState = (name: string): AIState => ({
@@ -239,34 +250,33 @@ describe('AIStateMachineImpl', () => {
         });
 
         it('two transition() calls in one tick — last name wins, warn is logged, onEnter called once for last state only', () => {
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+            const logger = makeNoopLogger();
+            const machineWithLogger = new AIStateMachineImpl<AIParams>({ logger });
 
             const stateA = makeState('stateA');
             const stateB = makeState('stateB');
             const stateC = makeState('stateC');
-            machine.registerState(stateA);
-            machine.registerState(stateB);
-            machine.registerState(stateC);
-            machine.setInitialState('stateA', snapshot, params, scheduler, context);
+            machineWithLogger.registerState(stateA);
+            machineWithLogger.registerState(stateB);
+            machineWithLogger.registerState(stateC);
+            machineWithLogger.setInitialState('stateA', snapshot, params, scheduler, context);
 
             vi.mocked(stateA.onTick).mockImplementation(() => {
-                machine.transition('stateB', snapshot, params, scheduler, context);
-                machine.transition('stateC', snapshot, params, scheduler, context);
+                machineWithLogger.transition('stateB', snapshot, params, scheduler, context);
+                machineWithLogger.transition('stateC', snapshot, params, scheduler, context);
             });
 
-            machine.tick(snapshot, 1, params, scheduler, context);
+            machineWithLogger.tick(snapshot, 1, params, scheduler, context);
 
             // warn must have been emitted on the second transition() call
-            expect(warnSpy).toHaveBeenCalledOnce();
+            expect(logger.warn).toHaveBeenCalledOnce();
 
             // Apply deferred transition on next tick
-            machine.tick(snapshot, 2, params, scheduler, context);
+            machineWithLogger.tick(snapshot, 2, params, scheduler, context);
 
             // stateC wins; stateB must not have been entered
             expect(vi.mocked(stateB.onEnter)).not.toHaveBeenCalled();
             expect(vi.mocked(stateC.onEnter)).toHaveBeenCalledOnce();
-
-            warnSpy.mockRestore();
         });
 
         it('throws on the next tick when transitioning to an unknown state name', () => {

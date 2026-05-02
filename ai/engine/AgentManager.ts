@@ -14,6 +14,7 @@
  *          (HumanPlayerAgent.onTick is a no-op).
  */
 
+import type { Logger } from '@chimera/shared/logging.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
@@ -57,6 +58,11 @@ export interface StateProjector {
  */
 export class AgentManager {
     private readonly agents = new Map<PlayerId, PlayerAgent>();
+    private readonly logger: Logger | undefined;
+
+    constructor(options?: { readonly logger?: Logger }) {
+        this.logger = options?.logger;
+    }
 
     /**
      * Register a player agent.
@@ -67,9 +73,9 @@ export class AgentManager {
      */
     public registerAgent(agent: PlayerAgent): void {
         if (this.agents.has(agent.playerId)) {
-            console.warn(
-                `[AgentManager] registerAgent: agent for playerId '${agent.playerId}' is already registered. Ignoring duplicate.`,
-            );
+            this.logger?.warn('agent-manager:duplicate-registration', {
+                playerId: agent.playerId,
+            });
             return;
         }
         this.agents.set(agent.playerId, agent);

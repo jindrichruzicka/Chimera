@@ -14,12 +14,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Logger } from '@chimera/shared/logging.js';
 import { playerId } from '@chimera/simulation/engine/types.js';
+import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
 import { HumanPlayerAgent } from './PlayerAgent.js';
 import { AgentManager } from './AgentManager.js';
 import type { StateProjector } from './AgentManager.js';
-import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
@@ -43,6 +44,16 @@ const makeResult = (): GameResult => ({ winner: null });
 
 const makeProjector = (): StateProjector => ({
     project: vi.fn(() => makeSnapshot()),
+});
+
+const makeNoopLogger = (): Logger => ({
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn().mockReturnThis() as Logger['child'],
 });
 
 const makeAiAgent = (id = p1): PlayerAgent => ({
@@ -70,20 +81,19 @@ describe('AgentManager', () => {
             expect(() => manager.registerAgent(agent)).not.toThrow();
         });
 
-        it('registering same playerId twice is a no-op and logs a warning', () => {
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        it('registering same playerId twice is a no-op and logs a warning via injected logger', () => {
+            const logger = makeNoopLogger();
+            const managerWithLogger = new AgentManager({ logger });
             const agent1 = makeAiAgent(p1);
             const agent2 = makeAiAgent(p1);
 
-            manager.registerAgent(agent1);
-            manager.registerAgent(agent2);
+            managerWithLogger.registerAgent(agent1);
+            managerWithLogger.registerAgent(agent2);
 
-            expect(warnSpy).toHaveBeenCalledOnce();
-            warnSpy.mockRestore();
+            expect(logger.warn).toHaveBeenCalledOnce();
         });
 
         it('duplicate registration keeps the first entry', () => {
-            const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
             const projector = makeProjector();
             const agent1 = makeAiAgent(p1);
             const agent2 = makeAiAgent(p1);
@@ -95,7 +105,6 @@ describe('AgentManager', () => {
             // onTick should be called on agent1 (the kept entry), not agent2
             expect(agent1.onTick).toHaveBeenCalledOnce();
             expect(agent2.onTick).not.toHaveBeenCalled();
-            warnSpy.mockRestore();
         });
     });
 
