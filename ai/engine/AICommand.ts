@@ -12,7 +12,7 @@
  */
 
 import type { CommandContext } from './CommandContext.js';
-import type { AIParams, PlayerSnapshot } from './PlayerAgent.js';
+import type { AIParams, PlayerSnapshot } from './AITypes.js';
 
 // ─── CommandProgress ───────────────────────────────────────────────────────────
 
@@ -43,17 +43,17 @@ export interface AICommand<TParams extends AIParams = AIParams, TPayload = unkno
     /** Immutable command payload provided at enqueue time. */
     readonly payload: Readonly<TPayload>;
 
-    onStart(snapshot: PlayerSnapshot, params: TParams, context: CommandContext): void;
+    onStart(snapshot: PlayerSnapshot, params: Readonly<TParams>, context: CommandContext): void;
     onTick(
         snapshot: PlayerSnapshot,
         tick: number,
-        params: TParams,
+        params: Readonly<TParams>,
         context: CommandContext,
     ): CommandProgress;
-    onEnd(snapshot: PlayerSnapshot, params: TParams, context: CommandContext): void;
+    onEnd(snapshot: PlayerSnapshot, params: Readonly<TParams>, context: CommandContext): void;
     onFail(
         snapshot: PlayerSnapshot,
-        params: TParams,
+        params: Readonly<TParams>,
         context: CommandContext,
         reason: string,
     ): void;

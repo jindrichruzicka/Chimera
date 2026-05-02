@@ -4,7 +4,7 @@
  * Unit tests for AIStateMachine<TParams> interface and AIStateMachineImpl<TParams>.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Task: F25 (issue #419)
+ * Task: F23 (issue #418)
  *
  * Invariants upheld:
  *   #18 — AIParams are passed by value (frozen) to every lifecycle method.
@@ -18,7 +18,7 @@ import type { AIState } from './AIState.js';
 import { AIStateMachineImpl, type AIStateMachine } from './AIStateMachine.js';
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler } from './CommandScheduler.js';
-import type { AIParams, PlayerSnapshot } from './PlayerAgent.js';
+import type { AIParams, PlayerSnapshot } from './AITypes.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

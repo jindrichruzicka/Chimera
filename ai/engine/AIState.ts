@@ -15,7 +15,7 @@
 
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler } from './CommandScheduler.js';
-import type { AIParams, PlayerSnapshot } from './PlayerAgent.js';
+import type { AIParams, PlayerSnapshot } from './AITypes.js';
 
 /**
  * A single state in an `AIStateMachine<TParams>`.
