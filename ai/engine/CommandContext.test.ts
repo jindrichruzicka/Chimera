@@ -14,8 +14,23 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import type { Logger } from '@chimera/shared/logging.js';
 import { type EngineAction, playerId } from '@chimera/simulation/engine/types.js';
 import { type CommandContext, CommandContextImpl } from './CommandContext.js';
+
+// ─── Test helpers ─────────────────────────────────────────────────────────────
+
+const makeLogger = (): Logger => ({
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(function (this: Logger) {
+        return this;
+    }),
+});
 
 // ─── CommandContext ────────────────────────────────────────────────────────────
 
@@ -86,7 +101,7 @@ describe('CommandContextImpl', () => {
     it('dispatch() calls the injected dispatch callback immediately', () => {
         const dispatchFn = vi.fn();
         const transitionFn = vi.fn();
-        const ctx = new CommandContextImpl(dispatchFn, transitionFn);
+        const ctx = new CommandContextImpl(dispatchFn, transitionFn, makeLogger());
 
         const action = makeAction();
         ctx.dispatch(action);
@@ -98,7 +113,7 @@ describe('CommandContextImpl', () => {
     it('transitionState() does not call transitionCallback immediately (deferred)', () => {
         const dispatchFn = vi.fn();
         const transitionFn = vi.fn();
-        const ctx = new CommandContextImpl(dispatchFn, transitionFn);
+        const ctx = new CommandContextImpl(dispatchFn, transitionFn, makeLogger());
 
         ctx.transitionState('idle');
 
@@ -108,7 +123,7 @@ describe('CommandContextImpl', () => {
     it('applyPendingTransition() calls transitionCallback with the buffered state name', () => {
         const dispatchFn = vi.fn();
         const transitionFn = vi.fn();
-        const ctx = new CommandContextImpl(dispatchFn, transitionFn);
+        const ctx = new CommandContextImpl(dispatchFn, transitionFn, makeLogger());
 
         ctx.transitionState('attack');
         ctx.applyPendingTransition();
@@ -120,31 +135,29 @@ describe('CommandContextImpl', () => {
     it('applyPendingTransition() with no pending transition is a no-op', () => {
         const dispatchFn = vi.fn();
         const transitionFn = vi.fn();
-        const ctx = new CommandContextImpl(dispatchFn, transitionFn);
+        const ctx = new CommandContextImpl(dispatchFn, transitionFn, makeLogger());
 
         ctx.applyPendingTransition();
 
         expect(transitionFn).not.toHaveBeenCalled();
     });
 
-    it('second transitionState() in same tick overwrites first and logs a console.warn', () => {
+    it('second transitionState() in same tick overwrites first and logs a warning via Logger', () => {
         const dispatchFn = vi.fn();
         const transitionFn = vi.fn();
-        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        const ctx = new CommandContextImpl(dispatchFn, transitionFn);
+        const logger = makeLogger();
+        const ctx = new CommandContextImpl(dispatchFn, transitionFn, logger);
 
         ctx.transitionState('attack');
         ctx.transitionState('retreat');
 
-        expect(warnSpy).toHaveBeenCalledOnce();
-        warnSpy.mockRestore();
+        expect(logger.warn).toHaveBeenCalledOnce();
     });
 
     it('last-wins: applyPendingTransition() applies only the final transitionState() request', () => {
         const dispatchFn = vi.fn();
         const transitionFn = vi.fn();
-        vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        const ctx = new CommandContextImpl(dispatchFn, transitionFn);
+        const ctx = new CommandContextImpl(dispatchFn, transitionFn, makeLogger());
 
         ctx.transitionState('attack');
         ctx.transitionState('retreat');
@@ -152,13 +165,12 @@ describe('CommandContextImpl', () => {
 
         expect(transitionFn).toHaveBeenCalledOnce();
         expect(transitionFn).toHaveBeenCalledWith('retreat');
-        vi.restoreAllMocks();
     });
 
     it('applyPendingTransition() clears the buffer so a second flush is a no-op', () => {
         const dispatchFn = vi.fn();
         const transitionFn = vi.fn();
-        const ctx = new CommandContextImpl(dispatchFn, transitionFn);
+        const ctx = new CommandContextImpl(dispatchFn, transitionFn, makeLogger());
 
         ctx.transitionState('idle');
         ctx.applyPendingTransition();
@@ -168,7 +180,7 @@ describe('CommandContextImpl', () => {
     });
 
     it('implements the CommandContext interface', () => {
-        const ctx: CommandContext = new CommandContextImpl(vi.fn(), vi.fn());
+        const ctx: CommandContext = new CommandContextImpl(vi.fn(), vi.fn(), makeLogger());
         expect(ctx).toBeDefined();
     });
 });

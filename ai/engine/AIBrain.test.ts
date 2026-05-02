@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import type { Logger } from '@chimera/shared/logging.js';
 import { AIBrain } from './AIBrain.js';
 import { AIStateMachineImpl } from './AIStateMachine.js';
 import type { AIStateMachine } from './AIStateMachine.js';
@@ -36,6 +37,18 @@ const makeParams = (): TestParams => ({ aggressiveness: 5 });
 const makeSnapshot = (tick = 0): PlayerSnapshot => ({ tick });
 
 const makeResult = (): GameResult => ({ winner: null });
+
+const makeLogger = (): Logger => ({
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(function (this: Logger) {
+        return this;
+    }),
+});
 
 const makeStateMachine = (): AIStateMachine<TestParams> => ({
     registerState: vi.fn(),
@@ -148,19 +161,19 @@ describe('Integration: Deferred state transitions (Invariant #19)', () => {
     /**
      * Integration test combining CommandContextImpl + AIStateMachineImpl.
      *
-     * Addresses WARN-2 from code review: "No integration test combining
-     * CommandContextImpl + AIStateMachineImpl for end-to-end Invariant #19."
-     *
      * Verifies that when a state calls context.transitionState(), the transition
-     * is deferred and applied on the next tick() call, ensuring the two
-     * deferred-transition buffers (AIStateMachineImpl.pendingTransition and
-     * CommandContextImpl.pendingTransition) are properly wired.
+     * is deferred and applied on the next tick() call (Invariant #19).
+     *
+     * Note: only the AIStateMachineImpl deferred-transition buffer is exercised
+     * here.  When AIStateMachineImpl wraps a CommandContextImpl, its internal
+     * _wrappedCtx proxy intercepts every transitionState() call and routes it
+     * through AIStateMachineImpl.transition() before it reaches
+     * CommandContextImpl.transitionState().  Therefore
+     * CommandContextImpl.pendingTransition is never written in this path.
+     * CommandContextImpl.applyPendingTransition() is a standalone-use API
+     * (see its doc comment) exercised separately in CommandContext.test.ts.
      *
      * Architecture reference: §4.9 — AI Framework, Invariant #19.
-     * Risk mitigation: Integration test exercises the full path from onTick through
-     *                  next tick's transition application, preventing misuse of
-     *                  CommandContextImpl where a developer calls transitionState()
-     *                  without calling applyPendingTransition().
      */
     it('defers state transition to next tick when context.transitionState() is called in onTick', () => {
         // ── Arrange ────────────────────────────────────────────────────────────
@@ -217,7 +230,7 @@ describe('Integration: Deferred state transitions (Invariant #19)', () => {
         // Create a real CommandContextImpl
         const dispatchSpy = vi.fn();
         const transitionSpy = vi.fn();
-        const context = new CommandContextImpl(dispatchSpy, transitionSpy);
+        const context = new CommandContextImpl(dispatchSpy, transitionSpy, makeLogger());
 
         // ── Act ────────────────────────────────────────────────────────────────
         // Initialize with stateA

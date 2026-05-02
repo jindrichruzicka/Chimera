@@ -13,6 +13,7 @@
  *          in CommandContextImpl; earlier requests discarded with a warning.
  */
 
+import type { Logger } from '@chimera/shared/logging.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 
 /**
@@ -40,8 +41,8 @@ export interface CommandContext {
  *
  * - `dispatch(action)` — invokes the dispatch callback immediately (Invariant #16).
  * - `transitionState(name)` — buffers the request in a single-slot; a second call
- *   in the same tick overwrites the previous request and logs a `console.warn`
- *   (Invariant #19, last-wins).
+ *   in the same tick overwrites the previous request and logs a warning via the
+ *   injected `Logger` (Invariant #19, last-wins).
  * - `applyPendingTransition()` — called by the state machine at the end of each
  *   tick; invokes `transitionCallback` with the buffered name (if any) and clears
  *   the buffer. No-op when no transition was requested.
@@ -53,6 +54,7 @@ export class CommandContextImpl implements CommandContext {
     constructor(
         private readonly _dispatch: (action: EngineAction) => void,
         private readonly _transitionCallback: (stateName: string) => void,
+        private readonly _logger: Logger,
     ) {}
 
     public dispatch(action: EngineAction): void {
@@ -62,7 +64,7 @@ export class CommandContextImpl implements CommandContext {
     public transitionState(stateName: string): void {
         if (this.pendingTransition !== null) {
             // Invariant #19: last-wins; warn and overwrite
-            console.warn(
+            this._logger.warn(
                 `[CommandContext] Multiple transitionState() calls in one tick: ` +
                     `discarding '${this.pendingTransition}', keeping '${stateName}'`,
             );
@@ -71,9 +73,20 @@ export class CommandContextImpl implements CommandContext {
     }
 
     /**
-     * Apply the buffered transition request (if any).
+     * Apply the buffered transition request (if any) — **standalone-use API**.
      *
-     * Called by the owning state machine at the end of each tick (Invariant #19).
+     * When `CommandContextImpl` is used directly (without being wrapped by an
+     * `AIStateMachineImpl`), the caller is responsible for flushing the buffer
+     * by invoking this method at the end of each tick (Invariant #19).
+     *
+     * **Wrapped mode**: when `AIStateMachineImpl` is in play, its internal
+     * `_wrappedCtx` proxy intercepts every `transitionState()` call and routes
+     * it through `AIStateMachineImpl.transition()` before it ever reaches
+     * `CommandContextImpl.transitionState()`.  In that mode
+     * `CommandContextImpl.pendingTransition` is never written and calling this
+     * method is a no-op.  The state machine manages its own deferred-transition
+     * buffer exclusively.
+     *
      * Clears the buffer after invoking the callback so a second call is a no-op.
      */
     public applyPendingTransition(): void {

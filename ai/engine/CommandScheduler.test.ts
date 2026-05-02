@@ -1,11 +1,13 @@
 /**
  * ai/engine/CommandScheduler.test.ts
  *
- * Unit tests for CommandScheduler interface, CommandProgress discriminated union,
- * AnyAICommand existential wrapper, and CommandSchedulerImpl concrete class.
+ * Unit tests for CommandScheduler interface, AnyAICommand existential wrapper,
+ * and CommandSchedulerImpl concrete class.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
  * Tasks: F23 (issue #418), F24 (issue #425)
+ *
+ * CommandProgress discriminated-union tests live in AICommand.test.ts.
  *
  * Tests written first (TDD — red confirmed before implementation).
  */
@@ -16,45 +18,6 @@ import { CommandSchedulerImpl } from './CommandScheduler.js';
 import type { CommandScheduler } from './CommandScheduler.js';
 import type { CommandContext } from './CommandContext.js';
 import type { AIParams, PlayerSnapshot } from './AITypes.js';
-
-// ─── CommandProgress ───────────────────────────────────────────────────────────
-
-describe('CommandProgress', () => {
-    it('running variant has status "running"', () => {
-        const p: CommandProgress = { status: 'running' };
-        expect(p.status).toBe('running');
-    });
-
-    it('done variant has status "done"', () => {
-        const p: CommandProgress = { status: 'done' };
-        expect(p.status).toBe('done');
-    });
-
-    it('failed variant has status "failed" and a reason string', () => {
-        const p: CommandProgress = { status: 'failed', reason: 'target lost' };
-        expect(p.status).toBe('failed');
-        if (p.status === 'failed') {
-            expect(p.reason).toBe('target lost');
-        }
-    });
-
-    it('discriminated union narrows correctly on status', () => {
-        const classify = (p: CommandProgress): string => {
-            switch (p.status) {
-                case 'running':
-                    return 'in-flight';
-                case 'done':
-                    return 'success';
-                case 'failed':
-                    return `fail:${p.reason}`;
-            }
-        };
-
-        expect(classify({ status: 'running' })).toBe('in-flight');
-        expect(classify({ status: 'done' })).toBe('success');
-        expect(classify({ status: 'failed', reason: 'timeout' })).toBe('fail:timeout');
-    });
-});
 
 // ─── CommandScheduler ─────────────────────────────────────────────────────────
 
