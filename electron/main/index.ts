@@ -43,6 +43,9 @@ import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js'
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
 import type { BaseGameSnapshot, GamePhase, PlayerId } from '@chimera/simulation/engine/types.js';
+import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
+import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
+import { SimulationHost } from './runtime/SimulationHost.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -491,6 +494,11 @@ export async function main(): Promise<void> {
         new LocalWebSocketProvider(),
         lobbyLogger,
         (transport) => {
+            // Pre-F26 identity projector: no fog-of-war applied yet.
+            // TODO(F26): replace with real StateProjector once projection lands.
+            const identityProjector = { project: (snap: BaseGameSnapshot) => snap };
+            const agentManager = new AgentManager();
+            const simulationHost = new SimulationHost(agentManager, identityProjector);
             // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
             // and InMemoryUndoManager) for the hosted session (issue #364).
             // Each hosted session gets a fresh history and undoManager so
@@ -534,10 +542,30 @@ export async function main(): Promise<void> {
             const activePlayers = new Set<PlayerId>();
             const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
                 activePlayers.add(pid);
+                // Register a HumanPlayerAgent for every joining player.
+                // AI players will be wired here once the game session definition
+                // carries agent-kind metadata (future M4 task).
+                simulationHost.registerAgent(new HumanPlayerAgent(pid));
             });
             const unsubLeft = transport.onPlayerLeft((pid) => {
                 activePlayers.delete(pid);
             });
+
+            // Notify agents that the game session has started.
+            // Called after the initial snapshot is ready, after the agent
+            // registration subscription (onPlayerJoined) is set up, and before
+            // the first action is processed (Invariant #17: projection via host).
+            //
+            // TODO(M4-agent-ordering): The SimulationHost contract requires
+            // agents to be registered before calling onGameStart (see
+            // SimulationHost.ts line 82–85), but player joins are async
+            // transport events, so zero agents are registered at this point.
+            // Currently harmless because HumanPlayerAgent.onGameStart is a
+            // no-op, but once AI agents are wired in M4 this must be
+            // restructured to drive onGameStart from within onPlayerJoined
+            // after all expected players have joined (requires knowing the
+            // expected player count from the session definition).
+            simulationHost.onGameStart(initialSnapshot);
 
             // Drive the pipeline with every received `EngineAction`.  Each
             // action mutates the SessionRuntime's live snapshot via the
@@ -548,6 +576,9 @@ export async function main(): Promise<void> {
             const unsubAction = transport.onActionReceived((_from, action) => {
                 try {
                     sessionRuntime.applyAction(action);
+                    // Fan-out to all registered agents after the tick advances
+                    // (Invariant #17: routing through SimulationHost/AgentManager).
+                    simulationHost.afterTick(sessionRuntime.getSnapshot());
                 } catch (err) {
                     lobbyLogger.warn('hosted session: applyAction threw', {
                         actionType: action.type,
@@ -559,6 +590,8 @@ export async function main(): Promise<void> {
             // TODO(F26): call broadcaster.dispose() once StateBroadcaster
             // exposes a cleanup method.
             return () => {
+                // Notify agents of session end before tearing down state.
+                simulationHost.onGameEnd(sessionRuntime.getSnapshot(), { winner: null });
                 unsubJoined();
                 unsubLeft();
                 unsubAction();
