@@ -13,61 +13,10 @@
  */
 
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { AIBrain } from './AIBrain.js';
+import type { AIParams, GameResult, PlayerSnapshot } from './AITypes.js';
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-/**
- * Base type for game-specific AI personality parameters.
- *
- * Architecture reference: §4.9, Invariant #18 — AIParams are passed by value
- * (frozen) to every lifecycle method. AI state and command implementations
- * must not mutate them.
- */
-// @chimera-review: Intentionally empty base interface; games extend with domain-specific fields (e.g., TacticsAIParams)
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface AIParams extends Record<string, unknown> {}
-
-/**
- * Minimal viewer-safe snapshot delivered to each PlayerAgent per tick.
- *
- * Formal `PlayerSnapshot` definition is deferred to F26 (StateProjector
- * landing). Until then this interface captures the minimum shape required by
- * the AI layer — `tick` for temporal awareness, plus any additional fields
- * that concrete game snapshots extend with via structural subtyping.
- *
- * // TODO(F26): replace with import from @chimera/simulation/engine/types.js
- */
-export interface PlayerSnapshot {
-    readonly tick: number;
-}
-
-/**
- * Outcome of a completed game session.
- * `winner` is `null` for draws or abandoned games.
- */
-export interface GameResult {
-    readonly winner: PlayerId | null;
-}
-
-/**
- * Structural brain interface — mirrors the public lifecycle surface of
- * `AIBrain` (to be implemented in F23).
- *
- * Defined locally so `PlayerAgent.ts` does not import from `ai/engine/AIBrain.ts`
- * (which does not exist yet). `AIBrain` must satisfy this interface structurally
- * when implemented.
- *
- * Generic over `TParams extends AIParams` to enforce type-level guarantees that
- * an AIBrain is not accidentally wired to an AIPlayerAgent of a different game
- * (Invariant #18).
- */
-// @chimera-review: TParams reserved for F23 when AIBrain lifecycle methods will receive AIParams (currently unused but architecturally required)
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export interface AgentBrain<TParams extends AIParams = AIParams> {
-    tick(snapshot: PlayerSnapshot, tick: number): void;
-    onGameStart(snapshot: PlayerSnapshot): void;
-    onGameEnd(snapshot: PlayerSnapshot, result: GameResult): void;
-}
+export type { AIParams, GameResult, PlayerSnapshot };
 
 // ─── PlayerAgent interface ────────────────────────────────────────────────────
 
@@ -75,7 +24,7 @@ export interface AgentBrain<TParams extends AIParams = AIParams> {
  * Strategy interface for per-player controllers.
  *
  * Human players: actions arrive via IPC — all lifecycle methods are no-ops.
- * AI players:    lifecycle methods are forwarded to the `AgentBrain`.
+ * AI players:    lifecycle methods are forwarded to the `AIBrain`.
  *
  * Both kinds share the same `ActionPipeline` path for any submitted
  * `EngineAction` (Invariant #16).
@@ -133,7 +82,7 @@ export class AIPlayerAgent<TParams extends AIParams = AIParams> implements Playe
 
     constructor(
         readonly playerId: PlayerId,
-        private readonly brain: AgentBrain<TParams>,
+        private readonly brain: AIBrain<TParams>,
     ) {}
 
     onTick(snapshot: PlayerSnapshot, tick: number): void {

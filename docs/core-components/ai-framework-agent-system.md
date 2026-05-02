@@ -67,18 +67,20 @@ interface AgentManager {
 ## AIParams — Personality Parameters
 
 ```typescript
-// Base — engine requires nothing; all fields are game-defined
-interface AIParams extends Record<string, unknown> {}
+// Base — all fields must be primitives (number | string | boolean | null | undefined).
+// Primitive-only values ensure shallow Object.freeze in AIBrain is complete (Invariant #18).
+// Arrays and nested objects are not allowed; reference unit def IDs as strings instead.
+interface AIParams extends Record<string, number | string | boolean | null | undefined> {}
 
 // Example game extension:
 interface TacticsAIParams extends AIParams {
     aggressivity: number; // 0.0 (passive) → 1.0 (all-out attack)
     riskTolerance: number; // 0.0 (never gambles) → 1.0 (high risk)
-    preferredUnits?: string[]; // unit def IDs to prioritise
+    preferredStrategy?: string; // strategy key (e.g. 'rush' | 'turtle' | 'balanced')
 }
 ```
 
-`AIParams` are passed **by value (frozen)** to every lifecycle method. AI state and command implementations must not mutate them.
+`AIParams` are passed **by value (frozen)** to every lifecycle method. AI state and command implementations must not mutate them. Fields are restricted to primitives so that shallow `Object.freeze` provides complete immutability.
 
 > **Invariant #18** — `AIParams` are passed by value (frozen) to every lifecycle method.
 > **Invariant #19** — At most one state transition is applied per AI tick.
@@ -234,12 +236,17 @@ interface AIStateMachine<TParams extends AIParams = AIParams> {
 ```typescript
 // ai/engine/AIBrain.ts — Facade wiring stateMachine + scheduler + context + params
 class AIBrain<TParams extends AIParams = AIParams> {
+    /** Frozen copy of the params provided at construction (Invariant #18). */
+    readonly params: Readonly<TParams>;
+
     constructor(
         private readonly stateMachine: AIStateMachine<TParams>,
         private readonly scheduler: CommandScheduler<TParams>,
         private readonly context: CommandContext,
-        private readonly params: TParams,
-    ) {}
+        params: TParams,
+    ) {
+        this.params = Object.freeze({ ...params });
+    }
 
     onGameStart(snapshot: PlayerSnapshot): void {
         this.stateMachine.tick(snapshot, 0, this.params, this.scheduler, this.context);

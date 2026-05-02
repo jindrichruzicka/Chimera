@@ -13,8 +13,8 @@
  */
 
 import type { AnyAICommand } from './AICommand.js';
+import type { AIParams, PlayerSnapshot } from './AITypes.js';
 import type { CommandContext } from './CommandContext.js';
-import type { AIParams, PlayerSnapshot } from './PlayerAgent.js';
 
 export type { AICommand, CommandProgress, AnyAICommand } from './AICommand.js';
 

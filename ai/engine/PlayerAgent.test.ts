@@ -11,8 +11,17 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { playerId } from '@chimera/simulation/engine/types.js';
-import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
-import { HumanPlayerAgent, AIPlayerAgent } from './PlayerAgent.js';
+import { AIBrain } from './AIBrain.js';
+import type { AIStateMachine } from './AIStateMachine.js';
+import type { CommandContext } from './CommandContext.js';
+import type { CommandScheduler } from './CommandScheduler.js';
+import {
+    type PlayerAgent,
+    type PlayerSnapshot,
+    type GameResult,
+    HumanPlayerAgent,
+    AIPlayerAgent,
+} from './PlayerAgent.js';
 
 const p1 = playerId('p1');
 
@@ -72,11 +81,32 @@ describe('HumanPlayerAgent', () => {
 // ─── AIPlayerAgent ────────────────────────────────────────────────────────────
 
 describe('AIPlayerAgent', () => {
-    const makeBrain = () => ({
-        tick: vi.fn<(snapshot: PlayerSnapshot, tick: number) => void>(),
-        onGameStart: vi.fn<(snapshot: PlayerSnapshot) => void>(),
-        onGameEnd: vi.fn<(snapshot: PlayerSnapshot, result: GameResult) => void>(),
+    const makeStateMachine = (): AIStateMachine => ({
+        registerState: vi.fn(),
+        setInitialState: vi.fn(),
+        transition: vi.fn(),
+        tick: vi.fn(),
+        get currentState(): never {
+            throw new Error('no state registered in test double');
+        },
     });
+
+    const makeScheduler = (): CommandScheduler => ({
+        enqueue: vi.fn(),
+        enqueueNext: vi.fn(),
+        advance: vi.fn(),
+        clearQueue: vi.fn(),
+        abort: vi.fn(),
+        isIdle: true,
+        queueLength: 0,
+    });
+
+    const makeContext = (): CommandContext => ({
+        dispatch: vi.fn(),
+        transitionState: vi.fn(),
+    });
+
+    const makeBrain = () => new AIBrain(makeStateMachine(), makeScheduler(), makeContext(), {});
 
     it('has kind "ai"', () => {
         const agent = new AIPlayerAgent(p1, makeBrain());
@@ -95,65 +125,74 @@ describe('AIPlayerAgent', () => {
 
     it('onTick delegates to brain.tick with the same snapshot and tick number', () => {
         const brain = makeBrain();
+        const tickSpy = vi.spyOn(brain, 'tick');
         const agent = new AIPlayerAgent(p1, brain);
         const snapshot = makeSnapshot(42);
 
         agent.onTick(snapshot, 42);
 
-        expect(brain.tick).toHaveBeenCalledOnce();
-        expect(brain.tick).toHaveBeenCalledWith(snapshot, 42);
+        expect(tickSpy).toHaveBeenCalledOnce();
+        expect(tickSpy).toHaveBeenCalledWith(snapshot, 42);
     });
 
     it('onGameStart delegates to brain.onGameStart with the same snapshot', () => {
         const brain = makeBrain();
+        const onGameStartSpy = vi.spyOn(brain, 'onGameStart');
         const agent = new AIPlayerAgent(p1, brain);
         const snapshot = makeSnapshot(5);
 
         agent.onGameStart(snapshot);
 
-        expect(brain.onGameStart).toHaveBeenCalledOnce();
-        expect(brain.onGameStart).toHaveBeenCalledWith(snapshot);
+        expect(onGameStartSpy).toHaveBeenCalledOnce();
+        expect(onGameStartSpy).toHaveBeenCalledWith(snapshot);
     });
 
     it('onGameEnd delegates to brain.onGameEnd with the same snapshot and result', () => {
         const brain = makeBrain();
+        const onGameEndSpy = vi.spyOn(brain, 'onGameEnd');
         const agent = new AIPlayerAgent(p1, brain);
         const snapshot = makeSnapshot(100);
         const result: GameResult = { winner: p1 };
 
         agent.onGameEnd(snapshot, result);
 
-        expect(brain.onGameEnd).toHaveBeenCalledOnce();
-        expect(brain.onGameEnd).toHaveBeenCalledWith(snapshot, result);
+        expect(onGameEndSpy).toHaveBeenCalledOnce();
+        expect(onGameEndSpy).toHaveBeenCalledWith(snapshot, result);
     });
 
     it('onTick does not call brain.onGameStart or brain.onGameEnd', () => {
         const brain = makeBrain();
+        const onGameStartSpy = vi.spyOn(brain, 'onGameStart');
+        const onGameEndSpy = vi.spyOn(brain, 'onGameEnd');
         const agent = new AIPlayerAgent(p1, brain);
 
         agent.onTick(makeSnapshot(), 0);
 
-        expect(brain.onGameStart).not.toHaveBeenCalled();
-        expect(brain.onGameEnd).not.toHaveBeenCalled();
+        expect(onGameStartSpy).not.toHaveBeenCalled();
+        expect(onGameEndSpy).not.toHaveBeenCalled();
     });
 
     it('onGameStart does not call brain.tick or brain.onGameEnd', () => {
         const brain = makeBrain();
+        const tickSpy = vi.spyOn(brain, 'tick');
+        const onGameEndSpy = vi.spyOn(brain, 'onGameEnd');
         const agent = new AIPlayerAgent(p1, brain);
 
         agent.onGameStart(makeSnapshot());
 
-        expect(brain.tick).not.toHaveBeenCalled();
-        expect(brain.onGameEnd).not.toHaveBeenCalled();
+        expect(tickSpy).not.toHaveBeenCalled();
+        expect(onGameEndSpy).not.toHaveBeenCalled();
     });
 
     it('onGameEnd does not call brain.tick or brain.onGameStart', () => {
         const brain = makeBrain();
+        const tickSpy = vi.spyOn(brain, 'tick');
+        const onGameStartSpy = vi.spyOn(brain, 'onGameStart');
         const agent = new AIPlayerAgent(p1, brain);
 
         agent.onGameEnd(makeSnapshot(), makeResult());
 
-        expect(brain.tick).not.toHaveBeenCalled();
-        expect(brain.onGameStart).not.toHaveBeenCalled();
+        expect(tickSpy).not.toHaveBeenCalled();
+        expect(onGameStartSpy).not.toHaveBeenCalled();
     });
 });

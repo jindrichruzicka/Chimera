@@ -15,9 +15,9 @@
  */
 
 import type { AIState } from './AIState.js';
+import type { AIParams, PlayerSnapshot } from './AITypes.js';
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler } from './CommandScheduler.js';
-import type { AIParams, PlayerSnapshot } from './PlayerAgent.js';
 
 // ─── AIStateMachine interface ─────────────────────────────────────────────────
 
