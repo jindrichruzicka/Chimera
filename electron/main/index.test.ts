@@ -188,6 +188,7 @@ const {
     main,
 } = await import('./index.js');
 const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
+const { createNoopLogger } = await import('./logging/logger.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
@@ -202,6 +203,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         expect(browserWindowInstances).toHaveLength(1);
@@ -214,6 +216,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         const [win] = browserWindowInstances;
@@ -225,6 +228,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         const [win] = browserWindowInstances;
@@ -236,6 +240,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         const [win] = browserWindowInstances;
@@ -247,6 +252,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         expect(win).toBeInstanceOf(FakeBrowserWindow);
@@ -257,6 +263,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'development',
+            logger: createNoopLogger(),
         });
 
         const [win] = browserWindowInstances;
@@ -270,6 +277,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         const [win] = browserWindowInstances;
@@ -283,6 +291,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         expect(win.loadFile).toHaveBeenCalledTimes(1);
@@ -294,6 +303,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'development',
+            logger: createNoopLogger(),
         });
 
         expect(win.webContents.openDevTools).toHaveBeenCalledTimes(1);
@@ -304,6 +314,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         });
 
         expect(win.webContents.openDevTools).not.toHaveBeenCalled();
@@ -314,6 +325,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         }) as unknown as FakeBrowserWindow;
 
         expect(win.webContents.setWindowOpenHandler).toHaveBeenCalledTimes(1);
@@ -328,6 +340,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         }) as unknown as FakeBrowserWindow;
 
         // Find the will-navigate handler registered via webContents.on
@@ -359,6 +372,7 @@ describe('createMainWindow', () => {
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
             env: 'production',
+            logger: createNoopLogger(),
         }) as unknown as FakeBrowserWindow;
 
         const onCalls = win.webContents.on.mock.calls as readonly (readonly [

@@ -24,7 +24,7 @@
  *   Must NOT import from: renderer/, electron/, games/*, any DOM API
  */
 
-import type { Logger } from '../../../shared/logging.js';
+import type { Logger } from '@chimera/shared/logging.js';
 import type { BaseGameSnapshot, EngineAction } from '../types.js';
 import type { ClientPredictor } from './ClientPredictor.js';
 

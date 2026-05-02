@@ -8,6 +8,7 @@ import {
     registerSettingsHandlers,
     registerSystemHandlers,
     registerLogsHandlers,
+    registerProfileHandlers,
 } from './ipc/ipc-handlers.js';
 import {
     createLogger,
@@ -121,8 +122,8 @@ export interface CreateMainWindowOptions {
     /** Absolute path to the Next.js static-export entry HTML file. */
     readonly rendererEntry: string;
     readonly env: ChimeraEnv;
-    /** Optional logger for did-fail-load events (Invariant #67). */
-    readonly logger?: Logger;
+    /** Logger for did-fail-load events; always provided in production main() (Invariant #67). */
+    readonly logger: Logger;
 }
 
 export interface RegisterAppLifecycleOptions {
@@ -271,11 +272,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     // WARN-6: log renderer load failures so silent white-screen bugs are diagnosable
     window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
         const msg = `[chimera] renderer failed to load: ${errorCode} ${errorDescription}`;
-        if (options.logger) {
-            options.logger.warn(msg);
-        } else {
-            console.error(msg);
-        }
+        options.logger.warn(msg);
     });
 
     if (options.env === 'development') {
@@ -484,7 +481,8 @@ export async function main(): Promise<void> {
     // ProfileGate is the sole caller of ProfileSanitizer.admit().
     // Constructed here (the DIP wiring point) and injected into LobbyManager
     // so LobbyManager stays a pure orchestrator (Invariant #61).
-    const profileGate = createProfileGate(new PlayerDirectory());
+    const playerDirectory = new PlayerDirectory();
+    const profileGate = createProfileGate(playerDirectory);
 
     // The single live `SessionRuntime` for the currently-hosted session, or
     // `null` when no session is running.  Wired by the `onSessionHosted`
@@ -732,6 +730,15 @@ export async function main(): Promise<void> {
         logger: logger.child({ module: 'logs' }),
         memorySink,
         sink: combinedSink,
+    });
+
+    // Register the `chimera:profile:*` channels.  All profile state is
+    // user-scoped and stateless — profile data never enters GameSnapshot,
+    // PlayerSnapshot, or SaveFile (Invariant #59).
+    registerProfileHandlers({
+        ipcMain,
+        logger: logger.child({ module: 'profile' }),
+        playerDirectory,
     });
 
     const createWindow = (): void => {
