@@ -247,7 +247,7 @@ describe('Integration: Deferred state transitions (Invariant #19)', () => {
         // Verify the full lifecycle sequence
         expect(lifecycle).toEqual([
             'A.onEnter', // setInitialState
-            'A.onIdle', // setInitialState (scheduler is idle)
+            'A.onIdle', // tick(0): scheduler is idle at start of first tick
             'A.onTick(tick=0)', // tick 0
             'A.onExit', // transition applied at start of tick 1
             'B.onEnter', // transition applied at start of tick 1
