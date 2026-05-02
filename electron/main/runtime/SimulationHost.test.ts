@@ -254,3 +254,66 @@ describe('SimulationHost.registerAgent', () => {
         warnSpy.mockRestore();
     });
 });
+
+// ─── SimulationHost ordering contract ────────────────────────────────────────
+//
+// Verifies the required call sequence: registerAgent → onGameStart → afterTick.
+// Callers (electron/main/index.ts onSessionHosted) must honour this ordering so
+// AI agents receive onGameStart before any tick events.
+//
+// Acceptance criterion: Issue #416 — "Unit tests for SimulationHost cover the
+// ordering: register agents → call onGameStart → begin tick loop".
+
+describe('SimulationHost ordering contract: register → onGameStart → afterTick', () => {
+    it('agent registered before onGameStart receives both onGameStart and subsequent afterTick events', () => {
+        const manager = new AgentManager();
+        const agent = makeMockAgent(P1);
+        const host = new SimulationHost(manager, identityProjector);
+
+        // Correct order mandated by the API contract (SimulationHost.ts line 82–85):
+        host.registerAgent(agent);
+        host.onGameStart(makeSnapshot(0));
+        host.afterTick(makeSnapshot(1));
+        host.afterTick(makeSnapshot(2));
+
+        expect(agent.onGameStart).toHaveBeenCalledOnce();
+        expect(agent.onTick).toHaveBeenCalledTimes(2);
+    });
+
+    it('onGameStart is called before any afterTick — call order is preserved', () => {
+        const manager = new AgentManager();
+        const agent = makeMockAgent(P1);
+        const host = new SimulationHost(manager, identityProjector);
+        const callOrder: string[] = [];
+
+        (agent.onGameStart as ReturnType<typeof vi.fn>).mockImplementation(() => {
+            callOrder.push('onGameStart');
+        });
+        (agent.onTick as ReturnType<typeof vi.fn>).mockImplementation(() => {
+            callOrder.push('onTick');
+        });
+
+        host.registerAgent(agent);
+        host.onGameStart(makeSnapshot(0));
+        host.afterTick(makeSnapshot(1));
+
+        expect(callOrder).toEqual(['onGameStart', 'onTick']);
+    });
+
+    it('two agents registered before onGameStart both receive all lifecycle events', () => {
+        const manager = new AgentManager();
+        const agent1 = makeMockAgent(P1);
+        const agent2 = makeMockAgent(P2);
+        const host = new SimulationHost(manager, identityProjector);
+
+        host.registerAgent(agent1);
+        host.registerAgent(agent2);
+        host.onGameStart(makeSnapshot(0, [P1, P2]));
+        host.afterTick(makeSnapshot(1, [P1, P2]));
+
+        expect(agent1.onGameStart).toHaveBeenCalledOnce();
+        expect(agent2.onGameStart).toHaveBeenCalledOnce();
+        expect(agent1.onTick).toHaveBeenCalledOnce();
+        expect(agent2.onTick).toHaveBeenCalledOnce();
+    });
+});

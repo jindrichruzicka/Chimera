@@ -498,7 +498,7 @@ export async function main(): Promise<void> {
     const lobbyManager = new LobbyManager(
         new LocalWebSocketProvider(),
         lobbyLogger,
-        (transport) => {
+        (transport, maxPlayers) => {
             // Pre-F26 identity projector: no fog-of-war applied yet.
             // TODO(F26): replace with real StateProjector once projection lands.
             const identityProjector = { project: (snap: BaseGameSnapshot) => snap };
@@ -545,32 +545,27 @@ export async function main(): Promise<void> {
             // Track active players so clearUndoHistory can release their
             // per-player undo memory when the session closes.
             const activePlayers = new Set<PlayerId>();
+            // Guard: onGameStart must fire exactly once per session regardless
+            // of player churn (WARN-1 fix — `>=` would re-fire on leave+rejoin).
+            let gameStarted = false;
             const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
                 activePlayers.add(pid);
                 // Register a HumanPlayerAgent for every joining player.
                 // AI players will be wired here once the game session definition
                 // carries agent-kind metadata (future M4 task).
                 simulationHost.registerAgent(new HumanPlayerAgent(pid));
+                // Once every expected player has joined and had their agent
+                // registered, notify agents that the game has started
+                // (Invariant #17: projection via host; agents must be fully
+                // wired before onGameStart fires).
+                if (!gameStarted && activePlayers.size >= maxPlayers) {
+                    gameStarted = true;
+                    simulationHost.onGameStart(initialSnapshot);
+                }
             });
             const unsubLeft = transport.onPlayerLeft((pid) => {
                 activePlayers.delete(pid);
             });
-
-            // Notify agents that the game session has started.
-            // Called after the initial snapshot is ready, after the agent
-            // registration subscription (onPlayerJoined) is set up, and before
-            // the first action is processed (Invariant #17: projection via host).
-            //
-            // TODO(M4-agent-ordering): The SimulationHost contract requires
-            // agents to be registered before calling onGameStart (see
-            // SimulationHost.ts line 82–85), but player joins are async
-            // transport events, so zero agents are registered at this point.
-            // Currently harmless because HumanPlayerAgent.onGameStart is a
-            // no-op, but once AI agents are wired in M4 this must be
-            // restructured to drive onGameStart from within onPlayerJoined
-            // after all expected players have joined (requires knowing the
-            // expected player count from the session definition).
-            simulationHost.onGameStart(initialSnapshot);
 
             // Drive the pipeline with every received `EngineAction`.  Each
             // action mutates the SessionRuntime's live snapshot via the

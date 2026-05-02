@@ -83,6 +83,20 @@ vi.mock('./runtime/StateBroadcaster.js', () => ({
     StateBroadcaster: vi.fn(() => ({})),
 }));
 
+// ── SimulationHost mock — captures lifecycle calls for agent-ordering tests ───
+const { mockSimulationHostInstance } = vi.hoisted(() => ({
+    mockSimulationHostInstance: {
+        registerAgent: vi.fn<(agent: unknown) => void>(),
+        onGameStart: vi.fn<(snap: unknown) => void>(),
+        afterTick: vi.fn<(snap: unknown) => void>(),
+        onGameEnd: vi.fn<(snap: unknown, result: unknown) => void>(),
+    },
+}));
+
+vi.mock('./runtime/SimulationHost.js', () => ({
+    SimulationHost: vi.fn(() => mockSimulationHostInstance),
+}));
+
 type AppEventHandler = (...args: readonly unknown[]) => void;
 
 interface FakeWebPreferences {
@@ -1080,5 +1094,203 @@ describe('main() CHIMERA_DEV_HARNESS guard', () => {
         } finally {
             process.env = origEnv;
         }
+    });
+});
+
+// ─── agent ordering: onGameStart deferred until all expected players join ─────
+//
+// Issue #416: onGameStart was called synchronously inside onSessionHosted,
+// before any onPlayerJoined events fired — so zero agents were registered at
+// that point, violating SimulationHost.ts lines 82–85 contract.
+//
+// Fix: onGameStart is driven from within onPlayerJoined, guarded by
+//   activePlayers.size >= maxPlayers (the expected player count).
+//
+// Invariant #17: all game state projections must route through SimulationHost /
+//   AgentManager; onGameStart must fire after agents are fully wired.
+
+describe('onSessionHosted agent-ordering: onGameStart deferred until all expected players join (Issue #416)', () => {
+    let capturedPlayerJoinedCb: ((entry: { playerId: string }) => void) | null = null;
+
+    interface OrderingTransport {
+        onPlayerJoined: ReturnType<typeof vi.fn>;
+        onPlayerLeft: ReturnType<typeof vi.fn>;
+        onActionReceived: ReturnType<typeof vi.fn>;
+    }
+
+    function makeOrderingTransport(): OrderingTransport {
+        capturedPlayerJoinedCb = null;
+        return {
+            onPlayerJoined: vi.fn((cb: (entry: { playerId: string }) => void) => {
+                capturedPlayerJoinedCb = cb;
+                return () => {};
+            }),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+    }
+
+    function getSessionCallback() {
+        // The 3rd arg passed to the LobbyManager constructor is the onSessionHosted callback.
+        return mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((transport: OrderingTransport, maxPlayers: number) => (() => void) | void)
+            | undefined;
+    }
+
+    beforeEach(() => {
+        browserWindowInstances.length = 0;
+        appOn.mockClear();
+        appWhenReady.mockClear();
+        appWhenReady.mockImplementation(() => Promise.resolve());
+        appGetPath.mockClear();
+        appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
+        ipcMainHandle.mockClear();
+        fsExistsSync.mockClear();
+        mockSaveManagerClearFlag.mockClear();
+        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
+        mockSaveManagerMarkExit.mockClear();
+        mockSaveManagerCheckCrash.mockClear();
+        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
+        mockSaveManagerAutoSave.mockClear();
+        mockRegisterCrashReporter.mockClear();
+        mockLobbyManagerCtor.mockClear();
+        mockSimulationHostInstance.registerAgent.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+        mockSimulationHostInstance.afterTick.mockClear();
+        mockSimulationHostInstance.onGameEnd.mockClear();
+    });
+
+    it('onGameStart is NOT called synchronously when onSessionHosted fires (before any join)', async () => {
+        await main();
+        const sessionCb = getSessionCallback();
+        const transport = makeOrderingTransport();
+
+        // Invoke the session callback — no players have joined yet
+        sessionCb?.(transport, 2);
+
+        // onGameStart must not fire before any onPlayerJoined events
+        expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
+    });
+
+    it('onGameStart is NOT called after only the first of two expected players joins', async () => {
+        await main();
+        const sessionCb = getSessionCallback();
+        const transport = makeOrderingTransport();
+
+        sessionCb?.(transport, 2);
+        capturedPlayerJoinedCb?.({ playerId: 'player-1' });
+
+        // Still one short — must not fire yet
+        expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
+    });
+
+    it('onGameStart fires exactly once when all expected players have joined', async () => {
+        await main();
+        const sessionCb = getSessionCallback();
+        const transport = makeOrderingTransport();
+
+        sessionCb?.(transport, 2);
+        capturedPlayerJoinedCb?.({ playerId: 'player-1' });
+        capturedPlayerJoinedCb?.({ playerId: 'player-2' });
+
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
+    });
+
+    it('every agent is registered before onGameStart fires (Invariant #17)', async () => {
+        await main();
+        const sessionCb = getSessionCallback();
+        const transport = makeOrderingTransport();
+
+        let agentCountAtGameStart = -1;
+        mockSimulationHostInstance.onGameStart.mockImplementation(() => {
+            // How many registerAgent calls have already happened?
+            agentCountAtGameStart = mockSimulationHostInstance.registerAgent.mock.calls.length;
+        });
+
+        sessionCb?.(transport, 2);
+        capturedPlayerJoinedCb?.({ playerId: 'player-1' });
+        capturedPlayerJoinedCb?.({ playerId: 'player-2' });
+
+        // Both agents must be registered before onGameStart is called
+        expect(agentCountAtGameStart).toBe(2);
+    });
+});
+
+// ─── onGameStart fires at most once: leave-then-rejoin guard ──────────────────
+//
+// WARN-1 / WARN-2 (review findings): the `>=` threshold allows onGameStart to
+// re-fire when a player leaves and then rejoins after the count recovers.
+// This describe block is the regression test that drove the fix (gameStarted flag).
+//
+// Fix: index.ts now uses `let gameStarted = false` inside onSessionHosted so
+// onGameStart is called at most once per session, regardless of churn.
+
+describe('onSessionHosted agent-ordering: onGameStart fires at most once on leave-then-rejoin (WARN-1 guard)', () => {
+    let capturedJoinCb: ((entry: { playerId: string }) => void) | null = null;
+    let capturedLeftCb: ((playerId: string) => void) | null = null;
+
+    interface RejoinTransport {
+        onPlayerJoined: ReturnType<typeof vi.fn>;
+        onPlayerLeft: ReturnType<typeof vi.fn>;
+        onActionReceived: ReturnType<typeof vi.fn>;
+    }
+
+    function makeRejoinTransport(): RejoinTransport {
+        capturedJoinCb = null;
+        capturedLeftCb = null;
+        return {
+            onPlayerJoined: vi.fn((cb: (entry: { playerId: string }) => void) => {
+                capturedJoinCb = cb;
+                return () => {};
+            }),
+            onPlayerLeft: vi.fn((cb: (playerId: string) => void) => {
+                capturedLeftCb = cb;
+                return () => {};
+            }),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+    }
+
+    function getSessionCallback() {
+        return mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((transport: RejoinTransport, maxPlayers: number) => (() => void) | void)
+            | undefined;
+    }
+
+    beforeEach(() => {
+        browserWindowInstances.length = 0;
+        appOn.mockClear();
+        appWhenReady.mockClear();
+        appWhenReady.mockImplementation(() => Promise.resolve());
+        appGetPath.mockClear();
+        appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
+        ipcMainHandle.mockClear();
+        fsExistsSync.mockClear();
+        mockSaveManagerClearFlag.mockClear();
+        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
+        mockSaveManagerMarkExit.mockClear();
+        mockSaveManagerCheckCrash.mockClear();
+        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
+        mockSaveManagerAutoSave.mockClear();
+        mockRegisterCrashReporter.mockClear();
+        mockLobbyManagerCtor.mockClear();
+        mockSimulationHostInstance.registerAgent.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+        mockSimulationHostInstance.afterTick.mockClear();
+        mockSimulationHostInstance.onGameEnd.mockClear();
+    });
+
+    it('onGameStart fires only once when a player leaves and rejoins after threshold was met', async () => {
+        await main();
+        const sessionCb = getSessionCallback();
+        const transport = makeRejoinTransport();
+
+        sessionCb?.(transport, 2);
+        capturedJoinCb?.({ playerId: 'player-1' });
+        capturedJoinCb?.({ playerId: 'player-2' }); // threshold met → onGameStart fires once
+        capturedLeftCb?.('player-2'); // drops below threshold
+        capturedJoinCb?.({ playerId: 'player-2' }); // recovers — must NOT fire again
+
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
     });
 });

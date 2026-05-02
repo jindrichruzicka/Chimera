@@ -64,7 +64,10 @@ export class LobbyManager {
     constructor(
         private readonly provider: MultiplayerProvider,
         logger: Logger,
-        private readonly onSessionHosted?: (transport: HostTransport) => (() => void) | void,
+        private readonly onSessionHosted?: (
+            transport: HostTransport,
+            maxPlayers: number,
+        ) => (() => void) | void,
         private readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void,
         private readonly onLobbyStateChanged?: (state: LobbyState) => void,
         private readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void,
@@ -93,9 +96,9 @@ export class LobbyManager {
      * Start a new hosted session.
      *
      * Calls `provider.hostLobby()`, stores the returned `HostedSession`, and
-     * wires transport event callbacks to simulation-host stubs.  The stubs are
-     * intentionally no-ops at this stage; they will be replaced in F15 / F17
-     * when the simulation host is wired.
+     * wires transport event callbacks.  The action-received callback remains as
+     * a no-op here; the actual dispatch is wired in index.ts and routed through
+     * SessionRuntime and SimulationHost (F15 ActionPipeline integration complete).
      *
      * Returns a `LobbyInfo` for the IPC caller.
      */
@@ -145,13 +148,17 @@ export class LobbyManager {
 
         this.publishLobbyState(initialState);
 
-        // Wire transport callbacks to simulation-host stubs (F15/F17 will
-        // replace these with real simulationHost calls).  Capture the
+        // Wire transport callbacks to simulation-host integration.  Capture the
         // Unsubscribe handles so closeLobby() can tear them down cleanly.
+        // NOTE: F15 (ActionPipeline integration) is complete; the actual
+        // onActionReceived handler is wired in index.ts and dispatches to
+        // SimulationHost.  This stub remains as a placeholder since the transport
+        // subscription is managed here and the callback is intentionally no-op
+        // (the real dispatch happens at the HostSessionPipeline boundary).
         this.subscriptions.push(
             session.transport.onActionReceived((_from, _action) => {
-                // TODO(F21): enqueue received action on the live SimulationHost
-                // once SimulationHost exists; see §4.20 (RealtimeTicker / action-loop).
+                // Actions are dispatched in index.ts::hostLobby() via
+                // SessionRuntime.applyAction(); see §4.14 & §4.20.
             }),
             session.transport.onSideChannelReceived((from, msg) => {
                 if (msg.kind !== 'profile') {
@@ -256,9 +263,9 @@ export class LobbyManager {
         );
 
         // Notify the wiring point (index.ts) that a hosted session is live
-        // so it can wire StateBroadcaster.  F15/F17 will replace this with
-        // real simulationHost wiring.
-        const teardown = this.onSessionHosted?.(session.transport);
+        // so it can wire StateBroadcaster and SimulationHost.  F15 is complete;
+        // the actual wiring happens in index.ts::hostLobby().
+        const teardown = this.onSessionHosted?.(session.transport, params.maxPlayers);
         if (teardown !== undefined) {
             this.sessionHostedTeardown = teardown;
         }
@@ -300,12 +307,13 @@ export class LobbyManager {
         this.localPlayerId = session.localPlayerId;
         this.publishLobbyState(session.initialLobbyState);
 
-        // Wire transport callbacks to renderer broadcast stubs (F12 / F15 will
-        // replace these with real IPC pushes to the renderer).  Capture the
+        // Wire transport callbacks to renderer broadcast stubs (F12 renderer state
+        // sync will implement snapshot pushing to the renderer).  Capture the
         // Unsubscribe handles so closeLobby() can tear them down cleanly.
         this.subscriptions.push(
             session.transport.onSnapshotReceived((_snapshot) => {
-                // TODO(F12/F15): broadcastToRenderer('chimera:snapshot', snapshot)
+                // TODO(F12): Forward snapshots to renderer via chimera:game:snapshot IPC.
+                // Awaiting renderer store bootstrap work; see docs/core-components/game-ui.md.
             }),
             session.transport.onLobbyStateChanged((state) => {
                 this.publishLobbyState(state);
