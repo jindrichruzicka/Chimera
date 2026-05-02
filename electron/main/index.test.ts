@@ -368,6 +368,44 @@ describe('createMainWindow', () => {
         const failLoadCall = onCalls.find(([event]) => event === 'did-fail-load');
         expect(failLoadCall).toBeDefined();
     });
+
+    it('calls logger.warn when renderer fails to load (Invariant #67 fix)', () => {
+        const mockLogger = {
+            trace: vi.fn(),
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn<(msg: string, ctx?: Record<string, unknown>) => void>(),
+            error: vi.fn(),
+            fatal: vi.fn(),
+            child: vi.fn(),
+        };
+
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: mockLogger,
+        }) as unknown as FakeBrowserWindow;
+
+        // Find and invoke the did-fail-load handler
+        const onCalls = win.webContents.on.mock.calls as readonly (readonly [
+            string,
+            ...unknown[],
+        ])[];
+        const failLoadCall = onCalls.find(([event]) => event === 'did-fail-load');
+        const handler = failLoadCall?.[1] as (
+            event: unknown,
+            errorCode: number,
+            errorDescription: string,
+        ) => void;
+
+        handler({}, 500, 'ERR_INVALID_URL');
+
+        expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+        expect(mockLogger.warn).toHaveBeenCalledWith(
+            '[chimera] renderer failed to load: 500 ERR_INVALID_URL',
+        );
+    });
 });
 
 describe('resolveChimeraEnv', () => {

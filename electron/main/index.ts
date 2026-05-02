@@ -121,6 +121,8 @@ export interface CreateMainWindowOptions {
     /** Absolute path to the Next.js static-export entry HTML file. */
     readonly rendererEntry: string;
     readonly env: ChimeraEnv;
+    /** Optional logger for did-fail-load events (Invariant #67). */
+    readonly logger?: Logger;
 }
 
 export interface RegisterAppLifecycleOptions {
@@ -268,7 +270,12 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
 
     // WARN-6: log renderer load failures so silent white-screen bugs are diagnosable
     window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-        console.error(`[chimera] renderer failed to load: ${errorCode} ${errorDescription}`);
+        const msg = `[chimera] renderer failed to load: ${errorCode} ${errorDescription}`;
+        if (options.logger) {
+            options.logger.warn(msg);
+        } else {
+            console.error(msg);
+        }
     });
 
     if (options.env === 'development') {
@@ -728,7 +735,7 @@ export async function main(): Promise<void> {
     });
 
     const createWindow = (): void => {
-        createMainWindow({ preloadPath, rendererEntry, env });
+        createMainWindow({ preloadPath, rendererEntry, env, logger });
     };
 
     void app.whenReady().then(createWindow);

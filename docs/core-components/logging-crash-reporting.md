@@ -50,7 +50,7 @@ export type LogSource =
 Backed by [Pino](https://getpino.io). Writes to `userData/logs/chimera-YYYY-MM-DD.log` with daily rotation and 14-day retention. Injected into every manager as a constructor parameter.
 
 ```typescript
-// electron/main/logger.ts
+// electron/main/logging/logger.ts
 
 export interface Logger {
     trace(msg: string, ctx?: Record<string, unknown>): void;
