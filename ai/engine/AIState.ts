@@ -43,7 +43,7 @@ export interface AIState<TParams extends AIParams = AIParams> {
      */
     onEnter(
         snapshot: PlayerSnapshot,
-        params: TParams,
+        params: Readonly<TParams>,
         scheduler: CommandScheduler<TParams>,
         context: CommandContext,
     ): void;
@@ -60,7 +60,7 @@ export interface AIState<TParams extends AIParams = AIParams> {
     onTick(
         snapshot: PlayerSnapshot,
         tick: number,
-        params: TParams,
+        params: Readonly<TParams>,
         scheduler: CommandScheduler<TParams>,
         context: CommandContext,
     ): void;
@@ -79,7 +79,7 @@ export interface AIState<TParams extends AIParams = AIParams> {
     onIdle(
         snapshot: PlayerSnapshot,
         tick: number,
-        params: TParams,
+        params: Readonly<TParams>,
         scheduler: CommandScheduler<TParams>,
         context: CommandContext,
     ): void;
@@ -90,5 +90,5 @@ export interface AIState<TParams extends AIParams = AIParams> {
      * @param snapshot  Viewer-safe snapshot at exit tick.
      * @param params    Frozen AI personality parameters (Invariant #18).
      */
-    onExit(snapshot: PlayerSnapshot, params: TParams): void;
+    onExit(snapshot: PlayerSnapshot, params: Readonly<TParams>): void;
 }

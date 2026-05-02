@@ -95,7 +95,7 @@ interface AIState<TParams extends AIParams = AIParams> {
 
     onEnter(
         snapshot: PlayerSnapshot,
-        params: TParams,
+        params: Readonly<TParams>,
         scheduler: CommandScheduler<TParams>,
         context: CommandContext,
     ): void;
@@ -103,7 +103,7 @@ interface AIState<TParams extends AIParams = AIParams> {
     onTick(
         snapshot: PlayerSnapshot,
         tick: number,
-        params: TParams,
+        params: Readonly<TParams>,
         scheduler: CommandScheduler<TParams>,
         context: CommandContext,
     ): void;
@@ -112,12 +112,12 @@ interface AIState<TParams extends AIParams = AIParams> {
     onIdle(
         snapshot: PlayerSnapshot,
         tick: number,
-        params: TParams,
+        params: Readonly<TParams>,
         scheduler: CommandScheduler<TParams>,
         context: CommandContext,
     ): void;
 
-    onExit(snapshot: PlayerSnapshot, params: TParams): void;
+    onExit(snapshot: PlayerSnapshot, params: Readonly<TParams>): void;
 }
 ```
 
