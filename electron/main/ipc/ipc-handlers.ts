@@ -745,6 +745,13 @@ export interface LogsHandlersIpcMain {
 
 export interface RegisterLogsHandlersOptions {
     readonly ipcMain: LogsHandlersIpcMain;
+    /**
+     * Logger instance for structured main-process logging.
+     * **Required** (unlike sibling options) because the logs IPC handlers
+     * must forward renderer emissions through a real logger to ensure
+     * proper server-side attribution and timestamp integrity (§9.1, Invariant #1).
+     * Cannot be optional without breaking the invariant guarantee.
+     */
     readonly logger: Logger;
     /**
      * In-memory ring buffer whose entries are returned by `readRecent`.

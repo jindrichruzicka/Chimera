@@ -26,7 +26,9 @@ tags:
 
 ## F43 — Crash Reporter and Error Boundaries `§4.27`
 
-Implement `crash-reporter.ts` (`uncaughtException`, `unhandledRejection`, `render-process-gone` handlers), autosave-before-crash-dump, atomic crash dump write, and `ToastHost` / `RootErrorBoundary` sibling mount ordering. Wire `rendererLogger` forwards to main via `window.__chimera.logs`.
+**Note**: Pino backing and `createPinoSink()` are already implemented in `logging/logger.ts`. This issue focuses on crash-dump configuration and error boundaries.
+
+Implement `crash-reporter.ts` (`uncaughtException`, `unhandledRejection`, `render-process-gone` handlers), autosave-before-crash-dump, atomic crash dump write, and `ToastHost` / `RootErrorBoundary` sibling mount ordering. Wire `rendererLogger` forwards to main via `window.__chimera.logs`. Configure Pino daily log rotation (userData/logs/) with retention policy.
 
 ---
 

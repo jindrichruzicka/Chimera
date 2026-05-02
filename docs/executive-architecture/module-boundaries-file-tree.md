@@ -41,21 +41,34 @@ These boundaries are **hard constraints**. Any violation is a BLOCK finding at r
 chimera/
 ├── electron/                        # Electron shell
 │   ├── main/
-│   │   ├── index.ts                 # App entry, window creation; injects SaveRepository + MultiplayerProvider
-│   │   ├── ipc-handlers.ts          # All contextBridge IPC registrations
-│   │   ├── lobby-manager.ts         # Owns the active MultiplayerProvider; lifecycle + IPC wiring
-│   │   ├── simulation-host.ts       # Hosts sim tick loop; calls AgentManager.tickAll() after each tick
-│   │   ├── save-manager.ts          # Takes SaveRepository by injection; handles IPC save/load/list/delete
-│   │   ├── settings-manager.ts      # Owns FileSettingsRepository; handles IPC getSettings/updateSettings/resetSettings
-│   │   ├── profile-manager.ts       # Owns ProfileRepository + PlayerDirectory; see §4.24
-│   │   ├── replay-manager.ts        # Captures ActionHistory to .chimera-replay; playback via ReplayPlayer; see §4.28
-│   │   ├── chat-relay.ts            # Host-only CHAT message rate-limit + rebroadcast; see §4.29
-│   │   ├── logger.ts                # Structured logger (Pino); writes to userData/logs/ with daily rotation; see §4.27
-│   │   ├── crash-reporter.ts        # process.on('uncaughtException') + process.on('unhandledRejection') handler; see §4.27
-│   │   ├── debug-bridge.ts          # CHIMERA_DEBUG only: spawns Inspector Window; wires SnapshotInspector to debug IPC
-│   │   └── saves/                   # SaveRepository implementations — injected into SaveManager
-│   │       ├── FileSaveRepository.ts      # Default: userData/saves/<game-id>/; atomic .tmp rename
-│   │       └── InMemorySaveRepository.ts  # In-memory test double; used by E2E fixtures for clean state
+│   │   ├── index.ts                 # App entry, window creation; injects dependencies and wires all subsystems
+│   │   ├── ipc/                     # IPC handler registrations per preload namespace
+│   │   │   ├── ipc-handlers.ts      # All contextBridge IPC registrations (one register* per namespace)
+│   │   │   └── ipc-schemas.ts       # Zod schemas for IPC message payloads (validation at IPC boundaries)
+│   │   ├── logging/                 # Structured logging (Pino) and crash reporting
+│   │   │   ├── logger.ts            # Logger interface and factories (Pino sink, memory sink, noop); see §4.27
+│   │   │   └── crash-reporter.ts    # process.on('uncaughtException'/'unhandledRejection') handler; see §4.27
+│   │   ├── lobby/                   # Multiplayer lobby lifecycle and active provider management
+│   │   │   └── LobbyManager.ts      # Owns the active MultiplayerProvider; lifecycle + IPC wiring
+│   │   ├── runtime/                 # Simulation host and live-game runtime infrastructure
+│   │   │   ├── SimulationHost.ts    # Hosts sim tick loop; calls AgentManager.tickAll() after each tick
+│   │   │   ├── RealtimeTicker.ts    # SetInterval-based clock; runs game loop at specified Hz
+│   │   │   ├── SessionRuntime.ts    # Manages session lifecycle: setup, teardown, player assignment
+│   │   │   ├── HostSessionPipeline.ts # Orchestrates pings, broadcasts, heartbeat loop during active session
+│   │   │   └── StateBroadcaster.ts  # Per-player snapshot projection via commitment scheme; network dispatch
+│   │   ├── saves/                   # Game save persistence via repository pattern
+│   │   │   ├── SaveManager.ts       # IPC handler; uses SaveRepository to handle save/load/list/delete
+│   │   │   ├── FileSaveRepository.ts      # Default: userData/saves/<game-id>/; atomic .tmp rename
+│   │   │   ├── InMemorySaveRepository.ts  # In-memory double; used by E2E fixtures for clean state
+│   │   │   └── SavesIpcAdapter.ts   # Adapter that bridges SaveRepository to IPC
+│   │   ├── settings/                # Application settings persistence
+│   │   │   ├── SettingsManager.ts   # IPC handler; uses FileSettingsRepository for get/update/reset
+│   │   │   └── FileSettingsRepository.ts  # Persists settings to userData/settings.json
+│   │   └── profile/                 # Player profile and directory management
+│   │       ├── ProfileManager.ts    # Profile repository + player directory owner; see §4.24
+│   │       ├── FileProfileRepository.ts  # Persists profiles to userData/profiles/
+│   │       ├── PlayerDirectory.ts   # Shared lobby player directory + presence tracking
+│   │       └── ProfileGate.ts       # Profile validation and acceptance gate
 │   ├── preload/
 │   │   ├── api.ts                   # Composes the following namespaces below into window.__chimera
 │   │   ├── api-types.ts             # Type-only module: ChimeraAPI, ChimeraExtensions, all namespace interfaces
