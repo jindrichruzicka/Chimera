@@ -10,8 +10,10 @@
  *   - T3 (§4.7): ActionRegistry
  *   - T4 (§4.7): EngineActions
  *   - T5 (§4.7): ActionPipeline + StateReducer
+ *   - F26 (§8): projection types (StateProjector interface, VisibilityRules, VisibilityScope)
  */
 
 export * from './engine/index.js';
 export * from './persistence/index.js';
 export * from './profile/index.js';
+export * from './projection/index.js';

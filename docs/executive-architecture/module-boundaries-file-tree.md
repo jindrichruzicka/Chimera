@@ -115,10 +115,10 @@ chimera/
 │   │   ├── prediction/              # Optional — real-time games only; turn-based games omit this module
 │   │   │   ├── ClientPredictor.ts   # Optimistic local application of own actions (predictable: true)
 │   │   │   └── ReconcileBuffer.ts   # Replays unconfirmed actions on top of authoritative snapshots
-│   │   └── projection/              # StateProjector + commitment scheme — planned (post-M3)
-│   │       ├── StateProjector.ts    # (GameSnapshot, PlayerId) → PlayerSnapshot
-│   │       ├── VisibilityRules.ts   # Per-game interface: field/entity visibility rules
-│   │       └── CommitmentScheme.ts  # SHA-256 commitments for hidden-until-revealed values
+│   ├── projection/                  # StateProjector + commitment scheme — fog-of-war, cryptographic commitment (§8)
+│   │   ├── index.ts                 # Public API: exports types for state projection
+│   │   ├── types.ts                 # ObservedEntityState, ObservedPlayerState, VisibilityRules, VisibilityScope
+│   │   └── types.test.ts            # Test coverage for projection types
 │   ├── content/                      # OPTIONAL — games with no static content omit this
 │   │   ├── DataRef.ts               # DataRef<T> branded type; buildRef() / parseRef() helpers
 │   │   ├── AssetRef.ts              # AssetRef<T> branded type — phantom-typed path string; zero renderer deps
