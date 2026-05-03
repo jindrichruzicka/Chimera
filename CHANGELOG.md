@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-05-03
+
+### Added
+
+- Player Abstraction and AgentManager — `PlayerAgent` interface, `HumanPlayerAgent` (no-op stub), `AIPlayerAgent`; `AgentManager` with tick fan-out, lifecycle management, and `tickAll()` wired into `simulation-host.ts` after each engine tick; agent-ordering contract driven from `onPlayerJoined` after all players join (F22)
+- AIBrain and State Machine — `AIStateMachineImpl<TParams>` with state registration and deferred-transition buffer; `AIBrain<TParams>` facade driving the state machine; `AIState<TParams>` interface (`onEnter`, `onTick`, `onIdle`, `onExit`); `AIParams` base type; `AIBrain` wired to `AIPlayerAgent.brain` (F23)
+- CommandScheduler and Commands — `AICommand<TParams, TPayload>` interface (`onStart`, `onTick`, `onEnd`, `onFail`); `CommandProgress` discriminated union; `AnyAICommand` existential wrapper; `CommandContextImpl` with dispatch bridge and deferred `transitionState`; `CommandSchedulerImpl` with queue, `advance`, `abort`, `isIdle` (F24)
+- Honest vs Omniscient AI Policy — `AgentManager` projects `GameSnapshot` per AI player via `StateProjector` before `AIBrain.tick()`; opt-in `omniscient` flag on `AIPlayerAgent` bypasses projection with startup log entry; honest-AI isolation test verifies AI snapshot never exposes fog-hidden opponent entities (F25)
+
 ## [0.3.0] — 2026-05-01
 
 ### Added
@@ -56,7 +65,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover
 - Crash dump write guarded against circular refs and oversized payloads; `process.exit(1)` after fatal crash dump
 
+[0.4.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.1.0
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.4.0...HEAD

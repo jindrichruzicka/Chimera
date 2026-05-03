@@ -10,7 +10,7 @@ Architecture reference: [`docs/architecture-overview.md`](docs/architecture-over
 
 ## Status
 
-**v0.3.0** — M1 (Skeleton), M2 (Networked Lobby), and M3 (Action Registry + Game Loop + Undo/Redo) are complete. The full 7-stage `ActionPipeline` is live, undo/redo works end-to-end via `UndoManager` + `TurnMemento`, client-side prediction reconciles against authoritative snapshots, game state persists and migrates across saves, settings survive app restart, deterministic Q32.32 fixed-point math is in place, and tick-based game timers serialise through saves. M4 (State Projection + Obfuscation) is next.
+**v0.4.0** — M1 (Skeleton), M2 (Networked Lobby), M3 (Action Registry + Game Loop + Undo/Redo), and M4 (AI Framework) are complete. The full 7-stage `ActionPipeline` is live, undo/redo works end-to-end via `UndoManager` + `TurnMemento`, client-side prediction reconciles against authoritative snapshots, game state persists and migrates across saves, settings survive app restart, deterministic Q32.32 fixed-point math is in place, tick-based game timers serialise through saves, and AI agents play full headless matches through `AgentManager` → `AIBrain` → `CommandScheduler` with honest fog-of-war projection enforced by tests. M5 (State Projection + Obfuscation) is next.
 
 ## Getting started
 
@@ -68,6 +68,17 @@ shared/
 ├── messages.ts               # Typed wire protocol: ClientMessage / ServerMessage
 ├── crc32.ts                  # CRC32 checksum for action envelopes
 └── messages-schemas.ts       # Zod schemas for all wire messages
+ai/
+└── engine/
+    ├── AgentManager.ts           # AgentManager — tick fan-out, lifecycle, honest/omniscient projection
+    ├── AIBrain.ts                # AIBrain<TParams> facade; drives AIStateMachine per tick
+    ├── AIStateMachine.ts         # AIStateMachineImpl — state registration, deferred transitions
+    ├── AIState.ts                # AIState<TParams> interface (onEnter, onTick, onIdle, onExit)
+    ├── AITypes.ts                # Shared types: AIParams, PlayerSnapshot, GameResult
+    ├── CommandScheduler.ts       # CommandSchedulerImpl — queue, advance, abort, isIdle
+    ├── CommandContext.ts         # CommandContextImpl — dispatch bridge + deferred transitionState
+    ├── AICommand.ts              # AICommand<TParams,TPayload>, CommandProgress, AnyAICommand
+    └── PlayerAgent.ts            # PlayerAgent interface, HumanPlayerAgent, AIPlayerAgent
 simulation/
 ├── engine/
 │   ├── ActionPipeline.ts         # 7-stage pipeline (validate → auth → intercept → reduce → history → project → broadcast)
