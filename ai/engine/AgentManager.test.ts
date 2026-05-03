@@ -60,6 +60,7 @@ const makeNoopLogger = (): Logger => ({
 const makeAiAgent = (id = p1): PlayerAgent => ({
     playerId: id,
     kind: 'ai',
+    omniscient: false,
     onTick: vi.fn(),
     onGameStart: vi.fn(),
     onGameEnd: vi.fn(),

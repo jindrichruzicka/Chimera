@@ -30,19 +30,33 @@ The simulation engine works exclusively with `PlayerId`. It has no concept of wh
 interface PlayerAgent {
     readonly playerId: PlayerId;
     readonly kind: 'human' | 'ai';
-    readonly omniscient?: boolean;
+    readonly omniscient: boolean;
     onTick(snapshot: PlayerSnapshot, tick: number): void;
     onGameStart(snapshot: PlayerSnapshot): void;
     onGameEnd(snapshot: PlayerSnapshot, result: GameResult): void;
 }
 
+interface AIPlayerAgentOptions {
+    readonly omniscient?: boolean;
+}
+
 // Human agent is a no-op stub — human actions arrive through IPC, not here
 class HumanPlayerAgent implements PlayerAgent {
     readonly kind = 'human' as const;
+    readonly omniscient = false as const;
     constructor(readonly playerId: PlayerId) {}
     onTick() {}
     onGameStart() {}
     onGameEnd() {}
+}
+
+class AIPlayerAgent implements PlayerAgent {
+    readonly kind = 'ai' as const;
+    readonly omniscient: boolean;
+
+    constructor(playerId: PlayerId, brain: AIBrain, options: AIPlayerAgentOptions = {}) {
+        this.omniscient = options.omniscient ?? false;
+    }
 }
 ```
 

@@ -11,8 +11,8 @@
  *
  * Invariants verified:
  *   #16 — No direct dispatch channel to agents; routing goes through AgentManager.
- *   #17 — tickAll() calls projector.project() for each agent; agents never
- *          receive the raw GameSnapshot.
+ *   #17 — honest agents receive projected PlayerSnapshot values; explicit
+ *          omniscient AI agents may receive raw state through AgentManager.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -57,6 +57,7 @@ function makeMockAgent(id: PlayerId, kind: 'human' | 'ai' = 'human'): PlayerAgen
     return {
         playerId: id,
         kind,
+        omniscient: false,
         onTick: vi.fn(),
         onGameStart: vi.fn(),
         onGameEnd: vi.fn(),

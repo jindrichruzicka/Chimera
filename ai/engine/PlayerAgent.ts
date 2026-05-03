@@ -39,17 +39,20 @@ export interface PlayerAgent {
      * the raw GameSnapshot directly to onTick/onGameStart/onGameEnd (per
      * Invariant #17). This is logged at game start.
      *
-     * Set this on a custom subclass of AIPlayerAgent or a plain object
-     * implementing PlayerAgent. The standard AIPlayerAgent class provides
-     * no constructor option for omniscient mode.
+     * The standard AIPlayerAgent constructor defaults this to false and accepts
+     * an explicit opt-in via { omniscient: true }.
      *
      * If mistakenly set on a HumanPlayerAgent, the flag is silently ignored
      * since HumanPlayerAgent lifecycle methods are no-ops (Invariant #16).
      */
-    readonly omniscient?: boolean;
+    readonly omniscient: boolean;
     onTick(snapshot: PlayerSnapshot, tick: number): void;
     onGameStart(snapshot: PlayerSnapshot): void;
     onGameEnd(snapshot: PlayerSnapshot, result: GameResult): void;
+}
+
+export interface AIPlayerAgentOptions {
+    readonly omniscient?: boolean;
 }
 
 // ─── HumanPlayerAgent ─────────────────────────────────────────────────────────
@@ -63,6 +66,7 @@ export interface PlayerAgent {
  */
 export class HumanPlayerAgent implements PlayerAgent {
     readonly kind = 'human' as const;
+    readonly omniscient = false as const;
 
     constructor(readonly playerId: PlayerId) {}
 
@@ -94,11 +98,15 @@ export class HumanPlayerAgent implements PlayerAgent {
  */
 export class AIPlayerAgent<TParams extends AIParams = AIParams> implements PlayerAgent {
     readonly kind = 'ai' as const;
+    readonly omniscient: boolean;
 
     constructor(
         readonly playerId: PlayerId,
         private readonly brain: AIBrain<TParams>,
-    ) {}
+        options: AIPlayerAgentOptions = {},
+    ) {
+        this.omniscient = options.omniscient ?? false;
+    }
 
     onTick(snapshot: PlayerSnapshot, tick: number): void {
         this.brain.tick(snapshot, tick);

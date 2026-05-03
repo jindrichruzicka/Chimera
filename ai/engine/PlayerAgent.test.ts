@@ -42,6 +42,11 @@ describe('HumanPlayerAgent', () => {
         expect(agent.playerId).toBe(p1);
     });
 
+    it('is not omniscient', () => {
+        const agent = new HumanPlayerAgent(p1);
+        expect(agent.omniscient).toBe(false);
+    });
+
     it('satisfies the PlayerAgent interface', () => {
         const agent: PlayerAgent = new HumanPlayerAgent(p1);
         expect(agent).toBeDefined();
@@ -116,6 +121,16 @@ describe('AIPlayerAgent', () => {
     it('stores playerId', () => {
         const agent = new AIPlayerAgent(p1, makeBrain());
         expect(agent.playerId).toBe(p1);
+    });
+
+    it('is not omniscient by default', () => {
+        const agent = new AIPlayerAgent(p1, makeBrain());
+        expect(agent.omniscient).toBe(false);
+    });
+
+    it('can opt in to omniscient mode through constructor options', () => {
+        const agent = new AIPlayerAgent(p1, makeBrain(), { omniscient: true });
+        expect(agent.omniscient).toBe(true);
     });
 
     it('satisfies the PlayerAgent interface', () => {

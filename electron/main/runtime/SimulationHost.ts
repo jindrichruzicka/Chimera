@@ -16,8 +16,9 @@
  * Invariants upheld:
  *   #16 — No direct dispatch channel to agents; all routing goes through
  *          `AgentManager`, which in turn calls only agent lifecycle methods.
- *   #17 — `tickAll()` receives the `StateProjector`; agents are given a
- *          `PlayerSnapshot` (projection output), never the raw `GameSnapshot`.
+ *   #17 — `tickAll()` receives the `StateProjector`; honest agents receive
+ *          `PlayerSnapshot`, while explicit omniscient AI agents may receive
+ *          raw state through the host-only AgentManager exception.
  */
 
 import type { AgentManager, StateProjector } from '@chimera/ai/engine/AgentManager.js';
@@ -32,9 +33,9 @@ import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
  * closes.
  *
  * The `StateProjector` passed at construction is reused for every lifecycle
- * call so the same projection logic is applied uniformly across all events.
- * Invariant #17: the raw `BaseGameSnapshot` is never forwarded to any agent;
- * it always passes through `projector.project()` first.
+ * call so the same projection policy is applied uniformly across all events.
+ * Invariant #17: honest agents receive projected snapshots by default; only
+ * explicit omniscient AI agents may bypass projection inside AgentManager.
  */
 export class SimulationHost {
     private readonly agentManager: AgentManager;
@@ -66,8 +67,8 @@ export class SimulationHost {
      * The snapshot's `.tick` field is used as the canonical tick number
      * passed to each agent's `onTick()` call.
      *
-     * Invariant #17: `fullSnapshot` is passed through `projector.project()`
-     * for each agent — agents receive a `PlayerSnapshot`, not the raw state.
+     * Invariant #17: honest agents receive `projector.project(fullSnapshot)`.
+     * Explicit omniscient AI agents may receive raw state inside AgentManager.
      */
     public afterTick(fullSnapshot: BaseGameSnapshot): void {
         this.agentManager.tickAll(fullSnapshot, fullSnapshot.tick, this.projector);

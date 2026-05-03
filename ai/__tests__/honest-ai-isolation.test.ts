@@ -1,0 +1,147 @@
+/**
+ * ai/__tests__/honest-ai-isolation.test.ts
+ *
+ * Regression coverage for Invariant #17: honest AI agents receive only the
+ * projected PlayerSnapshot, while explicit omniscient agents receive full state.
+ *
+ * Tests written first (TDD — red confirmed before implementation).
+ */
+
+import { describe, expect, it, vi } from 'vitest';
+import type {
+    BaseEntityState,
+    BaseGameSnapshot,
+    EntityId,
+} from '@chimera/simulation/engine/types.js';
+import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+import { AgentManager } from '../engine/AgentManager.js';
+import type { StateProjector } from '../engine/AgentManager.js';
+import { AIBrain } from '../engine/AIBrain.js';
+import type { AIStateMachine } from '../engine/AIStateMachine.js';
+import type { CommandContext } from '../engine/CommandContext.js';
+import type { CommandScheduler } from '../engine/CommandScheduler.js';
+import { AIPlayerAgent } from '../engine/PlayerAgent.js';
+import type { PlayerSnapshot } from '../engine/PlayerAgent.js';
+
+interface VisibilityEntity extends BaseEntityState {
+    readonly visibleToHonestAi: boolean;
+}
+
+interface VisibilitySnapshot extends PlayerSnapshot {
+    readonly entities: Readonly<Record<EntityId, VisibilityEntity>>;
+}
+
+const honestPlayerId = playerId('honest-ai');
+const visibleEntityId = entityId('visible-entity');
+const hiddenEntityId = entityId('hidden-entity');
+
+const visibleEntity: VisibilityEntity = {
+    id: visibleEntityId,
+    visibleToHonestAi: true,
+};
+
+const hiddenEntity: VisibilityEntity = {
+    id: hiddenEntityId,
+    visibleToHonestAi: false,
+};
+
+function makeFullState(): BaseGameSnapshot {
+    return {
+        tick: 7,
+        seed: 0,
+        players: {
+            [honestPlayerId]: { id: honestPlayerId },
+        },
+        entities: {
+            [visibleEntityId]: visibleEntity,
+            [hiddenEntityId]: hiddenEntity,
+        },
+        phase: gamePhase('playing'),
+        events: [],
+        turnNumber: 0,
+        timers: {},
+    };
+}
+
+function projectVisibleEntities(fullState: BaseGameSnapshot): VisibilitySnapshot {
+    return {
+        tick: fullState.tick,
+        entities: {
+            [visibleEntityId]: visibleEntity,
+        },
+    };
+}
+
+function makeProjector(): StateProjector {
+    return {
+        project: vi.fn((fullState) => projectVisibleEntities(fullState)),
+    };
+}
+
+function makeRecordingBrain(receivedSnapshots: PlayerSnapshot[]): AIBrain {
+    const stateMachine: AIStateMachine = {
+        registerState: vi.fn(),
+        setInitialState: vi.fn(),
+        transition: vi.fn(),
+        tick: vi.fn((snapshot) => {
+            receivedSnapshots.push(snapshot);
+        }),
+        get currentState(): never {
+            throw new Error('no state registered in honest-ai-isolation test double');
+        },
+    };
+    const scheduler: CommandScheduler = {
+        enqueue: vi.fn(),
+        enqueueNext: vi.fn(),
+        advance: vi.fn(),
+        clearQueue: vi.fn(),
+        abort: vi.fn(),
+        isIdle: true,
+        queueLength: 0,
+    };
+    const context: CommandContext = {
+        dispatch: vi.fn(),
+        transitionState: vi.fn(),
+    };
+
+    return new AIBrain(stateMachine, scheduler, context, {});
+}
+
+describe('honest AI isolation', () => {
+    it('passes a projected snapshot without fog-hidden entities to a non-omniscient AIPlayerAgent', () => {
+        const fullState = makeFullState();
+        const projectedSnapshot = projectVisibleEntities(fullState);
+        const projector: StateProjector = {
+            project: vi.fn(() => projectedSnapshot),
+        };
+        const receivedSnapshots: PlayerSnapshot[] = [];
+        const agent = new AIPlayerAgent(honestPlayerId, makeRecordingBrain(receivedSnapshots));
+        const manager = new AgentManager();
+
+        manager.registerAgent(agent);
+        manager.tickAll(fullState, fullState.tick, projector);
+
+        expect(projector.project).toHaveBeenCalledWith(fullState, honestPlayerId);
+        expect(projectedSnapshot.entities[visibleEntityId]).toBe(visibleEntity);
+        expect(projectedSnapshot.entities[hiddenEntityId]).toBeUndefined();
+        expect(receivedSnapshots).toStrictEqual([projectedSnapshot]);
+    });
+
+    it('bypasses projection and passes full state to an omniscient AIPlayerAgent', () => {
+        const fullState = makeFullState();
+        const projector = makeProjector();
+        const receivedSnapshots: PlayerSnapshot[] = [];
+        const agent = new AIPlayerAgent(honestPlayerId, makeRecordingBrain(receivedSnapshots), {
+            omniscient: true,
+        });
+        const manager = new AgentManager();
+
+        manager.registerAgent(agent);
+        manager.tickAll(fullState, fullState.tick, projector);
+
+        expect(projector.project).not.toHaveBeenCalled();
+        expect(fullState.entities[visibleEntityId]).toBe(visibleEntity);
+        expect(fullState.entities[hiddenEntityId]).toBe(hiddenEntity);
+        expect(receivedSnapshots).toStrictEqual([fullState]);
+    });
+});
