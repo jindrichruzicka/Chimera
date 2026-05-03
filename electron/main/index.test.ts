@@ -83,6 +83,15 @@ vi.mock('./runtime/StateBroadcaster.js', () => ({
     StateBroadcaster: vi.fn(() => ({})),
 }));
 
+// ── AgentManager mock — captures constructor args for logger wiring tests ─────
+const { mockAgentManagerCtor } = vi.hoisted(() => ({
+    mockAgentManagerCtor: vi.fn(() => ({})),
+}));
+
+vi.mock('@chimera/ai/engine/AgentManager.js', () => ({
+    AgentManager: mockAgentManagerCtor,
+}));
+
 // ── SimulationHost mock — captures lifecycle calls for agent-ordering tests ───
 const { mockSimulationHostInstance } = vi.hoisted(() => ({
     mockSimulationHostInstance: {
@@ -203,6 +212,7 @@ const {
 } = await import('./index.js');
 const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
+const { playerId } = await import('@chimera/simulation/engine/types.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
@@ -595,6 +605,7 @@ describe('main', () => {
         mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockSaveManagerAutoSave.mockClear();
         mockRegisterCrashReporter.mockClear();
+        mockAgentManagerCtor.mockClear();
         capturedSaveManagerRepoClassName.value = '';
         capturedSettingsBroadcastFn.current = null;
     });
@@ -632,6 +643,105 @@ describe('main', () => {
         expect(mockLobbyManagerCtor).toHaveBeenCalledOnce();
         // First arg is a LocalWebSocketProvider instance (mock returns {})
         expect(mockLobbyManagerCtor.mock.calls[0]?.[0]).toBeDefined();
+    });
+
+    it('constructs AgentManager with an injected lobby logger', async () => {
+        mockLobbyManagerCtor.mockClear();
+        await main();
+
+        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((
+                  transport: {
+                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                      onPlayerLeft(cb: (id: string) => void): () => void;
+                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                  },
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                      readonly agentSlots?: readonly {
+                          readonly slotIndex: number;
+                          readonly kind: 'human' | 'ai';
+                          readonly omniscient?: boolean;
+                      }[];
+                  },
+              ) => () => void)
+            | undefined;
+
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        onSessionHosted?.(
+            {
+                onPlayerJoined: vi.fn(() => () => {}),
+                onPlayerLeft: vi.fn(() => () => {}),
+                onActionReceived: vi.fn(() => () => {}),
+            },
+            { hostId: playerId('host-1'), maxPlayers: 1 },
+        );
+
+        const { AgentManager } = await import('@chimera/ai/engine/AgentManager.js');
+        expect(vi.mocked(AgentManager).mock.calls[0]?.[0]).toMatchObject({
+            logger: expect.any(Object),
+        });
+    });
+
+    it('registers configured AI slots before firing onGameStart', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockSimulationHostInstance.registerAgent.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+
+        await main();
+
+        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((
+                  transport: {
+                      onPlayerJoined(
+                          cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
+                      ): () => void;
+                      onPlayerLeft(cb: (id: ReturnType<typeof playerId>) => void): () => void;
+                      onActionReceived(
+                          cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
+                      ): () => void;
+                  },
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                      readonly agentSlots?: readonly {
+                          readonly slotIndex: number;
+                          readonly kind: 'human' | 'ai';
+                          readonly omniscient?: boolean;
+                      }[];
+                  },
+              ) => () => void)
+            | undefined;
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        onSessionHosted?.(
+            {
+                onPlayerJoined: vi.fn(() => () => {}),
+                onPlayerLeft: vi.fn(() => () => {}),
+                onActionReceived: vi.fn(() => () => {}),
+            },
+            {
+                hostId: playerId('host-ai'),
+                maxPlayers: 2,
+                agentSlots: [
+                    { slotIndex: 0, kind: 'ai' },
+                    { slotIndex: 1, kind: 'ai', omniscient: true },
+                ],
+            },
+        );
+
+        const registeredAgents = mockSimulationHostInstance.registerAgent.mock.calls.map(
+            ([agent]) => agent as { readonly kind: string; readonly omniscient: boolean },
+        );
+        expect(registeredAgents).toHaveLength(2);
+        expect(registeredAgents.map((agent) => agent.kind)).toStrictEqual(['ai', 'ai']);
+        expect(registeredAgents.map((agent) => agent.omniscient)).toStrictEqual([false, true]);
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
+        expect(mockSimulationHostInstance.registerAgent.mock.invocationCallOrder[1]).toBeLessThan(
+            mockSimulationHostInstance.onGameStart.mock.invocationCallOrder[0]!,
+        );
     });
 
     it('forwards lobby connection-status updates to live renderer windows', async () => {
@@ -766,11 +876,21 @@ describe('main', () => {
 
         // Extract the onSessionHosted callback (3rd arg, index 2) passed to LobbyManager.
         const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((transport: {
-                  onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
-                  onPlayerLeft(cb: (id: string) => void): () => void;
-                  onActionReceived(cb: (from: string, action: unknown) => void): () => void;
-              }) => () => void)
+            | ((
+                  transport: {
+                      onPlayerJoined(
+                          cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
+                      ): () => void;
+                      onPlayerLeft(cb: (id: ReturnType<typeof playerId>) => void): () => void;
+                      onActionReceived(
+                          cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
+                      ): () => void;
+                  },
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                  },
+              ) => () => void)
             | undefined;
         expect(onSessionHosted).toBeTypeOf('function');
 
@@ -780,7 +900,7 @@ describe('main', () => {
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
         };
-        onSessionHosted?.(fakeTransport);
+        onSessionHosted?.(fakeTransport, { hostId: playerId('host-1'), maxPlayers: 1 });
 
         // Now the autosave callback should route through the active session.
         const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
@@ -1110,7 +1230,9 @@ describe('main() CHIMERA_DEV_HARNESS guard', () => {
 //   AgentManager; onGameStart must fire after agents are fully wired.
 
 describe('onSessionHosted agent-ordering: onGameStart deferred until all expected players join (Issue #416)', () => {
-    let capturedPlayerJoinedCb: ((entry: { playerId: string }) => void) | null = null;
+    let capturedPlayerJoinedCb:
+        | ((entry: { playerId: ReturnType<typeof playerId> }) => void)
+        | null = null;
 
     interface OrderingTransport {
         onPlayerJoined: ReturnType<typeof vi.fn>;
@@ -1121,10 +1243,12 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
     function makeOrderingTransport(): OrderingTransport {
         capturedPlayerJoinedCb = null;
         return {
-            onPlayerJoined: vi.fn((cb: (entry: { playerId: string }) => void) => {
-                capturedPlayerJoinedCb = cb;
-                return () => {};
-            }),
+            onPlayerJoined: vi.fn(
+                (cb: (entry: { playerId: ReturnType<typeof playerId> }) => void) => {
+                    capturedPlayerJoinedCb = cb;
+                    return () => {};
+                },
+            ),
             onPlayerLeft: vi.fn(() => () => {}),
             onActionReceived: vi.fn(() => () => {}),
         };
@@ -1133,8 +1257,21 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
     function getSessionCallback() {
         // The 3rd arg passed to the LobbyManager constructor is the onSessionHosted callback.
         return mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((transport: OrderingTransport, maxPlayers: number) => (() => void) | void)
+            | ((
+                  transport: OrderingTransport,
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                  },
+              ) => (() => void) | void)
             | undefined;
+    }
+
+    function makeMetadata(maxPlayers: number): {
+        readonly hostId: ReturnType<typeof playerId>;
+        readonly maxPlayers: number;
+    } {
+        return { hostId: playerId('host-player'), maxPlayers };
     }
 
     beforeEach(() => {
@@ -1166,7 +1303,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
         const transport = makeOrderingTransport();
 
         // Invoke the session callback — no players have joined yet
-        sessionCb?.(transport, 2);
+        sessionCb?.(transport, makeMetadata(2));
 
         // onGameStart must not fire before any onPlayerJoined events
         expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
@@ -1177,8 +1314,8 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
         const sessionCb = getSessionCallback();
         const transport = makeOrderingTransport();
 
-        sessionCb?.(transport, 2);
-        capturedPlayerJoinedCb?.({ playerId: 'player-1' });
+        sessionCb?.(transport, makeMetadata(3));
+        capturedPlayerJoinedCb?.({ playerId: playerId('player-1') });
 
         // Still one short — must not fire yet
         expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
@@ -1189,9 +1326,9 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
         const sessionCb = getSessionCallback();
         const transport = makeOrderingTransport();
 
-        sessionCb?.(transport, 2);
-        capturedPlayerJoinedCb?.({ playerId: 'player-1' });
-        capturedPlayerJoinedCb?.({ playerId: 'player-2' });
+        sessionCb?.(transport, makeMetadata(3));
+        capturedPlayerJoinedCb?.({ playerId: playerId('player-1') });
+        capturedPlayerJoinedCb?.({ playerId: playerId('player-2') });
 
         expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
     });
@@ -1207,12 +1344,12 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
             agentCountAtGameStart = mockSimulationHostInstance.registerAgent.mock.calls.length;
         });
 
-        sessionCb?.(transport, 2);
-        capturedPlayerJoinedCb?.({ playerId: 'player-1' });
-        capturedPlayerJoinedCb?.({ playerId: 'player-2' });
+        sessionCb?.(transport, makeMetadata(3));
+        capturedPlayerJoinedCb?.({ playerId: playerId('player-1') });
+        capturedPlayerJoinedCb?.({ playerId: playerId('player-2') });
 
-        // Both agents must be registered before onGameStart is called
-        expect(agentCountAtGameStart).toBe(2);
+        // Host plus two joined agents must be registered before onGameStart is called
+        expect(agentCountAtGameStart).toBe(3);
     });
 });
 
@@ -1226,8 +1363,8 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
 // onGameStart is called at most once per session, regardless of churn.
 
 describe('onSessionHosted agent-ordering: onGameStart fires at most once on leave-then-rejoin (WARN-1 guard)', () => {
-    let capturedJoinCb: ((entry: { playerId: string }) => void) | null = null;
-    let capturedLeftCb: ((playerId: string) => void) | null = null;
+    let capturedJoinCb: ((entry: { playerId: ReturnType<typeof playerId> }) => void) | null = null;
+    let capturedLeftCb: ((leftPlayerId: ReturnType<typeof playerId>) => void) | null = null;
 
     interface RejoinTransport {
         onPlayerJoined: ReturnType<typeof vi.fn>;
@@ -1239,11 +1376,13 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
         capturedJoinCb = null;
         capturedLeftCb = null;
         return {
-            onPlayerJoined: vi.fn((cb: (entry: { playerId: string }) => void) => {
-                capturedJoinCb = cb;
-                return () => {};
-            }),
-            onPlayerLeft: vi.fn((cb: (playerId: string) => void) => {
+            onPlayerJoined: vi.fn(
+                (cb: (entry: { playerId: ReturnType<typeof playerId> }) => void) => {
+                    capturedJoinCb = cb;
+                    return () => {};
+                },
+            ),
+            onPlayerLeft: vi.fn((cb: (leftPlayerId: ReturnType<typeof playerId>) => void) => {
                 capturedLeftCb = cb;
                 return () => {};
             }),
@@ -1253,8 +1392,21 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
 
     function getSessionCallback() {
         return mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((transport: RejoinTransport, maxPlayers: number) => (() => void) | void)
+            | ((
+                  transport: RejoinTransport,
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                  },
+              ) => (() => void) | void)
             | undefined;
+    }
+
+    function makeMetadata(maxPlayers: number): {
+        readonly hostId: ReturnType<typeof playerId>;
+        readonly maxPlayers: number;
+    } {
+        return { hostId: playerId('host-player'), maxPlayers };
     }
 
     beforeEach(() => {
@@ -1285,11 +1437,11 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
         const sessionCb = getSessionCallback();
         const transport = makeRejoinTransport();
 
-        sessionCb?.(transport, 2);
-        capturedJoinCb?.({ playerId: 'player-1' });
-        capturedJoinCb?.({ playerId: 'player-2' }); // threshold met → onGameStart fires once
-        capturedLeftCb?.('player-2'); // drops below threshold
-        capturedJoinCb?.({ playerId: 'player-2' }); // recovers — must NOT fire again
+        sessionCb?.(transport, makeMetadata(3));
+        capturedJoinCb?.({ playerId: playerId('player-1') });
+        capturedJoinCb?.({ playerId: playerId('player-2') }); // threshold met → onGameStart fires once
+        capturedLeftCb?.(playerId('player-2')); // drops below threshold
+        capturedJoinCb?.({ playerId: playerId('player-2') }); // recovers — must NOT fire again
 
         expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
     });

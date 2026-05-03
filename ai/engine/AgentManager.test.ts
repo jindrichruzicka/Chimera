@@ -81,7 +81,7 @@ describe('AgentManager', () => {
     let manager: AgentManager;
 
     beforeEach(() => {
-        manager = new AgentManager();
+        manager = new AgentManager({ logger: makeNoopLogger() });
     });
 
     // ── registerAgent ─────────────────────────────────────────────────────────

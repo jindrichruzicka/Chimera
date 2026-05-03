@@ -8,6 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
+import type { Logger } from '@chimera/shared/logging.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,
@@ -44,6 +45,16 @@ const hiddenEntity: VisibilityEntity = {
     id: hiddenEntityId,
     visibleToHonestAi: false,
 };
+
+const makeNoopLogger = (): Logger => ({
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn().mockReturnThis() as Logger['child'],
+});
 
 function makeFullState(): BaseGameSnapshot {
     return {
@@ -116,7 +127,7 @@ describe('honest AI isolation', () => {
         };
         const receivedSnapshots: PlayerSnapshot[] = [];
         const agent = new AIPlayerAgent(honestPlayerId, makeRecordingBrain(receivedSnapshots));
-        const manager = new AgentManager();
+        const manager = new AgentManager({ logger: makeNoopLogger() });
 
         manager.registerAgent(agent);
         manager.tickAll(fullState, fullState.tick, projector);
@@ -134,7 +145,7 @@ describe('honest AI isolation', () => {
         const agent = new AIPlayerAgent(honestPlayerId, makeRecordingBrain(receivedSnapshots), {
             omniscient: true,
         });
-        const manager = new AgentManager();
+        const manager = new AgentManager({ logger: makeNoopLogger() });
 
         manager.registerAgent(agent);
         manager.tickAll(fullState, fullState.tick, projector);

@@ -29,11 +29,18 @@ import type {
     ClientTransport,
     PlayerId,
     PlayerSnapshot,
+    LobbyAgentSlot,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
+
+export interface HostedSessionMetadata {
+    readonly hostId: PlayerId;
+    readonly maxPlayers: number;
+    readonly agentSlots?: readonly LobbyAgentSlot[];
+}
 
 /**
  * Main-process orchestrator for the multiplayer session lifecycle.
@@ -67,7 +74,7 @@ export class LobbyManager {
         logger: Logger,
         private readonly onSessionHosted?: (
             transport: HostTransport,
-            maxPlayers: number,
+            metadata: HostedSessionMetadata,
         ) => (() => void) | void,
         private readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void,
         private readonly onLobbyStateChanged?: (state: LobbyState) => void,
@@ -267,7 +274,12 @@ export class LobbyManager {
         // Notify the wiring point (index.ts) that a hosted session is live
         // so it can wire StateBroadcaster and SimulationHost.  F15 is complete;
         // the actual wiring happens in index.ts::hostLobby().
-        const teardown = this.onSessionHosted?.(session.transport, params.maxPlayers);
+        const metadata: HostedSessionMetadata = {
+            hostId: info.hostId,
+            maxPlayers: params.maxPlayers,
+            ...(params.agentSlots !== undefined ? { agentSlots: params.agentSlots } : {}),
+        };
+        const teardown = this.onSessionHosted?.(session.transport, metadata);
         if (teardown !== undefined) {
             this.sessionHostedTeardown = teardown;
         }

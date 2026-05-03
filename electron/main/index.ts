@@ -35,6 +35,12 @@ import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline } from './runtime/HostSessionPipeline.js';
+import {
+    buildDefaultAIPlayerAgent,
+    buildInitialHostedSessionSnapshot,
+    collectInitialPlayerSlots,
+    resolveAgentSlot,
+} from './runtime/HostedSessionAgents.js';
 import { SessionRuntime } from './runtime/SessionRuntime.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
@@ -44,7 +50,8 @@ import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import type { BaseGameSnapshot, GamePhase, PlayerId } from '@chimera/simulation/engine/types.js';
+import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
+import { gamePhase } from '@chimera/simulation/engine/types.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
 import { SimulationHost } from './runtime/SimulationHost.js';
@@ -329,36 +336,6 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
  * Renderer entry follows issue #3:
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
-/**
- * Build a fresh, valid {@link BaseGameSnapshot} for a newly-hosted session.
- *
- * Used by the `onSessionHosted` callback to seed the {@link SessionRuntime}
- * before any action has been processed.  Game-specific reducers replace the
- * snapshot on first action — this seed only needs to satisfy the engine's
- * structural invariants:
- *
- *   - Integer fields (Invariants #42/#44): `tick=0`, `turnNumber=0`,
- *     `seed` is a 32-bit unsigned integer derived from `Date.now()` so each
- *     hosted session gets a distinct, reproducible RNG sequence.
- *   - Empty records for `players` and `entities` so the first reducer can
- *     freely add entries without colliding with placeholders.
- *   - Phase `'lobby'` because the session has just been hosted and no
- *     game-specific phase has been entered yet.
- */
-function createInitialBaseSnapshot(): BaseGameSnapshot {
-    return {
-        tick: 0,
-        // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).
-        seed: Date.now() >>> 0,
-        players: {},
-        entities: {},
-        phase: 'lobby' as GamePhase,
-        events: [],
-        turnNumber: 0,
-        timers: {},
-    };
-}
-
 export async function main(): Promise<void> {
     // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
     if (process.env['CHIMERA_DEV_HARNESS'] === '1' && process.env.NODE_ENV === 'production') {
@@ -499,11 +476,11 @@ export async function main(): Promise<void> {
     const lobbyManager = new LobbyManager(
         new LocalWebSocketProvider(),
         lobbyLogger,
-        (transport, maxPlayers) => {
+        (transport, metadata) => {
             // Pre-F26 identity projector: no fog-of-war applied yet.
             // TODO(F26): replace with real StateProjector once projection lands.
             const identityProjector = { project: (snap: BaseGameSnapshot) => snap };
-            const agentManager = new AgentManager();
+            const agentManager = new AgentManager({ logger: lobbyLogger });
             const simulationHost = new SimulationHost(agentManager, identityProjector);
             // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
             // and InMemoryUndoManager) for the hosted session (issue #364).
@@ -515,7 +492,14 @@ export async function main(): Promise<void> {
             // the host-side `processAction` flow updates a single live
             // snapshot reference.  `captureSaveFile` (BLOCK-3) and
             // `applyRestoredFile` (WARN-2) read/write through this runtime.
-            const initialSnapshot = createInitialBaseSnapshot();
+            const initialPlayerSlots = collectInitialPlayerSlots(metadata);
+            const initialSnapshot = buildInitialHostedSessionSnapshot({
+                // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).
+                seed: Date.now() >>> 0,
+                hostPlayerId: metadata.hostId,
+                playerSlots: initialPlayerSlots,
+                phase: gamePhase('lobby'),
+            });
             // `pipeline`, `processAction`, and `clearUndoHistory` come from
             // the same factory; `processAction` adds the autosave fire-and-
             // forget hook on top of `pipeline.process` (Issue #375).
@@ -545,24 +529,68 @@ export async function main(): Promise<void> {
 
             // Track active players so clearUndoHistory can release their
             // per-player undo memory when the session closes.
-            const activePlayers = new Set<PlayerId>();
+            const activePlayers = new Set<PlayerId>(
+                initialPlayerSlots.map((slot) => slot.playerId),
+            );
+            const assignedSlotIndexes = new Set<number>(
+                initialPlayerSlots.map((slot) => slot.slotIndex),
+            );
             // Guard: onGameStart must fire exactly once per session regardless
             // of player churn (WARN-1 fix — `>=` would re-fire on leave+rejoin).
             let gameStarted = false;
+
+            const registerSlotAgent = (pid: PlayerId, slotIndex: number): void => {
+                const agentSlot = resolveAgentSlot(metadata, slotIndex);
+                if (agentSlot.kind === 'ai') {
+                    simulationHost.registerAgent(
+                        buildDefaultAIPlayerAgent({
+                            playerId: pid,
+                            initialSnapshot: sessionRuntime.getSnapshot(),
+                            dispatch: (action) => {
+                                sessionRuntime.applyAction(action);
+                            },
+                            logger: lobbyLogger,
+                            omniscient: agentSlot.omniscient ?? false,
+                        }),
+                    );
+                    return;
+                }
+                simulationHost.registerAgent(new HumanPlayerAgent(pid));
+            };
+
+            const nextHumanSlotIndex = (): number => {
+                for (let slotIndex = 0; slotIndex < metadata.maxPlayers; slotIndex += 1) {
+                    if (assignedSlotIndexes.has(slotIndex)) {
+                        continue;
+                    }
+                    if (resolveAgentSlot(metadata, slotIndex).kind === 'human') {
+                        assignedSlotIndexes.add(slotIndex);
+                        return slotIndex;
+                    }
+                }
+                return assignedSlotIndexes.size;
+            };
+
+            const tryStartGame = (): void => {
+                if (!gameStarted && activePlayers.size >= metadata.maxPlayers) {
+                    gameStarted = true;
+                    simulationHost.onGameStart(sessionRuntime.getSnapshot());
+                }
+            };
+
+            for (const slot of initialPlayerSlots) {
+                registerSlotAgent(slot.playerId, slot.slotIndex);
+            }
+            tryStartGame();
+
             const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
                 activePlayers.add(pid);
-                // Register a HumanPlayerAgent for every joining player.
-                // AI players will be wired here once the game session definition
-                // carries agent-kind metadata (future M4 task).
-                simulationHost.registerAgent(new HumanPlayerAgent(pid));
+                registerSlotAgent(pid, nextHumanSlotIndex());
                 // Once every expected player has joined and had their agent
                 // registered, notify agents that the game has started
                 // (Invariant #17: projection via host; agents must be fully
                 // wired before onGameStart fires).
-                if (!gameStarted && activePlayers.size >= maxPlayers) {
-                    gameStarted = true;
-                    simulationHost.onGameStart(initialSnapshot);
-                }
+                tryStartGame();
             });
             const unsubLeft = transport.onPlayerLeft((pid) => {
                 activePlayers.delete(pid);

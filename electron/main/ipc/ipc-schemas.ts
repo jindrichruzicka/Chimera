@@ -22,6 +22,7 @@ import type {
     EngineAction,
     HostLobbyParams,
     JoinLobbyParams,
+    LobbyAgentSlot,
     SaveRequest,
     UserSettings,
 } from '../../preload/api-types.js';
@@ -122,11 +123,35 @@ export const SlotIdSchema = z
 /** Schema for a single `playerId` argument (e.g. `chimera:game:switch-seat`). */
 export const PlayerIdSchema = NonEmptyStringSchema.transform(playerId);
 
+const LobbyAgentSlotSchema = z
+    .object({
+        slotIndex: z.number().int().nonnegative(),
+        kind: z.enum(['human', 'ai']),
+        omniscient: z.boolean().optional(),
+    })
+    .strict();
+
 /** Schema for {@link HostLobbyParams} accepted by `chimera:lobby:host`. */
-export const HostLobbyParamsSchema = z.object({
-    gameId: NonEmptyStringSchema,
-    maxPlayers: z.number().int().positive(),
-}) satisfies z.ZodType<HostLobbyParams>;
+export const HostLobbyParamsSchema = z
+    .object({
+        gameId: NonEmptyStringSchema,
+        maxPlayers: z.number().int().positive(),
+        agentSlots: z.array(LobbyAgentSlotSchema).readonly().optional(),
+    })
+    .transform((value): HostLobbyParams => {
+        const agentSlots = value.agentSlots?.map((slot): LobbyAgentSlot => {
+            if (slot.omniscient === undefined) {
+                return { slotIndex: slot.slotIndex, kind: slot.kind };
+            }
+            return { slotIndex: slot.slotIndex, kind: slot.kind, omniscient: slot.omniscient };
+        });
+
+        if (agentSlots === undefined) {
+            return { gameId: value.gameId, maxPlayers: value.maxPlayers };
+        }
+
+        return { gameId: value.gameId, maxPlayers: value.maxPlayers, agentSlots };
+    });
 
 /** Schema for {@link JoinLobbyParams} accepted by `chimera:lobby:join`. */
 export const JoinLobbyParamsSchema = z.object({

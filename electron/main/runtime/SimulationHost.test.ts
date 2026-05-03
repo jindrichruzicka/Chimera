@@ -20,6 +20,7 @@ import { SimulationHost } from './SimulationHost.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import type { StateProjector } from '@chimera/ai/engine/AgentManager.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from '@chimera/ai/engine/PlayerAgent.js';
+import type { Logger } from '@chimera/shared/logging.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 
@@ -64,13 +65,27 @@ function makeMockAgent(id: PlayerId, kind: 'human' | 'ai' = 'human'): PlayerAgen
     };
 }
 
+const makeNoopLogger = (): Logger => ({
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn().mockReturnThis() as Logger['child'],
+});
+
+function makeAgentManager(): AgentManager {
+    return new AgentManager({ logger: makeNoopLogger() });
+}
+
 // ─── SimulationHost.afterTick ─────────────────────────────────────────────────
 
 describe('SimulationHost.afterTick', () => {
     let manager: AgentManager;
 
     beforeEach(() => {
-        manager = new AgentManager();
+        manager = makeAgentManager();
     });
 
     it('calls onTick on a registered agent with the projected snapshot and tick number', () => {
@@ -152,7 +167,7 @@ describe('SimulationHost.afterTick', () => {
 
 describe('SimulationHost.onGameStart', () => {
     it('calls onGameStart on all registered agents', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent1 = makeMockAgent(P1);
         const agent2 = makeMockAgent(P2);
         manager.registerAgent(agent1);
@@ -166,7 +181,7 @@ describe('SimulationHost.onGameStart', () => {
     });
 
     it('passes projected snapshot to onGameStart', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent = makeMockAgent(P1);
         manager.registerAgent(agent);
         const host = new SimulationHost(manager, identityProjector);
@@ -178,7 +193,7 @@ describe('SimulationHost.onGameStart', () => {
     });
 
     it('requires agents to be registered before calling onGameStart (API contract)', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent = makeMockAgent(P1);
         const host = new SimulationHost(manager, identityProjector);
 
@@ -199,7 +214,7 @@ describe('SimulationHost.onGameStart', () => {
 
 describe('SimulationHost.onGameEnd', () => {
     it('calls onGameEnd on all registered agents with the result', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent = makeMockAgent(P1);
         manager.registerAgent(agent);
         const host = new SimulationHost(manager, identityProjector);
@@ -212,7 +227,7 @@ describe('SimulationHost.onGameEnd', () => {
     });
 
     it('passes winner: null for a draw result', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent = makeMockAgent(P1);
         manager.registerAgent(agent);
         const host = new SimulationHost(manager, identityProjector);
@@ -230,7 +245,7 @@ describe('SimulationHost.onGameEnd', () => {
 
 describe('SimulationHost.registerAgent', () => {
     it('delegates registration to the AgentManager (agent receives afterTick calls)', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const host = new SimulationHost(manager, identityProjector);
         const agent = makeMockAgent(P1);
 
@@ -241,7 +256,7 @@ describe('SimulationHost.registerAgent', () => {
     });
 
     it('silently ignores duplicate registration for the same playerId', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
         const host = new SimulationHost(manager, identityProjector);
         const agent = makeMockAgent(P1);
@@ -267,7 +282,7 @@ describe('SimulationHost.registerAgent', () => {
 
 describe('SimulationHost ordering contract: register → onGameStart → afterTick', () => {
     it('agent registered before onGameStart receives both onGameStart and subsequent afterTick events', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent = makeMockAgent(P1);
         const host = new SimulationHost(manager, identityProjector);
 
@@ -282,7 +297,7 @@ describe('SimulationHost ordering contract: register → onGameStart → afterTi
     });
 
     it('onGameStart is called before any afterTick — call order is preserved', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent = makeMockAgent(P1);
         const host = new SimulationHost(manager, identityProjector);
         const callOrder: string[] = [];
@@ -302,7 +317,7 @@ describe('SimulationHost ordering contract: register → onGameStart → afterTi
     });
 
     it('two agents registered before onGameStart both receive all lifecycle events', () => {
-        const manager = new AgentManager();
+        const manager = makeAgentManager();
         const agent1 = makeMockAgent(P1);
         const agent2 = makeMockAgent(P2);
         const host = new SimulationHost(manager, identityProjector);

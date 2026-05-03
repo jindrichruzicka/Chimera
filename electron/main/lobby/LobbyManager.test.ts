@@ -13,7 +13,7 @@
  *   #67 — LobbyManager constructed with injected Logger; no console.* calls.
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from './LobbyManager.js';
@@ -224,6 +224,26 @@ describe('LobbyManager.hostLobby', () => {
         const manager = makeManager();
         await manager.hostLobby(HOST_PARAMS);
         await expect(manager.hostLobby(HOST_PARAMS)).rejects.toThrow(/session already active/i);
+    });
+
+    it('passes host identity and agent-slot metadata to the hosted-session callback', async () => {
+        const provider = makeProvider();
+        const onSessionHosted = vi.fn();
+        const manager = new LobbyManager(provider, createNoopLogger(), onSessionHosted);
+        const params: HostLobbyParams = {
+            gameId: 'tactics',
+            maxPlayers: 2,
+            agentSlots: [{ slotIndex: 1, kind: 'ai', omniscient: true }],
+        };
+
+        const info = await manager.hostLobby(params);
+
+        expect(onSessionHosted).toHaveBeenCalledOnce();
+        expect(onSessionHosted).toHaveBeenCalledWith(expect.anything(), {
+            hostId: info.hostId,
+            maxPlayers: 2,
+            agentSlots: params.agentSlots,
+        });
     });
 });
 

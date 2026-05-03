@@ -74,10 +74,21 @@ export interface PlayerSnapshot {
 
 // ─── Lobby domain types ───────────────────────────────────────────────────────
 
+/** Configurable controller kind for a hosted lobby player slot. */
+export type LobbyAgentKind = 'human' | 'ai';
+
+/** Player-slot controller metadata supplied when hosting a lobby. */
+export interface LobbyAgentSlot {
+    readonly slotIndex: number;
+    readonly kind: LobbyAgentKind;
+    readonly omniscient?: boolean;
+}
+
 /** Parameters for hosting a new lobby session. */
 export interface HostLobbyParams {
     readonly gameId: string;
     readonly maxPlayers: number;
+    readonly agentSlots?: readonly LobbyAgentSlot[];
 }
 
 /** Parameters for joining an existing lobby session. */

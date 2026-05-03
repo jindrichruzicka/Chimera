@@ -58,10 +58,10 @@ export interface StateProjector {
  */
 export class AgentManager {
     private readonly agents = new Map<PlayerId, PlayerAgent>();
-    private readonly logger: Logger | undefined;
+    private readonly logger: Logger;
 
-    constructor(options?: { readonly logger?: Logger }) {
-        this.logger = options?.logger;
+    constructor(options: { readonly logger: Logger }) {
+        this.logger = options.logger;
     }
 
     /**
@@ -73,7 +73,7 @@ export class AgentManager {
      */
     public registerAgent(agent: PlayerAgent): void {
         if (this.agents.has(agent.playerId)) {
-            this.logger?.warn('agent-manager:duplicate-registration', {
+            this.logger.warn('agent-manager:duplicate-registration', {
                 playerId: agent.playerId,
             });
             return;
@@ -113,7 +113,7 @@ export class AgentManager {
                 ? fullState
                 : projector.project(fullState, agent.playerId);
             if (agent.omniscient) {
-                this.logger?.warn('agent-manager:omniscient-agent', {
+                this.logger.warn('agent-manager:omniscient-agent', {
                     playerId: agent.playerId,
                 });
             }
