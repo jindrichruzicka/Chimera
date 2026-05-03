@@ -8,3 +8,6 @@ export type {
     VisibilityRules,
     VisibilityScope,
 } from './types.js';
+
+export type { PlayerSnapshot, StateProjector, StateProjectorOptions } from './StateProjector.js';
+export { DefaultStateProjector } from './StateProjector.js';
