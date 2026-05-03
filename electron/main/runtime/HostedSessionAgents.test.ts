@@ -64,4 +64,61 @@ describe('buildDefaultAIPlayerAgent', () => {
         expect(runtime.getSnapshot().turnNumber).toBe(1);
         expect(runtime.getSnapshot().turnClock?.activePlayerId).toBe(humanPlayerId);
     });
+
+    it('drives the AI through multiple turns in a full headless match', () => {
+        const registry = new ActionRegistry();
+        registerEngineActions(registry);
+        const { processAction } = buildHostSessionPipeline(registry, vi.fn());
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot: makeSnapshot(),
+            applyAction: processAction,
+            now: () => 1_000,
+        });
+
+        const agent = buildDefaultAIPlayerAgent({
+            playerId: aiPlayerId,
+            initialSnapshot: runtime.getSnapshot(),
+            dispatch: (action) => runtime.applyAction(action),
+            logger: createNoopLogger(),
+        });
+
+        // Turn 1: AI takes its turn
+        agent.onGameStart(runtime.getSnapshot());
+        expect(runtime.getSnapshot().turnNumber).toBe(1);
+        expect(runtime.getSnapshot().turnClock?.activePlayerId).toBe(humanPlayerId);
+
+        // Turn 2: Human takes its turn (manually dispatch)
+        let snapshot = runtime.getSnapshot();
+        runtime.applyAction({
+            type: 'engine:end_turn',
+            playerId: humanPlayerId,
+            tick: snapshot.tick,
+            payload: {},
+        });
+        snapshot = runtime.getSnapshot();
+        expect(snapshot.turnNumber).toBe(2);
+        expect(snapshot.turnClock?.activePlayerId).toBe(aiPlayerId);
+
+        // Turn 3: AI takes its second turn (onTick triggers the agent to dispatch)
+        agent.onTick(snapshot, snapshot.tick);
+        snapshot = runtime.getSnapshot();
+        expect(snapshot.turnNumber).toBe(3);
+        expect(snapshot.turnClock?.activePlayerId).toBe(humanPlayerId);
+
+        // Turn 4: Human takes second turn
+        runtime.applyAction({
+            type: 'engine:end_turn',
+            playerId: humanPlayerId,
+            tick: snapshot.tick,
+            payload: {},
+        });
+        snapshot = runtime.getSnapshot();
+        expect(snapshot.turnNumber).toBe(4);
+        expect(snapshot.turnClock?.activePlayerId).toBe(aiPlayerId);
+
+        // Verify we've completed a multi-turn cycle without errors
+        expect(snapshot.turnNumber).toBeGreaterThanOrEqual(4);
+    });
 });
