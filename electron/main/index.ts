@@ -50,10 +50,12 @@ import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { gamePhase } from '@chimera/simulation/engine/types.js';
+import { DefaultStateProjector } from '@chimera/simulation/projection/index.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
+import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
 import { SimulationHost } from './runtime/SimulationHost.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
@@ -477,16 +479,8 @@ export async function main(): Promise<void> {
         new LocalWebSocketProvider(),
         lobbyLogger,
         (transport, metadata) => {
-            // Pre-F26 identity projector: no fog-of-war applied yet.
-            // TODO(F26): replace with real StateProjector once projection lands.
-            const identityProjector = { project: (snap: BaseGameSnapshot) => snap };
             const agentManager = new AgentManager({ logger: lobbyLogger });
-            const simulationHost = new SimulationHost(agentManager, identityProjector);
-            // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
-            // and InMemoryUndoManager) for the hosted session (issue #364).
-            // Each hosted session gets a fresh history and undoManager so
-            // undo state never bleeds between sessions.
-            const broadcaster = new StateBroadcaster(transport, lobbyLogger);
+            const broadcasterRef: { current: StateBroadcaster | null } = { current: null };
 
             // Build a SessionRuntime around the freshly-created pipeline so
             // the host-side `processAction` flow updates a single live
@@ -503,9 +497,16 @@ export async function main(): Promise<void> {
             // `pipeline`, `processAction`, and `clearUndoHistory` come from
             // the same factory; `processAction` adds the autosave fire-and-
             // forget hook on top of `pipeline.process` (Issue #375).
-            const { processAction, clearUndoHistory } = buildHostSessionPipeline(
+            const { processAction, clearUndoHistory, undoManager } = buildHostSessionPipeline(
                 gameRegistry,
-                (snap, to) => broadcaster.broadcast(snap, to),
+                (snap, to) => {
+                    if (broadcasterRef.current === null) {
+                        throw new Error(
+                            'StateBroadcaster used before hosted session wiring completed',
+                        );
+                    }
+                    broadcasterRef.current.broadcast(snap, to);
+                },
                 {
                     gameId: HOSTED_GAME_ID,
                     savePort: {
@@ -518,6 +519,21 @@ export async function main(): Promise<void> {
                     logger: lobbyLogger,
                 },
             );
+
+            const projector = new DefaultStateProjector(tacticsVisibilityRules, {
+                getUndoMeta: (viewerId) => ({
+                    canUndo: undoManager.canUndo(viewerId),
+                    canRedo: undoManager.canRedo(viewerId),
+                }),
+            });
+            const simulationHost = new SimulationHost(agentManager, projector);
+            // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
+            // and InMemoryUndoManager) for the hosted session (issue #364).
+            // Each hosted session gets a fresh history and undoManager so
+            // undo state never bleeds between sessions.
+            // Must be set before any pipeline.process()/processAction-triggered
+            // broadcast can run; the callback above throws if this ordering is broken.
+            broadcasterRef.current = new StateBroadcaster(transport, projector, lobbyLogger);
 
             const sessionRuntime = new SessionRuntime({
                 gameId: HOSTED_GAME_ID,

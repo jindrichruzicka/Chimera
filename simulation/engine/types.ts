@@ -224,16 +224,15 @@ export interface HistoryContext {
  * `ActionPipeline.process()` via `BroadcastContext.broadcast`.
  *
  * `GameSnapshot` (or any subtype) must NEVER be assigned to this type without
- * an explicit projection step (Invariant #1). The only authorised cast site in
- * `simulation/` is inside `ActionPipeline` Stage 7, guarded by a TODO(F26)
- * comment. External callers (e.g. `StateBroadcaster`) should import
- * `ViewerSnapshot` and use `toViewerSnapshot` at the wiring point.
+ * an explicit projection step (Invariants #3/#8). The only authorised cast site
+ * in `simulation/` is inside `ActionPipeline` Stage 7.
  *
  * Zero runtime overhead — the brand field exists only in the type system.
  */
-export type ViewerSnapshot = Readonly<Record<string, unknown>> & {
-    readonly __chimera_viewer_snapshot: true;
-};
+export type ViewerSnapshot = Readonly<BaseGameSnapshot> &
+    Readonly<Record<string, unknown>> & {
+        readonly __chimera_viewer_snapshot: true;
+    };
 
 /**
  * Converts a projected per-viewer record to the opaque `ViewerSnapshot` brand.
@@ -266,21 +265,20 @@ export interface UndoMeta {
 /**
  * Narrow context for pipeline stages that broadcast state to players.
  *
- * Typed as opaque `ViewerSnapshot` until `PlayerSnapshot` is formalised in
- * F26. Stage 7 (broadcast) uses this to push per-player views without
- * depending on the renderer's snapshot shape.
+ * Stage 7 (broadcast) passes the full `BaseGameSnapshot` to the broadcast
+ * callback. The callback implementation (e.g., `StateBroadcaster`) is
+ * responsible for projecting it via `StateProjector.project()` to produce the
+ * per-viewer `PlayerSnapshot` before forwarding to transport (Invariants #3/#8).
  *
- * INVARIANT #1: `GameSnapshot` must NEVER be passed directly as a
- * `ViewerSnapshot`. The wiring point is responsible for applying a
- * `StateProjector` before calling broadcast. Use `toViewerSnapshot` only at
- * the authorised cast site inside `ActionPipeline` Stage 7, with a
- * `TODO(F26)` marker.
+ * This separation ensures:
+ *   - `ActionPipeline` remains free of projection/visibility logic.
+ *   - `StateProjector.project()` is the sole mandatory gate for outbound snapshots.
+ *   - `undoMeta` is computed once by the projector, not redundantly in the pipeline.
  *
  * Invariant #12: each pipeline stage receives only the context it needs.
  */
 export interface BroadcastContext {
-    /** Opaque until PlayerSnapshot is formalised in F26. */
-    readonly broadcast?: (snapshot: ViewerSnapshot, to: PlayerId) => void;
+    readonly broadcast?: (snapshot: Readonly<BaseGameSnapshot>, to: PlayerId) => void;
 }
 
 /**

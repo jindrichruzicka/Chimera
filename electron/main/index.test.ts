@@ -78,9 +78,43 @@ vi.mock('../../networking/provider/local/LocalWebSocketProvider.js', () => ({
     LocalWebSocketProvider: vi.fn(() => ({})),
 }));
 
-// ── StateBroadcaster mock — verifies it is imported from the module ───────────
+// ── StateBroadcaster mock — captures constructor args for projection wiring ───
+const { mockStateBroadcasterCtor } = vi.hoisted(() => {
+    const instance = { broadcast: vi.fn() };
+    return {
+        mockStateBroadcasterCtor: vi.fn(() => instance),
+    };
+});
+
 vi.mock('./runtime/StateBroadcaster.js', () => ({
-    StateBroadcaster: vi.fn(() => ({})),
+    StateBroadcaster: mockStateBroadcasterCtor,
+}));
+
+// ── StateProjector mock — captures DefaultStateProjector construction ─────────
+const { mockDefaultStateProjectorCtor, mockProjectorInstance } = vi.hoisted(() => {
+    const instance = { project: vi.fn() };
+    return {
+        mockProjectorInstance: instance,
+        mockDefaultStateProjectorCtor: vi.fn(() => instance),
+    };
+});
+
+vi.mock('@chimera/simulation/projection/index.js', () => ({
+    DefaultStateProjector: mockDefaultStateProjectorCtor,
+}));
+
+// ── Tactics visibility rules mock — verifies game-owned rules are injected ────
+const { mockTacticsVisibilityRules } = vi.hoisted(() => ({
+    mockTacticsVisibilityRules: {
+        isEntityVisible: vi.fn(),
+        maskEntity: vi.fn(),
+        maskPlayerState: vi.fn(),
+        filterEvents: vi.fn(),
+    },
+}));
+
+vi.mock('@chimera/games/tactics/visibility-rules.js', () => ({
+    tacticsVisibilityRules: mockTacticsVisibilityRules,
 }));
 
 // ── AgentManager mock — captures constructor args for logger wiring tests ─────
@@ -606,6 +640,8 @@ describe('main', () => {
         mockSaveManagerAutoSave.mockClear();
         mockRegisterCrashReporter.mockClear();
         mockAgentManagerCtor.mockClear();
+        mockDefaultStateProjectorCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
         capturedSaveManagerRepoClassName.value = '';
         capturedSettingsBroadcastFn.current = null;
     });
@@ -683,6 +719,46 @@ describe('main', () => {
         expect(vi.mocked(AgentManager).mock.calls[0]?.[0]).toMatchObject({
             logger: expect.any(Object),
         });
+    });
+
+    it('constructs DefaultStateProjector with tactics visibility rules and injects it into StateBroadcaster', async () => {
+        mockLobbyManagerCtor.mockClear();
+        await main();
+
+        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((
+                  transport: {
+                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                      onPlayerLeft(cb: (id: string) => void): () => void;
+                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                  },
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                  },
+              ) => () => void)
+            | undefined;
+
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        const transport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+
+        onSessionHosted?.(transport, { hostId: playerId('host-projector'), maxPlayers: 1 });
+
+        expect(mockDefaultStateProjectorCtor).toHaveBeenCalledOnce();
+        expect(mockDefaultStateProjectorCtor).toHaveBeenCalledWith(
+            mockTacticsVisibilityRules,
+            expect.objectContaining({ getUndoMeta: expect.any(Function) }),
+        );
+        expect(mockStateBroadcasterCtor).toHaveBeenCalledWith(
+            transport,
+            mockProjectorInstance,
+            expect.any(Object),
+        );
     });
 
     it('registers configured AI slots before firing onGameStart', async () => {

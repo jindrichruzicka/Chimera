@@ -36,7 +36,6 @@ import type {
     BroadcastContext,
     DebugContext,
     PipelineContext,
-    ViewerSnapshot,
 } from './types.js';
 import { isReduceContext } from './types.js';
 
@@ -465,13 +464,23 @@ describe('HistoryContext', () => {
 
 describe('BroadcastContext', () => {
     it('can be constructed with a broadcast function', () => {
-        const calls: [Readonly<Record<string, unknown>>, string][] = [];
+        const calls: [Readonly<BaseGameSnapshot>, string][] = [];
         const ctx: BroadcastContext = {
             broadcast: (snapshot, to) => {
                 calls.push([snapshot, to]);
             },
         };
-        ctx.broadcast?.(toViewerSnapshot({ tick: 1 }), toPlayerId('p1'));
+        const snap: BaseGameSnapshot = {
+            tick: 1,
+            seed: 2,
+            players: {},
+            entities: {},
+            phase: 'idle' as GamePhase,
+            events: [],
+            turnNumber: 0,
+            timers: {},
+        };
+        ctx.broadcast?.(snap, toPlayerId('p1'));
         expect(calls).toHaveLength(1);
         expect(calls[0]![1]).toBe('p1');
     });
@@ -481,8 +490,8 @@ describe('BroadcastContext', () => {
         expect(ctx.broadcast).toBeUndefined();
     });
 
-    it('broadcast receives an opaque snapshot and a PlayerId', () => {
-        let capturedSnapshot: Readonly<Record<string, unknown>> | null = null;
+    it('broadcast receives a BaseGameSnapshot and a PlayerId', () => {
+        let capturedSnapshot: Readonly<BaseGameSnapshot> | null = null;
         let capturedTo: string | null = null;
         const ctx: BroadcastContext = {
             broadcast: (snapshot, to) => {
@@ -490,8 +499,18 @@ describe('BroadcastContext', () => {
                 capturedTo = to;
             },
         };
-        ctx.broadcast?.(toViewerSnapshot({ foo: 'bar', tick: 42 }), toPlayerId('p2'));
-        expect(capturedSnapshot).toStrictEqual({ foo: 'bar', tick: 42 });
+        const snap: BaseGameSnapshot = {
+            tick: 42,
+            seed: 99,
+            players: {},
+            entities: {},
+            phase: 'end' as GamePhase,
+            events: [],
+            turnNumber: 0,
+            timers: {},
+        };
+        ctx.broadcast?.(snap, toPlayerId('p2'));
+        expect(capturedSnapshot).toBe(snap);
         expect(capturedTo).toBe('p2');
     });
 });
@@ -642,13 +661,23 @@ describe('PipelineContext', () => {
 
     it('is structurally assignable to BroadcastContext', () => {
         let called = false;
+        const snap: BaseGameSnapshot = {
+            tick: 0,
+            seed: 0,
+            players: {},
+            entities: {},
+            phase: 'idle' as GamePhase,
+            events: [],
+            turnNumber: 0,
+            timers: {},
+        };
         const pipelineCtx: PipelineContext = {
             broadcast: () => {
                 called = true;
             },
         };
         const broadCtx: BroadcastContext = pipelineCtx;
-        broadCtx.broadcast?.(toViewerSnapshot({}), toPlayerId('p1'));
+        broadCtx.broadcast?.(snap, toPlayerId('p1'));
         expect(called).toBe(true);
     });
 
@@ -686,18 +715,6 @@ describe('ViewerSnapshot and toViewerSnapshot', () => {
         const raw: Readonly<Record<string, unknown>> = { tick: 1, seed: 2 };
         const vs = toViewerSnapshot(raw);
         expect(vs).toBe(raw);
-    });
-
-    it('BroadcastContext.broadcast accepts a ViewerSnapshot value produced by toViewerSnapshot', () => {
-        const captured: ViewerSnapshot[] = [];
-        const ctx: BroadcastContext = {
-            broadcast: (snap) => captured.push(snap),
-        };
-        const pid = toPlayerId('p1');
-        const raw: Readonly<Record<string, unknown>> = { tick: 0, phase: 'test' };
-        ctx.broadcast?.(toViewerSnapshot(raw), pid);
-        expect(captured).toHaveLength(1);
-        expect(captured[0]).toBe(raw);
     });
 });
 

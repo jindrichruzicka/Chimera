@@ -159,7 +159,16 @@ describe('UndoManager + ActionPipeline integration', () => {
                 undoManager,
                 history,
                 broadcast: (snap, to) => {
-                    capturedByPlayer.set(to, snap);
+                    // Simulate StateBroadcaster: compute undoMeta and attach it
+                    const undoMeta = {
+                        canUndo: undoManager.canUndo(to),
+                        canRedo: undoManager.canRedo(to),
+                    };
+                    capturedByPlayer.set(to, {
+                        // safe: BaseGameSnapshot has no index signature; spread in test double to attach undoMeta
+                        ...(snap as Record<string, unknown>),
+                        undoMeta,
+                    });
                 },
             },
         });

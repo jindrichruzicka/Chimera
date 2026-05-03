@@ -32,7 +32,6 @@ import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-    ViewerSnapshot,
 } from '@chimera/simulation/engine/types.js';
 import { ActionPipeline } from '@chimera/simulation/engine/ActionPipeline.js';
 import { StateReducer } from '@chimera/simulation/engine/StateReducer.js';
@@ -133,9 +132,12 @@ export interface HostSessionPipelineResult {
  * `InMemoryUndoManager`.
  *
  * @param registry    - The `ActionRegistry` with game and engine actions registered.
- * @param broadcastFn - Called by Stage 7 for each player-specific projected snapshot.
- *                      Typically `StateBroadcaster.broadcast` bound to the active
- *                      session's `HostTransport`.
+ * @param broadcastFn - Called by Stage 7 for each player's full state. The callback
+ *                      is responsible for projecting the state via `StateProjector.project()`
+ *                      to produce a per-viewer `PlayerSnapshot` before forwarding to
+ *                      transport (Invariants #3/#8). Typically this is
+ *                      `StateBroadcaster.broadcast` bound to the active session's
+ *                      `HostTransport`.
  * @param options     - Optional per-session configuration.  Supply `gameId` and
  *                      `savePort` to enable autosave after `engine:end_turn`.
  *
@@ -159,7 +161,7 @@ export interface HostSessionPipelineResult {
  */
 export function buildHostSessionPipeline(
     registry: ActionRegistry,
-    broadcastFn: (snapshot: ViewerSnapshot, viewerId: PlayerId) => void,
+    broadcastFn: (snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId) => void,
     options?: HostSessionPipelineOptions,
 ): HostSessionPipelineResult {
     const history = new InMemoryActionHistory();

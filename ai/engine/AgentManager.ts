@@ -22,14 +22,15 @@ import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
 // ─── StateProjector ────────────────────────────────────────────────────────────
 
 /**
- * Structural interface for the state projector.
+ * Structural bridge interface for the state projector.
  *
- * Formal `StateProjector` definition is deferred to F26.  Until then this
- * interface captures the minimum shape required by the AI layer. `AgentManager`
- * accepts any object that satisfies this interface structurally — it does NOT
- * import from `simulation/projection` (which does not exist yet).
- *
- * TODO(F26): replace with import from @chimera/simulation/projection/StateProjector.js
+ * `simulation/projection/StateProjector.ts` (landed in F26) defines the
+ * canonical `StateProjector` interface, but its `project()` return type is the
+ * simulation-rich `PlayerSnapshot` (§4.6), whereas `AgentManager` and
+ * `PlayerAgent` consume the narrower `PlayerSnapshot` from `AITypes.ts`.
+ * This shim captures only the shape the AI layer requires and remains valid
+ * via structural subtyping until the two `PlayerSnapshot` definitions are
+ * unified.
  */
 export interface StateProjector {
     project(fullState: BaseGameSnapshot, viewerId: PlayerId): PlayerSnapshot;

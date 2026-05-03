@@ -31,24 +31,24 @@ import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-    ViewerSnapshot,
 } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 
 // ── Type helpers ───────────────────────────────────────────────────────────────
 
 /**
- * Extracts `undoMeta` from a `ViewerSnapshot` (opaque `Readonly<Record<string,unknown>>`).
+ * Extracts `undoMeta` from a broadcast snapshot (BaseGameSnapshot with injected undoMeta).
  *
- * `ViewerSnapshot` is an index-signature type, so property access requires a
- * cast (TS4111 / `noPropertyAccessFromIndexSignature`).  This helper isolates
- * the one intentional cast rather than scattering `as` throughout the tests.
+ * Since the broadcast callback now receives BaseGameSnapshot without undoMeta,
+ * the test injects undoMeta in the broadcast callback. This helper extracts it.
  */
-function undoMetaOf(snap: ViewerSnapshot): {
+function undoMetaOf(
+    snap: BaseGameSnapshot & { undoMeta: { canUndo: boolean; canRedo: boolean } },
+): {
     readonly canUndo: boolean;
     readonly canRedo: boolean;
 } {
-    return (snap as unknown as { undoMeta: { canUndo: boolean; canRedo: boolean } }).undoMeta;
+    return snap.undoMeta;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -135,18 +135,38 @@ describe('buildHostSessionPipeline — wiring contract', () => {
 // ── AC2 — canUndo transitions to true after a non-trivial action ───────────────
 
 describe('buildHostSessionPipeline — AC2: canUndo transitions to true', () => {
-    let capturedByPlayer: Map<PlayerId, ViewerSnapshot>;
+    let capturedByPlayer: Map<
+        PlayerId,
+        BaseGameSnapshot & { undoMeta: { canUndo: boolean; canRedo: boolean } }
+    >;
     let pipeline: ReturnType<typeof buildHostSessionPipeline>['pipeline'];
     let undoManager: ReturnType<typeof buildHostSessionPipeline>['undoManager'];
     let clearUndoHistory: ReturnType<typeof buildHostSessionPipeline>['clearUndoHistory'];
 
     beforeEach(() => {
         capturedByPlayer = new Map();
+        const capturedUndoManager: {
+            current: ReturnType<typeof buildHostSessionPipeline>['undoManager'] | null;
+        } = { current: null };
         const result = buildHostSessionPipeline(makeRegistry(), (snap, to) => {
-            capturedByPlayer.set(to, snap);
+            const manager = capturedUndoManager.current;
+            if (manager === null) {
+                throw new Error('undoManager must be initialized before broadcast callback use');
+            }
+            // Simulate StateBroadcaster: compute undoMeta and attach it
+            const undoMeta = {
+                canUndo: manager.canUndo(to),
+                canRedo: manager.canRedo(to),
+            };
+            capturedByPlayer.set(to, {
+                // safe: BaseGameSnapshot has no index signature; spread in test double to attach undoMeta
+                ...(snap as Record<string, unknown>),
+                undoMeta,
+            } as BaseGameSnapshot & { undoMeta: { canUndo: boolean; canRedo: boolean } });
         });
         pipeline = result.pipeline;
         undoManager = result.undoManager;
+        capturedUndoManager.current = result.undoManager;
         clearUndoHistory = result.clearUndoHistory;
     });
 
@@ -206,17 +226,37 @@ describe('buildHostSessionPipeline — AC2: canUndo transitions to true', () => 
 // ── AC3 — engine:undo round-trip via Stage 3 intercept ───────────────────────
 
 describe('buildHostSessionPipeline — AC3: engine:undo Stage 3 intercept', () => {
-    let capturedByPlayer: Map<PlayerId, ViewerSnapshot>;
+    let capturedByPlayer: Map<
+        PlayerId,
+        BaseGameSnapshot & { undoMeta: { canUndo: boolean; canRedo: boolean } }
+    >;
     let pipeline: ReturnType<typeof buildHostSessionPipeline>['pipeline'];
     let undoManager: ReturnType<typeof buildHostSessionPipeline>['undoManager'];
 
     beforeEach(() => {
         capturedByPlayer = new Map();
+        const capturedUndoManager: {
+            current: ReturnType<typeof buildHostSessionPipeline>['undoManager'] | null;
+        } = { current: null };
         const result = buildHostSessionPipeline(makeRegistry(), (snap, to) => {
-            capturedByPlayer.set(to, snap);
+            const manager = capturedUndoManager.current;
+            if (manager === null) {
+                throw new Error('undoManager must be initialized before broadcast callback use');
+            }
+            // Simulate StateBroadcaster: compute undoMeta and attach it
+            const undoMeta = {
+                canUndo: manager.canUndo(to),
+                canRedo: manager.canRedo(to),
+            };
+            capturedByPlayer.set(to, {
+                // safe: BaseGameSnapshot has no index signature; spread in test double to attach undoMeta
+                ...(snap as Record<string, unknown>),
+                undoMeta,
+            } as BaseGameSnapshot & { undoMeta: { canUndo: boolean; canRedo: boolean } });
         });
         pipeline = result.pipeline;
         undoManager = result.undoManager;
+        capturedUndoManager.current = result.undoManager;
     });
 
     it('engine:undo transitions canUndo to false after history is exhausted', () => {
