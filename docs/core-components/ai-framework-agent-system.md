@@ -30,6 +30,7 @@ The simulation engine works exclusively with `PlayerId`. It has no concept of wh
 interface PlayerAgent {
     readonly playerId: PlayerId;
     readonly kind: 'human' | 'ai';
+    readonly omniscient?: boolean;
     onTick(snapshot: PlayerSnapshot, tick: number): void;
     onGameStart(snapshot: PlayerSnapshot): void;
     onGameEnd(snapshot: PlayerSnapshot, result: GameResult): void;
@@ -313,7 +314,7 @@ Simulation tick N completes → GameSnapshot
 | **Honest AI** (default) | `PlayerSnapshot` — fog of war respected, hands hidden    | Competitive play; AI has same info as human         |
 | **Omniscient AI**       | `GameSnapshot` (full truth) — host-only, never networked | Puzzle modes, tutorial AI, declared "cheating" mode |
 
-Omniscient mode is opt-in per `AIPlayerAgent` instance. Games declare this in their AI configuration; it is never the default.
+Omniscient mode is opt-in per `PlayerAgent` object, declared via `omniscient: true`. Games declare this in their player configuration; it is never the default.
 
 > **Invariant #16** — AI players submit `EngineAction` through `ActionPipeline` — there is no back-door mutation path for AI.
 > **Invariant #17** — AI receives `PlayerSnapshot` by default (honest AI). Omniscient mode must be explicitly declared and is logged at game start.

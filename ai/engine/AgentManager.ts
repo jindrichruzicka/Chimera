@@ -87,12 +87,15 @@ export class AgentManager {
      * For each agent: projects `fullState` through `projector.project()` to
      * obtain the agent's `PlayerSnapshot`, then calls `agent.onTick(snapshot, tick)`.
      *
-     * Invariant #17: the raw `fullState` is never passed to any agent; only
-     * the projected `PlayerSnapshot` is forwarded.
+     * Invariant #17: honest agents receive a `PlayerSnapshot` from the projector.
+     * Omniscient agents receive the raw `fullState` structurally widened to `PlayerSnapshot`,
+     * bypassing the projector (as permitted by Invariant #17).
      */
     public tickAll(fullState: BaseGameSnapshot, tick: number, projector: StateProjector): void {
         for (const agent of this.agents.values()) {
-            const snapshot = projector.project(fullState, agent.playerId);
+            const snapshot: PlayerSnapshot = agent.omniscient
+                ? fullState
+                : projector.project(fullState, agent.playerId);
             agent.onTick(snapshot, tick);
         }
     }
@@ -101,10 +104,19 @@ export class AgentManager {
      * Fan-out the game-start event to all registered agents.
      *
      * For each agent: projects `fullState` and calls `agent.onGameStart(snapshot)`.
+     * Omniscient agents receive `fullState` directly and trigger an audit-trail
+     * `warn` log entry (Invariant #17).
      */
     public onGameStart(fullState: BaseGameSnapshot, projector: StateProjector): void {
         for (const agent of this.agents.values()) {
-            const snapshot = projector.project(fullState, agent.playerId);
+            const snapshot: PlayerSnapshot = agent.omniscient
+                ? fullState
+                : projector.project(fullState, agent.playerId);
+            if (agent.omniscient) {
+                this.logger?.warn('agent-manager:omniscient-agent', {
+                    playerId: agent.playerId,
+                });
+            }
             agent.onGameStart(snapshot);
         }
     }
@@ -113,7 +125,8 @@ export class AgentManager {
      * Fan-out the game-end event to all registered agents.
      *
      * For each agent: projects `fullState` and calls
-     * `agent.onGameEnd(snapshot, result)`.
+     * `agent.onGameEnd(snapshot, result)`. Omniscient agents receive `fullState`
+     * directly (Invariant #17).
      */
     public onGameEnd(
         fullState: BaseGameSnapshot,
@@ -121,7 +134,9 @@ export class AgentManager {
         projector: StateProjector,
     ): void {
         for (const agent of this.agents.values()) {
-            const snapshot = projector.project(fullState, agent.playerId);
+            const snapshot: PlayerSnapshot = agent.omniscient
+                ? fullState
+                : projector.project(fullState, agent.playerId);
             agent.onGameEnd(snapshot, result);
         }
     }

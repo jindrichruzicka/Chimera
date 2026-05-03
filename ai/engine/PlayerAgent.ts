@@ -32,6 +32,21 @@ export type { AIParams, GameResult, PlayerSnapshot };
 export interface PlayerAgent {
     readonly playerId: PlayerId;
     readonly kind: 'human' | 'ai';
+    /**
+     * Omniscient mode flag — ONLY applies to kind: 'ai' agents.
+     *
+     * When set to true, AgentManager bypasses the StateProjector and passes
+     * the raw GameSnapshot directly to onTick/onGameStart/onGameEnd (per
+     * Invariant #17). This is logged at game start.
+     *
+     * Set this on a custom subclass of AIPlayerAgent or a plain object
+     * implementing PlayerAgent. The standard AIPlayerAgent class provides
+     * no constructor option for omniscient mode.
+     *
+     * If mistakenly set on a HumanPlayerAgent, the flag is silently ignored
+     * since HumanPlayerAgent lifecycle methods are no-ops (Invariant #16).
+     */
+    readonly omniscient?: boolean;
     onTick(snapshot: PlayerSnapshot, tick: number): void;
     onGameStart(snapshot: PlayerSnapshot): void;
     onGameEnd(snapshot: PlayerSnapshot, result: GameResult): void;

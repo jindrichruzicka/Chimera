@@ -8,7 +8,8 @@
  *
  * Invariants upheld:
  *   #17 — AgentManager.tickAll() calls projector.project() for each agent;
- *          AI players receive a PlayerSnapshot, never the raw GameSnapshot.
+ *          Honest AI players receive a PlayerSnapshot; omniscient AI players
+ *          receive fullState directly (bypassing projector).
  *
  * Tests written first (TDD — red confirmed before implementation).
  */
@@ -59,6 +60,15 @@ const makeNoopLogger = (): Logger => ({
 const makeAiAgent = (id = p1): PlayerAgent => ({
     playerId: id,
     kind: 'ai',
+    onTick: vi.fn(),
+    onGameStart: vi.fn(),
+    onGameEnd: vi.fn(),
+});
+
+const makeOmniscientAgent = (id = p1): PlayerAgent => ({
+    playerId: id,
+    kind: 'ai',
+    omniscient: true,
     onTick: vi.fn(),
     onGameStart: vi.fn(),
     onGameEnd: vi.fn(),
@@ -173,6 +183,33 @@ describe('AgentManager', () => {
 
             expect(projector.project).toHaveBeenCalledOnce();
         });
+
+        it('omniscient agent receives raw fullState — projector.project() NOT called for it', () => {
+            const projector = makeProjector();
+            const omniscient = makeOmniscientAgent(p1);
+            manager.registerAgent(omniscient);
+            const fullState = makeFullState();
+
+            manager.tickAll(fullState, 3, projector);
+
+            expect(projector.project).not.toHaveBeenCalled();
+            expect(omniscient.onTick).toHaveBeenCalledWith(fullState, 3);
+        });
+
+        it('omniscient and honest agents both receive onTick; projector called only for honest agent', () => {
+            const projector = makeProjector();
+            const omniscient = makeOmniscientAgent(p1);
+            const honest = makeAiAgent(p2);
+            manager.registerAgent(omniscient);
+            manager.registerAgent(honest);
+            const fullState = makeFullState();
+
+            manager.tickAll(fullState, 2, projector);
+
+            expect(projector.project).toHaveBeenCalledTimes(1);
+            expect(projector.project).toHaveBeenCalledWith(fullState, p2);
+            expect(omniscient.onTick).toHaveBeenCalledWith(fullState, 2);
+        });
     });
 
     // ── onGameStart ───────────────────────────────────────────────────────────
@@ -212,6 +249,57 @@ describe('AgentManager', () => {
             manager.onGameStart(makeFullState(), projector);
 
             expect(agent.onGameStart).toHaveBeenCalledWith(snapshot);
+        });
+
+        it('omniscient agent receives raw fullState in onGameStart — projector NOT called', () => {
+            const projector = makeProjector();
+            const omniscient = makeOmniscientAgent(p1);
+            manager.registerAgent(omniscient);
+            const fullState = makeFullState();
+
+            manager.onGameStart(fullState, projector);
+
+            expect(projector.project).not.toHaveBeenCalled();
+            expect(omniscient.onGameStart).toHaveBeenCalledWith(fullState);
+        });
+
+        it('omniscient and honest agents both receive onGameStart; projector called only for honest agent', () => {
+            const projector = makeProjector();
+            const omniscient = makeOmniscientAgent(p1);
+            const honest = makeAiAgent(p2);
+            manager.registerAgent(omniscient);
+            manager.registerAgent(honest);
+            const fullState = makeFullState();
+
+            manager.onGameStart(fullState, projector);
+
+            expect(projector.project).toHaveBeenCalledTimes(1);
+            expect(projector.project).toHaveBeenCalledWith(fullState, p2);
+            expect(omniscient.onGameStart).toHaveBeenCalledWith(fullState);
+        });
+
+        it('emits logger.warn for each omniscient agent during onGameStart', () => {
+            const logger = makeNoopLogger();
+            const managerWithLogger = new AgentManager({ logger });
+            const omniscient = makeOmniscientAgent(p1);
+            managerWithLogger.registerAgent(omniscient);
+
+            managerWithLogger.onGameStart(makeFullState(), makeProjector());
+
+            expect(logger.warn).toHaveBeenCalledWith('agent-manager:omniscient-agent', {
+                playerId: p1,
+            });
+        });
+
+        it('does NOT emit logger.warn for honest agents during onGameStart', () => {
+            const logger = makeNoopLogger();
+            const managerWithLogger = new AgentManager({ logger });
+            const honest = makeAiAgent(p1);
+            managerWithLogger.registerAgent(honest);
+
+            managerWithLogger.onGameStart(makeFullState(), makeProjector());
+
+            expect(logger.warn).not.toHaveBeenCalled();
         });
     });
 
@@ -254,6 +342,35 @@ describe('AgentManager', () => {
             manager.onGameEnd(makeFullState(), result, projector);
 
             expect(agent.onGameEnd).toHaveBeenCalledWith(snapshot, result);
+        });
+
+        it('omniscient agent receives raw fullState in onGameEnd — projector NOT called', () => {
+            const projector = makeProjector();
+            const omniscient = makeOmniscientAgent(p1);
+            manager.registerAgent(omniscient);
+            const fullState = makeFullState();
+            const result = makeResult();
+
+            manager.onGameEnd(fullState, result, projector);
+
+            expect(projector.project).not.toHaveBeenCalled();
+            expect(omniscient.onGameEnd).toHaveBeenCalledWith(fullState, result);
+        });
+
+        it('omniscient and honest agents both receive onGameEnd; projector called only for honest agent', () => {
+            const projector = makeProjector();
+            const omniscient = makeOmniscientAgent(p1);
+            const honest = makeAiAgent(p2);
+            manager.registerAgent(omniscient);
+            manager.registerAgent(honest);
+            const fullState = makeFullState();
+            const result = makeResult();
+
+            manager.onGameEnd(fullState, result, projector);
+
+            expect(projector.project).toHaveBeenCalledTimes(1);
+            expect(projector.project).toHaveBeenCalledWith(fullState, p2);
+            expect(omniscient.onGameEnd).toHaveBeenCalledWith(fullState, result);
         });
     });
 });
