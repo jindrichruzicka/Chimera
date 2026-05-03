@@ -28,6 +28,7 @@ import type {
     HostTransport,
     ClientTransport,
     PlayerId,
+    PlayerSnapshot,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '../logging/logger.js';
@@ -72,6 +73,7 @@ export class LobbyManager {
         private readonly onLobbyStateChanged?: (state: LobbyState) => void,
         private readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void,
         private readonly profileGate?: ProfileGate,
+        private readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot) => void,
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
     }
@@ -307,13 +309,11 @@ export class LobbyManager {
         this.localPlayerId = session.localPlayerId;
         this.publishLobbyState(session.initialLobbyState);
 
-        // Wire transport callbacks to renderer broadcast stubs (F12 renderer state
-        // sync will implement snapshot pushing to the renderer).  Capture the
-        // Unsubscribe handles so closeLobby() can tear them down cleanly.
+        // Wire transport callbacks and capture Unsubscribe handles so
+        // closeLobby() can tear them down cleanly.
         this.subscriptions.push(
-            session.transport.onSnapshotReceived((_snapshot) => {
-                // TODO(F12): Forward snapshots to renderer via chimera:game:snapshot IPC.
-                // Awaiting renderer store bootstrap work; see docs/core-components/game-ui.md.
+            session.transport.onSnapshotReceived((snapshot) => {
+                this.onClientSnapshotReceived?.(snapshot);
             }),
             session.transport.onLobbyStateChanged((state) => {
                 this.publishLobbyState(state);
@@ -327,8 +327,7 @@ export class LobbyManager {
         this.log.info('joinLobby:connected', { sessionId: session.lobbyInfo.sessionId });
 
         // Notify the wiring point (index.ts) that a joined session is live
-        // so it can wire the renderer IPC bridge.  F12 will replace this with
-        // real broadcastToRenderer wiring.
+        // so it can perform any additional transport wiring.
         const joinedTeardown = this.onSessionJoined?.(session.transport);
         if (joinedTeardown !== undefined) {
             this.sessionJoinedTeardown = joinedTeardown;

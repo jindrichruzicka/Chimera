@@ -39,6 +39,7 @@ import { SessionRuntime } from './runtime/SessionRuntime.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
+import { GAME_SNAPSHOT_CHANNEL } from '../preload/apis/game-api.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
@@ -617,6 +618,13 @@ export async function main(): Promise<void> {
             });
         },
         profileGate,
+        (snapshot) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+                }
+            });
+        },
     );
 
     // Register the `chimera:game:*` channels. `switch-seat` delegates to the

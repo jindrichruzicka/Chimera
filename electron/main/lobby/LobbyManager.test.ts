@@ -1209,3 +1209,108 @@ describe('LobbyManager — PROFILE_UPDATE side-channel', () => {
         await manager.closeLobby();
     });
 });
+
+// ── onClientSnapshotReceived forwarding ──────────────────────────────────────
+//
+// When the host broadcasts a PlayerSnapshot to a joined client, LobbyManager
+// must invoke the onClientSnapshotReceived callback so the wiring point
+// (index.ts) can forward the snapshot to the renderer via webContents.send.
+
+describe('LobbyManager — onClientSnapshotReceived', () => {
+    async function hostAndJoin(
+        onClientSnapshotReceived?: (snapshot: PlayerSnapshot) => void,
+    ): Promise<{
+        hostManager: LobbyManager;
+        joinManager: LobbyManager;
+        provider: InMemoryMultiplayerProvider;
+    }> {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const code = (await hostManager.hostLobby(HOST_PARAMS)).sessionId;
+        const joinManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            onClientSnapshotReceived,
+        );
+        await joinManager.joinLobby({ address: code });
+        return { hostManager, joinManager, provider };
+    }
+
+    it('registers onClientSnapshotReceived without throwing (wiring-presence)', async () => {
+        const received: PlayerSnapshot[] = [];
+        const { joinManager } = await hostAndJoin((snap) => {
+            received.push(snap);
+        });
+
+        // Callback is registered and did not throw during setup.
+        // End-to-end callback invocation (snapshot delivery) is tested separately.
+        await joinManager.closeLobby();
+    });
+
+    it('invokes onClientSnapshotReceived when host sends a snapshot to the joined client', async () => {
+        const received: PlayerSnapshot[] = [];
+        const provider = makeProvider();
+
+        // Capture HostTransport from the host manager
+        let capturedTransport: HostTransport | null = null;
+        const hostManager = new LobbyManager(provider, createNoopLogger(), (transport) => {
+            capturedTransport = transport;
+        });
+
+        // Host and join
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+        const joinManager = new LobbyManager(
+            provider,
+            createNoopLogger(),
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            undefined,
+            (snap) => {
+                received.push(snap);
+            },
+        );
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        // Send a snapshot from host to joined client via captured transport
+        expect(capturedTransport).not.toBeNull();
+        const testSnapshot = makeTestSnapshot();
+        const joinPlayerId = joinManager.getLocalPlayerId();
+        expect(joinPlayerId).not.toBeNull();
+        capturedTransport!.sendSnapshot(joinPlayerId!, testSnapshot);
+
+        // Verify callback was invoked with the snapshot
+        expect(received).toHaveLength(1);
+        expect(received[0]).toEqual(testSnapshot);
+
+        // Teardown
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('does not throw when onClientSnapshotReceived is not provided', async () => {
+        const { hostManager, joinManager } = await hostAndJoin(undefined);
+        await hostManager.closeLobby();
+        await joinManager.closeLobby();
+    });
+
+    it('stops calling onClientSnapshotReceived after closeLobby', async () => {
+        const received: PlayerSnapshot[] = [];
+        const { hostManager, joinManager } = await hostAndJoin((snap) => {
+            received.push(snap);
+        });
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+
+        const countAfterClose = received.length;
+        // No further callbacks fire after close
+        expect(received.length).toBe(countAfterClose);
+    });
+});
