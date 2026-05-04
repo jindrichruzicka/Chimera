@@ -66,6 +66,7 @@ import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
 import { SimulationHost } from './runtime/SimulationHost.js';
+import { assertProductionDebugGuard } from './startup-guard.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 
@@ -386,6 +387,11 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
 export async function main(): Promise<void> {
+    // ── Invariant #27: CHIMERA_DEBUG + production guard ───────────────────────
+    // Must be the very first check so no debug surface is initialised before
+    // an illegal production+debug combination is caught.
+    assertProductionDebugGuard(process.env);
+
     // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
     if (process.env['CHIMERA_DEV_HARNESS'] === '1' && process.env.NODE_ENV === 'production') {
         throw new Error('CHIMERA_DEV_HARNESS is enabled in a production build. Refusing to start.');

@@ -1557,6 +1557,52 @@ describe('main() CHIMERA_DEV_HARNESS guard', () => {
     });
 });
 
+// ─── CHIMERA_DEBUG production guard (Invariant #27) ──────────────────────────
+
+describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
+    it('throws when CHIMERA_DEBUG is set and NODE_ENV=production', async () => {
+        const origEnv = process.env;
+        // Unset harness flag to isolate this guard from the CHIMERA_DEV_HARNESS check.
+        process.env = {
+            ...origEnv,
+            CHIMERA_DEBUG: '1',
+            NODE_ENV: 'production',
+            CHIMERA_DEV_HARNESS: undefined,
+        };
+        try {
+            await expect(main()).rejects.toThrow(/CHIMERA_DEBUG/i);
+        } finally {
+            process.env = origEnv;
+        }
+    });
+
+    it('does not throw when CHIMERA_DEBUG is set and NODE_ENV=development', async () => {
+        const origEnv = process.env;
+        process.env = {
+            ...origEnv,
+            CHIMERA_DEBUG: '1',
+            NODE_ENV: 'development',
+            CHIMERA_DEV_HARNESS: undefined,
+        };
+        try {
+            await expect(main()).resolves.not.toThrow();
+        } finally {
+            process.env = origEnv;
+        }
+    });
+
+    it('does not throw when CHIMERA_DEBUG is absent and NODE_ENV=production', async () => {
+        const origEnv = process.env;
+        const { CHIMERA_DEBUG: _removed, ...envWithout } = origEnv;
+        process.env = { ...envWithout, NODE_ENV: 'production', CHIMERA_DEV_HARNESS: undefined };
+        try {
+            await expect(main()).resolves.not.toThrow();
+        } finally {
+            process.env = origEnv;
+        }
+    });
+});
+
 // ─── agent ordering: onGameStart deferred until all expected players join ─────
 //
 // Issue #416: onGameStart was called synchronously inside onSessionHosted,
