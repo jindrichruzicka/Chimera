@@ -281,6 +281,10 @@ describe('fog-of-war (targeted, T03): known-invisible entity is key-absent from 
                                 `"${viewerId}". It must be entirely absent — not null.`,
                         );
                     }
+
+                    // Defence in depth: also assert no owner-only marker fields
+                    // leaked onto any entity in this snapshot (AC #449).
+                    assertNoLeakedFields(projected, viewerId, allPlayerIds);
                 }
             }),
             { numRuns: 10_000 },
