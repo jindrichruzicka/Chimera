@@ -70,6 +70,18 @@ export class SessionCommitmentRuntime {
         this.commitmentScheme = commitmentScheme;
     }
 
+    /**
+     * Generate a new commitment for `value`, store the envelope in
+     * pendingCommitments, and return the envelope for broadcast.
+     *
+     * Phase 1 of the commit/reveal protocol (§4.6 / §8).
+     */
+    commit(value: unknown): CommitmentEnvelope {
+        const envelope = this.commitmentScheme.commit(value);
+        this.pendingCommitments[envelope.id] = envelope;
+        return envelope;
+    }
+
     restorePendingCommitments(pendingCommitments: PendingCommitments): void {
         this.pendingCommitments = copyPendingCommitments(pendingCommitments);
     }
@@ -113,6 +125,7 @@ function copyPendingCommitments(
  * injected without an `as any` cast (DIP — §coding-standards SOLID §3.5).
  */
 export interface CommitmentRuntimePort {
+    commit(value: unknown): CommitmentEnvelope;
     restorePendingCommitments(pendingCommitments: PendingCommitments): void;
     capturePendingCommitments(): Record<CommitmentId, CommitmentEnvelope>;
     verifyReveal(reveal: CommitmentReveal): unknown;
@@ -211,6 +224,30 @@ export class SessionRuntime {
 
     verifyReveal(reveal: CommitmentReveal): unknown {
         return this.commitments.verifyReveal(reveal);
+    }
+
+    /**
+     * Generate a commitment for `value`, store the envelope in the host's
+     * pending-commitments map, and return the envelope.
+     *
+     * The envelope will be included in the next `PlayerSnapshot.commitments`
+     * broadcast once `StateProjector.project()` is configured with
+     * `getPendingCommitments: () => sessionRuntime.capturePendingCommitments()`
+     * (BLOCK-1 fix, §4.6 / §8).
+     *
+     * Phase 1 of the commit/reveal protocol.
+     */
+    commit(value: unknown): CommitmentEnvelope {
+        return this.commitments.commit(value);
+    }
+
+    /**
+     * Return a null-prototype copy of the current pending commitments.
+     * Used by `DefaultStateProjector` via the `getPendingCommitments` option
+     * to populate `PlayerSnapshot.commitments` on every broadcast.
+     */
+    capturePendingCommitments(): Readonly<Record<CommitmentId, CommitmentEnvelope>> {
+        return this.commitments.capturePendingCommitments();
     }
 
     /**

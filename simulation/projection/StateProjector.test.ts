@@ -29,6 +29,9 @@ import { entityId, gamePhase, playerId } from '../engine/types.js';
 import type { PlayerSnapshot, StateProjector } from './StateProjector.js';
 import { DefaultStateProjector } from './StateProjector.js';
 
+import type { CommitmentEnvelope, CommitmentId } from './CommitmentScheme.js';
+import { toCommitmentId } from './CommitmentScheme.js';
+
 import type { VisibilityRules } from './types.js';
 
 // ─── Test-domain types ────────────────────────────────────────────────────────
@@ -449,6 +452,59 @@ describe('DefaultStateProjector.project()', () => {
             const view = projector.project(snapshot, P1);
 
             expect(Object.keys(view.commitments).length).toBe(0);
+            expect(Object.getPrototypeOf(view.commitments)).toBeNull();
+        });
+
+        it('pending commitments from getPendingCommitments() appear in the projected snapshot', () => {
+            const envelope: CommitmentEnvelope = {
+                id: toCommitmentId('test-commitment-1'),
+                commitment: 'sha256-hash-placeholder',
+            };
+            const pendingCommitments: Record<CommitmentId, CommitmentEnvelope> = Object.assign(
+                Object.create(null) as Record<CommitmentId, CommitmentEnvelope>,
+                { [envelope.id]: envelope },
+            );
+            const projector = new DefaultStateProjector(fogRules, {
+                getPendingCommitments: () => pendingCommitments,
+            });
+            const snapshot = makeSnapshot();
+
+            const view = projector.project(snapshot, P1);
+
+            expect(view.commitments[envelope.id]).toEqual(envelope);
+        });
+
+        it('getPendingCommitments() result is used verbatim (null prototype preserved)', () => {
+            const envelope: CommitmentEnvelope = {
+                id: toCommitmentId('test-commitment-2'),
+                commitment: 'another-sha256-hash',
+            };
+            const pendingCommitments = Object.create(null) as Record<
+                CommitmentId,
+                CommitmentEnvelope
+            >;
+            pendingCommitments[envelope.id] = envelope;
+            const projector = new DefaultStateProjector(fogRules, {
+                getPendingCommitments: () => pendingCommitments,
+            });
+            const snapshot = makeSnapshot();
+
+            const view = projector.project(snapshot, P1);
+
+            expect(Object.getPrototypeOf(view.commitments)).toBeNull();
+            expect(Object.keys(view.commitments)).toContain(envelope.id);
+        });
+
+        it('empty getPendingCommitments() still produces a null-prototype commitments record', () => {
+            const empty = Object.create(null) as Record<CommitmentId, CommitmentEnvelope>;
+            const projector = new DefaultStateProjector(fogRules, {
+                getPendingCommitments: () => empty,
+            });
+            const snapshot = makeSnapshot();
+
+            const view = projector.project(snapshot, P1);
+
+            expect(Object.keys(view.commitments)).toHaveLength(0);
             expect(Object.getPrototypeOf(view.commitments)).toBeNull();
         });
     });

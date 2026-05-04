@@ -60,6 +60,19 @@ export interface PlayerSnapshot {
 
 export interface StateProjectorOptions<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly getUndoMeta?: (viewerId: PlayerId, fullState: Readonly<TState>) => UndoMeta;
+    /**
+     * Optional provider of the host's current pending commitments.
+     *
+     * When supplied, `project()` includes the returned map in
+     * `PlayerSnapshot.commitments` so every client snapshot contains
+     * the envelopes needed for Phase-2 REVEAL verification (§4.6 / §8,
+     * BLOCK-1 fix).  Returns a null-prototype copy from
+     * `SessionCommitmentRuntime.capturePendingCommitments()`.
+     *
+     * When absent the commitments field defaults to an empty null-prototype
+     * record (backwards-compatible default, same as the F27 stub).
+     */
+    readonly getPendingCommitments?: () => Readonly<Record<CommitmentId, CommitmentEnvelope>>;
 }
 
 // ─── StateProjector interface ─────────────────────────────────────────────────
@@ -145,6 +158,10 @@ export class DefaultStateProjector<
             canRedo: false,
         };
 
+        const commitments =
+            this.#options.getPendingCommitments?.() ??
+            (Object.create(null) as Readonly<Record<CommitmentId, CommitmentEnvelope>>);
+
         return {
             tick: fullState.tick,
             viewerId,
@@ -152,7 +169,7 @@ export class DefaultStateProjector<
             players,
             entities,
             events,
-            commitments: Object.create(null) as Readonly<Record<CommitmentId, CommitmentEnvelope>>,
+            commitments,
             undoMeta,
         };
     }

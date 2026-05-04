@@ -9,7 +9,12 @@
 import { createHash } from 'node:crypto';
 
 import { describe, expect, it, vi } from 'vitest';
-import { HOST_ENGINE_VERSION, SessionRuntime, type ApplyActionFn } from './SessionRuntime.js';
+import {
+    HOST_ENGINE_VERSION,
+    SessionCommitmentRuntime,
+    SessionRuntime,
+    type ApplyActionFn,
+} from './SessionRuntime.js';
 import { toSlotId } from '../../preload/api-types.js';
 import type {
     ActionEnvelope,
@@ -340,6 +345,7 @@ describe('SessionRuntime', () => {
                 restorePendingCommitments: vi.fn(),
                 capturePendingCommitments: vi.fn().mockReturnValue(makePendingCommitments()),
                 verifyReveal: vi.fn().mockReturnValue(COMMITTED_VALUE),
+                commit: vi.fn(),
             };
 
             const runtime = new SessionRuntime({
@@ -356,6 +362,106 @@ describe('SessionRuntime', () => {
             });
 
             expect(injectedCommitmentRuntime.capturePendingCommitments).toHaveBeenCalled();
+        });
+    });
+
+    describe('commit()', () => {
+        it('returns a CommitmentEnvelope with an id and commitment hash', () => {
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: makeSnapshot(0),
+                applyAction: vi.fn(),
+            });
+
+            const envelope = runtime.commit({ card: 'ace-of-stars' });
+
+            expect(typeof envelope.id).toBe('string');
+            expect(envelope.id.length).toBeGreaterThan(0);
+            expect(typeof envelope.commitment).toBe('string');
+            expect(envelope.commitment.length).toBe(64); // SHA-256 hex = 64 chars
+        });
+
+        it('the committed envelope is included in captureSaveFile pendingCommitments', () => {
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: makeSnapshot(0),
+                applyAction: vi.fn(),
+                now: () => 1_000,
+            });
+
+            const envelope = runtime.commit({ card: 'ace-of-stars' });
+            const file = runtime.captureSaveFile({ gameId: 'tactics' });
+
+            expect(file.pendingCommitments[envelope.id]).toEqual(envelope);
+        });
+
+        it('verifyReveal succeeds after commit() with a matching reveal', () => {
+            // Use a custom CommitmentScheme with known nonce so we can construct the reveal
+            const NONCE = 'aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899';
+            const VALUE = { dice: 6 };
+            const commitmentScheme = {
+                commit(_v: unknown) {
+                    return {
+                        id: toCommitmentId('known-id'),
+                        commitment: 'expected-hash',
+                    };
+                },
+                verify(_reveal: CommitmentReveal, _envelope: CommitmentEnvelope) {
+                    return true;
+                },
+            };
+
+            const commitmentRuntime = new SessionCommitmentRuntime(commitmentScheme);
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: makeSnapshot(0),
+                applyAction: vi.fn(),
+                commitmentRuntime,
+            });
+
+            const envelope = runtime.commit(VALUE);
+            const reveal: CommitmentReveal = { id: envelope.id, value: VALUE, nonce: NONCE };
+
+            expect(() => runtime.verifyReveal(reveal)).not.toThrow();
+        });
+
+        it('delegates commit() to the injected commitmentRuntime', () => {
+            const expectedEnvelope: CommitmentEnvelope = {
+                id: toCommitmentId('injected-id'),
+                commitment: 'injected-hash',
+            };
+            const injectedRuntime = {
+                restorePendingCommitments: vi.fn(),
+                capturePendingCommitments: vi.fn().mockReturnValue({}),
+                verifyReveal: vi.fn(),
+                commit: vi.fn().mockReturnValue(expectedEnvelope),
+            };
+
+            const runtime = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: makeSnapshot(0),
+                applyAction: vi.fn(),
+                commitmentRuntime: injectedRuntime,
+            });
+
+            const result = runtime.commit({ value: 42 });
+
+            expect(injectedRuntime.commit).toHaveBeenCalledWith({ value: 42 });
+            expect(result).toBe(expectedEnvelope);
+        });
+
+        it('SessionCommitmentRuntime.commit() stores the envelope in pendingCommitments', () => {
+            const VALUE = { foo: 'bar' };
+            const commitmentRuntime = new SessionCommitmentRuntime();
+
+            const envelope = commitmentRuntime.commit(VALUE);
+            const captured = commitmentRuntime.capturePendingCommitments();
+
+            expect(captured[envelope.id]).toEqual(envelope);
         });
     });
 });

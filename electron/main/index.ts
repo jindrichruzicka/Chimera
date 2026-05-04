@@ -568,11 +568,17 @@ export async function main(): Promise<void> {
                 },
             );
 
+            // Per-session commitment runtime shared between the projector and
+            // SessionRuntime so `commit()` envelopes are automatically included
+            // in the next broadcasted PlayerSnapshot (BLOCK-1 fix, §4.6 / §8).
+            const sessionCommitmentRuntime = new SessionCommitmentRuntime();
+
             const projector = new DefaultStateProjector(tacticsVisibilityRules, {
                 getUndoMeta: (viewerId) => ({
                     canUndo: undoManager.canUndo(viewerId),
                     canRedo: undoManager.canRedo(viewerId),
                 }),
+                getPendingCommitments: () => sessionCommitmentRuntime.capturePendingCommitments(),
             });
             const simulationHost = new SimulationHost(agentManager, projector);
             // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
@@ -588,6 +594,7 @@ export async function main(): Promise<void> {
                 gameVersion: HOSTED_GAME_VERSION,
                 initialSnapshot,
                 applyAction: processAction,
+                commitmentRuntime: sessionCommitmentRuntime,
             });
             activeSession = sessionRuntime;
 
