@@ -30,6 +30,7 @@ import type {
     DisconnectReason,
 } from './MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -442,6 +443,64 @@ describe('InMemoryMultiplayerProvider', () => {
         });
     });
 
+    // ─── Reveal delivery ──────────────────────────────────────────────────────
+
+    describe('reveal delivery', () => {
+        function makeReveal(): WireCommitmentReveal {
+            return { id: 'commitment-1', value: 42, nonce: 'abc' };
+        }
+
+        it('host sendReveal unicast is received by the target client only', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            const joinedA = await provider.joinLobby({ address: hosted.lobbyCode });
+            const joinedB = await provider.joinLobby({ address: hosted.lobbyCode });
+
+            const receivedByA: WireCommitmentReveal[] = [];
+            const receivedByB: WireCommitmentReveal[] = [];
+            joinedA.transport.onReveal((r) => receivedByA.push(r));
+            joinedB.transport.onReveal((r) => receivedByB.push(r));
+
+            const reveal = makeReveal();
+            hosted.transport.sendReveal(joinedA.localPlayerId, reveal);
+
+            expect(receivedByA).toHaveLength(1);
+            expect(receivedByA[0]).toEqual(reveal);
+            expect(receivedByB).toHaveLength(0);
+        });
+
+        it('host sendReveal broadcast is received by all clients', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            const joinedA = await provider.joinLobby({ address: hosted.lobbyCode });
+            const joinedB = await provider.joinLobby({ address: hosted.lobbyCode });
+
+            const receivedByA: WireCommitmentReveal[] = [];
+            const receivedByB: WireCommitmentReveal[] = [];
+            joinedA.transport.onReveal((r) => receivedByA.push(r));
+            joinedB.transport.onReveal((r) => receivedByB.push(r));
+
+            const reveal = makeReveal();
+            hosted.transport.sendReveal('broadcast', reveal);
+
+            expect(receivedByA).toHaveLength(1);
+            expect(receivedByB).toHaveLength(1);
+        });
+
+        it('unsubscribing from onReveal stops delivery', async () => {
+            const provider = new InMemoryMultiplayerProvider();
+            const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+
+            const received: WireCommitmentReveal[] = [];
+            const unsub = joined.transport.onReveal((r) => received.push(r));
+            unsub();
+
+            hosted.transport.sendReveal(joined.localPlayerId, makeReveal());
+            expect(received).toHaveLength(0);
+        });
+    });
+
     // ─── Unsub helpers are callable without side effects ─────────────────────
 
     describe('unsubscribe helpers', () => {
@@ -460,8 +519,10 @@ describe('InMemoryMultiplayerProvider', () => {
             const clientUnsubs = [
                 joined.transport.onSnapshotReceived(vi.fn()),
                 joined.transport.onSideChannelReceived(vi.fn()),
+                joined.transport.onReveal(vi.fn()),
                 joined.transport.onLobbyStateChanged(vi.fn()),
                 joined.transport.onDisconnected(vi.fn()),
+                joined.transport.onLatencyUpdate(vi.fn()),
             ];
 
             expect(() => {

@@ -19,7 +19,7 @@ import type {
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
-import type { ServerMessage } from '@chimera/shared/messages.js';
+import type { ServerMessage, WireCommitmentReveal } from '@chimera/shared/messages.js';
 import type { ServerConnection } from './ServerConnection.js';
 
 // ─── WsClientTransport ────────────────────────────────────────────────────────
@@ -35,6 +35,7 @@ import type { ServerConnection } from './ServerConnection.js';
 export class WsClientTransport implements ClientTransport {
     private readonly snapshotCbs = new Set<(snapshot: PlayerSnapshot) => void>();
     private readonly sideChannelCbs = new Set<(msg: SideChannelMessage) => void>();
+    private readonly revealCbs = new Set<(reveal: WireCommitmentReveal) => void>();
     private readonly lobbyStateCbs = new Set<(state: LobbyState) => void>();
     private readonly latencyUpdateCbs = new Set<(latencyMs: number) => void>();
     private disconnectUnsub: Unsubscribe | null = null;
@@ -105,6 +106,13 @@ export class WsClientTransport implements ClientTransport {
         };
     }
 
+    onReveal(cb: (reveal: WireCommitmentReveal) => void): Unsubscribe {
+        this.revealCbs.add(cb);
+        return (): void => {
+            this.revealCbs.delete(cb);
+        };
+    }
+
     onLobbyStateChanged(cb: (state: LobbyState) => void): Unsubscribe {
         this.lobbyStateCbs.add(cb);
         return (): void => {
@@ -137,6 +145,7 @@ export class WsClientTransport implements ClientTransport {
 
         this.snapshotCbs.clear();
         this.sideChannelCbs.clear();
+        this.revealCbs.clear();
         this.lobbyStateCbs.clear();
         this.latencyUpdateCbs.clear();
     }
@@ -169,8 +178,12 @@ export class WsClientTransport implements ClientTransport {
                 }
                 break;
 
+            case 'REVEAL':
+                for (const cb of this.revealCbs) cb(msg.reveal);
+                break;
+
             default:
-                // WELCOME handled by ServerConnection; DELTA, REJECT, REVEAL ignored
+                // WELCOME handled by ServerConnection; DELTA and non-terminal REJECT ignored
                 break;
         }
     }

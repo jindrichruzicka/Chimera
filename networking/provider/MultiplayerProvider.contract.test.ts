@@ -533,8 +533,10 @@ export function testMultiplayerProviderContract(
                     hosted.transport.onPlayerLeft(() => {}),
                     joined.transport.onSnapshotReceived(() => {}),
                     joined.transport.onSideChannelReceived(() => {}),
+                    joined.transport.onReveal(() => {}),
                     joined.transport.onLobbyStateChanged(() => {}),
                     joined.transport.onDisconnected(() => {}),
+                    joined.transport.onLatencyUpdate(() => {}),
                 ];
 
                 expect(() => {

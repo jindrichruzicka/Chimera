@@ -21,7 +21,7 @@ import type {
     JoinGateResult,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
-import type { ServerMessage } from '@chimera/shared/messages.js';
+import type { ServerMessage, WireCommitmentReveal } from '@chimera/shared/messages.js';
 import type { LobbyServer } from './LobbyServer.js';
 import type { MessageRouter } from './MessageRouter.js';
 
@@ -62,6 +62,15 @@ export class WsHostTransport implements HostTransport {
             this.server.broadcast(frame);
         } else {
             this.server.sendToPlayer(target, frame);
+        }
+    }
+
+    sendReveal(target: PlayerId | 'broadcast', reveal: WireCommitmentReveal): void {
+        const msg: ServerMessage = { type: 'REVEAL', reveal };
+        if (target === 'broadcast') {
+            this.server.broadcast(msg);
+        } else {
+            this.server.sendToPlayer(target, msg);
         }
     }
 

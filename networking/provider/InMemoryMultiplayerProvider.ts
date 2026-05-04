@@ -36,6 +36,7 @@ import type {
     LobbyInfo,
 } from './MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 import { playerId as toPlayerId } from './MultiplayerProvider.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────
@@ -48,6 +49,7 @@ type PlayerLeftCb = (playerId: PlayerId, reason: DisconnectReason) => void;
 type SnapshotCb = (snapshot: PlayerSnapshot) => void;
 type LobbyStateCb = (state: LobbyState) => void;
 type ClientSideChannelCb = (msg: SideChannelMessage) => void;
+type RevealCb = (reveal: WireCommitmentReveal) => void;
 type DisconnectCb = (reason: DisconnectReason) => void;
 
 function addSub<T>(set: Set<T>, cb: T): Unsubscribe {
@@ -62,6 +64,7 @@ interface ClientRecord {
     readonly playerId: PlayerId;
     readonly snapshotCbs: Set<SnapshotCb>;
     readonly sideChannelCbs: Set<ClientSideChannelCb>;
+    readonly revealCbs: Set<RevealCb>;
     readonly lobbyStateCbs: Set<LobbyStateCb>;
     readonly disconnectCbs: Set<DisconnectCb>;
 }
@@ -97,6 +100,7 @@ class InMemoryChannel {
             playerId,
             snapshotCbs: new Set(),
             sideChannelCbs: new Set(),
+            revealCbs: new Set(),
             lobbyStateCbs: new Set(),
             disconnectCbs: new Set(),
         };
@@ -121,6 +125,7 @@ class InMemoryChannel {
         for (const client of this.clients.values()) {
             client.snapshotCbs.clear();
             client.sideChannelCbs.clear();
+            client.revealCbs.clear();
             client.lobbyStateCbs.clear();
             client.disconnectCbs.clear();
         }
@@ -175,6 +180,19 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
                     const client = channel.clients.get(target);
                     if (client) {
                         for (const cb of client.sideChannelCbs) cb(msg);
+                    }
+                }
+            },
+
+            sendReveal: (target: PlayerId | 'broadcast', reveal: WireCommitmentReveal): void => {
+                if (target === 'broadcast') {
+                    for (const client of channel.clients.values()) {
+                        for (const cb of client.revealCbs) cb(reveal);
+                    }
+                } else {
+                    const client = channel.clients.get(target);
+                    if (client) {
+                        for (const cb of client.revealCbs) cb(reveal);
                     }
                 }
             },
@@ -317,6 +335,8 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
             onSideChannelReceived: (cb: ClientSideChannelCb): Unsubscribe =>
                 addSub(record.sideChannelCbs, cb),
+
+            onReveal: (cb: RevealCb): Unsubscribe => addSub(record.revealCbs, cb),
 
             onLobbyStateChanged: (cb: LobbyStateCb): Unsubscribe =>
                 addSub(record.lobbyStateCbs, cb),

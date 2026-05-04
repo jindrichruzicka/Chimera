@@ -34,6 +34,7 @@ function makeTransport(): HostTransport {
         sendSnapshot: vi.fn(),
         broadcastLobbyState: vi.fn(),
         sendSideChannel: vi.fn(),
+        sendReveal: vi.fn(),
         onActionReceived: vi.fn(() => () => {}),
         onReadyStateUpdate: vi.fn(() => () => {}),
         onSideChannelReceived: vi.fn(() => () => {}),

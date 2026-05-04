@@ -42,6 +42,8 @@ interface HostTransport {
     broadcastLobbyState(state: LobbyState): void;
     /** Side-channel: non-authoritative, not in ActionHistory, not in saves/replays */
     sendSideChannel(target: PlayerId | 'broadcast', msg: SideChannelMessage): void;
+    /** Push a cryptographic commitment reveal to one client or all clients. */
+    sendReveal(target: PlayerId | 'broadcast', reveal: WireCommitmentReveal): void;
     onActionReceived(cb: (from: PlayerId, action: EngineAction) => void): Unsubscribe;
     onSideChannelReceived(cb: (from: PlayerId, msg: SideChannelMessage) => void): Unsubscribe;
     onPlayerJoined(cb: (player: LobbyPlayerEntry) => void): Unsubscribe;
@@ -61,6 +63,8 @@ interface ClientTransport {
     sendSideChannel(msg: SideChannelMessage): void;
     onSnapshotReceived(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
     onSideChannelReceived(cb: (msg: SideChannelMessage) => void): Unsubscribe;
+    /** @remarks Always verify via CommitmentScheme.verify() before trusting reveal.value (Invariant #9). */
+    onReveal(cb: (reveal: WireCommitmentReveal) => void): Unsubscribe;
     onLobbyStateChanged(cb: (state: LobbyState) => void): Unsubscribe;
     onDisconnected(cb: (reason: DisconnectReason) => void): Unsubscribe;
     onLatencyUpdate(cb: (latencyMs: number) => void): Unsubscribe;

@@ -21,7 +21,11 @@ import type { Logger } from '@chimera/shared/logging.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { WsHostTransport } from '../server/WsHostTransport.js';
-import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
+import type {
+    ClientMessage,
+    ServerMessage,
+    WireCommitmentReveal,
+} from '@chimera/shared/messages.js';
 import { ServerConnection } from './ServerConnection.js';
 import { WsClientTransport } from './WsClientTransport.js';
 
@@ -114,6 +118,7 @@ describe('WsClientTransport — implements ClientTransport', () => {
         expect(typeof transport.onLobbyStateChanged).toBe('function');
         expect(typeof transport.onDisconnected).toBe('function');
         expect(typeof transport.onLatencyUpdate).toBe('function');
+        expect(typeof transport.onReveal).toBe('function');
     });
 });
 
@@ -409,6 +414,31 @@ describe('WsClientTransport — onSideChannelReceived', () => {
     });
 });
 
+// ─── onReveal ────────────────────────────────────────────────────────────────
+
+describe('WsClientTransport — onReveal', () => {
+    it('fires when the host sends a REVEAL message', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const reveal: WireCommitmentReveal = {
+            id: 'commitment-1',
+            value: { die: 6 },
+            nonce: 'nonce-1',
+        };
+        const revealReceived = new Promise<WireCommitmentReveal>((resolve) => {
+            const unsubscribe = transport.onReveal((message) => {
+                unsubscribe();
+                resolve(message);
+            });
+        });
+
+        server.sendToPlayer(playerId, { type: 'REVEAL', reveal });
+        const receivedReveal = await revealReceived;
+
+        expect(receivedReveal).toEqual(reveal);
+    });
+});
+
 // ─── onDisconnected ───────────────────────────────────────────────────────────
 
 describe('WsClientTransport — onDisconnected', () => {
@@ -571,11 +601,13 @@ describe('WsClientTransport — dispose', () => {
 
         const snapshotFired: unknown[] = [];
         const sideChannelFired: unknown[] = [];
+        const revealFired: unknown[] = [];
         const lobbyStateFired: unknown[] = [];
         const latencyFired: unknown[] = [];
 
         transport.onSnapshotReceived((s) => snapshotFired.push(s));
         transport.onSideChannelReceived((m) => sideChannelFired.push(m));
+        transport.onReveal((reveal) => revealFired.push(reveal));
         transport.onLobbyStateChanged((s) => lobbyStateFired.push(s));
         transport.onLatencyUpdate((ms) => latencyFired.push(ms));
 
@@ -588,9 +620,14 @@ describe('WsClientTransport — dispose', () => {
             type: 'PONG',
             sentAt: performance.now() - 1,
         });
+        capturedOnMessage({
+            type: 'REVEAL',
+            reveal: { id: 'commitment-1', value: 'hidden', nonce: 'nonce-1' },
+        });
 
         expect(snapshotFired).toHaveLength(0);
         expect(sideChannelFired).toHaveLength(0);
+        expect(revealFired).toHaveLength(0);
         expect(lobbyStateFired).toHaveLength(0);
         expect(latencyFired).toHaveLength(0);
     });

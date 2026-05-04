@@ -21,6 +21,7 @@
 
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
+import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 
 // ─── Re-export simulation primitives used by callers of this module ───────────
 
@@ -232,6 +233,14 @@ export interface HostTransport {
      * to all. Target is a PlayerId for unicast or 'broadcast' for all clients.
      */
     sendSideChannel(target: PlayerId | 'broadcast', msg: SideChannelMessage): void;
+    /**
+     * Send a cryptographic commitment reveal to one client or broadcast to all.
+     * Target is a PlayerId for unicast or 'broadcast' for all clients.
+     *
+     * Invariant #9: callers on the receiving end MUST verify the reveal via
+     * `CommitmentScheme.verify()` before trusting `reveal.value`. See §4.6.
+     */
+    sendReveal(target: PlayerId | 'broadcast', reveal: WireCommitmentReveal): void;
     /** Subscribe to inbound game actions from clients. */
     onActionReceived(cb: (from: PlayerId, action: EngineAction) => void): Unsubscribe;
     /** Subscribe to joined-client ready-state intent updates. */
@@ -297,6 +306,15 @@ export interface ClientTransport {
     onSnapshotReceived(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
     /** Subscribe to inbound side-channel messages from the host. */
     onSideChannelReceived(cb: (msg: SideChannelMessage) => void): Unsubscribe;
+    /** Subscribe to commitment reveal messages from the host.
+     *
+     * @remarks
+     * **Security — Invariant #9**: Always call `CommitmentScheme.verify(reveal)`
+     * before trusting `reveal.value`. An unverified reveal can be spoofed by a
+     * malicious host or a man-in-the-middle. Discard and flag any reveal that
+     * fails verification. See §4.6 — Cryptographic Commitment Scheme.
+     */
+    onReveal(cb: (reveal: WireCommitmentReveal) => void): Unsubscribe;
     /** Subscribe to lobby state changes broadcast by the host. */
     onLobbyStateChanged(cb: (state: LobbyState) => void): Unsubscribe;
     /** Subscribe to disconnect events. */
