@@ -18,6 +18,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
 import { createNoopLogger } from '../logging/logger.js';
+import { GAME_SNAPSHOT_CHANNEL } from '../../preload/apis/game-api.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { HostTransport, PlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { gamePhase } from '@chimera/simulation/engine/types.js';
@@ -144,6 +145,41 @@ describe('StateBroadcaster.broadcast', () => {
 
         expect(transport.broadcastLobbyState).not.toHaveBeenCalled();
         expect(transport.sendSideChannel).not.toHaveBeenCalled();
+    });
+
+    it('projects the host-player snapshot before pushing it to host renderer IPC', () => {
+        const transport = makeTransport();
+        const hostProjected = makeProjectedSnapshot(PLAYER_A);
+        const remoteProjected = makeProjectedSnapshot(PLAYER_B);
+        const projector: StateProjector<BaseGameSnapshot> = {
+            project: vi.fn((snapshot, viewerId) =>
+                viewerId === PLAYER_A ? hostProjected : remoteProjected,
+            ),
+        };
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        const hostWebContents = {
+            send: vi.fn<(channel: string, snapshot: PlayerSnapshot) => void>(),
+        };
+        const hostSnapshot = makeSnapshot(PLAYER_A);
+        const remoteSnapshot = makeSnapshot(PLAYER_B);
+
+        broadcaster.registerRendererRecipient({
+            viewerId: PLAYER_A,
+            sendSnapshot: (snapshot) => {
+                hostWebContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+            },
+        });
+
+        broadcaster.broadcast(hostSnapshot, PLAYER_A);
+        broadcaster.broadcast(remoteSnapshot, PLAYER_B);
+
+        expect(projector.project).toHaveBeenNthCalledWith(1, hostSnapshot, PLAYER_A);
+        expect(projector.project).toHaveBeenNthCalledWith(2, remoteSnapshot, PLAYER_B);
+        expect(hostWebContents.send).toHaveBeenCalledOnce();
+        expect(hostWebContents.send).toHaveBeenCalledWith(GAME_SNAPSHOT_CHANNEL, hostProjected);
+        expect(hostWebContents.send).not.toHaveBeenCalledWith(GAME_SNAPSHOT_CHANNEL, hostSnapshot);
+        expect(transport.sendSnapshot).toHaveBeenNthCalledWith(1, PLAYER_A, hostProjected);
+        expect(transport.sendSnapshot).toHaveBeenNthCalledWith(2, PLAYER_B, remoteProjected);
     });
 });
 

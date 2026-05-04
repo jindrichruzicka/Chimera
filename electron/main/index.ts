@@ -269,7 +269,6 @@ export function registerClientRevealForwarding(
             value: wireReveal.value,
             nonce: wireReveal.nonce,
         };
-
         try {
             commitmentRuntime.verifyReveal(reveal);
             sendRevealToRenderer(reveal);
@@ -518,6 +517,12 @@ export async function main(): Promise<void> {
     // SaveFiles (BLOCK-3) and apply restored files (WARN-2).
     let activeSession: SessionRuntime | null = null;
 
+    // The single primary renderer window, captured when app.whenReady()
+    // resolves.  Used to target IPC snapshot/reveal messages to the one
+    // window that owns the game UI, instead of blasting every BrowserWindow
+    // (e.g. detached DevTools) with private per-player projected data (WARN-1).
+    let mainWindow: BrowserWindow | null = null;
+
     // M1: only `'tactics'` is registered.  Stamped on captured save files
     // and used as the qualified slot prefix.
     const HOSTED_GAME_ID = 'tactics';
@@ -588,6 +593,15 @@ export async function main(): Promise<void> {
             // Must be set before any pipeline.process()/processAction-triggered
             // broadcast can run; the callback above throws if this ordering is broken.
             broadcasterRef.current = new StateBroadcaster(transport, projector, lobbyLogger);
+            const unsubscribeHostRenderer = broadcasterRef.current.registerRendererRecipient({
+                viewerId: metadata.hostId,
+                sendSnapshot: (snapshot) => {
+                    const win = mainWindow;
+                    if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                        win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+                    }
+                },
+            });
 
             const sessionRuntime = new SessionRuntime({
                 gameId: HOSTED_GAME_ID,
@@ -694,6 +708,7 @@ export async function main(): Promise<void> {
                 unsubLeft();
                 unsubAction();
                 clearUndoHistory([...activePlayers]);
+                unsubscribeHostRenderer();
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
@@ -741,11 +756,10 @@ export async function main(): Promise<void> {
         },
         profileGate,
         (snapshot) => {
-            BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                    win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
-                }
-            });
+            const win = mainWindow;
+            if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+            }
         },
     );
 
@@ -867,7 +881,7 @@ export async function main(): Promise<void> {
     });
 
     const createWindow = (): void => {
-        createMainWindow({ preloadPath, rendererEntry, env, logger });
+        mainWindow = createMainWindow({ preloadPath, rendererEntry, env, logger });
     };
 
     void app.whenReady().then(createWindow);

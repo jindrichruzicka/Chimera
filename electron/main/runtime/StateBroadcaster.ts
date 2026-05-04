@@ -18,10 +18,22 @@
  *   #67 — Constructed with injected Logger child; no console.* calls.
  */
 
-import type { HostTransport, PlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type {
+    HostTransport,
+    PlayerId,
+    Unsubscribe,
+} from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
+import type {
+    PlayerSnapshot,
+    StateProjector,
+} from '@chimera/simulation/projection/StateProjector.js';
 import type { Logger } from '../logging/logger.js';
+
+export interface RendererSnapshotRecipient {
+    readonly viewerId: PlayerId;
+    readonly sendSnapshot: (snapshot: PlayerSnapshot) => void;
+}
 
 /**
  * Fans out projected `PlayerSnapshot` objects to connected players via
@@ -32,6 +44,7 @@ import type { Logger } from '../logging/logger.js';
  */
 export class StateBroadcaster {
     private readonly log: Logger;
+    private readonly rendererRecipients = new Map<PlayerId, Set<RendererSnapshotRecipient>>();
     private disposed = false;
 
     constructor(
@@ -42,9 +55,30 @@ export class StateBroadcaster {
         this.log = logger.child({ module: 'state-broadcaster' });
     }
 
+    registerRendererRecipient(recipient: RendererSnapshotRecipient): Unsubscribe {
+        if (this.disposed) {
+            return () => undefined;
+        }
+
+        const recipients = this.rendererRecipients.get(recipient.viewerId) ?? new Set();
+        recipients.add(recipient);
+        this.rendererRecipients.set(recipient.viewerId, recipients);
+
+        return () => {
+            const registered = this.rendererRecipients.get(recipient.viewerId);
+            if (registered === undefined) {
+                return;
+            }
+            registered.delete(recipient);
+            if (registered.size === 0) {
+                this.rendererRecipients.delete(recipient.viewerId);
+            }
+        };
+    }
+
     /**
      * Project the full host snapshot for `viewerId` and forward only that
-     * player-safe view to the transport boundary.
+     * player-safe view to the transport and registered renderer boundaries.
      *
      * No-ops silently if `dispose()` has already been called.
      */
@@ -53,6 +87,18 @@ export class StateBroadcaster {
         const playerSnapshot = this.projector.project(snapshot, viewerId);
         this.log.debug('broadcast', { viewerId, tick: playerSnapshot.tick });
         this.transport.sendSnapshot(viewerId, playerSnapshot);
+        this.sendToRendererRecipients(viewerId, playerSnapshot);
+    }
+
+    private sendToRendererRecipients(viewerId: PlayerId, snapshot: PlayerSnapshot): void {
+        const recipients = this.rendererRecipients.get(viewerId);
+        if (recipients === undefined) {
+            return;
+        }
+
+        for (const recipient of recipients) {
+            recipient.sendSnapshot(snapshot);
+        }
     }
 
     /**
@@ -64,5 +110,6 @@ export class StateBroadcaster {
      */
     dispose(): void {
         this.disposed = true;
+        this.rendererRecipients.clear();
     }
 }

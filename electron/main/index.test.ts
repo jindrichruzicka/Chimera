@@ -79,9 +79,19 @@ vi.mock('../../networking/provider/local/LocalWebSocketProvider.js', () => ({
 }));
 
 // ── StateBroadcaster mock — captures constructor args for projection wiring ───
-const { mockStateBroadcasterCtor } = vi.hoisted(() => {
-    const instance = { broadcast: vi.fn() };
+const { mockStateBroadcasterCtor, mockStateBroadcasterInstance } = vi.hoisted(() => {
+    interface MockRendererRecipient {
+        readonly viewerId: string;
+        readonly sendSnapshot: (snapshot: unknown) => void;
+    }
+    const instance = {
+        broadcast: vi.fn(),
+        registerRendererRecipient: vi.fn<(recipient: MockRendererRecipient) => () => undefined>(
+            () => () => undefined,
+        ),
+    };
     return {
+        mockStateBroadcasterInstance: instance,
         mockStateBroadcasterCtor: vi.fn(() => instance),
     };
 });
@@ -260,7 +270,7 @@ const {
     main,
 } = await import('./index.js');
 const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
-const { GAME_REVEAL_CHANNEL } = await import('../preload/apis/game-api.js');
+const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
 const { playerId } = await import('@chimera/simulation/engine/types.js');
 
@@ -797,6 +807,8 @@ describe('main', () => {
         mockAgentManagerCtor.mockClear();
         mockDefaultStateProjectorCtor.mockClear();
         mockStateBroadcasterCtor.mockClear();
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
         capturedSaveManagerRepoClassName.value = '';
         capturedSettingsBroadcastFn.current = null;
     });
@@ -913,6 +925,103 @@ describe('main', () => {
             transport,
             mockProjectorInstance,
             expect.any(Object),
+        );
+    });
+
+    it('registers the host renderer as a projected snapshot IPC recipient', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
+        browserWindowInstances.length = 0;
+        await main(); // creates the main window (browserWindowInstances[0])
+        const mainWindow = browserWindowInstances[0]!;
+
+        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((
+                  transport: {
+                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                      onPlayerLeft(cb: (id: string) => void): () => void;
+                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                  },
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                  },
+              ) => () => void)
+            | undefined;
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        const hostId = playerId('host-renderer');
+        const transport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+
+        onSessionHosted?.(transport, { hostId, maxPlayers: 1 });
+
+        expect(mockStateBroadcasterInstance.registerRendererRecipient).toHaveBeenCalledOnce();
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock.calls[0]?.[0];
+        expect(recipient?.viewerId).toBe(hostId);
+
+        const projectedSnapshot = { tick: 7, viewerId: hostId };
+        recipient?.sendSnapshot(projectedSnapshot);
+
+        expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+            GAME_SNAPSHOT_CHANNEL,
+            projectedSnapshot,
+        );
+    });
+
+    it('sendSnapshot for hosted session targets only the main window, not secondary windows — WARN-1', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main(); // creates the main window (browserWindowInstances[0])
+        const mainWindow = browserWindowInstances[0]!;
+
+        // Simulate a secondary window opened after the app is ready
+        // (e.g. detached DevTools, secondary display).
+        const secondaryWindow = new FakeBrowserWindow({});
+
+        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | ((
+                  transport: {
+                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                      onPlayerLeft(cb: (id: string) => void): () => void;
+                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                  },
+                  metadata: {
+                      readonly hostId: ReturnType<typeof playerId>;
+                      readonly maxPlayers: number;
+                  },
+              ) => () => void)
+            | undefined;
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        const hostId = playerId('host-warn1');
+        onSessionHosted?.(
+            {
+                onPlayerJoined: vi.fn(() => () => {}),
+                onPlayerLeft: vi.fn(() => () => {}),
+                onActionReceived: vi.fn(() => () => {}),
+            },
+            { hostId, maxPlayers: 1 },
+        );
+
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock.calls[0]?.[0];
+        const projectedSnapshot = { tick: 42, viewerId: hostId };
+        recipient?.sendSnapshot(projectedSnapshot);
+
+        // The main window receives the snapshot
+        expect(mainWindow.webContents.send).toHaveBeenCalledWith(
+            GAME_SNAPSHOT_CHANNEL,
+            projectedSnapshot,
+        );
+        // Secondary windows must NOT receive the host's private projected snapshot
+        expect(secondaryWindow.webContents.send).not.toHaveBeenCalledWith(
+            GAME_SNAPSHOT_CHANNEL,
+            expect.anything(),
         );
     });
 
