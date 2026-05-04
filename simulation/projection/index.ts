@@ -12,6 +12,8 @@ export type {
 export type { PlayerSnapshot, StateProjector, StateProjectorOptions } from './StateProjector.js';
 export { DefaultStateProjector } from './StateProjector.js';
 
+export { assertNoLeakedFields, ObfuscationAssertionError } from './assertNoLeakedFields.js';
+
 export type {
     CommitmentEnvelope,
     CommitmentId,
