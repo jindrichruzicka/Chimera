@@ -46,13 +46,14 @@ export function toCommitmentId(raw: string): CommitmentId {
  * Opaque commitment envelope stub. Holds the SHA-256 hash of a value
  * that will be revealed later (anti-cheat commitment scheme, §8).
  *
- * Full definition arrives in F27. For M1, only `commitmentId` and `hash`
- * are required so that pending commitments can be round-tripped through
+ * Full definition arrives in F27. For M1, field names are intentionally kept
+ * structurally compatible with the canonical F27 envelope (`id`, `commitment`)
+ * so pending commitments can be round-tripped through
  * a save file.
  */
 export interface CommitmentEnvelope {
-    readonly commitmentId: CommitmentId;
-    readonly hash: string;
+    readonly id: CommitmentId;
+    readonly commitment: string;
 }
 
 // ─── SaveFileHeader ───────────────────────────────────────────────────────────

@@ -14,9 +14,12 @@ import { describe, expect, it } from 'vitest';
 import { JsonSaveSerializer, MAX_SAVE_SIZE_CHARS } from './JsonSaveSerializer.js';
 import { SaveParseError } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
+import type { CommitmentEnvelope as SaveCommitmentEnvelope } from './SaveFile.js';
+import { toCommitmentId } from './SaveFile.js';
 import type { GamePhase, BaseGameSnapshot } from '../engine/types.js';
 import { playerId as toPlayerId } from '../engine/types.js';
 import type { GameTimer, TimerId } from '../engine/GameTimer.js';
+import type { CommitmentEnvelope as ProjectionCommitmentEnvelope } from '../projection/CommitmentScheme.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -55,6 +58,12 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
         pendingCommitments: {},
         ...restOverrides,
     };
+}
+
+function assertSaveEnvelopeCompatibility(
+    envelope: ProjectionCommitmentEnvelope,
+): SaveCommitmentEnvelope {
+    return envelope;
 }
 
 // ─── JsonSaveSerializer ───────────────────────────────────────────────────────
@@ -110,6 +119,35 @@ describe('JsonSaveSerializer', () => {
         });
 
         expect(await serializer.deserialize(await serializer.serialize(file))).toStrictEqual(file);
+    });
+
+    it('round-trip preserves pendingCommitments using canonical F27 envelope fields', async () => {
+        const serializer = new JsonSaveSerializer();
+        const commitmentId = toCommitmentId('commitment-1');
+        const pendingCommitments = Object.create(null) as SaveFile['pendingCommitments'];
+        pendingCommitments[commitmentId] = {
+            id: commitmentId,
+            commitment: 'a'.repeat(64),
+        };
+        const file = makeSaveFile({
+            pendingCommitments,
+        });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.pendingCommitments[commitmentId]).toStrictEqual({
+            id: commitmentId,
+            commitment: 'a'.repeat(64),
+        });
+    });
+
+    it('matches the projection CommitmentEnvelope shape for invariant #26 load wiring', () => {
+        const compatibilityProbe = assertSaveEnvelopeCompatibility({
+            id: toCommitmentId('commitment-compat'),
+            commitment: 'b'.repeat(64),
+        });
+
+        expect(compatibilityProbe.id).toBeDefined();
     });
 });
 

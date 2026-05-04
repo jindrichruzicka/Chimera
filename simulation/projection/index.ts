@@ -11,3 +11,6 @@ export type {
 
 export type { PlayerSnapshot, StateProjector, StateProjectorOptions } from './StateProjector.js';
 export { DefaultStateProjector } from './StateProjector.js';
+
+export type { CommitmentEnvelope, CommitmentReveal, CommitmentScheme } from './CommitmentScheme.js';
+export { CommitmentVerificationError, DefaultCommitmentScheme } from './CommitmentScheme.js';
