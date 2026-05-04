@@ -144,7 +144,7 @@ describe('honest AI isolation', () => {
         expect(receivedSnapshots).toStrictEqual([projectedSnapshot]);
     });
 
-    it('bypasses projection and passes full state to an omniscient AIPlayerAgent', () => {
+    it('bypasses projection and passes full state snapshot to an omniscient AIPlayerAgent', () => {
         const fullState = makeFullState();
         const projector = makeProjector();
         const receivedSnapshots: PlayerSnapshot[] = [];
@@ -156,9 +156,12 @@ describe('honest AI isolation', () => {
         manager.registerAgent(agent);
         manager.tickAll(fullState, fullState.tick, projector);
 
+        // Projector is bypassed — omniscient agent builds its snapshot directly
         expect(projector.project).not.toHaveBeenCalled();
-        expect(fullState.entities[visibleEntityId]).toBe(visibleEntity);
-        expect(fullState.entities[hiddenEntityId]).toBe(hiddenEntity);
-        expect(receivedSnapshots).toStrictEqual([fullState]);
+        // Omniscient snapshot contains all full-state entities (fog-of-war does not apply)
+        expect(receivedSnapshots).toHaveLength(1);
+        const received = receivedSnapshots[0]!;
+        expect(received.entities[visibleEntityId]).toBe(visibleEntity);
+        expect(received.entities[hiddenEntityId]).toBe(hiddenEntity);
     });
 });

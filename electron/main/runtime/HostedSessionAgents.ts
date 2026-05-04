@@ -11,7 +11,7 @@ import { AIStateMachineImpl } from '@chimera/ai/engine/AIStateMachine.js';
 import { CommandContextImpl } from '@chimera/ai/engine/CommandContext.js';
 import { CommandSchedulerImpl } from '@chimera/ai/engine/CommandScheduler.js';
 import { AIPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
-import type { PlayerAgent, PlayerSnapshot } from '@chimera/ai/engine/PlayerAgent.js';
+import type { PlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import type {
     ActionEnvelope,
@@ -114,7 +114,12 @@ export function buildDefaultAIPlayerAgent(options: BuildDefaultAIPlayerAgentOpti
     stateMachine.registerState(createAutoEndTurnState(options.playerId));
     stateMachine.setInitialState(
         DEFAULT_AI_STATE,
-        options.initialSnapshot as unknown as PlayerSnapshot,
+        {
+            ...options.initialSnapshot,
+            viewerId: options.playerId,
+            commitments: {},
+            undoMeta: { canUndo: false, canRedo: false },
+        },
         {},
         scheduler,
         context,
