@@ -72,7 +72,12 @@ export {
 
 export { StateReducer, ActionSchemaError } from './StateReducer.js';
 
-export { ActionPipeline, StaleActionError, ActionUnauthorizedError } from './ActionPipeline.js';
+export {
+    ActionPipeline,
+    StaleActionError,
+    ActionUnauthorizedError,
+    ForbiddenDispatchError,
+} from './ActionPipeline.js';
 
 export { RecursiveDispatchError, MAX_NESTED_DISPATCH } from './RecursiveDispatchError.js';
 

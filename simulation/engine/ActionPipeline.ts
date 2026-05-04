@@ -212,6 +212,15 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             const savedDispatch = this.#ctx.dispatch ?? this.#forbiddenDispatchFn;
             const savedActionType = this.#currentActionType;
             try {
+                // Cast invariant (WARN-2): `dispatch` is only invoked by
+                // `engine:tick` reducers, which receive the accumulating state
+                // from a prior `process()` call on a `TState` snapshot. The
+                // `ReduceContext.dispatch` signature uses the wider
+                // `BaseGameSnapshot` to stay generic, but the concrete value
+                // passed here is always a `TState` — the pipeline is the sole
+                // producer of state through `def.reduce()`. If `UndoManager` is
+                // ever parameterised as `UndoManager<TState>`, this cast can be
+                // removed.
                 return this.process(dispatchState as Readonly<TState>, dispatchAction);
             } finally {
                 this.#depth--;
@@ -310,6 +319,13 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 }
             }
 
+            // Cast invariant (WARN-2): `UndoManager.undo/redo()` returns
+            // `BaseGameSnapshot` because the interface is non-generic. The
+            // concrete value is always a `TState` because every memento stored
+            // by `saveTurnMemento()` (called after `engine:end_turn`) was itself
+            // produced by `process()` on a `TState` snapshot — the pipeline is
+            // the sole mutation point for game state. If `UndoManager` is ever
+            // parameterised as `UndoManager<TState>`, this cast can be removed.
             return reconstructed as TState;
         }
 
