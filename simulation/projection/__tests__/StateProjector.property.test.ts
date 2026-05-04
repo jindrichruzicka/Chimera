@@ -42,6 +42,7 @@ import type { VisibilityRules } from '../types.js';
 
 import {
     arbitraryGameSnapshot,
+    arbitraryGameSnapshotWithHiddenEntity,
     type ArbitraryEntityState,
     type ArbitraryGameSnapshot,
     type ArbitraryPlayerState,
@@ -244,6 +245,42 @@ describe('Honest AI viewer — PlayerSnapshot passed to AI never contains oppone
 
                     // The same gate used for human viewers applies to AI viewers.
                     assertNoLeakedFields(aiSnapshot, aiViewerId, allPlayerIds);
+                }
+            }),
+            { numRuns: 10_000 },
+        );
+    });
+});
+
+describe('fog-of-war (targeted, T03): known-invisible entity is key-absent from non-owner PlayerSnapshot (§10.1)', () => {
+    /**
+     * This test complements the general fog-of-war check (T02) with a TARGETED
+     * property that guarantees every run exercises fog-of-war exclusion:
+     *   - `arbitraryGameSnapshotWithHiddenEntity()` always produces a snapshot
+     *     containing at least one hidden entity plus the ID of that entity.
+     *   - The assertion positively checks key absence via `!(id in entities)`
+     *     rather than delegating solely to assertNoLeakedFields.
+     *
+     * Invariant #8: StateProjector.project() is the mandatory gate.
+     * Architecture: §10.1 — "fog-of-war entities absent (not null) in non-owner PlayerSnapshot"
+     */
+    it('known-hidden entity is absent (not null, not undefined, not keyed) from every viewer PlayerSnapshot across 10 000 random snapshots', () => {
+        assert(
+            property(arbitraryGameSnapshotWithHiddenEntity(), ({ snapshot, hiddenEntityId }) => {
+                const allPlayerIds = playerIdsOf(snapshot);
+
+                for (const viewerId of allPlayerIds) {
+                    const projected = projector.project(snapshot, viewerId);
+
+                    // The entity must be ABSENT as a key — a client must not
+                    // be able to infer entity existence from a null/undefined slot.
+                    if (hiddenEntityId in projected.entities) {
+                        throw new Error(
+                            `Fog-of-war violation: hidden entity "${hiddenEntityId}" is ` +
+                                `present as a key in PlayerSnapshot.entities for viewer ` +
+                                `"${viewerId}". It must be entirely absent — not null.`,
+                        );
+                    }
                 }
             }),
             { numRuns: 10_000 },

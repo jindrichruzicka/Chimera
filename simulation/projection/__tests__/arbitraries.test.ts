@@ -27,6 +27,7 @@ import type { VisibilityRules } from '../types.js';
 import {
     arbitraryEntityState,
     arbitraryGameSnapshot,
+    arbitraryGameSnapshotWithHiddenEntity,
     arbitraryPlayerId,
     arbitraryPlayerState,
     type ArbitraryEntityState,
@@ -219,6 +220,38 @@ describe('arbitraryGameSnapshot', () => {
                 return entityIds.length === new Set(entityIds).size;
             }),
             { numRuns: 200 },
+        );
+    });
+});
+
+// ─── arbitraryGameSnapshotWithHiddenEntity ────────────────────────────────────
+
+describe('arbitraryGameSnapshotWithHiddenEntity', () => {
+    it('always produces a snapshot containing at least one hidden entity', () => {
+        assert(
+            property(arbitraryGameSnapshotWithHiddenEntity(), ({ snapshot }) => {
+                return Object.values(snapshot.entities).some((e) => e.visibilityScope === 'hidden');
+            }),
+            { numRuns: 500 },
+        );
+    });
+
+    it('the returned hiddenEntityId is a key present in snapshot.entities', () => {
+        assert(
+            property(arbitraryGameSnapshotWithHiddenEntity(), ({ snapshot, hiddenEntityId }) => {
+                return hiddenEntityId in snapshot.entities;
+            }),
+            { numRuns: 500 },
+        );
+    });
+
+    it('the entity at hiddenEntityId has visibilityScope === "hidden"', () => {
+        assert(
+            property(arbitraryGameSnapshotWithHiddenEntity(), ({ snapshot, hiddenEntityId }) => {
+                const entity = snapshot.entities[hiddenEntityId];
+                return entity?.visibilityScope === 'hidden';
+            }),
+            { numRuns: 500 },
         );
     });
 });
