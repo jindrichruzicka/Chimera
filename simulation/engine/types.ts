@@ -239,9 +239,7 @@ export type ViewerSnapshot = Readonly<BaseGameSnapshot> &
  *
  * This is the **only** authorised cast site for `ViewerSnapshot` within
  * `simulation/`. Callers must ensure the supplied `projected` value is a
- * properly projected viewer-safe record — not a raw `GameSnapshot`. Until
- * `StateProjector` lands in F26, the caller in `ActionPipeline` Stage 7
- * documents the gap with a `TODO(F26)` comment.
+ * properly projected viewer-safe record — not a raw `GameSnapshot`.
  */
 export const toViewerSnapshot = (projected: Readonly<Record<string, unknown>>): ViewerSnapshot =>
     projected as ViewerSnapshot;

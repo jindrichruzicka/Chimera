@@ -28,6 +28,7 @@ import {
     arbitraryEntityState,
     arbitraryGameSnapshot,
     arbitraryGameSnapshotWithHiddenEntity,
+    arbitraryGameSnapshotWithCommittedEntity,
     arbitraryPlayerId,
     arbitraryPlayerState,
     type ArbitraryEntityState,
@@ -252,6 +253,72 @@ describe('arbitraryGameSnapshotWithHiddenEntity', () => {
                 return entity?.visibilityScope === 'hidden';
             }),
             { numRuns: 500 },
+        );
+    });
+});
+
+// ─── arbitraryGameSnapshotWithCommittedEntity ─────────────────────────────────
+
+describe('arbitraryGameSnapshotWithCommittedEntity', () => {
+    it('always produces a snapshot containing at least one committed entity', () => {
+        assert(
+            property(arbitraryGameSnapshotWithCommittedEntity(), ({ snapshot }) => {
+                return Object.values(snapshot.entities).some(
+                    (e) => e.visibilityScope === 'committed',
+                );
+            }),
+            { numRuns: 500 },
+        );
+    });
+
+    it('the returned committedEntityId is a key present in snapshot.entities', () => {
+        assert(
+            property(
+                arbitraryGameSnapshotWithCommittedEntity(),
+                ({ snapshot, committedEntityId }) => {
+                    return committedEntityId in snapshot.entities;
+                },
+            ),
+            { numRuns: 500 },
+        );
+    });
+
+    it('the entity at committedEntityId has visibilityScope === "committed"', () => {
+        assert(
+            property(
+                arbitraryGameSnapshotWithCommittedEntity(),
+                ({ snapshot, committedEntityId }) => {
+                    const entity = snapshot.entities[committedEntityId];
+                    return entity?.visibilityScope === 'committed';
+                },
+            ),
+            { numRuns: 500 },
+        );
+    });
+
+    it('rawSecretData matches the secretData of the committed entity', () => {
+        assert(
+            property(
+                arbitraryGameSnapshotWithCommittedEntity(),
+                ({ snapshot, committedEntityId, rawSecretData }) => {
+                    const entity = snapshot.entities[committedEntityId];
+                    return entity?.secretData === rawSecretData;
+                },
+            ),
+            { numRuns: 500 },
+        );
+    });
+
+    it('satisfies BaseGameSnapshot integer invariants (#42/#44)', () => {
+        assert(
+            property(arbitraryGameSnapshotWithCommittedEntity(), ({ snapshot }) => {
+                return (
+                    Number.isInteger(snapshot.tick) &&
+                    Number.isInteger(snapshot.seed) &&
+                    Number.isInteger(snapshot.turnNumber)
+                );
+            }),
+            { numRuns: 200 },
         );
     });
 });

@@ -36,6 +36,8 @@ import { assert, property } from 'fast-check';
 import { describe, it } from 'vitest';
 
 import type { EntityId, GameEvent, PlayerId } from '../../engine/types.js';
+import type { CommitmentEnvelope, CommitmentId } from '../CommitmentScheme.js';
+import { toCommitmentId } from '../CommitmentScheme.js';
 import { DefaultStateProjector } from '../StateProjector.js';
 import { assertNoLeakedFields } from '../assertNoLeakedFields.js';
 import type { VisibilityRules } from '../types.js';
@@ -43,8 +45,11 @@ import type { VisibilityRules } from '../types.js';
 import {
     arbitraryGameSnapshot,
     arbitraryGameSnapshotWithHiddenEntity,
+    arbitraryGameSnapshotWithCommittedEntity,
     type ArbitraryEntityState,
+    type ArbitraryAnyEntityState,
     type ArbitraryGameSnapshot,
+    type ArbitraryGameSnapshotWithCommitted,
     type ArbitraryPlayerState,
 } from './arbitraries.js';
 
@@ -288,6 +293,138 @@ describe('fog-of-war (targeted, T03): known-invisible entity is key-absent from 
                 }
             }),
             { numRuns: 10_000 },
+        );
+    });
+});
+
+// ─── Committed-scope invariant (F29/WARN-2) ───────────────────────────────────
+
+/**
+ * Observed entity shape for the committed-scope property test.
+ * Simple — only tracks the fields relevant to the committed-scope invariant.
+ */
+interface CommittedTestObservedEntity {
+    readonly id: EntityId;
+    readonly ownerId: PlayerId;
+    readonly value: number;
+    readonly secretData: string | null;
+}
+
+/**
+ * Observed player shape for the committed-scope property test.
+ */
+interface CommittedTestObservedPlayer {
+    readonly id: PlayerId;
+    readonly score: number;
+    readonly hand: null;
+}
+
+/**
+ * Visibility rules that treat 'committed' exactly like 'hidden': committed
+ * entities are excluded from projected.entities so their raw secretData never
+ * leaks to any viewer.
+ *
+ * The corresponding commitment envelope is injected via getPendingCommitments
+ * (§4.6 / §8 BLOCK-1 pattern).
+ */
+function makeCommittedRules(): VisibilityRules<
+    ArbitraryGameSnapshotWithCommitted,
+    ArbitraryAnyEntityState,
+    ArbitraryPlayerState,
+    CommittedTestObservedEntity,
+    CommittedTestObservedPlayer
+> {
+    return {
+        isEntityVisible(entity: ArbitraryAnyEntityState): boolean {
+            return entity.visibilityScope !== 'hidden' && entity.visibilityScope !== 'committed';
+        },
+
+        maskEntity(entity: ArbitraryAnyEntityState, viewer: PlayerId): CommittedTestObservedEntity {
+            // committed entities are excluded by isEntityVisible —
+            // this path is only reached for public / owner-only entities.
+            const isOwnerOnly = entity.visibilityScope === 'owner-only';
+            const isOwner = entity.ownerId === viewer;
+            return {
+                id: entity.id,
+                ownerId: entity.ownerId,
+                value: entity.value,
+                secretData: isOwnerOnly && !isOwner ? null : entity.secretData,
+            };
+        },
+
+        maskPlayerState(
+            player: ArbitraryPlayerState,
+            _viewer: PlayerId,
+        ): CommittedTestObservedPlayer {
+            return { id: player.id, score: player.score, hand: null };
+        },
+
+        filterEvents(_events: readonly GameEvent[]): readonly GameEvent[] {
+            return [];
+        },
+    };
+}
+
+describe('committed-scope invariant (F29/WARN-2): committed raw values appear only in PlayerSnapshot.commitments', () => {
+    /**
+     * Property: for every viewer and every generated snapshot,
+     *   (1) the committed entity is KEY-ABSENT from PlayerSnapshot.entities, and
+     *   (2) a commitment envelope for that entity IS present in
+     *       PlayerSnapshot.commitments.
+     *
+     * This regression guards against a committed visibility marker leaking its
+     * raw secretData value through projected entities before REVEAL verification
+     * (§4.6 / §8; roadmap WARN-2 / F29 acceptance criterion).
+     */
+    it('committed entity is absent from projected.entities and its envelope is in commitments across 2 000 random snapshots', () => {
+        assert(
+            property(
+                arbitraryGameSnapshotWithCommittedEntity(),
+                ({ snapshot, committedEntityId, rawSecretData: _rawSecretData }) => {
+                    const allPlayerIds = Object.keys(snapshot.players) as PlayerId[];
+
+                    // Build a deterministic commitment envelope for the committed entity.
+                    // The commitment string is a placeholder — we are testing PRESENCE in
+                    // the snapshot, not the hash algorithm (that is CommitmentScheme.test.ts).
+                    const envelopeId = toCommitmentId(committedEntityId);
+                    const envelope: CommitmentEnvelope = {
+                        id: envelopeId,
+                        commitment: `property-test-commitment-for-${committedEntityId}`,
+                    };
+                    const pendingCommitments = Object.create(null) as Record<
+                        CommitmentId,
+                        CommitmentEnvelope
+                    >;
+                    pendingCommitments[envelopeId] = envelope;
+
+                    const projector = new DefaultStateProjector(makeCommittedRules(), {
+                        getPendingCommitments: () => pendingCommitments,
+                    });
+
+                    for (const viewerId of allPlayerIds) {
+                        const projected = projector.project(snapshot, viewerId);
+
+                        // (1) Committed entity must be KEY-ABSENT from projected.entities.
+                        if (committedEntityId in projected.entities) {
+                            throw new Error(
+                                `Committed-scope violation: entity "${committedEntityId}" leaked ` +
+                                    `into projected.entities for viewer "${viewerId}". ` +
+                                    `Raw values must never be exposed before REVEAL.`,
+                            );
+                        }
+
+                        // (2) Commitment envelope must be present in projected.commitments.
+                        if (!(envelopeId in projected.commitments)) {
+                            throw new Error(
+                                `Commitment missing: envelope for "${committedEntityId}" absent ` +
+                                    `from PlayerSnapshot.commitments for viewer "${viewerId}". ` +
+                                    `Committed values must be represented via their envelope.`,
+                            );
+                        }
+                    }
+                },
+            ),
+            { numRuns: 2_000 },
         );
     });
 });

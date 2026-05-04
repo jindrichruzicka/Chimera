@@ -291,3 +291,135 @@ export function arbitraryGameSnapshotWithHiddenEntity(): Arbitrary<ArbitrarySnap
         });
     });
 }
+
+// ─── ArbitraryCommittedEntityState ───────────────────────────────────────────
+
+/**
+ * Committed entity shape for the committed-scope arbitrary.
+ *
+ * Extends `BaseEntityState` with `visibilityScope: 'committed'`, representing
+ * an entity whose value has been committed (hashed) via the commit/reveal
+ * protocol (§4.6 / §8).  The raw `secretData` must NOT appear in any
+ * projected entity field — it may only be accessible via
+ * `PlayerSnapshot.commitments` until REVEAL verification.
+ */
+export interface ArbitraryCommittedEntityState extends BaseEntityState {
+    readonly ownerId: PlayerId;
+    readonly visibilityScope: 'committed';
+    readonly value: number;
+    readonly secretData: string;
+}
+
+/**
+ * Union of the standard three-scope entity and the committed-scope entity.
+ * Used by `ArbitraryGameSnapshotWithCommitted` to model the full
+ * `VisibilityScope` surface including `'committed'`.
+ */
+export type ArbitraryAnyEntityState = ArbitraryEntityState | ArbitraryCommittedEntityState;
+
+/**
+ * Full game-snapshot shape that may include committed entities.
+ * Narrows `BaseGameSnapshot` so `entities` allows the `ArbitraryAnyEntityState`
+ * union and `players` uses `ArbitraryPlayerState`.
+ */
+export interface ArbitraryGameSnapshotWithCommitted extends BaseGameSnapshot {
+    readonly entities: Record<EntityId, ArbitraryAnyEntityState>;
+    readonly players: Record<PlayerId, ArbitraryPlayerState>;
+}
+
+/**
+ * Return value of `arbitraryGameSnapshotWithCommittedEntity`.
+ *
+ * Pairs a full `ArbitraryGameSnapshotWithCommitted` with:
+ *   - `committedEntityId` — the `EntityId` of the guaranteed committed entity.
+ *   - `rawSecretData`     — the raw value baked into that entity; must NOT
+ *                           appear in any projected entity for any viewer.
+ */
+export interface ArbitrarySnapshotWithCommittedEntity {
+    readonly snapshot: ArbitraryGameSnapshotWithCommitted;
+    /** ID of the entity inside `snapshot` whose `visibilityScope === 'committed'`. */
+    readonly committedEntityId: EntityId;
+    /** Raw value that must NOT appear in projected.entities before REVEAL. */
+    readonly rawSecretData: string;
+}
+
+/**
+ * Generates an `ArbitraryGameSnapshotWithCommitted` that is **guaranteed** to
+ * contain at least one entity with `visibilityScope: 'committed'`, alongside
+ * the `EntityId` of that entity and its raw `secretData`.
+ *
+ * Used by committed-scope property tests (F29/WARN-2) to assert that:
+ *   - The committed entity is absent (key-absent) from `PlayerSnapshot.entities`.
+ *   - A corresponding commitment envelope is present in `PlayerSnapshot.commitments`.
+ *
+ * Entity `e0` is always the guaranteed committed entity; up to seven additional
+ * entities with random non-committed visibility scopes are placed at `e1`…`e7`.
+ *
+ * Architecture: §10.1
+ * Module boundary: must NOT import from renderer/, electron/, networking/, or games/.
+ */
+export function arbitraryGameSnapshotWithCommittedEntity(): Arbitrary<ArbitrarySnapshotWithCommittedEntity> {
+    const twoPlayerIds = uniqueArray(arbitraryPlayerId(), { minLength: 2, maxLength: 2 });
+
+    return twoPlayerIds.chain(([p1, p2]) => {
+        const pid1 = p1!;
+        const pid2 = p2!;
+
+        // Guaranteed committed entity — visibilityScope is fixed to 'committed'.
+        const forcedCommittedEntity = record({
+            id: constant(entityId('_placeholder')),
+            ownerId: constantFrom(pid1, pid2),
+            visibilityScope: constant('committed' as const),
+            value: integer(),
+            secretData: string(),
+        });
+
+        return tuple(
+            arbitraryPlayerState(pid1),
+            arbitraryPlayerState(pid2),
+            forcedCommittedEntity,
+            array(oneof(arbitraryEntityState(pid1), arbitraryEntityState(pid2)), {
+                maxLength: 7,
+            }),
+            integer({ min: 0, max: 10_000 }), // tick — integer invariant #42
+            integer({ min: 0, max: 2_147_483_647 }), // seed — integer invariant #42
+            constantFrom(gamePhase('lobby'), gamePhase('playing'), gamePhase('ended')),
+            integer({ min: 0, max: 10_000 }), // turnNumber — integer invariant #44
+        ).map(
+            ([player1, player2, committedEntity, extraEntities, tick, seed, phase, turnNumber]) => {
+                const entities = Object.create(null) as Record<EntityId, ArbitraryAnyEntityState>;
+
+                // e0 is always the guaranteed committed entity.
+                const committedId = entityId('e0');
+                entities[committedId] = { ...committedEntity, id: committedId };
+
+                // e1…e7 are additional randomly-scoped (non-committed) entities.
+                extraEntities.forEach((e, i) => {
+                    const eid = entityId(`e${i + 1}`);
+                    entities[eid] = { ...e, id: eid };
+                });
+
+                const players = Object.create(null) as Record<PlayerId, ArbitraryPlayerState>;
+                players[pid1] = player1;
+                players[pid2] = player2;
+
+                const snapshot: ArbitraryGameSnapshotWithCommitted = {
+                    tick,
+                    seed,
+                    phase,
+                    turnNumber,
+                    timers: {},
+                    events: [],
+                    players,
+                    entities,
+                };
+
+                return {
+                    snapshot,
+                    committedEntityId: committedId,
+                    rawSecretData: committedEntity.secretData,
+                };
+            },
+        );
+    });
+}
