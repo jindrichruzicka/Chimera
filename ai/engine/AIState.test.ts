@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { AIState } from './AIState.js';
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler, CommandProgress } from './CommandScheduler.js';
@@ -21,7 +22,7 @@ import type { AIParams } from './PlayerAgent.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const makeSnapshot = (tick = 0) => ({ tick });
+const makeSnapshot = (tick = 0) => makeStubPlayerSnapshot(tick);
 
 const makeScheduler = <TParams extends AIParams = AIParams>(): CommandScheduler<TParams> => ({
     enqueue: vi.fn(),

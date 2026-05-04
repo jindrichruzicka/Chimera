@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import { playerId } from '@chimera/simulation/engine/types.js';
 import { AIBrain } from './AIBrain.js';
 import type { AIStateMachine } from './AIStateMachine.js';
@@ -25,7 +26,7 @@ import {
 
 const p1 = playerId('p1');
 
-const makeSnapshot = (tick = 0): PlayerSnapshot => ({ tick });
+const makeSnapshot = (tick = 0): PlayerSnapshot => makeStubPlayerSnapshot(tick);
 
 const makeResult = (): GameResult => ({ winner: null });
 

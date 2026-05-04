@@ -68,10 +68,10 @@ export class NonPredictableActionError extends Error {
  *             defaults to `BaseGameSnapshot`. In practice callers pass the
  *             concrete game snapshot type (e.g. `TacticsSnapshot`).
  *
- * TODO(F26): When `StateProjector` and the formal `PlayerSnapshot` type land,
- * update the type parameter constraint to `TState extends PlayerSnapshot` so the
- * predictor operates on the projected per-player view rather than the full
- * `BaseGameSnapshot` shape.
+ * Design note (WARN-2): `ClientPredictor` currently operates on the full
+ * `BaseGameSnapshot`. Constraining `TState extends PlayerSnapshot` would make it
+ * operate on the projected per-player view instead. This is a follow-on design
+ * decision deferred beyond F26; consider filing an issue if this becomes a priority.
  */
 export class ClientPredictor<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #registry: ActionRegistry<TState>;

@@ -21,7 +21,8 @@
  *          raw state through the host-only AgentManager exception.
  */
 
-import type { AgentManager, StateProjector } from '@chimera/ai/engine/AgentManager.js';
+import type { AgentManager } from '@chimera/ai/engine/AgentManager.js';
+import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
 import type { PlayerAgent, GameResult } from '@chimera/ai/engine/PlayerAgent.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 

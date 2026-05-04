@@ -14,6 +14,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import type { AIState } from './AIState.js';
 import { AIStateMachineImpl, type AIStateMachine } from './AIStateMachine.js';
@@ -23,7 +24,7 @@ import type { AIParams, PlayerSnapshot } from './AITypes.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const makeSnapshot = (tick = 0): PlayerSnapshot => ({ tick });
+const makeSnapshot = (tick = 0): PlayerSnapshot => makeStubPlayerSnapshot(tick);
 
 const makeScheduler = <TParams extends AIParams = AIParams>(
     idle = true,

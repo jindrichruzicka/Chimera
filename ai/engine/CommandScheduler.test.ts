@@ -13,11 +13,12 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { CommandProgress, AnyAICommand } from './AICommand.js';
 import { CommandSchedulerImpl } from './CommandScheduler.js';
 import type { CommandScheduler } from './CommandScheduler.js';
 import type { CommandContext } from './CommandContext.js';
-import type { AIParams, PlayerSnapshot } from './AITypes.js';
+import type { AIParams } from './AITypes.js';
 
 // ─── CommandScheduler ─────────────────────────────────────────────────────────
 
@@ -80,7 +81,7 @@ describe('CommandScheduler', () => {
 
     it('abort is callable with reason and context args', () => {
         const scheduler = makeScheduler();
-        const snapshot = { tick: 5 };
+        const snapshot = makeStubPlayerSnapshot(5);
         const params: AIParams = {};
         const context = { dispatch: vi.fn(), transitionState: vi.fn() };
         expect(() => scheduler.abort('target lost', snapshot, params, context)).not.toThrow();
@@ -104,7 +105,7 @@ describe('AnyAICommand', () => {
     });
 
     it('onTick returns CommandProgress', () => {
-        const snapshot = { tick: 1 };
+        const snapshot = makeStubPlayerSnapshot(1);
         const params: AIParams = {};
         const context = { dispatch: vi.fn(), transitionState: vi.fn() };
 
@@ -149,7 +150,7 @@ function makeCommand(progressSequence: CommandProgress[]): AnyAICommand & {
     };
 }
 
-const SNAPSHOT: PlayerSnapshot = { tick: 1 };
+const SNAPSHOT = makeStubPlayerSnapshot(1);
 const TICK = 1;
 
 describe('CommandSchedulerImpl', () => {

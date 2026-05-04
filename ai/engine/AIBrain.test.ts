@@ -15,6 +15,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { AIBrain } from './AIBrain.js';
 import { AIStateMachineImpl } from './AIStateMachine.js';
@@ -34,7 +35,7 @@ interface TestParams extends AIParams {
 
 const makeParams = (): TestParams => ({ aggressiveness: 5 });
 
-const makeSnapshot = (tick = 0): PlayerSnapshot => ({ tick });
+const makeSnapshot = (tick = 0): PlayerSnapshot => makeStubPlayerSnapshot(tick);
 
 const makeResult = (): GameResult => ({ winner: null });
 
@@ -178,7 +179,7 @@ describe('Integration: Deferred state transitions (Invariant #19)', () => {
     it('defers state transition to next tick when context.transitionState() is called in onTick', () => {
         // ── Arrange ────────────────────────────────────────────────────────────
         const params: TestParams = { aggressiveness: 5 };
-        const snapshot: PlayerSnapshot = { tick: 0 };
+        const snapshot: PlayerSnapshot = makeStubPlayerSnapshot(0);
         const scheduler = new CommandSchedulerImpl<TestParams>();
 
         // Track which states are entered/exited and when

@@ -16,26 +16,35 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { Logger } from '@chimera/shared/logging.js';
-import { playerId } from '@chimera/simulation/engine/types.js';
+import { playerId, gamePhase } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
+import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
 import { HumanPlayerAgent } from './PlayerAgent.js';
 import { AgentManager } from './AgentManager.js';
-import type { StateProjector } from './AgentManager.js';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────
 
 const p1 = playerId('p1');
 const p2 = playerId('p2');
 
-const makeSnapshot = (tick = 0): PlayerSnapshot => ({ tick });
+const makeSnapshot = (tick = 0, viewerId = p1): PlayerSnapshot => ({
+    tick,
+    viewerId,
+    phase: gamePhase('playing'),
+    players: {},
+    entities: {},
+    events: [],
+    commitments: Object.create(null),
+    undoMeta: { canUndo: false, canRedo: false },
+});
 
 const makeFullState = (): BaseGameSnapshot => ({
     tick: 1,
     seed: 0,
     players: {},
     entities: {},
-    phase: 'playing' as BaseGameSnapshot['phase'],
+    phase: gamePhase('playing'),
     events: [],
     turnNumber: 0,
     timers: {},

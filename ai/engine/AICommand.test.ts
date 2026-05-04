@@ -16,6 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { AICommand, AnyAICommand, CommandProgress } from './AICommand.js';
 import type { AIParams, PlayerSnapshot } from './AITypes.js';
 import type { CommandContext } from './CommandContext.js';
@@ -158,7 +159,7 @@ describe('AICommand', () => {
 
     it('onTick returns CommandProgress', () => {
         const cmd = makeCommand();
-        const snapshot: PlayerSnapshot = { tick: 1 };
+        const snapshot: PlayerSnapshot = makeStubPlayerSnapshot(1);
         const params: TestParams = { aggressivity: 0.5 };
         const ctx: CommandContext = { dispatch: () => {}, transitionState: () => {} };
         const result = cmd.onTick(snapshot, 1, params, ctx);

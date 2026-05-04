@@ -5,6 +5,8 @@
  * NEVER import this file from production code.
  */
 import type { DeterministicRng } from '../DeterministicRng.js';
+import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import { playerId, gamePhase } from '../types.js';
 
 /**
  * Creates a minimal `DeterministicRng` stub for use in unit tests.
@@ -20,5 +22,22 @@ export function makeStubRng(floatValue = 0.5): DeterministicRng {
         int: (min, max) => Math.floor(floatValue * (max - min + 1)) + min,
         shuffle: <T>(items: readonly T[]) => [...items],
         pick: <T>(items: readonly T[]) => items[Math.floor(floatValue * items.length)] as T,
+    };
+}
+
+/**
+ * Creates a minimal `PlayerSnapshot` stub for use in unit tests.
+ * Useful for tests that verify agent behavior against projected snapshots.
+ */
+export function makeStubPlayerSnapshot(tick = 0): PlayerSnapshot {
+    return {
+        tick,
+        viewerId: playerId('test-viewer'),
+        phase: gamePhase('playing'),
+        players: {},
+        entities: {},
+        events: [],
+        commitments: {},
+        undoMeta: { canUndo: false, canRedo: false },
     };
 }

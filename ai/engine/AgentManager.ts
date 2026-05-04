@@ -17,24 +17,11 @@
 import type { Logger } from '@chimera/shared/logging.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
-
-// ─── StateProjector ────────────────────────────────────────────────────────────
-
-/**
- * Structural bridge interface for the state projector.
- *
- * `simulation/projection/StateProjector.ts` (landed in F26) defines the
- * canonical `StateProjector` interface, but its `project()` return type is the
- * simulation-rich `PlayerSnapshot` (§4.6), whereas `AgentManager` and
- * `PlayerAgent` consume the narrower `PlayerSnapshot` from `AITypes.ts`.
- * This shim captures only the shape the AI layer requires and remains valid
- * via structural subtyping until the two `PlayerSnapshot` definitions are
- * unified.
- */
-export interface StateProjector {
-    project(fullState: BaseGameSnapshot, viewerId: PlayerId): PlayerSnapshot;
-}
+import type {
+    StateProjector,
+    PlayerSnapshot,
+} from '@chimera/simulation/projection/StateProjector.js';
+import type { PlayerAgent, GameResult } from './PlayerAgent.js';
 
 // ─── AgentManager ─────────────────────────────────────────────────────────────
 
@@ -89,13 +76,13 @@ export class AgentManager {
      * obtain the agent's `PlayerSnapshot`, then calls `agent.onTick(snapshot, tick)`.
      *
      * Invariant #17: honest agents receive a `PlayerSnapshot` from the projector.
-     * Omniscient agents receive the raw `fullState` structurally widened to `PlayerSnapshot`,
+     * Omniscient agents receive the raw `fullState` as a `PlayerSnapshot` (type assertion),
      * bypassing the projector (as permitted by Invariant #17).
      */
     public tickAll(fullState: BaseGameSnapshot, tick: number, projector: StateProjector): void {
         for (const agent of this.agents.values()) {
             const snapshot: PlayerSnapshot = agent.omniscient
-                ? fullState
+                ? (fullState as unknown as PlayerSnapshot)
                 : projector.project(fullState, agent.playerId);
             agent.onTick(snapshot, tick);
         }
@@ -105,13 +92,13 @@ export class AgentManager {
      * Fan-out the game-start event to all registered agents.
      *
      * For each agent: projects `fullState` and calls `agent.onGameStart(snapshot)`.
-     * Omniscient agents receive `fullState` directly and trigger an audit-trail
-     * `warn` log entry (Invariant #17).
+     * Omniscient agents receive `fullState` directly (as PlayerSnapshot via type assertion)
+     * and trigger an audit-trail `warn` log entry (Invariant #17).
      */
     public onGameStart(fullState: BaseGameSnapshot, projector: StateProjector): void {
         for (const agent of this.agents.values()) {
             const snapshot: PlayerSnapshot = agent.omniscient
-                ? fullState
+                ? (fullState as unknown as PlayerSnapshot)
                 : projector.project(fullState, agent.playerId);
             if (agent.omniscient) {
                 this.logger.warn('agent-manager:omniscient-agent', {
@@ -127,7 +114,7 @@ export class AgentManager {
      *
      * For each agent: projects `fullState` and calls
      * `agent.onGameEnd(snapshot, result)`. Omniscient agents receive `fullState`
-     * directly (Invariant #17).
+     * directly (as PlayerSnapshot via type assertion, per Invariant #17).
      */
     public onGameEnd(
         fullState: BaseGameSnapshot,
@@ -136,7 +123,7 @@ export class AgentManager {
     ): void {
         for (const agent of this.agents.values()) {
             const snapshot: PlayerSnapshot = agent.omniscient
-                ? fullState
+                ? (fullState as unknown as PlayerSnapshot)
                 : projector.project(fullState, agent.playerId);
             agent.onGameEnd(snapshot, result);
         }

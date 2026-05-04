@@ -8,6 +8,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { playerId, gamePhase, type BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
+import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
 import { buildDefaultAIPlayerAgent } from './HostedSessionAgents.js';
@@ -59,7 +60,7 @@ describe('buildDefaultAIPlayerAgent', () => {
             logger: createNoopLogger(),
         });
 
-        agent.onGameStart(runtime.getSnapshot());
+        agent.onGameStart(runtime.getSnapshot() as unknown as PlayerSnapshot);
 
         expect(runtime.getSnapshot().turnNumber).toBe(1);
         expect(runtime.getSnapshot().turnClock?.activePlayerId).toBe(humanPlayerId);
@@ -85,7 +86,7 @@ describe('buildDefaultAIPlayerAgent', () => {
         });
 
         // Turn 1: AI takes its turn
-        agent.onGameStart(runtime.getSnapshot());
+        agent.onGameStart(runtime.getSnapshot() as unknown as PlayerSnapshot);
         expect(runtime.getSnapshot().turnNumber).toBe(1);
         expect(runtime.getSnapshot().turnClock?.activePlayerId).toBe(humanPlayerId);
 
@@ -102,7 +103,7 @@ describe('buildDefaultAIPlayerAgent', () => {
         expect(snapshot.turnClock?.activePlayerId).toBe(aiPlayerId);
 
         // Turn 3: AI takes its second turn (onTick triggers the agent to dispatch)
-        agent.onTick(snapshot, snapshot.tick);
+        agent.onTick(snapshot as unknown as PlayerSnapshot, snapshot.tick);
         snapshot = runtime.getSnapshot();
         expect(snapshot.turnNumber).toBe(3);
         expect(snapshot.turnClock?.activePlayerId).toBe(humanPlayerId);

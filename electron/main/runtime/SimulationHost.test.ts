@@ -18,8 +18,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SimulationHost } from './SimulationHost.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
-import type { StateProjector } from '@chimera/ai/engine/AgentManager.js';
+import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from '@chimera/ai/engine/PlayerAgent.js';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
@@ -47,7 +48,7 @@ function makeSnapshot(tick: number, ids: readonly PlayerId[] = [P1]): BaseGameSn
  * Pre-F26 placeholder: no fog-of-war projection is applied yet.
  */
 const identityProjector: StateProjector = {
-    project: (snap) => snap,
+    project: (snap) => makeStubPlayerSnapshot(snap.tick),
 };
 
 /**
@@ -145,7 +146,7 @@ describe('SimulationHost.afterTick', () => {
     });
 
     it('passes snapshot through projector — projected snapshot is forwarded to agent', () => {
-        const projectedSnapshot: PlayerSnapshot = { tick: 99 };
+        const projectedSnapshot: PlayerSnapshot = makeStubPlayerSnapshot(99);
         const trackingProjector: StateProjector = {
             project: vi.fn(() => projectedSnapshot),
         };

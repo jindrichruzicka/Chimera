@@ -11,7 +11,7 @@ import { AIStateMachineImpl } from '@chimera/ai/engine/AIStateMachine.js';
 import { CommandContextImpl } from '@chimera/ai/engine/CommandContext.js';
 import { CommandSchedulerImpl } from '@chimera/ai/engine/CommandScheduler.js';
 import { AIPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
-import type { PlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
+import type { PlayerAgent, PlayerSnapshot } from '@chimera/ai/engine/PlayerAgent.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import type {
     ActionEnvelope,
@@ -112,7 +112,13 @@ export function buildDefaultAIPlayerAgent(options: BuildDefaultAIPlayerAgentOpti
     const scheduler = new CommandSchedulerImpl();
     const context = new CommandContextImpl(options.dispatch, () => undefined, options.logger);
     stateMachine.registerState(createAutoEndTurnState(options.playerId));
-    stateMachine.setInitialState(DEFAULT_AI_STATE, options.initialSnapshot, {}, scheduler, context);
+    stateMachine.setInitialState(
+        DEFAULT_AI_STATE,
+        options.initialSnapshot as unknown as PlayerSnapshot,
+        {},
+        scheduler,
+        context,
+    );
 
     const brain = new AIBrain(stateMachine, scheduler, context, {});
     return new AIPlayerAgent(options.playerId, brain, { omniscient: options.omniscient ?? false });

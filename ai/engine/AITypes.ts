@@ -14,6 +14,7 @@
  */
 
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 
 // ─── AIParams ─────────────────────────────────────────────────────────────────
 
@@ -29,21 +30,13 @@ import type { PlayerId } from '@chimera/simulation/engine/types.js';
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AIParams extends Record<string, number | string | boolean | null | undefined> {}
 
-// ─── PlayerSnapshot ───────────────────────────────────────────────────────────
+// ─── PlayerSnapshot (imported from StateProjector) ────────────────────────────
 
-/**
- * Minimal viewer-safe snapshot delivered to each PlayerAgent per tick.
- *
- * Formal `PlayerSnapshot` definition is deferred to F26 (StateProjector
- * landing). Until then this interface captures the minimum shape required by
- * the AI layer — `tick` for temporal awareness, plus any additional fields
- * that concrete game snapshots extend with via structural subtyping.
- *
- * // TODO(F26): replace with import from @chimera/simulation/engine/types.js
- */
-export interface PlayerSnapshot {
-    readonly tick: number;
-}
+// Re-export the canonical PlayerSnapshot type from F26 StateProjector (§4.6).
+// This replaces the pre-F26 local stub interface, ensuring the AI layer receives
+// the same `PlayerSnapshot` shape that the projection system produces.
+// Invariant #3 — GameSnapshot never leaves the host; PlayerSnapshot crosses boundaries.
+export type { PlayerSnapshot };
 
 // ─── GameResult ───────────────────────────────────────────────────────────────
 

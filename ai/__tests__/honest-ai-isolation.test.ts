@@ -16,7 +16,7 @@ import type {
 } from '@chimera/simulation/engine/types.js';
 import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import { AgentManager } from '../engine/AgentManager.js';
-import type { StateProjector } from '../engine/AgentManager.js';
+import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
 import { AIBrain } from '../engine/AIBrain.js';
 import type { AIStateMachine } from '../engine/AIStateMachine.js';
 import type { CommandContext } from '../engine/CommandContext.js';
@@ -77,9 +77,15 @@ function makeFullState(): BaseGameSnapshot {
 function projectVisibleEntities(fullState: BaseGameSnapshot): VisibilitySnapshot {
     return {
         tick: fullState.tick,
+        viewerId: honestPlayerId,
+        phase: fullState.phase,
+        players: {},
         entities: {
             [visibleEntityId]: visibleEntity,
         },
+        events: [],
+        commitments: Object.create(null),
+        undoMeta: { canUndo: false, canRedo: false },
     };
 }
 

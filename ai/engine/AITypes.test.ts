@@ -16,7 +16,8 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { AIParams } from './AITypes.js';
+import type { AIParams, PlayerSnapshot } from './AITypes.js';
+import type { PlayerSnapshot as CanonicalPlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 
 // ─── AIParams type constraints ────────────────────────────────────────────────
 
@@ -58,5 +59,17 @@ describe('AIParams', () => {
         // Object.freeze would leave nested objects unfrozen, violating Invariant #18.
         const _: AIParams = { nested: { value: 1 } };
         expect(_).toBeDefined();
+    });
+});
+
+// ─── PlayerSnapshot unification (WARN-1) ──────────────────────────────────────
+
+describe('PlayerSnapshot', () => {
+    it('should be the canonical type from StateProjector', () => {
+        // WARN-1: PlayerSnapshot must be imported from StateProjector (canonical F26 definition),
+        // not defined locally as a stub. This type-level assertion ensures the AI's PlayerSnapshot
+        // is structurally compatible with the canonical definition.
+        const _canary: PlayerSnapshot = {} as CanonicalPlayerSnapshot;
+        expect(_canary).toBeDefined();
     });
 });
