@@ -145,3 +145,45 @@ describe('StateBroadcaster.broadcast', () => {
         expect(transport.sendSideChannel).not.toHaveBeenCalled();
     });
 });
+
+// ── dispose() ─────────────────────────────────────────────────────────────────
+
+describe('StateBroadcaster.dispose', () => {
+    it('silently ignores broadcast() calls after dispose()', () => {
+        const transport = makeTransport();
+        const projector = makeProjector(makeProjectedSnapshot(PLAYER_A));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        const snapshot = makeSnapshot(PLAYER_A);
+
+        broadcaster.dispose();
+        broadcaster.broadcast(snapshot, PLAYER_A);
+
+        expect(projector.project).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).not.toHaveBeenCalled();
+    });
+
+    it('does not throw when disposed multiple times', () => {
+        const transport = makeTransport();
+        const projector = makeProjector(makeProjectedSnapshot(PLAYER_A));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+
+        expect(() => {
+            broadcaster.dispose();
+            broadcaster.dispose();
+        }).not.toThrow();
+    });
+
+    it('allows broadcast() calls before dispose()', () => {
+        const transport = makeTransport();
+        const projected = makeProjectedSnapshot(PLAYER_A);
+        const projector = makeProjector(projected);
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+        const snapshot = makeSnapshot(PLAYER_A);
+
+        broadcaster.broadcast(snapshot, PLAYER_A);
+        broadcaster.dispose();
+
+        expect(transport.sendSnapshot).toHaveBeenCalledOnce();
+        expect(transport.sendSnapshot).toHaveBeenCalledWith(PLAYER_A, projected);
+    });
+});

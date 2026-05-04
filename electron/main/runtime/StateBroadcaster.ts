@@ -32,6 +32,7 @@ import type { Logger } from '../logging/logger.js';
  */
 export class StateBroadcaster {
     private readonly log: Logger;
+    private disposed = false;
 
     constructor(
         private readonly transport: HostTransport,
@@ -44,10 +45,24 @@ export class StateBroadcaster {
     /**
      * Project the full host snapshot for `viewerId` and forward only that
      * player-safe view to the transport boundary.
+     *
+     * No-ops silently if `dispose()` has already been called.
      */
     broadcast(snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId): void {
+        if (this.disposed) return;
         const playerSnapshot = this.projector.project(snapshot, viewerId);
         this.log.debug('broadcast', { viewerId, tick: playerSnapshot.tick });
         this.transport.sendSnapshot(viewerId, playerSnapshot);
+    }
+
+    /**
+     * Release this broadcaster. After calling `dispose()`, any subsequent
+     * `broadcast()` calls are silently ignored, preventing stale snapshots
+     * from leaking out during rapid session cycling.
+     *
+     * Safe to call multiple times.
+     */
+    dispose(): void {
+        this.disposed = true;
     }
 }

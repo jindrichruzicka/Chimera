@@ -632,9 +632,6 @@ export async function main(): Promise<void> {
                 }
             });
 
-            // WARN-2: StateBroadcaster lacks a dispose() cleanup method, causing potential
-            // resource leaks under rapid session cycling. Follow-up: consider adding cleanup
-            // method and invoking it here during teardown.
             return () => {
                 // Notify agents of session end before tearing down state.
                 simulationHost.onGameEnd(sessionRuntime.getSnapshot(), { winner: null });
@@ -642,6 +639,7 @@ export async function main(): Promise<void> {
                 unsubLeft();
                 unsubAction();
                 clearUndoHistory([...activePlayers]);
+                broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
                 }
