@@ -12,8 +12,7 @@
  *   - T3 (#122): SaveRepository, SaveSlotMeta, InMemorySaveRepository
  */
 
-export type { CommitmentId, SaveFileHeader, SaveFile } from './SaveFile.js';
-export { toCommitmentId } from './SaveFile.js';
+export type { SaveFileHeader, SaveFile } from './SaveFile.js';
 export type { SaveSerializer } from './SaveSerializer.js';
 export { JsonSaveSerializer } from './JsonSaveSerializer.js';
 export {

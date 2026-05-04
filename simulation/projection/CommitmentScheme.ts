@@ -13,18 +13,42 @@
 // @chimera-review: node:crypto is permitted here per architecture §8 commitment mandate.
 import { createHash, randomBytes } from 'node:crypto';
 
-import type { CommitmentId } from '../persistence/index.js';
-import { toCommitmentId } from '../persistence/index.js';
-
 const NONCE_BYTE_LENGTH = 32;
 const COMMITMENT_ID_BYTE_LENGTH = 16;
 
+/**
+ * Opaque commitment identifier. Branded to prevent mix-up with other
+ * string-shaped identifiers.
+ */
+export type CommitmentId = string & { readonly __brand: 'CommitmentId' };
+
+/**
+ * Constructs a branded {@link CommitmentId} from a raw string.
+ *
+ * This is the single authorised cast site for the CommitmentId brand.
+ */
+export function toCommitmentId(raw: string): CommitmentId {
+    return raw as CommitmentId;
+}
+
+/**
+ * Commitment envelope broadcast during Phase 1 of the commit/reveal protocol
+ * (§4.6 / §8). Save files persist pending envelopes so verification can resume
+ * after reload.
+ *
+ * Invariant #44: `revealedAt` is a tick integer — never a float.
+ */
 export interface CommitmentEnvelope {
     readonly id: CommitmentId;
     readonly commitment: string;
     readonly revealedAt?: number;
 }
 
+/**
+ * Reveal payload broadcast by the host during Phase 2 of the commit/reveal
+ * protocol (§4.6 / §8). Clients call `CommitmentScheme.verify()` with this
+ * before trusting the revealed `value`.
+ */
 export interface CommitmentReveal {
     readonly id: CommitmentId;
     readonly value: unknown;

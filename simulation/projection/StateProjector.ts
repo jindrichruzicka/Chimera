@@ -30,9 +30,7 @@ import type {
     UndoMeta,
 } from '../engine/types.js';
 
-import type { CommitmentId } from '../persistence/index.js';
-
-import type { CommitmentEnvelope } from './CommitmentScheme.js';
+import type { CommitmentEnvelope, CommitmentId } from './CommitmentScheme.js';
 import type { ObservedEntityState, ObservedPlayerState, VisibilityRules } from './types.js';
 
 // ─── PlayerSnapshot ───────────────────────────────────────────────────────────

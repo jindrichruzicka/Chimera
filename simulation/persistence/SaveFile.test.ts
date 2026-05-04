@@ -14,12 +14,11 @@ import { describe, expect, it } from 'vitest';
 import { JsonSaveSerializer, MAX_SAVE_SIZE_CHARS } from './JsonSaveSerializer.js';
 import { SaveParseError } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
-import type { CommitmentEnvelope as SaveCommitmentEnvelope } from './SaveFile.js';
-import { toCommitmentId } from './SaveFile.js';
 import type { GamePhase, BaseGameSnapshot } from '../engine/types.js';
 import { playerId as toPlayerId } from '../engine/types.js';
 import type { GameTimer, TimerId } from '../engine/GameTimer.js';
-import type { CommitmentEnvelope as ProjectionCommitmentEnvelope } from '../projection/CommitmentScheme.js';
+import type { CommitmentEnvelope } from '../projection/CommitmentScheme.js';
+import { toCommitmentId } from '../projection/CommitmentScheme.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -61,8 +60,23 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
 }
 
 function assertSaveEnvelopeCompatibility(
-    envelope: ProjectionCommitmentEnvelope,
-): SaveCommitmentEnvelope {
+    envelope: CommitmentEnvelope,
+): SaveFile['pendingCommitments'] {
+    const pendingCommitments = Object.create(null) as SaveFile['pendingCommitments'];
+    pendingCommitments[envelope.id] = envelope;
+
+    return pendingCommitments;
+}
+
+function readPendingCommitment(
+    pendingCommitments: SaveFile['pendingCommitments'],
+    commitmentId: ReturnType<typeof toCommitmentId>,
+): CommitmentEnvelope {
+    const envelope = pendingCommitments[commitmentId];
+    if (envelope === undefined) {
+        throw new Error(`Expected pending commitment '${commitmentId}' to exist`);
+    }
+
     return envelope;
 }
 
@@ -142,12 +156,18 @@ describe('JsonSaveSerializer', () => {
     });
 
     it('matches the projection CommitmentEnvelope shape for invariant #26 load wiring', () => {
-        const compatibilityProbe = assertSaveEnvelopeCompatibility({
-            id: toCommitmentId('commitment-compat'),
+        const commitmentId = toCommitmentId('commitment-compat');
+        const pendingCommitments = assertSaveEnvelopeCompatibility({
+            id: commitmentId,
             commitment: 'b'.repeat(64),
         });
 
-        expect(compatibilityProbe.id).toBeDefined();
+        const compatibilityProbe = readPendingCommitment(pendingCommitments, commitmentId);
+
+        expect(compatibilityProbe).toStrictEqual({
+            id: toCommitmentId('commitment-compat'),
+            commitment: 'b'.repeat(64),
+        });
     });
 });
 
@@ -276,6 +296,124 @@ describe('JsonSaveSerializer — security', () => {
         await expect(
             serializer.deserialize(await serializer.serialize(file)),
         ).resolves.toStrictEqual(file);
+    });
+});
+
+// ─── CommitmentEnvelope F27 shape — revealedAt field (issue #440) ────────────
+
+describe('CommitmentEnvelope F27 shape — revealedAt (issue #440)', () => {
+    it('round-trip preserves CommitmentEnvelope with revealedAt tick', async () => {
+        const serializer = new JsonSaveSerializer();
+        const commitmentId = toCommitmentId('c-reveal-1');
+        const pendingCommitments = Object.create(null) as SaveFile['pendingCommitments'];
+        // revealedAt is the new F27 field; type must accept it (pnpm typecheck red before fix)
+        pendingCommitments[commitmentId] = {
+            id: commitmentId,
+            commitment: 'a'.repeat(64),
+            revealedAt: 7,
+        };
+        const file = makeSaveFile({ pendingCommitments });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.pendingCommitments[commitmentId]).toStrictEqual({
+            id: commitmentId,
+            commitment: 'a'.repeat(64),
+            revealedAt: 7,
+        });
+    });
+
+    it('round-trip preserves CommitmentEnvelope without revealedAt when omitted', async () => {
+        const serializer = new JsonSaveSerializer();
+        const commitmentId = toCommitmentId('c-reveal-2');
+        const pendingCommitments = Object.create(null) as SaveFile['pendingCommitments'];
+        pendingCommitments[commitmentId] = { id: commitmentId, commitment: 'b'.repeat(64) };
+        const file = makeSaveFile({ pendingCommitments });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.pendingCommitments[commitmentId]).toStrictEqual({
+            id: commitmentId,
+            commitment: 'b'.repeat(64),
+        });
+    });
+
+    it('rejects with SaveParseError when CommitmentEnvelope.revealedAt is a float (invariant #44)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = JSON.stringify({
+            header: {
+                schemaVersion: 1,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 1,
+                playerNames: [],
+            },
+            checkpoint: {
+                tick: 1,
+                seed: 42,
+                players: {},
+                entities: {},
+                phase: 'playing',
+                events: [],
+                turnNumber: 0,
+            },
+            deltaActions: [],
+            pendingCommitments: {
+                'c-float': {
+                    id: 'c-float',
+                    commitment: 'a'.repeat(64),
+                    revealedAt: 1.5,
+                },
+            },
+        });
+
+        await expect(serializer.deserialize(raw)).rejects.toBeInstanceOf(SaveParseError);
+    });
+
+    it('accepts CommitmentEnvelope with valid integer revealedAt in raw JSON', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = JSON.stringify({
+            header: {
+                schemaVersion: 1,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                slotId: 'autosave',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 1,
+                playerNames: [],
+            },
+            checkpoint: {
+                tick: 1,
+                seed: 42,
+                players: {},
+                entities: {},
+                phase: 'playing',
+                events: [],
+                turnNumber: 0,
+            },
+            deltaActions: [],
+            pendingCommitments: {
+                'c-int': {
+                    id: 'c-int',
+                    commitment: 'a'.repeat(64),
+                    revealedAt: 42,
+                },
+            },
+        });
+
+        const result = await serializer.deserialize(raw);
+        const commitmentId = toCommitmentId('c-int');
+        const commitment = readPendingCommitment(result.pendingCommitments, commitmentId);
+
+        expect(commitment).toStrictEqual({
+            id: 'c-int',
+            commitment: 'a'.repeat(64),
+            revealedAt: 42,
+        });
     });
 });
 

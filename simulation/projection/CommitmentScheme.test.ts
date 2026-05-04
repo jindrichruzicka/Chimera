@@ -8,9 +8,12 @@ import { createHash } from 'node:crypto';
 
 import { describe, expect, it } from 'vitest';
 
-import { CommitmentVerificationError, DefaultCommitmentScheme } from './CommitmentScheme.js';
+import {
+    CommitmentVerificationError,
+    DefaultCommitmentScheme,
+    toCommitmentId,
+} from './CommitmentScheme.js';
 import type { CommitmentEnvelope, CommitmentReveal } from './CommitmentScheme.js';
-import { toCommitmentId } from '../persistence/index.js';
 
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/u;
 const KNOWN_ID = toCommitmentId('commitment-1');

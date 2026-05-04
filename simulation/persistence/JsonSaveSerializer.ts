@@ -50,6 +50,17 @@ const SaveFileHeaderSchema = z.object({
 });
 
 /**
+ * Wire shape of a single `CommitmentEnvelope` stored under `pendingCommitments`.
+ * Mirrors the full F27 `CommitmentEnvelope` interface (§4.6 / §8).
+ * `revealedAt` must be an integer tick (invariant #44) when present.
+ */
+const WireCommitmentEnvelopeSchema = z.object({
+    id: z.string(),
+    commitment: z.string(),
+    revealedAt: z.number().int().optional(),
+});
+
+/**
  * Validates the minimum required structure of a `SaveFile` object parsed from
  * untrusted JSON. The checkpoint schema enforces integer-only arithmetic fields
  * (invariant #44). Extra fields on any nested object are permitted.
@@ -67,7 +78,7 @@ const SaveFileSchema = z.object({
         timers: z.record(z.string(), z.unknown()).optional(),
     }),
     deltaActions: z.array(z.unknown()),
-    pendingCommitments: z.record(z.string(), z.unknown()),
+    pendingCommitments: z.record(z.string(), WireCommitmentEnvelopeSchema),
 });
 
 // ─── Prototype-pollution defence ─────────────────────────────────────────────
