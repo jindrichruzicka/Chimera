@@ -291,12 +291,19 @@ describe('SessionRuntime', () => {
                 applyAction: vi.fn(),
             });
 
-            // Craft a malicious payload with __proto__ key (simulates network-sourced JSON).
-            // JSON.parse stores __proto__ as an own enumerable property, which is the real
-            // prototype-pollution attack vector (unlike Object.assign which sets the prototype).
-            const maliciousCommitments = JSON.parse(
-                JSON.stringify({ [COMMITMENT_ID]: makeEnvelope(), __proto__: { injected: true } }),
-            ) as SaveFile['pendingCommitments'];
+            // Craft a malicious payload with __proto__ key (network-sourced data).
+            // Object.defineProperty adds __proto__ as an own enumerable property without
+            // triggering the [[Set]] accessor that would mutate the prototype, matching
+            // how JSON.parse handles __proto__ keys from untrusted input.
+            const maliciousCommitments: SaveFile['pendingCommitments'] = {
+                [COMMITMENT_ID]: makeEnvelope(),
+            };
+            Object.defineProperty(maliciousCommitments, '__proto__', {
+                value: { injected: true },
+                enumerable: true,
+                configurable: true,
+                writable: true,
+            });
 
             // Restore the malicious commitments
             runtime.applyRestoredFile({
@@ -315,9 +322,8 @@ describe('SessionRuntime', () => {
                 pendingCommitments: maliciousCommitments,
             });
 
-            // Verify that Object.prototype was not polluted.
-            // copyPendingCommitments uses Object.create(null) as the target, so assigning
-            // the __proto__ key creates a harmless own property rather than changing any prototype.
+            // Verify that Object.prototype was not polluted
+            // (the __proto__ key is stored as a regular property due to Object.create(null))
             const newObject: Record<string, unknown> = {};
             expect(newObject['injected']).toBeUndefined();
 
@@ -326,6 +332,7 @@ describe('SessionRuntime', () => {
                 gameId: 'tactics',
             });
             expect(captured.pendingCommitments[COMMITMENT_ID]).toEqual(makeEnvelope());
+            // The __proto__ string is stored as a property but harmless (no prototype pollution)
         });
 
         it('allows injecting a test double commitmentRuntime via options', () => {
