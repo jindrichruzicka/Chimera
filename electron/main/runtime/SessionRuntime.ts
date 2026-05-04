@@ -30,8 +30,16 @@
  */
 
 import type { ActionEnvelope, BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
-import { CURRENT_SCHEMA_VERSION } from '@chimera/simulation/persistence/SaveMigrator.js';
+import { CURRENT_SCHEMA_VERSION, type SaveFile } from '@chimera/simulation/persistence/index.js';
+import {
+    CommitmentVerificationError,
+    DefaultCommitmentScheme,
+    toCommitmentId,
+    type CommitmentEnvelope,
+    type CommitmentId,
+    type CommitmentReveal,
+    type CommitmentScheme,
+} from '@chimera/simulation/projection/index.js';
 import type { SaveRequest } from '../../preload/api-types.js';
 
 /**
@@ -51,6 +59,64 @@ export type ApplyActionFn = (
  * the engine version when the on-disk schema changes.
  */
 export const HOST_ENGINE_VERSION = '0.1.0';
+
+export type PendingCommitments = Readonly<Record<CommitmentId, CommitmentEnvelope>>;
+
+export class SessionCommitmentRuntime {
+    private readonly commitmentScheme: CommitmentScheme;
+    private pendingCommitments: Record<CommitmentId, CommitmentEnvelope> = {};
+
+    constructor(commitmentScheme: CommitmentScheme = new DefaultCommitmentScheme()) {
+        this.commitmentScheme = commitmentScheme;
+    }
+
+    restorePendingCommitments(pendingCommitments: PendingCommitments): void {
+        this.pendingCommitments = copyPendingCommitments(pendingCommitments);
+    }
+
+    capturePendingCommitments(): Record<CommitmentId, CommitmentEnvelope> {
+        return copyPendingCommitments(this.pendingCommitments);
+    }
+
+    verifyReveal(reveal: CommitmentReveal): unknown {
+        const envelope = this.pendingCommitments[reveal.id];
+        if (envelope === undefined) {
+            throw new CommitmentVerificationError('No pending commitment found for reveal');
+        }
+
+        const verified = this.commitmentScheme.verify(reveal, envelope);
+        if (!verified) {
+            throw new CommitmentVerificationError();
+        }
+
+        delete this.pendingCommitments[reveal.id];
+        return reveal.value;
+    }
+}
+
+function copyPendingCommitments(
+    pendingCommitments: PendingCommitments,
+): Record<CommitmentId, CommitmentEnvelope> {
+    // Object.create(null) prevents __proto__ key injection from network data
+    // from polluting Object.prototype via the [[Set]] accessor (§11.2).
+    const copy = Object.create(null) as Record<CommitmentId, CommitmentEnvelope>;
+    for (const [id, envelope] of Object.entries(pendingCommitments)) {
+        copy[toCommitmentId(id)] = envelope;
+    }
+    return copy;
+}
+
+/**
+ * Narrow structural interface for the commitment runtime slot in
+ * {@link SessionRuntimeOptions}.  Typed as an interface (not the concrete
+ * class) so test doubles and future alternative implementations can be
+ * injected without an `as any` cast (DIP — §coding-standards SOLID §3.5).
+ */
+export interface CommitmentRuntimePort {
+    restorePendingCommitments(pendingCommitments: PendingCommitments): void;
+    capturePendingCommitments(): Record<CommitmentId, CommitmentEnvelope>;
+    verifyReveal(reveal: CommitmentReveal): unknown;
+}
 
 export interface SessionRuntimeOptions {
     /**
@@ -79,6 +145,12 @@ export interface SessionRuntimeOptions {
      * `reduce`).
      */
     readonly now?: () => number;
+    /**
+     * Commitment runtime injected for testability.  Defaults to
+     * `new SessionCommitmentRuntime()` if not provided.  Allows tests to
+     * verify commitment capture/restore without using real SHA-256 hashing.
+     */
+    readonly commitmentRuntime?: CommitmentRuntimePort;
 }
 
 /**
@@ -92,6 +164,7 @@ export class SessionRuntime {
     private readonly gameVersion: string;
     private readonly applyActionFn: ApplyActionFn;
     private readonly now: () => number;
+    private readonly commitments: CommitmentRuntimePort;
 
     constructor(options: SessionRuntimeOptions) {
         this.snapshot = options.initialSnapshot;
@@ -99,6 +172,7 @@ export class SessionRuntime {
         this.gameVersion = options.gameVersion;
         this.applyActionFn = options.applyAction;
         this.now = options.now ?? Date.now;
+        this.commitments = options.commitmentRuntime ?? new SessionCommitmentRuntime();
     }
 
     /** The game identifier for this session (e.g. `'tactics'`). */
@@ -132,10 +206,11 @@ export class SessionRuntime {
      */
     applyRestoredFile(file: SaveFile): void {
         this.snapshot = file.checkpoint;
-        // TODO(invariant-26): restore file.pendingCommitments into CommitmentScheme
-        // when CommitmentScheme lands in M5 (F26–F29, issues #371/#379).
-        // Until then, saves carry pendingCommitments: {} and REVEAL flows are not
-        // yet reachable, so no REVEAL message can misbehave post-load.
+        this.commitments.restorePendingCommitments(file.pendingCommitments);
+    }
+
+    verifyReveal(reveal: CommitmentReveal): unknown {
+        return this.commitments.verifyReveal(reveal);
     }
 
     /**
@@ -165,9 +240,7 @@ export class SessionRuntime {
             },
             checkpoint: this.snapshot,
             deltaActions: [],
-            // TODO(invariant-26): capture CommitmentScheme state here when M5
-            // (F26–F29, issues #371/#379) lands so restored saves carry live commitments.
-            pendingCommitments: {},
+            pendingCommitments: this.commitments.capturePendingCommitments(),
         };
     }
 }

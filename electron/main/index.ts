@@ -41,18 +41,27 @@ import {
     collectInitialPlayerSlots,
     resolveAgentSlot,
 } from './runtime/HostedSessionAgents.js';
-import { SessionRuntime } from './runtime/SessionRuntime.js';
+import { SessionCommitmentRuntime, SessionRuntime } from './runtime/SessionRuntime.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
-import { GAME_SNAPSHOT_CHANNEL } from '../preload/apis/game-api.js';
+import type {
+    ClientTransport,
+    Unsubscribe,
+} from '@chimera/networking/provider/MultiplayerProvider.js';
+import { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } from '../preload/apis/game-api.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { gamePhase } from '@chimera/simulation/engine/types.js';
-import { DefaultStateProjector } from '@chimera/simulation/projection/index.js';
+import {
+    CommitmentVerificationError,
+    DefaultStateProjector,
+    toCommitmentId,
+    type CommitmentReveal,
+} from '@chimera/simulation/projection/index.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
@@ -169,6 +178,17 @@ export interface RegisterCleanExitIpcOptions {
     readonly wasCleanExit: boolean;
 }
 
+export interface RevealVerificationRuntime {
+    verifyReveal(reveal: CommitmentReveal): unknown;
+}
+
+export interface RegisterClientRevealForwardingOptions {
+    readonly transport: Pick<ClientTransport, 'onReveal'>;
+    readonly commitmentRuntime: RevealVerificationRuntime;
+    readonly sendRevealToRenderer: (reveal: CommitmentReveal) => void;
+    readonly logger: Logger;
+}
+
 // ─── SaveManager lifecycle wiring ─────────────────────────────────────────────
 
 import type { SaveSlotMeta } from '@chimera/simulation/persistence/SaveRepository.js';
@@ -237,6 +257,34 @@ export async function registerSaveManagerLifecycle(
  */
 export function registerCleanExitIpc(options: RegisterCleanExitIpcOptions): void {
     options.ipcMain.handle(CLEAN_EXIT_IPC_CHANNEL, () => options.wasCleanExit);
+}
+
+export function registerClientRevealForwarding(
+    options: RegisterClientRevealForwardingOptions,
+): Unsubscribe {
+    const { transport, commitmentRuntime, sendRevealToRenderer, logger } = options;
+    return transport.onReveal((wireReveal) => {
+        const reveal: CommitmentReveal = {
+            id: toCommitmentId(wireReveal.id),
+            value: wireReveal.value,
+            nonce: wireReveal.nonce,
+        };
+
+        try {
+            commitmentRuntime.verifyReveal(reveal);
+            sendRevealToRenderer(reveal);
+        } catch (error) {
+            if (error instanceof CommitmentVerificationError) {
+                logger.warn('client reveal verification failed', {
+                    commitmentId: wireReveal.id,
+                    error: error.message,
+                });
+                return;
+            }
+
+            throw error;
+        }
+    });
 }
 
 /**
@@ -645,7 +693,31 @@ export async function main(): Promise<void> {
                 }
             };
         },
-        undefined,
+        (transport) => {
+            const clientCommitments = new SessionCommitmentRuntime();
+            const unsubSnapshotCommitments = transport.onSnapshotReceived((snapshot) => {
+                if (snapshot.commitments !== undefined) {
+                    clientCommitments.restorePendingCommitments(snapshot.commitments);
+                }
+            });
+            const unsubReveal = registerClientRevealForwarding({
+                transport,
+                commitmentRuntime: clientCommitments,
+                sendRevealToRenderer: (reveal) => {
+                    BrowserWindow.getAllWindows().forEach((win) => {
+                        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                            win.webContents.send(GAME_REVEAL_CHANNEL, reveal);
+                        }
+                    });
+                },
+                logger: lobbyLogger,
+            });
+
+            return () => {
+                unsubSnapshotCommitments();
+                unsubReveal();
+            };
+        },
         (state) => {
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {

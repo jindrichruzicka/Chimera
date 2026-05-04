@@ -39,6 +39,7 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         entities: {},
         phase: 'test',
         events: [],
+        commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
     };
 }
@@ -349,6 +350,7 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
             players: {},
             entities: {},
             events: [],
+            commitments: {},
             undoMeta: { canUndo: false as const, canRedo: false as const },
         };
         // CRC computed from the non-schema-order object — as the host would produce it

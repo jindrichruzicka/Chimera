@@ -18,6 +18,7 @@
 
 import type {
     ActionRejection,
+    CommitmentReveal,
     EngineAction,
     GameAPI,
     PlayerId,
@@ -28,6 +29,7 @@ import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
 import {
     ActionRejectionSchema,
+    CommitmentRevealSchema,
     parseInvokeResponse,
     PredictableActionTypesSchema,
 } from '../shared/schemas.js';
@@ -52,6 +54,12 @@ export const GAME_SNAPSHOT_CHANNEL = 'chimera:game:snapshot';
  * Wire-shape analogue of the §4.3 WebSocket `ServerMessage` REJECT frame.
  */
 export const GAME_ACTION_REJECTED_CHANNEL = 'chimera:game:action-rejected';
+
+/**
+ * `ipcRenderer.on` target for {@link GameAPI.onReveal}. Main pushes only
+ * reveals that passed `CommitmentScheme.verify()`.
+ */
+export const GAME_REVEAL_CHANNEL = 'chimera:game:reveal';
 
 /** `ipcRenderer.invoke` target for {@link GameAPI.switchActiveSeat}. */
 export const GAME_SWITCH_SEAT_CHANNEL = 'chimera:game:switch-seat';
@@ -105,6 +113,13 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
                 ipc,
                 GAME_ACTION_REJECTED_CHANNEL,
                 ActionRejectionSchema,
+                cb,
+            ),
+        onReveal: (cb: (reveal: CommitmentReveal) => void): Unsubscribe =>
+            subscribeValidatedPush<CommitmentReveal>(
+                ipc,
+                GAME_REVEAL_CHANNEL,
+                CommitmentRevealSchema,
                 cb,
             ),
         switchActiveSeat: async (playerId: PlayerId): Promise<void> => {

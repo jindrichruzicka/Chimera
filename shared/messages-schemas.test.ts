@@ -301,4 +301,33 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
         expect(round.success).toBe(true);
     });
+
+    it('SNAPSHOT preserves pending commitment envelopes for reveal verification', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 1,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                events: [],
+                commitments: {
+                    'commitment-1': {
+                        id: 'commitment-1',
+                        commitment: 'a'.repeat(64),
+                    },
+                },
+                undoMeta: { canUndo: false, canRedo: false },
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.commitments).toStrictEqual(msg.snapshot.commitments);
+        }
+    });
 });

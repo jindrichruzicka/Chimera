@@ -51,6 +51,7 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         entities: {},
         phase: 'contract-test',
         events: [],
+        commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
     };
 }

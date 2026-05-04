@@ -101,7 +101,16 @@ export interface GameEvent {
 
 /** Cryptographic commitment envelope for a concealed value. */
 export interface CommitmentEnvelope {
-    readonly hash: string;
+    readonly id: CommitmentId;
+    readonly commitment: string;
+    readonly revealedAt?: number;
+}
+
+/** Verified reveal of a previously committed hidden value. */
+export interface CommitmentReveal {
+    readonly id: CommitmentId;
+    readonly value: unknown;
+    readonly nonce: string;
 }
 
 /**
@@ -481,6 +490,8 @@ export interface GameAPI {
      * fire-and-forget (returns `void`).
      */
     onActionRejected(cb: (rejection: ActionRejection) => void): Unsubscribe;
+    /** Stream of verified commitment reveals from the main-process trust gate. */
+    onReveal(cb: (reveal: CommitmentReveal) => void): Unsubscribe;
     /** Local multi-seat (pass-and-play): switch the active viewer for the current renderer. */
     switchActiveSeat(playerId: PlayerId): Promise<void>;
     /**

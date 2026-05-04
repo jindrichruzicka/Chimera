@@ -91,16 +91,30 @@ vi.mock('./runtime/StateBroadcaster.js', () => ({
 }));
 
 // ── StateProjector mock — captures DefaultStateProjector construction ─────────
-const { mockDefaultStateProjectorCtor, mockProjectorInstance } = vi.hoisted(() => {
-    const instance = { project: vi.fn() };
-    return {
-        mockProjectorInstance: instance,
-        mockDefaultStateProjectorCtor: vi.fn(() => instance),
-    };
-});
+const { mockDefaultStateProjectorCtor, mockProjectorInstance, MockCommitmentVerificationError } =
+    vi.hoisted(() => {
+        const instance = { project: vi.fn() };
+        class MockCommitmentVerificationError extends Error {
+            constructor(message = 'Commitment verification failed') {
+                super(message);
+                this.name = 'CommitmentVerificationError';
+            }
+        }
+        return {
+            mockProjectorInstance: instance,
+            mockDefaultStateProjectorCtor: vi.fn(() => instance),
+            MockCommitmentVerificationError,
+        };
+    });
 
 vi.mock('@chimera/simulation/projection/index.js', () => ({
     DefaultStateProjector: mockDefaultStateProjectorCtor,
+    DefaultCommitmentScheme: vi.fn(() => ({
+        commit: vi.fn(),
+        verify: vi.fn(() => true),
+    })),
+    CommitmentVerificationError: MockCommitmentVerificationError,
+    toCommitmentId: (raw: string): string => raw,
 }));
 
 // ── Tactics visibility rules mock — verifies game-owned rules are injected ────
@@ -242,9 +256,11 @@ const {
     registerCleanExitIpc,
     registerSaveManagerLifecycle,
     parseHarnessFlags,
+    registerClientRevealForwarding,
     main,
 } = await import('./index.js');
 const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
+const { GAME_REVEAL_CHANNEL } = await import('../preload/apis/game-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
 const { playerId } = await import('@chimera/simulation/engine/types.js');
 
@@ -616,6 +632,145 @@ describe('registerCleanExitIpc', () => {
 
         const handler = handlers.get('chimera:system:was-clean-exit');
         await expect(Promise.resolve(handler?.())).resolves.toBe(false);
+    });
+});
+
+describe('registerClientRevealForwarding', () => {
+    interface TestWireReveal {
+        readonly id: string;
+        readonly value: unknown;
+        readonly nonce: string;
+    }
+
+    interface TestPlayerSnapshotWithCommitments {
+        readonly commitments?: Readonly<
+            Record<string, { readonly id: string; readonly commitment: string }>
+        >;
+    }
+
+    function makeReveal(): TestWireReveal {
+        return { id: 'commitment-1', value: { card: 'ace-of-stars' }, nonce: 'nonce-1' };
+    }
+
+    function makeRevealTransport(): {
+        readonly transport: {
+            readonly onReveal: ReturnType<typeof vi.fn>;
+            readonly onSnapshotReceived: ReturnType<typeof vi.fn>;
+        };
+        readonly callbacks: ((reveal: TestWireReveal) => void)[];
+        readonly snapshotCallbacks: ((snapshot: TestPlayerSnapshotWithCommitments) => void)[];
+        readonly unsubscribe: ReturnType<typeof vi.fn>;
+    } {
+        const callbacks: ((reveal: TestWireReveal) => void)[] = [];
+        const snapshotCallbacks: ((snapshot: TestPlayerSnapshotWithCommitments) => void)[] = [];
+        const unsubscribe = vi.fn();
+        return {
+            callbacks,
+            snapshotCallbacks,
+            unsubscribe,
+            transport: {
+                onReveal: vi.fn((cb: (reveal: TestWireReveal) => void) => {
+                    callbacks.push(cb);
+                    return unsubscribe;
+                }),
+                onSnapshotReceived: vi.fn(
+                    (cb: (snapshot: TestPlayerSnapshotWithCommitments) => void) => {
+                        snapshotCallbacks.push(cb);
+                        return unsubscribe;
+                    },
+                ),
+            },
+        };
+    }
+
+    it('verifies a REVEAL before forwarding it to renderer windows', () => {
+        const { transport, callbacks } = makeRevealTransport();
+        const verifyReveal = vi.fn<(reveal: TestWireReveal) => unknown>(() => true);
+        const sendRevealToRenderer = vi.fn<(reveal: TestWireReveal) => void>();
+        const reveal = makeReveal();
+
+        registerClientRevealForwarding({
+            transport,
+            commitmentRuntime: { verifyReveal },
+            sendRevealToRenderer,
+            logger: createNoopLogger(),
+        });
+
+        callbacks[0]?.(reveal);
+
+        expect(verifyReveal).toHaveBeenCalledWith(reveal);
+        expect(sendRevealToRenderer).toHaveBeenCalledWith(reveal);
+    });
+
+    it('logs and drops a tampered REVEAL without forwarding it', () => {
+        const { transport, callbacks } = makeRevealTransport();
+        const error = new MockCommitmentVerificationError('bad reveal');
+        const verifyReveal = vi.fn<(reveal: TestWireReveal) => unknown>(() => {
+            throw error;
+        });
+        const sendRevealToRenderer = vi.fn<(reveal: TestWireReveal) => void>();
+        const logger = { ...createNoopLogger(), warn: vi.fn() };
+
+        registerClientRevealForwarding({
+            transport,
+            commitmentRuntime: { verifyReveal },
+            sendRevealToRenderer,
+            logger,
+        });
+
+        callbacks[0]?.(makeReveal());
+
+        expect(sendRevealToRenderer).not.toHaveBeenCalled();
+        expect(logger.warn).toHaveBeenCalledWith(
+            'client reveal verification failed',
+            expect.objectContaining({ commitmentId: 'commitment-1', error: 'bad reveal' }),
+        );
+    });
+
+    it('returns the ClientTransport onReveal unsubscribe handle', () => {
+        const { transport, unsubscribe } = makeRevealTransport();
+        const result = registerClientRevealForwarding({
+            transport,
+            commitmentRuntime: { verifyReveal: vi.fn() },
+            sendRevealToRenderer: vi.fn(),
+            logger: createNoopLogger(),
+        });
+
+        result();
+
+        expect(unsubscribe).toHaveBeenCalledOnce();
+    });
+
+    it('main forwards verified joined-client reveals on the game reveal channel', async () => {
+        mockLobbyManagerCtor.mockClear();
+        browserWindowInstances.length = 0;
+        const win = new FakeBrowserWindow({});
+        await main();
+
+        const onSessionJoined = mockLobbyManagerCtor.mock.calls[0]?.[3] as
+            | ((transport: {
+                  onReveal(cb: (reveal: TestWireReveal) => void): () => void;
+                  onSnapshotReceived(
+                      cb: (snapshot: TestPlayerSnapshotWithCommitments) => void,
+                  ): () => void;
+              }) => void)
+            | undefined;
+        expect(onSessionJoined).toBeTypeOf('function');
+
+        const { transport, callbacks, snapshotCallbacks } = makeRevealTransport();
+        onSessionJoined?.(transport);
+        const reveal = makeReveal();
+        snapshotCallbacks[0]?.({
+            commitments: {
+                'commitment-1': {
+                    id: 'commitment-1',
+                    commitment: 'a'.repeat(64),
+                },
+            },
+        });
+        callbacks[0]?.(reveal);
+
+        expect(win.webContents.send).toHaveBeenCalledWith(GAME_REVEAL_CHANNEL, reveal);
     });
 });
 

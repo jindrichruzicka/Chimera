@@ -71,6 +71,7 @@ function makeApi(
     const onActionRejectedSpy = vi.fn<(cb: (r: ActionRejection) => void) => Unsubscribe>(() =>
         vi.fn(),
     );
+    const onRevealSpy = vi.fn(() => vi.fn());
     const getPredictableActionTypesSpy = vi.fn<() => Promise<readonly string[]>>(() =>
         Promise.resolve(options.predictableTypes ?? []),
     );
@@ -79,6 +80,7 @@ function makeApi(
         sendAction: sendActionSpy,
         onSnapshot: onSnapshotSpy,
         onActionRejected: onActionRejectedSpy,
+        onReveal: onRevealSpy,
         switchActiveSeat: vi.fn(),
         getPredictableActionTypes: getPredictableActionTypesSpy,
     };

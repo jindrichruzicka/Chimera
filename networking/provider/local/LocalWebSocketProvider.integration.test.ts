@@ -37,6 +37,7 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         entities: {},
         phase: 'integration',
         events: [],
+        commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
     };
 }

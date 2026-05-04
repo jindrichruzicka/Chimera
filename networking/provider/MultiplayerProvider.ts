@@ -21,6 +21,7 @@
 
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
+import type { CommitmentEnvelope, CommitmentId } from '@chimera/simulation/projection/index.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 
 // ─── Re-export simulation primitives used by callers of this module ───────────
@@ -70,6 +71,14 @@ export interface PlayerSnapshot {
     >;
     readonly phase: string;
     readonly events: readonly Readonly<{ type: string }>[];
+    /**
+     * Per-player commitment state (proposals and envelopes).
+     * Optional for backward-compat: older clients may not include this field
+     * when sending snapshots. The wire schema (messages-schemas.ts) declares
+     * this as `.optional()` to handle old versions gracefully; newer clients
+     * guard with `if (snapshot.commitments !== undefined)` before accessing.
+     */
+    readonly commitments?: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
 }
 

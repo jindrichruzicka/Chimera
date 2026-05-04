@@ -95,6 +95,7 @@ describe('shared/messages — ServerMessage', () => {
                 entities: {},
                 phase: 'playing',
                 events: [],
+                commitments: {},
                 undoMeta: { canUndo: false, canRedo: false },
             },
             checksum: 42,

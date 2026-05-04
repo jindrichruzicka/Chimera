@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
+    GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
@@ -10,8 +11,14 @@ import {
     type GameApiListener,
 } from './game-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
-import type { ActionRejection, EngineAction, PlayerSnapshot } from '../api-types.js';
+import type {
+    ActionRejection,
+    CommitmentReveal,
+    EngineAction,
+    PlayerSnapshot,
+} from '../api-types.js';
 import { playerId, gamePhase } from '../api-types.js';
+import { toCommitmentId } from '@chimera/simulation/projection/index.js';
 
 /**
  * Recording stub for the narrow `GameApiIpcPort` slice. Captures every call
@@ -72,6 +79,14 @@ function makeSnapshot(): PlayerSnapshot {
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
+    };
+}
+
+function makeReveal(): CommitmentReveal {
+    return {
+        id: toCommitmentId('commitment-1'),
+        value: { card: 'ace-of-stars' },
+        nonce: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
     };
 }
 
@@ -278,6 +293,55 @@ describe('createGameApi', () => {
             }
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('onReveal()', () => {
+        it('registers a listener on chimera:game:reveal and forwards the validated payload', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(reveal: CommitmentReveal) => void>();
+
+            api.onReveal(callback);
+
+            const registered = stub.listeners.get(GAME_REVEAL_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const reveal = makeReveal();
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, reveal);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(reveal);
+        });
+
+        it('throws PreloadIpcValidationError if main pushes a malformed reveal payload', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(reveal: CommitmentReveal) => void>();
+
+            api.onReveal(callback);
+            const listener = [...(stub.listeners.get(GAME_REVEAL_CHANNEL) ?? [])][0];
+
+            expect(() => listener?.({}, { value: 42, nonce: 'abc' })).toThrow(
+                PreloadIpcValidationError,
+            );
+            expect(() => listener?.({}, { id: 'commitment-1', value: 42 })).toThrow(
+                PreloadIpcValidationError,
+            );
+            expect(() => listener?.({}, null)).toThrow(PreloadIpcValidationError);
+            expect(callback).not.toHaveBeenCalled();
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(reveal: CommitmentReveal) => void>();
+
+            const unsubscribe = api.onReveal(callback);
+            expect(stub.listeners.get(GAME_REVEAL_CHANNEL)?.size).toBe(1);
+            unsubscribe();
+            expect(stub.listeners.get(GAME_REVEAL_CHANNEL)?.size).toBe(0);
         });
     });
 

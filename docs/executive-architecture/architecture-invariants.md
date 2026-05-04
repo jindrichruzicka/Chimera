@@ -84,7 +84,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **25.** `engine:save` and `engine:load` are validated `EngineAction` types — only the designated host player may dispatch them. Client-originated save/load actions are rejected by `validate()` before reaching the reducer.
 
-**26.** `SaveFile.pendingCommitments` must be restored into `CommitmentScheme` on load. A loaded game without restored commitments must not process any `REVEAL` messages until commitments are present. _(Deferred — `CommitmentScheme` lands in M5 F26–F29. See issues #371 and #379. The wiring point is marked with `TODO(invariant-26)` in `SessionRuntime.applyRestoredFile` and `captureSaveFile`.)_
+**26.** `SaveFile.pendingCommitments` must be restored into `CommitmentScheme` on load. A loaded game without restored commitments must not process any `REVEAL` messages until commitments are present.
 
 **27.** `CHIMERA_DEBUG` must never appear in the production packaging configuration. The production build must assert `IS_DEBUG_MODE === false` at startup and refuse to start if `process.env.CHIMERA_DEBUG` is set in a `NODE_ENV=production` process.
 

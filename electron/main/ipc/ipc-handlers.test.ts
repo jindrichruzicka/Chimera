@@ -4,6 +4,7 @@ import {
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
+    GAME_REVEAL_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
     LOBBY_HOST_CHANNEL,
@@ -295,9 +296,9 @@ describe('registerGameHandlers', () => {
         const stub = makeGameIpcMainStub();
         registerGameHandlers({ ipcMain: stub.ipcMain });
 
-        // `chimera:game:snapshot` is a one-way push from main → renderer via
-        // `webContents.send`. It must NOT appear as a main-side listener or
-        // invoke handler.
+        // `chimera:game:snapshot` and `chimera:game:reveal` are one-way pushes
+        // from main → renderer via `webContents.send`. They must NOT appear as
+        // main-side listeners or invoke handlers.
         expect([...stub.handled.keys()]).toEqual([
             GAME_SWITCH_SEAT_CHANNEL,
             GAME_PREDICTABLE_TYPES_CHANNEL,
@@ -305,6 +306,8 @@ describe('registerGameHandlers', () => {
         expect([...stub.listeners.keys()]).toEqual([GAME_SEND_ACTION_CHANNEL]);
         expect(stub.handled.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
         expect(stub.listeners.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
+        expect(stub.handled.has(GAME_REVEAL_CHANNEL)).toBe(false);
+        expect(stub.listeners.has(GAME_REVEAL_CHANNEL)).toBe(false);
     });
 
     describe('chimera:game:predictable-action-types handler', () => {

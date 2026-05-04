@@ -90,6 +90,7 @@ function makeTestSnapshot(): PlayerSnapshot {
         entities: {},
         phase: 'setup',
         events: [],
+        commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
     };
 }

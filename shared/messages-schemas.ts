@@ -56,6 +56,14 @@ const WireCommitmentReveal = z.object({
     nonce: z.string(),
 });
 
+const WireCommitmentEnvelope = z
+    .object({
+        id: z.string(),
+        commitment: z.string(),
+        revealedAt: z.number().int().optional(),
+    })
+    .strict();
+
 const EngineAction = z.object({
     type: z.string(),
     playerId: PlayerId,
@@ -91,6 +99,7 @@ const PlayerSnapshot = z.object({
     entities: z.record(z.string(), z.record(z.string(), z.unknown())),
     phase: z.string(),
     events: z.array(z.object({ type: z.string() }).passthrough()),
+    commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
 });
 

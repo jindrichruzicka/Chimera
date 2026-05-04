@@ -23,9 +23,11 @@
 
 import { z } from 'zod';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import { toCommitmentId } from '@chimera/simulation/projection/index.js';
 import { toSlotId, playerId } from '../api-types.js';
 import type {
     ActionRejection,
+    CommitmentReveal,
     CrashRecoveryStatus,
     LocalProfileSlot,
     LobbyInfo,
@@ -166,6 +168,13 @@ export const ActionRejectionSchema: z.ZodType<ActionRejection> = z.object({
     tick: z.number().int(),
     actionType: z.string().optional(),
 }) as z.ZodType<ActionRejection>;
+
+/** Schema for {@link CommitmentReveal} pushed on `chimera:game:reveal`. */
+export const CommitmentRevealSchema = z.object({
+    id: z.string().transform(toCommitmentId),
+    value: z.unknown(),
+    nonce: z.string().min(1),
+}) satisfies z.ZodType<CommitmentReveal>;
 
 // ─── Profile domain schemas ───────────────────────────────────────────────────
 
