@@ -144,6 +144,7 @@ interface ReduceContext {
 interface ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     register<TPayload extends object>(definition: ActionDefinition<TPayload, TState>): void;
     resolve(type: string): ActionDefinition<object, TState>; // throws UnknownActionTypeError
+    has(type: string): boolean;
     registeredTypes(): readonly string[];
 }
 ```
