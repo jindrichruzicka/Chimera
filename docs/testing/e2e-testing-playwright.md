@@ -37,6 +37,9 @@ All cross-process, multiplayer, and full-stack scenarios are validated through P
 ```
 e2e/
 ├── playwright.config.ts
+├── playwright.config.test.ts    # Vitest shape-check — validates config values without launching Electron (deliberate)
+├── lobby.fixture.test.ts        # Vitest shape-check — validates lobby.fixture exports without launching Electron (deliberate)
+├── global-setup.ts
 ├── fixtures/
 │   ├── electron.fixture.ts      # Base: launch / close one ElectronApplication
 │   ├── lobby.fixture.ts         # Extends base: two instances + lobby helpers
@@ -59,6 +62,13 @@ e2e/
     ├── reconnect.spec.ts
     └── multiplayer-soak.spec.ts
 ```
+
+> **Note — Vitest shape-check files in `e2e/` root:** `playwright.config.test.ts` and
+> `lobby.fixture.test.ts` are intentional Vitest unit tests co-located at the `e2e/` root
+> (§12.3 pattern). They validate module-level exports and config values without launching
+> Electron, so failures surface in the fast Vitest run rather than only during a full E2E
+> run. Playwright's `testDir: './tests'` correctly excludes them; they are picked up by
+> Vitest's `include` glob instead.
 
 ---
 
