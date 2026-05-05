@@ -7,6 +7,15 @@ import globalSetup from '../global-setup';
 export interface ElectronFixtures {
     readonly electronApp: ElectronApplication;
     readonly mainWindow: Page;
+    readonly rendererConsole: RendererConsoleEntry[];
+}
+
+export type RendererConsoleSource = 'console' | 'pageerror';
+
+export interface RendererConsoleEntry {
+    readonly source: RendererConsoleSource;
+    readonly level: string;
+    readonly text: string;
 }
 
 export type E2eElectronRole = 'host' | 'client';
@@ -88,6 +97,24 @@ export async function launchE2eElectronApplication(
     });
 }
 
+function attachRendererConsoleCapture(page: Page, entries: RendererConsoleEntry[]): void {
+    page.on('console', (message) => {
+        entries.push({
+            source: 'console',
+            level: message.type(),
+            text: message.text(),
+        });
+    });
+
+    page.on('pageerror', (error) => {
+        entries.push({
+            source: 'pageerror',
+            level: 'error',
+            text: error.message,
+        });
+    });
+}
+
 /**
  * Base Electron fixture — launches a single ElectronApplication for boot-smoke and
  * single-player tests.
@@ -101,8 +128,16 @@ export async function launchE2eElectronApplication(
  */
 export const test = base.extend<ElectronFixtures>({
     // eslint-disable-next-line no-empty-pattern
-    electronApp: async ({}, use) => {
+    rendererConsole: async ({}, use) => {
+        const entries: RendererConsoleEntry[] = [];
+        await use(entries);
+    },
+
+    electronApp: async ({ rendererConsole }, use) => {
         const app = await launchE2eElectronApplication({ port: '7778' });
+        app.on('window', (page) => {
+            attachRendererConsoleCapture(page, rendererConsole);
+        });
         try {
             await use(app);
         } finally {

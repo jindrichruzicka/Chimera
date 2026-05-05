@@ -6,6 +6,7 @@
 // need is a valid HTML scaffold that hosts `page.tsx`.
 
 import type { ReactNode } from 'react';
+import type { Metadata } from 'next';
 import React from 'react';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
 import { SettingsBootstrap } from './SettingsBootstrap';
@@ -14,7 +15,7 @@ import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusI
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
 
-export const metadata = {
+export const metadata: Metadata = {
     title: 'Chimera',
     description: 'Chimera engine shell',
 };
@@ -25,10 +26,10 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <head>
                 <meta
                     httpEquiv="Content-Security-Policy"
-                    content="default-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'"
+                    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'"
                 />
             </head>
-            <body>
+            <body style={{ margin: 0 }}>
                 <SettingsBootstrap />
                 <GameStoreBootstrap />
                 <SaveStoreBootstrap />

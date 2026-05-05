@@ -5,7 +5,7 @@
 // Main-menu shell page. For the M1 boot-smoke (§12 checklist item
 // "Electron boots, preload bridge wired") this page only needs to:
 //
-//   1. Render a visible heading so the developer can see Electron loaded
+//   1. Render a visible logo so the developer can see Electron loaded
 //      `renderer/out/index.html` via `window.loadFile()`.
 //   2. Exercise the preload bridge by calling
 //      `window.__chimera.system.platform()` on mount and logging the result
@@ -31,10 +31,15 @@ export default function HomePage() {
     return (
         <main
             data-testid="main-menu"
-            style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}
+            style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                height: '100vh',
+                margin: 0,
+            }}
         >
-            <h1>Chimera</h1>
-            <p>Engine shell — M1 boot smoke. See devtools console for bridge status.</p>
+            <img src="./chimera-logo-compact.png" alt="Chimera" width={256} height={256} />
         </main>
     );
 }

@@ -27,6 +27,10 @@ interface WebpackConfig {
 const nextConfig: NextConfig = {
     output: 'export',
     distDir: 'out',
+    // Electron loads renderer/out/index.html with file://, so absolute /_next
+    // URLs resolve to the filesystem root and fail. Keep exported asset URLs
+    // relative to the entry HTML file.
+    assetPrefix: './',
     reactStrictMode: true,
     // Static export cannot rewrite paths at runtime; emit a trailing slash so
     // that `file://` loads of nested routes resolve to `<route>/index.html`.

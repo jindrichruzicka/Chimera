@@ -40,6 +40,9 @@ describe('RootLayout', () => {
 
         const content = metaList[0]?.getAttribute('content') ?? '';
         expect(content).toContain("default-src 'self'");
+        expect(content).toContain("script-src 'self' 'unsafe-inline'");
+        expect(content).toContain("style-src 'self' 'unsafe-inline'");
+        expect(content).toContain("img-src 'self' data:");
         expect(content).toContain("object-src 'none'");
         expect(content).toContain("base-uri 'none'");
     });
