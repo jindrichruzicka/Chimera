@@ -35,11 +35,32 @@ import type {
 import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
+import type { E2eHooks } from '../runtime/e2e-hooks.js';
 
 export interface HostedSessionMetadata {
     readonly hostId: PlayerId;
     readonly maxPlayers: number;
     readonly agentSlots?: readonly LobbyAgentSlot[];
+    readonly e2eHooks?: E2eHooks;
+}
+
+/**
+ * Optional callbacks and dependencies for {@link LobbyManager}.
+ *
+ * Collecting these into an options bag avoids a long positional constructor
+ * parameter list where callers must pass `undefined` to reach a later slot.
+ */
+export interface LobbyManagerOptions {
+    readonly onSessionHosted?: (
+        transport: HostTransport,
+        metadata: HostedSessionMetadata,
+    ) => (() => void) | void;
+    readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void;
+    readonly onLobbyStateChanged?: (state: LobbyState) => void;
+    readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
+    readonly profileGate?: ProfileGate;
+    readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot) => void;
+    readonly e2eHooks?: E2eHooks;
 }
 
 /**
@@ -69,20 +90,27 @@ export class LobbyManager {
     /** Optional teardown returned by onSessionJoined; cleared on closeLobby(). */
     private sessionJoinedTeardown: (() => void) | null = null;
 
+    private readonly onSessionHosted: LobbyManagerOptions['onSessionHosted'];
+    private readonly onSessionJoined: LobbyManagerOptions['onSessionJoined'];
+    private readonly onLobbyStateChanged: LobbyManagerOptions['onLobbyStateChanged'];
+    private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
+    private readonly profileGate: LobbyManagerOptions['profileGate'];
+    private readonly onClientSnapshotReceived: LobbyManagerOptions['onClientSnapshotReceived'];
+    private readonly e2eHooks: LobbyManagerOptions['e2eHooks'];
+
     constructor(
         private readonly provider: MultiplayerProvider,
         logger: Logger,
-        private readonly onSessionHosted?: (
-            transport: HostTransport,
-            metadata: HostedSessionMetadata,
-        ) => (() => void) | void,
-        private readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void,
-        private readonly onLobbyStateChanged?: (state: LobbyState) => void,
-        private readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void,
-        private readonly profileGate?: ProfileGate,
-        private readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot) => void,
+        options: LobbyManagerOptions = {},
     ) {
         this.log = logger.child({ module: 'lobby-manager' });
+        this.onSessionHosted = options.onSessionHosted;
+        this.onSessionJoined = options.onSessionJoined;
+        this.onLobbyStateChanged = options.onLobbyStateChanged;
+        this.onConnectionStatusChanged = options.onConnectionStatusChanged;
+        this.profileGate = options.profileGate;
+        this.onClientSnapshotReceived = options.onClientSnapshotReceived;
+        this.e2eHooks = options.e2eHooks;
     }
 
     private publishLobbyState(state: LobbyState): void {
@@ -274,10 +302,12 @@ export class LobbyManager {
         // Notify the wiring point (index.ts) that a hosted session is live
         // so it can wire StateBroadcaster and SimulationHost.  F15 is complete;
         // the actual wiring happens in index.ts::hostLobby().
+        const e2eHooks = this.e2eHooks;
         const metadata: HostedSessionMetadata = {
             hostId: info.hostId,
             maxPlayers: params.maxPlayers,
             ...(params.agentSlots !== undefined ? { agentSlots: params.agentSlots } : {}),
+            ...(e2eHooks !== undefined ? { e2eHooks } : {}),
         };
         const teardown = this.onSessionHosted?.(session.transport, metadata);
         if (teardown !== undefined) {

@@ -66,6 +66,7 @@ import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
 import { SimulationHost } from './runtime/SimulationHost.js';
+import { registerE2eHooks, getE2eHooks } from './runtime/e2e-hooks.js';
 import { assertProductionDebugGuard } from './startup-guard.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
@@ -561,10 +562,14 @@ export async function main(): Promise<void> {
     const HOSTED_GAME_ID = 'tactics';
     const HOSTED_GAME_VERSION = '0.1.0';
 
-    const lobbyManager = new LobbyManager(
-        new LocalWebSocketProvider(),
-        lobbyLogger,
-        (transport, metadata) => {
+    // Register E2E hooks at the wiring point so no module-level side effects
+    // are needed in SimulationHost.ts (WARN-1 / §2 DIP).
+    registerE2eHooks(process.env);
+    const resolvedE2eHooks = getE2eHooks();
+
+    const lobbyManager = new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, {
+        ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
+        onSessionHosted: (transport, metadata) => {
             const agentManager = new AgentManager({ logger: lobbyLogger });
             const broadcasterRef: { current: StateBroadcaster | null } = { current: null };
 
@@ -625,7 +630,16 @@ export async function main(): Promise<void> {
             // undo state never bleeds between sessions.
             // Must be set before any pipeline.process()/processAction-triggered
             // broadcast can run; the callback above throws if this ordering is broken.
-            broadcasterRef.current = new StateBroadcaster(transport, projector, lobbyLogger);
+            const broadcasterOptions =
+                metadata.e2eHooks === undefined
+                    ? { hostViewerId: metadata.hostId }
+                    : { hostViewerId: metadata.hostId, e2eHooks: metadata.e2eHooks };
+            broadcasterRef.current = new StateBroadcaster(
+                transport,
+                projector,
+                lobbyLogger,
+                broadcasterOptions,
+            );
             const unsubscribeHostRenderer = broadcasterRef.current.registerRendererRecipient({
                 viewerId: metadata.hostId,
                 sendSnapshot: (snapshot) => {
@@ -748,7 +762,7 @@ export async function main(): Promise<void> {
                 }
             };
         },
-        (transport) => {
+        onSessionJoined: (transport) => {
             const clientCommitments = new SessionCommitmentRuntime();
             const unsubSnapshotCommitments = transport.onSnapshotReceived((snapshot) => {
                 if (snapshot.commitments !== undefined) {
@@ -773,14 +787,14 @@ export async function main(): Promise<void> {
                 unsubReveal();
             };
         },
-        (state) => {
+        onLobbyStateChanged: (state) => {
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(LOBBY_UPDATE_CHANNEL, state);
                 }
             });
         },
-        (status) => {
+        onConnectionStatusChanged: (status) => {
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(SYSTEM_CONNECTION_STATUS_CHANNEL, status);
@@ -788,13 +802,16 @@ export async function main(): Promise<void> {
             });
         },
         profileGate,
-        (snapshot) => {
+        onClientSnapshotReceived: (snapshot) => {
             const win = mainWindow;
             if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                 win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
             }
         },
-    );
+        // E2E hooks are resolved at the wiring point and injected so
+        // LobbyManager never pulls from globalThis directly (WARN-3 / §2 DIP).
+        ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
+    });
 
     // Register the `chimera:game:*` channels. `switch-seat` delegates to the
     // same LobbyManager instance used by lobby IPC handlers.

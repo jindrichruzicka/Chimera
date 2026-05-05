@@ -165,6 +165,16 @@ vi.mock('./runtime/SimulationHost.js', () => ({
     SimulationHost: vi.fn(() => mockSimulationHostInstance),
 }));
 
+// ── E2E hooks mock — captures getE2eHooks for wiring tests ────────────────────
+const { mockGetE2eHooks } = vi.hoisted(() => ({
+    mockGetE2eHooks: vi.fn<() => unknown>(() => undefined),
+}));
+
+vi.mock('./runtime/e2e-hooks.js', () => ({
+    registerE2eHooks: vi.fn(),
+    getE2eHooks: mockGetE2eHooks,
+}));
+
 type AppEventHandler = (...args: readonly unknown[]) => void;
 
 interface FakeWebPreferences {
@@ -801,14 +811,18 @@ describe('registerClientRevealForwarding', () => {
         const win = new FakeBrowserWindow({});
         await main();
 
-        const onSessionJoined = mockLobbyManagerCtor.mock.calls[0]?.[3] as
-            | ((transport: {
-                  onReveal(cb: (reveal: TestWireReveal) => void): () => void;
-                  onSnapshotReceived(
-                      cb: (snapshot: TestPlayerSnapshotWithCommitments) => void,
-                  ): () => void;
-              }) => void)
-            | undefined;
+        const onSessionJoined = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionJoined?: (transport: {
+                          onReveal(cb: (reveal: TestWireReveal) => void): () => void;
+                          onSnapshotReceived(
+                              cb: (snapshot: TestPlayerSnapshotWithCommitments) => void,
+                          ): () => void;
+                      }) => void;
+                  }
+                | undefined
+        )?.onSessionJoined;
         expect(onSessionJoined).toBeTypeOf('function');
 
         const { transport, callbacks, snapshotCallbacks } = makeRevealTransport();
@@ -853,6 +867,8 @@ describe('main', () => {
         mockStateBroadcasterCtor.mockClear();
         mockStateBroadcasterInstance.broadcast.mockClear();
         mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
+        mockGetE2eHooks.mockClear();
+        mockGetE2eHooks.mockReturnValue(undefined);
         capturedSaveManagerRepoClassName.value = '';
         capturedSettingsBroadcastFn.current = null;
     });
@@ -896,24 +912,30 @@ describe('main', () => {
         mockLobbyManagerCtor.mockClear();
         await main();
 
-        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: {
-                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
-                      onPlayerLeft(cb: (id: string) => void): () => void;
-                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
-                  },
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                      readonly agentSlots?: readonly {
-                          readonly slotIndex: number;
-                          readonly kind: 'human' | 'ai';
-                          readonly omniscient?: boolean;
-                      }[];
-                  },
-              ) => () => void)
-            | undefined;
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: {
+                              onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                              onPlayerLeft(cb: (id: string) => void): () => void;
+                              onActionReceived(
+                                  cb: (from: string, action: unknown) => void,
+                              ): () => void;
+                          },
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                              readonly agentSlots?: readonly {
+                                  readonly slotIndex: number;
+                                  readonly kind: 'human' | 'ai';
+                                  readonly omniscient?: boolean;
+                              }[];
+                          },
+                      ) => () => void;
+                  }
+                | undefined
+        )?.onSessionHosted;
 
         expect(onSessionHosted).toBeTypeOf('function');
 
@@ -936,19 +958,25 @@ describe('main', () => {
         mockLobbyManagerCtor.mockClear();
         await main();
 
-        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: {
-                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
-                      onPlayerLeft(cb: (id: string) => void): () => void;
-                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
-                  },
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                  },
-              ) => () => void)
-            | undefined;
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: {
+                              onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                              onPlayerLeft(cb: (id: string) => void): () => void;
+                              onActionReceived(
+                                  cb: (from: string, action: unknown) => void,
+                              ): () => void;
+                          },
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                          },
+                      ) => () => void;
+                  }
+                | undefined
+        )?.onSessionHosted;
 
         expect(onSessionHosted).toBeTypeOf('function');
 
@@ -969,6 +997,55 @@ describe('main', () => {
             transport,
             mockProjectorInstance,
             expect.any(Object),
+            { hostViewerId: playerId('host-projector') },
+        );
+    });
+
+    it('wires e2eHooks to StateBroadcaster when getE2eHooks returns a non-undefined value (WARN-1)', async () => {
+        const stubE2eHooks = { onBeforeAction: vi.fn(), onAfterAction: vi.fn() };
+        mockGetE2eHooks.mockReturnValue(stubE2eHooks);
+
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterCtor.mockClear();
+        await main();
+
+        // Verify LobbyManager was constructed with e2eHooks in the options
+        expect(mockLobbyManagerCtor).toHaveBeenCalledOnce();
+        const lobbyManagerOptions = mockLobbyManagerCtor.mock.calls[0]?.[2];
+        expect(lobbyManagerOptions).toBeDefined();
+        expect(lobbyManagerOptions?.e2eHooks).toBe(stubE2eHooks);
+
+        // Extract the onSessionHosted callback
+        const onSessionHosted = (
+            lobbyManagerOptions as unknown as {
+                onSessionHosted?: (
+                    transport: unknown,
+                    metadata: { hostId: string; maxPlayers: number; e2eHooks?: unknown },
+                ) => () => void;
+            }
+        )?.onSessionHosted;
+
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        const transport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+        const hostId = playerId('host-e2e-wiring');
+
+        // Clear the mock before calling onSessionHosted so we can assert on this specific call
+        mockStateBroadcasterCtor.mockClear();
+
+        // LobbyManager will pass e2eHooks to metadata when calling onSessionHosted
+        onSessionHosted?.(transport, { hostId, maxPlayers: 1, e2eHooks: stubE2eHooks });
+
+        // Verify StateBroadcaster was constructed with e2eHooks in its options
+        expect(mockStateBroadcasterCtor).toHaveBeenCalledWith(
+            transport,
+            mockProjectorInstance,
+            expect.any(Object),
+            expect.objectContaining({ hostViewerId: hostId, e2eHooks: stubE2eHooks }),
         );
     });
 
@@ -979,19 +1056,25 @@ describe('main', () => {
         await main(); // creates the main window (browserWindowInstances[0])
         const mainWindow = browserWindowInstances[0]!;
 
-        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: {
-                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
-                      onPlayerLeft(cb: (id: string) => void): () => void;
-                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
-                  },
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                  },
-              ) => () => void)
-            | undefined;
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: {
+                              onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                              onPlayerLeft(cb: (id: string) => void): () => void;
+                              onActionReceived(
+                                  cb: (from: string, action: unknown) => void,
+                              ): () => void;
+                          },
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                          },
+                      ) => () => void;
+                  }
+                | undefined
+        )?.onSessionHosted;
         expect(onSessionHosted).toBeTypeOf('function');
 
         const hostId = playerId('host-renderer');
@@ -1028,19 +1111,25 @@ describe('main', () => {
         // (e.g. detached DevTools, secondary display).
         const secondaryWindow = new FakeBrowserWindow({});
 
-        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: {
-                      onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
-                      onPlayerLeft(cb: (id: string) => void): () => void;
-                      onActionReceived(cb: (from: string, action: unknown) => void): () => void;
-                  },
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                  },
-              ) => () => void)
-            | undefined;
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: {
+                              onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                              onPlayerLeft(cb: (id: string) => void): () => void;
+                              onActionReceived(
+                                  cb: (from: string, action: unknown) => void,
+                              ): () => void;
+                          },
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                          },
+                      ) => () => void;
+                  }
+                | undefined
+        )?.onSessionHosted;
         expect(onSessionHosted).toBeTypeOf('function');
 
         const hostId = playerId('host-warn1');
@@ -1076,28 +1165,34 @@ describe('main', () => {
 
         await main();
 
-        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: {
-                      onPlayerJoined(
-                          cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
-                      ): () => void;
-                      onPlayerLeft(cb: (id: ReturnType<typeof playerId>) => void): () => void;
-                      onActionReceived(
-                          cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
-                      ): () => void;
-                  },
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                      readonly agentSlots?: readonly {
-                          readonly slotIndex: number;
-                          readonly kind: 'human' | 'ai';
-                          readonly omniscient?: boolean;
-                      }[];
-                  },
-              ) => () => void)
-            | undefined;
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: {
+                              onPlayerJoined(
+                                  cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
+                              ): () => void;
+                              onPlayerLeft(
+                                  cb: (id: ReturnType<typeof playerId>) => void,
+                              ): () => void;
+                              onActionReceived(
+                                  cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
+                              ): () => void;
+                          },
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                              readonly agentSlots?: readonly {
+                                  readonly slotIndex: number;
+                                  readonly kind: 'human' | 'ai';
+                                  readonly omniscient?: boolean;
+                              }[];
+                          },
+                      ) => () => void;
+                  }
+                | undefined
+        )?.onSessionHosted;
         expect(onSessionHosted).toBeTypeOf('function');
 
         onSessionHosted?.(
@@ -1138,9 +1233,15 @@ describe('main', () => {
 
         await main();
 
-        const onConnectionStatusChanged = mockLobbyManagerCtor.mock.calls[0]?.[5] as
-            | ((status: 'connected' | 'connecting' | 'disconnected' | 'error') => void)
-            | undefined;
+        const onConnectionStatusChanged = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onConnectionStatusChanged?: (
+                          status: 'connected' | 'connecting' | 'disconnected' | 'error',
+                      ) => void;
+                  }
+                | undefined
+        )?.onConnectionStatusChanged;
         expect(onConnectionStatusChanged).toBeTypeOf('function');
 
         onConnectionStatusChanged?.('disconnected');
@@ -1258,24 +1359,30 @@ describe('main', () => {
         mockLobbyManagerCtor.mockClear();
         await main();
 
-        // Extract the onSessionHosted callback (3rd arg, index 2) passed to LobbyManager.
-        const onSessionHosted = mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: {
-                      onPlayerJoined(
-                          cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
-                      ): () => void;
-                      onPlayerLeft(cb: (id: ReturnType<typeof playerId>) => void): () => void;
-                      onActionReceived(
-                          cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
-                      ): () => void;
-                  },
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                  },
-              ) => () => void)
-            | undefined;
+        // Extract the onSessionHosted callback from the options bag (3rd arg) passed to LobbyManager.
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: {
+                              onPlayerJoined(
+                                  cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
+                              ): () => void;
+                              onPlayerLeft(
+                                  cb: (id: ReturnType<typeof playerId>) => void,
+                              ): () => void;
+                              onActionReceived(
+                                  cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
+                              ): () => void;
+                          },
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                          },
+                      ) => () => void;
+                  }
+                | undefined
+        )?.onSessionHosted;
         expect(onSessionHosted).toBeTypeOf('function');
 
         // Provide a minimal fake transport so onSessionHosted can set activeSession.
@@ -1685,16 +1792,20 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
     }
 
     function getSessionCallback() {
-        // The 3rd arg passed to the LobbyManager constructor is the onSessionHosted callback.
-        return mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: OrderingTransport,
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                  },
-              ) => (() => void) | void)
-            | undefined;
+        // The options bag (3rd arg) passed to the LobbyManager constructor holds onSessionHosted.
+        return (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: OrderingTransport,
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                          },
+                      ) => (() => void) | void;
+                  }
+                | undefined
+        )?.onSessionHosted;
     }
 
     function makeMetadata(maxPlayers: number): {
@@ -1821,15 +1932,19 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
     }
 
     function getSessionCallback() {
-        return mockLobbyManagerCtor.mock.calls[0]?.[2] as
-            | ((
-                  transport: RejoinTransport,
-                  metadata: {
-                      readonly hostId: ReturnType<typeof playerId>;
-                      readonly maxPlayers: number;
-                  },
-              ) => (() => void) | void)
-            | undefined;
+        return (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: RejoinTransport,
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                          },
+                      ) => (() => void) | void;
+                  }
+                | undefined
+        )?.onSessionHosted;
     }
 
     function makeMetadata(maxPlayers: number): {

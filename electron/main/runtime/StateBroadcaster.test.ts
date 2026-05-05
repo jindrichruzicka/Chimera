@@ -21,12 +21,14 @@ import { createNoopLogger } from '../logging/logger.js';
 import { GAME_SNAPSHOT_CHANNEL } from '../../preload/apis/game-api.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { HostTransport, PlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import { gamePhase } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type {
     PlayerSnapshot,
     StateProjector,
 } from '@chimera/simulation/projection/StateProjector.js';
+import type { E2eHooks } from './e2e-hooks.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -76,6 +78,30 @@ function makeProjector(projected: PlayerSnapshot): StateProjector<BaseGameSnapsh
         project: vi.fn<
             (snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId) => PlayerSnapshot
         >(() => projected),
+    };
+}
+
+function makeE2eHooks(): E2eHooks {
+    const state = {
+        lastHostSnapshot: null as PlayerSnapshot | null,
+        lastChecksum: 0,
+        currentTick: 0,
+    };
+    return {
+        get lastHostSnapshot() {
+            return state.lastHostSnapshot;
+        },
+        get lastChecksum() {
+            return state.lastChecksum;
+        },
+        get currentTick() {
+            return state.currentTick;
+        },
+        onTick(tick, checksum, snapshot): void {
+            state.currentTick = tick;
+            state.lastChecksum = checksum;
+            state.lastHostSnapshot = snapshot;
+        },
     };
 }
 
@@ -180,6 +206,42 @@ describe('StateBroadcaster.broadcast', () => {
         expect(hostWebContents.send).not.toHaveBeenCalledWith(GAME_SNAPSHOT_CHANNEL, hostSnapshot);
         expect(transport.sendSnapshot).toHaveBeenNthCalledWith(1, PLAYER_A, hostProjected);
         expect(transport.sendSnapshot).toHaveBeenNthCalledWith(2, PLAYER_B, remoteProjected);
+    });
+
+    it('updates E2E hooks with the projected host snapshot and checksum', () => {
+        const transport = makeTransport();
+        const projected = makeProjectedSnapshot(PLAYER_A);
+        const projector = makeProjector(projected);
+        const hooks = makeE2eHooks();
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            hostViewerId: PLAYER_A,
+            e2eHooks: hooks,
+        });
+        const snapshot = makeSnapshot(PLAYER_A);
+
+        broadcaster.broadcast(snapshot, PLAYER_A);
+
+        expect(hooks.currentTick).toBe(projected.tick);
+        expect(hooks.lastChecksum).toBe(crc32Json(projected));
+        expect(hooks.lastHostSnapshot).toBe(projected);
+        expect(hooks.lastHostSnapshot).not.toBe(snapshot);
+    });
+
+    it('does not update E2E hooks for non-host viewer snapshots', () => {
+        const transport = makeTransport();
+        const projected = makeProjectedSnapshot(PLAYER_B);
+        const projector = makeProjector(projected);
+        const hooks = makeE2eHooks();
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger(), {
+            hostViewerId: PLAYER_A,
+            e2eHooks: hooks,
+        });
+
+        broadcaster.broadcast(makeSnapshot(PLAYER_B), PLAYER_B);
+
+        expect(hooks.currentTick).toBe(0);
+        expect(hooks.lastChecksum).toBe(0);
+        expect(hooks.lastHostSnapshot).toBeNull();
     });
 });
 

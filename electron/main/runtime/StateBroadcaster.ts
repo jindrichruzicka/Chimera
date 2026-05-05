@@ -23,17 +23,31 @@ import type {
     PlayerId,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type {
     PlayerSnapshot,
     StateProjector,
 } from '@chimera/simulation/projection/StateProjector.js';
 import type { Logger } from '../logging/logger.js';
+import type { E2eHooks } from './e2e-hooks.js';
 
 export interface RendererSnapshotRecipient {
     readonly viewerId: PlayerId;
     readonly sendSnapshot: (snapshot: PlayerSnapshot) => void;
 }
+
+/**
+ * Options for {@link StateBroadcaster}.
+ *
+ * The two branches are mutually exclusive:
+ * - No E2E: neither `hostViewerId` nor `e2eHooks` need be supplied.
+ * - E2E: both `hostViewerId` **and** `e2eHooks` must be supplied together;
+ *   supplying `e2eHooks` without `hostViewerId` is a type error (WARN-2 / ISP).
+ */
+export type StateBroadcasterOptions =
+    | { readonly hostViewerId?: PlayerId; readonly e2eHooks?: undefined }
+    | { readonly hostViewerId: PlayerId; readonly e2eHooks: E2eHooks };
 
 /**
  * Fans out projected `PlayerSnapshot` objects to connected players via
@@ -51,6 +65,7 @@ export class StateBroadcaster {
         private readonly transport: HostTransport,
         private readonly projector: StateProjector<BaseGameSnapshot>,
         logger: Logger,
+        private readonly options: StateBroadcasterOptions = {},
     ) {
         this.log = logger.child({ module: 'state-broadcaster' });
     }
@@ -88,6 +103,13 @@ export class StateBroadcaster {
         this.log.debug('broadcast', { viewerId, tick: playerSnapshot.tick });
         this.transport.sendSnapshot(viewerId, playerSnapshot);
         this.sendToRendererRecipients(viewerId, playerSnapshot);
+        this.notifyE2eHooks(viewerId, playerSnapshot);
+    }
+
+    private notifyE2eHooks(viewerId: PlayerId, snapshot: PlayerSnapshot): void {
+        if (this.options.e2eHooks === undefined) return;
+        if (viewerId !== this.options.hostViewerId) return;
+        this.options.e2eHooks.onTick(snapshot.tick, crc32Json(snapshot), snapshot);
     }
 
     private sendToRendererRecipients(viewerId: PlayerId, snapshot: PlayerSnapshot): void {

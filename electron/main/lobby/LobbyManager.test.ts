@@ -13,10 +13,14 @@
  *   #67 — LobbyManager constructed with injected Logger; no console.* calls.
  */
 
-import { describe, it, expect, vi } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
-import { LobbyManager } from './LobbyManager.js';
+import {
+    LobbyManager,
+    type HostedSessionMetadata,
+    type LobbyManagerOptions,
+} from './LobbyManager.js';
 import { PlayerDirectory } from '../profile/PlayerDirectory.js';
 import { createProfileGate } from '../profile/ProfileGate.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
@@ -36,6 +40,7 @@ import type { ConnectionStatus } from '../../preload/api-types.js';
 import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import { registerE2eHooks, type E2eHooks } from '../runtime/e2e-hooks.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -52,13 +57,27 @@ function makeManager(
     return new LobbyManager(
         provider,
         createNoopLogger(),
-        undefined,
-        undefined,
-        undefined,
-        undefined,
-        directory !== undefined ? createProfileGate(directory) : undefined,
+        directory !== undefined ? { profileGate: createProfileGate(directory) } : undefined,
     );
 }
+
+function requireHooks(value: E2eHooks | undefined): E2eHooks {
+    if (value === undefined) {
+        throw new Error('Expected __e2eHooks to be registered');
+    }
+    return value;
+}
+
+function requireMetadata(value: HostedSessionMetadata | null): HostedSessionMetadata {
+    if (value === null) {
+        throw new Error('Expected hosted-session metadata to be captured');
+    }
+    return value;
+}
+
+afterEach(() => {
+    registerE2eHooks({});
+});
 
 /** Build a minimal valid {@link PlayerProfile} for profile attestation tests. */
 function makeValidProfile(overrides?: Partial<PlayerProfile>): PlayerProfile {
@@ -230,7 +249,7 @@ describe('LobbyManager.hostLobby', () => {
     it('passes host identity and agent-slot metadata to the hosted-session callback', async () => {
         const provider = makeProvider();
         const onSessionHosted = vi.fn();
-        const manager = new LobbyManager(provider, createNoopLogger(), onSessionHosted);
+        const manager = new LobbyManager(provider, createNoopLogger(), { onSessionHosted });
         const params: HostLobbyParams = {
             gameId: 'tactics',
             maxPlayers: 2,
@@ -245,6 +264,39 @@ describe('LobbyManager.hostLobby', () => {
             maxPlayers: 2,
             agentSlots: params.agentSlots,
         });
+    });
+
+    it('passes injected E2E hooks through hosted-session metadata', async () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+        const provider = makeProvider();
+        let metadata: HostedSessionMetadata | null = null;
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionHosted: (_transport, next) => {
+                metadata = next;
+            },
+            e2eHooks: hooks,
+        });
+
+        await manager.hostLobby(HOST_PARAMS);
+
+        const captured = requireMetadata(metadata);
+        expect(captured.e2eHooks).toBe(hooks);
+    });
+
+    it('omits E2E hooks from hosted-session metadata when no hooks are injected', async () => {
+        const provider = makeProvider();
+        let metadata: HostedSessionMetadata | null = null;
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionHosted: (_transport, next) => {
+                metadata = next;
+            },
+        });
+
+        await manager.hostLobby(HOST_PARAMS);
+
+        const captured = requireMetadata(metadata);
+        expect(captured.e2eHooks).toBeUndefined();
+        expect(Object.prototype.hasOwnProperty.call(captured, 'e2eHooks')).toBe(false);
     });
 });
 
@@ -384,16 +436,11 @@ describe('LobbyManager.switchActiveSeat', () => {
 describe('LobbyManager connection-status lifecycle', () => {
     it('emits connecting and connected when hosting succeeds', async () => {
         const statuses: ConnectionStatus[] = [];
-        const manager = new LobbyManager(
-            makeProvider(),
-            createNoopLogger(),
-            undefined,
-            undefined,
-            undefined,
-            (status) => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            onConnectionStatusChanged: (status) => {
                 statuses.push(status);
             },
-        );
+        });
 
         await manager.hostLobby(HOST_PARAMS);
 
@@ -407,16 +454,11 @@ describe('LobbyManager connection-status lifecycle', () => {
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
 
         const statuses: ConnectionStatus[] = [];
-        const joinManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            undefined,
-            (status) => {
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            onConnectionStatusChanged: (status) => {
                 statuses.push(status);
             },
-        );
+        });
 
         await joinManager.joinLobby({ address: hostInfo.sessionId });
 
@@ -432,16 +474,11 @@ describe('LobbyManager connection-status lifecycle', () => {
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
 
         const statuses: ConnectionStatus[] = [];
-        const joinManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            undefined,
-            (status) => {
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            onConnectionStatusChanged: (status) => {
                 statuses.push(status);
             },
-        );
+        });
         await joinManager.joinLobby({ address: hostInfo.sessionId });
 
         await hostManager.closeLobby();
@@ -462,16 +499,11 @@ describe('LobbyManager connection-status lifecycle', () => {
         };
 
         const statuses: ConnectionStatus[] = [];
-        const manager = new LobbyManager(
-            errorProvider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            undefined,
-            (status) => {
+        const manager = new LobbyManager(errorProvider, createNoopLogger(), {
+            onConnectionStatusChanged: (status) => {
                 statuses.push(status);
             },
-        );
+        });
 
         await expect(manager.joinLobby({ address: 'invalid' })).rejects.toThrow(
             'unable to connect',
@@ -625,10 +657,12 @@ describe('LobbyManager provider-swap smoke test', () => {
 
         // Capture the HostTransport via the onSessionHosted callback
         let receivedAction: unknown = null;
-        const hostManager = new LobbyManager(provider, createNoopLogger(), (transport) => {
-            transport.onActionReceived((_from, action) => {
-                receivedAction = action;
-            });
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionHosted: (transport) => {
+                transport.onActionReceived((_from, action) => {
+                    receivedAction = action;
+                });
+            },
         });
 
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
@@ -657,8 +691,10 @@ describe('LobbyManager provider-swap smoke test', () => {
         const provider = makeProvider();
 
         let capturedTransport: HostTransport | null = null;
-        const hostManager = new LobbyManager(provider, createNoopLogger(), (transport) => {
-            capturedTransport = transport;
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionHosted: (transport) => {
+                capturedTransport = transport;
+            },
         });
 
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
@@ -702,15 +738,11 @@ describe('LobbyManager provider-swap smoke test', () => {
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
 
         const joinedStateRef: { value: LobbyState | null } = { value: null };
-        const joinManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            (state) => {
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            onLobbyStateChanged: (state) => {
                 joinedStateRef.value = state;
             },
-        );
+        });
 
         await joinManager.joinLobby({ address: hostInfo.sessionId });
 
@@ -733,27 +765,19 @@ describe('LobbyManager provider-swap smoke test', () => {
         let hostLobbyStateSnapshot: LobbyState | null = null;
         let joinLobbyStateSnapshot: LobbyState | null = null;
 
-        const hostManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            (state) => {
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            onLobbyStateChanged: (state) => {
                 hostLobbyStateSnapshot = state;
             },
-        );
+        });
 
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
 
-        const joinManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            (state) => {
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            onLobbyStateChanged: (state) => {
                 joinLobbyStateSnapshot = state;
             },
-        );
+        });
 
         await joinManager.joinLobby({ address: hostInfo.sessionId });
         const joinedPlayerId = joinManager.getLocalPlayerId();
@@ -787,27 +811,19 @@ describe('LobbyManager provider-swap smoke test', () => {
         let hostLobbyStateSnapshot: LobbyState | null = null;
         let joinMiddleLobbyStateSnapshot: LobbyState | null = null;
 
-        const hostManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            (state) => {
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            onLobbyStateChanged: (state) => {
                 hostLobbyStateSnapshot = state;
             },
-        );
+        });
 
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
 
-        const joinMiddleManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            (state) => {
+        const joinMiddleManager = new LobbyManager(provider, createNoopLogger(), {
+            onLobbyStateChanged: (state) => {
                 joinMiddleLobbyStateSnapshot = state;
             },
-        );
+        });
 
         const joinLastManager = makeManager(provider);
 
@@ -864,10 +880,12 @@ describe('LobbyManager provider-swap smoke test', () => {
 describe('LobbyManager onSessionHosted teardown', () => {
     it('calls the teardown returned by onSessionHosted when closeLobby is called', async () => {
         let teardownCalled = false;
-        const manager = new LobbyManager(makeProvider(), createNoopLogger(), (_transport) => {
-            return () => {
-                teardownCalled = true;
-            };
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            onSessionHosted: (_transport) => {
+                return () => {
+                    teardownCalled = true;
+                };
+            },
         });
         await manager.hostLobby(HOST_PARAMS);
         expect(teardownCalled).toBe(false);
@@ -876,8 +894,10 @@ describe('LobbyManager onSessionHosted teardown', () => {
     });
 
     it('does not throw when onSessionHosted returns undefined (no teardown)', async () => {
-        const manager = new LobbyManager(makeProvider(), createNoopLogger(), (_transport) => {
-            return undefined;
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            onSessionHosted: (_transport) => {
+                return undefined;
+            },
         });
         await manager.hostLobby(HOST_PARAMS);
         await expect(manager.closeLobby()).resolves.toBeUndefined();
@@ -902,10 +922,12 @@ describe('LobbyManager onSessionHosted teardown', () => {
             joinLobby: (p) => rawProvider.joinLobby(p),
             dispose: () => rawProvider.dispose(),
         };
-        const manager = new LobbyManager(wrappedProvider, createNoopLogger(), (_transport) => {
-            return () => {
-                order.push('teardown');
-            };
+        const manager = new LobbyManager(wrappedProvider, createNoopLogger(), {
+            onSessionHosted: (_transport) => {
+                return () => {
+                    order.push('teardown');
+                };
+            },
         });
         await manager.hostLobby(HOST_PARAMS);
         await manager.closeLobby();
@@ -930,8 +952,10 @@ describe('LobbyManager onSessionJoined teardown', () => {
     it('fires onSessionJoined exactly once when joinLobby succeeds', async () => {
         const { code, provider } = await hostAndGetCode();
         let callCount = 0;
-        const manager = new LobbyManager(provider, createNoopLogger(), undefined, (_transport) => {
-            callCount += 1;
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionJoined: (_transport) => {
+                callCount += 1;
+            },
         });
         await manager.joinLobby({ address: code });
         expect(callCount).toBe(1);
@@ -940,8 +964,10 @@ describe('LobbyManager onSessionJoined teardown', () => {
     it('passes the ClientTransport to onSessionJoined', async () => {
         const { code, provider } = await hostAndGetCode();
         let capturedTransport: ClientTransport | null = null;
-        const manager = new LobbyManager(provider, createNoopLogger(), undefined, (transport) => {
-            capturedTransport = transport;
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionJoined: (transport) => {
+                capturedTransport = transport;
+            },
         });
         await manager.joinLobby({ address: code });
         expect(capturedTransport).not.toBeNull();
@@ -950,10 +976,12 @@ describe('LobbyManager onSessionJoined teardown', () => {
     it('calls the teardown returned by onSessionJoined when closeLobby is called', async () => {
         const { code, provider } = await hostAndGetCode();
         let teardownCalled = false;
-        const manager = new LobbyManager(provider, createNoopLogger(), undefined, (_transport) => {
-            return () => {
-                teardownCalled = true;
-            };
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionJoined: (_transport) => {
+                return () => {
+                    teardownCalled = true;
+                };
+            },
         });
         await manager.joinLobby({ address: code });
         expect(teardownCalled).toBe(false);
@@ -963,12 +991,9 @@ describe('LobbyManager onSessionJoined teardown', () => {
 
     it('does not throw when onSessionJoined returns undefined (no teardown)', async () => {
         const { code, provider } = await hostAndGetCode();
-        const manager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            (_transport) => undefined,
-        );
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionJoined: (_transport) => undefined,
+        });
         await manager.joinLobby({ address: code });
         await expect(manager.closeLobby()).resolves.toBeUndefined();
     });
@@ -1043,17 +1068,12 @@ describe('LobbyManager — JOIN profile attestation', () => {
         const directory = new PlayerDirectory();
         const provider = makeProvider();
         const lobbyStates: LobbyState[] = [];
-        const manager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            (state) => {
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onLobbyStateChanged: (state) => {
                 lobbyStates.push(state);
             },
-            undefined,
-            createProfileGate(directory),
-        );
+            profileGate: createProfileGate(directory),
+        });
         const hostInfo = await manager.hostLobby(HOST_PARAMS);
 
         await provider.joinLobby({
@@ -1101,17 +1121,12 @@ describe('LobbyManager — PROFILE_UPDATE side-channel', () => {
         const provider = makeProvider();
         const directory = new PlayerDirectory();
         const lobbyStates: LobbyState[] = [];
-        const manager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            (state) => {
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onLobbyStateChanged: (state) => {
                 lobbyStates.push(state);
             },
-            undefined,
-            createProfileGate(directory),
-        );
+            profileGate: createProfileGate(directory),
+        });
 
         const hostInfo = await manager.hostLobby(HOST_PARAMS);
         const originalProfile = makeValidProfile({ displayName: 'Alice' });
@@ -1251,12 +1266,7 @@ describe('LobbyManager — onClientSnapshotReceived', () => {
         const joinManager = new LobbyManager(
             provider,
             createNoopLogger(),
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            onClientSnapshotReceived,
+            onClientSnapshotReceived !== undefined ? { onClientSnapshotReceived } : undefined,
         );
         await joinManager.joinLobby({ address: code });
         return { hostManager, joinManager, provider };
@@ -1279,24 +1289,19 @@ describe('LobbyManager — onClientSnapshotReceived', () => {
 
         // Capture HostTransport from the host manager
         let capturedTransport: HostTransport | null = null;
-        const hostManager = new LobbyManager(provider, createNoopLogger(), (transport) => {
-            capturedTransport = transport;
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionHosted: (transport) => {
+                capturedTransport = transport;
+            },
         });
 
         // Host and join
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
-        const joinManager = new LobbyManager(
-            provider,
-            createNoopLogger(),
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            undefined,
-            (snap) => {
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            onClientSnapshotReceived: (snap) => {
                 received.push(snap);
             },
-        );
+        });
         await joinManager.joinLobby({ address: hostInfo.sessionId });
 
         // Send a snapshot from host to joined client via captured transport
@@ -1333,5 +1338,39 @@ describe('LobbyManager — onClientSnapshotReceived', () => {
         const countAfterClose = received.length;
         // No further callbacks fire after close
         expect(received.length).toBe(countAfterClose);
+    });
+});
+
+// ── LobbyManagerOptions ───────────────────────────────────────────────────────
+
+describe('LobbyManagerOptions', () => {
+    it('constructs LobbyManager with callbacks supplied via options bag', async () => {
+        const statuses: ConnectionStatus[] = [];
+        const options: LobbyManagerOptions = {
+            onConnectionStatusChanged: (status) => {
+                statuses.push(status);
+            },
+        };
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), options);
+        await manager.hostLobby(HOST_PARAMS);
+        expect(statuses).toEqual(['connecting', 'connected']);
+        await manager.closeLobby();
+    });
+
+    it('e2eHooks can be passed via options bag without undefined padding', async () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+        const provider = makeProvider();
+        let metadata: HostedSessionMetadata | null = null;
+        const options: LobbyManagerOptions = {
+            onSessionHosted: (_transport, next) => {
+                metadata = next;
+            },
+            e2eHooks: hooks,
+        };
+        const manager = new LobbyManager(provider, createNoopLogger(), options);
+        await manager.hostLobby(HOST_PARAMS);
+        const captured = requireMetadata(metadata);
+        expect(captured.e2eHooks).toBe(hooks);
+        await manager.closeLobby();
     });
 });
