@@ -20,7 +20,7 @@ tags: [toolchain, pnpm, vitest, scripts, path-aliases, tsconfig, coding-standard
 pnpm test              # vitest run — all unit and integration tests
 pnpm test:watch        # vitest — interactive watch mode
 pnpm test:coverage     # vitest run --coverage
-pnpm test:e2e          # CHIMERA_E2E=1 playwright test
+pnpm test:e2e          # playwright test --config=e2e/playwright.config.ts --project=electron-e2e
 pnpm lint              # eslint with all chimera/* rules
 pnpm format            # prettier --write on the tracked tree
 pnpm format:check      # prettier --check — CI-gated, must pass

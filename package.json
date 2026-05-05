@@ -13,6 +13,7 @@
         "typecheck": "tsc --noEmit && tsc --noEmit -p renderer",
         "test": "vitest run",
         "test:watch": "vitest",
+        "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
         "lint": "eslint .",
