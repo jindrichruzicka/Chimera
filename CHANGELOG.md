@@ -7,6 +7,15 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-05-05
+
+### Added
+
+- StateProjector and VisibilityRules — `StateProjector`, `VisibilityRules` interface (`isEntityVisible`, `maskEntity`, `maskPlayerState`, `filterEvents`), `VisibilityScope` classification, and `DefaultStateProjector`; fog-hidden entities are entirely absent (not `null`) from `PlayerSnapshot.entities`; `StateProjector` wired into `StateBroadcaster` so the host renderer receives only its own `PlayerSnapshot` via the same IPC path as remote clients (F26)
+- Cryptographic Commitment Scheme — `CommitmentScheme`, `CommitmentEnvelope`, `CommitmentReveal`, and SHA-256 commit / verify flow; `REVEAL` server message forwarded through `WsClientTransport`; `pendingCommitments` delivered in `PlayerSnapshot` and restored from `SaveFile` on load; client-side `verify()` rejects tampered reveals before trusting any hidden value (F27)
+- Host Renderer Obfuscation Enforcement — `assertNoLeakedFields` integration assertion confirms the host window never exposes an opponent's `owner-only` fields; `CHIMERA_DEBUG` production startup guard (Invariant #27) prevents debug overrides in release builds (F28)
+- Projection Property Tests — `fast-check` property tests over 10 000 random `GameSnapshot` inputs: (a) no `owner-only` or `hidden` field ever appears in a non-owner `PlayerSnapshot`; (b) fog-of-war entities are absent (not `null`) in views of players who cannot see them; `fast-check` arbitraries for `GameSnapshot` and projection inputs extracted as reusable helpers (F29)
+
 ## [0.4.0] — 2026-05-03
 
 ### Added
@@ -65,8 +74,9 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover
 - Crash dump write guarded against circular refs and oversized payloads; `process.exit(1)` after fatal crash dump
 
+[0.5.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.5.0
 [0.4.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.1.0
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.4.0...HEAD
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.5.0...HEAD

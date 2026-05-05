@@ -10,7 +10,7 @@ Architecture reference: [`docs/architecture-overview.md`](docs/architecture-over
 
 ## Status
 
-**v0.4.0** — M1 (Skeleton), M2 (Networked Lobby), M3 (Action Registry + Game Loop + Undo/Redo), and M4 (AI Framework) are complete. The full 7-stage `ActionPipeline` is live, undo/redo works end-to-end via `UndoManager` + `TurnMemento`, client-side prediction reconciles against authoritative snapshots, game state persists and migrates across saves, settings survive app restart, deterministic Q32.32 fixed-point math is in place, tick-based game timers serialise through saves, and AI agents play full headless matches through `AgentManager` → `AIBrain` → `CommandScheduler` with honest fog-of-war projection enforced by tests. M5 (State Projection + Obfuscation) is next.
+**v0.5.0** — M1 (Skeleton), M2 (Networked Lobby), M3 (Action Registry + Game Loop + Undo/Redo), M4 (AI Framework), and M5 (State Projection + Obfuscation) are complete. Every client — including the host renderer — receives only its authoritative `PlayerSnapshot` via `StateProjector` + `VisibilityRules`; fog-of-war entities are absent by construction. A SHA-256 cryptographic commitment scheme guards hidden-information reveals. Host renderer obfuscation is enforced by `assertNoLeakedFields` integration tests, and `fast-check` property tests verify no `owner-only`/`hidden` field leaks across 10 000 random snapshots. M6 (3D Render Integration) is next.
 
 ## Getting started
 
@@ -91,6 +91,11 @@ simulation/
 │   └── prediction/
 │       ├── ClientPredictor.ts    # Optimistic local state for predictable:true actions
 │       └── ReconcileBuffer.ts    # Reconciliation on authoritative snapshot receipt
+├── projection/
+│   ├── StateProjector.ts         # StateProjector interface + DefaultStateProjector (fog-of-war by construction)
+│   ├── CommitmentScheme.ts       # CommitmentScheme, CommitmentEnvelope, CommitmentReveal (SHA-256)
+│   ├── assertNoLeakedFields.ts   # assertNoLeakedFields — obfuscation leak assertion for tests + E2E
+│   └── types.ts                  # VisibilityRules, VisibilityScope, projection types
 ├── persistence/                  # JsonSaveSerializer, CompressedSaveSerializer, FileSaveRepository,
 │                                 #   InMemorySaveRepository, SaveMigrator, SaveManager
 ├── profile/                      # ProfileSchema, ProfileRepository, FileProfileRepository,
