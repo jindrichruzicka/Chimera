@@ -37,6 +37,9 @@ export default tseslint.config(
             '.e2e-build/**',
             'e2e/playwright-report/**',
             'test-results/**',
+            // Legacy Electron bundle outputs — source lives in the adjacent .ts files.
+            'electron/main/index.js',
+            'electron/preload/api.js',
         ],
     },
 

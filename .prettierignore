@@ -10,6 +10,10 @@ renderer/out/
 coverage/
 .e2e-build/
 
+# Legacy Electron bundle outputs — source lives in the adjacent .ts files
+electron/main/index.js
+electron/preload/api.js
+
 # Playwright output — generated artefacts, not source
 e2e/playwright-report/
 test-results/
