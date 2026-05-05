@@ -16,4 +16,10 @@ export default defineConfig({
         screenshot: 'only-on-failure',
     },
     globalSetup: './global-setup.ts', // Compile renderer bundle once before all tests
+    projects: [
+        {
+            name: 'electron-e2e',
+            // testDir inherited from top-level; all specs in ./tests run under this project.
+        },
+    ],
 });

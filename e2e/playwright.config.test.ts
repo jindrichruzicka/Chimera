@@ -40,4 +40,10 @@ describe('playwright.config', () => {
         expect(names).toContain('html');
         expect(names).toContain('junit');
     });
+
+    it('defines an "electron-e2e" project — required by e2e.yml --project=electron-e2e', () => {
+        const projects = (config.projects ?? []) as { name: string }[];
+        const names = projects.map((p) => p.name);
+        expect(names).toContain('electron-e2e');
+    });
 });

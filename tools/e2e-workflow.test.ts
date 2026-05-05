@@ -86,4 +86,17 @@ describe('e2e.yml CI workflow', () => {
     it('sets CI: true in test step env', () => {
         expect(content).toMatch(/CI:\s*true/);
     });
+
+    it('does NOT have a standalone "build:renderer" step — global-setup.ts handles renderer compilation', () => {
+        // global-setup.ts runs `pnpm build:renderer` as part of Playwright globalSetup,
+        // so a separate CI step would double-build the renderer unnecessarily.
+        expect(content).not.toMatch(/run:\s*pnpm(?:\s+run)?\s+build:renderer/);
+    });
+
+    it('does NOT have a standalone "build:electron" step — global-setup.ts esbuild handles main compilation into .e2e-build/', () => {
+        // global-setup.ts uses esbuild to compile electron/main/index.ts → .e2e-build/electron/main/index.js.
+        // pnpm build:electron writes to a different path (electron/main/index.js) not used by e2e,
+        // so the step is dead work.
+        expect(content).not.toMatch(/run:\s*pnpm(?:\s+run)?\s+build:electron/);
+    });
 });

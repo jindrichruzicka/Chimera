@@ -38,12 +38,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build renderer
-        run: pnpm run build:renderer
-
-      - name: Build Electron main
-        run: pnpm run build:electron
-
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
