@@ -120,8 +120,8 @@ describe('LobbyPage pending actions', () => {
     it('disables join while hosting is in progress', async () => {
         render(<LobbyPage />);
 
-        const hostButton = screen.getByTestId('lobby-host-btn');
-        const joinButton = screen.getByTestId('lobby-join-btn');
+        const hostButton = screen.getByTestId('host-lobby');
+        const joinButton = screen.getByTestId('confirm-join');
 
         fireEvent.click(hostButton);
 
@@ -137,7 +137,7 @@ describe('LobbyPage pending actions', () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
         const rendered = render(<LobbyPage />);
-        const hostButton = screen.getByTestId('lobby-host-btn');
+        const hostButton = screen.getByTestId('host-lobby');
 
         fireEvent.click(hostButton);
 
@@ -152,6 +152,32 @@ describe('LobbyPage pending actions', () => {
         await Promise.resolve();
 
         expect(consoleErrorSpy.mock.calls.length).toBe(0);
+    });
+
+    it('renders lobby page object locators before a lobby is joined', () => {
+        render(<LobbyPage />);
+
+        expect(screen.getByTestId('host-lobby')).toBeTruthy();
+        expect(screen.getByTestId('join-lobby')).toBeTruthy();
+        expect(screen.getByTestId('address-input')).toBeTruthy();
+        expect(screen.getByTestId('confirm-join')).toBeTruthy();
+    });
+
+    it('renders lobby page object locators during an active lobby', () => {
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'p1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
+        };
+
+        render(<LobbyPage />);
+
+        expect(screen.getByTestId('player-list')).toBeTruthy();
+        expect(screen.getByTestId('start-match')).toBeTruthy();
     });
 
     it('does not render SeatSwitcher outside an active session', () => {
@@ -216,7 +242,7 @@ describe('LobbyPage pending actions', () => {
 
         render(<LobbyPage />);
 
-        fireEvent.click(screen.getByTestId('lobby-host-btn'));
+        fireEvent.click(screen.getByTestId('host-lobby'));
 
         await waitFor(() => {
             expect(host).toHaveBeenCalledWith({ gameId: 'tactics', maxPlayers: 4 });

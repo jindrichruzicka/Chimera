@@ -56,7 +56,8 @@ interface PlayerRowProps {
 function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: PlayerRowProps) {
     return (
         <li
-            data-testid={`player-row-${player.playerId}`}
+            data-testid="player-list-item"
+            data-player-id={player.playerId}
             style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -83,6 +84,7 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: Pl
                 </span>
                 {isLocalPlayer && onToggleReady && (
                     <button
+                        data-testid="ready-toggle"
                         onClick={() => {
                             void onToggleReady(!player.ready);
                         }}

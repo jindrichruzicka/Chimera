@@ -134,6 +134,11 @@ describe('SettingsPage — section rendering (AC #1)', () => {
 // ── AC #2 — Volume slider dispatches update ───────────────────────────────────
 
 describe('SettingsPage — master volume slider (AC #2)', () => {
+    it('marks the master volume input for settings page objects', () => {
+        render(<SettingsPage />);
+        expect(screen.getByTestId('master-volume')).toBeTruthy();
+    });
+
     it('calls window.__chimera.settings.update with audio masterVolume patch when slider changes', () => {
         render(<SettingsPage />);
         const slider = screen.getByLabelText(/master volume/i);
@@ -151,6 +156,11 @@ describe('SettingsPage — master volume slider (AC #2)', () => {
 // ── AC #3 — Reset to defaults button ─────────────────────────────────────────
 
 describe('SettingsPage — reset to defaults (AC #3)', () => {
+    it('marks the reset button for settings page objects', () => {
+        render(<SettingsPage />);
+        expect(screen.getByTestId('reset-to-defaults')).toBeTruthy();
+    });
+
     it('calls window.__chimera.settings.reset with the active gameId when reset is clicked', () => {
         render(<SettingsPage />);
         const btn = screen.getByRole('button', { name: /reset to defaults/i });

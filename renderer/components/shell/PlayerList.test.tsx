@@ -6,12 +6,39 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlayerList } from './PlayerList';
 
-// Mock the lobbyStore with a controlled state
-let mockLobbyState: any = null;
+interface MockLobbyStoreState {
+    readonly lobbyState: {
+        readonly info: {
+            readonly sessionId: string;
+            readonly hostId: string;
+            readonly gameId: string;
+        };
+        readonly players: readonly {
+            readonly playerId: string;
+            readonly displayName: string;
+            readonly ready: boolean;
+        }[];
+    } | null;
+}
+
+let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
+
+function getPlayerRow(playerId: string): HTMLElement {
+    const row = screen
+        .getAllByTestId('player-list-item')
+        .find((element) => element.getAttribute('data-player-id') === playerId);
+
+    if (row === undefined) {
+        throw new Error(`Missing player row for ${playerId}`);
+    }
+
+    return row;
+}
 
 vi.mock('../../state/lobbyStore', () => {
     return {
-        useLobbyStore: (selector: (state: any) => any) => selector({ lobbyState: mockLobbyState }),
+        useLobbyStore: <TSelected,>(selector: (state: MockLobbyStoreState) => TSelected) =>
+            selector({ lobbyState: mockLobbyState }),
     };
 });
 
@@ -36,7 +63,7 @@ describe('PlayerList', () => {
         expect(heading).toBeTruthy();
     });
 
-    it('renders one row per player in the roster with correct testid', () => {
+    it('renders one row per player in the roster with the page object test id', () => {
         mockLobbyState = {
             info: {
                 sessionId: 'session-1',
@@ -55,10 +82,11 @@ describe('PlayerList', () => {
         // Verify heading shows correct count
         expect(screen.getByText(/Players \(3\)/)).toBeTruthy();
 
-        // Verify all rows are rendered with correct testid
-        expect(screen.getByTestId('player-row-player-1')).toBeTruthy();
-        expect(screen.getByTestId('player-row-player-2')).toBeTruthy();
-        expect(screen.getByTestId('player-row-player-3')).toBeTruthy();
+        const rows = screen.getAllByTestId('player-list-item');
+        expect(rows.length).toBe(3);
+        expect(getPlayerRow('player-1')).toBeTruthy();
+        expect(getPlayerRow('player-2')).toBeTruthy();
+        expect(getPlayerRow('player-3')).toBeTruthy();
 
         // Verify player names are displayed (use matcher for split text)
         expect(screen.getByText(/Alice/)).toBeTruthy();
@@ -82,8 +110,8 @@ describe('PlayerList', () => {
         render(<PlayerList />);
 
         // Get the row containers
-        const aliceRow = screen.getByTestId('player-row-player-1');
-        const bobRow = screen.getByTestId('player-row-player-2');
+        const aliceRow = getPlayerRow('player-1');
+        const bobRow = getPlayerRow('player-2');
 
         // Verify ready state labels are rendered
         expect(aliceRow.textContent).toContain('Ready');
@@ -126,11 +154,11 @@ describe('PlayerList', () => {
         render(<PlayerList localPlayerId="player-1" onToggleReady={onToggleReady} />);
 
         // Alice (local player) should have (You) indicator
-        const aliceRow = screen.getByTestId('player-row-player-1');
+        const aliceRow = getPlayerRow('player-1');
         expect(aliceRow.textContent).toContain('(You)');
 
         // Bob should NOT have (You) indicator
-        const bobRow = screen.getByTestId('player-row-player-2');
+        const bobRow = getPlayerRow('player-2');
         expect(bobRow.textContent).not.toContain('(You)');
 
         // Alice should have a Toggle Ready button
@@ -163,7 +191,7 @@ describe('PlayerList', () => {
 
         render(<PlayerList localPlayerId="player-1" onToggleReady={onToggleReady} />);
 
-        const aliceRow = screen.getByTestId('player-row-player-1');
+        const aliceRow = getPlayerRow('player-1');
         const toggleButton = aliceRow.querySelector('button');
 
         expect(toggleButton).toBeTruthy();
@@ -227,7 +255,7 @@ describe('PlayerList', () => {
 
         // Initial state: 1 player, not ready
         expect(screen.getByText(/Players \(1\)/)).toBeTruthy();
-        expect(screen.getByTestId('player-row-player-1')).toBeTruthy();
+        expect(getPlayerRow('player-1')).toBeTruthy();
         expect(screen.getByText(/Alice/)).toBeTruthy();
         expect(screen.getByText('Not Ready')).toBeTruthy();
 
@@ -248,12 +276,12 @@ describe('PlayerList', () => {
 
         // Verify updates
         expect(screen.getByText(/Players \(2\)/)).toBeTruthy();
-        expect(screen.getByTestId('player-row-player-2')).toBeTruthy();
+        expect(getPlayerRow('player-2')).toBeTruthy();
         expect(screen.getByText('Bob')).toBeTruthy();
 
         // Verify Alice's ready state changed
         const aliceReadyBadges = Array.from(screen.getAllByText('Ready')).filter((el) =>
-            el.closest('[data-testid="player-row-player-1"]'),
+            el.closest('[data-testid="player-list-item"][data-player-id="player-1"]'),
         );
         expect(aliceReadyBadges.length).toBeGreaterThan(0);
     });
@@ -273,8 +301,8 @@ describe('PlayerList', () => {
 
         const { rerender } = render(<PlayerList />);
 
-        expect(screen.getByTestId('player-row-player-1')).toBeTruthy();
-        expect(screen.getByTestId('player-row-player-2')).toBeTruthy();
+        expect(getPlayerRow('player-1')).toBeTruthy();
+        expect(getPlayerRow('player-2')).toBeTruthy();
 
         // Remove Bob from the roster
         mockLobbyState = {
@@ -288,8 +316,8 @@ describe('PlayerList', () => {
 
         rerender(<PlayerList />);
 
-        expect(screen.getByTestId('player-row-player-1')).toBeTruthy();
-        expect(() => screen.getByTestId('player-row-player-2')).toThrow();
+        expect(getPlayerRow('player-1')).toBeTruthy();
+        expect(() => getPlayerRow('player-2')).toThrow();
         expect(screen.getByText(/Players \(1\)/)).toBeTruthy();
     });
 
@@ -312,7 +340,7 @@ describe('PlayerList', () => {
         render(<PlayerList localPlayerId="player-2" onToggleReady={onToggleReady} />);
 
         // Bob's row should have (You) indicator and toggle button
-        const bobRow = screen.getByTestId('player-row-player-2');
+        const bobRow = getPlayerRow('player-2');
         expect(bobRow.textContent).toContain('(You)');
 
         const bobToggleButton = Array.from(bobRow.querySelectorAll('button')).find(
@@ -321,7 +349,7 @@ describe('PlayerList', () => {
         expect(bobToggleButton).toBeTruthy();
 
         // Alice's row should NOT have (You) indicator or toggle button
-        const aliceRow = screen.getByTestId('player-row-player-1');
+        const aliceRow = getPlayerRow('player-1');
         expect(aliceRow.textContent).not.toContain('(You)');
 
         const aliceToggleButton = Array.from(aliceRow.querySelectorAll('button')).find(
@@ -350,8 +378,8 @@ describe('PlayerList', () => {
         render(<PlayerList localPlayerId={null} />);
 
         // Neither player should have (You) indicator
-        const aliceRow = screen.getByTestId('player-row-player-1');
-        const bobRow = screen.getByTestId('player-row-player-2');
+        const aliceRow = getPlayerRow('player-1');
+        const bobRow = getPlayerRow('player-2');
 
         expect(aliceRow.textContent).not.toContain('(You)');
         expect(bobRow.textContent).not.toContain('(You)');
@@ -381,7 +409,7 @@ describe('PlayerList', () => {
         );
 
         // Initial: Bob is local
-        expect(screen.getByTestId('player-row-player-2').textContent).toContain('(You)');
+        expect(getPlayerRow('player-2').textContent).toContain('(You)');
 
         // A third player joins
         mockLobbyState = {
@@ -400,8 +428,8 @@ describe('PlayerList', () => {
         rerender(<PlayerList localPlayerId="player-2" onToggleReady={onToggleReady} />);
 
         // Bob should still be marked as local
-        expect(screen.getByTestId('player-row-player-2').textContent).toContain('(You)');
-        expect(screen.getByTestId('player-row-player-1').textContent).not.toContain('(You)');
-        expect(screen.getByTestId('player-row-player-3').textContent).not.toContain('(You)');
+        expect(getPlayerRow('player-2').textContent).toContain('(You)');
+        expect(getPlayerRow('player-1').textContent).not.toContain('(You)');
+        expect(getPlayerRow('player-3').textContent).not.toContain('(You)');
     });
 });

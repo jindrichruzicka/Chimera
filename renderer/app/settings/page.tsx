@@ -148,6 +148,7 @@ export default function SettingsPage(): React.ReactElement {
                     <label style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
                         <span>Master Volume</span>
                         <input
+                            data-testid="master-volume"
                             aria-label="Master Volume"
                             type="range"
                             min={0}
@@ -379,7 +380,12 @@ export default function SettingsPage(): React.ReactElement {
             )}
 
             {/* ── Reset ── */}
-            <button type="button" onClick={handleReset} style={{ marginTop: '1rem' }}>
+            <button
+                data-testid="reset-to-defaults"
+                type="button"
+                onClick={handleReset}
+                style={{ marginTop: '1rem' }}
+            >
                 Reset to defaults
             </button>
         </main>

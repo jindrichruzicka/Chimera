@@ -206,7 +206,7 @@ export default function LobbyPage() {
                             Hosting game "{gameId}" with up to {maxPlayers} players
                         </p>
                         <button
-                            data-testid="lobby-host-btn"
+                            data-testid="host-lobby"
                             onClick={() => {
                                 void handleHost();
                             }}
@@ -224,7 +224,7 @@ export default function LobbyPage() {
                         </div>
                     </div>
 
-                    <div>
+                    <div data-testid="join-lobby">
                         <h2>Join a Lobby</h2>
                         <div style={{ marginBottom: '1rem' }}>
                             <label
@@ -235,7 +235,7 @@ export default function LobbyPage() {
                             </label>
                             <input
                                 id="lobby-code-input"
-                                data-testid="lobby-code-input"
+                                data-testid="address-input"
                                 type="text"
                                 value={lobbyCode}
                                 onChange={(e) => setLobbyCode(e.target.value)}
@@ -250,7 +250,7 @@ export default function LobbyPage() {
                                 Enter the code provided by the lobby host
                             </div>
                             <button
-                                data-testid="lobby-join-btn"
+                                data-testid="confirm-join"
                                 onClick={() => {
                                     void handleJoin();
                                 }}
@@ -265,6 +265,14 @@ export default function LobbyPage() {
             ) : (
                 <div>
                     <h2>Current Lobby</h2>
+                    <button
+                        data-testid="start-match"
+                        type="button"
+                        disabled
+                        style={{ padding: '0.5rem 1rem', marginBottom: '1rem' }}
+                    >
+                        Start Match
+                    </button>
                     {renderLobbyInfo()}
                     <div style={{ marginTop: '1rem' }}>
                         <button

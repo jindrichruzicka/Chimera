@@ -89,7 +89,7 @@ describe('LobbyPage write lock', () => {
     it('dispatches host and leave through useLobbyApi without direct store writes', async () => {
         const rendered = render(<LobbyPage />);
 
-        fireEvent.click(screen.getByTestId('lobby-host-btn'));
+        fireEvent.click(screen.getByTestId('host-lobby'));
         await waitFor(() => {
             expect(host).toHaveBeenCalledOnce();
         });
@@ -122,7 +122,7 @@ describe('LobbyPage write lock', () => {
 
         render(<LobbyPage />);
 
-        fireEvent.click(screen.getByText('Toggle Ready'));
+        fireEvent.click(screen.getByTestId('ready-toggle'));
 
         await waitFor(() => {
             expect(updatePlayerReadyState).toHaveBeenCalledWith(true);
@@ -142,7 +142,7 @@ describe('LobbyPage write lock', () => {
 
         render(<LobbyPage />);
 
-        fireEvent.click(screen.getByText('Toggle Ready'));
+        fireEvent.click(screen.getByTestId('ready-toggle'));
 
         await waitFor(() => {
             expect(screen.getByRole('alert').textContent).toContain('ready failed');
