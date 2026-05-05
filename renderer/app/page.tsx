@@ -16,7 +16,6 @@
 
 import React, { useEffect } from 'react';
 import { logPlatformOnBoot } from './bootSmoke';
-import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
 
 export default function HomePage() {
     useEffect(() => {
@@ -34,7 +33,6 @@ export default function HomePage() {
             data-testid="main-menu"
             style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}
         >
-            <CrashRecoveryBanner />
             <h1>Chimera</h1>
             <p>Engine shell — M1 boot smoke. See devtools console for bridge status.</p>
         </main>

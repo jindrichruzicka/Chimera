@@ -12,6 +12,7 @@ import { SettingsBootstrap } from './SettingsBootstrap';
 import { SaveStoreBootstrap } from './SaveStoreBootstrap';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
+import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
 
 export const metadata = {
     title: 'Chimera',
@@ -31,6 +32,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                 <SettingsBootstrap />
                 <GameStoreBootstrap />
                 <SaveStoreBootstrap />
+                <CrashRecoveryBanner />
                 <ConnectionStatusIndicator />
                 <RootErrorBoundary>{children}</RootErrorBoundary>
                 {/* ToastHost will be added here as a sibling in §4.30 */}
