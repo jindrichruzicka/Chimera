@@ -45,7 +45,7 @@ jobs:
         run: Xvfb :99 -screen 0 1024x768x24 &
 
       - name: Run e2e tests
-        run: npx playwright test --project=electron-e2e
+        run: pnpm test:e2e
         env:
           CI: true
           DISPLAY: ':99'

@@ -48,8 +48,19 @@ describe('e2e.yml CI workflow', () => {
         expect(content).toMatch(/DISPLAY.*:99|:99.*DISPLAY/);
     });
 
-    it('runs playwright test with electron-e2e project', () => {
-        expect(content).toMatch(/playwright test.*--project=electron-e2e|--project=electron-e2e/);
+    it('runs playwright test with electron-e2e project (via pnpm test:e2e or --project flag)', () => {
+        // Accept either the canonical pnpm script (which carries --project=electron-e2e) or a
+        // direct --project flag.  pnpm test:e2e is the preferred form; the raw flag is also fine.
+        expect(content).toMatch(
+            /pnpm test:e2e|playwright test.*--project=electron-e2e|--project=electron-e2e/,
+        );
+    });
+
+    it('passes --config pointing at e2e/playwright.config.ts — prevents Playwright config discovery failure', () => {
+        // Without --config, Playwright searches CWD (repo root) upward and never finds
+        // e2e/playwright.config.ts, so --project=electron-e2e fails with "project not found".
+        // The canonical command is `pnpm test:e2e` which already carries the flag.
+        expect(content).toMatch(/--config[= ]e2e\/playwright\.config\.ts|pnpm test:e2e/);
     });
 
     it('uploads playwright-report artifact on every run', () => {
