@@ -1,3 +1,5 @@
+'use client';
+
 // renderer/components/shell/RootErrorBoundary.tsx
 //
 // React class-based error boundary (§4.27). On catch:

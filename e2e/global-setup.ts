@@ -1,11 +1,60 @@
 import { execSync } from 'child_process';
+import { mkdirSync, rmSync } from 'node:fs';
 import path from 'path';
+import { buildSync } from 'esbuild';
 
 /**
  * Playwright global setup — runs once before all E2E tests.
- * Compiles the renderer bundle so tests can load the real UI.
+ * 1. Compiles the renderer bundle so tests can load the real UI.
+ * 2. Bundles electron/main/index.ts → .e2e-build/electron/main/index.js  (main process)
+ * 3. Bundles electron/preload/api.ts → .e2e-build/electron/preload/api.js (preload script)
+ *
+ * @chimera/* path aliases are resolved here to real workspace-relative paths
+ * because the Electron process itself has no tsconfig-paths support at runtime.
  */
 export default function globalSetup(): void {
     const root = path.resolve(__dirname, '..');
+    const e2eBuildRoot = path.join(root, '.e2e-build');
+    const mainOutfile = path.join(e2eBuildRoot, 'electron', 'main', 'index.js');
+    const preloadOutfile = path.join(e2eBuildRoot, 'electron', 'preload', 'api.js');
+
+    rmSync(e2eBuildRoot, { recursive: true, force: true });
+    mkdirSync(path.dirname(mainOutfile), { recursive: true });
+    mkdirSync(path.dirname(preloadOutfile), { recursive: true });
+
     execSync('pnpm build:renderer', { cwd: root, stdio: 'inherit' });
+
+    const alias: Record<string, string> = {
+        '@chimera/electron': path.join(root, 'electron'),
+        '@chimera/shared': path.join(root, 'shared'),
+        '@chimera/simulation': path.join(root, 'simulation'),
+        '@chimera/ai': path.join(root, 'ai'),
+        '@chimera/networking': path.join(root, 'networking'),
+        '@chimera/games': path.join(root, 'games'),
+    };
+
+    // Main process — runs in Node.js (Electron's main context).
+    buildSync({
+        entryPoints: [path.join(root, 'electron/main/index.ts')],
+        outfile: mainOutfile,
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        target: 'node20',
+        external: ['electron', 'node:*'],
+        alias,
+    });
+
+    // Preload script — runs in a sandboxed renderer context but has access to
+    // Node.js APIs via contextBridge; bundle as CJS with Electron as external.
+    buildSync({
+        entryPoints: [path.join(root, 'electron/preload/api.ts')],
+        outfile: preloadOutfile,
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        target: 'node20',
+        external: ['electron'],
+        alias,
+    });
 }

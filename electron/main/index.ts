@@ -153,6 +153,16 @@ export interface RegisterAppLifecycleOptions {
     readonly createWindow: () => void;
 }
 
+export interface ResolveRuntimePathOptions {
+    readonly moduleDirname: string;
+    readonly env: Readonly<Record<string, string | undefined>>;
+}
+
+export interface RuntimePaths {
+    readonly preloadPath: string;
+    readonly rendererEntry: string;
+}
+
 const DEFAULT_WINDOW_WIDTH = 1280;
 const DEFAULT_WINDOW_HEIGHT = 800;
 
@@ -164,6 +174,27 @@ const DEFAULT_WINDOW_HEIGHT = 800;
  */
 export function resolveChimeraEnv(raw: string | undefined): ChimeraEnv {
     return raw === 'development' ? 'development' : 'production';
+}
+
+export function resolveRuntimePaths(options: ResolveRuntimePathOptions): RuntimePaths {
+    const preloadPath = path.join(options.moduleDirname, '..', 'preload', 'api.js');
+    const rendererEntry = path.join(
+        options.moduleDirname,
+        '..',
+        '..',
+        'renderer',
+        'out',
+        'index.html',
+    );
+
+    if (options.env['CHIMERA_E2E'] !== '1') {
+        return { preloadPath, rendererEntry };
+    }
+
+    return {
+        preloadPath: options.env['CHIMERA_E2E_PRELOAD_PATH'] ?? preloadPath,
+        rendererEntry: options.env['CHIMERA_E2E_RENDERER_ENTRY'] ?? rendererEntry,
+    };
 }
 
 /**
@@ -397,16 +428,12 @@ export async function main(): Promise<void> {
         throw new Error('CHIMERA_DEV_HARNESS is enabled in a production build. Refusing to start.');
     }
 
-    const preloadPath = path.join(__dirname, '..', 'preload', 'api.js');
-    const rendererEntry = path.join(__dirname, '..', '..', 'renderer', 'out', 'index.html');
+    const { preloadPath, rendererEntry } = resolveRuntimePaths({
+        moduleDirname: __dirname,
+        env: process.env,
+    });
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
     const userData = app.getPath('userData');
-
-    // WARN-4: deny all permission requests (camera, microphone, notifications, etc.)
-    // The renderer has no legitimate need for OS-level permissions beyond DOM APIs.
-    session.defaultSession.setPermissionRequestHandler((_webContents, _permission, callback) => {
-        callback(false);
-    });
 
     // Shared in-memory ring buffer: used by the logs IPC `readRecent` handler
     // so the renderer can fetch recent entries for export/debug.
@@ -890,7 +917,17 @@ export async function main(): Promise<void> {
         mainWindow = createMainWindow({ preloadPath, rendererEntry, env, logger });
     };
 
-    void app.whenReady().then(createWindow);
+    void app.whenReady().then(() => {
+        // WARN-4: deny all permission requests (camera, microphone, notifications, etc.).
+        // Must be set after app.whenReady() — Electron 33 throws if session is
+        // accessed before the app is ready.
+        session.defaultSession.setPermissionRequestHandler(
+            (_webContents, _permission, callback) => {
+                callback(false);
+            },
+        );
+        createWindow();
+    });
 
     registerAppLifecycle({
         app,

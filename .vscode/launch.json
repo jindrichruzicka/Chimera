@@ -68,6 +68,29 @@
             "console": "integratedTerminal",
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
             "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Playwright: run all tests",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/playwright",
+            "runtimeArgs": ["test", "--config", "e2e/playwright.config.ts"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Playwright: debug all tests",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/playwright",
+            "runtimeArgs": ["test", "--config", "e2e/playwright.config.ts", "--debug"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "autoAttachChildProcesses": true,
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
         }
     ]
 }

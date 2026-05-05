@@ -8,3 +8,8 @@ pnpm-lock.yaml
 *.min.css
 renderer/out/
 coverage/
+.e2e-build/
+
+# Playwright output — generated artefacts, not source
+e2e/playwright-report/
+test-results/

@@ -33,6 +33,10 @@ export default tseslint.config(
             'simulation/engine/__tests__/fixtures/**',
             // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
             'tools/eslint-plugin-chimera/plugin.cjs',
+            // Playwright output directories — generated artefacts, not source.
+            '.e2e-build/**',
+            'e2e/playwright-report/**',
+            'test-results/**',
         ],
     },
 

@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── pino mock — prevent SonicBoom from opening real file descriptors ──────────
@@ -267,6 +268,7 @@ const {
     registerSaveManagerLifecycle,
     parseHarnessFlags,
     registerClientRevealForwarding,
+    resolveRuntimePaths,
     main,
 } = await import('./index.js');
 const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
@@ -521,6 +523,48 @@ describe('resolveChimeraEnv', () => {
 
     it('defaults to "production" for an unrecognised value', () => {
         expect(resolveChimeraEnv('staging')).toBe('production');
+    });
+});
+
+describe('resolveRuntimePaths', () => {
+    const moduleDirname = path.join('/app', 'electron', 'main');
+
+    it('uses source-tree runtime paths by default', () => {
+        const paths = resolveRuntimePaths({ moduleDirname, env: {} });
+
+        expect(paths.preloadPath).toBe(path.join(moduleDirname, '..', 'preload', 'api.js'));
+        expect(paths.rendererEntry).toBe(
+            path.join(moduleDirname, '..', '..', 'renderer', 'out', 'index.html'),
+        );
+    });
+
+    it('uses E2E bundle overrides when CHIMERA_E2E is enabled', () => {
+        const paths = resolveRuntimePaths({
+            moduleDirname,
+            env: {
+                CHIMERA_E2E: '1',
+                CHIMERA_E2E_PRELOAD_PATH: '/tmp/chimera-e2e/preload/api.js',
+                CHIMERA_E2E_RENDERER_ENTRY: '/tmp/chimera-renderer/index.html',
+            },
+        });
+
+        expect(paths.preloadPath).toBe('/tmp/chimera-e2e/preload/api.js');
+        expect(paths.rendererEntry).toBe('/tmp/chimera-renderer/index.html');
+    });
+
+    it('ignores E2E bundle overrides outside CHIMERA_E2E', () => {
+        const paths = resolveRuntimePaths({
+            moduleDirname,
+            env: {
+                CHIMERA_E2E_PRELOAD_PATH: '/tmp/chimera-e2e/preload/api.js',
+                CHIMERA_E2E_RENDERER_ENTRY: '/tmp/chimera-renderer/index.html',
+            },
+        });
+
+        expect(paths.preloadPath).toBe(path.join(moduleDirname, '..', 'preload', 'api.js'));
+        expect(paths.rendererEntry).toBe(
+            path.join(moduleDirname, '..', '..', 'renderer', 'out', 'index.html'),
+        );
     });
 });
 
