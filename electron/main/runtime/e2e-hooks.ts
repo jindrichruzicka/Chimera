@@ -112,9 +112,18 @@ export function createE2eHooks(): E2eHooks {
             state.lastChecksum = checksum;
             state.lastHostSnapshot = snapshot;
         },
-        // @chimera-review: intentional no-op — replaced by session runtime via hooks.dispatchTick = <fn> before first tick dispatch (§13.7)
-        // eslint-disable-next-line @typescript-eslint/no-empty-function
-        dispatchTick: () => {},
+        // Guard: throw loudly if called before the session runtime wires a real dispatch
+        // function. A silent no-op here would let soak tests (e.g. 1 000-tick convergence)
+        // advance zero ticks and produce a subtly wrong checksum with no error signal.
+        // The session runtime must assign: hooks.dispatchTick = () => pipeline.dispatch(tickAction)
+        // before any E2E spec calls tick() (§13.7).
+        dispatchTick: () => {
+            throw new Error(
+                'dispatchTick has not been wired by the session runtime. ' +
+                    'Assign hooks.dispatchTick = () => pipeline.dispatch(tickAction) ' +
+                    'in SessionRuntime (or equivalent) before calling tick() from E2E specs.',
+            );
+        },
     };
     return hooks;
 }

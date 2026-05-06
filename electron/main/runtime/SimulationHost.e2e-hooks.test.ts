@@ -50,10 +50,10 @@ describe('registerE2eHooks', () => {
         expect(typeof hooks.dispatchTick).toBe('function');
     });
 
-    it('dispatchTick is a callable no-op before the session runtime wires it', () => {
+    it('dispatchTick throws before the session runtime wires it — fails loudly in CI', () => {
         const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
 
-        expect(() => hooks.dispatchTick()).not.toThrow();
+        expect(() => hooks.dispatchTick()).toThrow(/dispatchTick.*not.*wired|session runtime/i);
     });
 
     it('dispatchTick can be replaced by the session runtime', () => {
