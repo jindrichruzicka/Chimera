@@ -273,15 +273,14 @@ export class MatchPage {
 
 ```typescript
 // e2e/helpers/ipc-spy.ts
-import { ElectronApplication } from 'playwright';
-import { PlayerSnapshot } from '../../shared/snapshot';
+import type { ElectronApplication } from '@playwright/test';
 
 /**
  * Read the last PlayerSnapshot delivered to the host renderer.
  * Requires CHIMERA_E2E=1 — main process stores it on globalThis.__e2eHooks.
  */
-export async function getHostSnapshot(app: ElectronApplication): Promise<PlayerSnapshot> {
-    return app.evaluate(() => (globalThis as Record<string, unknown>).__e2eHooks?.lastHostSnapshot);
+export async function getHostSnapshot(app: ElectronApplication): Promise<PlayerSnapshot | null> {
+    return app.evaluate(() => globalThis.__e2eHooks?.lastHostSnapshot ?? null);
 }
 
 /**
@@ -289,7 +288,7 @@ export async function getHostSnapshot(app: ElectronApplication): Promise<PlayerS
  * Uses the same __e2eHooks mechanism — avoids reading from renderer DOM.
  */
 export async function getSimulationTick(app: ElectronApplication): Promise<number> {
-    return app.evaluate(() => (globalThis as Record<string, unknown>).__e2eHooks?.currentTick ?? 0);
+    return app.evaluate(() => globalThis.__e2eHooks?.currentTick ?? 0);
 }
 
 /**
@@ -297,9 +296,7 @@ export async function getSimulationTick(app: ElectronApplication): Promise<numbe
  * Used by soak tests to compare host vs client convergence.
  */
 export async function getLastBroadcastChecksum(app: ElectronApplication): Promise<number> {
-    return app.evaluate(
-        () => (globalThis as Record<string, unknown>).__e2eHooks?.lastChecksum ?? 0,
-    );
+    return app.evaluate(() => globalThis.__e2eHooks?.lastChecksum ?? 0);
 }
 ```
 
