@@ -17,11 +17,35 @@
  */
 
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import { createRingBuffer } from './ws-ring-buffer.js';
+
+/** Maximum number of WebSocket frames retained in the E2E buffer. Oldest frames are evicted when this limit is reached. */
+export const MAX_WS_FRAMES = 10_000;
+
+/** A single WebSocket frame recorded by the CHIMERA_E2E networking hook. */
+export interface WsFrame {
+    readonly direction: 'inbound' | 'outbound';
+    readonly data: string;
+    readonly timestamp: number;
+}
 
 export interface E2eHooks {
     readonly lastHostSnapshot: PlayerSnapshot | null;
     readonly lastChecksum: number;
     readonly currentTick: number;
+    /**
+     * WebSocket frames recorded by the networking-layer CHIMERA_E2E hook. Initialized lazily by tapWebSocketFrames().
+     * @chimera-review: intentionally mutable — field is assigned/reset externally by ws-inspector helpers
+     * (tapWebSocketFrames/clearCapturedFrames). Uses an O(1) ring-buffer internally; assigning `[]`
+     * creates a fresh ring and assigning `undefined` deactivates capture.
+     */
+    wsFrames: WsFrame[] | undefined;
+    /**
+     * Append a WebSocket frame to the bounded buffer. When the buffer reaches MAX_WS_FRAMES, the oldest
+     * frame is evicted (FIFO). No-op when wsFrames has not been initialized by tapWebSocketFrames().
+     * Networking-layer CHIMERA_E2E hooks must use this method rather than pushing directly.
+     */
+    pushWsFrame(frame: WsFrame): void;
     onTick(tick: number, checksum: number, snapshot: PlayerSnapshot): void;
 }
 
@@ -29,13 +53,20 @@ declare global {
     var __e2eHooks: E2eHooks | undefined;
 }
 
-function createE2eHooks(): E2eHooks {
+export function createE2eHooks(): E2eHooks {
     const state = {
         lastHostSnapshot: null as PlayerSnapshot | null,
         lastChecksum: 0,
         currentTick: 0,
     };
-    return {
+
+    // Internal ring-buffer. `undefined` means the buffer has not yet been
+    // activated (tapWebSocketFrames has not been called). When activated, any
+    // assignment to `wsFrames` (including []) creates a fresh ring so that
+    // pushWsFrame always uses O(1) eviction instead of Array.shift().
+    let _ring: WsFrame[] | undefined = undefined;
+
+    const hooks: E2eHooks = {
         get lastHostSnapshot() {
             return state.lastHostSnapshot;
         },
@@ -45,12 +76,30 @@ function createE2eHooks(): E2eHooks {
         get currentTick() {
             return state.currentTick;
         },
+        get wsFrames(): WsFrame[] | undefined {
+            return _ring;
+        },
+        set wsFrames(value: WsFrame[] | undefined) {
+            if (value === undefined) {
+                _ring = undefined;
+            } else {
+                // Any assignment ([] from tapWebSocketFrames / clearCapturedFrames)
+                // creates a fresh O(1) ring-buffer regardless of the assigned value.
+                _ring = createRingBuffer<WsFrame>(MAX_WS_FRAMES);
+            }
+        },
+        pushWsFrame(frame: WsFrame): void {
+            if (_ring === undefined) return;
+            // O(1): createRingBuffer overrides push with ring-eviction logic.
+            _ring.push(frame);
+        },
         onTick(tick, checksum, snapshot): void {
             state.currentTick = tick;
             state.lastChecksum = checksum;
             state.lastHostSnapshot = snapshot;
         },
     };
+    return hooks;
 }
 
 export function registerE2eHooks(

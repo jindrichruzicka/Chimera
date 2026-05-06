@@ -102,6 +102,10 @@ function makeE2eHooks(): E2eHooks {
             state.lastChecksum = checksum;
             state.lastHostSnapshot = snapshot;
         },
+        pushWsFrame(): void {
+            // no-op in this test double — StateBroadcaster does not call pushWsFrame
+        },
+        wsFrames: undefined,
     };
 }
 
