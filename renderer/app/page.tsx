@@ -14,10 +14,13 @@
 // All dispatch/engine logic lives behind `window.__chimera` (invariant 4);
 // the renderer never touches Node.js APIs directly.
 
+import { useRouter } from 'next/navigation';
 import React, { useEffect } from 'react';
 import { logPlatformOnBoot } from './bootSmoke';
 
 export default function HomePage() {
+    const router = useRouter();
+
     useEffect(() => {
         void logPlatformOnBoot(window.__chimera, (message, detail) => {
             if (detail === undefined) {
@@ -40,6 +43,12 @@ export default function HomePage() {
             }}
         >
             <img src="./chimera-logo-compact.png" alt="Chimera" width={256} height={256} />
+            <button data-testid="main-menu-play" onClick={() => router.push('/lobby')}>
+                Play
+            </button>
+            <button data-testid="main-menu-settings" onClick={() => router.push('/settings')}>
+                Settings
+            </button>
         </main>
     );
 }

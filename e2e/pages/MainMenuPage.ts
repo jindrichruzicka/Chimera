@@ -9,19 +9,15 @@ export class MainMenuPage {
         this.settingsButton = page.getByTestId('main-menu-settings');
     }
 
+    public async goto(): Promise<void> {
+        await this.page.goto('/');
+    }
+
     public async navigateToLobby(): Promise<void> {
         await this.playButton.click();
     }
 
     public async navigateToSettings(): Promise<void> {
         await this.settingsButton.click();
-    }
-
-    public async openLobby(): Promise<void> {
-        await this.navigateToLobby();
-    }
-
-    public async openSettings(): Promise<void> {
-        await this.navigateToSettings();
     }
 }

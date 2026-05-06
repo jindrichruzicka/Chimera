@@ -7,6 +7,7 @@ interface ClickableLocator {
 }
 
 interface TestPage {
+    goto: (url: string) => Promise<null>;
     getByTestId: (testId: string) => ClickableLocator;
 }
 
@@ -14,11 +15,17 @@ const buildPageDouble = (): {
     readonly page: Page;
     readonly clickedTestIds: string[];
     readonly requestedTestIds: string[];
+    readonly visitedUrls: string[];
 } => {
     const clickedTestIds: string[] = [];
     const requestedTestIds: string[] = [];
+    const visitedUrls: string[] = [];
 
     const page: TestPage = {
+        goto: async (url: string): Promise<null> => {
+            visitedUrls.push(url);
+            return null;
+        },
         getByTestId: (testId: string): ClickableLocator => {
             requestedTestIds.push(testId);
             return {
@@ -29,7 +36,7 @@ const buildPageDouble = (): {
         },
     };
 
-    return { page: page as Page, clickedTestIds, requestedTestIds };
+    return { page: page as Page, clickedTestIds, requestedTestIds, visitedUrls };
 };
 
 describe('MainMenuPage', () => {
@@ -61,21 +68,12 @@ describe('MainMenuPage', () => {
         expect(clickedTestIds).toEqual(['main-menu-settings']);
     });
 
-    it('opens the lobby via the public alias method', async () => {
-        const { page, clickedTestIds } = buildPageDouble();
+    it('navigates to the main menu root when goto is called', async () => {
+        const { page, visitedUrls } = buildPageDouble();
         const mainMenu = new MainMenuPage(page);
 
-        await mainMenu.openLobby();
+        await mainMenu.goto();
 
-        expect(clickedTestIds).toEqual(['main-menu-play']);
-    });
-
-    it('opens settings via the public alias method', async () => {
-        const { page, clickedTestIds } = buildPageDouble();
-        const mainMenu = new MainMenuPage(page);
-
-        await mainMenu.openSettings();
-
-        expect(clickedTestIds).toEqual(['main-menu-settings']);
+        expect(visitedUrls).toEqual(['/']);
     });
 });
