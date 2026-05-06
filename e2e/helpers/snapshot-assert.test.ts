@@ -181,6 +181,49 @@ describe('assertNoLeakedFields', () => {
             ),
         ).not.toThrow();
     });
+
+    it('throws when a deeply nested field carries an owner-only marker (recursive scan)', () => {
+        // The __visibility marker is two levels below playerState — a shallow
+        // scan (Object.entries(playerState) only) would miss it.
+        const snapshot = makeSnapshot({
+            p1: { id: 'p1' },
+            p2: {
+                id: 'p2',
+                hand: {
+                    cards: [{ name: 'card-x', __visibility: 'owner-only' }],
+                },
+            },
+        });
+
+        expect(() =>
+            assertNoLeakedFields(
+                snapshot as unknown as Parameters<typeof assertNoLeakedFields>[0],
+                'p1',
+                'p2',
+            ),
+        ).toThrow();
+    });
+
+    it('does not throw when the viewer owns the deeply nested owner-only field', () => {
+        // p1 is the viewer — their own nested owner-only data must not trigger the check.
+        const snapshot = makeSnapshot({
+            p1: {
+                id: 'p1',
+                hand: {
+                    cards: [{ name: 'card-x', __visibility: 'owner-only' }],
+                },
+            },
+            p2: { id: 'p2', score: 0 },
+        });
+
+        expect(() =>
+            assertNoLeakedFields(
+                snapshot as unknown as Parameters<typeof assertNoLeakedFields>[0],
+                'p1',
+                'p2',
+            ),
+        ).not.toThrow();
+    });
 });
 
 // ---------------------------------------------------------------------------

@@ -31,34 +31,63 @@ type PlayerSnapshot = NonNullable<NonNullable<typeof globalThis.__e2eHooks>['las
 /**
  * Assert that a PlayerSnapshot contains no fields classified owner-only for
  * another player. Fields tagged with `__visibility: 'owner-only'` must be
- * null in any non-owner snapshot.
+ * absent (or null) in any non-owner snapshot.
  *
- * When `viewerId === ownerId` the snapshot was projected for the viewer, so
- * all their own fields are permitted regardless of visibility tag — returns
+ * The scan is a full recursive descent through nested objects and arrays so
+ * that deeply-nested visibility markers (e.g. `player.hand.cards[0].__visibility`)
+ * are not missed. A WeakSet guards against circular references.
+ *
+ * NOTE: **all** non-viewer players are scanned, not only `snapshotOwner`.
+ * `snapshotOwner` is used solely for the early-exit guard when
+ * `viewerId === snapshotOwner`.
+ *
+ * When `viewerId === snapshotOwner` the snapshot was projected for the viewer,
+ * so all their own fields are permitted regardless of visibility tag — returns
  * immediately without checking.
  *
- * @param snapshot - The PlayerSnapshot to inspect.
- * @param viewerId - The player receiving this snapshot.
- * @param ownerId  - The player who owns the sensitive data being tested.
+ * @param snapshot      - The PlayerSnapshot to inspect.
+ * @param viewerId      - The player receiving this snapshot.
+ * @param snapshotOwner - The player who owns the sensitive data being tested.
+ *                        Used only for the early-exit guard; all non-viewer
+ *                        players are always scanned.
  */
 export function assertNoLeakedFields(
     snapshot: PlayerSnapshot,
     viewerId: string,
-    ownerId: string,
+    snapshotOwner: string,
 ): void {
-    if (viewerId === ownerId) return;
+    if (viewerId === snapshotOwner) return;
+
+    const visited = new WeakSet<object>();
+    const leaked: string[] = [];
+
+    function scan(value: unknown, playerId: string, path: string): void {
+        if (value === null || typeof value !== 'object') return;
+        const obj = value as Record<string, unknown>;
+        if (visited.has(obj)) return;
+        visited.add(obj);
+
+        if ((obj as { __visibility?: string }).__visibility === 'owner-only') {
+            leaked.push(`player=${playerId} path=${path}`);
+            // Do not descend further into an already-flagged subtree.
+            return;
+        }
+
+        for (const [key, child] of Object.entries(obj)) {
+            scan(child, playerId, `${path}.${key}`);
+        }
+    }
 
     for (const [playerId, playerState] of Object.entries(snapshot.players)) {
         if (playerId !== viewerId) {
-            const leaked = Object.entries(playerState as Record<string, unknown>).filter(
-                ([, v]) => (v as { __visibility?: string })?.__visibility === 'owner-only',
-            );
-            expect(
-                leaked,
-                `Snapshot for viewer=${viewerId} leaked owner-only field from player=${playerId}`,
-            ).toHaveLength(0);
+            scan(playerState, playerId, `players.${playerId}`);
         }
     }
+
+    expect(
+        leaked,
+        `Snapshot for viewer=${viewerId} leaked owner-only fields: ${leaked.join(', ')}`,
+    ).toHaveLength(0);
 }
 
 /**
