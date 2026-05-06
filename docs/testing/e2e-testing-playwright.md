@@ -300,26 +300,157 @@ export async function getLastBroadcastChecksum(app: ElectronApplication): Promis
 }
 ```
 
+### ws-inspector.ts
+
+Provides read-only helpers to record and inspect raw WebSocket frames from the Electron main process via `electronApp.evaluate()`. Requires `CHIMERA_E2E=1` — the networking layer appends frames to `globalThis.__e2eHooks.wsFrames` when that flag is set.
+
+**Ring-buffer capacity**: The main process caps the frame buffer at `MAX_WS_FRAMES = 10 000` entries (defined in `electron/main/runtime/e2e-hooks.ts`). When the limit is reached the oldest frame is evicted (FIFO drop), keeping memory bounded in long-running soak tests.
+
+**Module boundary**: must NOT import from `electron/main/`, `simulation/`, or `networking/`. `ElectronApplication` is the only external import — it is a Playwright test type.
+
+```typescript
+// e2e/helpers/ws-inspector.ts
+import type { ElectronApplication } from '@playwright/test';
+
+/**
+ * WsFrame type derived from the globally-declared __e2eHooks shape
+ * (electron/main/runtime/e2e-hooks.ts). Using typeof avoids a cross-module
+ * import from electron/main/.
+ */
+export type WsFrame = NonNullable<NonNullable<typeof globalThis.__e2eHooks>['wsFrames']>[number];
+
+/**
+ * Ensure the WebSocket frame buffer is initialized on __e2eHooks.
+ * Call once at the start of a test before any actions that generate WebSocket traffic.
+ * Graceful no-op when CHIMERA_E2E is off (__e2eHooks absent).
+ *
+ * Does NOT modify, delay, or drop frames — only initialises the buffer so the
+ * networking-layer hook can start appending (Invariant #6).
+ */
+export async function tapWebSocketFrames(
+    app: Pick<ElectronApplication, 'evaluate'>,
+): Promise<void> {
+    await app.evaluate(() => {
+        if (globalThis.__e2eHooks) {
+            globalThis.__e2eHooks.wsFrames ??= [];
+        }
+    });
+}
+
+/**
+ * Retrieve all WebSocket frames recorded since the last clearCapturedFrames()
+ * (or since tapWebSocketFrames() if never cleared).
+ * Returns [] when __e2eHooks is absent or the buffer has not been initialised.
+ */
+export async function getCapturedFrames(
+    app: Pick<ElectronApplication, 'evaluate'>,
+): Promise<WsFrame[]> {
+    return app.evaluate(() => globalThis.__e2eHooks?.wsFrames ?? []);
+}
+
+/**
+ * Reset the WebSocket frame buffer to empty.
+ * Graceful no-op when CHIMERA_E2E is off (__e2eHooks absent).
+ */
+export async function clearCapturedFrames(
+    app: Pick<ElectronApplication, 'evaluate'>,
+): Promise<void> {
+    await app.evaluate(() => {
+        if (globalThis.__e2eHooks) {
+            globalThis.__e2eHooks.wsFrames = [];
+        }
+    });
+}
+```
+
+### tick-driver.ts
+
+Programmatic tick-dispatch helper for soak specs. Dispatches a specified number of ticks to the simulation host via `electronApp.evaluate()`, calling `__e2eHooks.dispatchTick()` registered under `CHIMERA_E2E=1`.
+
+**Batch semantics**: Ticks are dispatched in configurable batches (default `batchSize = 100`). After each batch — except the final one — the helper yields to the Node.js event loop via `setTimeout(0)` so pending I/O and IPC callbacks can drain before the next batch begins. This prevents flooding the message queue during high-count soak runs and keeps the host process responsive to Playwright interactions between batches.
+
+**Graceful no-op**: When `__e2eHooks` is absent (i.e. `CHIMERA_E2E` is not set) the function resolves immediately without throwing.
+
+**Module boundary**: must NOT import from `electron/main/`, `simulation/`, or `networking/`. `ElectronApplication` is the only external import — it is a Playwright test type.
+
+```typescript
+// e2e/helpers/tick-driver.ts
+import type { ElectronApplication } from '@playwright/test';
+
+/** Number of ticks dispatched per batch before yielding to the event loop. */
+const DEFAULT_BATCH_SIZE = 100;
+
+/**
+ * Dispatch `count` ticks to the simulation host via the CHIMERA_E2E hook.
+ *
+ * Ticks are dispatched in batches of `batchSize`. After each batch (except the
+ * final one) the helper yields to the Node.js event loop via `setTimeout(0)` so
+ * that pending I/O and IPC callbacks can drain before the next batch starts.
+ *
+ * Requires `CHIMERA_E2E=1` — `__e2eHooks.dispatchTick` must have been wired by
+ * the session runtime before calling this function. When `__e2eHooks` is absent
+ * the function resolves immediately without throwing.
+ *
+ * @param app       - The Playwright `ElectronApplication` for the host process.
+ * @param count     - Total number of ticks to dispatch. `0` is a no-op.
+ * @param batchSize - Ticks per batch before yielding (default: 100).
+ */
+export async function tick(
+    app: ElectronApplication,
+    count: number,
+    batchSize: number = DEFAULT_BATCH_SIZE,
+): Promise<void> {
+    const safeBatchSize = Math.max(1, batchSize);
+    let dispatched = 0;
+
+    while (dispatched < count) {
+        const batch = Math.min(count - dispatched, safeBatchSize);
+
+        await app.evaluate((_electron, n: number) => {
+            for (let i = 0; i < n; i++) {
+                globalThis.__e2eHooks?.dispatchTick();
+            }
+        }, batch);
+
+        dispatched += batch;
+
+        if (dispatched < count) {
+            // Yield to the event loop between batches to prevent flooding.
+            await app.evaluate(() => new Promise<void>((r) => setTimeout(r, 0)));
+        }
+    }
+}
+```
+
 ### snapshot-assert.ts
 
 ```typescript
 // e2e/helpers/snapshot-assert.ts
 import { expect } from '@playwright/test';
-import { PlayerSnapshot } from '../../shared/snapshot';
+import type { ElectronApplication } from '@playwright/test';
+import { getLastBroadcastChecksum, getSimulationTick } from './ipc-spy';
 
 /**
- * Assert that a PlayerSnapshot contains no fields classified owner-only for another player.
- * Fields tagged with __visibility: 'owner-only' must be null/undefined in non-owner snapshots.
+ * PlayerSnapshot type derived from the globally-declared __e2eHooks shape
+ * (electron/main/runtime/e2e-hooks.ts). Using typeof avoids a cross-module
+ * import from electron/main/ or simulation/.
+ */
+type PlayerSnapshot = NonNullable<NonNullable<typeof globalThis.__e2eHooks>['lastHostSnapshot']>;
+
+/**
+ * Assert that a PlayerSnapshot contains no fields classified owner-only for
+ * another player. Fields tagged with `__visibility: 'owner-only'` must be
+ * null in any non-owner snapshot.
  */
 export function assertNoLeakedFields(
     snapshot: PlayerSnapshot,
     viewerId: string,
     ownerId: string,
 ): void {
-    if (viewerId === ownerId) return; // own snapshot — all fields permitted
+    if (viewerId === ownerId) return;
+
     for (const [playerId, playerState] of Object.entries(snapshot.players)) {
         if (playerId !== viewerId) {
-            // Any field on opponent players that is explicitly marked owner-only must be absent
             const leaked = Object.entries(playerState as Record<string, unknown>).filter(
                 ([, v]) => (v as { __visibility?: string })?.__visibility === 'owner-only',
             );
@@ -332,13 +463,20 @@ export function assertNoLeakedFields(
 }
 
 export async function assertChecksumMatch(
-    hostApp: import('playwright').ElectronApplication,
-    clientApp: import('playwright').ElectronApplication,
+    hostApp: ElectronApplication,
+    clientApp: ElectronApplication,
 ): Promise<void> {
-    const { getLastBroadcastChecksum } = await import('./ipc-spy');
     const hostChecksum = await getLastBroadcastChecksum(hostApp);
     const clientChecksum = await getLastBroadcastChecksum(clientApp);
     expect(hostChecksum).toBe(clientChecksum);
+}
+
+export async function assertTickAdvanced(
+    app: ElectronApplication,
+    baseline: number,
+): Promise<void> {
+    const tick = await getSimulationTick(app);
+    expect(tick).toBeGreaterThan(baseline);
 }
 ```
 
