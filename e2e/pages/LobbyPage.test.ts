@@ -124,4 +124,16 @@ describe('LobbyPage', () => {
         expect(nthSelections).toEqual([{ testId: 'player-list-item', index: 2 }]);
         expect(waitedTestIds).toEqual(['player-list-item']);
     });
+
+    it('throws when waitForPlayerCount is called with count less than 1', async () => {
+        const { page } = buildPageDouble();
+        const lobbyPage = new LobbyPage(page);
+
+        await expect(lobbyPage.waitForPlayerCount(0)).rejects.toThrow(
+            'waitForPlayerCount requires count >= 1',
+        );
+        await expect(lobbyPage.waitForPlayerCount(-1)).rejects.toThrow(
+            'waitForPlayerCount requires count >= 1',
+        );
+    });
 });

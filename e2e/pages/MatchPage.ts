@@ -25,16 +25,16 @@ export class MatchPage {
     public async waitForTick(tick: number, timeout = 30_000): Promise<void> {
         await this.page.waitForFunction(
             (targetTick: number) => {
-                const root = globalThis as {
-                    readonly document?: {
-                        readonly querySelector: (selector: string) => {
-                            readonly textContent: string | null;
-                        } | null;
-                    };
-                };
-
                 const text =
-                    root.document?.querySelector('[data-testid=hud-tick]')?.textContent ?? '0';
+                    (
+                        globalThis as {
+                            readonly document?: {
+                                querySelector(
+                                    s: string,
+                                ): { readonly textContent: string | null } | null;
+                            };
+                        }
+                    ).document?.querySelector('[data-testid=hud-tick]')?.textContent ?? '0';
                 return parseInt(text, 10) >= targetTick;
             },
             tick,

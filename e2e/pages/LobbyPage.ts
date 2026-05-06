@@ -36,6 +36,7 @@ export class LobbyPage {
     }
 
     public async waitForPlayerCount(count: number): Promise<void> {
+        if (count < 1) throw new Error('waitForPlayerCount requires count >= 1');
         await this.playerListItems.nth(count - 1).waitFor({ state: 'visible' });
     }
 }

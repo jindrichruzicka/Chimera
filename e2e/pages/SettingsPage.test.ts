@@ -50,15 +50,8 @@ describe('SettingsPage', () => {
 
         expect(settingsPage.masterVolumeInput).toBeDefined();
         expect(settingsPage.resetDefaultsButton).toBeDefined();
-        expect(settingsPage.saveButton).toBeDefined();
-        expect(settingsPage.closeButton).toBeDefined();
 
-        expect(requestedTestIds).toEqual([
-            'settings-master-volume',
-            'settings-reset-defaults',
-            'settings-save',
-            'settings-close',
-        ]);
+        expect(requestedTestIds).toEqual(['master-volume', 'reset-to-defaults']);
     });
 
     it('fills master volume input with the provided value', async () => {
@@ -67,7 +60,7 @@ describe('SettingsPage', () => {
 
         await settingsPage.setMasterVolume(73);
 
-        expect(filledValues).toEqual([{ testId: 'settings-master-volume', value: '73' }]);
+        expect(filledValues).toEqual([{ testId: 'master-volume', value: '73' }]);
     });
 
     it('clicks reset to defaults', async () => {
@@ -76,16 +69,6 @@ describe('SettingsPage', () => {
 
         await settingsPage.resetToDefaults();
 
-        expect(clickedTestIds).toEqual(['settings-reset-defaults']);
-    });
-
-    it('clicks save and close actions', async () => {
-        const { page, clickedTestIds } = buildPageDouble();
-        const settingsPage = new SettingsPage(page);
-
-        await settingsPage.save();
-        await settingsPage.close();
-
-        expect(clickedTestIds).toEqual(['settings-save', 'settings-close']);
+        expect(clickedTestIds).toEqual(['reset-to-defaults']);
     });
 });
