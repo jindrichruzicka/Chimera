@@ -106,6 +106,8 @@ function makeE2eHooks(): E2eHooks {
             // no-op in this test double — StateBroadcaster does not call pushWsFrame
         },
         wsFrames: undefined,
+        // no-op in this test double — StateBroadcaster does not call dispatchTick
+        dispatchTick: () => {},
     };
 }
 

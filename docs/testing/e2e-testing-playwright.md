@@ -466,11 +466,14 @@ if (process.env.CHIMERA_E2E === '1') {
             this.lastChecksum = checksum;
             this.lastHostSnapshot = hostSnapshot;
         },
+        // No-op until the session runtime wires the real ActionPipeline dispatch.
+        // The session runtime replaces this property after creating the hooks object.
+        dispatchTick(): void {},
     };
 }
 ```
 
-The block is a compile-time dead-code elimination target in production builds. The hook surface is **read-only from tests** — tests inspect state; they do not inject actions or mutate snapshots.
+The block is a compile-time dead-code elimination target in production builds. The hook surface is primarily **read-only from tests** — tests inspect state and do not mutate snapshots directly. The `dispatchTick` property is the sole exception: it allows soak specs to programmatically advance the simulation clock. All tick dispatches still go through the full `ActionPipeline` path (Invariant #6); no state is injected.
 
 ---
 
@@ -519,12 +522,12 @@ On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed 
 
 ## §13.12 Security Notes
 
-| Concern               | Rule                                                                                                       |
-| --------------------- | ---------------------------------------------------------------------------------------------------------- |
-| Test hook surface     | `__e2eHooks` is read-only from tests. All actions still go through `ActionPipeline`.                       |
-| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `fullyParallel: false` prevents collision.         |
-| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                      |
-| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it. |
+| Concern               | Rule                                                                                                                                            |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test hook surface     | `__e2eHooks` exposes only `dispatchTick` as an active method; all other fields are read-only. All dispatched ticks go through `ActionPipeline`. |
+| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `fullyParallel: false` prevents collision.                                              |
+| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                           |
+| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                      |
 
 ---
 

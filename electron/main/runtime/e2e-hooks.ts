@@ -47,6 +47,20 @@ export interface E2eHooks {
      */
     pushWsFrame(frame: WsFrame): void;
     onTick(tick: number, checksum: number, snapshot: PlayerSnapshot): void;
+    /**
+     * Advance the simulation clock by one tick.
+     *
+     * No-op until wired by the session runtime — the runtime replaces this
+     * property after creating the hooks object so the tick dispatch goes
+     * through the registered `ActionPipeline` path (Invariant #6).
+     *
+     * Must NOT be called from `simulation/` or `renderer/` — this property
+     * exists only for the CHIMERA_E2E test path.
+     *
+     * @chimera-review: intentionally mutable — replaced by session runtime
+     *   to connect the hook to the real ActionPipeline dispatch.
+     */
+    dispatchTick: () => void;
 }
 
 declare global {
@@ -98,6 +112,9 @@ export function createE2eHooks(): E2eHooks {
             state.lastChecksum = checksum;
             state.lastHostSnapshot = snapshot;
         },
+        // @chimera-review: intentional no-op — replaced by session runtime via hooks.dispatchTick = <fn> before first tick dispatch (§13.7)
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
+        dispatchTick: () => {},
     };
     return hooks;
 }

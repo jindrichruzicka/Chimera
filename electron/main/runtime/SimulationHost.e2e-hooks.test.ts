@@ -14,7 +14,7 @@
  *   #27 — CHIMERA_E2E is a test-only flag and absent/0 means no hook is set.
  */
 
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 import { registerE2eHooks, type E2eHooks } from './e2e-hooks.js';
@@ -47,6 +47,23 @@ describe('registerE2eHooks', () => {
         expect(hooks.lastChecksum).toBe(0);
         expect(hooks.currentTick).toBe(0);
         expect(typeof hooks.onTick).toBe('function');
+        expect(typeof hooks.dispatchTick).toBe('function');
+    });
+
+    it('dispatchTick is a callable no-op before the session runtime wires it', () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+
+        expect(() => hooks.dispatchTick()).not.toThrow();
+    });
+
+    it('dispatchTick can be replaced by the session runtime', () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+        const stub = vi.fn();
+
+        hooks.dispatchTick = stub;
+        hooks.dispatchTick();
+
+        expect(stub).toHaveBeenCalledOnce();
     });
 
     it('does not define __e2eHooks when CHIMERA_E2E is absent', () => {
