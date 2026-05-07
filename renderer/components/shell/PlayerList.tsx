@@ -58,6 +58,7 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: Pl
         <li
             data-testid="player-list-item"
             data-player-id={player.playerId}
+            data-ready={player.ready ? 'true' : 'false'}
             style={{
                 display: 'flex',
                 justifyContent: 'space-between',

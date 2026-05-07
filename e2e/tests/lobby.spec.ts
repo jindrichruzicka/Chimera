@@ -30,4 +30,52 @@ test.describe('Lobby lifecycle', () => {
         await expect(hostLobby.connectionStatus).toHaveAttribute('data-status', 'connected');
         await expect(clientLobby.connectionStatus).toHaveAttribute('data-status', 'connected');
     });
+
+    test('both players toggle ready; ready status updates in both windows', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostLobby = new LobbyPage(hostWindow);
+        const clientLobby = new LobbyPage(clientWindow);
+
+        await hostLobby.hostLobby();
+        const lobbyCode = await hostLobby.lobbyCode();
+        await clientLobby.joinLobby(lobbyCode);
+
+        await hostLobby.waitForPlayerCount(2);
+        await clientLobby.waitForPlayerCount(2);
+
+        await hostLobby.toggleReady();
+
+        // Resolve player IDs from each window's local perspective to avoid
+        // relying on positional index (WARN-1 fix: ordering is not guaranteed).
+        const hostPlayerId = await hostLobby.localPlayerId();
+        const clientPlayerId = await clientLobby.localPlayerId();
+        if (!hostPlayerId) throw new Error('Could not determine host player ID');
+        if (!clientPlayerId) throw new Error('Could not determine client player ID');
+
+        await expect.poll(() => hostLobby.playerReadyStatusById(hostPlayerId)).toBe('true');
+        await expect.poll(() => clientLobby.playerReadyStatusById(hostPlayerId)).toBe('true');
+        await expect.poll(() => hostLobby.playerReadyStatusById(clientPlayerId)).toBe('false');
+        await expect.poll(() => clientLobby.playerReadyStatusById(clientPlayerId)).toBe('false');
+
+        await clientLobby.toggleReady();
+
+        await expect
+            .poll(() =>
+                Promise.all([
+                    hostLobby.playerReadyStatusById(hostPlayerId),
+                    hostLobby.playerReadyStatusById(clientPlayerId),
+                ]),
+            )
+            .toEqual(['true', 'true']);
+        await expect
+            .poll(() =>
+                Promise.all([
+                    clientLobby.playerReadyStatusById(hostPlayerId),
+                    clientLobby.playerReadyStatusById(clientPlayerId),
+                ]),
+            )
+            .toEqual(['true', 'true']);
+    });
 });

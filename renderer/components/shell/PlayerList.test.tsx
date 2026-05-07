@@ -136,6 +136,25 @@ describe('PlayerList', () => {
         expect(notReadyBgColor).toContain('rgb');
     });
 
+    it('exposes each player ready state on the row data-ready attribute', () => {
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'player-1',
+                gameId: 'tactics',
+            },
+            players: [
+                { playerId: 'player-1', displayName: 'Alice', ready: true },
+                { playerId: 'player-2', displayName: 'Bob', ready: false },
+            ],
+        };
+
+        render(<PlayerList />);
+
+        expect(getPlayerRow('player-1').getAttribute('data-ready')).toBe('true');
+        expect(getPlayerRow('player-2').getAttribute('data-ready')).toBe('false');
+    });
+
     it('shows (You) indicator and toggle button only for local player', () => {
         const onToggleReady = vi.fn();
 

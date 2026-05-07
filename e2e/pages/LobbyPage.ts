@@ -37,6 +37,28 @@ export class LobbyPage {
         await this.connectionStatus.waitFor({ state: 'visible' });
     }
 
+    public async toggleReady(): Promise<void> {
+        await this.readyButton.click();
+    }
+
+    public async playerReadyStatus(index: number): Promise<string | null> {
+        const item = this.playerListItems.nth(index);
+        await item.waitFor({ state: 'visible' });
+        return item.getAttribute('data-ready');
+    }
+
+    public async localPlayerId(): Promise<string | null> {
+        const item = this.playerListItems.filter({ hasText: '(You)' });
+        await item.waitFor({ state: 'visible' });
+        return item.getAttribute('data-player-id');
+    }
+
+    public async playerReadyStatusById(playerId: string): Promise<string | null> {
+        const item = this.playerList.locator(`[data-player-id="${playerId}"]`);
+        await item.waitFor({ state: 'visible' });
+        return item.getAttribute('data-ready');
+    }
+
     public async waitForPlayerCount(count: number): Promise<void> {
         if (count < 1) throw new Error('waitForPlayerCount requires count >= 1');
         await this.playerListItems.nth(count - 1).waitFor({ state: 'visible' });

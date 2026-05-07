@@ -15,16 +15,19 @@ interface BuildPageDoubleResult {
     readonly filledValues: { readonly testId: string; readonly value: string }[];
     readonly waitedTestIds: string[];
     readonly nthSelections: { readonly testId: string; readonly index: number }[];
+    readonly attributeReads: { readonly testId: string; readonly name: string }[];
 }
 
 const buildPageDouble = (
     textByTestId: Readonly<Record<string, string>> = {},
+    attributesByTestId: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
 ): BuildPageDoubleResult => {
     const requestedTestIds: string[] = [];
     const clickedTestIds: string[] = [];
     const filledValues: { readonly testId: string; readonly value: string }[] = [];
     const waitedTestIds: string[] = [];
     const nthSelections: { readonly testId: string; readonly index: number }[] = [];
+    const attributeReads: { readonly testId: string; readonly name: string }[] = [];
 
     const createLocator = (testId: string): Locator => {
         const recordNthSelection: IndexRecorder = (index: number): void => {
@@ -42,6 +45,10 @@ const buildPageDouble = (
                 waitedTestIds.push(testId);
             },
             innerText: async (): Promise<string> => textByTestId[testId] ?? '',
+            getAttribute: async (name: string): Promise<string | null> => {
+                attributeReads.push({ testId, name });
+                return attributesByTestId[testId]?.[name] ?? null;
+            },
             nth: (index: number): Locator => {
                 recordNthSelection(index);
                 return createLocator(testId);
@@ -65,6 +72,7 @@ const buildPageDouble = (
         filledValues,
         waitedTestIds,
         nthSelections,
+        attributeReads,
     };
 };
 
@@ -128,6 +136,33 @@ describe('LobbyPage', () => {
         expect(clickedTestIds).toEqual(['join-lobby', 'confirm-join']);
         expect(filledValues).toEqual([{ testId: 'address-input', value: 'ws://localhost:7779' }]);
         expect(waitedTestIds).toEqual(['connection-status']);
+    });
+
+    it('toggles the local player ready state from the ready button', async () => {
+        const { page, clickedTestIds } = buildPageDouble();
+        const lobbyPage = new LobbyPage(page);
+
+        await lobbyPage.toggleReady();
+
+        expect(clickedTestIds).toEqual(['ready-toggle']);
+    });
+
+    it('reads the data-ready attribute from the indexed player list item', async () => {
+        const { page, waitedTestIds, nthSelections, attributeReads } = buildPageDouble(
+            {},
+            {
+                'player-list-item': {
+                    'data-ready': 'true',
+                },
+            },
+        );
+        const lobbyPage = new LobbyPage(page);
+
+        await expect(lobbyPage.playerReadyStatus(1)).resolves.toBe('true');
+
+        expect(nthSelections).toEqual([{ testId: 'player-list-item', index: 1 }]);
+        expect(waitedTestIds).toEqual(['player-list-item']);
+        expect(attributeReads).toEqual([{ testId: 'player-list-item', name: 'data-ready' }]);
     });
 
     it('waits for the nth player list item to become visible', async () => {
