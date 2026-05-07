@@ -12,7 +12,6 @@
  * the lobby join flow must complete the full WebSocket handshake.
  */
 import { test, expect } from '../fixtures/lobby.fixture';
-import { MainMenuPage } from '../pages/MainMenuPage';
 import { LobbyPage } from '../pages/LobbyPage';
 
 test.describe('Lobby lifecycle', () => {
@@ -20,12 +19,6 @@ test.describe('Lobby lifecycle', () => {
         hostWindow,
         clientWindow,
     }) => {
-        const hostMainMenu = new MainMenuPage(hostWindow);
-        const clientMainMenu = new MainMenuPage(clientWindow);
-
-        await hostMainMenu.navigateToLobby();
-        await clientMainMenu.navigateToLobby();
-
         const hostLobby = new LobbyPage(hostWindow);
         const clientLobby = new LobbyPage(clientWindow);
 

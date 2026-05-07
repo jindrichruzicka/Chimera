@@ -5,6 +5,7 @@ import type {
     PlayerProfile,
     ProfileRepository,
 } from '@chimera/simulation/profile/ProfileSchema.js';
+import type { ChimeraRendererUrl } from './index.js';
 
 // ── pino mock — prevent SonicBoom from opening real file descriptors ──────────
 vi.mock('pino', () => {
@@ -301,6 +302,7 @@ const {
     resolveRuntimePaths,
     resolveRendererProtocolFilePath,
     registerRendererProtocolScheme,
+    sanitiseE2eInitialUrl,
     CHIMERA_RENDERER_URL,
     createDefaultPlayerProfile,
     ensureActiveProfile,
@@ -418,6 +420,21 @@ describe('createMainWindow', () => {
 
         expect(win.loadURL).toHaveBeenCalledTimes(1);
         expect(win.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_URL);
+        expect(win.loadFile).not.toHaveBeenCalled();
+    });
+
+    it('loads the supplied initial URL override when provided', () => {
+        const initialUrl = 'chimera://renderer/lobby/' as ChimeraRendererUrl;
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+            initialUrl,
+        });
+
+        expect(win.loadURL).toHaveBeenCalledTimes(1);
+        expect(win.loadURL).toHaveBeenCalledWith(initialUrl);
         expect(win.loadFile).not.toHaveBeenCalled();
     });
 
@@ -542,6 +559,63 @@ describe('createMainWindow', () => {
         expect(mockLogger.warn).toHaveBeenCalledWith(
             '[chimera] renderer failed to load: 500 ERR_INVALID_URL',
         );
+    });
+
+    it('throws when initialUrl has a non-chimera protocol (WARN-1 depth-of-defence)', () => {
+        expect(() => {
+            createMainWindow({
+                preloadPath: PRELOAD,
+                rendererEntry: RENDERER_ENTRY,
+                env: 'production',
+                logger: createNoopLogger(),
+                // Cast simulates a future caller bypassing the branded-type guard
+                initialUrl: 'https://evil.example.com/' as unknown as ChimeraRendererUrl,
+            });
+        }).toThrow();
+    });
+
+    it('throws when initialUrl uses chimera: protocol but wrong host (WARN-1 depth-of-defence)', () => {
+        expect(() => {
+            createMainWindow({
+                preloadPath: PRELOAD,
+                rendererEntry: RENDERER_ENTRY,
+                env: 'production',
+                logger: createNoopLogger(),
+                initialUrl: 'chimera://evil/lobby/' as unknown as ChimeraRendererUrl,
+            });
+        }).toThrow();
+    });
+});
+
+describe('sanitiseE2eInitialUrl (BLOCK-1)', () => {
+    it('accepts a valid chimera://renderer/... URL and returns it unchanged', () => {
+        expect(sanitiseE2eInitialUrl('chimera://renderer/lobby/')).toBe(
+            'chimera://renderer/lobby/',
+        );
+    });
+
+    it('returns CHIMERA_RENDERER_URL when protocol is https (remote URL attack)', () => {
+        expect(sanitiseE2eInitialUrl('https://evil.example.com/')).toBe(CHIMERA_RENDERER_URL);
+    });
+
+    it('returns CHIMERA_RENDERER_URL when protocol is http', () => {
+        expect(sanitiseE2eInitialUrl('http://localhost:3000/')).toBe(CHIMERA_RENDERER_URL);
+    });
+
+    it('returns CHIMERA_RENDERER_URL when protocol is correct but host is wrong', () => {
+        expect(sanitiseE2eInitialUrl('chimera://evil/lobby/')).toBe(CHIMERA_RENDERER_URL);
+    });
+
+    it('returns CHIMERA_RENDERER_URL for a completely different protocol', () => {
+        expect(sanitiseE2eInitialUrl('file:///etc/passwd')).toBe(CHIMERA_RENDERER_URL);
+    });
+
+    it('returns CHIMERA_RENDERER_URL for a malformed URL that new URL() rejects', () => {
+        expect(sanitiseE2eInitialUrl('not-a-url')).toBe(CHIMERA_RENDERER_URL);
+    });
+
+    it('returns CHIMERA_RENDERER_URL when called with undefined', () => {
+        expect(sanitiseE2eInitialUrl(undefined)).toBe(CHIMERA_RENDERER_URL);
     });
 });
 
@@ -1376,6 +1450,37 @@ describe('main', () => {
         const [win] = browserWindowInstances;
         expect(win?.options.webPreferences?.contextIsolation).toBe(true);
         expect(win?.options.webPreferences?.nodeIntegration).toBe(false);
+    });
+
+    it('passes CHIMERA_E2E_INITIAL_URL to the main window only when CHIMERA_E2E=1', async () => {
+        const origEnv = process.env;
+        const initialUrl = 'chimera://renderer/lobby/';
+        process.env = { ...origEnv, CHIMERA_E2E: '1', CHIMERA_E2E_INITIAL_URL: initialUrl };
+        try {
+            await main();
+        } finally {
+            process.env = origEnv;
+        }
+
+        const [win] = browserWindowInstances;
+        expect(win?.loadURL).toHaveBeenCalledWith(initialUrl);
+    });
+
+    it('ignores CHIMERA_E2E_INITIAL_URL outside E2E mode', async () => {
+        const origEnv = process.env;
+        const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
+        process.env = {
+            ...envWithoutE2e,
+            CHIMERA_E2E_INITIAL_URL: 'chimera://renderer/lobby/',
+        };
+        try {
+            await main();
+        } finally {
+            process.env = origEnv;
+        }
+
+        const [win] = browserWindowInstances;
+        expect(win?.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_URL);
     });
 
     it('propagates wasCleanExit=true when SaveManager.clearCleanExitFlag returns true', async () => {

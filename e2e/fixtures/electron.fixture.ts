@@ -3,6 +3,7 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { existsSync } from 'node:fs';
 import path from 'path';
 import globalSetup from '../global-setup';
+import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
 
 export interface ElectronFixtures {
     readonly electronApp: ElectronApplication;
@@ -19,10 +20,12 @@ export interface RendererConsoleEntry {
 }
 
 export type E2eElectronRole = 'host' | 'client';
+export type E2eInitialRoute = `/${string}`;
 
 export interface E2eElectronLaunchOptions {
     readonly port: string;
     readonly role?: E2eElectronRole;
+    readonly initialRoute?: E2eInitialRoute;
 }
 
 export interface E2eElectronLaunchConfig {
@@ -78,6 +81,14 @@ export function createE2eElectronLaunchConfig(
 
     if (options.role !== undefined) {
         env['CHIMERA_ROLE'] = options.role;
+    }
+
+    if (options.initialRoute !== undefined) {
+        const initialRoute = options.initialRoute.endsWith('/')
+            ? options.initialRoute
+            : `${options.initialRoute}/`;
+        env['CHIMERA_E2E_INITIAL_URL'] =
+            `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}${initialRoute}`;
     }
 
     return {

@@ -22,7 +22,11 @@ export const test = electronTest.extend<LobbyFixtures>({
     // @chimera-review: Playwright fixture signature requires empty destructuring for unused fixture dependencies
     // eslint-disable-next-line no-empty-pattern
     hostApp: async ({}, use) => {
-        const app = await launchE2eElectronApplication({ port: '7779', role: 'host' });
+        const app = await launchE2eElectronApplication({
+            port: '7779',
+            role: 'host',
+            initialRoute: '/lobby',
+        });
         try {
             await use(app);
         } finally {
@@ -33,7 +37,11 @@ export const test = electronTest.extend<LobbyFixtures>({
     // @chimera-review: Playwright fixture signature requires empty destructuring for unused fixture dependencies
     // eslint-disable-next-line no-empty-pattern
     clientApp: async ({}, use) => {
-        const app = await launchE2eElectronApplication({ port: '7779', role: 'client' });
+        const app = await launchE2eElectronApplication({
+            port: '7779',
+            role: 'client',
+            initialRoute: '/lobby',
+        });
         try {
             await use(app);
         } finally {

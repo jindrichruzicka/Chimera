@@ -103,6 +103,12 @@ export default defineConfig({
 
 ```typescript
 // e2e/fixtures/electron.fixture.ts
+export interface E2eElectronLaunchOptions {
+    readonly port: string;
+    readonly role?: 'host' | 'client';
+    readonly initialRoute?: `/${string}`;
+}
+
 export const test = base.extend<ElectronFixtures>({
     electronApp: async ({}, use) => {
         const app = await electron.launch({
@@ -131,29 +137,19 @@ export const test = base.extend<ElectronFixtures>({
 // e2e/fixtures/lobby.fixture.ts
 export const test = electronTest.extend<LobbyFixtures>({
     hostApp: async ({}, use) => {
-        const app = await electron.launch({
-            args: [path.resolve(__dirname, '../../electron/main/index.js')],
-            env: {
-                ...process.env,
-                CHIMERA_E2E: '1',
-                NODE_ENV: 'test',
-                CHIMERA_PORT: '7779',
-                CHIMERA_ROLE: 'host',
-            },
+        const app = await launchE2eElectronApplication({
+            port: '7779',
+            role: 'host',
+            initialRoute: '/lobby',
         });
         await use(app);
         await app.close();
     },
     clientApp: async ({}, use) => {
-        const app = await electron.launch({
-            args: [path.resolve(__dirname, '../../electron/main/index.js')],
-            env: {
-                ...process.env,
-                CHIMERA_E2E: '1',
-                NODE_ENV: 'test',
-                CHIMERA_PORT: '7779',
-                CHIMERA_ROLE: 'client',
-            },
+        const app = await launchE2eElectronApplication({
+            port: '7779',
+            role: 'client',
+            initialRoute: '/lobby',
         });
         await use(app);
         await app.close();
@@ -174,6 +170,13 @@ export const test = electronTest.extend<LobbyFixtures>({
 
 export { expect } from '@playwright/test';
 ```
+
+`initialRoute` is an E2E-only shortcut for loading a static-export route directly.
+When provided, `createE2eElectronLaunchConfig()` sets `CHIMERA_E2E_INITIAL_URL`, and
+`createMainWindow()` loads that URL instead of the root app URL. The value must be a
+slash-prefixed Next.js route path; the fixture appends a trailing slash so it matches
+the renderer's `trailingSlash: true` static-export output. The override is read only
+when `CHIMERA_E2E=1`; production builds always load the default renderer URL.
 
 ---
 
@@ -669,7 +672,13 @@ The block is a compile-time dead-code elimination target in production builds. T
 | Absent / `0` | Production mode. `__e2eHooks` not set.                                                                            |
 | `1`          | Test mode. `__e2eHooks` registered. Fixed `CHIMERA_PORT` from env respected. Lobby auto-connect skips NAT checks. |
 
-The flag is not forwarded to the renderer process. No production code path branches on `CHIMERA_E2E` outside `simulation-host.ts` and `lobby-manager.ts` (provider port binding).
+The flag is not forwarded to the renderer process. Main-process code paths that branch on `CHIMERA_E2E`:
+
+| Location                                          | Effect                                                                                                                                                                                                                                                                                                                                                                 |
+| ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `simulation-host.ts`                              | Registers `__e2eHooks` on the window object.                                                                                                                                                                                                                                                                                                                           |
+| `lobby-manager.ts`                                | Binds to a fixed `CHIMERA_PORT`; skips NAT checks.                                                                                                                                                                                                                                                                                                                     |
+| `electron/main/index.ts` — `createWindow` closure | Reads `CHIMERA_E2E_INITIAL_URL` and, after validation through `sanitiseE2eInitialUrl`, passes it as `initialUrl` to `createMainWindow` so the window opens on a specific app route. Only `chimera://renderer/…` URLs are accepted; any other value (remote URL, wrong protocol, malformed string) is silently replaced by the default `chimera://renderer/index.html`. |
 
 ---
 

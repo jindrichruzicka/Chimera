@@ -77,8 +77,16 @@ import {
     type PlayerProfile,
     type ProfileRepository,
 } from '@chimera/simulation/profile/ProfileSchema.js';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+    CHIMERA_RENDERER_URL,
+    type ChimeraRendererUrl,
+} from './renderer-url.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
+export { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL, CHIMERA_RENDERER_URL };
+export type { ChimeraRendererUrl };
 
 export const DEFAULT_LOCAL_PROFILE_ID = 'local-default';
 
@@ -183,6 +191,12 @@ export interface CreateMainWindowOptions {
     readonly preloadPath: string;
     /** Absolute path to the Next.js static-export entry HTML file. */
     readonly rendererEntry: string;
+    /**
+     * Optional deep-link override.  Must be a validated {@link ChimeraRendererUrl};
+     * passing an unvalidated `string` is a compile-error.  Use
+     * `sanitiseE2eInitialUrl` to obtain a value of this type.
+     */
+    readonly initialUrl?: ChimeraRendererUrl;
     readonly env: ChimeraEnv;
     /** Logger for did-fail-load events; always provided in production main() (Invariant #67). */
     readonly logger: Logger;
@@ -207,10 +221,6 @@ export interface RuntimePaths {
 
 const DEFAULT_WINDOW_WIDTH = 1280;
 const DEFAULT_WINDOW_HEIGHT = 800;
-const CHIMERA_RENDERER_PROTOCOL = 'chimera';
-const CHIMERA_RENDERER_HOST = 'renderer';
-
-export const CHIMERA_RENDERER_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/index.html`;
 
 export interface RendererProtocolHeaders {
     get(name: string): string | null;
@@ -561,6 +571,33 @@ export function registerClientRevealForwarding(
 }
 
 /**
+ * Validate a CHIMERA_E2E_INITIAL_URL value from the environment.
+ *
+ * Security invariant (BLOCK-1): the env var is untrusted input — accept only
+ * URLs whose protocol is `chimera:` and whose host is `renderer`.  Any other
+ * value (remote https, wrong host, malformed string, undefined) falls back to
+ * the canonical app entry URL so a BrowserWindow can never load a remote URL
+ * via the E2E path.
+ */
+export function sanitiseE2eInitialUrl(raw: string | undefined): ChimeraRendererUrl {
+    if (raw === undefined) {
+        return CHIMERA_RENDERER_URL;
+    }
+    try {
+        const parsed = new URL(raw);
+        if (
+            parsed.protocol === `${CHIMERA_RENDERER_PROTOCOL}:` &&
+            parsed.hostname === CHIMERA_RENDERER_HOST
+        ) {
+            return raw as ChimeraRendererUrl;
+        }
+    } catch {
+        // malformed URL — fall through to default
+    }
+    return CHIMERA_RENDERER_URL;
+}
+
+/**
  * Construct the primary renderer `BrowserWindow` and load the Next.js static
  * export through the `chimera://renderer` protocol.
  *
@@ -588,7 +625,21 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         },
     });
 
-    void window.loadURL(CHIMERA_RENDERER_URL);
+    const urlToLoad = options.initialUrl ?? CHIMERA_RENDERER_URL;
+    // Defense-in-depth: validate protocol and host even though the branded type
+    // already enforces this statically.  Guards against callers that bypass the
+    // type via `as`.
+    const parsed = new URL(urlToLoad);
+    if (
+        parsed.protocol !== `${CHIMERA_RENDERER_PROTOCOL}:` ||
+        parsed.hostname !== CHIMERA_RENDERER_HOST
+    ) {
+        throw new Error(
+            `[chimera] createMainWindow: refusing to load untrusted URL "${urlToLoad}". ` +
+                `Only ${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/… is permitted (WARN-1).`,
+        );
+    }
+    void window.loadURL(urlToLoad);
 
     // WARN-2: block all new-window / popup navigations
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
@@ -1178,7 +1229,16 @@ export async function main(): Promise<void> {
     });
 
     const createWindow = (): void => {
-        mainWindow = createMainWindow({ preloadPath, rendererEntry, env, logger });
+        mainWindow = createMainWindow({
+            preloadPath,
+            rendererEntry,
+            initialUrl:
+                process.env['CHIMERA_E2E'] === '1'
+                    ? sanitiseE2eInitialUrl(process.env['CHIMERA_E2E_INITIAL_URL'])
+                    : CHIMERA_RENDERER_URL,
+            env,
+            logger,
+        });
     };
 
     void app.whenReady().then(() => {
