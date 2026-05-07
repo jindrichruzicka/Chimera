@@ -432,6 +432,38 @@ describe('registerLobbyHandlers', () => {
         expect(result).toEqual(mockInfo);
     });
 
+    it('adds the current local profile attestation to chimera:lobby:join when a ProfileManager is wired', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const profile = makeProfile({ localProfileId: 'local-client', displayName: 'Client' });
+        const profileManager = {
+            currentAttestation: vi.fn<() => PlayerProfile>().mockReturnValue(profile),
+            updateLocal: vi
+                .fn<(patch: Partial<Omit<PlayerProfile, 'localProfileId'>>) => PlayerProfile>()
+                .mockReturnValue(profile),
+            listLocalSlots: vi.fn(async () => []),
+            switchLocalSlot: vi.fn(async () => profile),
+        };
+        const mockInfo: LobbyInfo = {
+            sessionId: 'sess-1',
+            hostId: toPlayerId('host-1'),
+            gameId: 'tactics',
+        };
+        const spy = vi.spyOn(lobbyManager, 'joinLobby').mockResolvedValue(mockInfo);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager, profileManager });
+
+        const handler = stub.handled.get(LOBBY_JOIN_CHANNEL);
+        expect(handler).toBeDefined();
+
+        const params: JoinLobbyParams = { address: '127.0.0.1:7777:token' };
+        const result = await Promise.resolve(handler?.({}, params));
+
+        expect(profileManager.currentAttestation).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledWith({ address: params.address, profile });
+        expect(result).toEqual(mockInfo);
+    });
+
     it('registers chimera:lobby:leave as an invoke handler that calls lobbyManager.closeLobby', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();

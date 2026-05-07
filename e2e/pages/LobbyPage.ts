@@ -10,6 +10,7 @@ export class LobbyPage {
     readonly connectionStatus: Locator;
     readonly addressInput: Locator;
     readonly confirmJoinButton: Locator;
+    readonly sessionId: Locator;
 
     public constructor(private readonly page: Page) {
         this.hostButton = page.getByTestId('host-lobby');
@@ -21,6 +22,7 @@ export class LobbyPage {
         this.connectionStatus = page.getByTestId('connection-status');
         this.addressInput = page.getByTestId('address-input');
         this.confirmJoinButton = page.getByTestId('confirm-join');
+        this.sessionId = page.getByTestId('lobby-session-id');
     }
 
     public async hostLobby(): Promise<void> {
@@ -38,5 +40,10 @@ export class LobbyPage {
     public async waitForPlayerCount(count: number): Promise<void> {
         if (count < 1) throw new Error('waitForPlayerCount requires count >= 1');
         await this.playerListItems.nth(count - 1).waitFor({ state: 'visible' });
+    }
+
+    public async lobbyCode(): Promise<string> {
+        await this.sessionId.waitFor({ state: 'visible' });
+        return (await this.sessionId.innerText()).trim();
     }
 }

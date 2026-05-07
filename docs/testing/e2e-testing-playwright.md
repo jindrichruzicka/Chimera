@@ -191,6 +191,7 @@ export class LobbyPage {
     readonly readyButton: Locator;
     readonly startButton: Locator;
     readonly playerList: Locator;
+    readonly sessionId: Locator;
     readonly connectionStatus: Locator;
 
     constructor(private readonly page: Page) {
@@ -199,6 +200,7 @@ export class LobbyPage {
         this.readyButton = page.getByTestId('ready-toggle');
         this.startButton = page.getByTestId('start-match');
         this.playerList = page.getByTestId('player-list');
+        this.sessionId = page.getByTestId('lobby-session-id');
         this.connectionStatus = page.getByTestId('connection-status');
     }
 
@@ -219,6 +221,11 @@ export class LobbyPage {
             .getByTestId('player-list-item')
             .nth(count - 1)
             .waitFor({ state: 'visible' });
+    }
+
+    async lobbyCode(): Promise<string> {
+        await this.sessionId.waitFor({ state: 'visible' });
+        return (await this.sessionId.innerText()).trim();
     }
 }
 ```
@@ -521,6 +528,7 @@ export async function assertTickAdvanced(
 ```typescript
 // e2e/tests/lobby.spec.ts
 import { test, expect } from '../fixtures/lobby.fixture';
+import { MainMenuPage } from '../pages/MainMenuPage';
 import { LobbyPage } from '../pages/LobbyPage';
 
 test.describe('Lobby lifecycle', () => {
@@ -528,14 +536,21 @@ test.describe('Lobby lifecycle', () => {
         hostWindow,
         clientWindow,
     }) => {
+        const hostMainMenu = new MainMenuPage(hostWindow);
+        const clientMainMenu = new MainMenuPage(clientWindow);
+
+        await hostMainMenu.navigateToLobby();
+        await clientMainMenu.navigateToLobby();
+
         const hostLobby = new LobbyPage(hostWindow);
         const clientLobby = new LobbyPage(clientWindow);
         await hostLobby.hostLobby();
-        await clientLobby.joinLobby('localhost:7779');
+        const lobbyCode = await hostLobby.lobbyCode();
+        await clientLobby.joinLobby(lobbyCode);
         await hostLobby.waitForPlayerCount(2);
         await clientLobby.waitForPlayerCount(2);
-        await expect(hostLobby.connectionStatus).toContainText('Connected');
-        await expect(clientLobby.connectionStatus).toContainText('Connected');
+        await expect(hostLobby.connectionStatus).toHaveAttribute('data-status', 'connected');
+        await expect(clientLobby.connectionStatus).toHaveAttribute('data-status', 'connected');
     });
 });
 ```

@@ -1,5 +1,6 @@
 import * as path from 'node:path';
-import { app, BrowserWindow, ipcMain, session } from 'electron';
+import { readFile } from 'node:fs/promises';
+import { app, BrowserWindow, ipcMain, protocol as electronProtocol, session } from 'electron';
 import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera/shared/constants.js';
 import {
     registerGameHandlers,
@@ -22,6 +23,8 @@ import { registerCrashReporter } from './logging/crash-reporter.js';
 import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
+import { ProfileManager } from './profile/ProfileManager.js';
+import { FileProfileRepository } from './profile/FileProfileRepository.js';
 import { toSlotId } from '../preload/api-types.js';
 import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
@@ -68,8 +71,46 @@ import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.
 import { SimulationHost } from './runtime/SimulationHost.js';
 import { registerE2eHooks, getE2eHooks } from './runtime/e2e-hooks.js';
 import { assertProductionDebugGuard } from './startup-guard.js';
+import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import {
+    localProfileId,
+    type PlayerProfile,
+    type ProfileRepository,
+} from '@chimera/simulation/profile/ProfileSchema.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
+
+export const DEFAULT_LOCAL_PROFILE_ID = 'local-default';
+
+export function createDefaultPlayerProfile(
+    rawLocalProfileId: string = DEFAULT_LOCAL_PROFILE_ID,
+): PlayerProfile {
+    return {
+        localProfileId: localProfileId(rawLocalProfileId),
+        displayName: 'Player',
+        avatar: { kind: 'builtin', ref: buildAssetRef<TextureAsset>('avatar', 'default') },
+        locale: 'en-US',
+    };
+}
+
+function resolveLocalProfileId(rawLocalProfileId: string | undefined): string {
+    const trimmed = rawLocalProfileId?.trim();
+    return trimmed === undefined || trimmed.length === 0 ? DEFAULT_LOCAL_PROFILE_ID : trimmed;
+}
+
+export async function ensureActiveProfile(
+    profileManager: ProfileManager,
+    repository: ProfileRepository,
+    rawLocalProfileId: string | undefined,
+): Promise<PlayerProfile> {
+    const resolvedProfileId = resolveLocalProfileId(rawLocalProfileId);
+    const profileId = localProfileId(resolvedProfileId);
+    const existingProfile = await repository.load(profileId);
+    if (existingProfile === null) {
+        await repository.save(createDefaultPlayerProfile(resolvedProfileId));
+    }
+    return profileManager.getLocal(profileId);
+}
 
 // ── HarnessFlags ──────────────────────────────────────────────────────────────
 
@@ -166,6 +207,206 @@ export interface RuntimePaths {
 
 const DEFAULT_WINDOW_WIDTH = 1280;
 const DEFAULT_WINDOW_HEIGHT = 800;
+const CHIMERA_RENDERER_PROTOCOL = 'chimera';
+const CHIMERA_RENDERER_HOST = 'renderer';
+
+export const CHIMERA_RENDERER_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/index.html`;
+
+export interface RendererProtocolHeaders {
+    get(name: string): string | null;
+}
+
+export interface ResolveRendererProtocolFilePathOptions {
+    readonly rendererRoot: string;
+    readonly requestUrl: string;
+    readonly headers: RendererProtocolHeaders;
+}
+
+export interface RegisterRendererProtocolOptions {
+    readonly protocol: Pick<typeof electronProtocol, 'handle'>;
+    readonly rendererRoot: string;
+    readonly logger: Logger;
+}
+
+export interface RegisterRendererProtocolSchemeOptions {
+    readonly registerSchemesAsPrivileged: typeof electronProtocol.registerSchemesAsPrivileged;
+}
+
+export function registerRendererProtocolScheme(
+    options: RegisterRendererProtocolSchemeOptions,
+): void {
+    options.registerSchemesAsPrivileged([
+        {
+            scheme: CHIMERA_RENDERER_PROTOCOL,
+            privileges: {
+                standard: true,
+                secure: true,
+                supportFetchAPI: true,
+            },
+        },
+    ]);
+}
+
+registerRendererProtocolScheme(electronProtocol);
+
+const RSC_CONTENT_TYPE = 'text/x-component; charset=utf-8';
+const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
+
+const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
+    '.css': 'text/css; charset=utf-8',
+    '.html': HTML_CONTENT_TYPE,
+    '.js': 'application/javascript; charset=utf-8',
+    '.json': 'application/json; charset=utf-8',
+    '.map': 'application/json; charset=utf-8',
+    '.png': 'image/png',
+    '.svg': 'image/svg+xml; charset=utf-8',
+    '.txt': RSC_CONTENT_TYPE,
+    '.webp': 'image/webp',
+};
+
+function isRendererProtocolRscRequest(url: URL, headers: RendererProtocolHeaders): boolean {
+    return url.searchParams.has('_rsc') || headers.get('RSC') === '1';
+}
+
+function isWithinDirectory(root: string, candidate: string): boolean {
+    const relative = path.relative(root, candidate);
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+}
+
+function normaliseRendererProtocolPath(url: URL, headers: RendererProtocolHeaders): string | null {
+    if (
+        url.protocol !== `${CHIMERA_RENDERER_PROTOCOL}:` ||
+        url.hostname !== CHIMERA_RENDERER_HOST
+    ) {
+        return null;
+    }
+
+    if (/%2e|%2f|%5c/i.test(url.pathname)) {
+        return null;
+    }
+
+    let routePath: string;
+    try {
+        routePath = decodeURIComponent(url.pathname);
+    } catch {
+        return null;
+    }
+
+    if (routePath.includes('\\')) {
+        return null;
+    }
+
+    const nestedNextPathIndex = routePath.indexOf('/_next/');
+    if (nestedNextPathIndex > 0) {
+        routePath = routePath.slice(nestedNextPathIndex);
+    }
+
+    if (routePath === '' || routePath === '/') {
+        return '/index.html';
+    }
+
+    if (routePath.startsWith('/_next/')) {
+        return routePath;
+    }
+
+    const isRsc = isRendererProtocolRscRequest(url, headers);
+    const extension = path.posix.extname(routePath);
+
+    if (extension === '.txt' && !routePath.endsWith('/index.txt')) {
+        return `${routePath.slice(0, -'.txt'.length)}/index.txt`;
+    }
+
+    if (routePath.endsWith('/')) {
+        return `${routePath}index.${isRsc ? 'txt' : 'html'}`;
+    }
+
+    if (extension === '') {
+        return `${routePath}/index.${isRsc ? 'txt' : 'html'}`;
+    }
+
+    return routePath;
+}
+
+export function resolveRendererProtocolFilePath(
+    options: ResolveRendererProtocolFilePathOptions,
+): string | null {
+    if (/%2e|%2f|%5c/i.test(options.requestUrl)) {
+        return null;
+    }
+
+    let url: URL;
+    try {
+        url = new URL(options.requestUrl);
+    } catch {
+        return null;
+    }
+
+    const protocolPath = normaliseRendererProtocolPath(url, options.headers);
+    if (protocolPath === null) {
+        return null;
+    }
+
+    const root = path.resolve(options.rendererRoot);
+    const candidate = path.resolve(root, `.${protocolPath}`);
+    return isWithinDirectory(root, candidate) ? candidate : null;
+}
+
+function contentTypeForPath(filePath: string): string {
+    return CONTENT_TYPES_BY_EXTENSION[path.extname(filePath)] ?? 'application/octet-stream';
+}
+
+function codeFromError(error: unknown): string | undefined {
+    if (typeof error !== 'object' || error === null || !('code' in error)) {
+        return undefined;
+    }
+
+    const code = error.code;
+    return typeof code === 'string' ? code : undefined;
+}
+
+async function handleRendererProtocolRequest(
+    rendererRoot: string,
+    logger: Logger,
+    request: Request,
+): Promise<Response> {
+    const filePath = resolveRendererProtocolFilePath({
+        rendererRoot,
+        requestUrl: request.url,
+        headers: request.headers,
+    });
+
+    if (filePath === null) {
+        return new Response('Not found', { status: 404 });
+    }
+
+    try {
+        const data = await readFile(filePath);
+        return new Response(data, {
+            status: 200,
+            headers: {
+                'content-type': contentTypeForPath(filePath),
+            },
+        });
+    } catch (error) {
+        const code = codeFromError(error);
+        if (code === 'ENOENT' || code === 'ENOTDIR') {
+            return new Response('Not found', { status: 404 });
+        }
+
+        logger.warn('renderer protocol failed to read static asset', {
+            path: filePath,
+            error: error instanceof Error ? error.message : String(error),
+        });
+        return new Response('Internal server error', { status: 500 });
+    }
+}
+
+export function registerRendererProtocol(options: RegisterRendererProtocolOptions): void {
+    const rendererRoot = path.resolve(options.rendererRoot);
+    options.protocol.handle(CHIMERA_RENDERER_PROTOCOL, (request) =>
+        handleRendererProtocolRequest(rendererRoot, options.logger, request),
+    );
+}
 
 /**
  * Resolve the `ChimeraEnv` runtime mode from the raw `CHIMERA_ENV` environment
@@ -321,7 +562,7 @@ export function registerClientRevealForwarding(
 
 /**
  * Construct the primary renderer `BrowserWindow` and load the Next.js static
- * export (`renderer/out/index.html`).
+ * export through the `chimera://renderer` protocol.
  *
  * Security invariants (see docs/executive-architecture/architecture-invariants.md, Invariants #3 and #4):
  *   - `nodeIntegration` MUST be `false`
@@ -347,14 +588,14 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         },
     });
 
-    void window.loadFile(options.rendererEntry);
+    void window.loadURL(CHIMERA_RENDERER_URL);
 
     // WARN-2: block all new-window / popup navigations
     window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-    // WARN-3: prevent in-page navigations to non-file URLs
+    // WARN-3: prevent in-page navigations outside the renderer app protocol.
     window.webContents.on('will-navigate', (event, url) => {
-        if (!url.startsWith('file://')) {
+        if (!url.startsWith(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/`)) {
             event.preventDefault();
         }
     });
@@ -435,6 +676,7 @@ export async function main(): Promise<void> {
     });
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
     const userData = app.getPath('userData');
+    const harnessFlags = parseHarnessFlags(process.argv, process.env);
 
     // Shared in-memory ring buffer: used by the logs IPC `readRecent` handler
     // so the renderer can fetch recent entries for export/debug.
@@ -544,6 +786,9 @@ export async function main(): Promise<void> {
     // so LobbyManager stays a pure orchestrator (Invariant #61).
     const playerDirectory = new PlayerDirectory();
     const profileGate = createProfileGate(playerDirectory);
+    const profileRepository = new FileProfileRepository(path.join(userData, 'profiles'));
+    const profileManager = new ProfileManager(profileRepository);
+    await ensureActiveProfile(profileManager, profileRepository, harnessFlags?.profileId);
 
     // The single live `SessionRuntime` for the currently-hosted session, or
     // `null` when no session is running.  Wired by the `onSessionHosted`
@@ -825,6 +1070,7 @@ export async function main(): Promise<void> {
     registerLobbyHandlers({
         ipcMain,
         lobbyManager,
+        profileManager,
         logger: logger.child({ module: 'lobby' }),
     });
 
@@ -927,6 +1173,7 @@ export async function main(): Promise<void> {
     registerProfileHandlers({
         ipcMain,
         logger: logger.child({ module: 'profile' }),
+        profileManager,
         playerDirectory,
     });
 
@@ -943,6 +1190,11 @@ export async function main(): Promise<void> {
                 callback(false);
             },
         );
+        registerRendererProtocol({
+            protocol: electronProtocol,
+            rendererRoot: path.dirname(rendererEntry),
+            logger: logger.child({ module: 'renderer-protocol' }),
+        });
         createWindow();
     });
 

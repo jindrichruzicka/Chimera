@@ -150,7 +150,8 @@ export default function LobbyPage() {
             >
                 <h3>Lobby Information</h3>
                 <p>
-                    <strong>Session ID:</strong> {lobbyState.info.sessionId}
+                    <strong>Session ID:</strong>{' '}
+                    <span data-testid="lobby-session-id">{lobbyState.info.sessionId}</span>
                 </p>
                 <p>
                     <strong>Host ID:</strong> {lobbyState.info.hostId}

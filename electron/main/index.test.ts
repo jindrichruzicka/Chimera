@@ -1,5 +1,10 @@
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type {
+    LocalProfileId,
+    PlayerProfile,
+    ProfileRepository,
+} from '@chimera/simulation/profile/ProfileSchema.js';
 
 // ── pino mock — prevent SonicBoom from opening real file descriptors ──────────
 vi.mock('pino', () => {
@@ -204,6 +209,7 @@ class FakeWebContents {
 class FakeBrowserWindow {
     public readonly options: FakeBrowserWindowOptions;
     public readonly loadFile = vi.fn();
+    public readonly loadURL = vi.fn();
     public readonly webContents = new FakeWebContents();
     public readonly isDestroyed = vi.fn<() => boolean>(() => false);
     constructor(options: FakeBrowserWindowOptions) {
@@ -221,6 +227,16 @@ const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
 const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
 const ipcMainOn = vi.fn<(channel: string, handler: () => void) => void>();
+const protocolRegisterSchemesAsPrivileged = vi.fn<
+    (
+        schemes: readonly {
+            readonly scheme: string;
+            readonly privileges?: object;
+        }[],
+    ) => void
+>();
+const protocolHandle =
+    vi.fn<(scheme: string, handler: (request: Request) => Promise<Response>) => void>();
 
 const mockSetPermissionRequestHandler =
     vi.fn<
@@ -246,6 +262,10 @@ vi.mock('electron', () => ({
     ipcMain: {
         handle: ipcMainHandle,
         on: ipcMainOn,
+    },
+    protocol: {
+        registerSchemesAsPrivileged: protocolRegisterSchemesAsPrivileged,
+        handle: protocolHandle,
     },
     session: {
         defaultSession: {
@@ -279,12 +299,18 @@ const {
     parseHarnessFlags,
     registerClientRevealForwarding,
     resolveRuntimePaths,
+    resolveRendererProtocolFilePath,
+    registerRendererProtocolScheme,
+    CHIMERA_RENDERER_URL,
+    createDefaultPlayerProfile,
+    ensureActiveProfile,
     main,
 } = await import('./index.js');
 const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
 const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
 const { playerId } = await import('@chimera/simulation/engine/types.js');
+const { ProfileManager } = await import('./profile/ProfileManager.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
@@ -382,7 +408,7 @@ describe('createMainWindow', () => {
         );
     });
 
-    it('loads the renderer entry HTML file via loadFile', () => {
+    it('loads the renderer through the app protocol URL', () => {
         const win = createMainWindow({
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
@@ -390,8 +416,9 @@ describe('createMainWindow', () => {
             logger: createNoopLogger(),
         });
 
-        expect(win.loadFile).toHaveBeenCalledTimes(1);
-        expect(win.loadFile).toHaveBeenCalledWith(RENDERER_ENTRY);
+        expect(win.loadURL).toHaveBeenCalledTimes(1);
+        expect(win.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_URL);
+        expect(win.loadFile).not.toHaveBeenCalled();
     });
 
     it('opens DevTools when env is development', () => {
@@ -457,9 +484,9 @@ describe('createMainWindow', () => {
         handler(externalEvent, 'https://evil.example.com/');
         expect(preventDefault).toHaveBeenCalledTimes(1);
 
-        // file:// URL: preventDefault must NOT be called
+        // chimera:// renderer URL: preventDefault must NOT be called
         const safeEvent = { preventDefault: vi.fn() };
-        handler(safeEvent, 'file:///renderer/out/index.html');
+        handler(safeEvent, 'chimera://renderer/lobby');
         expect(safeEvent.preventDefault).not.toHaveBeenCalled();
     });
 
@@ -515,6 +542,70 @@ describe('createMainWindow', () => {
         expect(mockLogger.warn).toHaveBeenCalledWith(
             '[chimera] renderer failed to load: 500 ERR_INVALID_URL',
         );
+    });
+});
+
+describe('renderer app protocol', () => {
+    it('registers the chimera renderer scheme as privileged', () => {
+        protocolRegisterSchemesAsPrivileged.mockClear();
+
+        registerRendererProtocolScheme({
+            registerSchemesAsPrivileged: protocolRegisterSchemesAsPrivileged,
+        });
+
+        expect(protocolRegisterSchemesAsPrivileged).toHaveBeenCalledWith([
+            {
+                scheme: 'chimera',
+                privileges: {
+                    standard: true,
+                    secure: true,
+                    supportFetchAPI: true,
+                },
+            },
+        ]);
+    });
+
+    it('maps route navigations to exported HTML files', () => {
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                requestUrl: 'chimera://renderer/lobby',
+                headers: new Headers(),
+            }),
+        ).toBe(path.join('/abs/path/renderer/out', 'lobby', 'index.html'));
+    });
+
+    it('maps RSC route fetches to exported route payloads', () => {
+        const headers = new Headers();
+        headers.set('RSC', '1');
+
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                requestUrl: 'chimera://renderer/lobby?_rsc=test',
+                headers,
+            }),
+        ).toBe(path.join('/abs/path/renderer/out', 'lobby', 'index.txt'));
+    });
+
+    it('maps nested route asset requests back to the shared _next directory', () => {
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                requestUrl: 'chimera://renderer/lobby/_next/static/chunks/app.js',
+                headers: new Headers(),
+            }),
+        ).toBe(path.join('/abs/path/renderer/out', '_next', 'static', 'chunks', 'app.js'));
+    });
+
+    it('rejects renderer protocol paths outside the static export root', () => {
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                requestUrl: 'chimera://renderer/%2e%2e/secret.txt',
+                headers: new Headers(),
+            }),
+        ).toBeNull();
     });
 });
 
@@ -1681,6 +1772,72 @@ describe('parseHarnessFlags', () => {
             CHIMERA_DEV_HARNESS: '1',
         });
         expect(result?.game).toBe('tactics');
+    });
+});
+
+class ProfileRepositoryDouble implements ProfileRepository {
+    readonly savedProfiles: PlayerProfile[] = [];
+    private profile: PlayerProfile | null;
+
+    constructor(initialProfile: PlayerProfile | null = null) {
+        this.profile = initialProfile;
+    }
+
+    async load(localProfileId: LocalProfileId): Promise<PlayerProfile | null> {
+        if (this.profile?.localProfileId === localProfileId) {
+            return this.profile;
+        }
+        return null;
+    }
+
+    async save(profile: PlayerProfile): Promise<void> {
+        this.savedProfiles.push(profile);
+        this.profile = profile;
+    }
+
+    async listLocalSlots(): Promise<
+        readonly { readonly localProfileId: LocalProfileId; readonly displayName: string }[]
+    > {
+        if (this.profile === null) {
+            return [];
+        }
+        return [
+            {
+                localProfileId: this.profile.localProfileId,
+                displayName: this.profile.displayName,
+            },
+        ];
+    }
+
+    async delete(localProfileId: LocalProfileId): Promise<void> {
+        if (this.profile?.localProfileId === localProfileId) {
+            this.profile = null;
+        }
+    }
+}
+
+describe('ensureActiveProfile', () => {
+    it('creates and activates a default profile when the repository is empty', async () => {
+        const repository = new ProfileRepositoryDouble();
+        const profileManager = new ProfileManager(repository);
+
+        const profile = await ensureActiveProfile(profileManager, repository, undefined);
+
+        expect(profile).toEqual(createDefaultPlayerProfile());
+        expect(repository.savedProfiles).toEqual([createDefaultPlayerProfile()]);
+        expect(profileManager.currentAttestation()).toEqual(profile);
+    });
+
+    it('loads an existing requested profile without overwriting it', async () => {
+        const existingProfile = createDefaultPlayerProfile('local-existing');
+        const repository = new ProfileRepositoryDouble(existingProfile);
+        const profileManager = new ProfileManager(repository);
+
+        const profile = await ensureActiveProfile(profileManager, repository, 'local-existing');
+
+        expect(profile).toEqual(existingProfile);
+        expect(repository.savedProfiles).toEqual([]);
+        expect(profileManager.currentAttestation()).toEqual(existingProfile);
     });
 });
 

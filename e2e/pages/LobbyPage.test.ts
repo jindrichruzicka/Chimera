@@ -17,7 +17,9 @@ interface BuildPageDoubleResult {
     readonly nthSelections: { readonly testId: string; readonly index: number }[];
 }
 
-const buildPageDouble = (): BuildPageDoubleResult => {
+const buildPageDouble = (
+    textByTestId: Readonly<Record<string, string>> = {},
+): BuildPageDoubleResult => {
     const requestedTestIds: string[] = [];
     const clickedTestIds: string[] = [];
     const filledValues: { readonly testId: string; readonly value: string }[] = [];
@@ -39,6 +41,7 @@ const buildPageDouble = (): BuildPageDoubleResult => {
             waitFor: async (_options?: WaitOptions): Promise<void> => {
                 waitedTestIds.push(testId);
             },
+            innerText: async (): Promise<string> => textByTestId[testId] ?? '',
             nth: (index: number): Locator => {
                 recordNthSelection(index);
                 return createLocator(testId);
@@ -80,6 +83,7 @@ describe('LobbyPage', () => {
         expect(lobbyPage.connectionStatus).toBeDefined();
         expect(lobbyPage.addressInput).toBeDefined();
         expect(lobbyPage.confirmJoinButton).toBeDefined();
+        expect(lobbyPage.sessionId).toBeDefined();
 
         expect(requestedTestIds).toEqual([
             'host-lobby',
@@ -91,7 +95,18 @@ describe('LobbyPage', () => {
             'connection-status',
             'address-input',
             'confirm-join',
+            'lobby-session-id',
         ]);
+    });
+
+    it('reads the host-issued lobby code from the current lobby', async () => {
+        const { page, waitedTestIds } = buildPageDouble({
+            'lobby-session-id': '127.0.0.1:54321:abc123',
+        });
+        const lobbyPage = new LobbyPage(page);
+
+        await expect(lobbyPage.lobbyCode()).resolves.toBe('127.0.0.1:54321:abc123');
+        expect(waitedTestIds).toEqual(['lobby-session-id']);
     });
 
     it('hosts a lobby and waits for visible connection status', async () => {

@@ -421,6 +421,8 @@ export interface RegisterLobbyHandlersOptions {
     readonly ipcMain: LobbyHandlersIpcMain;
     /** Real LobbyManager that handles host / join / leave (F11). */
     readonly lobbyManager: LobbyManager;
+    /** Supplies the local profile attestation attached to outbound JOIN requests. */
+    readonly profileManager?: ProfileManagerPort;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
 }
@@ -460,7 +462,13 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
 
     ipcMain.handle(LOBBY_JOIN_CHANNEL, (_event, params) => {
         const validated = parseInvokeRequest(JoinLobbyParamsSchema, LOBBY_JOIN_CHANNEL, params);
-        return lobbyManager.joinLobby(validated);
+        if (options.profileManager === undefined) {
+            return lobbyManager.joinLobby(validated);
+        }
+        return lobbyManager.joinLobby({
+            ...validated,
+            profile: options.profileManager.currentAttestation(),
+        });
     });
 
     ipcMain.handle(LOBBY_LEAVE_CHANNEL, () => {
