@@ -79,3 +79,85 @@ test.describe('Lobby lifecycle', () => {
             .toEqual(['true', 'true']);
     });
 });
+
+test.describe('Start Match button enable/disable', () => {
+    test('start-match is disabled for client regardless of all-ready state', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostLobby = new LobbyPage(hostWindow);
+        const clientLobby = new LobbyPage(clientWindow);
+
+        await hostLobby.hostLobby();
+        const lobbyCode = await hostLobby.lobbyCode();
+        await clientLobby.joinLobby(lobbyCode);
+
+        await hostLobby.waitForPlayerCount(2);
+        await clientLobby.waitForPlayerCount(2);
+
+        await hostLobby.toggleReady();
+        await clientLobby.toggleReady();
+
+        const hostPlayerId = await hostLobby.localPlayerId();
+        const clientPlayerId = await clientLobby.localPlayerId();
+        if (!hostPlayerId || !clientPlayerId) throw new Error('Could not determine player IDs');
+
+        // Wait for both to be ready
+        await expect
+            .poll(() =>
+                Promise.all([
+                    hostLobby.playerReadyStatusById(hostPlayerId),
+                    hostLobby.playerReadyStatusById(clientPlayerId),
+                ]),
+            )
+            .toEqual(['true', 'true']);
+
+        // Client window must keep start-match disabled
+        await expect(clientLobby.startButton).toBeDisabled();
+    });
+
+    test('start-match enables for host when all ready; disables when any player unreadies', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostLobby = new LobbyPage(hostWindow);
+        const clientLobby = new LobbyPage(clientWindow);
+
+        await hostLobby.hostLobby();
+        const lobbyCode = await hostLobby.lobbyCode();
+        await clientLobby.joinLobby(lobbyCode);
+
+        await hostLobby.waitForPlayerCount(2);
+        await clientLobby.waitForPlayerCount(2);
+
+        // Before any ready: start-match disabled for host
+        await expect(hostLobby.startButton).toBeDisabled();
+
+        await hostLobby.toggleReady();
+        await clientLobby.toggleReady();
+
+        const hostPlayerId = await hostLobby.localPlayerId();
+        const clientPlayerId = await clientLobby.localPlayerId();
+        if (!hostPlayerId || !clientPlayerId) throw new Error('Could not determine player IDs');
+
+        // Wait until both players are ready in host's view
+        await expect
+            .poll(() =>
+                Promise.all([
+                    hostLobby.playerReadyStatusById(hostPlayerId),
+                    hostLobby.playerReadyStatusById(clientPlayerId),
+                ]),
+            )
+            .toEqual(['true', 'true']);
+
+        // start-match must be enabled for the host
+        await expect(hostLobby.startButton).toBeEnabled();
+
+        // Host toggles back to unready
+        await hostLobby.toggleReady();
+        await expect.poll(() => hostLobby.playerReadyStatusById(hostPlayerId)).toBe('false');
+
+        // start-match must be disabled again
+        await expect(hostLobby.startButton).toBeDisabled();
+    });
+});

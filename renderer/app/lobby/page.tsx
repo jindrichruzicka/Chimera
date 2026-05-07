@@ -31,6 +31,13 @@ export default function LobbyPage() {
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
 
+    const canStartMatch =
+        localPlayerId !== null &&
+        lobbyState !== null &&
+        localPlayerId === lobbyState.info.hostId &&
+        lobbyState.players.length > 0 &&
+        lobbyState.players.every((p) => p.ready);
+
     // Bootstrap the lobby store with the chimera API
     useEffect(() => {
         let unsubscribe: (() => void) | undefined;
@@ -269,7 +276,7 @@ export default function LobbyPage() {
                     <button
                         data-testid="start-match"
                         type="button"
-                        disabled
+                        disabled={!canStartMatch || pendingAction !== null}
                         style={{ padding: '0.5rem 1rem', marginBottom: '1rem' }}
                     >
                         Start Match

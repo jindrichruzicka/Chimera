@@ -249,3 +249,85 @@ describe('LobbyPage pending actions', () => {
         });
     });
 });
+
+describe('Start Match button enable/disable', () => {
+    beforeEach(() => {
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: false },
+                { playerId: 'p2', displayName: 'Client', ready: false },
+            ],
+        };
+        mockProfileSlots = [];
+        mockLocalSeatIds = [];
+
+        Object.defineProperty(window, '__chimera', {
+            value: {
+                lobby: {
+                    host: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
+                    join: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
+                    getLocalPlayerId: vi.fn(async () => 'p1'),
+                    leave: vi.fn(async () => undefined),
+                    updatePlayerReadyState: vi.fn(async () => undefined),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(() => () => undefined),
+                },
+            },
+            configurable: true,
+        });
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+    });
+
+    it('is disabled when local player is not the host (client window)', () => {
+        mockLocalPlayerId = 'p2'; // client, not host
+        render(<LobbyPage />);
+        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
+    });
+
+    it('is disabled when local player is host but not all players are ready', () => {
+        mockLocalPlayerId = 'p1'; // host, but players not ready
+        render(<LobbyPage />);
+        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
+    });
+
+    it('is enabled when local player is host and all players are ready', () => {
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: true },
+                { playerId: 'p2', displayName: 'Client', ready: true },
+            ],
+        };
+        render(<LobbyPage />);
+        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(false);
+    });
+
+    it('becomes disabled again when any player toggles back to unready', () => {
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: true },
+                { playerId: 'p2', displayName: 'Client', ready: true },
+            ],
+        };
+        const { rerender } = render(<LobbyPage />);
+        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(false);
+
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: true },
+                { playerId: 'p2', displayName: 'Client', ready: false },
+            ],
+        };
+        rerender(<LobbyPage />);
+        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
+    });
+});
