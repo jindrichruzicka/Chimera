@@ -6,10 +6,13 @@
 // Implements the UI for multiplayer lobby management.
 
 import React, { useEffect, useRef, useState } from 'react';
+import { type EngineAction, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import { TacticsScreenRegistry } from '@chimera/games/tactics/screens/index.js';
 import { PlayerList } from '../../components/shell/PlayerList';
 import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
 import { MatchShell } from '../../components/shell/MatchShell';
 import { Button } from '../../components/ui/Button';
+import { useSendAction } from '../../bridge/useSendAction';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
@@ -21,6 +24,7 @@ import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
 
 type PendingAction = 'hosting' | 'joining' | 'leaving' | 'starting' | 'updating-ready' | null;
+type MatchActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
 
 const sectionCardStyle = {
     padding: 'var(--ch-space-md)',
@@ -51,6 +55,7 @@ export default function LobbyPage() {
     const maxPlayers = lobbyConfig.maxPlayers;
     const lobbyTheme = useThemeOverride(lobbyConfig.themeId ?? defaultTheme.id);
     const lobbyApi = useLobbyApi();
+    const sendAction = useSendAction();
 
     // Get lobby state and local player ID from the store
     const snapshot = useGameStore((state) => state.snapshot);
@@ -184,6 +189,23 @@ export default function LobbyPage() {
         }
     };
 
+    const dispatchMatchAction = (
+        snapshotForAction: PlayerSnapshot,
+        type: MatchActionType,
+        payload: Record<string, unknown>,
+    ): void => {
+        if (localPlayerId === null) {
+            return;
+        }
+        const action: EngineAction = {
+            type,
+            playerId: localPlayerId,
+            tick: snapshotForAction.tick,
+            payload,
+        };
+        sendAction(action);
+    };
+
     // Display lobby information when in a lobby
     const renderLobbyInfo = () => {
         if (!lobbyState) return null;
@@ -223,7 +245,22 @@ export default function LobbyPage() {
                     canUndo={snapshot.undoMeta.canUndo}
                     canRedo={snapshot.undoMeta.canRedo}
                     isGameOver={snapshot.phase === 'ended'}
-                />
+                    {...(localPlayerId === null
+                        ? {}
+                        : {
+                              onUndo: () =>
+                                  dispatchMatchAction(snapshot, 'engine:undo', { steps: 1 }),
+                              onRedo: () =>
+                                  dispatchMatchAction(snapshot, 'engine:redo', { steps: 1 }),
+                              onEndTurn: () => dispatchMatchAction(snapshot, 'engine:end_turn', {}),
+                          })}
+                >
+                    <TacticsScreenRegistry.board
+                        snapshot={snapshot}
+                        sendAction={sendAction}
+                        {...(localPlayerId === null ? {} : { localPlayerId })}
+                    />
+                </MatchShell>
             </ThemeProvider>
         );
     }

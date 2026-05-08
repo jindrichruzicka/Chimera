@@ -7,11 +7,19 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import { playerId, gamePhase, type BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
+import {
+    playerId,
+    gamePhase,
+    entityId,
+    type BaseGameSnapshot,
+} from '@chimera/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import { buildDefaultAIPlayerAgent } from './HostedSessionAgents.js';
+import {
+    buildDefaultAIPlayerAgent,
+    buildInitialHostedSessionSnapshot,
+} from './HostedSessionAgents.js';
 import { buildHostSessionPipeline } from './HostSessionPipeline.js';
 import { SessionRuntime } from './SessionRuntime.js';
 import { createNoopLogger } from '../logging/logger.js';
@@ -121,5 +129,38 @@ describe('buildDefaultAIPlayerAgent', () => {
 
         // Verify we've completed a multi-turn cycle without errors
         expect(snapshot.turnNumber).toBeGreaterThanOrEqual(4);
+    });
+});
+
+describe('buildInitialHostedSessionSnapshot', () => {
+    it('uses injected initialEntities when provided', () => {
+        const host = playerId('host-entities-1');
+        const customId = entityId('unit-custom');
+        const customEntities: BaseGameSnapshot['entities'] = {
+            [customId]: { id: customId },
+        };
+
+        const snapshot = buildInitialHostedSessionSnapshot({
+            seed: 42,
+            hostPlayerId: host,
+            playerSlots: [{ slotIndex: 0, playerId: host }],
+            phase: gamePhase('lobby'),
+            initialEntities: customEntities,
+        });
+
+        expect(snapshot.entities).toBe(customEntities);
+    });
+
+    it('yields empty entities when initialEntities is not provided', () => {
+        const host = playerId('host-entities-2');
+
+        const snapshot = buildInitialHostedSessionSnapshot({
+            seed: 42,
+            hostPlayerId: host,
+            playerSlots: [{ slotIndex: 0, playerId: host }],
+            phase: gamePhase('lobby'),
+        });
+
+        expect(snapshot.entities).toEqual({});
     });
 });

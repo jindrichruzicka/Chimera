@@ -3,6 +3,11 @@
 // renderer/components/shell/MatchShell.tsx
 
 import React, { type ReactNode } from 'react';
+import type {
+    EngineAction,
+    PlayerId,
+    PlayerSnapshot,
+} from '@chimera/electron/preload/api-types.js';
 
 export interface MatchShellProps {
     readonly children?: ReactNode;
@@ -76,6 +81,7 @@ export function MatchShell({
                             placeItems: 'center',
                             fontSize: '1.25rem',
                             fontWeight: 700,
+                            pointerEvents: 'none',
                         }}
                     >
                         {gameOverMessage}
@@ -125,4 +131,19 @@ export function MatchShell({
             </footer>
         </main>
     );
+}
+
+export type SendAction = (action: EngineAction) => void;
+
+export interface GameScreenProps {
+    readonly snapshot: PlayerSnapshot;
+    readonly localPlayerId?: PlayerId;
+    readonly sendAction: SendAction;
+}
+
+export interface GameScreenRegistry {
+    readonly board: React.ComponentType<GameScreenProps>;
+    readonly hud?: React.ComponentType<GameScreenProps>;
+    readonly screens?: Readonly<Record<string, React.ComponentType<GameScreenProps>>>;
+    readonly transitionOverlay?: React.ComponentType<GameScreenProps>;
 }

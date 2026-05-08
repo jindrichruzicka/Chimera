@@ -63,6 +63,7 @@ import {
 import type {
     ActionRejection,
     CrashRecoveryStatus,
+    EngineAction,
     PlayerProfile,
     PlayerId,
     ResolvedSettings,
@@ -266,6 +267,8 @@ export interface GameHandlersIpcMain {
 
 export interface RegisterGameHandlersOptions {
     readonly ipcMain: GameHandlersIpcMain;
+    /** Dispatches a validated action envelope to the live host session. */
+    readonly actionDispatcher?: (action: EngineAction) => void;
     /** Main-process authority for local pass-and-play seat switching. */
     readonly seatSwitchManager?: {
         switchActiveSeat(playerId: PlayerId): Promise<void>;
@@ -342,7 +345,7 @@ function buildIpcValidationRejection(
  *         no parallel list in this file to drift out of sync.
  */
 export function registerGameHandlers(options: RegisterGameHandlersOptions): void {
-    const { ipcMain, seatSwitchManager, actionRegistry } = options;
+    const { ipcMain, actionDispatcher, seatSwitchManager, actionRegistry } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:game:* handlers', {
         channels: [
@@ -366,8 +369,13 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
         // carry ActionPipeline Stage-3 rejections once F03–F15 wire the
         // real pipeline — the renderer's listener contract does not
         // churn.
+        let validatedAction: EngineAction;
         try {
-            parseInvokeRequest(EngineActionSchema, GAME_SEND_ACTION_CHANNEL, action);
+            validatedAction = parseInvokeRequest(
+                EngineActionSchema,
+                GAME_SEND_ACTION_CHANNEL,
+                action,
+            );
         } catch (err) {
             if (err instanceof IpcRequestValidationError) {
                 const rejection: ActionRejection = buildIpcValidationRejection(err, action);
@@ -387,7 +395,23 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
             // genuine bug behind the REJECT channel.
             throw err;
         }
-        // Stub. ActionPipeline integration lands in F03–F15.
+
+        try {
+            actionDispatcher?.(validatedAction);
+        } catch (err) {
+            const reason = err instanceof Error ? err.message : String(err);
+            logger.warn('ipc action dispatch rejected', {
+                channel: GAME_SEND_ACTION_CHANNEL,
+                reason,
+                tick: validatedAction.tick,
+                actionType: validatedAction.type,
+            });
+            event.sender.send(GAME_ACTION_REJECTED_CHANNEL, {
+                reason: `action-dispatch:${reason}`,
+                tick: validatedAction.tick,
+                actionType: validatedAction.type,
+            } satisfies ActionRejection);
+        }
     });
 
     ipcMain.handle(GAME_SWITCH_SEAT_CHANNEL, (_event, playerId) => {

@@ -38,6 +38,7 @@ export interface BuildInitialHostedSessionSnapshotOptions {
     readonly hostPlayerId: PlayerId;
     readonly playerSlots: readonly HostedSessionPlayerSlot[];
     readonly phase: GamePhase;
+    readonly initialEntities?: BaseGameSnapshot['entities'];
 }
 
 export interface BuildDefaultAIPlayerAgentOptions {
@@ -85,12 +86,13 @@ export function buildInitialHostedSessionSnapshot(
     }
 
     const firstPlayer = options.playerSlots[0]?.playerId;
+    const entities: BaseGameSnapshot['entities'] = options.initialEntities ?? {};
 
     return {
         tick: 0,
         seed: options.seed,
         players,
-        entities: {},
+        entities,
         phase: options.phase,
         events: [],
         turnNumber: 0,

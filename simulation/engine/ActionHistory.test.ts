@@ -93,6 +93,15 @@ describe('InMemoryActionHistory — basic contract', () => {
         snapshot.push(makeEntry(99));
         expect(history.sinceLastMemento()).toHaveLength(1);
     });
+
+    it('sinceLastMemento returns only entries appended after markMementoBoundary', () => {
+        const history = new InMemoryActionHistory();
+        history.append(makeEntry(1));
+        history.markMementoBoundary();
+        history.append(makeEntry(2));
+
+        expect(history.sinceLastMemento().map((entry) => entry.tickApplied)).toEqual([2]);
+    });
 });
 
 // ─── InMemoryActionHistory — pruneTo ─────────────────────────────────────────

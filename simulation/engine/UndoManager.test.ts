@@ -182,6 +182,14 @@ describe('InMemoryUndoManager', () => {
             expect(manager.canUndo(P1)).toBe(true);
         });
 
+        it('does not count setup entries that were appended before saveTurnMemento', () => {
+            history.append(makeHistoryEntry(1, 0, 'engine:start_match'));
+
+            manager.saveTurnMemento(makeSnapshot(1), P1);
+
+            expect(manager.canUndo(P1)).toBe(false);
+        });
+
         it('returns false after all steps are undone', () => {
             manager.saveTurnMemento(makeSnapshot(0), P1);
             history.append(makeHistoryEntry(1));

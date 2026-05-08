@@ -98,6 +98,8 @@ export interface ActionHistoryEntry {
 export interface ActionHistory {
     /** Appends an entry to the history. */
     append(entry: ActionHistoryEntry): void;
+    /** Marks the current append position as the start of a new undoable segment. */
+    markMementoBoundary(): void;
     /**
      * Returns all entries since the most recent turn-start memento boundary.
      * The returned array is a snapshot — mutating it must not affect internal state.
@@ -199,6 +201,7 @@ export class InMemoryActionHistory implements ActionHistory {
      */
     private readonly entries: ActionHistoryEntry[] = [];
     private head = 0;
+    private mementoBoundary = 0;
     private readonly logger: Logger | undefined;
     private readonly maxEntries: number;
 
@@ -218,6 +221,7 @@ export class InMemoryActionHistory implements ActionHistory {
     append(entry: ActionHistoryEntry): void {
         if (this.#size() >= this.maxEntries) {
             this.head++;
+            this.#clampMementoBoundary();
             this.logger?.warn('action-history:overflow', {
                 capacity: this.maxEntries,
             });
@@ -226,8 +230,13 @@ export class InMemoryActionHistory implements ActionHistory {
         this.#compactIfNeeded();
     }
 
+    markMementoBoundary(): void {
+        this.mementoBoundary = this.entries.length;
+        this.#clampMementoBoundary();
+    }
+
     sinceLastMemento(): readonly ActionHistoryEntry[] {
-        return this.entries.slice(this.head);
+        return this.entries.slice(Math.max(this.head, this.mementoBoundary));
     }
 
     pruneTo(cutoff: number): void {
@@ -237,6 +246,7 @@ export class InMemoryActionHistory implements ActionHistory {
         while (this.head < this.entries.length && this.entries[this.head]!.turnNumber < cutoff) {
             this.head++;
         }
+        this.#clampMementoBoundary();
         this.#compactIfNeeded();
     }
 
@@ -252,8 +262,16 @@ export class InMemoryActionHistory implements ActionHistory {
      */
     #compactIfNeeded(): void {
         if (this.head > 0 && this.head >= this.entries.length - this.head) {
+            const removed = this.head;
             this.entries.splice(0, this.head);
+            this.mementoBoundary = Math.max(0, this.mementoBoundary - removed);
             this.head = 0;
+        }
+    }
+
+    #clampMementoBoundary(): void {
+        if (this.mementoBoundary < this.head) {
+            this.mementoBoundary = this.head;
         }
     }
 }
@@ -303,6 +321,7 @@ export class InMemoryUndoManager implements UndoManager {
     }
 
     saveTurnMemento(state: BaseGameSnapshot, playerId: PlayerId): void {
+        this.history.markMementoBoundary();
         this.mementos.set(playerId, {
             tickAtTurnStart: state.tick,
             playerId,

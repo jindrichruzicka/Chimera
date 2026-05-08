@@ -5,7 +5,12 @@ import type {
     PlayerProfile,
     ProfileRepository,
 } from '@chimera/simulation/profile/ProfileSchema.js';
+import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import type { ChimeraRendererUrl } from './index.js';
+
+interface ProjectorOptionsForTest {
+    readonly getUndoMeta?: (viewerId: PlayerId) => unknown;
+}
 
 // ── pino mock — prevent SonicBoom from opening real file descriptors ──────────
 vi.mock('pino', () => {
@@ -108,21 +113,34 @@ vi.mock('./runtime/StateBroadcaster.js', () => ({
 }));
 
 // ── StateProjector mock — captures DefaultStateProjector construction ─────────
-const { mockDefaultStateProjectorCtor, mockProjectorInstance, MockCommitmentVerificationError } =
-    vi.hoisted(() => {
-        const instance = { project: vi.fn() };
-        class MockCommitmentVerificationError extends Error {
-            constructor(message = 'Commitment verification failed') {
-                super(message);
-                this.name = 'CommitmentVerificationError';
-            }
+const {
+    mockDefaultStateProjectorCtor,
+    mockProjectorInstance,
+    MockCommitmentVerificationError,
+    capturedDefaultStateProjectorOptions,
+} = vi.hoisted(() => {
+    const instance = { project: vi.fn() };
+    const capturedDefaultStateProjectorOptions = {
+        current: undefined as ProjectorOptionsForTest | undefined,
+    };
+    class MockCommitmentVerificationError extends Error {
+        constructor(message = 'Commitment verification failed') {
+            super(message);
+            this.name = 'CommitmentVerificationError';
         }
-        return {
-            mockProjectorInstance: instance,
-            mockDefaultStateProjectorCtor: vi.fn(() => instance),
-            MockCommitmentVerificationError,
-        };
-    });
+    }
+    return {
+        mockProjectorInstance: instance,
+        mockDefaultStateProjectorCtor: vi.fn(
+            (_visibilityRules: unknown, options?: ProjectorOptionsForTest) => {
+                capturedDefaultStateProjectorOptions.current = options;
+                return instance;
+            },
+        ),
+        MockCommitmentVerificationError,
+        capturedDefaultStateProjectorOptions,
+    };
+});
 
 vi.mock('@chimera/simulation/projection/index.js', () => ({
     DefaultStateProjector: mockDefaultStateProjectorCtor,
@@ -1321,6 +1339,169 @@ describe('main', () => {
             GAME_SNAPSHOT_CHANNEL,
             expect.anything(),
         );
+    });
+
+    it('starts undo history after engine:start_match so the first tactics move exhausts cleanly', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockDefaultStateProjectorCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main();
+
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | {
+                  onSessionHosted?: (
+                      transport: {
+                          onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                          onPlayerLeft(cb: (id: string) => void): () => void;
+                          onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                      },
+                      metadata: {
+                          readonly hostId: ReturnType<typeof playerId>;
+                          maxPlayers: number;
+                      },
+                  ) => void;
+                  onMatchStartRequested?: (state: {
+                      readonly info: {
+                          readonly sessionId: string;
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly gameId: string;
+                      };
+                      readonly players: readonly {
+                          readonly playerId: ReturnType<typeof playerId>;
+                          readonly displayName: string;
+                          readonly ready: boolean;
+                      }[];
+                  }) => void;
+              }
+            | undefined;
+        expect(options?.onSessionHosted).toBeTypeOf('function');
+        expect(options?.onMatchStartRequested).toBeTypeOf('function');
+
+        const actionReceivedRef: {
+            current?: (from: string, action: unknown) => void;
+        } = {};
+        const transport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn((cb: (from: string, action: unknown) => void) => {
+                actionReceivedRef.current = cb;
+                return () => {};
+            }),
+        };
+
+        const hostId = playerId('host-undo-start');
+        const guestId = playerId('guest-undo-start');
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        options?.onMatchStartRequested?.({
+            info: { sessionId: 'session-undo', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: guestId, displayName: 'Guest', ready: true },
+            ],
+        });
+
+        const actionReceived = actionReceivedRef.current;
+        expect(actionReceived).toBeDefined();
+        if (actionReceived === undefined) {
+            throw new Error('Expected hosted session to subscribe to incoming actions');
+        }
+        actionReceived(hostId, {
+            type: 'tactics:move_unit',
+            playerId: hostId,
+            tick: 1,
+            payload: { unitId: 'unit-1', x: 1, y: 0 },
+        });
+
+        const projectorOptions = capturedDefaultStateProjectorOptions.current;
+
+        expect(projectorOptions?.getUndoMeta?.(hostId)).toEqual({
+            canUndo: true,
+            canRedo: false,
+        });
+    });
+
+    it('seeds undo memento only for the active (host) player — guest canUndo stays false until its own turn', async () => {
+        // Regression guard for BLOCK-2: onMatchStartRequested must NOT seed a
+        // turn-start memento for non-active players. Seeding every player made
+        // guests eligible to undo the host's actions, violating the per-turn
+        // ownership rule in undo-redo-policy.md §60 and the per-viewer contract
+        // in undo-wiring.integration.test.ts:326.
+        mockLobbyManagerCtor.mockClear();
+        mockDefaultStateProjectorCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main();
+
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | {
+                  onSessionHosted?: (
+                      transport: {
+                          onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                          onPlayerLeft(cb: (id: string) => void): () => void;
+                          onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                      },
+                      metadata: {
+                          readonly hostId: ReturnType<typeof playerId>;
+                          maxPlayers: number;
+                      },
+                  ) => void;
+                  onMatchStartRequested?: (state: {
+                      readonly info: {
+                          readonly sessionId: string;
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly gameId: string;
+                      };
+                      readonly players: readonly {
+                          readonly playerId: ReturnType<typeof playerId>;
+                          readonly displayName: string;
+                          readonly ready: boolean;
+                      }[];
+                  }) => void;
+              }
+            | undefined;
+
+        const hostId = playerId('host-guest-undo');
+        const guestId = playerId('guest-guest-undo');
+        const actionReceivedRef: { current?: (from: string, action: unknown) => void } = {};
+        const transport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn((cb: (from: string, action: unknown) => void) => {
+                actionReceivedRef.current = cb;
+                return () => {};
+            }),
+        };
+
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        options?.onMatchStartRequested?.({
+            info: { sessionId: 'session-guest-undo', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: guestId, displayName: 'Guest', ready: true },
+            ],
+        });
+
+        const actionReceived = actionReceivedRef.current;
+        if (actionReceived === undefined) {
+            throw new Error('Expected hosted session to subscribe to incoming actions');
+        }
+
+        // Host makes a valid move — only the host's memento was seeded at match
+        // start (the active player's turn), so the guest has no memento and its
+        // canUndo must remain false, regardless of how many actions the host takes.
+        actionReceived(hostId, {
+            type: 'tactics:move_unit',
+            playerId: hostId,
+            tick: 1,
+            payload: { unitId: 'unit-1', x: 1, y: 0 },
+        });
+
+        const projectorOptions = capturedDefaultStateProjectorOptions.current;
+        expect(projectorOptions?.getUndoMeta?.(guestId)).toEqual({
+            canUndo: false,
+            canRedo: false,
+        });
     });
 
     it('registers configured AI slots before firing onGameStart', async () => {

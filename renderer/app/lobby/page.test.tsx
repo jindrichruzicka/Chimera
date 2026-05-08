@@ -117,6 +117,13 @@ function makeMatchSnapshot(): PlayerSnapshot {
     };
 }
 
+function makeUndoableMatchSnapshot(): PlayerSnapshot {
+    return {
+        ...makeMatchSnapshot(),
+        undoMeta: { canUndo: true, canRedo: false },
+    };
+}
+
 describe('LobbyPage pending actions', () => {
     let hostDeferred: DeferredPromise;
 
@@ -141,6 +148,9 @@ describe('LobbyPage pending actions', () => {
                 },
                 system: {
                     onConnectionStatus: vi.fn(() => () => undefined),
+                },
+                game: {
+                    sendAction: vi.fn(),
                 },
             },
             configurable: true,
@@ -223,6 +233,40 @@ describe('LobbyPage pending actions', () => {
         expect(screen.getByTestId('match-canvas')).toBeTruthy();
         expect(screen.getByTestId('game-over-banner')).toBeTruthy();
         expect(screen.queryByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeNull();
+    });
+
+    it('dispatches engine:undo through the game bridge with the current viewer tick', () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeUndoableMatchSnapshot();
+        const sendAction = vi.fn();
+        Object.defineProperty(window, '__chimera', {
+            value: {
+                lobby: {
+                    host: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
+                    join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
+                    getLocalPlayerId: vi.fn(async () => 'p2'),
+                    leave: vi.fn(async () => undefined),
+                    startMatch: vi.fn(async () => undefined),
+                    updatePlayerReadyState: vi.fn(async () => undefined),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(() => () => undefined),
+                },
+                game: { sendAction },
+            },
+            configurable: true,
+        });
+
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByTestId('undo'));
+
+        expect(sendAction).toHaveBeenCalledWith({
+            type: 'engine:undo',
+            playerId: 'p1',
+            tick: 1,
+            payload: { steps: 1 },
+        });
     });
 
     it('renders the active lobby with separated info and player sections and a grouped action bar', () => {

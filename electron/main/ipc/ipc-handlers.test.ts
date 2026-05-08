@@ -255,9 +255,10 @@ function makeGameEvent(): {
 }
 
 describe('registerGameHandlers', () => {
-    it('registers chimera:game:send-action as a send listener (stub: no-op)', () => {
+    it('registers chimera:game:send-action as a send listener and delegates valid actions', () => {
         const stub = makeGameIpcMainStub();
-        registerGameHandlers({ ipcMain: stub.ipcMain });
+        const actionDispatcher = vi.fn();
+        registerGameHandlers({ ipcMain: stub.ipcMain, actionDispatcher });
 
         const handler = stub.listeners.get(GAME_SEND_ACTION_CHANNEL);
         expect(handler).toBeDefined();
@@ -268,11 +269,9 @@ describe('registerGameHandlers', () => {
             tick: 0,
             payload: {},
         };
-        // Actual reducer wiring lands in F03–F15; this task only proves the
-        // channel is registered and the stub accepts the payload without
-        // throwing.
         const { event, sends } = makeGameEvent();
         expect(() => handler?.(event, action)).not.toThrow();
+        expect(actionDispatcher).toHaveBeenCalledWith(action);
         // Happy path: no REJECT push is emitted when the envelope is valid.
         expect(sends).toEqual([]);
     });

@@ -33,6 +33,8 @@ import {
     createDefaultMigrator,
 } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
+import { registerTacticsActions } from '@chimera/games/tactics/actions.js';
+import { buildInitialTacticsEntities } from '@chimera/games/tactics/entities.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
@@ -832,6 +834,7 @@ export async function main(): Promise<void> {
     // here when F18+ lands.  The registry is immutable after this point.
     const gameRegistry = new ActionRegistry();
     registerEngineActions(gameRegistry);
+    registerTacticsActions(gameRegistry);
 
     // ProfileGate is the sole caller of ProfileSanitizer.admit().
     // Constructed here (the DIP wiring point) and injected into LobbyManager
@@ -847,6 +850,8 @@ export async function main(): Promise<void> {
     // callback below and consumed by the saves IPC adapter to capture
     // SaveFiles (BLOCK-3) and apply restored files (WARN-2).
     let activeSession: SessionRuntime | null = null;
+    let dispatchRendererAction: ((action: ActionEnvelope) => void) | null = null;
+    let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
 
     // The single primary renderer window, captured when app.whenReady()
     // resolves.  Used to target IPC snapshot/reveal messages to the one
@@ -875,12 +880,16 @@ export async function main(): Promise<void> {
             // snapshot reference.  `captureSaveFile` (BLOCK-3) and
             // `applyRestoredFile` (WARN-2) read/write through this runtime.
             const initialPlayerSlots = collectInitialPlayerSlots(metadata);
+            const firstPlayer = initialPlayerSlots[0]?.playerId;
+            const initialEntities = buildInitialTacticsEntities(firstPlayer);
+
             const initialSnapshot = buildInitialHostedSessionSnapshot({
                 // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).
                 seed: Date.now() >>> 0,
                 hostPlayerId: metadata.hostId,
                 playerSlots: initialPlayerSlots,
                 phase: gamePhase('lobby'),
+                ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
             });
             // `pipeline`, `processAction`, and `clearUndoHistory` come from
             // the same factory; `processAction` adds the autosave fire-and-
@@ -955,6 +964,13 @@ export async function main(): Promise<void> {
                 commitmentRuntime: sessionCommitmentRuntime,
             });
             activeSession = sessionRuntime;
+            dispatchRendererAction = (action) => {
+                sessionRuntime.applyAction(action);
+                simulationHost.afterTick(sessionRuntime.getSnapshot());
+            };
+            saveInitialTurnMemento = (playerIdForMemento) => {
+                undoManager.saveTurnMemento(sessionRuntime.getSnapshot(), playerIdForMemento);
+            };
 
             // Track active players so clearUndoHistory can release their
             // per-player undo memory when the session closes.
@@ -1056,6 +1072,8 @@ export async function main(): Promise<void> {
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
+                    dispatchRendererAction = null;
+                    saveInitialTurnMemento = null;
                 }
             };
         },
@@ -1099,6 +1117,13 @@ export async function main(): Promise<void> {
                 },
             };
             sessionRuntime.applyAction(action);
+            // Seed the turn-start memento only for the active (first-to-act) player.
+            // Seeding every player would make non-active players eligible to undo the
+            // host's actions, violating the per-turn ownership rule in
+            // undo-redo-policy.md §60 and the per-viewer contract (BLOCK-2 fix).
+            // Non-active players receive their memento when engine:end_turn fires and
+            // their turn begins.
+            saveInitialTurnMemento?.(state.info.hostId);
         },
         onLobbyStateChanged: (state) => {
             BrowserWindow.getAllWindows().forEach((win) => {
@@ -1130,7 +1155,14 @@ export async function main(): Promise<void> {
     // same LobbyManager instance used by lobby IPC handlers.
     registerGameHandlers({
         ipcMain,
+        actionDispatcher: (action) => {
+            if (dispatchRendererAction === null) {
+                throw new Error('No active hosted session is available for game actions');
+            }
+            dispatchRendererAction(action);
+        },
         seatSwitchManager: lobbyManager,
+        actionRegistry: gameRegistry,
         logger: logger.child({ module: 'game' }),
     });
 
