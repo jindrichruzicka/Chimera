@@ -16,6 +16,24 @@ import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
 
 type PendingAction = 'hosting' | 'joining' | 'leaving' | 'updating-ready' | null;
 
+const sectionCardStyle = {
+    padding: '1rem',
+    border: '1px solid #ccc',
+    borderRadius: '4px',
+};
+
+const activeLobbyStyle = {
+    display: 'flex',
+    flexDirection: 'column' as const,
+    gap: '1rem',
+};
+
+const actionBarStyle = {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: '0.75rem',
+};
+
 export default function LobbyPage() {
     const [lobbyCode, setLobbyCode] = useState('');
     const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -147,15 +165,7 @@ export default function LobbyPage() {
         if (!lobbyState) return null;
 
         return (
-            <div
-                style={{
-                    marginTop: '1rem',
-                    padding: '1rem',
-                    border: '1px solid #ccc',
-                    borderRadius: '4px',
-                }}
-            >
-                <h3>Lobby Information</h3>
+            <div style={sectionCardStyle}>
                 <p>
                     <strong>Session ID:</strong>{' '}
                     <span data-testid="lobby-session-id">{lobbyState.info.sessionId}</span>
@@ -163,9 +173,15 @@ export default function LobbyPage() {
                 <p>
                     <strong>Host ID:</strong> {lobbyState.info.hostId}
                 </p>
-                <p>
-                    <strong>Game:</strong> {lobbyState.info.gameId}
-                </p>
+            </div>
+        );
+    };
+
+    const renderPlayerSection = () => {
+        if (!lobbyState) return null;
+
+        return (
+            <div style={sectionCardStyle}>
                 <PlayerList
                     localPlayerId={localPlayerId}
                     onToggleReady={handleToggleReady}
@@ -182,7 +198,6 @@ export default function LobbyPage() {
             aria-labelledby="lobby-heading"
         >
             <h1 id="lobby-heading">Multiplayer Lobby</h1>
-
             {/* Display current configuration */}
             <div
                 style={{
@@ -271,18 +286,10 @@ export default function LobbyPage() {
                     </div>
                 </div>
             ) : (
-                <div>
-                    <h2>Current Lobby</h2>
-                    <button
-                        data-testid="start-match"
-                        type="button"
-                        disabled={!canStartMatch || pendingAction !== null}
-                        style={{ padding: '0.5rem 1rem', marginBottom: '1rem' }}
-                    >
-                        Start Match
-                    </button>
+                <div style={activeLobbyStyle}>
                     {renderLobbyInfo()}
-                    <div style={{ marginTop: '1rem' }}>
+                    {renderPlayerSection()}
+                    <div style={actionBarStyle}>
                         <button
                             data-testid="lobby-leave-btn"
                             onClick={() => {
@@ -294,12 +301,30 @@ export default function LobbyPage() {
                         >
                             {pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby'}
                         </button>
-                        <div
+                        <span
                             id="leave-warning"
-                            style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}
+                            style={{
+                                position: 'absolute',
+                                width: '1px',
+                                height: '1px',
+                                padding: 0,
+                                margin: '-1px',
+                                overflow: 'hidden',
+                                clip: 'rect(0, 0, 0, 0)',
+                                whiteSpace: 'nowrap',
+                                border: 0,
+                            }}
                         >
                             This will disconnect you from the current lobby
-                        </div>
+                        </span>
+                        <button
+                            data-testid="start-match"
+                            type="button"
+                            disabled={!canStartMatch || pendingAction !== null}
+                            style={{ padding: '0.5rem 1rem' }}
+                        >
+                            Start Match
+                        </button>
                     </div>
                 </div>
             )}

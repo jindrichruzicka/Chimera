@@ -1,6 +1,7 @@
 // renderer/app/lobby/page.test.tsx
 // @vitest-environment jsdom
 
+import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -178,6 +179,57 @@ describe('LobbyPage pending actions', () => {
 
         expect(screen.getByTestId('player-list')).toBeTruthy();
         expect(screen.getByTestId('start-match')).toBeTruthy();
+    });
+
+    it('renders the active lobby with separated info and player sections and a grouped action bar', () => {
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'p1',
+                gameId: 'tactics',
+            },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: true },
+                { playerId: 'p2', displayName: 'Guest', ready: true },
+            ],
+        };
+
+        render(<LobbyPage />);
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { name: 'Current Lobby' })).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Lobby Information' })).toBeNull();
+
+        expect(screen.getByRole('main')).toHaveAttribute('aria-labelledby', 'lobby-heading');
+
+        const mainText = screen.getByRole('main').textContent ?? '';
+        expect(mainText.includes('Session ID:')).toBe(true);
+        expect(mainText.includes('Host ID:')).toBe(true);
+        expect(mainText.includes('Game:')).toBe(false);
+
+        const infoSection = screen.getByTestId('lobby-session-id').closest('div');
+        const playerSection = screen.getByTestId('player-list').closest('div');
+
+        expect(infoSection).not.toBeNull();
+        expect(playerSection).not.toBeNull();
+        expect(infoSection).not.toBe(playerSection);
+
+        const startButton = screen.getByTestId('start-match');
+        const leaveButton = screen.getByTestId('lobby-leave-btn');
+        const actionBar = startButton.parentElement;
+
+        expect(actionBar).toBe(leaveButton.parentElement);
+        expect(actionBar).toHaveStyle({ display: 'flex', justifyContent: 'space-between' });
+
+        expect(leaveButton).toHaveAttribute('aria-describedby', 'leave-warning');
+        expect(document.getElementById('leave-warning')).toBeTruthy();
+
+        const actionButtons = Array.from(actionBar?.querySelectorAll('button') ?? []);
+
+        expect(actionButtons).toHaveLength(2);
+        expect(actionButtons[0]).toBe(leaveButton);
+        expect(actionButtons[1]).toBe(startButton);
     });
 
     it('does not render SeatSwitcher outside an active session', () => {
