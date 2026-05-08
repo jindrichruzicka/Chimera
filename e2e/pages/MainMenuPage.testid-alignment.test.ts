@@ -22,7 +22,7 @@ describe('MainMenuPage POM — testid alignment with renderer', () => {
             'utf-8',
         );
         const rendererSource = readFileSync(
-            path.join(workspaceRoot, 'renderer/app/page.tsx'),
+            path.join(workspaceRoot, 'renderer/app/main-menu/page.tsx'),
             'utf-8',
         );
 
@@ -39,8 +39,20 @@ describe('MainMenuPage POM — testid alignment with renderer', () => {
         for (const testId of pomTestIds) {
             expect(
                 rendererSource,
-                `MainMenuPage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from renderer/app/page.tsx`,
+                `MainMenuPage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from renderer/app/main-menu/page.tsx`,
             ).toContain(`data-testid="${testId}"`);
         }
+    });
+
+    it('main-menu-quit testid is present in renderer/app/main-menu/page.tsx', () => {
+        const rendererSource = readFileSync(
+            path.join(workspaceRoot, 'renderer/app/main-menu/page.tsx'),
+            'utf-8',
+        );
+
+        expect(
+            rendererSource,
+            'data-testid="main-menu-quit" must be present in renderer/app/main-menu/page.tsx',
+        ).toContain('data-testid="main-menu-quit"');
     });
 });

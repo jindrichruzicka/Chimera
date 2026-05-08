@@ -40,14 +40,19 @@ const buildPageDouble = (): {
 };
 
 describe('MainMenuPage', () => {
-    it('binds lobby and settings locators using test ids', () => {
+    it('binds play, settings, and quit locators using test ids', () => {
         const { page, requestedTestIds } = buildPageDouble();
 
         const mainMenu = new MainMenuPage(page);
 
         expect(mainMenu.playButton).toBeDefined();
         expect(mainMenu.settingsButton).toBeDefined();
-        expect(requestedTestIds).toEqual(['main-menu-play', 'main-menu-settings']);
+        expect(mainMenu.quitButton).toBeDefined();
+        expect(requestedTestIds).toEqual([
+            'main-menu-play',
+            'main-menu-settings',
+            'main-menu-quit',
+        ]);
     });
 
     it('navigates to lobby via play button', async () => {
@@ -68,12 +73,21 @@ describe('MainMenuPage', () => {
         expect(clickedTestIds).toEqual(['main-menu-settings']);
     });
 
-    it('navigates to the main menu root when goto is called', async () => {
+    it('clicks the quit button when quit() is called', async () => {
+        const { page, clickedTestIds } = buildPageDouble();
+        const mainMenu = new MainMenuPage(page);
+
+        await mainMenu.quit();
+
+        expect(clickedTestIds).toEqual(['main-menu-quit']);
+    });
+
+    it('navigates to /main-menu when goto is called', async () => {
         const { page, visitedUrls } = buildPageDouble();
         const mainMenu = new MainMenuPage(page);
 
         await mainMenu.goto();
 
-        expect(visitedUrls).toEqual(['/']);
+        expect(visitedUrls).toEqual(['/main-menu']);
     });
 });

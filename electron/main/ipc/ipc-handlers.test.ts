@@ -153,6 +153,25 @@ describe('registerSystemHandlers', () => {
         expect(quit).toHaveBeenCalledOnce();
     });
 
+    it('does not call app.quit() when isE2e is true (CHIMERA_E2E guard)', () => {
+        const stub = makeIpcMainStub();
+        const quit = vi.fn();
+        const app: SystemHandlersAppHost = { quit, relaunch: vi.fn(), exit: vi.fn() };
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app,
+            platform: 'linux',
+            electronVersion: '33.4.11',
+            isE2e: true,
+        });
+
+        const handler = stub.listeners.get(SYSTEM_QUIT_CHANNEL);
+        expect(handler).toBeDefined();
+        handler?.();
+
+        expect(quit).not.toHaveBeenCalled();
+    });
+
     it('registers chimera:system:relaunch as a send listener that calls app.relaunch() then app.exit(0)', () => {
         const stub = makeIpcMainStub();
         const quit = vi.fn();

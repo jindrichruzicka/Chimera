@@ -63,6 +63,15 @@ export interface SystemApiIpcPort extends PushListenerPort {
  * referenced on the renderer side. `electron/main/ipc-handlers.ts` imports the
  * same channel constants to wire the main-side handlers.
  */
+/**
+ * Renderer-side slice of the E2E hook object that may be set by Playwright
+ * specs via `page.evaluate()`. Declared locally so the preload never imports
+ * from `electron/main/` (invariant 4 / module-boundary rule).
+ */
+interface RendererE2eHooks {
+    onSystemQuit?: () => void;
+}
+
 export function createSystemApi(ipc: SystemApiIpcPort): SystemAPI {
     return {
         platform: () =>
@@ -72,6 +81,11 @@ export function createSystemApi(ipc: SystemApiIpcPort): SystemAPI {
                     parseInvokeResponse(PlatformInfoSchema, SYSTEM_PLATFORM_CHANNEL, value),
                 ),
         quit: () => {
+            // In CHIMERA_E2E mode Playwright specs set `window.__e2eHooks.onSystemQuit`
+            // via `page.evaluate()` so they can assert the button fires without
+            // terminating the test process. Call the hook before sending IPC so
+            // the promise resolves even if the main-process handler is a no-op.
+            (globalThis as { __e2eHooks?: RendererE2eHooks }).__e2eHooks?.onSystemQuit?.();
             ipc.send(SYSTEM_QUIT_CHANNEL);
         },
         relaunch: () => {

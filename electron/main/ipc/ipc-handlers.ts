@@ -168,6 +168,14 @@ export interface RegisterSystemHandlersOptions {
      * a noop logger so today's tests and call sites need not supply one.
      */
     readonly logger?: Logger;
+    /**
+     * When true, the `chimera:system:quit` handler is a no-op — the process
+     * must not be terminated during E2E tests (CHIMERA_E2E=1). The renderer
+     * calls `window.__e2eHooks.onSystemQuit?.()` via the preload bridge before
+     * sending the IPC so Playwright specs can observe the button interaction
+     * without killing the test process.
+     */
+    readonly isE2e?: boolean;
 }
 
 /**
@@ -199,6 +207,7 @@ export function mapPlatform(platform: NodeJS.Platform): PlatformInfo['os'] {
  */
 export function registerSystemHandlers(options: RegisterSystemHandlersOptions): void {
     const { ipcMain, app, platform, electronVersion } = options;
+    const isE2e = options.isE2e === true;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:system:* handlers', {
         channels: [SYSTEM_PLATFORM_CHANNEL, SYSTEM_QUIT_CHANNEL, SYSTEM_RELAUNCH_CHANNEL],
@@ -213,6 +222,7 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
     });
 
     ipcMain.on(SYSTEM_QUIT_CHANNEL, () => {
+        if (isE2e) return;
         app.quit();
     });
 

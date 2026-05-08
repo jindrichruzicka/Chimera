@@ -1,16 +1,10 @@
 // renderer/app/page.test.tsx
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import HomePage from './page';
-
-const mockPush = vi.fn();
-
-vi.mock('next/navigation', () => ({
-    useRouter: () => ({ push: mockPush }),
-}));
 
 beforeEach(() => {
     vi.spyOn(console, 'log').mockImplementation(() => undefined);
@@ -34,31 +28,21 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('HomePage page object locators', () => {
-    it('marks the main menu screen for the page object model', () => {
+describe('HomePage (boot-smoke page)', () => {
+    it('renders the root container with data-testid="boot-smoke" for boot-smoke verification', () => {
         render(<HomePage />);
-        expect(screen.getByTestId('main-menu')).toBeTruthy();
+        expect(screen.getByTestId('boot-smoke')).toBeTruthy();
     });
 
-    it('renders a play button with the main-menu-play test id', () => {
+    it('renders the Chimera logo for boot-smoke visual confirmation', () => {
         render(<HomePage />);
-        expect(screen.getByTestId('main-menu-play')).toBeTruthy();
+        expect(screen.getByAltText('Chimera')).toBeTruthy();
     });
 
-    it('renders a settings button with the main-menu-settings test id', () => {
+    it('renders no navigation buttons (page.tsx is boot-smoke only; buttons live at /main-menu)', () => {
         render(<HomePage />);
-        expect(screen.getByTestId('main-menu-settings')).toBeTruthy();
-    });
-
-    it('navigates to /lobby when the play button is clicked', () => {
-        render(<HomePage />);
-        fireEvent.click(screen.getByTestId('main-menu-play'));
-        expect(mockPush).toHaveBeenCalledWith('/lobby');
-    });
-
-    it('navigates to /settings when the settings button is clicked', () => {
-        render(<HomePage />);
-        fireEvent.click(screen.getByTestId('main-menu-settings'));
-        expect(mockPush).toHaveBeenCalledWith('/settings');
+        expect(screen.queryByTestId('main-menu-play')).toBeNull();
+        expect(screen.queryByTestId('main-menu-settings')).toBeNull();
+        expect(screen.queryByTestId('main-menu-quit')).toBeNull();
     });
 });

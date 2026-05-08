@@ -820,6 +820,7 @@ export async function main(): Promise<void> {
         platform: process.platform,
         electronVersion: process.versions.electron ?? '',
         logger: logger.child({ module: 'system' }),
+        isE2e: process.env['CHIMERA_E2E'] === '1',
     });
 
     // Build the LobbyManager once so both lobby IPC and game seat-switch IPC
