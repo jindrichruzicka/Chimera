@@ -17,12 +17,6 @@ const styles = {
         width: '200px',
         padding: '12px 0',
         fontSize: '16px',
-        cursor: 'pointer',
-        borderRadius: '6px',
-        border: '1px solid #555',
-        background: '#222',
-        color: '#eee',
-        letterSpacing: '0.05em',
     },
 } satisfies Record<string, React.CSSProperties>;
 
