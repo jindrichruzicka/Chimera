@@ -1,7 +1,8 @@
+import { themeId } from './types';
 import type { ThemeDefinition } from './types';
 
 export const defaultTheme = {
-    id: 'engine-default',
+    id: themeId('engine-default'),
     name: 'Engine Default',
     palette: {
         button: {

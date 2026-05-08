@@ -1,6 +1,10 @@
+import { themeId as makeThemeId } from '../../theme/types';
+import type { ThemeId } from '../../theme/types';
+
 export interface LobbyConfig {
     readonly gameId: string;
     readonly maxPlayers: number;
+    readonly themeId?: ThemeId;
 }
 
 const DEFAULT_GAME_ID = 'tactics';
@@ -29,8 +33,13 @@ export function parseLobbyConfig(searchParams: URLSearchParams): LobbyConfig {
         : DEFAULT_MAX_PLAYERS;
     const maxPlayers = Math.min(Math.max(normalizedMaxPlayers, MIN_MAX_PLAYERS), MAX_MAX_PLAYERS);
 
+    const rawThemeId = searchParams.get('themeId');
+    const parsedThemeId =
+        rawThemeId !== null && rawThemeId.length > 0 ? makeThemeId(rawThemeId) : undefined;
+
     return {
         gameId,
         maxPlayers,
+        ...(parsedThemeId !== undefined && { themeId: parsedThemeId }),
     };
 }

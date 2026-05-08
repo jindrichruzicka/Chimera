@@ -1,0 +1,41 @@
+:root {
+    --ch-font-ui: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    --ch-font-size-lg: 16px;
+    --ch-font-size-sm: 0.9rem;
+    --ch-font-size-xs: 0.8rem;
+    --ch-font-weight-semibold: 600;
+    --ch-line-height-tight: 1.1;
+
+    --ch-radius-sm: 6px;
+
+    --ch-space-xxs: 4px;
+    --ch-space-xs: 8px;
+    --ch-space-sm: 12px;
+    --ch-space-md: 16px;
+    --ch-space-lg: 32px;
+
+    --ch-color-surface-subtle: #f0f0f0;
+    --ch-color-text-muted: #666;
+    --ch-color-border-default: #ccc;
+    --ch-color-feedback-error: #c0392b;
+
+    --ch-color-action-primary: #222;
+    --ch-color-action-primary-border: #555;
+    --ch-color-action-primary-foreground: #eee;
+    --ch-color-action-secondary: #3d3d3d;
+    --ch-color-action-secondary-border: #6a6a6a;
+    --ch-color-action-secondary-foreground: #e0e0e0;
+    --ch-color-action-ghost: transparent;
+    --ch-color-action-ghost-border: #666;
+    --ch-color-action-ghost-foreground: #ccc;
+    --ch-color-action-danger: #7a1a1a;
+    --ch-color-action-danger-border: #a03232;
+    --ch-color-action-danger-foreground: #ffd5d5;
+
+    --ch-button-min-width-sm: 160px;
+    --ch-button-min-width-md: 200px;
+    --ch-button-min-width-lg: 240px;
+    --ch-button-padding-sm: 8px 0;
+    --ch-button-padding-md: 12px 0;
+    --ch-button-padding-lg: 16px 0;
+}

@@ -8,6 +8,7 @@ describe('parseLobbyConfig', () => {
         expect(config).toEqual({
             gameId: 'tactics',
             maxPlayers: 4,
+            themeId: undefined,
         });
     });
 
@@ -17,6 +18,7 @@ describe('parseLobbyConfig', () => {
         expect(config).toEqual({
             gameId: 'arena',
             maxPlayers: 8,
+            themeId: undefined,
         });
     });
 
@@ -36,5 +38,17 @@ describe('parseLobbyConfig', () => {
         expect(nanConfig.maxPlayers).toBe(4);
         expect(floatConfig.maxPlayers).toBe(4);
         expect(emptyConfig.maxPlayers).toBe(4);
+    });
+
+    it('parses themeId when provided', () => {
+        const config = parseLobbyConfig(new URLSearchParams('themeId=engine-default'));
+
+        expect(config.themeId).toBe('engine-default');
+    });
+
+    it('returns undefined themeId when param is absent', () => {
+        const config = parseLobbyConfig(new URLSearchParams('gameId=tactics'));
+
+        expect(config.themeId).toBeUndefined();
     });
 });

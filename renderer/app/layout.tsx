@@ -8,6 +8,7 @@
 import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import React from 'react';
+import '../styles/tokens.css';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
 import { SettingsBootstrap } from './SettingsBootstrap';
 import { SaveStoreBootstrap } from './SaveStoreBootstrap';

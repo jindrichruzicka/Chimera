@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultTheme } from './default-theme';
 import { ThemeProvider } from './ThemeProvider';
 import type { ThemeDefinition } from './types';
+import { themeId } from './types';
 import { useTheme } from './useTheme';
 
 function ThemeProbe(): React.ReactElement {
@@ -46,7 +47,7 @@ describe('ThemeProvider and useTheme', () => {
     it('provides the supplied current theme from context', () => {
         const customTheme: ThemeDefinition = {
             ...defaultTheme,
-            id: 'custom-test-theme',
+            id: themeId('custom-test-theme'),
             name: 'Custom Test Theme',
         };
 
