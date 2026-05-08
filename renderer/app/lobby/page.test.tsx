@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
 import type {
@@ -35,6 +36,7 @@ interface MockLobbyUiStoreState {
 let mockLocalSeatIds: readonly string[] = [];
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
+let mockSnapshot: PlayerSnapshot | null = null;
 let mockProfileSlots: readonly LocalProfileSlot[] = [];
 const mockSwitchToProfile = vi.fn(async () => undefined);
 
@@ -58,6 +60,11 @@ vi.mock('../../state/lobbyUiStore', () => ({
             localPlayerId: mockLocalPlayerId,
             localSeatIds: mockLocalSeatIds,
         }),
+}));
+
+vi.mock('../../state/gameStore', () => ({
+    useGameStore: (selector: (state: { readonly snapshot: PlayerSnapshot | null }) => unknown) =>
+        selector({ snapshot: mockSnapshot }),
 }));
 
 vi.mock('../../state/lobbyStoreBootstrap', () => ({
@@ -94,6 +101,22 @@ function renderLobbyPage(): ReturnType<typeof render> {
     );
 }
 
+function makeMatchSnapshot(): PlayerSnapshot {
+    const viewerId = playerId('p1');
+    return {
+        tick: 1,
+        viewerId,
+        players: {
+            [viewerId]: { id: viewerId },
+        },
+        entities: {},
+        phase: gamePhase('ended'),
+        events: [],
+        commitments: {},
+        undoMeta: { canUndo: false, canRedo: false },
+    };
+}
+
 describe('LobbyPage pending actions', () => {
     let hostDeferred: DeferredPromise;
 
@@ -102,6 +125,7 @@ describe('LobbyPage pending actions', () => {
         mockLocalSeatIds = [];
         mockLocalPlayerId = null;
         mockLobbyState = null;
+        mockSnapshot = null;
         mockProfileSlots = [];
         mockSwitchToProfile.mockReset();
 
@@ -112,6 +136,7 @@ describe('LobbyPage pending actions', () => {
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
                     getLocalPlayerId: vi.fn(async () => 'p2'),
                     leave: vi.fn(async () => undefined),
+                    startMatch: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
@@ -188,6 +213,16 @@ describe('LobbyPage pending actions', () => {
 
         expect(screen.getByTestId('player-list')).toBeTruthy();
         expect(screen.getByTestId('start-match')).toBeTruthy();
+    });
+
+    it('renders MatchShell instead of the lobby once a game snapshot arrives', () => {
+        mockSnapshot = makeMatchSnapshot();
+
+        renderLobbyPage();
+
+        expect(screen.getByTestId('match-canvas')).toBeTruthy();
+        expect(screen.getByTestId('game-over-banner')).toBeTruthy();
+        expect(screen.queryByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeNull();
     });
 
     it('renders the active lobby with separated info and player sections and a grouped action bar', () => {
@@ -328,6 +363,7 @@ describe('LobbyPage pending actions', () => {
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
                     getLocalPlayerId: vi.fn(async () => 'p2'),
                     leave: vi.fn(async () => undefined),
+                    startMatch: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
@@ -359,6 +395,7 @@ describe('Start Match button enable/disable', () => {
         };
         mockProfileSlots = [];
         mockLocalSeatIds = [];
+        mockSnapshot = null;
 
         Object.defineProperty(window, '__chimera', {
             value: {
@@ -367,6 +404,7 @@ describe('Start Match button enable/disable', () => {
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
                     getLocalPlayerId: vi.fn(async () => 'p1'),
                     leave: vi.fn(async () => undefined),
+                    startMatch: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {

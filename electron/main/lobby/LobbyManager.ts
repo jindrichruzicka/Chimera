@@ -56,6 +56,7 @@ export interface LobbyManagerOptions {
         metadata: HostedSessionMetadata,
     ) => (() => void) | void;
     readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void;
+    readonly onMatchStartRequested?: (state: LobbyState) => void | Promise<void>;
     readonly onLobbyStateChanged?: (state: LobbyState) => void;
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
     readonly profileGate?: ProfileGate;
@@ -92,6 +93,7 @@ export class LobbyManager {
 
     private readonly onSessionHosted: LobbyManagerOptions['onSessionHosted'];
     private readonly onSessionJoined: LobbyManagerOptions['onSessionJoined'];
+    private readonly onMatchStartRequested: LobbyManagerOptions['onMatchStartRequested'];
     private readonly onLobbyStateChanged: LobbyManagerOptions['onLobbyStateChanged'];
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
     private readonly profileGate: LobbyManagerOptions['profileGate'];
@@ -106,6 +108,7 @@ export class LobbyManager {
         this.log = logger.child({ module: 'lobby-manager' });
         this.onSessionHosted = options.onSessionHosted;
         this.onSessionJoined = options.onSessionJoined;
+        this.onMatchStartRequested = options.onMatchStartRequested;
         this.onLobbyStateChanged = options.onLobbyStateChanged;
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
         this.profileGate = options.profileGate;
@@ -438,6 +441,31 @@ export class LobbyManager {
         this.publishLobbyState(nextState);
         session.transport.broadcastLobbyState(nextState);
         return Promise.resolve();
+    }
+
+    async startMatch(): Promise<void> {
+        const session = this.session;
+        if (session === null) {
+            throw new Error('LobbyManager: start-match requires an active session');
+        }
+
+        if (!('close' in session)) {
+            throw new Error('LobbyManager: only the lobby host can start the match');
+        }
+
+        if (this.lobbyState === null || this.localPlayerId === null) {
+            throw new Error('LobbyManager: lobby state is not available');
+        }
+
+        if (this.localPlayerId !== this.lobbyState.info.hostId) {
+            throw new Error('LobbyManager: only the lobby host can start the match');
+        }
+
+        if (this.lobbyState.players.length === 0 || this.lobbyState.players.some((p) => !p.ready)) {
+            throw new Error('LobbyManager: all players must be ready before starting the match');
+        }
+
+        await this.onMatchStartRequested?.(this.lobbyState);
     }
 
     /**

@@ -24,8 +24,8 @@
  *          Date.now() calls.
  */
 
-import type { ActionDefinition, BaseGameSnapshot, ValidationResult } from './types.js';
-import { isReduceContext } from './types.js';
+import type { ActionDefinition, BaseGameSnapshot, PlayerId, ValidationResult } from './types.js';
+import { gamePhase, isReduceContext, playerId } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { TimerManager } from './GameTimer.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
@@ -75,6 +75,15 @@ export interface EngineUndoRedoPayload {
  * No payload fields — requests a full state snapshot from the host.
  */
 export type EngineSyncRequestPayload = Record<string, never>;
+
+/**
+ * Payload for `engine:start_match`.
+ * Carries the authoritative lobby player list into the simulation snapshot at
+ * match start so every current participant receives the first projected view.
+ */
+export interface EngineStartMatchPayload {
+    readonly playerIds: readonly PlayerId[];
+}
 
 // ─── engine:tick ──────────────────────────────────────────────────────────────
 
@@ -241,6 +250,63 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
         };
     },
 } satisfies ActionDefinition<EngineEndTurnPayload>;
+
+// ─── engine:start_match ──────────────────────────────────────────────────────
+
+/**
+ * `ActionDefinition` for starting a hosted match from the lobby.
+ *
+ * The main-process lobby manager validates host/all-ready policy before
+ * dispatching this action. The simulation-level guard still enforces host-only
+ * authority and the reducer transitions via the normal ActionPipeline path.
+ */
+export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayload> = {
+    type: 'engine:start_match',
+
+    parsePayload(raw: Readonly<Record<string, unknown>>): EngineStartMatchPayload {
+        const rawPlayerIds = raw['playerIds'];
+        if (!Array.isArray(rawPlayerIds) || rawPlayerIds.length === 0) {
+            throw new TypeError(
+                'engine:start_match payload must have a non-empty "playerIds" array; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+
+        const parsed: PlayerId[] = [];
+        for (const rawPlayerId of rawPlayerIds) {
+            if (typeof rawPlayerId !== 'string' || rawPlayerId.length === 0) {
+                throw new TypeError(
+                    'engine:start_match payload playerIds must contain only non-empty strings; ' +
+                        `received ${JSON.stringify(raw)}.`,
+                );
+            }
+            parsed.push(playerId(rawPlayerId));
+        }
+
+        return { playerIds: parsed };
+    },
+
+    validate(_payload, state, dispatcherId): ValidationResult {
+        if (state.hostPlayerId === undefined || dispatcherId !== state.hostPlayerId) {
+            return { ok: false, reason: 'host_only' };
+        }
+        return { ok: true };
+    },
+
+    reduce(state: Readonly<BaseGameSnapshot>, payload: EngineStartMatchPayload): BaseGameSnapshot {
+        const nextPlayers: BaseGameSnapshot['players'] = { ...state.players };
+        for (const pid of payload.playerIds) {
+            nextPlayers[pid] = nextPlayers[pid] ?? { id: pid };
+        }
+
+        return {
+            ...state,
+            tick: state.tick + 1,
+            players: nextPlayers,
+            phase: gamePhase('ended'),
+        };
+    },
+} satisfies ActionDefinition<EngineStartMatchPayload>;
 
 // ─── engine:save ─────────────────────────────────────────────────────────────
 
@@ -462,6 +528,7 @@ export const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayl
 export const EngineActions: readonly ActionDefinition<object>[] = [
     engineTickDefinition,
     engineEndTurnDefinition,
+    engineStartMatchDefinition,
     engineSaveDefinition,
     engineLoadDefinition,
     engineUndoDefinition,

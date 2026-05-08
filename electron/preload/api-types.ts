@@ -515,6 +515,8 @@ export interface LobbyAPI {
     host(params: HostLobbyParams): Promise<LobbyInfo>;
     join(params: JoinLobbyParams): Promise<LobbyInfo>;
     leave(): Promise<void>;
+    /** Requests that the current host start the match for the active lobby. */
+    startMatch(): Promise<void>;
     getLocalPlayerId(): Promise<PlayerId | null>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;

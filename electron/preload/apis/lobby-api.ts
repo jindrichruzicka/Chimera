@@ -41,6 +41,9 @@ export const LOBBY_JOIN_CHANNEL = 'chimera:lobby:join';
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.leave}. */
 export const LOBBY_LEAVE_CHANNEL = 'chimera:lobby:leave';
 
+/** `ipcRenderer.invoke` target for {@link LobbyAPI.startMatch}. */
+export const LOBBY_START_MATCH_CHANNEL = 'chimera:lobby:start-match';
+
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.getLocalPlayerId}. */
 export const LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL = 'chimera:lobby:get-local-player-id';
 
@@ -86,6 +89,9 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 .invoke(LOBBY_JOIN_CHANNEL, params)
                 .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
         leave: (): Promise<void> => ipc.invoke(LOBBY_LEAVE_CHANNEL).then(() => undefined),
+        startMatch: (): Promise<void> =>
+            ipc.invoke(LOBBY_START_MATCH_CHANNEL).then(() => undefined),
+
         getLocalPlayerId: (): Promise<PlayerId | null> =>
             ipc
                 .invoke(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL)

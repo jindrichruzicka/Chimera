@@ -57,7 +57,7 @@ import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { ActionEnvelope, PlayerId } from '@chimera/simulation/engine/types.js';
 import { gamePhase } from '@chimera/simulation/engine/types.js';
 import {
     CommitmentVerificationError,
@@ -1083,6 +1083,22 @@ export async function main(): Promise<void> {
                 unsubSnapshotCommitments();
                 unsubReveal();
             };
+        },
+        onMatchStartRequested: (state) => {
+            const sessionRuntime = activeSession;
+            if (sessionRuntime === null) {
+                throw new Error('LobbyManager: no hosted session runtime is available');
+            }
+
+            const action: ActionEnvelope = {
+                type: 'engine:start_match',
+                playerId: state.info.hostId,
+                tick: sessionRuntime.getSnapshot().tick,
+                payload: {
+                    playerIds: state.players.map((player) => player.playerId),
+                },
+            };
+            sessionRuntime.applyAction(action);
         },
         onLobbyStateChanged: (state) => {
             BrowserWindow.getAllWindows().forEach((win) => {

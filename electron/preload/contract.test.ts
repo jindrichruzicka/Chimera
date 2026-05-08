@@ -265,6 +265,11 @@ describe('window.__chimera.lobby — contract', () => {
         expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:leave', args: [] }]);
     });
 
+    it('startMatch() invokes chimera:lobby:start-match with no payload', async () => {
+        await api.lobby.startMatch();
+        expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:start-match', args: [] }]);
+    });
+
     it('getLocalPlayerId() invokes chimera:lobby:get-local-player-id with no payload', async () => {
         await api.lobby.getLocalPlayerId();
         expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:get-local-player-id', args: [] }]);

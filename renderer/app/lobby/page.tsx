@@ -8,7 +8,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { PlayerList } from '../../components/shell/PlayerList';
 import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
+import { MatchShell } from '../../components/shell/MatchShell';
 import { Button } from '../../components/ui/Button';
+import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
@@ -18,7 +20,7 @@ import { useThemeOverride } from '../../theme/useThemeOverride';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
 
-type PendingAction = 'hosting' | 'joining' | 'leaving' | 'updating-ready' | null;
+type PendingAction = 'hosting' | 'joining' | 'leaving' | 'starting' | 'updating-ready' | null;
 
 const sectionCardStyle = {
     padding: 'var(--ch-space-md)',
@@ -51,6 +53,7 @@ export default function LobbyPage() {
     const lobbyApi = useLobbyApi();
 
     // Get lobby state and local player ID from the store
+    const snapshot = useGameStore((state) => state.snapshot);
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
 
@@ -165,6 +168,22 @@ export default function LobbyPage() {
         }
     };
 
+    const handleStartMatch = async (): Promise<void> => {
+        try {
+            setPendingAction('starting');
+            setError(null);
+            await lobbyApi.startMatch();
+        } catch (err) {
+            if (isMountedRef.current) {
+                setError(err instanceof Error ? err.message : 'Failed to start match');
+            }
+        } finally {
+            if (isMountedRef.current) {
+                setPendingAction(null);
+            }
+        }
+    };
+
     // Display lobby information when in a lobby
     const renderLobbyInfo = () => {
         if (!lobbyState) return null;
@@ -195,6 +214,19 @@ export default function LobbyPage() {
             </div>
         );
     };
+
+    if (snapshot !== null) {
+        return (
+            <ThemeProvider theme={lobbyTheme}>
+                <MatchShell
+                    tick={snapshot.tick}
+                    canUndo={snapshot.undoMeta.canUndo}
+                    canRedo={snapshot.undoMeta.canRedo}
+                    isGameOver={snapshot.phase === 'ended'}
+                />
+            </ThemeProvider>
+        );
+    }
 
     return (
         <ThemeProvider theme={lobbyTheme}>
@@ -343,10 +375,13 @@ export default function LobbyPage() {
                             <Button
                                 data-testid="start-match"
                                 type="button"
+                                onClick={() => {
+                                    void handleStartMatch();
+                                }}
                                 disabled={!canStartMatch || pendingAction !== null}
                                 variant="primary"
                             >
-                                Start Match
+                                {pendingAction === 'starting' ? 'Starting...' : 'Start Match'}
                             </Button>
                         </div>
                     </div>

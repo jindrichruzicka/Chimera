@@ -11,6 +11,7 @@ import {
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
+    LOBBY_START_MATCH_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
@@ -495,6 +496,19 @@ describe('registerLobbyHandlers', () => {
         expect(spy).toHaveBeenCalledOnce();
     });
 
+    it('registers chimera:lobby:start-match as an invoke handler that calls lobbyManager.startMatch', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'startMatch').mockResolvedValue(undefined);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_START_MATCH_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}));
+        expect(spy).toHaveBeenCalledOnce();
+    });
+
     it('registers chimera:lobby:get-local-player-id as an invoke handler that calls lobbyManager.getLocalPlayerId', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -558,6 +572,7 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
                 LOBBY_JOIN_CHANNEL,
                 LOBBY_LEAVE_CHANNEL,
+                LOBBY_START_MATCH_CHANNEL,
                 LOBBY_UPDATE_READY_STATE_CHANNEL,
             ].sort(),
         );

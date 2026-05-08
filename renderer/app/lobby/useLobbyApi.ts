@@ -26,6 +26,7 @@ export interface LobbyApi {
     host(params: HostLobbyParams): Promise<LobbyInfo>;
     join(params: JoinLobbyParams): Promise<LobbyInfo>;
     leave(): Promise<void>;
+    startMatch(): Promise<void>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
 }
 
@@ -102,6 +103,13 @@ export function useLobbyApi(): LobbyApi {
                 }
                 await bridge.lobby.leave();
                 useLobbyUiStore.getState().clearLocalLobbyContext();
+            },
+            async startMatch(): Promise<void> {
+                const bridge = getLobbyBridge();
+                if (!bridge) {
+                    throw new Error(MISSING_BRIDGE_ERROR);
+                }
+                await bridge.lobby.startMatch();
             },
             async updatePlayerReadyState(ready: boolean): Promise<void> {
                 const bridge = getLobbyBridge();

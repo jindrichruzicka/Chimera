@@ -10,6 +10,7 @@ import LobbyPage from './page';
 const host = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 const join = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 const leave = vi.fn(async () => undefined);
+const startMatch = vi.fn(async () => undefined);
 const updatePlayerReadyState = vi.fn(async () => undefined);
 
 let mockLobbyState: {
@@ -64,6 +65,7 @@ vi.mock('./useLobbyApi', () => ({
         host,
         join,
         leave,
+        startMatch,
         updatePlayerReadyState,
     }),
 }));
@@ -90,11 +92,13 @@ describe('LobbyPage write lock', () => {
         host.mockReset();
         join.mockReset();
         leave.mockReset();
+        startMatch.mockReset();
         updatePlayerReadyState.mockReset();
 
         host.mockResolvedValue({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' });
         join.mockResolvedValue({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' });
         leave.mockResolvedValue(undefined);
+        startMatch.mockResolvedValue(undefined);
         updatePlayerReadyState.mockResolvedValue(undefined);
     });
 
@@ -143,6 +147,25 @@ describe('LobbyPage write lock', () => {
 
         await waitFor(() => {
             expect(updatePlayerReadyState).toHaveBeenCalledWith(true);
+        });
+    });
+
+    it('dispatches start-match through useLobbyApi without direct store writes', async () => {
+        mockLobbyState = {
+            info: {
+                sessionId: 's1',
+                hostId: 'p1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: true }],
+        };
+
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByTestId('start-match'));
+
+        await waitFor(() => {
+            expect(startMatch).toHaveBeenCalledOnce();
         });
     });
 

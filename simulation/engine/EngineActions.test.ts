@@ -26,6 +26,7 @@ import {
     engineUndoDefinition,
     engineRedoDefinition,
     engineSyncRequestDefinition,
+    engineStartMatchDefinition,
 } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
@@ -77,8 +78,8 @@ describe('EngineActions array', () => {
         expect(EngineActions.length).toBeGreaterThan(0);
     });
 
-    it('contains exactly seven definitions', () => {
-        expect(EngineActions).toHaveLength(7);
+    it('contains exactly eight definitions', () => {
+        expect(EngineActions).toHaveLength(8);
     });
 
     it('contains an engine:tick definition', () => {
@@ -113,6 +114,11 @@ describe('EngineActions array', () => {
 
     it('contains an engine:sync_request definition', () => {
         const definition = EngineActions.find((d) => d.type === 'engine:sync_request');
+        expect(definition).toBeDefined();
+    });
+
+    it('contains an engine:start_match definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:start_match');
         expect(definition).toBeDefined();
     });
 });
@@ -621,6 +627,66 @@ describe('engine:end_turn definition', () => {
     });
 });
 
+// ─── engine:start_match definition ───────────────────────────────────────────
+
+describe('engine:start_match definition', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:start_match');
+        if (!d) throw new Error('engine:start_match not found');
+        return d;
+    };
+
+    it('has type string "engine:start_match"', () => {
+        expect(definition().type).toBe('engine:start_match');
+    });
+
+    it('parsePayload accepts a non-empty playerIds array', () => {
+        expect(definition().parsePayload({ playerIds: ['p1', 'p2'] })).toEqual({
+            playerIds: ['p1', 'p2'],
+        });
+    });
+
+    it('parsePayload rejects an empty playerIds array', () => {
+        expect(() => definition().parsePayload({ playerIds: [] })).toThrow(TypeError);
+    });
+
+    it('validate accepts the host player', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate({ playerIds: [hostId] }, snapshot, hostId, stubCtx);
+        expect(result).toEqual({ ok: true });
+    });
+
+    it('validate rejects a non-host player', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate({ playerIds: [hostId] }, snapshot, guestId, stubCtx);
+        expect(result).toEqual({ ok: false, reason: 'host_only' });
+    });
+
+    it('reduce adds every started player, marks the phase ended, and advances tick exactly once', () => {
+        const snapshot = makeSnapshot(hostId);
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next).not.toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick + 1);
+        expect(next.phase).toBe('ended');
+        expect(Object.keys(next.players).sort()).toEqual([guestId, hostId].sort());
+    });
+
+    it('reduce does not mutate the input snapshot', () => {
+        const snapshot = makeSnapshot(hostId);
+        definition().reduce(snapshot, { playerIds: [hostId, guestId] }, hostId, stubCtx);
+
+        expect(snapshot.tick).toBe(0);
+        expect(snapshot.phase).toBe('waiting');
+        expect(snapshot.players).toEqual({});
+    });
+});
+
 // ─── registerEngineActions ────────────────────────────────────────────────────
 
 describe('registerEngineActions', () => {
@@ -648,6 +714,11 @@ describe('registerEngineActions', () => {
     it('registry.has("engine:end_turn") returns true after registration', () => {
         registerEngineActions(registry);
         expect(registry.has('engine:end_turn')).toBe(true);
+    });
+
+    it('registry.has("engine:start_match") returns true after registration', () => {
+        registerEngineActions(registry);
+        expect(registry.has('engine:start_match')).toBe(true);
     });
 
     it('both engine: types appear in registeredTypes()', () => {
@@ -691,7 +762,7 @@ describe('registerEngineActions', () => {
         expect(registry.has('engine:load')).toBe(true);
     });
 
-    it('all seven engine: types appear in registeredTypes()', () => {
+    it('all eight engine: types appear in registeredTypes()', () => {
         registerEngineActions(registry);
         const types = registry.registeredTypes();
         expect(types).toContain('engine:save');
@@ -699,6 +770,7 @@ describe('registerEngineActions', () => {
         expect(types).toContain('engine:undo');
         expect(types).toContain('engine:redo');
         expect(types).toContain('engine:sync_request');
+        expect(types).toContain('engine:start_match');
     });
 });
 
@@ -1133,6 +1205,10 @@ describe('individual engine action definition named exports', () => {
         expect(engineSyncRequestDefinition.type).toBe('engine:sync_request');
     });
 
+    it('engineStartMatchDefinition is a named export with type engine:start_match', () => {
+        expect(engineStartMatchDefinition.type).toBe('engine:start_match');
+    });
+
     it('all individually exported definitions are in the EngineActions array', () => {
         const individualDefs = [
             engineTickDefinition,
@@ -1142,6 +1218,7 @@ describe('individual engine action definition named exports', () => {
             engineUndoDefinition,
             engineRedoDefinition,
             engineSyncRequestDefinition,
+            engineStartMatchDefinition,
         ];
         for (const def of individualDefs) {
             expect(EngineActions.some((d) => d === def)).toBe(true);

@@ -512,6 +512,44 @@ describe('LobbyManager connection-status lifecycle', () => {
     });
 });
 
+// ── startMatch ───────────────────────────────────────────────────────────────
+
+describe('LobbyManager.startMatch', () => {
+    it('calls onMatchStartRequested when the hosted lobby has all players ready', async () => {
+        const onMatchStartRequested = vi.fn();
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            onMatchStartRequested,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        await manager.updatePlayerReadyState(true);
+
+        await expect(manager.startMatch()).resolves.toBeUndefined();
+
+        expect(onMatchStartRequested).toHaveBeenCalledOnce();
+    });
+
+    it('rejects when any current player is not ready', async () => {
+        const onMatchStartRequested = vi.fn();
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            onMatchStartRequested,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        await expect(manager.startMatch()).rejects.toThrow(/all players.*ready/i);
+        expect(onMatchStartRequested).not.toHaveBeenCalled();
+    });
+
+    it('rejects from a joined client session', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const info = await hostManager.hostLobby(HOST_PARAMS);
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: info.sessionId });
+
+        await expect(joinManager.startMatch()).rejects.toThrow(/host/i);
+    });
+});
+
 // ── closeLobby ───────────────────────────────────────────────────────────────
 
 describe('LobbyManager.closeLobby', () => {
