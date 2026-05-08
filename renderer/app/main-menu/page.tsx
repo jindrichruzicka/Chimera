@@ -4,28 +4,49 @@ import { useRouter } from 'next/navigation';
 import React from 'react';
 import { useQuit } from './useQuit';
 
+const styles = {
+    container: {
+        display: 'flex',
+        flexDirection: 'column' as const,
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        gap: '12px',
+    },
+    button: {
+        width: '200px',
+        padding: '12px 0',
+        fontSize: '16px',
+        cursor: 'pointer',
+        borderRadius: '6px',
+        border: '1px solid #555',
+        background: '#222',
+        color: '#eee',
+        letterSpacing: '0.05em',
+    },
+} satisfies Record<string, React.CSSProperties>;
+
 export default function MainMenuPage() {
     const router = useRouter();
     const quit = useQuit();
 
     return (
-        <main
-            data-testid="main-menu"
-            style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100vh',
-            }}
-        >
-            <button data-testid="main-menu-play" onClick={() => router.push('/lobby')}>
+        <main data-testid="main-menu" style={styles.container}>
+            <button
+                data-testid="main-menu-play"
+                style={styles.button}
+                onClick={() => router.push('/lobby')}
+            >
                 Play
             </button>
-            <button data-testid="main-menu-settings" onClick={() => router.push('/settings')}>
+            <button
+                data-testid="main-menu-settings"
+                style={styles.button}
+                onClick={() => router.push('/settings')}
+            >
                 Settings
             </button>
-            <button data-testid="main-menu-quit" onClick={quit}>
+            <button data-testid="main-menu-quit" style={styles.button} onClick={quit}>
                 Quit
             </button>
         </main>
