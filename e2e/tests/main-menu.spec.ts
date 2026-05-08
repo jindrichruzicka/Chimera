@@ -5,13 +5,16 @@
  * Verifies the Main Menu screen at /main-menu:
  *   - Play button navigates to /lobby
  *   - Settings button navigates to /settings
- *   - Quit button calls window.__chimera.system.quit() via __e2eHooks
+ *   - Quit button calls window.__chimera.system.quit()
  *
  * Invariant 4: The Quit button must call window.__chimera.system.quit() —
  * never require('electron') or any direct Node API.
  */
 import { test, expect } from '../fixtures/electron.fixture';
 import { MainMenuPage } from '../pages/MainMenuPage';
+import { SYSTEM_QUIT_CHANNEL } from '../../electron/preload/apis/system-api';
+
+const MAIN_MENU_QUIT_OBSERVED_KEY = '__chimeraMainMenuQuitObserved';
 
 test.describe('Main Menu', () => {
     test.beforeEach(async ({ mainWindow }) => {
@@ -31,22 +34,42 @@ test.describe('Main Menu', () => {
         await expect(mainWindow).toHaveURL(/\/settings/);
     });
 
-    test('Quit button calls window.__chimera.system.quit via __e2eHooks', async ({
+    test('Quit button sends the system quit IPC in E2E mode', async ({
+        electronApp,
         mainWindow,
     }) => {
-        // Intercept via renderer-side __e2eHooks so the real app-quit IPC is
-        // shadowed. The preload calls onSystemQuit before forwarding the IPC;
-        // the main-process handler is a no-op in CHIMERA_E2E=1 mode.
-        const quitCalled = mainWindow.evaluate(
-            () =>
-                new Promise<void>((resolve) => {
-                    const g = globalThis as unknown as Record<string, Record<string, unknown>>;
-                    g['__e2eHooks'] = { ...(g['__e2eHooks'] ?? {}), onSystemQuit: resolve };
-                }),
+        await electronApp.evaluate(
+            ({ ipcMain }, params) => {
+                Object.defineProperty(globalThis, params.observedKey, {
+                    configurable: true,
+                    value: false,
+                    writable: true,
+                });
+
+                ipcMain.once(params.quitChannel, () => {
+                    Object.defineProperty(globalThis, params.observedKey, {
+                        configurable: true,
+                        value: true,
+                        writable: true,
+                    });
+                });
+            },
+            {
+                observedKey: MAIN_MENU_QUIT_OBSERVED_KEY,
+                quitChannel: SYSTEM_QUIT_CHANNEL,
+            },
         );
 
         const mainMenu = new MainMenuPage(mainWindow);
         await mainMenu.quit();
-        await quitCalled;
+
+        await expect
+            .poll(() =>
+                electronApp.evaluate((_electron, observedKey) => {
+                    const descriptor = Object.getOwnPropertyDescriptor(globalThis, observedKey);
+                    return descriptor?.value === true;
+                }, MAIN_MENU_QUIT_OBSERVED_KEY),
+            )
+            .toBe(true);
     });
 });

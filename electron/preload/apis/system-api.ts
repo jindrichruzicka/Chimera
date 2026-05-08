@@ -64,15 +64,21 @@ export interface SystemApiIpcPort extends PushListenerPort {
  * same channel constants to wire the main-side handlers.
  */
 /**
- * Renderer-side slice of the E2E hook object that may be set by Playwright
- * specs via `page.evaluate()`. Declared locally so the preload never imports
- * from `electron/main/` (invariant 4 / module-boundary rule).
+ * Optional callback injected at wiring time (see `api.ts`) so tests and the
+ * real preload entry can supply different notification strategies without
+ * coupling this factory to DOM APIs. In the real Electron preload it dispatches
+ * a `CustomEvent` that crosses the `contextIsolation` boundary; unit tests
+ * inject a plain spy instead.
+ *
+ * `contextIsolation: true` means `globalThis` in the preload is a different V8
+ * context from the renderer's `window`. A `CustomEvent` dispatched via
+ * `window.dispatchEvent()` in the preload world IS observable in the renderer
+ * world (DOM events cross isolation boundaries), which is why this is the
+ * correct mechanism for E2E detection.
  */
-interface RendererE2eHooks {
-    onSystemQuit?: () => void;
-}
+export type QuitNotifier = () => void;
 
-export function createSystemApi(ipc: SystemApiIpcPort): SystemAPI {
+export function createSystemApi(ipc: SystemApiIpcPort, notifyQuit?: QuitNotifier): SystemAPI {
     return {
         platform: () =>
             ipc
@@ -81,11 +87,7 @@ export function createSystemApi(ipc: SystemApiIpcPort): SystemAPI {
                     parseInvokeResponse(PlatformInfoSchema, SYSTEM_PLATFORM_CHANNEL, value),
                 ),
         quit: () => {
-            // In CHIMERA_E2E mode Playwright specs set `window.__e2eHooks.onSystemQuit`
-            // via `page.evaluate()` so they can assert the button fires without
-            // terminating the test process. Call the hook before sending IPC so
-            // the promise resolves even if the main-process handler is a no-op.
-            (globalThis as { __e2eHooks?: RendererE2eHooks }).__e2eHooks?.onSystemQuit?.();
+            notifyQuit?.();
             ipc.send(SYSTEM_QUIT_CHANNEL);
         },
         relaunch: () => {

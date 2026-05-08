@@ -82,12 +82,12 @@ describe('MainMenuPage', () => {
         expect(clickedTestIds).toEqual(['main-menu-quit']);
     });
 
-    it('navigates to /main-menu when goto is called', async () => {
+    it('navigates to the main menu through the Electron renderer protocol', async () => {
         const { page, visitedUrls } = buildPageDouble();
         const mainMenu = new MainMenuPage(page);
 
         await mainMenu.goto();
 
-        expect(visitedUrls).toEqual(['/main-menu']);
+        expect(visitedUrls).toEqual(['chimera://renderer/main-menu/']);
     });
 });

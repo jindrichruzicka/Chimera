@@ -1,4 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
+import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+
+const MAIN_MENU_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/main-menu/`;
 
 export class MainMenuPage {
     readonly playButton: Locator;
@@ -12,7 +15,7 @@ export class MainMenuPage {
     }
 
     public async goto(): Promise<void> {
-        await this.page.goto('/main-menu');
+        await this.page.goto(MAIN_MENU_URL);
     }
 
     public async navigateToLobby(): Promise<void> {

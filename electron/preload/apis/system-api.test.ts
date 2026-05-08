@@ -81,19 +81,22 @@ describe('createSystemApi', () => {
             expect(stub.sends).toEqual([SYSTEM_QUIT_CHANNEL]);
         });
 
-        it('calls globalThis.__e2eHooks.onSystemQuit if present, then still sends the IPC', () => {
+        it('calls the injected notifyQuit callback when provided, then still sends the IPC', () => {
+            const stub = makeIpcStub();
+            const notifyQuit = vi.fn();
+            const api = createSystemApi(stub.port, notifyQuit);
+
+            api.quit();
+
+            expect(notifyQuit).toHaveBeenCalledOnce();
+            expect(stub.sends).toEqual([SYSTEM_QUIT_CHANNEL]);
+        });
+
+        it('still sends the IPC when no notifyQuit callback is provided', () => {
             const stub = makeIpcStub();
             const api = createSystemApi(stub.port);
-            const onSystemQuit = vi.fn();
-            (globalThis as Record<string, unknown>)['__e2eHooks'] = { onSystemQuit };
 
-            try {
-                api.quit();
-            } finally {
-                Reflect.deleteProperty(globalThis, '__e2eHooks');
-            }
-
-            expect(onSystemQuit).toHaveBeenCalledOnce();
+            expect(() => api.quit()).not.toThrow();
             expect(stub.sends).toEqual([SYSTEM_QUIT_CHANNEL]);
         });
     });
