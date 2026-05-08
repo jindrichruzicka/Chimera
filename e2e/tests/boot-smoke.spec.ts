@@ -32,7 +32,7 @@ test('boot-smoke: renderer logs Chimera status without console errors', async ({
     mainWindow,
     rendererConsole,
 }) => {
-    await expect(mainWindow.getByTestId('main-menu')).toBeVisible();
+    await expect(mainWindow.getByTestId('boot-smoke')).toBeVisible();
 
     await expect
         .poll(
