@@ -2,9 +2,11 @@
 
 import { useRouter } from 'next/navigation';
 import React from 'react';
+import { useQuit } from './useQuit';
 
 export default function MainMenuPage() {
     const router = useRouter();
+    const quit = useQuit();
 
     return (
         <main
@@ -23,7 +25,7 @@ export default function MainMenuPage() {
             <button data-testid="main-menu-settings" onClick={() => router.push('/settings')}>
                 Settings
             </button>
-            <button data-testid="main-menu-quit" onClick={() => window.__chimera.system.quit()}>
+            <button data-testid="main-menu-quit" onClick={quit}>
                 Quit
             </button>
         </main>
