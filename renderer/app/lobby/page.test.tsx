@@ -5,6 +5,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
 import type {
     LocalProfileSlot,
@@ -85,6 +86,14 @@ function createDeferredPromise(): DeferredPromise {
     };
 }
 
+function renderLobbyPage(): ReturnType<typeof render> {
+    return render(
+        <ThemeProvider>
+            <LobbyPage />
+        </ThemeProvider>,
+    );
+}
+
 describe('LobbyPage pending actions', () => {
     let hostDeferred: DeferredPromise;
 
@@ -119,7 +128,7 @@ describe('LobbyPage pending actions', () => {
     });
 
     it('disables join while hosting is in progress', async () => {
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         const hostButton = screen.getByTestId('host-lobby');
         const joinButton = screen.getByTestId('confirm-join');
@@ -137,7 +146,7 @@ describe('LobbyPage pending actions', () => {
     it('does not update state after unmount while host request is still pending', async () => {
         const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
 
-        const rendered = render(<LobbyPage />);
+        const rendered = renderLobbyPage();
         const hostButton = screen.getByTestId('host-lobby');
 
         fireEvent.click(hostButton);
@@ -156,7 +165,7 @@ describe('LobbyPage pending actions', () => {
     });
 
     it('renders lobby page object locators before a lobby is joined', () => {
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         expect(screen.getByTestId('host-lobby')).toBeTruthy();
         expect(screen.getByTestId('join-lobby')).toBeTruthy();
@@ -175,7 +184,7 @@ describe('LobbyPage pending actions', () => {
             players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
         };
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         expect(screen.getByTestId('player-list')).toBeTruthy();
         expect(screen.getByTestId('start-match')).toBeTruthy();
@@ -195,7 +204,7 @@ describe('LobbyPage pending actions', () => {
             ],
         };
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
         expect(screen.queryByRole('heading', { name: 'Current Lobby' })).toBeNull();
@@ -232,6 +241,42 @@ describe('LobbyPage pending actions', () => {
         expect(actionButtons[1]).toBe(startButton);
     });
 
+    it('uses shared themed variants for lobby shell actions', () => {
+        renderLobbyPage();
+
+        expect(screen.getByTestId('host-lobby')).toHaveAttribute(
+            'data-ch-button-variant',
+            'primary',
+        );
+        expect(screen.getByTestId('confirm-join')).toHaveAttribute(
+            'data-ch-button-variant',
+            'primary',
+        );
+
+        cleanup();
+
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'p1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: true }],
+        };
+
+        renderLobbyPage();
+
+        expect(screen.getByTestId('lobby-leave-btn')).toHaveAttribute(
+            'data-ch-button-variant',
+            'danger',
+        );
+        expect(screen.getByTestId('start-match')).toHaveAttribute(
+            'data-ch-button-variant',
+            'primary',
+        );
+    });
+
     it('does not render SeatSwitcher outside an active session', () => {
         mockProfileSlots = [
             { localProfileId: 'local-a', displayName: 'Alice' },
@@ -239,7 +284,7 @@ describe('LobbyPage pending actions', () => {
         ];
         mockLobbyState = null;
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         expect(screen.queryByTestId('seat-switcher')).toBeNull();
     });
@@ -258,7 +303,7 @@ describe('LobbyPage pending actions', () => {
             players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
         };
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         expect(screen.getByTestId('seat-switcher')).toBeTruthy();
         expect(screen.getByTestId('seat-btn-local-a')).toBeTruthy();
@@ -268,7 +313,7 @@ describe('LobbyPage pending actions', () => {
     it('does not render SeatSwitcher when there is only one local slot', () => {
         mockProfileSlots = [{ localProfileId: 'local-a', displayName: 'Alice' }];
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         expect(screen.queryByTestId('seat-switcher')).toBeNull();
     });
@@ -292,7 +337,7 @@ describe('LobbyPage pending actions', () => {
             configurable: true,
         });
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         fireEvent.click(screen.getByTestId('host-lobby'));
 
@@ -339,13 +384,13 @@ describe('Start Match button enable/disable', () => {
 
     it('is disabled when local player is not the host (client window)', () => {
         mockLocalPlayerId = 'p2'; // client, not host
-        render(<LobbyPage />);
+        renderLobbyPage();
         expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
     });
 
     it('is disabled when local player is host but not all players are ready', () => {
         mockLocalPlayerId = 'p1'; // host, but players not ready
-        render(<LobbyPage />);
+        renderLobbyPage();
         expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
     });
 
@@ -357,7 +402,7 @@ describe('Start Match button enable/disable', () => {
                 { playerId: 'p2', displayName: 'Client', ready: true },
             ],
         };
-        render(<LobbyPage />);
+        renderLobbyPage();
         expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(false);
     });
 
@@ -369,7 +414,7 @@ describe('Start Match button enable/disable', () => {
                 { playerId: 'p2', displayName: 'Client', ready: true },
             ],
         };
-        const { rerender } = render(<LobbyPage />);
+        const { rerender } = renderLobbyPage();
         expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(false);
 
         mockLobbyState = {
@@ -379,7 +424,11 @@ describe('Start Match button enable/disable', () => {
                 { playerId: 'p2', displayName: 'Client', ready: false },
             ],
         };
-        rerender(<LobbyPage />);
+        rerender(
+            <ThemeProvider>
+                <LobbyPage />
+            </ThemeProvider>,
+        );
         expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
     });
 });

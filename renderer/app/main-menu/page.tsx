@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import React from 'react';
+import { Button } from '../../components/ui/Button';
 import { useQuit } from './useQuit';
 
 const styles = {
@@ -11,12 +12,7 @@ const styles = {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
-        gap: '12px',
-    },
-    button: {
-        width: '200px',
-        padding: '12px 0',
-        fontSize: '16px',
+        gap: 'var(--ch-space-sm)',
     },
 } satisfies Record<string, React.CSSProperties>;
 
@@ -26,23 +22,23 @@ export default function MainMenuPage() {
 
     return (
         <main data-testid="main-menu" style={styles.container}>
-            <button
+            <Button
                 data-testid="main-menu-play"
-                style={styles.button}
                 onClick={() => router.push('/lobby')}
+                variant="primary"
             >
                 Play
-            </button>
-            <button
+            </Button>
+            <Button
                 data-testid="main-menu-settings"
-                style={styles.button}
                 onClick={() => router.push('/settings')}
+                variant="secondary"
             >
                 Settings
-            </button>
-            <button data-testid="main-menu-quit" style={styles.button} onClick={quit}>
+            </Button>
+            <Button data-testid="main-menu-quit" onClick={quit} variant="danger">
                 Quit
-            </button>
+            </Button>
         </main>
     );
 }

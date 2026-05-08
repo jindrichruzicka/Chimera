@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
 
 const host = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
@@ -67,6 +68,22 @@ vi.mock('./useLobbyApi', () => ({
     }),
 }));
 
+function renderLobbyPage(): ReturnType<typeof render> {
+    return render(
+        <ThemeProvider>
+            <LobbyPage />
+        </ThemeProvider>,
+    );
+}
+
+function renderLobbyPageElement(): React.ReactElement {
+    return (
+        <ThemeProvider>
+            <LobbyPage />
+        </ThemeProvider>
+    );
+}
+
 describe('LobbyPage write lock', () => {
     beforeEach(() => {
         mockLobbyState = null;
@@ -87,7 +104,7 @@ describe('LobbyPage write lock', () => {
     });
 
     it('dispatches host and leave through useLobbyApi without direct store writes', async () => {
-        const rendered = render(<LobbyPage />);
+        const rendered = renderLobbyPage();
 
         fireEvent.click(screen.getByTestId('host-lobby'));
         await waitFor(() => {
@@ -102,7 +119,7 @@ describe('LobbyPage write lock', () => {
             },
             players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
         };
-        rendered.rerender(<LobbyPage />);
+        rendered.rerender(renderLobbyPageElement());
 
         fireEvent.click(screen.getByTestId('lobby-leave-btn'));
         await waitFor(() => {
@@ -120,7 +137,7 @@ describe('LobbyPage write lock', () => {
             players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
         };
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         fireEvent.click(screen.getByTestId('ready-toggle'));
 
@@ -140,7 +157,7 @@ describe('LobbyPage write lock', () => {
             players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
         };
 
-        render(<LobbyPage />);
+        renderLobbyPage();
 
         fireEvent.click(screen.getByTestId('ready-toggle'));
 

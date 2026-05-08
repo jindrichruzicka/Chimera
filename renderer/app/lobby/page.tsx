@@ -6,13 +6,14 @@
 // Implements the UI for multiplayer lobby management.
 
 import React, { useEffect, useRef, useState } from 'react';
+import { PlayerList } from '../../components/shell/PlayerList';
+import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
+import { Button } from '../../components/ui/Button';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
-import { PlayerList } from '../../components/shell/PlayerList';
-import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
 
 type PendingAction = 'hosting' | 'joining' | 'leaving' | 'updating-ready' | null;
 
@@ -228,17 +229,17 @@ export default function LobbyPage() {
                         <p>
                             Hosting game "{gameId}" with up to {maxPlayers} players
                         </p>
-                        <button
+                        <Button
                             data-testid="host-lobby"
                             onClick={() => {
                                 void handleHost();
                             }}
                             disabled={pendingAction !== null}
-                            style={{ padding: '0.5rem 1rem', marginRight: '1rem' }}
                             aria-describedby="host-config-info"
+                            variant="primary"
                         >
                             {pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby'}
-                        </button>
+                        </Button>
                         <div
                             id="host-config-info"
                             style={{ fontSize: '0.8rem', color: '#666', marginTop: '0.5rem' }}
@@ -272,16 +273,16 @@ export default function LobbyPage() {
                             >
                                 Enter the code provided by the lobby host
                             </div>
-                            <button
+                            <Button
                                 data-testid="confirm-join"
                                 onClick={() => {
                                     void handleJoin();
                                 }}
                                 disabled={pendingAction !== null}
-                                style={{ padding: '0.5rem 1rem', marginTop: '0.5rem' }}
+                                variant="primary"
                             >
                                 {pendingAction === 'joining' ? 'Joining...' : 'Join Lobby'}
-                            </button>
+                            </Button>
                         </div>
                     </div>
                 </div>
@@ -290,17 +291,17 @@ export default function LobbyPage() {
                     {renderLobbyInfo()}
                     {renderPlayerSection()}
                     <div style={actionBarStyle}>
-                        <button
+                        <Button
                             data-testid="lobby-leave-btn"
                             onClick={() => {
                                 void handleLeave();
                             }}
                             disabled={pendingAction !== null}
-                            style={{ padding: '0.5rem 1rem' }}
                             aria-describedby="leave-warning"
+                            variant="danger"
                         >
                             {pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby'}
-                        </button>
+                        </Button>
                         <span
                             id="leave-warning"
                             style={{
@@ -317,14 +318,14 @@ export default function LobbyPage() {
                         >
                             This will disconnect you from the current lobby
                         </span>
-                        <button
+                        <Button
                             data-testid="start-match"
                             type="button"
                             disabled={!canStartMatch || pendingAction !== null}
-                            style={{ padding: '0.5rem 1rem' }}
+                            variant="primary"
                         >
                             Start Match
-                        </button>
+                        </Button>
                     </div>
                 </div>
             )}

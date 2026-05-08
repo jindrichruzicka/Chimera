@@ -159,6 +159,12 @@ has been imported. Shell pages therefore receive game theming without any explic
 renderer/
 ├── styles/
 │   └── tokens.css              # Engine default --ch-* tokens (§4.35)
+├── theme/
+│   ├── ThemeProvider.tsx       # Provides active shell/match theme to UI components
+│   ├── default-theme.ts        # Token-referenced button palette + size map
+│   ├── theme-context.ts        # React context object exported for consumers
+│   ├── types.ts                # Theme and button palette contract types
+│   └── useTheme.ts             # Hook: returns active theme from context
 ├── components/
 │   └── ui/
 │       └── Button.tsx          # Shared across shell pages and match screens

@@ -1,9 +1,11 @@
 // renderer/app/main-menu/page.test.tsx
 // @vitest-environment jsdom
 
+import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ThemeProvider } from '../../theme/ThemeProvider';
 import MainMenuPage from './page';
 
 const mockPush = vi.fn();
@@ -11,6 +13,14 @@ const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: mockPush }),
 }));
+
+function renderMainMenuPage(): void {
+    render(
+        <ThemeProvider>
+            <MainMenuPage />
+        </ThemeProvider>,
+    );
+}
 
 beforeEach(() => {
     Object.defineProperty(window, '__chimera', {
@@ -31,45 +41,62 @@ afterEach(() => {
 
 describe('MainMenuPage', () => {
     it('renders the main-menu container with data-testid="main-menu"', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         expect(screen.getByTestId('main-menu')).toBeTruthy();
     });
 
     it('renders a play button with data-testid="main-menu-play"', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         expect(screen.getByTestId('main-menu-play')).toBeTruthy();
     });
 
     it('renders a settings button with data-testid="main-menu-settings"', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         expect(screen.getByTestId('main-menu-settings')).toBeTruthy();
     });
 
     it('renders a quit button with data-testid="main-menu-quit"', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         expect(screen.getByTestId('main-menu-quit')).toBeTruthy();
     });
 
+    it('uses shared themed variants for shell actions', () => {
+        renderMainMenuPage();
+
+        expect(screen.getByTestId('main-menu-play')).toHaveAttribute(
+            'data-ch-button-variant',
+            'primary',
+        );
+        expect(screen.getByTestId('main-menu-settings')).toHaveAttribute(
+            'data-ch-button-variant',
+            'secondary',
+        );
+        expect(screen.getByTestId('main-menu-quit')).toHaveAttribute(
+            'data-ch-button-variant',
+            'danger',
+        );
+    });
+
     it('navigates to /lobby when the play button is clicked', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         fireEvent.click(screen.getByTestId('main-menu-play'));
         expect(mockPush).toHaveBeenCalledWith('/lobby');
     });
 
     it('navigates to /settings when the settings button is clicked', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         fireEvent.click(screen.getByTestId('main-menu-settings'));
         expect(mockPush).toHaveBeenCalledWith('/settings');
     });
 
     it('calls window.__chimera.system.quit() when the quit button is clicked', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         fireEvent.click(screen.getByTestId('main-menu-quit'));
         expect(window.__chimera.system.quit).toHaveBeenCalledOnce();
     });
 
     it('does not call router.push when the quit button is clicked', () => {
-        render(<MainMenuPage />);
+        renderMainMenuPage();
         fireEvent.click(screen.getByTestId('main-menu-quit'));
         expect(mockPush).not.toHaveBeenCalled();
     });
