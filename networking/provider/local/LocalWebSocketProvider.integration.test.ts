@@ -21,6 +21,7 @@ import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js
 import type {
     HostedSession,
     JoinedSession,
+    LobbyState,
     PlayerSnapshot,
     SideChannelMessage,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
@@ -260,6 +261,35 @@ describe('LocalWebSocketProvider integration — side-channel', () => {
 // ─── Lobby state broadcast ────────────────────────────────────────────────────
 
 describe('LocalWebSocketProvider integration — lobby state broadcast', () => {
+    it('seeds join initialLobbyState from the latest hosted lobby roster', async () => {
+        const p = makeProvider();
+        const hosted = await p.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        sessions.push(hosted);
+
+        const latestLobbyState: LobbyState = {
+            info: hosted.lobbyInfo,
+            players: [
+                {
+                    playerId: hosted.lobbyInfo.hostId,
+                    displayName: hosted.lobbyInfo.hostId,
+                    ready: false,
+                },
+            ],
+        };
+        hosted.transport.broadcastLobbyState(latestLobbyState);
+
+        const client = await p.joinLobby({ address: hosted.lobbyCode });
+        sessions.push(client);
+
+        expect(client.initialLobbyState.info).toEqual(latestLobbyState.info);
+        expect(client.initialLobbyState.players).toEqual(
+            expect.arrayContaining([
+                expect.objectContaining({ playerId: hosted.lobbyInfo.hostId }),
+                expect.objectContaining({ playerId: client.localPlayerId }),
+            ]),
+        );
+    });
+
     it('broadcastLobbyState is received by the client via onLobbyStateChanged', async () => {
         const p = makeProvider();
         const hosted = await p.hostLobby({ gameId: 'tactics', maxPlayers: 4 });

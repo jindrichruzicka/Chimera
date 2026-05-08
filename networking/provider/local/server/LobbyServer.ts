@@ -29,7 +29,7 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
-import type { JoinGateResult } from '../../MultiplayerProvider.js';
+import type { JoinGateResult, LobbyPlayerEntry, LobbyState } from '../../MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { ClientMessageSchema } from '@chimera/shared/messages-schemas.js';
@@ -75,6 +75,7 @@ export class LobbyServer implements MessageBus {
     private readonly messageCbs = new Set<MessageCallback>();
     private readonly connectedCbs = new Set<PlayerCallback>();
     private readonly disconnectedCbs = new Set<DisconnectCallback>();
+    private latestLobbyState: LobbyState | null = null;
 
     private readonly opts: LobbyServerOptions;
     private readonly logger: Logger | undefined;
@@ -152,6 +153,12 @@ export class LobbyServer implements MessageBus {
                 ws.send(serialised);
             }
         }
+    }
+
+    /** Cache and broadcast the authoritative lobby roster for future JOIN welcomes. */
+    broadcastLobbyState(state: LobbyState): void {
+        this.latestLobbyState = state;
+        this.broadcast({ type: 'LOBBY_STATE', state });
     }
 
     /**
@@ -324,17 +331,11 @@ export class LobbyServer implements MessageBus {
                 this.logger?.info('player connected', { playerId: pid });
 
                 // Send WELCOME
+                const lobbyState = this.buildWelcomeLobbyState(pid, displayName);
                 const welcomeMsg: ServerMessage = {
                     type: 'WELCOME',
                     playerId: pid,
-                    lobbyState: {
-                        info: {
-                            sessionId: this._token,
-                            hostId: toPlayerId(`host-${this._token}`),
-                            gameId: this.opts.gameId,
-                        },
-                        players: [],
-                    },
+                    lobbyState,
                 };
                 ws.send(JSON.stringify(welcomeMsg));
 
@@ -368,6 +369,34 @@ export class LobbyServer implements MessageBus {
         ws.on('error', () => {
             // Let the 'close' event handle cleanup
         });
+    }
+
+    private buildWelcomeLobbyState(playerId: PlayerId, displayName: string): LobbyState {
+        const baseState: LobbyState =
+            this.latestLobbyState ??
+            ({
+                info: {
+                    sessionId: this._token,
+                    hostId: toPlayerId(`host-${this._token}`),
+                    gameId: this.opts.gameId,
+                },
+                players: [],
+            } satisfies LobbyState);
+
+        const playersById = new Map<PlayerId, LobbyPlayerEntry>();
+        for (const entry of baseState.players) {
+            playersById.set(entry.playerId, entry);
+        }
+        if (!playersById.has(playerId)) {
+            playersById.set(playerId, { playerId, displayName, ready: false });
+        }
+
+        const lobbyState: LobbyState = {
+            info: baseState.info,
+            players: [...playersById.values()],
+        };
+        this.latestLobbyState = lobbyState;
+        return lobbyState;
     }
 }
 

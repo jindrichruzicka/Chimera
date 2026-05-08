@@ -51,8 +51,7 @@ export class WsHostTransport implements HostTransport {
     }
 
     broadcastLobbyState(state: LobbyState): void {
-        const msg: ServerMessage = { type: 'LOBBY_STATE', state };
-        this.server.broadcast(msg);
+        this.server.broadcastLobbyState(state);
     }
 
     sendSideChannel(target: PlayerId | 'broadcast', msg: SideChannelMessage): void {
