@@ -361,4 +361,5 @@ return (
 - [Content Database & DataRefs](content-database-data-refs.md) — `ContentDatabaseContext`, `useContentDatabase()`
 - [Audio System](audio-system.md) — `AudioManagerContext`, `useAudioManager()`
 - [Performance HUD & Device Info](performance-hud-device-info.md) — `DeviceInfoContext`, `useDeviceInfo()`
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #80–88
+- [Renderer Shell Pages UI Contract](renderer-shell-pages-ui-contract.md) — §4.37 shell page token contract, `Button` variant guide, game override cascade, invariants #91–94
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #80–94

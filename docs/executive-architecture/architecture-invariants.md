@@ -13,18 +13,18 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Thematic Index
 
-| Theme                                  | Invariants                                                                             |
-| -------------------------------------- | -------------------------------------------------------------------------------------- |
-| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                               |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78      |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                      |
-| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                             |
-| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                 |
-| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                             |
-| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                         |
-| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88 |
-| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                    |
-| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                         |
+| Theme                                  | Invariants                                                                                             |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                               |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78                      |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                      |
+| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                                             |
+| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                 |
+| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                             |
+| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                         |
+| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94 |
+| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                                    |
+| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                         |
 
 ---
 
@@ -225,6 +225,18 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **89.** `ctx.dispatch()` nesting depth is bounded by `MAX_NESTED_DISPATCH = 16`. `ActionPipeline` throws `RecursiveDispatchError` when this ceiling is exceeded. Only `engine:tick` may call `ctx.dispatch()`. This bound is reflected in `ReduceContext.dispatchDepth` and is invariant-backed per the ReduceContext JSDoc contract (lines 366–421 of `types.ts`): adding fields to `ReduceContext` requires a dedicated invariant in this document.
 
 **90.** `ReduceContext.logger?: Logger` is engine-internal diagnostics surface, populated by `ActionPipeline` from its injected `Logger` instance. It is intentionally absent from the public `GameReduceContext` interface (Invariant #12, ISP) and is reachable only after a deliberate `isReduceContext()` narrowing call. Use is restricted to engine-reserved actions: today only `engine:tick` (which emits `warn`-level entries when a timer-fired action is rejected by `validate()` — non-fatal, see §4.20). Game reducers must never read or write this field; any future engine-reserved action that uses it must update this invariant.
+
+---
+
+## Invariants 91–94
+
+**91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
+
+**92.** Shell pages must use `<Button>` from `renderer/components/ui/` for all interactive actions. Raw `<button>` or `<input type="button">` elements with inline styles are prohibited in shell pages. (See [Renderer Shell Pages UI Contract](../core-components/renderer-shell-pages-ui-contract.md).)
+
+**93.** Game token override CSS must not be imported directly by any shell page component. Token overrides enter the cascade exclusively as side-effects of game registry initialisation — importing `games/<name>/styles/tokens-override.css` from a shell page file is a module-boundary violation.
+
+**94.** Engine shell pages (`main-menu`, `settings`, `saves`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` parsing helpers but must not import game-specific screen modules, registries, or override stylesheets directly.
 
 ---
 
