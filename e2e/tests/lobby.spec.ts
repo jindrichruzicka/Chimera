@@ -7,9 +7,14 @@
  *   - Client joins via the host-issued lobby code (joinLobby())
  *   - Both windows show playerList with two entries (waitForPlayerCount(2))
  *   - Both windows expose data-status="connected"
+ *   - Leave Lobby: host and client scenarios (issue #487)
  *
  * Invariant #6: Network messages are validated before touching the simulation —
  * the lobby join flow must complete the full WebSocket handshake.
+ *
+ * Invariant #40: LobbyManager.closeLobby() must complete before provider.dispose() —
+ * teardown must not race with the leave action (verified by waiting for the
+ * pre-lobby screen before fixture cleanup).
  */
 import { test, expect } from '../fixtures/lobby.fixture';
 import { LobbyPage } from '../pages/LobbyPage';
@@ -77,6 +82,47 @@ test.describe('Lobby lifecycle', () => {
                 ]),
             )
             .toEqual(['true', 'true']);
+    });
+
+    test('host leaves; both windows return to pre-lobby screen', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostLobby = new LobbyPage(hostWindow);
+        const clientLobby = new LobbyPage(clientWindow);
+
+        await hostLobby.hostLobby();
+        const lobbyCode = await hostLobby.lobbyCode();
+        await clientLobby.joinLobby(lobbyCode);
+        await hostLobby.waitForPlayerCount(2);
+        await clientLobby.waitForPlayerCount(2);
+
+        await hostLobby.leaveLobby();
+
+        // Host window must return to pre-lobby immediately (leaveLobby() waits for it).
+        // Client window must also return to pre-lobby once the disconnect reason
+        // host_closed propagates through onConnectionStatus → lobbyStore cleared.
+        await clientLobby.waitForPreLobbyScreen();
+    });
+
+    test('client leaves; client returns to pre-lobby; host stays with 1 player', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostLobby = new LobbyPage(hostWindow);
+        const clientLobby = new LobbyPage(clientWindow);
+
+        await hostLobby.hostLobby();
+        const lobbyCode = await hostLobby.lobbyCode();
+        await clientLobby.joinLobby(lobbyCode);
+        await hostLobby.waitForPlayerCount(2);
+        await clientLobby.waitForPlayerCount(2);
+
+        await clientLobby.leaveLobby();
+
+        // Client window must return to pre-lobby (leaveLobby() waits for it).
+        // Host window must still show the lobby with only 1 player remaining.
+        await hostLobby.waitForPlayerCount(1);
     });
 });
 

@@ -93,6 +93,8 @@ describe('LobbyPage', () => {
         expect(lobbyPage.confirmJoinButton).toBeDefined();
         expect(lobbyPage.sessionId).toBeDefined();
 
+        expect(lobbyPage.leaveButton).toBeDefined();
+
         expect(requestedTestIds).toEqual([
             'host-lobby',
             'join-lobby',
@@ -104,6 +106,7 @@ describe('LobbyPage', () => {
             'address-input',
             'confirm-join',
             'lobby-session-id',
+            'lobby-leave-btn',
         ]);
     });
 
@@ -185,5 +188,24 @@ describe('LobbyPage', () => {
         await expect(lobbyPage.waitForPlayerCount(-1)).rejects.toThrow(
             'waitForPlayerCount requires count >= 1',
         );
+    });
+
+    it('leaves a lobby by clicking the leave button then waiting for the pre-lobby screen', async () => {
+        const { page, clickedTestIds, waitedTestIds } = buildPageDouble();
+        const lobbyPage = new LobbyPage(page);
+
+        await lobbyPage.leaveLobby();
+
+        expect(clickedTestIds).toEqual(['lobby-leave-btn']);
+        expect(waitedTestIds).toEqual(['host-lobby']);
+    });
+
+    it('waitForPreLobbyScreen waits for the host-lobby button to become visible', async () => {
+        const { page, waitedTestIds } = buildPageDouble();
+        const lobbyPage = new LobbyPage(page);
+
+        await lobbyPage.waitForPreLobbyScreen();
+
+        expect(waitedTestIds).toEqual(['host-lobby']);
     });
 });

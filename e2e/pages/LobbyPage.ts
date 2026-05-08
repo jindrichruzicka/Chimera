@@ -11,6 +11,7 @@ export class LobbyPage {
     readonly addressInput: Locator;
     readonly confirmJoinButton: Locator;
     readonly sessionId: Locator;
+    readonly leaveButton: Locator;
 
     public constructor(private readonly page: Page) {
         this.hostButton = page.getByTestId('host-lobby');
@@ -23,6 +24,7 @@ export class LobbyPage {
         this.addressInput = page.getByTestId('address-input');
         this.confirmJoinButton = page.getByTestId('confirm-join');
         this.sessionId = page.getByTestId('lobby-session-id');
+        this.leaveButton = page.getByTestId('lobby-leave-btn');
     }
 
     public async hostLobby(): Promise<void> {
@@ -67,5 +69,14 @@ export class LobbyPage {
     public async lobbyCode(): Promise<string> {
         await this.sessionId.waitFor({ state: 'visible' });
         return (await this.sessionId.innerText()).trim();
+    }
+
+    public async leaveLobby(): Promise<void> {
+        await this.leaveButton.click();
+        await this.waitForPreLobbyScreen();
+    }
+
+    public async waitForPreLobbyScreen(): Promise<void> {
+        await this.hostButton.waitFor({ state: 'visible' });
     }
 }
