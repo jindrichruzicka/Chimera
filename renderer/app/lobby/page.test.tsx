@@ -5,13 +5,17 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
 import type {
     LocalProfileSlot,
     ProfileSwitcherApi,
 } from '../../components/shell/useProfileSwitcher';
+
+const mockPush = vi.fn();
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: mockPush }),
+}));
 
 interface MockLobbyStoreState {
     readonly lobbyState: {
@@ -36,7 +40,6 @@ interface MockLobbyUiStoreState {
 let mockLocalSeatIds: readonly string[] = [];
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
-let mockSnapshot: PlayerSnapshot | null = null;
 let mockProfileSlots: readonly LocalProfileSlot[] = [];
 const mockSwitchToProfile = vi.fn(async () => undefined);
 
@@ -60,11 +63,6 @@ vi.mock('../../state/lobbyUiStore', () => ({
             localPlayerId: mockLocalPlayerId,
             localSeatIds: mockLocalSeatIds,
         }),
-}));
-
-vi.mock('../../state/gameStore', () => ({
-    useGameStore: (selector: (state: { readonly snapshot: PlayerSnapshot | null }) => unknown) =>
-        selector({ snapshot: mockSnapshot }),
 }));
 
 vi.mock('../../state/lobbyStoreBootstrap', () => ({
@@ -101,30 +99,6 @@ function renderLobbyPage(): ReturnType<typeof render> {
     );
 }
 
-function makeMatchSnapshot(): PlayerSnapshot {
-    const viewerId = playerId('p1');
-    return {
-        tick: 1,
-        viewerId,
-        players: {
-            [viewerId]: { id: viewerId },
-        },
-        entities: {},
-        phase: gamePhase('ended'),
-        events: [],
-        commitments: {},
-        undoMeta: { canUndo: false, canRedo: false },
-        isMyTurn: true,
-    };
-}
-
-function makeUndoableMatchSnapshot(): PlayerSnapshot {
-    return {
-        ...makeMatchSnapshot(),
-        undoMeta: { canUndo: true, canRedo: false },
-    };
-}
-
 describe('LobbyPage pending actions', () => {
     let hostDeferred: DeferredPromise;
 
@@ -133,9 +107,9 @@ describe('LobbyPage pending actions', () => {
         mockLocalSeatIds = [];
         mockLocalPlayerId = null;
         mockLobbyState = null;
-        mockSnapshot = null;
         mockProfileSlots = [];
         mockSwitchToProfile.mockReset();
+        mockPush.mockReset();
 
         Object.defineProperty(window, '__chimera', {
             value: {
@@ -226,47 +200,36 @@ describe('LobbyPage pending actions', () => {
         expect(screen.getByTestId('start-match')).toBeTruthy();
     });
 
-    it('renders MatchShell instead of the lobby once a game snapshot arrives', () => {
-        mockSnapshot = makeMatchSnapshot();
+    it('still renders lobby heading when a snapshot is active (no MatchShell in lobby)', () => {
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
+        };
 
         renderLobbyPage();
 
-        expect(screen.getByTestId('match-canvas')).toBeTruthy();
-        expect(screen.getByTestId('game-over-banner')).toBeTruthy();
-        expect(screen.queryByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeNull();
+        // Lobby heading must remain; MatchShell must NOT be rendered.
+        expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
+        expect(screen.queryByTestId('match-canvas')).toBeNull();
     });
 
-    it('dispatches engine:undo through the game bridge with the current viewer tick', () => {
+    it('calls router.push("/match") after handleStartMatch succeeds', async () => {
         mockLocalPlayerId = 'p1';
-        mockSnapshot = makeUndoableMatchSnapshot();
-        const sendAction = vi.fn();
-        Object.defineProperty(window, '__chimera', {
-            value: {
-                lobby: {
-                    host: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
-                    join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
-                    getLocalPlayerId: vi.fn(async () => 'p2'),
-                    leave: vi.fn(async () => undefined),
-                    startMatch: vi.fn(async () => undefined),
-                    updatePlayerReadyState: vi.fn(async () => undefined),
-                },
-                system: {
-                    onConnectionStatus: vi.fn(() => () => undefined),
-                },
-                game: { sendAction },
-            },
-            configurable: true,
-        });
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: true },
+                { playerId: 'p2', displayName: 'Guest', ready: true },
+            ],
+        };
 
         renderLobbyPage();
 
-        fireEvent.click(screen.getByTestId('undo'));
+        fireEvent.click(screen.getByTestId('start-match'));
 
-        expect(sendAction).toHaveBeenCalledWith({
-            type: 'engine:undo',
-            playerId: 'p1',
-            tick: 1,
-            payload: { steps: 1 },
+        await waitFor(() => {
+            expect(mockPush).toHaveBeenCalledWith('/match');
         });
     });
 
@@ -440,7 +403,6 @@ describe('Start Match button enable/disable', () => {
         };
         mockProfileSlots = [];
         mockLocalSeatIds = [];
-        mockSnapshot = null;
 
         Object.defineProperty(window, '__chimera', {
             value: {

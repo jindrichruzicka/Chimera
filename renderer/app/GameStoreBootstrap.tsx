@@ -10,6 +10,10 @@
  * pushes from the main process are routed into gameStore via
  * `confirmPrediction` + `applySnapshot`.
  *
+ * Also handles automatic navigation: when a snapshot arrives (match started)
+ * and the current path is /lobby, navigates to /match. This drives the CLIENT
+ * window's navigation without requiring a snapshot subscription in lobby/page.
+ *
  * Architecture reference: §4.4 — Renderer State Stores;
  *                         §6  — simulation/prediction · Client Prediction (F17)
  *
@@ -20,10 +24,25 @@
  */
 
 import { useEffect } from 'react';
+import { usePathname, useRouter } from 'next/navigation';
 import { bootstrapGameStore } from '../state/gameStoreBootstrap';
+import { useGameStore } from '../state/gameStore';
 import type { GameAPI } from '@chimera/electron/preload/api-types.js';
 
 export function GameStoreBootstrap(): null {
+    const router = useRouter();
+    const pathname = usePathname();
+    const snapshot = useGameStore((state) => state.snapshot);
+
+    // Navigate to /match when a snapshot arrives on the lobby page.
+    // This handles the CLIENT window — the host navigates via router.push in
+    // handleStartMatch(). Both end up at /match automatically.
+    useEffect(() => {
+        if (snapshot !== null && pathname === '/lobby') {
+            router.push('/match');
+        }
+    }, [snapshot, router, pathname]);
+
     useEffect(() => {
         const chimera = (globalThis as { __chimera?: { game: GameAPI } }).__chimera;
         if (!chimera?.game) return;

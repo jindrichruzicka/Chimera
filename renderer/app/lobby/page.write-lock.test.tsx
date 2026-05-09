@@ -7,6 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
 
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: vi.fn() }),
+}));
+
 const host = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 const join = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 const leave = vi.fn(async () => undefined);

@@ -85,6 +85,10 @@ async function advanceToMatch(
 
     await hostLobby.startButton.click();
 
+    // Under the custom Electron protocol used in E2E, route transitions can
+    // render the Match screen before the URL reflects `/match`. Gate on
+    // visible match UI instead of URL assertions.
+
     const hostMatch = new MatchPage(hostWindow);
     const clientMatch = new MatchPage(clientWindow);
     await hostMatch.canvas.waitFor({ state: 'visible' });

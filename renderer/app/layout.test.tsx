@@ -8,6 +8,11 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import RootLayout from './layout';
 
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
+    usePathname: () => '/',
+}));
+
 function renderLayoutDocument(): Document {
     const markup = `<!DOCTYPE html>${renderToStaticMarkup(<RootLayout>{null}</RootLayout>)}`;
     return new DOMParser().parseFromString(markup, 'text/html');
