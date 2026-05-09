@@ -32,6 +32,7 @@ import type {
     LobbyAgentSlot,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
@@ -383,6 +384,19 @@ export class LobbyManager {
 
     getLocalPlayerId(): PlayerId | null {
         return this.localPlayerId;
+    }
+
+    sendAction(action: EngineAction): void {
+        const session = this.session;
+        if (session === null) {
+            throw new Error('LobbyManager: game actions require an active session');
+        }
+
+        if ('close' in session) {
+            throw new Error('LobbyManager: hosted game actions are dispatched by SessionRuntime');
+        }
+
+        session.transport.sendAction(action);
     }
 
     switchActiveSeat(playerId: PlayerId): Promise<void> {

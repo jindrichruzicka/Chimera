@@ -6,6 +6,7 @@
  *   - After one move action + undo: undoButton is disabled, redoButton is enabled
  *   - After one move action + undo + redo: redoButton is disabled, undoButton is enabled
  *   - Guest cannot undo the host's actions (per-turn ownership enforcement, BLOCK-2 fix)
+ *   - Host cannot undo the client's first action when client is configured to go first
  *
  * Invariant #7: engine:undo/engine:redo go through the normal ActionPipeline —
  * the spec verifies the UI reflects canUndo=false / canRedo=false, proving no
@@ -59,5 +60,20 @@ test.describe('Undo/redo', () => {
         await expect(hostMatch.undoButton).toBeEnabled();
 
         await expect(clientMatch.undoButton).toBeDisabled();
+    });
+
+    test.describe('client first player', () => {
+        test.use({ firstPlayer: 'client' });
+
+        test('host cannot undo when client goes first', async ({ hostWindow, clientWindow }) => {
+            const hostMatch = new MatchPage(hostWindow);
+            const clientMatch = new MatchPage(clientWindow);
+
+            await clientWindow.getByTestId('selectable-unit').first().click();
+            await clientWindow.getByTestId('move-target').first().click();
+
+            await expect(clientMatch.undoButton).toBeEnabled();
+            await expect(hostMatch.undoButton).toBeDisabled();
+        });
     });
 });

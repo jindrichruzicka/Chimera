@@ -24,8 +24,15 @@
  *          Date.now() calls.
  */
 
-import type { ActionDefinition, BaseGameSnapshot, PlayerId, ValidationResult } from './types.js';
-import { gamePhase, isReduceContext, playerId } from './types.js';
+import type {
+    ActionDefinition,
+    BaseEntityState,
+    BaseGameSnapshot,
+    EntityId,
+    PlayerId,
+    ValidationResult,
+} from './types.js';
+import { entityId, gamePhase, isReduceContext, playerId } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { TimerManager } from './GameTimer.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
@@ -83,6 +90,67 @@ export type EngineSyncRequestPayload = Record<string, never>;
  */
 export interface EngineStartMatchPayload {
     readonly playerIds: readonly PlayerId[];
+    readonly firstPlayerId?: PlayerId;
+    readonly initialEntities?: BaseGameSnapshot['entities'];
+}
+
+const DEFAULT_TURN_DEADLINE_MS = 30_000;
+
+function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function isUnsafeObjectKey(key: string): boolean {
+    return key === '__proto__' || key === 'constructor' || key === 'prototype';
+}
+
+function copyEntityFields(entity: Readonly<Record<string, unknown>>): Record<string, unknown> {
+    const copy: Record<string, unknown> = {};
+    for (const [fieldName, fieldValue] of Object.entries(entity)) {
+        if (!isUnsafeObjectKey(fieldName)) {
+            copy[fieldName] = fieldValue;
+        }
+    }
+    return copy;
+}
+
+function parseInitialEntities(raw: unknown): BaseGameSnapshot['entities'] | undefined {
+    if (raw === undefined) {
+        return undefined;
+    }
+    if (!isRecord(raw)) {
+        throw new TypeError(
+            'engine:start_match payload "initialEntities" must be an entity map when present; ' +
+                `received ${JSON.stringify(raw)}.`,
+        );
+    }
+
+    const parsed: Record<EntityId, BaseEntityState> = {};
+    for (const [rawEntityId, rawEntity] of Object.entries(raw)) {
+        if (rawEntityId.length === 0 || isUnsafeObjectKey(rawEntityId) || !isRecord(rawEntity)) {
+            throw new TypeError(
+                'engine:start_match payload "initialEntities" must map non-empty entity ids to objects; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+
+        const rawId = rawEntity['id'];
+        if (typeof rawId !== 'string' || rawId.length === 0) {
+            throw new TypeError(
+                'engine:start_match payload "initialEntities" entries must include a non-empty id; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+
+        const parsedId = entityId(rawId);
+        const parsedEntity = {
+            ...copyEntityFields(rawEntity),
+            id: parsedId,
+        } satisfies BaseEntityState & Readonly<Record<string, unknown>>;
+        parsed[entityId(rawEntityId)] = parsedEntity;
+    }
+
+    return parsed;
 }
 
 // ─── engine:tick ──────────────────────────────────────────────────────────────
@@ -283,12 +351,40 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
             parsed.push(playerId(rawPlayerId));
         }
 
-        return { playerIds: parsed };
+        const rawFirstPlayerId = raw['firstPlayerId'];
+        if (rawFirstPlayerId !== undefined && typeof rawFirstPlayerId !== 'string') {
+            throw new TypeError(
+                'engine:start_match payload "firstPlayerId" must be a non-empty string when present; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+        if (rawFirstPlayerId === '') {
+            throw new TypeError(
+                'engine:start_match payload "firstPlayerId" must be a non-empty string when present; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+
+        const firstPlayerId =
+            rawFirstPlayerId === undefined ? undefined : playerId(rawFirstPlayerId);
+        const initialEntities = parseInitialEntities(raw['initialEntities']);
+
+        return {
+            playerIds: parsed,
+            ...(firstPlayerId !== undefined ? { firstPlayerId } : {}),
+            ...(initialEntities !== undefined ? { initialEntities } : {}),
+        };
     },
 
-    validate(_payload, state, dispatcherId): ValidationResult {
+    validate(payload, state, dispatcherId): ValidationResult {
         if (state.hostPlayerId === undefined || dispatcherId !== state.hostPlayerId) {
             return { ok: false, reason: 'host_only' };
+        }
+        if (
+            payload.firstPlayerId !== undefined &&
+            !payload.playerIds.includes(payload.firstPlayerId)
+        ) {
+            return { ok: false, reason: 'first_player_not_in_match' };
         }
         return { ok: true };
     },
@@ -299,12 +395,24 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
             nextPlayers[pid] = nextPlayers[pid] ?? { id: pid };
         }
 
-        return {
+        const firstPlayerId = payload.firstPlayerId ?? state.turnClock?.activePlayerId;
+        const nextTurnClock =
+            firstPlayerId === undefined
+                ? undefined
+                : {
+                      activePlayerId: firstPlayerId,
+                      deadlineMs: state.turnClock?.deadlineMs ?? DEFAULT_TURN_DEADLINE_MS,
+                  };
+
+        const nextState: BaseGameSnapshot = {
             ...state,
             tick: state.tick + 1,
             players: nextPlayers,
+            entities: payload.initialEntities ?? state.entities,
             phase: gamePhase('ended'),
         };
+
+        return nextTurnClock === undefined ? nextState : { ...nextState, turnClock: nextTurnClock };
     },
 } satisfies ActionDefinition<EngineStartMatchPayload>;
 

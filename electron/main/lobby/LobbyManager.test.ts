@@ -393,6 +393,43 @@ describe('LobbyManager.joinLobby', () => {
     });
 });
 
+// ── sendAction ──────────────────────────────────────────────────────────────
+
+describe('LobbyManager.sendAction', () => {
+    it('forwards joined renderer actions to the authoritative host transport', async () => {
+        const provider = makeProvider();
+        const receivedActions: EngineAction[] = [];
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            onSessionHosted: (transport) =>
+                transport.onActionReceived((_from, action) => {
+                    receivedActions.push(action);
+                }),
+        });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        const joinedPlayerId = joinManager.getLocalPlayerId();
+        if (joinedPlayerId === null) {
+            throw new Error('Expected joined player identity to be available');
+        }
+        const action: EngineAction = {
+            ...makeTestAction(),
+            playerId: joinedPlayerId,
+        };
+
+        joinManager.sendAction(action);
+
+        expect(receivedActions).toEqual([action]);
+    });
+
+    it('throws when no session is active', () => {
+        const manager = makeManager();
+
+        expect(() => manager.sendAction(makeTestAction())).toThrow(/active session/i);
+    });
+});
+
 // ── switchActiveSeat ─────────────────────────────────────────────────────────
 
 describe('LobbyManager.switchActiveSeat', () => {

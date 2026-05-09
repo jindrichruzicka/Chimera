@@ -4,6 +4,12 @@ import { test as lobbyTest } from './lobby.fixture';
 import { LobbyPage } from '../pages/LobbyPage';
 import { MatchPage } from '../pages/MatchPage';
 
+export type E2eFirstPlayer = 'host' | 'client';
+
+export interface GameFixtureOptions {
+    readonly firstPlayer: E2eFirstPlayer;
+}
+
 export interface GameFixtures {
     readonly hostApp: ElectronApplication;
     readonly clientApp: ElectronApplication;
@@ -26,7 +32,30 @@ export interface GameFixtures {
  *
  * §13.11: CHIMERA_E2E is set by the launcher — not here.
  */
-async function advanceToMatch(hostWindow: Page, clientWindow: Page): Promise<void> {
+async function configureFirstPlayer(
+    hostApp: ElectronApplication,
+    firstPlayer: E2eFirstPlayer,
+): Promise<void> {
+    await hostApp.evaluate((_electron, role: E2eFirstPlayer) => {
+        type E2eHookGlobal = typeof globalThis & {
+            __e2eHooks?: { firstPlayerRole: E2eFirstPlayer };
+        };
+        const hooks = (globalThis as E2eHookGlobal).__e2eHooks;
+        if (hooks === undefined) {
+            throw new Error('CHIMERA_E2E hooks are not available in the host process');
+        }
+        hooks.firstPlayerRole = role;
+    }, firstPlayer);
+}
+
+async function advanceToMatch(
+    hostApp: ElectronApplication,
+    hostWindow: Page,
+    clientWindow: Page,
+    firstPlayer: E2eFirstPlayer,
+): Promise<void> {
+    await configureFirstPlayer(hostApp, firstPlayer);
+
     const hostLobby = new LobbyPage(hostWindow);
     const clientLobby = new LobbyPage(clientWindow);
 
@@ -71,13 +100,15 @@ async function advanceToMatch(hostWindow: Page, clientWindow: Page): Promise<voi
  *
  * §13.8: game.fixture.ts — Extends lobby: match started, tick driver wired.
  */
-export const test = lobbyTest.extend<{ readonly _matchStarted: void }>({
+export const test = lobbyTest.extend<GameFixtureOptions & { readonly _matchStarted: void }>({
+    firstPlayer: ['host', { option: true }],
+
     // @chimera-review: auto fixture must reference hostWindow/clientWindow to
     // trigger dependency resolution; the eslint empty-destructure suppression
     // used in lobby.fixture does not apply here.
     _matchStarted: [
-        async ({ hostWindow, clientWindow }, use) => {
-            await advanceToMatch(hostWindow, clientWindow);
+        async ({ hostApp, hostWindow, clientWindow, firstPlayer }, use) => {
+            await advanceToMatch(hostApp, hostWindow, clientWindow, firstPlayer);
             await use();
         },
         { auto: true },

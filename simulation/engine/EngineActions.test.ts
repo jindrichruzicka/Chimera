@@ -30,7 +30,7 @@ import {
 } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
-import { playerId as toPlayerId } from './types.js';
+import { entityId, playerId as toPlayerId } from './types.js';
 import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
 import type { Logger } from '@chimera/shared/logging.js';
@@ -646,6 +646,26 @@ describe('engine:start_match definition', () => {
         });
     });
 
+    it('parsePayload accepts firstPlayerId and initialEntities for match initialization', () => {
+        const unit = entityId('unit-start-match');
+
+        expect(
+            definition().parsePayload({
+                playerIds: ['p1', 'p2'],
+                firstPlayerId: 'p2',
+                initialEntities: {
+                    [unit]: { id: unit, kind: 'unit', ownerId: 'p2', x: 0, y: 0 },
+                },
+            }),
+        ).toEqual({
+            playerIds: ['p1', 'p2'],
+            firstPlayerId: 'p2',
+            initialEntities: {
+                [unit]: { id: unit, kind: 'unit', ownerId: 'p2', x: 0, y: 0 },
+            },
+        });
+    });
+
     it('parsePayload rejects an empty playerIds array', () => {
         expect(() => definition().parsePayload({ playerIds: [] })).toThrow(TypeError);
     });
@@ -662,6 +682,18 @@ describe('engine:start_match definition', () => {
         expect(result).toEqual({ ok: false, reason: 'host_only' });
     });
 
+    it('validate rejects an explicit first player outside the match roster', () => {
+        const snapshot = makeSnapshot(hostId);
+        const result = definition().validate(
+            { playerIds: [hostId], firstPlayerId: guestId },
+            snapshot,
+            hostId,
+            stubCtx,
+        );
+
+        expect(result).toEqual({ ok: false, reason: 'first_player_not_in_match' });
+    });
+
     it('reduce adds every started player, marks the phase ended, and advances tick exactly once', () => {
         const snapshot = makeSnapshot(hostId);
         const next = definition().reduce(
@@ -675,6 +707,24 @@ describe('engine:start_match definition', () => {
         expect(next.tick).toBe(snapshot.tick + 1);
         expect(next.phase).toBe('ended');
         expect(Object.keys(next.players).sort()).toEqual([guestId, hostId].sort());
+    });
+
+    it('reduce applies initial entities and explicit first player through the match-start action', () => {
+        const snapshot = makeSnapshot(hostId);
+        const unit = entityId('unit-start-match-reduce');
+        const initialEntities: BaseGameSnapshot['entities'] = {
+            [unit]: { id: unit },
+        };
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId], firstPlayerId: guestId, initialEntities },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.entities).toBe(initialEntities);
+        expect(next.turnClock).toEqual({ activePlayerId: guestId, deadlineMs: 30_000 });
     });
 
     it('reduce does not mutate the input snapshot', () => {

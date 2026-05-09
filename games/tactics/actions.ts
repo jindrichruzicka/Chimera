@@ -37,6 +37,15 @@ export interface TacticsMoveUnitPayload {
     readonly y: TacticsGridCoordinate;
 }
 
+export interface TacticsGameInitializationConfig {
+    readonly hostPlayerId: PlayerId;
+    readonly firstPlayer?: PlayerId;
+}
+
+export function resolveTacticsFirstPlayer(config: TacticsGameInitializationConfig): PlayerId {
+    return config.firstPlayer ?? config.hostPlayerId;
+}
+
 interface TacticsUnitEntity extends BaseEntityState {
     readonly kind: 'unit';
     readonly ownerId: PlayerId;

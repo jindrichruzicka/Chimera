@@ -41,4 +41,10 @@ describe('electron.fixture', () => {
 
         expect(config.env['CHIMERA_E2E_INITIAL_URL']).toBeUndefined();
     });
+
+    it('omits first-player launch configuration by default', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7778' });
+
+        expect(config.env['CHIMERA_E2E_FIRST_PLAYER']).toBeUndefined();
+    });
 });

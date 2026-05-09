@@ -29,10 +29,13 @@ export interface WsFrame {
     readonly timestamp: number;
 }
 
+export type E2eFirstPlayerRole = 'host' | 'client';
+
 export interface E2eHooks {
     readonly lastHostSnapshot: PlayerSnapshot | null;
     readonly lastChecksum: number;
     readonly currentTick: number;
+    firstPlayerRole: E2eFirstPlayerRole;
     /**
      * WebSocket frames recorded by the networking-layer CHIMERA_E2E hook. Initialized lazily by tapWebSocketFrames().
      * @chimera-review: intentionally mutable — field is assigned/reset externally by ws-inspector helpers
@@ -90,6 +93,7 @@ export function createE2eHooks(): E2eHooks {
         get currentTick() {
             return state.currentTick;
         },
+        firstPlayerRole: 'host',
         get wsFrames(): WsFrame[] | undefined {
             return _ring;
         },

@@ -151,6 +151,25 @@ describe('buildInitialHostedSessionSnapshot', () => {
         expect(snapshot.entities).toBe(customEntities);
     });
 
+    it('uses an explicit firstPlayer for the initial turn clock at tick 0', () => {
+        const host = playerId('host-first-player-1');
+        const client = playerId('client-first-player-1');
+
+        const snapshot = buildInitialHostedSessionSnapshot({
+            seed: 42,
+            hostPlayerId: host,
+            firstPlayer: client,
+            playerSlots: [
+                { slotIndex: 0, playerId: host },
+                { slotIndex: 1, playerId: client },
+            ],
+            phase: gamePhase('lobby'),
+        });
+
+        expect(snapshot.tick).toBe(0);
+        expect(snapshot.turnClock).toEqual({ activePlayerId: client, deadlineMs: 30_000 });
+    });
+
     it('yields empty entities when initialEntities is not provided', () => {
         const host = playerId('host-entities-2');
 

@@ -11,6 +11,7 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_DEFAULT_UNIT_ID,
     registerTacticsActions,
+    resolveTacticsFirstPlayer,
     tacticsGridCoordinate,
     tacticsMoveUnitDefinition,
 } from './actions.js';
@@ -76,6 +77,27 @@ describe('tactics move unit action', () => {
             ownerId: P1,
             x: 0,
             y: 0,
+        });
+    });
+
+    it('defaults the initial first player to the host player', () => {
+        expect(resolveTacticsFirstPlayer({ hostPlayerId: P1 })).toBe(P1);
+    });
+
+    it('uses an explicit first player from Tactics initialization config', () => {
+        expect(resolveTacticsFirstPlayer({ hostPlayerId: P1, firstPlayer: P2 })).toBe(P2);
+    });
+
+    it('builds initial tactics entities for the explicit first player', () => {
+        const registry = new ActionRegistry<BaseGameSnapshot>();
+
+        registerTacticsActions(registry);
+
+        const definition = registry.resolveGame('tactics');
+        const initialEntities = definition?.buildInitialEntities?.(P2);
+
+        expect(initialEntities?.[TACTICS_DEFAULT_UNIT_ID]).toMatchObject({
+            ownerId: P2,
         });
     });
 

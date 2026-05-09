@@ -58,6 +58,22 @@ describe('getE2eHooks', () => {
 });
 
 // ---------------------------------------------------------------------------
+// firstPlayerRole
+// ---------------------------------------------------------------------------
+
+describe('firstPlayerRole', () => {
+    it('defaults to host and can be switched by E2E fixture setup', () => {
+        const hooks = createE2eHooks();
+
+        expect(hooks.firstPlayerRole).toBe('host');
+
+        hooks.firstPlayerRole = 'client';
+
+        expect(hooks.firstPlayerRole).toBe('client');
+    });
+});
+
+// ---------------------------------------------------------------------------
 // pushWsFrame
 // ---------------------------------------------------------------------------
 

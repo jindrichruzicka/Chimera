@@ -97,6 +97,7 @@ function makeE2eHooks(): E2eHooks {
         get currentTick() {
             return state.currentTick;
         },
+        firstPlayerRole: 'host',
         onTick(tick, checksum, snapshot): void {
             state.currentTick = tick;
             state.lastChecksum = checksum;

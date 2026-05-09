@@ -36,6 +36,7 @@ export interface HostedSessionPlayerSlot {
 export interface BuildInitialHostedSessionSnapshotOptions {
     readonly seed: number;
     readonly hostPlayerId: PlayerId;
+    readonly firstPlayer?: PlayerId;
     readonly playerSlots: readonly HostedSessionPlayerSlot[];
     readonly phase: GamePhase;
     readonly initialEntities?: BaseGameSnapshot['entities'];
@@ -85,7 +86,7 @@ export function buildInitialHostedSessionSnapshot(
         players[slot.playerId] = { id: slot.playerId };
     }
 
-    const firstPlayer = options.playerSlots[0]?.playerId;
+    const firstPlayer = options.firstPlayer ?? options.playerSlots[0]?.playerId;
     const entities: BaseGameSnapshot['entities'] = options.initialEntities ?? {};
 
     return {

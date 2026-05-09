@@ -1506,6 +1506,90 @@ describe('main', () => {
         });
     });
 
+    it('seeds undo memento for the configured client first player in E2E sessions', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockDefaultStateProjectorCtor.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main();
+
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | {
+                  onSessionHosted?: (
+                      transport: {
+                          onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                          onPlayerLeft(cb: (id: string) => void): () => void;
+                          onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                      },
+                      metadata: {
+                          readonly hostId: ReturnType<typeof playerId>;
+                          maxPlayers: number;
+                          readonly e2eHooks?: { readonly firstPlayerRole: 'host' | 'client' };
+                      },
+                  ) => void;
+                  onMatchStartRequested?: (state: {
+                      readonly info: {
+                          readonly sessionId: string;
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly gameId: string;
+                      };
+                      readonly players: readonly {
+                          readonly playerId: ReturnType<typeof playerId>;
+                          readonly displayName: string;
+                          readonly ready: boolean;
+                      }[];
+                  }) => void;
+              }
+            | undefined;
+
+        const hostId = playerId('host-client-first');
+        const guestId = playerId('guest-client-first');
+        const actionReceivedRef: { current?: (from: string, action: unknown) => void } = {};
+        const transport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn((cb: (from: string, action: unknown) => void) => {
+                actionReceivedRef.current = cb;
+                return () => {};
+            }),
+        };
+
+        options?.onSessionHosted?.(transport, {
+            hostId,
+            maxPlayers: 2,
+            e2eHooks: { firstPlayerRole: 'client' },
+        });
+        options?.onMatchStartRequested?.({
+            info: { sessionId: 'session-client-first-undo', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: guestId, displayName: 'Guest', ready: true },
+            ],
+        });
+
+        const actionReceived = actionReceivedRef.current;
+        if (actionReceived === undefined) {
+            throw new Error('Expected hosted session to subscribe to incoming actions');
+        }
+
+        actionReceived(guestId, {
+            type: 'tactics:move_unit',
+            playerId: guestId,
+            tick: 1,
+            payload: { unitId: 'unit-1', x: 1, y: 0 },
+        });
+
+        const projectorOptions = capturedDefaultStateProjectorOptions.current;
+        expect(projectorOptions?.getUndoMeta?.(guestId)).toEqual({
+            canUndo: true,
+            canRedo: false,
+        });
+        expect(projectorOptions?.getUndoMeta?.(hostId)).toEqual({
+            canUndo: false,
+            canRedo: false,
+        });
+    });
+
     it('registers configured AI slots before firing onGameStart', async () => {
         mockLobbyManagerCtor.mockClear();
         mockSimulationHostInstance.registerAgent.mockClear();

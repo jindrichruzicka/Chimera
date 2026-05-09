@@ -33,7 +33,10 @@ import {
     createDefaultMigrator,
 } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
-import { registerTacticsActions } from '@chimera/games/tactics/actions.js';
+import {
+    registerTacticsActions,
+    resolveTacticsFirstPlayer,
+} from '@chimera/games/tactics/actions.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
@@ -51,6 +54,7 @@ import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import type {
     ClientTransport,
+    LobbyState,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } from '../preload/apis/game-api.js';
@@ -74,7 +78,12 @@ import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
 import { SimulationHost } from './runtime/SimulationHost.js';
-import { registerE2eHooks, getE2eHooks } from './runtime/e2e-hooks.js';
+import {
+    registerE2eHooks,
+    getE2eHooks,
+    type E2eFirstPlayerRole,
+    type E2eHooks,
+} from './runtime/e2e-hooks.js';
 import { assertProductionDebugGuard } from './startup-guard.js';
 import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import {
@@ -128,9 +137,23 @@ export async function ensureActiveProfile(
 export function resolveInitialEntitiesForGame(
     gameRegistry: ActionRegistry<BaseGameSnapshot>,
     gameId: string,
-    hostPlayerId: PlayerId | undefined,
+    firstPlayer: PlayerId | undefined,
 ): BaseGameSnapshot['entities'] {
-    return gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(hostPlayerId) ?? {};
+    return gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(firstPlayer) ?? {};
+}
+
+export function resolveFirstPlayerFromLobbyState(
+    state: LobbyState,
+    firstPlayerRole: E2eFirstPlayerRole,
+): PlayerId {
+    if (firstPlayerRole === 'host') {
+        return state.info.hostId;
+    }
+
+    return (
+        state.players.find((entry) => entry.playerId !== state.info.hostId)?.playerId ??
+        state.info.hostId
+    );
 }
 
 // ── HarnessFlags ──────────────────────────────────────────────────────────────
@@ -879,10 +902,12 @@ export async function main(): Promise<void> {
     // are needed in SimulationHost.ts (WARN-1 / §2 DIP).
     registerE2eHooks(process.env);
     const resolvedE2eHooks = getE2eHooks();
+    let activeE2eHooks: E2eHooks | undefined = undefined;
 
     const lobbyManager = new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, {
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
         onSessionHosted: (transport, metadata) => {
+            activeE2eHooks = metadata.e2eHooks;
             const agentManager = new AgentManager({ logger: lobbyLogger });
             const broadcasterRef: { current: StateBroadcaster | null } = { current: null };
 
@@ -1087,6 +1112,7 @@ export async function main(): Promise<void> {
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
+                    activeE2eHooks = undefined;
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
                 }
@@ -1123,12 +1149,29 @@ export async function main(): Promise<void> {
                 throw new Error('LobbyManager: no hosted session runtime is available');
             }
 
+            const playerIds = state.players.map((player) => player.playerId);
+            const selectedFirstPlayer = resolveFirstPlayerFromLobbyState(
+                state,
+                activeE2eHooks?.firstPlayerRole ?? 'host',
+            );
+            const firstPlayer = resolveTacticsFirstPlayer({
+                hostPlayerId: state.info.hostId,
+                firstPlayer: selectedFirstPlayer,
+            });
+            const initialEntities = resolveInitialEntitiesForGame(
+                gameRegistry,
+                HOSTED_GAME_ID,
+                firstPlayer,
+            );
+
             const action: ActionEnvelope = {
                 type: 'engine:start_match',
                 playerId: state.info.hostId,
                 tick: sessionRuntime.getSnapshot().tick,
                 payload: {
-                    playerIds: state.players.map((player) => player.playerId),
+                    playerIds,
+                    firstPlayerId: firstPlayer,
+                    ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
                 },
             };
             sessionRuntime.applyAction(action);
@@ -1138,7 +1181,7 @@ export async function main(): Promise<void> {
             // undo-redo-policy.md §60 and the per-viewer contract (BLOCK-2 fix).
             // Non-active players receive their memento when engine:end_turn fires and
             // their turn begins.
-            saveInitialTurnMemento?.(state.info.hostId);
+            saveInitialTurnMemento?.(firstPlayer);
         },
         onLobbyStateChanged: (state) => {
             BrowserWindow.getAllWindows().forEach((win) => {
@@ -1171,10 +1214,12 @@ export async function main(): Promise<void> {
     registerGameHandlers({
         ipcMain,
         actionDispatcher: (action) => {
-            if (dispatchRendererAction === null) {
-                throw new Error('No active hosted session is available for game actions');
+            if (dispatchRendererAction !== null) {
+                dispatchRendererAction(action);
+                return;
             }
-            dispatchRendererAction(action);
+
+            lobbyManager.sendAction(action);
         },
         seatSwitchManager: lobbyManager,
         actionRegistry: gameRegistry,
