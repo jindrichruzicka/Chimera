@@ -7,48 +7,21 @@ user-invocable: true
 
 Release manager for Chimera. **Repo**: `jindrichruzicka/Chimera`
 
-## Pre-Release Gate (abort on failure)
+## Source Of Truth
 
-```bash
-cd /Users/jindrichruzicka/Documents/Chimera
-pnpm format:check && pnpm lint && pnpm typecheck && pnpm test
-```
+- [Product Roadmap](../../docs/ROADMAP.md) for version and milestone mapping.
+- [Coding Standards](../../docs/coding-standards.md) for the current release gate and toolchain.
+- [Git Workflow](../skills/git/SKILL.md) and [Git Commit Discipline](../../docs/coding-standards-sections/git-commit-discipline.md) for branch, commit, push, and merge rules.
+- [GitHub Release Workflow](../skills/github/SKILL.md) and [Release Template](../skills/github/assets/release-template.md) for release creation.
+- [CHANGELOG](../../CHANGELOG.md) for release notes.
 
-## Procedure
+## Operating Rules
 
-1. **Identify** — ask for version if not given. Derive `VERSION`, `TAG` (`v<VERSION>`), `MILESTONE_TITLE` from `docs/ROADMAP.md`.
-2. **Collect** — F-numbers from roadmap; closed issues from GitHub milestone.
-3. **CHANGELOG** — replace `## [Unreleased]` with `## [<VERSION>] — <YYYY-MM-DD>` block (Added/Security/Fixed; omit empty). Keep `## [Unreleased]` empty at top. Append link refs at bottom.
-4. **Commit + merge**:
-    ```bash
-    git checkout -b feature/release-<VERSION>
-    git add CHANGELOG.md
-    git commit -m "Release <VERSION>..."
-    bash .github/skills/git/merge/scripts/check-and-merge.sh
-    ```
-5. **Tag**:
-    ```bash
-    git checkout main && git pull origin main
-    git tag -a "v<VERSION>" -m "Release v<VERSION> — <MILESTONE_TITLE>"
-    git push origin "v<VERSION>"
-    ```
-6. **GitHub release** — fill `.github/skills/github/assets/release-template.md` → `/tmp/release-body.md`:
-    ```bash
-    gh release create "v<VERSION>" --repo jindrichruzicka/Chimera \
-      --title "v<VERSION> — <MILESTONE_TITLE>" --notes-file /tmp/release-body.md --target main
-    ```
-7. **Close milestone**:
-    ```bash
-    M_ID=$(gh api repos/jindrichruzicka/Chimera/milestones --jq '.[] | select(.title | startswith("<PREFIX>")) | .number')
-    gh api repos/jindrichruzicka/Chimera/milestones/$M_ID --method PATCH --field state=closed
-    ```
-8. **Report** — version, tag, milestone closed, release URL, CHANGELOG ✅, gate ✅.
+- Load the relevant source docs and skill files before acting; do not duplicate release policy or roadmap details here.
+- Ask for the version when it is not provided, then derive milestone scope from the roadmap.
+- Stop on a failed gate, missing milestone, existing tag, or failed merge/release command and report the blocker.
+- Use the git and GitHub skill scripts for covered operations.
 
-## Error Handling
+## Report
 
-| Error               | Resolution                         |
-| ------------------- | ---------------------------------- |
-| Gate fails          | Stop and report. Do not proceed.   |
-| Tag exists          | Ask: re-release or abort?          |
-| Milestone not found | Verify via `gh api .../milestones` |
-| Merge script fails  | Fix reported problems, re-run      |
+Summarize version, tag, milestone, changelog update, gate result, release URL, closed milestone state, and any blockers.

@@ -7,8 +7,14 @@ user-invocable: true
 
 Git-operations runner for Chimera.
 
-- Only do the git operation the user requested.
-- Read `.github/skills/git/SKILL.md`, then the matching sub-skill.
-- Run the skill script; do not hand-roll covered workflows.
-- If no skill covers the request, ask before proceeding.
-- Report the result briefly.
+## Source Of Truth
+
+- [Git Skillset](../skills/git/SKILL.md) for pull, branch, commit, push, and merge workflows.
+- [Git Commit Discipline](../../docs/coding-standards-sections/git-commit-discipline.md) for branch and commit policy.
+
+## Rules
+
+- Perform only the git operation the user requested.
+- Load the git skillset and matching sub-skill before acting.
+- Run the skill script for covered workflows; ask before any uncovered ad-hoc operation.
+- Report branch, commit/push/merge result, and blockers briefly.
