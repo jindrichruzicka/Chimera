@@ -60,6 +60,10 @@ describe('MatchPage', () => {
         expect(matchPage.redoButton).toBeDefined();
         expect(matchPage.endTurnButton).toBeDefined();
         expect(matchPage.gameOverBanner).toBeDefined();
+        expect(matchPage.matchResultBanner).toBeDefined();
+        expect(matchPage.matchResultText).toBeDefined();
+        expect(matchPage.selectableUnit).toBeDefined();
+        expect(matchPage.attackTarget).toBeDefined();
         expect(matchPage.hudTick).toBeDefined();
         expect(requestedTestIds).toEqual([
             'match-canvas',
@@ -67,6 +71,10 @@ describe('MatchPage', () => {
             'redo',
             'end-turn',
             'game-over-banner',
+            'match-result-banner',
+            'match-result-text',
+            'selectable-unit',
+            'attack-target',
             'hud-tick',
         ]);
     });

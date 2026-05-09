@@ -54,7 +54,10 @@ export async function bootstrapGameStore(
     clientFactory: IpcClientFactory = createIpcClient,
 ): Promise<Unsubscribe> {
     const resolvedStore: IpcPredictionStore = store ?? useGameStore.getState();
-    const predictableTypes = new Set(await api.getPredictableActionTypes());
+    let predictableTypes = new Set<string>();
+    const predictableTypesPromise = api.getPredictableActionTypes();
     const client = clientFactory(api, resolvedStore, (type: string) => predictableTypes.has(type));
-    return client.bootstrap();
+    const unsubscribe = client.bootstrap();
+    predictableTypes = new Set(await predictableTypesPromise);
+    return unsubscribe;
 }

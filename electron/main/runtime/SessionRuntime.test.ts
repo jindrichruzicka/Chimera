@@ -74,6 +74,7 @@ function makeSnapshot(tick: number, ids: readonly PlayerId[] = [P1]): BaseGameSn
         events: [],
         turnNumber: tick,
         timers: {},
+        matchResult: null,
     };
 }
 

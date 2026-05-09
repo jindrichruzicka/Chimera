@@ -23,7 +23,7 @@ import type { SaveFile } from './SaveFile.js';
  * of its nested types, and add a corresponding `SaveMigration` so that
  * older saves are automatically upgraded.
  */
-export const CURRENT_SCHEMA_VERSION = 3;
+export const CURRENT_SCHEMA_VERSION = 4;
 
 // ─── SaveMigration interface ──────────────────────────────────────────────────
 
@@ -281,6 +281,27 @@ export const checkpointTimersMigration: SaveMigration = {
 };
 
 /**
+ * Migration from schema v3 to v4: ensure every checkpoint has matchResult.
+ *
+ * Saves written before §4.38 match resolution should load as in-progress by
+ * default, represented by `matchResult: null`. Existing resolved results are
+ * preserved verbatim so the migration is additive and idempotent.
+ */
+export const checkpointMatchResultMigration: SaveMigration = {
+    fromVersion: 3,
+    apply(file: SaveFile): SaveFile {
+        const checkpoint = file.checkpoint as unknown as Record<string, unknown>;
+        if ('matchResult' in checkpoint) {
+            return file;
+        }
+        return {
+            ...file,
+            checkpoint: { ...checkpoint, matchResult: null } as SaveFile['checkpoint'],
+        };
+    },
+};
+
+/**
  * Returns a fresh `SaveMigrator` with all built-in schema migrations
  * pre-registered in order.
  *
@@ -291,5 +312,6 @@ export function createDefaultMigrator(): SaveMigrator {
     const migrator = new SaveMigrator();
     migrator.register(checkpointTurnNumberMigration);
     migrator.register(checkpointTimersMigration);
+    migrator.register(checkpointMatchResultMigration);
     return migrator;
 }

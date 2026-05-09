@@ -38,7 +38,7 @@ export function GameStoreBootstrap(): null {
     // This handles the CLIENT window — the host navigates via router.push in
     // handleStartMatch(). Both end up at /match automatically.
     useEffect(() => {
-        if (snapshot !== null && pathname === '/lobby') {
+        if (snapshot !== null && isLobbyPath(pathname)) {
             router.push('/match');
         }
     }, [snapshot, router, pathname]);
@@ -68,4 +68,8 @@ export function GameStoreBootstrap(): null {
     }, []);
 
     return null;
+}
+
+function isLobbyPath(pathname: string | null): boolean {
+    return pathname === '/lobby' || pathname === '/lobby/' || pathname === '/lobby/index.html';
 }

@@ -5,6 +5,7 @@
 import React, { type ReactNode } from 'react';
 import type {
     EngineAction,
+    MatchResult,
     PlayerId,
     PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
@@ -17,6 +18,8 @@ export interface MatchShellProps {
     readonly canEndTurn?: boolean;
     readonly isGameOver?: boolean;
     readonly gameOverMessage?: string;
+    readonly matchResult?: MatchResult | null;
+    readonly localPlayerId?: PlayerId;
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
     readonly onEndTurn?: () => void | Promise<void>;
@@ -30,6 +33,8 @@ export function MatchShell({
     canEndTurn = true,
     isGameOver = false,
     gameOverMessage = 'Game Over',
+    matchResult,
+    localPlayerId,
     onUndo,
     onRedo,
     onEndTurn,
@@ -37,6 +42,8 @@ export function MatchShell({
     const undoDisabled = !canUndo || onUndo === undefined;
     const redoDisabled = !canRedo || onRedo === undefined;
     const endTurnDisabled = !canEndTurn || onEndTurn === undefined;
+    const resultMessage = resolveMatchResultMessage(matchResult, localPlayerId, gameOverMessage);
+    const shouldShowResult = isGameOver || (matchResult !== undefined && matchResult !== null);
 
     function handleUndo(): void {
         if (onUndo !== undefined) {
@@ -72,7 +79,7 @@ export function MatchShell({
                 style={{ minHeight: '20rem', position: 'relative' }}
             >
                 {children}
-                {isGameOver && (
+                {shouldShowResult && (
                     <div
                         data-testid="game-over-banner"
                         role="status"
@@ -86,7 +93,9 @@ export function MatchShell({
                             pointerEvents: 'none',
                         }}
                     >
-                        {gameOverMessage}
+                        <span data-testid="match-result-banner">
+                            <span data-testid="match-result-text">{resultMessage}</span>
+                        </span>
                     </div>
                 )}
             </section>
@@ -133,6 +142,23 @@ export function MatchShell({
             </footer>
         </main>
     );
+}
+
+function resolveMatchResultMessage(
+    matchResult: MatchResult | null | undefined,
+    localPlayerId: PlayerId | undefined,
+    fallback: string,
+): string {
+    if (matchResult === undefined || matchResult === null) {
+        return fallback;
+    }
+    if (matchResult.winnerIds.length === 0) {
+        return 'Draw';
+    }
+    if (localPlayerId === undefined) {
+        return 'Match ended';
+    }
+    return matchResult.winnerIds.includes(localPlayerId) ? 'You won' : 'You lose';
 }
 
 export type SendAction = (action: EngineAction) => void;

@@ -40,6 +40,7 @@ function makeSnapshot(tick: number): PlayerSnapshot {
         entities: {},
         phase: gamePhase('playing'),
         events: [],
+        matchResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,
@@ -166,6 +167,21 @@ describe('bootstrapGameStore()', () => {
         const { api, getPredictableActionTypesSpy } = makeApi();
         await bootstrapGameStore(api, createGameStore().getState());
         expect(getPredictableActionTypesSpy).toHaveBeenCalledOnce();
+    });
+
+    it('registers the snapshot listener before predictable action types resolve', async () => {
+        let resolvePredictableTypes: (value: readonly string[]) => void = () => undefined;
+        const predictableTypesPromise = new Promise<readonly string[]>((resolve) => {
+            resolvePredictableTypes = resolve;
+        });
+        const { api, onSnapshotSpy, getPredictableActionTypesSpy } = makeApi();
+        getPredictableActionTypesSpy.mockReturnValueOnce(predictableTypesPromise);
+
+        const bootstrapPromise = bootstrapGameStore(api, createGameStore().getState());
+
+        expect(onSnapshotSpy).toHaveBeenCalledOnce();
+        resolvePredictableTypes([]);
+        await bootstrapPromise;
     });
 
     it('enqueues addPrediction for predictable types but not for others (predicate wiring)', async () => {

@@ -1,5 +1,6 @@
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import {
+    TACTICS_ATTACK_ACTION,
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
 } from '@chimera/shared/tactics.js';
@@ -8,13 +9,14 @@ import type {
     BaseEntityState,
     BaseGameSnapshot,
     EntityId,
+    MatchResult,
     PlayerId,
     ValidationResult,
 } from '@chimera/simulation/engine/types.js';
 import { entityId } from '@chimera/simulation/engine/types.js';
 import { buildInitialTacticsEntities } from './entities.js';
 
-export { TACTICS_MOVE_UNIT_ACTION };
+export { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION };
 
 /**
  * Canonical entity ID for the default unit seeded in the initial game snapshot.
@@ -37,6 +39,11 @@ export interface TacticsMoveUnitPayload {
     readonly y: TacticsGridCoordinate;
 }
 
+export interface TacticsAttackPayload {
+    readonly attackerId: EntityId;
+    readonly defenderId: EntityId;
+}
+
 export interface TacticsGameInitializationConfig {
     readonly hostPlayerId: PlayerId;
     readonly firstPlayer?: PlayerId;
@@ -51,6 +58,7 @@ interface TacticsUnitEntity extends BaseEntityState {
     readonly ownerId: PlayerId;
     readonly x: TacticsGridCoordinate;
     readonly y: TacticsGridCoordinate;
+    readonly hp: number;
 }
 
 function isTacticsUnitEntity(entity: BaseEntityState | undefined): entity is TacticsUnitEntity {
@@ -62,13 +70,21 @@ function isTacticsUnitEntity(entity: BaseEntityState | undefined): entity is Tac
         readonly ownerId?: unknown;
         readonly x?: unknown;
         readonly y?: unknown;
+        readonly hp?: unknown;
     };
     return (
         candidate.kind === 'unit' &&
         typeof candidate.ownerId === 'string' &&
         Number.isInteger(candidate.x) &&
-        Number.isInteger(candidate.y)
+        Number.isInteger(candidate.y) &&
+        Number.isInteger(candidate.hp)
     );
+}
+
+function areAdjacent(first: TacticsUnitEntity, second: TacticsUnitEntity): boolean {
+    const dx = first.x > second.x ? first.x - second.x : second.x - first.x;
+    const dy = first.y > second.y ? first.y - second.y : second.y - first.y;
+    return dx + dy === 1;
 }
 
 export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload, BaseGameSnapshot> =
@@ -131,9 +147,102 @@ export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload,
         },
     };
 
+export const tacticsAttackDefinition: ActionDefinition<TacticsAttackPayload, BaseGameSnapshot> = {
+    type: TACTICS_ATTACK_ACTION,
+
+    parsePayload(raw: Readonly<Record<string, unknown>>): TacticsAttackPayload {
+        const attackerId = raw['attackerId'];
+        const defenderId = raw['defenderId'];
+        if (typeof attackerId !== 'string' || attackerId.length === 0) {
+            throw new TypeError('tactics:attack payload must include a non-empty attackerId.');
+        }
+        if (typeof defenderId !== 'string' || defenderId.length === 0) {
+            throw new TypeError('tactics:attack payload must include a non-empty defenderId.');
+        }
+        return {
+            attackerId: entityId(attackerId),
+            defenderId: entityId(defenderId),
+        };
+    },
+
+    validate(payload, state, playerId): ValidationResult {
+        const attacker = state.entities[payload.attackerId];
+        const defender = state.entities[payload.defenderId];
+        if (!isTacticsUnitEntity(attacker)) {
+            return { ok: false, reason: 'attacker_not_found' };
+        }
+        if (!isTacticsUnitEntity(defender)) {
+            return { ok: false, reason: 'defender_not_found' };
+        }
+        if (attacker.ownerId !== playerId) {
+            return { ok: false, reason: 'not_attacker_owner' };
+        }
+        if (defender.ownerId === playerId) {
+            return { ok: false, reason: 'cannot_attack_own_unit' };
+        }
+        if (!areAdjacent(attacker, defender)) {
+            return { ok: false, reason: 'defender_not_adjacent' };
+        }
+        return { ok: true };
+    },
+
+    reduce(state, payload): BaseGameSnapshot {
+        const defender = state.entities[payload.defenderId];
+        if (!isTacticsUnitEntity(defender)) {
+            return state;
+        }
+
+        return {
+            ...state,
+            tick: state.tick + 1,
+            entities: {
+                ...state.entities,
+                [payload.defenderId]: {
+                    ...defender,
+                    hp: defender.hp <= 0 ? 0 : defender.hp - 1,
+                },
+            },
+            events: [...state.events, { type: TACTICS_ATTACK_ACTION }],
+        };
+    },
+};
+
+function resolveTacticsMatchResult(snapshot: Readonly<BaseGameSnapshot>): MatchResult | null {
+    const units = Object.values(snapshot.entities).filter(isTacticsUnitEntity);
+    const allOwnerIds = uniquePlayerIds(units.map((unit) => unit.ownerId));
+    if (allOwnerIds.length <= 1) {
+        return null;
+    }
+
+    const survivingOwnerIds = uniquePlayerIds(
+        units.filter((unit) => unit.hp > 0).map((unit) => unit.ownerId),
+    );
+    if (survivingOwnerIds.length === 0) {
+        return { winnerIds: [] };
+    }
+    if (survivingOwnerIds.length === 1) {
+        return { winnerIds: survivingOwnerIds };
+    }
+    return null;
+}
+
+function uniquePlayerIds(playerIds: readonly PlayerId[]): PlayerId[] {
+    const seen = new Set<PlayerId>();
+    const result: PlayerId[] = [];
+    for (const playerId of playerIds) {
+        if (!seen.has(playerId)) {
+            seen.add(playerId);
+            result.push(playerId);
+        }
+    }
+    return result;
+}
+
 export function registerTacticsActions(registry: ActionRegistry<BaseGameSnapshot>): void {
     registry.register(tacticsMoveUnitDefinition);
+    registry.register(tacticsAttackDefinition);
     registry.registerGame('tactics', {
         buildInitialEntities: buildInitialTacticsEntities,
+        resolveMatchResult: resolveTacticsMatchResult,
     });
 }

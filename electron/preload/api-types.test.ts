@@ -8,8 +8,8 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { toSlotId } from './api-types.js';
-import type { SlotId } from './api-types.js';
+import { gamePhase, playerId, toSlotId } from './api-types.js';
+import type { PlayerSnapshot, SlotId } from './api-types.js';
 
 describe('toSlotId', () => {
     it('wraps a raw string as a SlotId', () => {
@@ -30,5 +30,25 @@ describe('toSlotId', () => {
     it('preserves non-trivial slot identifier strings', () => {
         const raw = 'autosave-2026-04-30T12:34:56.789Z';
         expect(toSlotId(raw)).toBe(raw);
+    });
+});
+
+describe('PlayerSnapshot', () => {
+    it('carries matchResult across the preload boundary', () => {
+        const viewerId = playerId('p1');
+        const snapshot: PlayerSnapshot = {
+            tick: 3,
+            viewerId,
+            players: { [viewerId]: { id: viewerId } },
+            entities: {},
+            phase: gamePhase('ended'),
+            events: [],
+            commitments: {},
+            matchResult: { winnerIds: [viewerId] },
+            undoMeta: { canUndo: false, canRedo: false },
+            isMyTurn: true,
+        };
+
+        expect(snapshot.matchResult?.winnerIds).toEqual([viewerId]);
     });
 });

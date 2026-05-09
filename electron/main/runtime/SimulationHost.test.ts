@@ -40,6 +40,7 @@ function makeSnapshot(tick: number, ids: readonly PlayerId[] = [P1]): BaseGameSn
         events: [],
         turnNumber: tick,
         timers: {},
+        matchResult: null,
     };
 }
 
@@ -220,24 +221,24 @@ describe('SimulationHost.onGameEnd', () => {
         manager.registerAgent(agent);
         const host = new SimulationHost(manager, identityProjector);
 
-        const result: GameResult = { winner: P1 };
+        const result: GameResult = { winnerIds: [P1] };
         host.onGameEnd(makeSnapshot(10), result);
 
         expect(agent.onGameEnd).toHaveBeenCalledOnce();
         expect(agent.onGameEnd).toHaveBeenCalledWith(expect.objectContaining({ tick: 10 }), result);
     });
 
-    it('passes winner: null for a draw result', () => {
+    it('passes empty winnerIds for a draw result', () => {
         const manager = makeAgentManager();
         const agent = makeMockAgent(P1);
         manager.registerAgent(agent);
         const host = new SimulationHost(manager, identityProjector);
 
-        const result: GameResult = { winner: null };
+        const result: GameResult = { winnerIds: [] };
         host.onGameEnd(makeSnapshot(10), result);
 
         expect(agent.onGameEnd).toHaveBeenCalledWith(expect.objectContaining({ tick: 10 }), {
-            winner: null,
+            winnerIds: [],
         });
     });
 });

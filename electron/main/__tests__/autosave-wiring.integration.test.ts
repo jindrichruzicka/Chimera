@@ -48,6 +48,7 @@ function makeBaseSnapshot(tick = 0, playerIds: readonly PlayerId[] = [P1]): Base
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
     };
 }
 
@@ -70,6 +71,7 @@ function makeSnapshotWithTurnClock(
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
         turnClock: { activePlayerId, deadlineMs: 60_000 },
     };
 }
@@ -104,6 +106,13 @@ const redoEnvelope = (tick: number): ActionEnvelope => ({
     payload: {},
 });
 
+const winCheckEnvelope = (tick: number): ActionEnvelope => ({
+    type: 'game:win-check',
+    playerId: P1,
+    tick,
+    payload: {},
+});
+
 // ── Simple action that produces a new snapshot reference (for undo setup) ─────
 
 const advanceDef: ActionDefinition<Record<string, never>> = {
@@ -113,10 +122,26 @@ const advanceDef: ActionDefinition<Record<string, never>> = {
     reduce: (state) => ({ ...state, tick: state.tick + 1 }),
 };
 
+const winCheckDef: ActionDefinition<Record<string, never>> = {
+    type: 'game:win-check',
+    parsePayload: () => ({}),
+    validate: () => ({ ok: true }),
+    reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+};
+
 function makeRegistry(): ActionRegistry {
     const registry = new ActionRegistry();
     registerEngineActions(registry);
     registry.register(advanceDef);
+    return registry;
+}
+
+function makeResolvingRegistry(): ActionRegistry {
+    const registry = makeRegistry();
+    registry.register(winCheckDef);
+    registry.registerGame('tactics', {
+        resolveMatchResult: (snapshot) => (snapshot.tick >= 1 ? { winnerIds: [P1] } : null),
+    });
     return registry;
 }
 
@@ -276,6 +301,43 @@ describe('buildHostSessionPipeline — AC3: autosave errors are caught and do no
 
         // The turn advanced, so turnNumber incremented.
         expect(result.turnNumber).toBe(1);
+    });
+});
+
+// ── AC4: match result triggers SimulationHost.onGameEnd wiring ───────────────
+
+describe('buildHostSessionPipeline — AC4: match result game-end notification', () => {
+    it('calls the game-end port once when matchResult first becomes non-null', () => {
+        const onGameEnd = vi.fn();
+        const { processAction } = buildHostSessionPipeline(makeResolvingRegistry(), vi.fn(), {
+            gameId: 'tactics',
+            savePort: { autoSave: vi.fn().mockResolvedValue(undefined) },
+            gameEndPort: { onGameEnd },
+        });
+
+        const s0 = makeBaseSnapshot(0, [P1, P2]);
+        const next = processAction(s0, winCheckEnvelope(0));
+
+        expect(next.matchResult).toEqual({ winnerIds: [P1] });
+        expect(onGameEnd).toHaveBeenCalledOnce();
+        expect(onGameEnd).toHaveBeenCalledWith(next, { winnerIds: [P1] });
+    });
+
+    it('does not call the game-end port again for an already resolved snapshot', () => {
+        const onGameEnd = vi.fn();
+        const { processAction } = buildHostSessionPipeline(makeResolvingRegistry(), vi.fn(), {
+            gameId: 'tactics',
+            savePort: { autoSave: vi.fn().mockResolvedValue(undefined) },
+            gameEndPort: { onGameEnd },
+        });
+
+        const resolved = {
+            ...makeBaseSnapshot(1, [P1, P2]),
+            matchResult: { winnerIds: [P1] },
+        };
+        processAction(resolved, winCheckEnvelope(1));
+
+        expect(onGameEnd).not.toHaveBeenCalled();
     });
 });
 

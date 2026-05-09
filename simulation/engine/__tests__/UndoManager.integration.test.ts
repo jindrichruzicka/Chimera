@@ -42,6 +42,7 @@ const makeBaseSnapshot = (tick = 0): BaseGameSnapshot => ({
     events: [],
     turnNumber: 0,
     timers: {},
+    matchResult: null,
 });
 
 /**

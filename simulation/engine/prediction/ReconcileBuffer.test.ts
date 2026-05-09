@@ -62,6 +62,7 @@ function makeBaseSnapshot(overrides: Partial<TestSnapshot> = {}): TestSnapshot {
         timers: {},
         value: 0,
         ...overrides,
+        matchResult: overrides.matchResult !== undefined ? overrides.matchResult : null,
     };
 }
 

@@ -18,10 +18,17 @@ const workspaceRoot = path.resolve(import.meta.dirname, '../..');
 describe('MatchPage POM — testid alignment with renderer', () => {
     it('every getByTestId call in MatchPage.ts resolves against a data-testid in the renderer match shell', () => {
         const pomSource = readFileSync(path.join(workspaceRoot, 'e2e/pages/MatchPage.ts'), 'utf-8');
-        const rendererSource = readFileSync(
-            path.join(workspaceRoot, 'renderer/components/shell/MatchShell.tsx'),
-            'utf-8',
-        );
+        const rendererSources = [
+            readFileSync(
+                path.join(workspaceRoot, 'renderer/components/shell/MatchShell.tsx'),
+                'utf-8',
+            ),
+            readFileSync(
+                path.join(workspaceRoot, 'games/tactics/screens/TacticsDemoBoard.tsx'),
+                'utf-8',
+            ),
+        ];
+        const rendererSource = rendererSources.join('\n');
 
         const testIdPattern = /getByTestId\('([^']+)'\)/g;
         const pomTestIds: string[] = [];

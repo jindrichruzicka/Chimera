@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import type { GameScreenProps } from '@chimera/renderer/components/shell/MatchShell.js';
-import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
+import { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
 
 interface TacticsUnit {
     readonly id: string;
@@ -10,6 +10,7 @@ interface TacticsUnit {
     readonly ownerId: string;
     readonly x: number;
     readonly y: number;
+    readonly hp: number;
 }
 
 /**
@@ -26,8 +27,15 @@ function isTacticsUnit(entity: unknown): entity is TacticsUnit {
         typeof obj['id'] === 'string' &&
         typeof obj['ownerId'] === 'string' &&
         typeof obj['x'] === 'number' &&
-        typeof obj['y'] === 'number'
+        typeof obj['y'] === 'number' &&
+        typeof obj['hp'] === 'number'
     );
+}
+
+function areAdjacent(first: TacticsUnit, second: TacticsUnit): boolean {
+    const dx = Math.abs(first.x - second.x);
+    const dy = Math.abs(first.y - second.y);
+    return dx + dy === 1;
 }
 
 export function TacticsDemoBoard({
@@ -37,11 +45,12 @@ export function TacticsDemoBoard({
 }: GameScreenProps): React.ReactElement | null {
     const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
 
-    // Find the unit owned by the local player
-    const demoUnit = Object.values(snapshot.entities)
+    const units = Object.values(snapshot.entities)
         .map((entity) => entity as unknown as TacticsUnit)
-        .filter(isTacticsUnit)
-        .find((unit) => unit.ownerId === localPlayerId);
+        .filter(isTacticsUnit);
+
+    // Find the unit owned by the local player
+    const demoUnit = units.find((unit) => unit.ownerId === localPlayerId);
 
     if (demoUnit === undefined) {
         return null;
@@ -49,6 +58,16 @@ export function TacticsDemoBoard({
 
     const canUseControls = localPlayerId !== undefined;
     const canMove = canUseControls && selectedUnitId === demoUnit.id;
+    const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
+    const attackTarget =
+        canUseControls && selectedUnit !== undefined
+            ? units.find(
+                  (unit) =>
+                      unit.ownerId !== localPlayerId &&
+                      unit.hp > 0 &&
+                      areAdjacent(selectedUnit, unit),
+              )
+            : undefined;
 
     return (
         <div aria-label="Tactics board">
@@ -83,6 +102,29 @@ export function TacticsDemoBoard({
             >
                 Move
             </button>
+            {attackTarget !== undefined && (
+                <button
+                    data-testid="attack-target"
+                    type="button"
+                    onClick={() => {
+                        if (localPlayerId === undefined || selectedUnit === undefined) {
+                            return;
+                        }
+                        sendAction({
+                            type: TACTICS_ATTACK_ACTION,
+                            playerId: localPlayerId,
+                            tick: snapshot.tick,
+                            payload: {
+                                attackerId: selectedUnit.id,
+                                defenderId: attackTarget.id,
+                            },
+                        });
+                        setSelectedUnitId(null);
+                    }}
+                >
+                    Attack
+                </button>
+            )}
         </div>
     );
 }

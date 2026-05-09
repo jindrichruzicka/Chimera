@@ -22,7 +22,7 @@
  *         or any DOM API. Import-type-only from simulation/ and networking/.
  */
 
-import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import type { PlayerId, EngineAction, MatchResult } from '@chimera/simulation/engine/types.js';
 import type {
     PlayerSnapshot,
     LobbyState,
@@ -30,7 +30,7 @@ import type {
 
 // ─── Re-export for consumers in local/ ───────────────────────────────────────
 
-export type { PlayerId, EngineAction, PlayerSnapshot, LobbyState };
+export type { PlayerId, EngineAction, MatchResult, PlayerSnapshot, LobbyState };
 
 // ─── Stub / forward-declared types ───────────────────────────────────────────
 

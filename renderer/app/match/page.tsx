@@ -67,6 +67,8 @@ export default function MatchPage(): React.ReactElement | null {
             canRedo={snapshot.undoMeta.canRedo}
             canEndTurn={snapshot.isMyTurn}
             isGameOver={snapshot.phase === 'ended'}
+            matchResult={snapshot.matchResult}
+            {...(localPlayerId === null ? {} : { localPlayerId })}
             {...(localPlayerId === null
                 ? {}
                 : {

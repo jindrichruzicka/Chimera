@@ -76,6 +76,7 @@ function makeTestSnapshot(): TestGameSnapshot {
             },
         },
         entities: {},
+        matchResult: null,
     };
 }
 

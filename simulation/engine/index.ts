@@ -22,6 +22,8 @@ export type {
     BasePlayerState,
     BaseEntityState,
     GameEvent,
+    MatchResult,
+    MatchResolution,
     BaseGameSnapshot,
     ContentDatabase,
     EngineAction,

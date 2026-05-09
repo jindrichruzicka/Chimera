@@ -410,7 +410,7 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
             tick: state.tick + 1,
             players: nextPlayers,
             entities: payload.initialEntities ?? state.entities,
-            phase: gamePhase('ended'),
+            phase: gamePhase('playing'),
         };
 
         return nextTurnClock === undefined ? nextState : { ...nextState, turnClock: nextTurnClock };

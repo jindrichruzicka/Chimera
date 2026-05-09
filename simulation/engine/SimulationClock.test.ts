@@ -28,6 +28,7 @@ function makeSnapshot(tick: number): BaseGameSnapshot {
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
     };
 }
 

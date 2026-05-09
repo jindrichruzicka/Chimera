@@ -31,6 +31,7 @@ function makeSnapshot(tick: number, canUndo = false, canRedo = false): PlayerSna
         entities: {},
         phase: gamePhase('playing'),
         events: [],
+        matchResult: null,
         commitments: {},
         undoMeta: { canUndo, canRedo },
         isMyTurn: true,

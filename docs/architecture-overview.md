@@ -55,6 +55,7 @@ tags: [architecture, index, chimera, engine, overview, invariants, ipc, simulati
 | [core-components/dev-tooling.md](core-components/dev-tooling.md)                                           | §4.32                | `pnpm dev:mp <N>`, CLI flags, `HarnessOptions`, startup flow, seed profiles, production guard                           |
 | [core-components/matchshell-ui-design-system.md](core-components/matchshell-ui-design-system.md)           | §4.33–§4.36          | `GameScreenRegistry`, `MatchShell`, within-scene navigation, Renderer Context Map, design tokens, code splitting        |
 | [core-components/renderer-shell-pages-ui-contract.md](core-components/renderer-shell-pages-ui-contract.md) | §4.37                | Shell page token contract, `Button` variant assignment guide, game override cascade rules, invariants #91–94            |
+| [core-components/match-resolution.md](core-components/match-resolution.md)                                 | §4.38                | `MatchResult`, `resolveMatchResult`, `matchResult` in `PlayerSnapshot`, `MatchShell` winner display                     |
 
 ---
 

@@ -71,6 +71,7 @@ function makeFullState(): BaseGameSnapshot {
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
     };
 }
 
@@ -84,6 +85,7 @@ function projectVisibleEntities(fullState: BaseGameSnapshot): VisibilitySnapshot
             [visibleEntityId]: visibleEntity,
         },
         events: [],
+        matchResult: fullState.matchResult,
         commitments: Object.create(null),
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,

@@ -201,6 +201,7 @@ describe('window.__chimera.game — contract', () => {
             entities: {},
             phase: gamePhase('main'),
             events: [],
+            matchResult: null,
             commitments: {},
             undoMeta: { canUndo: false, canRedo: false },
             isMyTurn: true,

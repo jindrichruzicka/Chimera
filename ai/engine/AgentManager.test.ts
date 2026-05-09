@@ -35,6 +35,7 @@ const makeSnapshot = (tick = 0, viewerId = p1): PlayerSnapshot => ({
     players: {},
     entities: {},
     events: [],
+    matchResult: null,
     commitments: Object.create(null),
     undoMeta: { canUndo: false, canRedo: false },
     isMyTurn: true,
@@ -49,9 +50,10 @@ const makeFullState = (): BaseGameSnapshot => ({
     events: [],
     turnNumber: 0,
     timers: {},
+    matchResult: null,
 });
 
-const makeResult = (): GameResult => ({ winner: null });
+const makeResult = (): GameResult => ({ winnerIds: [] });
 
 const makeProjector = (): StateProjector => ({
     project: vi.fn(() => makeSnapshot()),

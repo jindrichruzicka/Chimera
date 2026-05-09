@@ -32,6 +32,7 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
     };
 
     const { checkpoint: checkpointOverride, ...restOverrides } = overrides;
@@ -502,6 +503,7 @@ describe('JsonSaveSerializer — checkpoint.turnNumber schema enforcement', () =
                 events: [],
                 turnNumber: 7,
                 timers: {},
+                matchResult: null,
             },
         });
 
@@ -545,6 +547,7 @@ describe('JsonSaveSerializer — GameTimer serialization', () => {
                     [timer1.id]: timer1,
                     [timer2.id]: timer2,
                 },
+                matchResult: null,
             },
         });
 
@@ -568,6 +571,7 @@ describe('JsonSaveSerializer — GameTimer serialization', () => {
                 events: [],
                 turnNumber: 0,
                 timers: {},
+                matchResult: null,
             },
         });
 

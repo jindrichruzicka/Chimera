@@ -88,8 +88,8 @@ export class SimulationHost {
     /**
      * Notify all registered agents that the game has ended.
      *
-     * Call in the session teardown path. `result.winner` is `null` for
-     * draws, disconnects, or abandoned sessions.
+     * Call when the pipeline resolves a match result. `result.winnerIds` is
+     * empty for draws, disconnects, or abandoned sessions.
      */
     public onGameEnd(fullSnapshot: BaseGameSnapshot, result: GameResult): void {
         this.agentManager.onGameEnd(fullSnapshot, result, this.projector);

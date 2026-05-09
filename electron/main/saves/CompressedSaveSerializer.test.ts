@@ -41,6 +41,7 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         },
         deltaActions: [],
         pendingCommitments: {},

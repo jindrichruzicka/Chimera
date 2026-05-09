@@ -57,6 +57,7 @@ function makeSnapshot(viewerId: PlayerId): BaseGameSnapshot {
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
     };
 }
 
@@ -68,6 +69,7 @@ function makeProjectedSnapshot(viewerId: PlayerId): PlayerSnapshot {
         entities: {},
         phase: gamePhase('playing'),
         events: [],
+        matchResult: null,
         commitments: {},
         undoMeta: { canUndo: true, canRedo: false },
         isMyTurn: true,

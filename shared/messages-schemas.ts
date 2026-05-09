@@ -64,6 +64,12 @@ const WireCommitmentEnvelope = z
     })
     .strict();
 
+const MatchResult = z
+    .object({
+        winnerIds: z.array(PlayerId).readonly(),
+    })
+    .strict();
+
 const EngineAction = z.object({
     type: z.string(),
     playerId: PlayerId,
@@ -99,6 +105,7 @@ const PlayerSnapshot = z.object({
     entities: z.record(z.string(), z.record(z.string(), z.unknown())),
     phase: z.string(),
     events: z.array(z.object({ type: z.string() }).passthrough()),
+    matchResult: MatchResult.nullable(),
     commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
     isMyTurn: z.boolean(),

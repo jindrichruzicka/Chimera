@@ -46,6 +46,7 @@ const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
     events: [],
     turnNumber: 0,
     timers: {},
+    matchResult: null,
     ...(hostPlayerId !== undefined && { hostPlayerId }),
 });
 
@@ -703,7 +704,7 @@ describe('engine:start_match definition', () => {
         expect(result).toEqual({ ok: false, reason: 'first_player_not_in_match' });
     });
 
-    it('reduce adds every started player, marks the phase ended, and advances tick exactly once', () => {
+    it('reduce adds every started player, marks the phase playing, and advances tick exactly once', () => {
         const snapshot = makeSnapshot(hostId);
         const next = definition().reduce(
             snapshot,
@@ -714,7 +715,7 @@ describe('engine:start_match definition', () => {
 
         expect(next).not.toBe(snapshot);
         expect(next.tick).toBe(snapshot.tick + 1);
-        expect(next.phase).toBe('ended');
+        expect(next.phase).toBe('playing');
         expect(Object.keys(next.players).sort()).toEqual([guestId, hostId].sort());
     });
 

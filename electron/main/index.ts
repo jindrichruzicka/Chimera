@@ -910,6 +910,7 @@ export async function main(): Promise<void> {
             activeE2eHooks = metadata.e2eHooks;
             const agentManager = new AgentManager({ logger: lobbyLogger });
             const broadcasterRef: { current: StateBroadcaster | null } = { current: null };
+            const simulationHostRef: { current: SimulationHost | null } = { current: null };
 
             // Build a SessionRuntime around the freshly-created pipeline so
             // the host-side `processAction` flow updates a single live
@@ -953,6 +954,11 @@ export async function main(): Promise<void> {
                             await saveManager.autoSave(file);
                         },
                     },
+                    gameEndPort: {
+                        onGameEnd: (snapshot, result) => {
+                            simulationHostRef.current?.onGameEnd(snapshot, result);
+                        },
+                    },
                     logger: lobbyLogger,
                 },
             );
@@ -970,6 +976,7 @@ export async function main(): Promise<void> {
                 getPendingCommitments: () => sessionCommitmentRuntime.capturePendingCommitments(),
             });
             const simulationHost = new SimulationHost(agentManager, projector);
+            simulationHostRef.current = simulationHost;
             // Wire StateBroadcaster + ActionPipeline (with InMemoryActionHistory
             // and InMemoryUndoManager) for the hosted session (issue #364).
             // Each hosted session gets a fresh history and undoManager so
@@ -1102,8 +1109,10 @@ export async function main(): Promise<void> {
             });
 
             return () => {
-                // Notify agents of session end before tearing down state.
-                simulationHost.onGameEnd(sessionRuntime.getSnapshot(), { winner: null });
+                const finalSnapshot = sessionRuntime.getSnapshot();
+                if (finalSnapshot.matchResult === null) {
+                    simulationHost.onGameEnd(finalSnapshot, { winnerIds: [] });
+                }
                 unsubJoined();
                 unsubLeft();
                 unsubAction();

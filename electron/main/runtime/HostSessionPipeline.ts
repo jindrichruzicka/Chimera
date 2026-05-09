@@ -32,6 +32,7 @@ import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
+    MatchResult,
 } from '@chimera/simulation/engine/types.js';
 import { ActionPipeline } from '@chimera/simulation/engine/ActionPipeline.js';
 import { StateReducer } from '@chimera/simulation/engine/StateReducer.js';
@@ -67,6 +68,11 @@ export interface AutoSavePort {
     readonly autoSave: (gameId: string) => Promise<void>;
 }
 
+export interface GameEndPort {
+    /** Notify the AI/runtime layer that the match reached a resolved result. */
+    readonly onGameEnd: (snapshot: Readonly<BaseGameSnapshot>, result: MatchResult) => void;
+}
+
 // ─── HostSessionPipelineOptions ──────────────────────────────────────────────
 
 /**
@@ -87,6 +93,8 @@ export interface HostSessionPipelineOptions {
      * When absent, autosave is silently skipped (no error).
      */
     readonly savePort: AutoSavePort;
+    /** Optional game-end notification port, wired to SimulationHost.onGameEnd. */
+    readonly gameEndPort?: GameEndPort;
     /**
      * Optional logger for autosave error reporting.
      * Defaults to a noop logger when absent.
@@ -192,6 +200,7 @@ export function buildHostSessionPipeline(
     const undoManager = new InMemoryUndoManager(history, DEFAULT_UNDO_POLICY, replay);
 
     const pipeline = new ActionPipeline(registry, {
+        ...(options?.gameId !== undefined ? { gameId: options.gameId } : {}),
         context: {
             undoManager,
             history,
@@ -209,7 +218,7 @@ export function buildHostSessionPipeline(
     // Resolve the optional logger and save port once at construction time so
     // the hot `processAction` path has no conditional property accesses.
     const log: Logger = options?.logger ?? createNoopLogger();
-    const { gameId, savePort } = options ?? {};
+    const { gameId, savePort, gameEndPort } = options ?? {};
 
     /**
      * Thin wrapper around `ActionPipeline.process` that fires autosave as a
@@ -226,7 +235,12 @@ export function buildHostSessionPipeline(
         snapshot: Readonly<BaseGameSnapshot>,
         action: ActionEnvelope,
     ): BaseGameSnapshot => {
+        const wasResolved = snapshot.matchResult !== null;
         const nextState = pipeline.process(snapshot, action);
+
+        if (!wasResolved && nextState.matchResult !== null) {
+            gameEndPort?.onGameEnd(nextState, nextState.matchResult);
+        }
 
         if (action.type === 'engine:end_turn' && gameId !== undefined && savePort !== undefined) {
             void savePort.autoSave(gameId).catch((err: unknown) => {

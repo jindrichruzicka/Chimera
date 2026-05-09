@@ -66,6 +66,7 @@ function makeBaseSnapshot(tick = 0, playerIds: readonly PlayerId[] = [P1]): Base
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
     };
 }
 

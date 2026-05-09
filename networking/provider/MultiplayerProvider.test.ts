@@ -35,6 +35,7 @@ import type {
     LobbyState,
     LobbyPlayerEntry,
     LobbyListEntry,
+    PlayerSnapshot,
     DisconnectReason,
     Unsubscribe,
 } from './MultiplayerProvider.js';
@@ -159,6 +160,44 @@ describe('SideChannelMessage', () => {
             },
         };
         expect(msg.kind).toBe('profile');
+    });
+});
+
+// ─── PlayerSnapshot ─────────────────────────────────────────────────────────
+
+describe('PlayerSnapshot', () => {
+    it('carries matchResult over the provider boundary', () => {
+        const viewerId = playerId('p1');
+        const snapshot: PlayerSnapshot = {
+            tick: 4,
+            viewerId,
+            players: { [viewerId]: { id: viewerId } },
+            entities: {},
+            phase: 'ended',
+            events: [],
+            matchResult: { winnerIds: [viewerId] },
+            undoMeta: { canUndo: false, canRedo: false },
+            isMyTurn: true,
+        };
+
+        expect(snapshot.matchResult?.winnerIds).toEqual([viewerId]);
+    });
+
+    it('allows null matchResult while the match is in progress', () => {
+        const viewerId = playerId('p1');
+        const snapshot: PlayerSnapshot = {
+            tick: 4,
+            viewerId,
+            players: { [viewerId]: { id: viewerId } },
+            entities: {},
+            phase: 'playing',
+            events: [],
+            matchResult: null,
+            undoMeta: { canUndo: false, canRedo: false },
+            isMyTurn: true,
+        };
+
+        expect(snapshot.matchResult).toBeNull();
     });
 });
 

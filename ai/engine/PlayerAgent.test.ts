@@ -28,7 +28,7 @@ const p1 = playerId('p1');
 
 const makeSnapshot = (tick = 0): PlayerSnapshot => makeStubPlayerSnapshot(tick);
 
-const makeResult = (): GameResult => ({ winner: null });
+const makeResult = (): GameResult => ({ winnerIds: [] });
 
 // ─── HumanPlayerAgent ─────────────────────────────────────────────────────────
 
@@ -168,7 +168,7 @@ describe('AIPlayerAgent', () => {
         const onGameEndSpy = vi.spyOn(brain, 'onGameEnd');
         const agent = new AIPlayerAgent(p1, brain);
         const snapshot = makeSnapshot(100);
-        const result: GameResult = { winner: p1 };
+        const result: GameResult = { winnerIds: [p1] };
 
         agent.onGameEnd(snapshot, result);
 

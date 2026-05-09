@@ -59,6 +59,7 @@ const makeSnapshot = (tick = 0, turnNumber = 0): BaseGameSnapshot => ({
     events: [],
     turnNumber,
     timers: {},
+    matchResult: null,
 });
 
 const makeEnvelope = (
@@ -354,6 +355,61 @@ describe('ActionPipeline — Stage 5: reduce', () => {
     });
 });
 
+// ─── Post-reduce match-result resolution (§4.38) ─────────────────────────────
+
+describe('ActionPipeline — post-reduce match-result resolution', () => {
+    const advanceDef: ActionDefinition<Record<string, never>> = {
+        type: 'game:resolve-test',
+        parsePayload: () => ({}),
+        validate: () => ({ ok: true }),
+        reduce: (state) => ({
+            ...state,
+            tick: state.tick + 1,
+            phase: 'playing' as BaseGameSnapshot['phase'],
+        }),
+    };
+
+    it('writes a non-null resolved result and ends the match after reduce', () => {
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(advanceDef);
+        r.registerGame('test-game', {
+            resolveMatchResult: (snapshot) => (snapshot.tick === 1 ? { winnerIds: [PID] } : null),
+        });
+        const p = new ActionPipeline(r, { gameId: 'test-game' });
+
+        const next = p.process(makeSnapshot(0), makeEnvelope(0, 'game:resolve-test'));
+
+        expect(next.tick).toBe(1);
+        expect(next.matchResult).toEqual({ winnerIds: [PID] });
+        expect(next.phase).toBe('ended');
+    });
+
+    it('leaves matchResult null when no resolver is registered for the pipeline game', () => {
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(advanceDef);
+        const p = new ActionPipeline(r, { gameId: 'test-game' });
+
+        const next = p.process(makeSnapshot(0), makeEnvelope(0, 'game:resolve-test'));
+
+        expect(next.matchResult).toBeNull();
+        expect(next.phase).toBe('playing');
+    });
+
+    it('leaves matchResult null when the resolver returns null', () => {
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(advanceDef);
+        r.registerGame('test-game', {
+            resolveMatchResult: () => null,
+        });
+        const p = new ActionPipeline(r, { gameId: 'test-game' });
+
+        const next = p.process(makeSnapshot(0), makeEnvelope(0, 'game:resolve-test'));
+
+        expect(next.matchResult).toBeNull();
+        expect(next.phase).toBe('playing');
+    });
+});
+
 // ─── Stages 6 & 7 — no-op stubs ───────────────────────────────────────────────
 
 describe('ActionPipeline — Stages 6 & 7: no-op stubs', () => {
@@ -633,6 +689,7 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         events: [],
         turnNumber: 0,
         timers: {},
+        matchResult: null,
     });
 
     beforeEach(() => {
@@ -892,6 +949,7 @@ describe('ActionPipeline — Stage 3: engine:undo interception via UndoManager',
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const undoManager = makeUndoManagerStub({ undoResult: reconstructed });
         const broadcastSpy = vi.fn();

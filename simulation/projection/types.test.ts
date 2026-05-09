@@ -59,6 +59,7 @@ const makeSnapshot = (event: GameEvent): BaseGameSnapshot => ({
     events: [event],
     turnNumber: 0,
     timers: {},
+    matchResult: null,
 });
 
 describe('VisibilityScope', () => {

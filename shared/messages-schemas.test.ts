@@ -294,6 +294,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 entities: {},
                 phase: 'game',
                 events: [],
+                matchResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,
             },
@@ -319,6 +320,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                         commitment: 'a'.repeat(64),
                     },
                 },
+                matchResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,
             },
@@ -343,6 +345,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 entities: {},
                 phase: 'game',
                 events: [],
+                matchResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: false,
             },
@@ -354,6 +357,56 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         expect(round.success).toBe(true);
         if (round.success && round.data.type === 'SNAPSHOT') {
             expect(round.data.snapshot.isMyTurn).toBe(false);
+        }
+    });
+
+    it('SNAPSHOT preserves null matchResult while the match is in progress', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 1,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                events: [],
+                matchResult: null,
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.matchResult).toBeNull();
+        }
+    });
+
+    it('SNAPSHOT preserves resolved matchResult winnerIds including draw', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 2,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'ended',
+                events: [],
+                matchResult: { winnerIds: [] },
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.matchResult).toEqual({ winnerIds: [] });
         }
     });
 });

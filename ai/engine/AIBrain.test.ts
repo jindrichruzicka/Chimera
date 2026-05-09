@@ -37,7 +37,7 @@ const makeParams = (): TestParams => ({ aggressiveness: 5 });
 
 const makeSnapshot = (tick = 0): PlayerSnapshot => makeStubPlayerSnapshot(tick);
 
-const makeResult = (): GameResult => ({ winner: null });
+const makeResult = (): GameResult => ({ winnerIds: [] });
 
 const makeLogger = (): Logger => ({
     trace: vi.fn(),

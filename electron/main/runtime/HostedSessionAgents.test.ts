@@ -45,6 +45,7 @@ function makeSnapshot(): BaseGameSnapshot {
             deadlineMs: 30_000,
         },
         timers: {},
+        matchResult: null,
     };
 }
 

@@ -107,6 +107,7 @@ export function buildInitialHostedSessionSnapshot(
               }
             : {}),
         timers: {},
+        matchResult: null,
     };
 }
 

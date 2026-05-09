@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { MatchShell } from './MatchShell';
 
 afterEach(() => {
@@ -90,5 +91,68 @@ describe('MatchShell page object locators', () => {
 
         fireEvent.click(endTurnButton);
         expect(onEndTurn).toHaveBeenCalledOnce();
+    });
+
+    it('shows You won when the local player is a winner', () => {
+        const localPlayerId = playerId('p1');
+
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                localPlayerId={localPlayerId}
+                matchResult={{ winnerIds: [localPlayerId] }}
+            />,
+        );
+
+        expect(screen.getByTestId('game-over-banner')).toBeTruthy();
+        expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(screen.getByTestId('match-result-text').textContent).toBe('You won');
+    });
+
+    it('shows You lose when the local player is not a winner', () => {
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                localPlayerId={playerId('p1')}
+                matchResult={{ winnerIds: [playerId('p2')] }}
+            />,
+        );
+
+        expect(screen.getByTestId('match-result-text').textContent).toBe('You lose');
+    });
+
+    it('shows Draw when matchResult has no winners', () => {
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                localPlayerId={playerId('p1')}
+                matchResult={{ winnerIds: [] }}
+            />,
+        );
+
+        expect(screen.getByTestId('match-result-text').textContent).toBe('Draw');
+    });
+
+    it('shows neutral message when localPlayerId is undefined (unknown viewer)', () => {
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                matchResult={{ winnerIds: [playerId('p2')] }}
+            />,
+        );
+
+        expect(screen.getByTestId('match-result-text').textContent).toBe('Match ended');
     });
 });

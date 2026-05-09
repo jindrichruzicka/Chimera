@@ -100,6 +100,36 @@ export interface GameEvent {
     readonly type: string;
 }
 
+// ─── Match result ───────────────────────────────────────────────────────────
+
+/**
+ * The canonical outcome of a completed match.
+ *
+ * `winnerIds` contains the IDs of every winning player. An empty array
+ * represents a draw. The type intentionally exposes only `winnerIds` —
+ * no internal resolver state may be included (Invariant #1).
+ *
+ * Architecture reference: §4.38 — Match Resolution & Winner Detection
+ */
+export interface MatchResult {
+    readonly winnerIds: readonly PlayerId[];
+}
+
+/**
+ * Discriminated union that represents the resolution state of a match.
+ *
+ * - `in_progress` — no winner has been determined yet.
+ * - `resolved`    — the match has ended; `result` carries the winner list.
+ *
+ * Downstream consumers (PlayerSnapshot, MatchShell) use this union to
+ * distinguish an ongoing game from a decided one without a nullable sentinel.
+ *
+ * Architecture reference: §4.38
+ */
+export type MatchResolution =
+    | { readonly status: 'in_progress' }
+    | { readonly status: 'resolved'; readonly result: MatchResult };
+
 // ─── Authoritative game state ─────────────────────────────────────────────────
 
 /**
@@ -152,6 +182,19 @@ export interface BaseGameSnapshot {
      * were introduced (see SaveMigrator v1→v2).
      */
     readonly timers: TimerRegistry;
+    /**
+     * The outcome of the match, or `null` when the game is still in progress.
+     *
+     * Set by the `resolveMatchResult` hook in `ActionPipeline` after each
+     * `reduce()` step (§4.38). The initial snapshot must always set this to
+     * `null`. Downstream tasks (#509–#511) propagate this through
+     * `PlayerSnapshot`, `HostSessionPipeline`, and `MatchShell`.
+     *
+     * `winnerIds: []` encodes a draw. `null` means no decision yet.
+     *
+     * Architecture reference: §4.38 — Match Resolution & Winner Detection
+     */
+    readonly matchResult: MatchResult | null;
 }
 
 // ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────

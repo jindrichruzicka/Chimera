@@ -29,6 +29,8 @@ import type {
     ContentDatabase,
     ReduceContext,
     GameReduceContext,
+    MatchResult,
+    MatchResolution,
     SimulationHostRole,
     SimulationClientRole,
     UndoContext,
@@ -108,6 +110,7 @@ describe('BaseGameSnapshot', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         expect(snapshot.tick).toBe(0);
         expect(snapshot.seed).toBe(12345);
@@ -124,6 +127,7 @@ describe('BaseGameSnapshot', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
             turnClock: { activePlayerId: pid, deadlineMs: 30_000 },
         };
         expect(snapshot.turnClock?.activePlayerId).toBe('p1');
@@ -139,6 +143,7 @@ describe('BaseGameSnapshot', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         expect(snapshot.turnClock).toBeUndefined();
     });
@@ -293,6 +298,7 @@ describe('ActionDefinition', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const result = def.validate({ value: 42 }, snap, toPlayerId('p1'), ctx);
         expect(result.ok).toBe(true);
@@ -322,6 +328,7 @@ describe('ActionDefinition', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
 
         const ctx: ReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
@@ -360,6 +367,7 @@ describe('UndoContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const ctx: UndoContext = {
             undoManager: {
@@ -391,6 +399,7 @@ describe('UndoContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const ctx: UndoContext = {
             undoManager: {
@@ -479,6 +488,7 @@ describe('BroadcastContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         ctx.broadcast?.(snap, toPlayerId('p1'));
         expect(calls).toHaveLength(1);
@@ -508,6 +518,7 @@ describe('BroadcastContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         ctx.broadcast?.(snap, toPlayerId('p2'));
         expect(capturedSnapshot).toBe(snap);
@@ -534,6 +545,7 @@ describe('DebugContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         ctx.debugObserver?.(3, snap);
         expect(observations).toHaveLength(1);
@@ -561,6 +573,7 @@ describe('DebugContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         ctx.debugObserver?.(7, snap);
         expect(capturedTick).toBe(7);
@@ -587,6 +600,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const ctx: PipelineContext = {
             db,
@@ -628,6 +642,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const pipelineCtx: PipelineContext = {
             undoManager: {
@@ -670,6 +685,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const pipelineCtx: PipelineContext = {
             broadcast: () => {
@@ -692,6 +708,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
+            matchResult: null,
         };
         const pipelineCtx: PipelineContext = {
             debugObserver: () => {
@@ -813,5 +830,134 @@ describe('isReduceContext', () => {
             },
         };
         expect(isReduceContext(grc)).toBe(false);
+    });
+});
+
+// ─── MatchResult ─────────────────────────────────────────────────────────────
+
+describe('MatchResult', () => {
+    it('has a required winnerIds field typed as readonly PlayerId[]', () => {
+        const result: MatchResult = { winnerIds: [toPlayerId('p1')] };
+        expect(result.winnerIds).toHaveLength(1);
+        expect(result.winnerIds[0]).toBe('p1');
+    });
+
+    it('accepts an empty winnerIds array (draw)', () => {
+        const result: MatchResult = { winnerIds: [] };
+        expect(result.winnerIds).toHaveLength(0);
+    });
+
+    it('accepts multiple winners (co-winners)', () => {
+        const result: MatchResult = { winnerIds: [toPlayerId('p1'), toPlayerId('p2')] };
+        expect(result.winnerIds).toHaveLength(2);
+    });
+});
+
+// ─── MatchResolution ─────────────────────────────────────────────────────────
+
+describe('MatchResolution', () => {
+    it('in_progress variant has status: "in_progress"', () => {
+        const res: MatchResolution = { status: 'in_progress' };
+        expect(res.status).toBe('in_progress');
+    });
+
+    it('resolved variant has status: "resolved" and a result field', () => {
+        const res: MatchResolution = {
+            status: 'resolved',
+            result: { winnerIds: [toPlayerId('p1')] },
+        };
+        expect(res.status).toBe('resolved');
+        if (res.status === 'resolved') {
+            expect(res.result.winnerIds[0]).toBe('p1');
+        }
+    });
+
+    it('resolved variant result can contain empty winnerIds (draw)', () => {
+        const res: MatchResolution = {
+            status: 'resolved',
+            result: { winnerIds: [] },
+        };
+        if (res.status === 'resolved') {
+            expect(res.result.winnerIds).toHaveLength(0);
+        }
+    });
+
+    it('discriminant narrows the union correctly', () => {
+        function check(res: MatchResolution): void {
+            if (res.status === 'resolved') {
+                // TypeScript narrows — in this branch result is accessible
+                expect(res.result).toBeDefined();
+            } else {
+                expect(res.status).toBe('in_progress');
+            }
+        }
+        check({ status: 'in_progress' });
+        check({ status: 'resolved', result: { winnerIds: [] } });
+    });
+});
+
+// ─── BaseGameSnapshot.matchResult ────────────────────────────────────────────
+
+describe('BaseGameSnapshot.matchResult', () => {
+    it('can be null (game in progress)', () => {
+        const snapshot: BaseGameSnapshot = {
+            tick: 0,
+            seed: 1,
+            players: {},
+            entities: {},
+            phase: 'playing' as GamePhase,
+            events: [],
+            turnNumber: 0,
+            timers: {},
+            matchResult: null,
+        };
+        expect(snapshot.matchResult).toBeNull();
+    });
+
+    it('can hold a resolved MatchResult with one winner', () => {
+        const result: MatchResult = { winnerIds: [toPlayerId('p1')] };
+        const snapshot: BaseGameSnapshot = {
+            tick: 10,
+            seed: 1,
+            players: {},
+            entities: {},
+            phase: 'ended' as GamePhase,
+            events: [],
+            turnNumber: 2,
+            timers: {},
+            matchResult: result,
+        };
+        expect(snapshot.matchResult).not.toBeNull();
+        expect(snapshot.matchResult?.winnerIds[0]).toBe('p1');
+    });
+
+    it('can hold a resolved MatchResult with empty winnerIds (draw)', () => {
+        const snapshot: BaseGameSnapshot = {
+            tick: 8,
+            seed: 1,
+            players: {},
+            entities: {},
+            phase: 'ended' as GamePhase,
+            events: [],
+            turnNumber: 2,
+            timers: {},
+            matchResult: { winnerIds: [] },
+        };
+        expect(snapshot.matchResult?.winnerIds).toHaveLength(0);
+    });
+
+    it('defaults to null in a freshly-built snapshot (in-progress invariant)', () => {
+        const snapshot: BaseGameSnapshot = {
+            tick: 0,
+            seed: 42,
+            players: {},
+            entities: {},
+            phase: 'lobby' as GamePhase,
+            events: [],
+            turnNumber: 0,
+            timers: {},
+            matchResult: null,
+        };
+        expect(snapshot.matchResult).toBeNull();
     });
 });

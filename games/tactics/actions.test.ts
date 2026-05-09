@@ -8,9 +8,11 @@ import type {
 } from '@chimera/simulation/engine/types.js';
 import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import {
+    TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     registerTacticsActions,
     resolveTacticsFirstPlayer,
+    tacticsAttackDefinition,
     tacticsGridCoordinate,
     tacticsMoveUnitDefinition,
 } from './actions.js';
@@ -18,13 +20,36 @@ import {
 const P1 = playerId('player-1');
 const P2 = playerId('player-2');
 const UNIT = entityId('unit-1');
+const ENEMY_UNIT = entityId('unit-2');
 
 function makeSnapshot(): BaseGameSnapshot {
-    const unit = { id: UNIT, kind: 'unit', ownerId: P1, x: 0, y: 0 } satisfies BaseEntityState & {
+    const unit = {
+        id: UNIT,
+        kind: 'unit',
+        ownerId: P1,
+        x: 0,
+        y: 0,
+        hp: 1,
+    } satisfies BaseEntityState & {
         readonly kind: 'unit';
         readonly ownerId: typeof P1;
         readonly x: number;
         readonly y: number;
+        readonly hp: number;
+    };
+    const enemyUnit = {
+        id: ENEMY_UNIT,
+        kind: 'unit',
+        ownerId: P2,
+        x: 1,
+        y: 0,
+        hp: 1,
+    } satisfies BaseEntityState & {
+        readonly kind: 'unit';
+        readonly ownerId: typeof P2;
+        readonly x: number;
+        readonly y: number;
+        readonly hp: number;
     };
     return {
         tick: 1,
@@ -33,13 +58,14 @@ function makeSnapshot(): BaseGameSnapshot {
             [P1]: { id: P1 },
             [P2]: { id: P2 },
         },
-        entities: { [UNIT]: unit },
-        phase: gamePhase('ended'),
+        entities: { [UNIT]: unit, [ENEMY_UNIT]: enemyUnit },
+        phase: gamePhase('playing'),
         events: [],
         turnNumber: 0,
         hostPlayerId: P1,
         turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
         timers: {},
+        matchResult: null,
     };
 }
 
@@ -60,6 +86,15 @@ describe('tactics move unit action', () => {
 
         expect(registry.has(TACTICS_MOVE_UNIT_ACTION)).toBe(true);
         expect(registry.resolve(TACTICS_MOVE_UNIT_ACTION).predictable).toBe(true);
+    });
+
+    it('exports and registers the attack action for deterministic match resolution', () => {
+        const registry = new ActionRegistry();
+
+        registerTacticsActions(registry);
+
+        expect(TACTICS_ATTACK_ACTION).toBe('tactics:attack');
+        expect(registry.has(TACTICS_ATTACK_ACTION)).toBe(true);
     });
 
     it('registers a GameDefinition that builds the initial tactics entities', () => {
@@ -134,5 +169,81 @@ describe('tactics move unit action', () => {
             ok: false,
             reason: 'not_unit_owner',
         });
+    });
+
+    it('decrements an adjacent enemy defender by 1 hp and advances tick', () => {
+        const snapshot = makeSnapshot();
+        const payload = tacticsAttackDefinition.parsePayload({
+            attackerId: UNIT,
+            defenderId: ENEMY_UNIT,
+        });
+
+        const validation = tacticsAttackDefinition.validate(payload, snapshot, P1, {
+            rng: createRng(snapshot.seed, snapshot.tick),
+            dispatchDepth: 0,
+        });
+        const next = tacticsAttackDefinition.reduce(
+            snapshot,
+            payload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(validation).toEqual({ ok: true });
+        expect(next.tick).toBe(2);
+        expect(next.entities[ENEMY_UNIT]).toMatchObject({ hp: 0 });
+        expect(snapshot.entities[ENEMY_UNIT]).toMatchObject({ hp: 1 });
+    });
+
+    it('clamps defender hp at zero', () => {
+        const snapshot = makeSnapshot();
+        const defeated = {
+            ...snapshot,
+            entities: {
+                ...snapshot.entities,
+                [ENEMY_UNIT]: { ...snapshot.entities[ENEMY_UNIT], hp: 0 },
+            },
+        };
+        const payload = tacticsAttackDefinition.parsePayload({
+            attackerId: UNIT,
+            defenderId: ENEMY_UNIT,
+        });
+
+        const next = tacticsAttackDefinition.reduce(
+            defeated,
+            payload,
+            P1,
+            makeReduceContext(defeated),
+        );
+
+        expect(next.entities[ENEMY_UNIT]).toMatchObject({ hp: 0 });
+    });
+
+    it('rejects attacking with an opponent unit', () => {
+        const snapshot = makeSnapshot();
+        const payload = tacticsAttackDefinition.parsePayload({
+            attackerId: ENEMY_UNIT,
+            defenderId: UNIT,
+        });
+
+        expect(
+            tacticsAttackDefinition.validate(payload, snapshot, P1, makeReduceContext(snapshot)),
+        ).toEqual({ ok: false, reason: 'not_attacker_owner' });
+    });
+
+    it('registered tactics GameDefinition resolves a winner when enemies are defeated', () => {
+        const registry = new ActionRegistry<BaseGameSnapshot>();
+        registerTacticsActions(registry);
+        const definition = registry.resolveGame('tactics');
+        const snapshot = makeSnapshot();
+        const defeated = {
+            ...snapshot,
+            entities: {
+                ...snapshot.entities,
+                [ENEMY_UNIT]: { ...snapshot.entities[ENEMY_UNIT], hp: 0 },
+            },
+        };
+
+        expect(definition?.resolveMatchResult?.(defeated)).toEqual({ winnerIds: [P1] });
     });
 });

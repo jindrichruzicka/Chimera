@@ -195,6 +195,7 @@ export function arbitraryGameSnapshot(): Arbitrary<ArbitraryGameSnapshot> {
                 events: [],
                 players,
                 entities,
+                matchResult: null,
             } satisfies ArbitraryGameSnapshot;
         });
     });
@@ -285,6 +286,7 @@ export function arbitraryGameSnapshotWithHiddenEntity(): Arbitrary<ArbitrarySnap
                 events: [],
                 players,
                 entities,
+                matchResult: null,
             };
 
             return { snapshot, hiddenEntityId: hiddenId };
@@ -412,6 +414,7 @@ export function arbitraryGameSnapshotWithCommittedEntity(): Arbitrary<ArbitraryS
                     events: [],
                     players,
                     entities,
+                    matchResult: null,
                 };
 
                 return {

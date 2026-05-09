@@ -27,6 +27,7 @@ import type {
 } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { createRng } from './DeterministicRng.js';
+import { gamePhase } from './types.js';
 import { StateReducer } from './StateReducer.js';
 import { TURN_MEMENTO_RETENTION } from './UndoManager.js';
 import { MAX_NESTED_DISPATCH, RecursiveDispatchError } from './RecursiveDispatchError.js';
@@ -148,6 +149,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
     readonly #registry: ActionRegistry<TState>;
     readonly #logger: Logger;
     readonly #context: PipelineContext | undefined;
+    readonly #gameId: string | undefined;
     /**
      * Tracks current re-entrant dispatch depth. Starts at 0 (top-level call);
      * incremented by the dispatch closure before each nested process() call and
@@ -187,11 +189,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
     constructor(
         registry: ActionRegistry<TState>,
-        options?: { logger?: Logger; context?: PipelineContext },
+        options?: { logger?: Logger; context?: PipelineContext; gameId?: string },
     ) {
         this.#registry = registry;
         this.#logger = options?.logger ?? NOOP_LOGGER;
         this.#context = options?.context;
+        this.#gameId = options?.gameId;
 
         // Hoist the dispatch closure once — same body as before, rooted on the
         // instance so #depth tracking works correctly for re-entrant calls.
@@ -299,6 +302,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 action.type === 'engine:undo'
                     ? undoManager.undo(action.playerId, steps)
                     : undoManager.redo(action.playerId, steps);
+            const resolvedReconstructed = this.#resolveMatchResult(reconstructed as TState);
 
             // Stage 6 equivalent — record undo/redo in history so it appears in replay.
             this.#context.history?.append({
@@ -312,10 +316,10 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             // Implementations (e.g., StateBroadcaster) must project it via
             // StateProjector.project() to produce the per-viewer PlayerSnapshot
             // before forwarding to transport (Invariants #3/#8).
-            if (reconstructed !== snapshot) {
-                for (const pid of Object.keys(reconstructed.players)) {
+            if (resolvedReconstructed !== snapshot) {
+                for (const pid of Object.keys(resolvedReconstructed.players)) {
                     const viewerId = pid as PlayerId;
-                    this.#context.broadcast?.(reconstructed, viewerId);
+                    this.#context.broadcast?.(resolvedReconstructed, viewerId);
                 }
             }
 
@@ -326,7 +330,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             // produced by `process()` on a `TState` snapshot — the pipeline is
             // the sole mutation point for game state. If `UndoManager` is ever
             // parameterised as `UndoManager<TState>`, this cast can be removed.
-            return reconstructed as TState;
+            return resolvedReconstructed;
         }
 
         // ── Stage 4 — authorization (validate) ────────────────────────────
@@ -349,7 +353,8 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         }
 
         // ── Stage 5 — reduce ──────────────────────────────────────────────
-        const nextState = def.reduce(snapshot, parsedPayload, action.playerId, ctx);
+        const reducedState = def.reduce(snapshot, parsedPayload, action.playerId, ctx);
+        const nextState = this.#resolveMatchResult(reducedState);
 
         this.#logger.debug('action reduced', {
             type: action.type,
@@ -435,6 +440,32 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         }
 
         return nextState;
+    }
+
+    #resolveMatchResult(snapshot: TState): TState {
+        if (this.#gameId === undefined) {
+            return snapshot;
+        }
+
+        // Guard early-exit: if match is already resolved, skip resolver invocation.
+        // Ensures resolveGame().resolveMatchResult() is never called redundantly
+        // on undo, redo, or subsequent actions after game-over (Invariant #38).
+        if (snapshot.matchResult !== null) {
+            return snapshot;
+        }
+
+        const matchResult = this.#registry
+            .resolveGame(this.#gameId)
+            ?.resolveMatchResult?.(snapshot);
+        if (matchResult === undefined || matchResult === null) {
+            return snapshot;
+        }
+
+        return {
+            ...snapshot,
+            phase: gamePhase('ended'),
+            matchResult,
+        };
     }
 }
 

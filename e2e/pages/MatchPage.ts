@@ -6,6 +6,10 @@ export class MatchPage {
     readonly redoButton: Locator;
     readonly endTurnButton: Locator;
     readonly gameOverBanner: Locator;
+    readonly matchResultBanner: Locator;
+    readonly matchResultText: Locator;
+    readonly selectableUnit: Locator;
+    readonly attackTarget: Locator;
     readonly hudTick: Locator;
 
     public constructor(private readonly page: Page) {
@@ -14,7 +18,16 @@ export class MatchPage {
         this.redoButton = page.getByTestId('redo');
         this.endTurnButton = page.getByTestId('end-turn');
         this.gameOverBanner = page.getByTestId('game-over-banner');
+        this.matchResultBanner = page.getByTestId('match-result-banner');
+        this.matchResultText = page.getByTestId('match-result-text');
+        this.selectableUnit = page.getByTestId('selectable-unit');
+        this.attackTarget = page.getByTestId('attack-target');
         this.hudTick = page.getByTestId('hud-tick');
+    }
+
+    public async attackAdjacentEnemy(): Promise<void> {
+        await this.selectableUnit.click();
+        await this.attackTarget.click();
     }
 
     public async currentTick(): Promise<number> {

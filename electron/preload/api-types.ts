@@ -16,7 +16,12 @@ import type { LogEntry } from '@chimera/shared/logging.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { CommitmentId } from '@chimera/simulation/projection/index.js';
-import type { PlayerId, EntityId, GamePhase } from '@chimera/simulation/engine/types.js';
+import type {
+    PlayerId,
+    EntityId,
+    GamePhase,
+    MatchResult,
+} from '@chimera/simulation/engine/types.js';
 import { playerId, entityId, gamePhase } from '@chimera/simulation/engine/types.js';
 import type { EngineSettings } from '@chimera/simulation/settings/SettingsSchema.js';
 
@@ -33,6 +38,9 @@ export type { CommitmentId };
 
 /** Current phase of the game state machine. Canonical: simulation/ (F03). */
 export type { GamePhase };
+
+/** Resolved match outcome. Canonical: simulation/ (§4.38). */
+export type { MatchResult };
 
 /**
  * Constructs a branded {@link PlayerId} from a raw string.
@@ -126,6 +134,7 @@ export interface PlayerSnapshot {
     readonly entities: Readonly<Record<EntityId, ObservedEntityState>>;
     readonly phase: GamePhase;
     readonly events: readonly GameEvent[];
+    readonly matchResult: MatchResult | null;
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;

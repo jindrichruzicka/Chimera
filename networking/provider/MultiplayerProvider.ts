@@ -19,7 +19,7 @@
  *        outside that directory; this file contains only the abstract surface.
  */
 
-import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import type { PlayerId, EngineAction, MatchResult } from '@chimera/simulation/engine/types.js';
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
 import type { CommitmentEnvelope, CommitmentId } from '@chimera/simulation/projection/index.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
@@ -27,6 +27,8 @@ import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 // ─── Re-export simulation primitives used by callers of this module ───────────
 
 export type { PlayerId };
+
+export type { MatchResult };
 
 /**
  * Constructs a branded `PlayerId` from a raw string.
@@ -71,6 +73,7 @@ export interface PlayerSnapshot {
     >;
     readonly phase: string;
     readonly events: readonly Readonly<{ type: string }>[];
+    readonly matchResult: MatchResult | null;
     /**
      * Per-player commitment state (proposals and envelopes).
      * Optional for backward-compat: older clients may not include this field
