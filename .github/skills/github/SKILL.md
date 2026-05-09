@@ -1,7 +1,7 @@
 ---
 name: github
-description: 'Use when creating or managing GitHub milestones, issues, or releases. How: load the matching sub-skill (create-issue, create-milestone, bootstrap-milestone, close-issue, create-release).'
-argument-hint: "Operation type (e.g. 'create-milestone', 'create-issue', 'bootstrap-milestone', 'close-issue', 'list-issues', 'create-release')"
+description: 'Use when fetching, creating, or managing GitHub milestones, issues, or releases. How: load the matching sub-skill (fetch-issue, list-issues, create-issue, create-milestone, bootstrap-milestone, close-issue, create-release).'
+argument-hint: "Operation type (e.g. 'fetch-issue', 'create-milestone', 'create-issue', 'bootstrap-milestone', 'close-issue', 'list-issues', 'create-release')"
 user-invocable: true
 ---
 
@@ -16,6 +16,7 @@ Repo: `jindrichruzicka/Chimera`. Set once per session: `export GH_REPO=jindrichr
 | create-milestone    | Setting up M1/M2/…                           | `create-milestone/SKILL.md`    |
 | create-labels       | Ensuring labels exist before creating issues | `create-labels/SKILL.md`       |
 | create-issue        | Creating feature/task/bug issues             | `create-issue/SKILL.md`        |
+| fetch-issue         | Fetching one issue by number or URL          | `fetch-issue/SKILL.md`         |
 | bootstrap-milestone | Setting up full milestone from scratch       | `bootstrap-milestone/SKILL.md` |
 | close-issue         | Closing a task issue after merge             | `close-issue/SKILL.md`         |
 | list-issues         | Querying issues                              | `list-issues/SKILL.md`         |
