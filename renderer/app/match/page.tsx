@@ -10,7 +10,7 @@
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) is consumed here.
-//   #48 — MatchShell is game-agnostic; TacticsScreenRegistry is the only
+//   #48 — MatchShell is game-agnostic; MatchScreenRegistry is the only
 //          coupling point and lives HERE, not inside MatchShell.
 //   #80 — MatchShell never imports from games/*; the board is passed as
 //          children (GameScreenRegistry.board rendered by this page).
@@ -19,7 +19,7 @@
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { type EngineAction, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
-import { TacticsScreenRegistry } from '@chimera/games/tactics/screens/index.js';
+import { MatchScreenRegistry } from '@chimera/games/tactics/screens/index.js';
 import { MatchShell } from '../../components/shell/MatchShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { useGameStore } from '../../state/gameStore';
@@ -75,7 +75,7 @@ export default function MatchPage(): React.ReactElement | null {
                       onEndTurn: () => dispatchMatchAction(snapshot, 'engine:end_turn', {}),
                   })}
         >
-            <TacticsScreenRegistry.board
+            <MatchScreenRegistry.board
                 snapshot={snapshot}
                 sendAction={sendAction}
                 {...(localPlayerId === null ? {} : { localPlayerId })}

@@ -134,7 +134,7 @@ override is a side-effect import loaded at game registry initialisation time (§
 ```typescript
 // games/tactics/screens/index.ts
 import './styles/tokens-override.css'; // Re-declares --ch-* tokens for Tactics visual language
-export const TacticsScreenRegistry: GameScreenRegistry = { ... };
+export const MatchScreenRegistry: GameScreenRegistry = { ... };
 ```
 
 Because token overrides are global CSS custom properties, they cascade into _all_ descendant

@@ -10,7 +10,7 @@
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
-//   #48 — MatchShell is game-agnostic; TacticsScreenRegistry is the sole
+//   #48 — MatchShell is game-agnostic; MatchScreenRegistry is the sole
 //          coupling point and lives in match/page.tsx, not in MatchShell.
 //   #80 — Verified by the board being injected via registry prop (children).
 
@@ -50,7 +50,7 @@ vi.mock('../../bridge/useSendAction', () => ({
 // Minimal stub for TacticsDemoBoard (games/* import; kept in match/page.tsx
 // per invariant #48 — MatchShell itself never imports from games/*).
 vi.mock('@chimera/games/tactics/screens/index.js', () => ({
-    TacticsScreenRegistry: {
+    MatchScreenRegistry: {
         board: ({ snapshot }: { snapshot: PlayerSnapshot }) => (
             <div data-testid="tactics-board" data-tick={snapshot.tick} />
         ),

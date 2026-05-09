@@ -39,7 +39,7 @@ const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 const DiplomacyScreen = React.lazy(() => import('./DiplomacyScreen'));
 const UnitDetailScreen = React.lazy(() => import('./UnitDetailScreen'));
 
-export const TacticsScreenRegistry: GameScreenRegistry = {
+export const MatchScreenRegistry: GameScreenRegistry = {
     board: BoardScreen,
     screens: {
         'tech-tree': TechTreeScreen,
@@ -56,7 +56,7 @@ export const TacticsScreenRegistry: GameScreenRegistry = {
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
         case 'tactics':
-            return (await import('../../games/tactics/screens/index')).TacticsScreenRegistry;
+            return (await import('../../games/tactics/screens/index')).MatchScreenRegistry;
         default:
             throw new Error(`No screen registry for game '${gameId}'`);
     }
@@ -317,7 +317,7 @@ renderer/
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
         case 'tactics':
-            return (await import('../../games/tactics/screens/index')).TacticsScreenRegistry;
+            return (await import('../../games/tactics/screens/index')).MatchScreenRegistry;
         default:
             throw new Error(`No screen registry for game '${gameId}'`);
     }
