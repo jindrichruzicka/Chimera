@@ -86,6 +86,7 @@ function projectVisibleEntities(fullState: BaseGameSnapshot): VisibilitySnapshot
         events: [],
         commitments: Object.create(null),
         undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
     };
 }
 

@@ -310,6 +310,7 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
 
         return {
             ...state,
+            tick: state.tick + 1,
             turnNumber: state.turnNumber + 1,
             turnClock: {
                 activePlayerId: nextPlayerId,

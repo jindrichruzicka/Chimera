@@ -1153,10 +1153,10 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         expect(() => p.process(snapshot, makeEnvelope(0, 'engine:end_turn'))).not.toThrow();
     });
 
-    it('clears undo history AFTER Stage 7 broadcast so the broadcast undoMeta still reflects pre-clear state', () => {
-        // Capture the order: broadcast must happen before clearUndoHistory; otherwise
-        // the broadcast snapshot would carry post-clear (always false/false) undoMeta
-        // even though the player still had a valid pre-end-turn history.
+    it('clears undo history BEFORE Stage 7 broadcast so the broadcast undoMeta reflects post-clear state', () => {
+        // Capture the order: clearUndoHistory must happen before broadcast so that
+        // the broadcast snapshot carries post-clear (always false/false) undoMeta,
+        // preventing stale turn-end undo eligibility from leaking to the UI.
         const callOrder: string[] = [];
         const undoManager: NonNullable<PipelineContext['undoManager']> = {
             canUndo: vi.fn(() => true),
@@ -1183,7 +1183,7 @@ describe('ActionPipeline — engine:end_turn clears undoManager history (post-St
         };
         p.process(snapshot, makeEnvelope(0, 'engine:end_turn'));
 
-        expect(callOrder).toEqual(['broadcast', 'clearUndoHistory']);
+        expect(callOrder).toEqual(['clearUndoHistory', 'broadcast']);
     });
 
     it('calls history.pruneTo(nextState.turnNumber - TURN_MEMENTO_RETENTION) after engine:end_turn so action history stays bounded', () => {

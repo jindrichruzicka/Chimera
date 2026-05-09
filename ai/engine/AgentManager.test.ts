@@ -37,6 +37,7 @@ const makeSnapshot = (tick = 0, viewerId = p1): PlayerSnapshot => ({
     events: [],
     commitments: Object.create(null),
     undoMeta: { canUndo: false, canRedo: false },
+    isMyTurn: true,
 });
 
 const makeFullState = (): BaseGameSnapshot => ({

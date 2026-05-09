@@ -14,6 +14,7 @@ export interface MatchShellProps {
     readonly tick: number;
     readonly canUndo: boolean;
     readonly canRedo: boolean;
+    readonly canEndTurn?: boolean;
     readonly isGameOver?: boolean;
     readonly gameOverMessage?: string;
     readonly onUndo?: () => void | Promise<void>;
@@ -26,6 +27,7 @@ export function MatchShell({
     tick,
     canUndo,
     canRedo,
+    canEndTurn = true,
     isGameOver = false,
     gameOverMessage = 'Game Over',
     onUndo,
@@ -34,7 +36,7 @@ export function MatchShell({
 }: MatchShellProps): React.ReactElement {
     const undoDisabled = !canUndo || onUndo === undefined;
     const redoDisabled = !canRedo || onRedo === undefined;
-    const endTurnDisabled = onEndTurn === undefined;
+    const endTurnDisabled = !canEndTurn || onEndTurn === undefined;
 
     function handleUndo(): void {
         if (onUndo !== undefined) {

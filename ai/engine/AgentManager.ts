@@ -70,6 +70,14 @@ export class AgentManager {
     }
 
     /**
+     * Compute isMyTurn for a given player based on turn clock state.
+     * This matches the logic in StateProjector.project().
+     */
+    private computeIsMyTurn(state: BaseGameSnapshot, playerId: PlayerId): boolean {
+        return state.turnClock === undefined || state.turnClock.activePlayerId === playerId;
+    }
+
+    /**
      * Fan-out the per-tick lifecycle to all registered agents.
      *
      * For each agent: projects `fullState` through `projector.project()` to
@@ -82,12 +90,14 @@ export class AgentManager {
      */
     public tickAll(fullState: BaseGameSnapshot, tick: number, projector: StateProjector): void {
         for (const agent of this.agents.values()) {
+            const isMyTurn = this.computeIsMyTurn(fullState, agent.playerId);
             const snapshot: PlayerSnapshot = agent.omniscient
                 ? {
                       ...fullState,
                       viewerId: agent.playerId,
                       commitments: {},
                       undoMeta: { canUndo: false, canRedo: false },
+                      isMyTurn,
                   }
                 : projector.project(fullState, agent.playerId);
             agent.onTick(snapshot, tick);
@@ -103,12 +113,14 @@ export class AgentManager {
      */
     public onGameStart(fullState: BaseGameSnapshot, projector: StateProjector): void {
         for (const agent of this.agents.values()) {
+            const isMyTurn = this.computeIsMyTurn(fullState, agent.playerId);
             const snapshot: PlayerSnapshot = agent.omniscient
                 ? {
                       ...fullState,
                       viewerId: agent.playerId,
                       commitments: {},
                       undoMeta: { canUndo: false, canRedo: false },
+                      isMyTurn,
                   }
                 : projector.project(fullState, agent.playerId);
             if (agent.omniscient) {
@@ -133,12 +145,14 @@ export class AgentManager {
         projector: StateProjector,
     ): void {
         for (const agent of this.agents.values()) {
+            const isMyTurn = this.computeIsMyTurn(fullState, agent.playerId);
             const snapshot: PlayerSnapshot = agent.omniscient
                 ? {
                       ...fullState,
                       viewerId: agent.playerId,
                       commitments: {},
                       undoMeta: { canUndo: false, canRedo: false },
+                      isMyTurn,
                   }
                 : projector.project(fullState, agent.playerId);
             agent.onGameEnd(snapshot, result);

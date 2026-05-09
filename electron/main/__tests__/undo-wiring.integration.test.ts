@@ -69,6 +69,13 @@ function makeBaseSnapshot(tick = 0, playerIds: readonly PlayerId[] = [P1]): Base
     };
 }
 
+function makeTurnSnapshot(tick = 0): BaseGameSnapshot {
+    return {
+        ...makeBaseSnapshot(tick, [P1, P2]),
+        turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
+    };
+}
+
 /**
  * Simple action that increments tick by 1.
  * Produces a new snapshot reference — required for Stage 7 broadcast to fire.
@@ -96,6 +103,13 @@ const undoEnvelope = (tick: number): ActionEnvelope => ({
 
 const redoEnvelope = (tick: number): ActionEnvelope => ({
     type: 'engine:redo',
+    playerId: P1,
+    tick,
+    payload: {},
+});
+
+const endTurnEnvelope = (tick: number): ActionEnvelope => ({
+    type: 'engine:end_turn',
     playerId: P1,
     tick,
     payload: {},
@@ -220,6 +234,31 @@ describe('buildHostSessionPipeline — AC2: canUndo transitions to true', () => 
 
         // After clear, canUndo is immediately disabled
         expect(undoManager.canUndo(P1)).toBe(false);
+    });
+
+    it('engine:end_turn broadcast carries cleared canUndo for the ending player', () => {
+        const s0 = makeTurnSnapshot(0);
+        undoManager.saveTurnMemento(s0, P1);
+
+        const s1 = pipeline.process(s0, advanceEnvelope(0));
+        expect(undoMetaOf(capturedByPlayer.get(P1)!).canUndo).toBe(true);
+
+        pipeline.process(s1, endTurnEnvelope(s1.tick));
+
+        expect(undoMetaOf(capturedByPlayer.get(P1)!).canUndo).toBe(false);
+    });
+
+    it('engine:end_turn broadcast carries cleared canRedo for the ending player', () => {
+        const s0 = makeTurnSnapshot(0);
+        undoManager.saveTurnMemento(s0, P1);
+
+        const s1 = pipeline.process(s0, advanceEnvelope(0));
+        const afterUndo = pipeline.process(s1, undoEnvelope(s1.tick));
+        expect(undoMetaOf(capturedByPlayer.get(P1)!).canRedo).toBe(true);
+
+        pipeline.process(afterUndo, endTurnEnvelope(afterUndo.tick));
+
+        expect(undoMetaOf(capturedByPlayer.get(P1)!).canRedo).toBe(false);
     });
 });
 

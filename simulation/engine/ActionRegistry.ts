@@ -16,8 +16,9 @@
 import type { ActionDefinition, BaseGameSnapshot, PlayerId } from './types.js';
 
 export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapshot> {
-    /** Called once by the host when a session is being created for this game. */
-    readonly buildInitialEntities?: (hostPlayerId: PlayerId | undefined) => TState['entities'];
+    /** Called once by the host when a session is being created for this game.
+     * Receives an array of player IDs in insertion order. */
+    readonly buildInitialEntities?: (playerIds: readonly PlayerId[]) => TState['entities'];
 }
 
 // ─── Error classes ────────────────────────────────────────────────────────────

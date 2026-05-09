@@ -137,9 +137,9 @@ export async function ensureActiveProfile(
 export function resolveInitialEntitiesForGame(
     gameRegistry: ActionRegistry<BaseGameSnapshot>,
     gameId: string,
-    firstPlayer: PlayerId | undefined,
+    playerIds: readonly PlayerId[],
 ): BaseGameSnapshot['entities'] {
-    return gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(firstPlayer) ?? {};
+    return gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(playerIds) ?? {};
 }
 
 export function resolveFirstPlayerFromLobbyState(
@@ -916,11 +916,11 @@ export async function main(): Promise<void> {
             // snapshot reference.  `captureSaveFile` (BLOCK-3) and
             // `applyRestoredFile` (WARN-2) read/write through this runtime.
             const initialPlayerSlots = collectInitialPlayerSlots(metadata);
-            const firstPlayer = initialPlayerSlots[0]?.playerId;
+            const initialPlayerIds = initialPlayerSlots.map((slot) => slot.playerId);
             const initialEntities = resolveInitialEntitiesForGame(
                 gameRegistry,
                 HOSTED_GAME_ID,
-                firstPlayer,
+                initialPlayerIds,
             );
 
             const initialSnapshot = buildInitialHostedSessionSnapshot({
@@ -1149,7 +1149,6 @@ export async function main(): Promise<void> {
                 throw new Error('LobbyManager: no hosted session runtime is available');
             }
 
-            const playerIds = state.players.map((player) => player.playerId);
             const selectedFirstPlayer = resolveFirstPlayerFromLobbyState(
                 state,
                 activeE2eHooks?.firstPlayerRole ?? 'host',
@@ -1158,10 +1157,15 @@ export async function main(): Promise<void> {
                 hostPlayerId: state.info.hostId,
                 firstPlayer: selectedFirstPlayer,
             });
+
+            // Reorder playerIds so the first player is at index 0 for unit assignment
+            const allPlayerIds = state.players.map((player) => player.playerId);
+            const playerIds = [firstPlayer, ...allPlayerIds.filter((id) => id !== firstPlayer)];
+
             const initialEntities = resolveInitialEntitiesForGame(
                 gameRegistry,
                 HOSTED_GAME_ID,
-                firstPlayer,
+                playerIds,
             );
 
             const action: ActionEnvelope = {
@@ -1169,7 +1173,7 @@ export async function main(): Promise<void> {
                 playerId: state.info.hostId,
                 tick: sessionRuntime.getSnapshot().tick,
                 payload: {
-                    playerIds,
+                    playerIds: allPlayerIds,
                     firstPlayerId: firstPlayer,
                     ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
                 },

@@ -97,6 +97,7 @@ describe('shared/messages — ServerMessage', () => {
                 events: [],
                 commitments: {},
                 undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
             },
             checksum: 42,
         };

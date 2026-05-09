@@ -203,6 +203,7 @@ describe('window.__chimera.game — contract', () => {
             events: [],
             commitments: {},
             undoMeta: { canUndo: false, canRedo: false },
+            isMyTurn: true,
         };
         emit('chimera:game:snapshot', snapshot);
         expect(seen).toEqual([snapshot]);

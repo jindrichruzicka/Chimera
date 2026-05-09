@@ -44,6 +44,7 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
     };
 }
 

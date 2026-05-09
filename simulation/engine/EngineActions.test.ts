@@ -572,6 +572,15 @@ describe('engine:end_turn definition', () => {
         expect(next.turnNumber).toBe(8);
     });
 
+    it('reduce increments tick by 1 when turnClock advances', () => {
+        const snapshot: BaseGameSnapshot = {
+            ...makeTurnSnapshot(hostId, 30_000),
+            tick: 7,
+        };
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+        expect(next.tick).toBe(8);
+    });
+
     it('reduce leaves turnNumber unchanged on the no-turnClock early return', () => {
         const snapshot: BaseGameSnapshot = { ...makeSnapshot(), turnNumber: 7 };
         const next = definition().reduce(snapshot, {}, hostId, stubCtx);

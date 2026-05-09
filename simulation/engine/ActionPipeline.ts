@@ -374,31 +374,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             });
         }
 
-        // ── Stage 7 — snapshot broadcast ───────────────────────────────────
-        // Policy: broadcast is skipped when nextState === snapshot (same reference).
-        // Engine actions MUST preserve reference equality when state does not actually
-        // change (e.g., engine:tick on idle ticks with no timers returns snapshot unchanged).
-        // This prevents spurious network broadcasts. If "always broadcast" semantics are
-        // ever required (e.g. for sync-on-join), revisit this guard here and in
-        // StateBroadcaster (F26).
-        //
-        // Skipped for nested dispatches (this.#depth > 0): only the outer action's
-        // final state is broadcast. Timer-fired sub-actions accumulate into the
-        // outer state; a single broadcast of the outer engine:tick result follows.
-        //
-        // The broadcast callback receives the full BaseGameSnapshot. Implementations
-        // (e.g., StateBroadcaster) must project it via StateProjector.project() to
-        // produce the per-viewer PlayerSnapshot before forwarding to transport
-        // (Invariants #3/#8). This ensures undoMeta is computed once by the projector,
-        // not redundantly in the pipeline.
-        if (this.#depth === 0 && nextState !== snapshot) {
-            for (const pid of Object.keys(nextState.players)) {
-                const viewerId = pid as PlayerId;
-                this.#context?.broadcast?.(nextState, viewerId);
-            }
-        }
-
-        // ── Post-Stage-7 turn-lifecycle hook ───────────────────────────────
+        // ── Pre-broadcast turn-lifecycle hook ──────────────────────────────
         // After a successful `engine:end_turn` reduce we must:
         //   1. Clear the prior active player's undo history so the
         //      `crossTurnUndo: false` policy default holds in production.
@@ -406,8 +382,8 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         //      turn has a baseline to undo back to (host wiring — WARN-1).
         //   3. Prune the bounded action history to `TURN_MEMENTO_RETENTION`
         //      turns of retention so memory stays bounded under long sessions.
-        // All of this runs AFTER Stage 7 so the broadcast snapshot still
-        // carries the player's pre-clear `undoMeta` for the final tick.
+        // This runs before Stage 7 so projected `undoMeta` reflects the current
+        // turn boundary and never leaks stale undo/redo eligibility to the UI.
         if (action.type === 'engine:end_turn') {
             this.#context?.undoManager?.clearUndoHistory(action.playerId);
 
@@ -432,6 +408,30 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             // identical to the previous call — pruneTo is idempotent in that
             // case and no entries are incorrectly evicted.
             this.#context?.history?.pruneTo(nextState.turnNumber - TURN_MEMENTO_RETENTION);
+        }
+
+        // ── Stage 7 — snapshot broadcast ───────────────────────────────────
+        // Policy: broadcast is skipped when nextState === snapshot (same reference).
+        // Engine actions MUST preserve reference equality when state does not actually
+        // change (e.g., engine:tick on idle ticks with no timers returns snapshot unchanged).
+        // This prevents spurious network broadcasts. If "always broadcast" semantics are
+        // ever required (e.g. for sync-on-join), revisit this guard here and in
+        // StateBroadcaster (F26).
+        //
+        // Skipped for nested dispatches (this.#depth > 0): only the outer action's
+        // final state is broadcast. Timer-fired sub-actions accumulate into the
+        // outer state; a single broadcast of the outer engine:tick result follows.
+        //
+        // The broadcast callback receives the full BaseGameSnapshot. Implementations
+        // (e.g., StateBroadcaster) must project it via StateProjector.project() to
+        // produce the per-viewer PlayerSnapshot before forwarding to transport
+        // (Invariants #3/#8). This ensures undoMeta is computed once by the projector,
+        // not redundantly in the pipeline.
+        if (this.#depth === 0 && nextState !== snapshot) {
+            for (const pid of Object.keys(nextState.players)) {
+                const viewerId = pid as PlayerId;
+                this.#context?.broadcast?.(nextState, viewerId);
+            }
         }
 
         return nextState;

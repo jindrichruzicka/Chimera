@@ -9,7 +9,6 @@ import type {
 import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import {
     TACTICS_MOVE_UNIT_ACTION,
-    TACTICS_DEFAULT_UNIT_ID,
     registerTacticsActions,
     resolveTacticsFirstPlayer,
     tacticsGridCoordinate,
@@ -69,15 +68,16 @@ describe('tactics move unit action', () => {
         registerTacticsActions(registry);
 
         const definition = registry.resolveGame('tactics');
-        const initialEntities = definition?.buildInitialEntities?.(P1);
+        const initialEntities = definition?.buildInitialEntities?.([P1, P2]);
 
-        expect(initialEntities?.[TACTICS_DEFAULT_UNIT_ID]).toMatchObject({
-            id: TACTICS_DEFAULT_UNIT_ID,
-            kind: 'unit',
-            ownerId: P1,
-            x: 0,
-            y: 0,
-        });
+        expect(initialEntities).toBeDefined();
+        expect(Object.keys(initialEntities ?? {})).toHaveLength(2);
+        // First player gets unit at index 0
+        const p1Unit = Object.values(initialEntities ?? {}).find(
+            (e: BaseEntityState) => (e as unknown as Record<string, unknown>)['ownerId'] === P1,
+        ) as unknown as Record<string, unknown>;
+        expect(p1Unit['kind']).toBe('unit');
+        expect(p1Unit['ownerId']).toBe(P1);
     });
 
     it('defaults the initial first player to the host player', () => {
@@ -88,17 +88,19 @@ describe('tactics move unit action', () => {
         expect(resolveTacticsFirstPlayer({ hostPlayerId: P1, firstPlayer: P2 })).toBe(P2);
     });
 
-    it('builds initial tactics entities for the explicit first player', () => {
+    it('builds initial tactics entities for each player', () => {
         const registry = new ActionRegistry<BaseGameSnapshot>();
 
         registerTacticsActions(registry);
 
         const definition = registry.resolveGame('tactics');
-        const initialEntities = definition?.buildInitialEntities?.(P2);
+        const initialEntities = definition?.buildInitialEntities?.([P1, P2]);
 
-        expect(initialEntities?.[TACTICS_DEFAULT_UNIT_ID]).toMatchObject({
-            ownerId: P2,
-        });
+        expect(Object.keys(initialEntities ?? {})).toHaveLength(2);
+        // Both players should have a unit
+        const units = Object.values(initialEntities ?? {}) as unknown as Record<string, unknown>[];
+        expect(units.some((u) => u['ownerId'] === P1)).toBe(true);
+        expect(units.some((u) => u['ownerId'] === P2)).toBe(true);
     });
 
     it('moves a unit owned by the dispatcher and advances tick once', () => {

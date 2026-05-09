@@ -1,6 +1,7 @@
 import { _electron as electron, test as base, expect } from '@playwright/test';
 import type { ElectronApplication, Page } from '@playwright/test';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import os from 'node:os';
 import path from 'path';
 import globalSetup from '../global-setup';
 import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
@@ -43,6 +44,7 @@ function inheritEnv(): Record<string, string> {
 }
 
 let e2eBuildReady = false;
+let userDataLaunchCounter = 0;
 
 function ensureE2eBuild(mainEntry: string, preloadPath: string, rendererEntry: string): void {
     if (
@@ -59,6 +61,27 @@ function ensureE2eBuild(mainEntry: string, preloadPath: string, rendererEntry: s
     e2eBuildReady = true;
 }
 
+function safeUserDataSegment(value: string): string {
+    return value.replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
+function createFreshE2eUserDataDir(options: E2eElectronLaunchOptions): string {
+    userDataLaunchCounter += 1;
+    const role = options.role ?? 'single';
+    const dirName = [
+        process.pid.toString(),
+        userDataLaunchCounter.toString(),
+        safeUserDataSegment(role),
+        safeUserDataSegment(options.port),
+    ].join('-');
+    const userDataDir = path.join(os.tmpdir(), 'chimera-e2e-userdata', dirName);
+
+    rmSync(userDataDir, { recursive: true, force: true });
+    mkdirSync(userDataDir, { recursive: true });
+
+    return userDataDir;
+}
+
 export function createE2eElectronLaunchConfig(
     options: E2eElectronLaunchOptions,
 ): E2eElectronLaunchConfig {
@@ -69,6 +92,7 @@ export function createE2eElectronLaunchConfig(
     const rendererEntry = path.join(root, 'renderer', 'out', 'index.html');
 
     ensureE2eBuild(mainEntry, preloadPath, rendererEntry);
+    const userDataDir = createFreshE2eUserDataDir(options);
 
     const env: Record<string, string> = {
         ...inheritEnv(),
@@ -92,7 +116,7 @@ export function createE2eElectronLaunchConfig(
     }
 
     return {
-        args: [mainEntry],
+        args: [mainEntry, `--user-data-dir=${userDataDir}`],
         env,
     };
 }

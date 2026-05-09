@@ -36,6 +36,7 @@ function makeSnapshot(tick: number): PlayerSnapshot {
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
     };
 }
 

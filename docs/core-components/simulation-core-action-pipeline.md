@@ -55,6 +55,7 @@ interface PlayerSnapshot {
     events: GameEvent[]; // Filtered to this viewer
     commitments: Record<CommitmentId, CommitmentEnvelope>; // Hashes for concealed values
     undoMeta: { canUndo: boolean; canRedo: boolean };
+    isMyTurn: boolean; // Derived: true if turnClock is undefined or activePlayerId === viewerId
 }
 ```
 

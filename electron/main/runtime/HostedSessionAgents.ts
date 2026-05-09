@@ -122,6 +122,7 @@ export function buildDefaultAIPlayerAgent(options: BuildDefaultAIPlayerAgentOpti
             viewerId: options.playerId,
             commitments: {},
             undoMeta: { canUndo: false, canRedo: false },
+            isMyTurn: true,
         },
         {},
         scheduler,

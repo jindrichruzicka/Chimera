@@ -19,6 +19,18 @@ tags: [state-projection, visibility, fog-of-war, commitment-scheme, anti-cheat]
 interface StateProjector {
     project(fullState: GameSnapshot, viewerId: PlayerId): PlayerSnapshot;
 }
+
+interface PlayerSnapshot {
+    tick: number;
+    viewerId: PlayerId;
+    players: Record<PlayerId, ObservedPlayerState>;
+    entities: Record<EntityId, ObservedEntityState>;
+    phase: GamePhase;
+    events: GameEvent[];
+    commitments: Record<CommitmentId, CommitmentEnvelope>;
+    undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
+    isMyTurn: boolean; // Derived: true if turnClock is undefined or activePlayerId === viewerId
+}
 ```
 
 > **Invariant #8** — `StateProjector.project()` is the mandatory gate between `GameSnapshot` and any outbound message. `StateBroadcaster` never reads `GameSnapshot` directly.

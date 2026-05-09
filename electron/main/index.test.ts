@@ -2153,26 +2153,28 @@ describe('resolveInitialEntitiesForGame', () => {
     it('uses the registered GameDefinition initial-entities hook', () => {
         const registry = new ActionRegistry<BaseGameSnapshot>();
         const host = playerId('host-game-definition-1');
+        const other = playerId('other-player-1');
+        const playerIds = [host, other] as const;
         const unitId = entityId('unit-game-definition-1');
         const initialEntities: BaseGameSnapshot['entities'] = {
             [unitId]: { id: unitId },
         };
         const buildInitialEntities = vi.fn<
-            (hostPlayerId: PlayerId | undefined) => BaseGameSnapshot['entities']
+            (playerIds: readonly PlayerId[]) => BaseGameSnapshot['entities']
         >(() => initialEntities);
         registry.registerGame('custom-game', { buildInitialEntities });
 
-        const resolved = resolveInitialEntitiesForGame(registry, 'custom-game', host);
+        const resolved = resolveInitialEntitiesForGame(registry, 'custom-game', playerIds);
 
         expect(resolved).toBe(initialEntities);
-        expect(buildInitialEntities).toHaveBeenCalledWith(host);
+        expect(buildInitialEntities).toHaveBeenCalledWith(playerIds);
     });
 
     it('returns an empty entity map when the game has no GameDefinition', () => {
         const registry = new ActionRegistry<BaseGameSnapshot>();
 
         expect(
-            resolveInitialEntitiesForGame(registry, 'unregistered-game', playerId('host-empty')),
+            resolveInitialEntitiesForGame(registry, 'unregistered-game', [playerId('host-empty')]),
         ).toEqual({});
     });
 });

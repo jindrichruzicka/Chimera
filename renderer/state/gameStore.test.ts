@@ -33,6 +33,7 @@ function makeSnapshot(tick: number, canUndo = false, canRedo = false): PlayerSna
         events: [],
         commitments: {},
         undoMeta: { canUndo, canRedo },
+        isMyTurn: true,
     };
 }
 

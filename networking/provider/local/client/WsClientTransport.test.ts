@@ -41,6 +41,7 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
     };
 }
 
@@ -352,6 +353,7 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
             events: [],
             commitments: {},
             undoMeta: { canUndo: false as const, canRedo: false as const },
+            isMyTurn: true,
         };
         // CRC computed from the non-schema-order object — as the host would produce it
         const checksum = crc32Json(nonSchemaOrderSnapshot);

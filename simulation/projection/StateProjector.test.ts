@@ -508,4 +508,50 @@ describe('DefaultStateProjector.project()', () => {
             expect(Object.getPrototypeOf(view.commitments)).toBeNull();
         });
     });
+
+    describe('isMyTurn (turn clock)', () => {
+        it('isMyTurn is true when the viewer is the active player', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot({
+                turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
+            });
+
+            const view = projector.project(snapshot, P1);
+
+            expect(view.isMyTurn).toBe(true);
+        });
+
+        it('isMyTurn is false when the viewer is not the active player', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot({
+                turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
+            });
+
+            const view = projector.project(snapshot, P2);
+
+            expect(view.isMyTurn).toBe(false);
+        });
+
+        it('isMyTurn defaults to true when turnClock is absent', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot(); // no turnClock
+
+            const view = projector.project(snapshot, P1);
+
+            expect(view.isMyTurn).toBe(true);
+        });
+
+        it('isMyTurn is independently computed for each viewer', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot({
+                turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
+            });
+
+            const viewP1 = projector.project(snapshot, P1);
+            const viewP2 = projector.project(snapshot, P2);
+
+            expect(viewP1.isMyTurn).toBe(true);
+            expect(viewP2.isMyTurn).toBe(false);
+        });
+    });
 });

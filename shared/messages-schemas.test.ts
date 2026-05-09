@@ -295,6 +295,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 phase: 'game',
                 events: [],
                 undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
             },
             checksum: 42,
         };
@@ -319,6 +320,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                     },
                 },
                 undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
             },
             checksum: 42,
         };
@@ -328,6 +330,30 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         expect(round.success).toBe(true);
         if (round.success && round.data.type === 'SNAPSHOT') {
             expect(round.data.snapshot.commitments).toStrictEqual(msg.snapshot.commitments);
+        }
+    });
+
+    it('SNAPSHOT preserves isMyTurn for renderer turn controls', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 1,
+                viewerId: toPlayerId('p2'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                events: [],
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: false,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.isMyTurn).toBe(false);
         }
     });
 });

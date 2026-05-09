@@ -44,6 +44,8 @@ import type { ObservedEntityState, ObservedPlayerState, VisibilityRules } from '
  * - Player states are masked for non-owners.
  * - Events are filtered to the viewer.
  * - The `seed` field is absent — it is host-internal.
+ * - `isMyTurn` is a derived boolean indicating if the viewer is the active player.
+ *   It is computed as `turnClock?.activePlayerId === viewerId` (or `true` if no turnClock).
  *
  * Architecture: §4.6
  */
@@ -56,6 +58,7 @@ export interface PlayerSnapshot {
     readonly events: readonly GameEvent[];
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     readonly undoMeta: UndoMeta;
+    readonly isMyTurn: boolean;
 }
 
 export interface StateProjectorOptions<TState extends BaseGameSnapshot = BaseGameSnapshot> {
@@ -138,6 +141,7 @@ export class DefaultStateProjector<
      * - Surviving entities are passed through `maskEntity`.
      * - All players are included but passed through `maskPlayerState`.
      * - Events are filtered by `filterEvents`.
+     * - `isMyTurn` is derived as `turnClock?.activePlayerId === viewerId` (true if no turnClock).
      */
     project(fullState: Readonly<TState>, viewerId: PlayerId): PlayerSnapshot {
         // ── 1. Filter + mask entities (fog of war) ───────────────────────────
@@ -162,6 +166,10 @@ export class DefaultStateProjector<
             this.#options.getPendingCommitments?.() ??
             (Object.create(null) as Readonly<Record<CommitmentId, CommitmentEnvelope>>);
 
+        // ── 4. Compute isMyTurn ──────────────────────────────────────────────
+        const isMyTurn =
+            fullState.turnClock === undefined || fullState.turnClock.activePlayerId === viewerId;
+
         return {
             tick: fullState.tick,
             viewerId,
@@ -171,6 +179,7 @@ export class DefaultStateProjector<
             events,
             commitments,
             undoMeta,
+            isMyTurn,
         };
     }
 

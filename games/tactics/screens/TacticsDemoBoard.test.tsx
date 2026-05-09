@@ -27,12 +27,13 @@ function makeSnapshot(): PlayerSnapshot {
             [viewerId]: { id: viewerId },
         },
         entities: {
-            [unitId]: { id: unitId },
+            [unitId]: { id: unitId, kind: 'unit', ownerId: viewerId, x: 0, y: 0 },
         },
         phase: gamePhase('playing'),
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
     };
 }
 

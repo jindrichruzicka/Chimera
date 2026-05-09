@@ -244,6 +244,7 @@ export default function LobbyPage() {
                     tick={snapshot.tick}
                     canUndo={snapshot.undoMeta.canUndo}
                     canRedo={snapshot.undoMeta.canRedo}
+                    canEndTurn={snapshot.isMyTurn}
                     isGameOver={snapshot.phase === 'ended'}
                     {...(localPlayerId === null
                         ? {}

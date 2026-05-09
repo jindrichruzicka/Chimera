@@ -114,6 +114,7 @@ function makeMatchSnapshot(): PlayerSnapshot {
         events: [],
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
     };
 }
 

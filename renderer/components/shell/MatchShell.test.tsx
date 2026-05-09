@@ -51,4 +51,44 @@ describe('MatchShell page object locators', () => {
         expect(onRedo).toHaveBeenCalledOnce();
         expect(onEndTurn).toHaveBeenCalledOnce();
     });
+
+    it('disables end-turn button when canEndTurn is false', () => {
+        const onEndTurn = vi.fn();
+
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={true}
+                canRedo={true}
+                canEndTurn={false}
+                onEndTurn={onEndTurn}
+            />,
+        );
+
+        const endTurnButton = screen.getByTestId('end-turn');
+        expect(endTurnButton.hasAttribute('disabled')).toBe(true);
+
+        fireEvent.click(endTurnButton);
+        expect(onEndTurn).not.toHaveBeenCalled();
+    });
+
+    it('enables end-turn button when canEndTurn is true (or not specified)', () => {
+        const onEndTurn = vi.fn();
+
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={true}
+                canRedo={true}
+                canEndTurn={true}
+                onEndTurn={onEndTurn}
+            />,
+        );
+
+        const endTurnButton = screen.getByTestId('end-turn');
+        expect(endTurnButton.hasAttribute('disabled')).toBe(false);
+
+        fireEvent.click(endTurnButton);
+        expect(onEndTurn).toHaveBeenCalledOnce();
+    });
 });

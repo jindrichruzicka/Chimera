@@ -70,6 +70,7 @@ function makeProjectedSnapshot(viewerId: PlayerId): PlayerSnapshot {
         events: [],
         commitments: {},
         undoMeta: { canUndo: true, canRedo: false },
+        isMyTurn: true,
     };
 }
 

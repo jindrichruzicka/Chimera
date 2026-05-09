@@ -101,6 +101,7 @@ const PlayerSnapshot = z.object({
     events: z.array(z.object({ type: z.string() }).passthrough()),
     commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
+    isMyTurn: z.boolean(),
 });
 
 // ─── ClientMessage variants ───────────────────────────────────────────────────

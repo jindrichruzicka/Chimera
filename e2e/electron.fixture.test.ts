@@ -7,13 +7,17 @@
  */
 import { describe, expect, it, vi } from 'vitest';
 
-const { existsSyncMock, globalSetupMock } = vi.hoisted(() => ({
+const { existsSyncMock, mkdirSyncMock, rmSyncMock, globalSetupMock } = vi.hoisted(() => ({
     existsSyncMock: vi.fn<() => boolean>(() => true),
+    mkdirSyncMock: vi.fn<() => void>(),
+    rmSyncMock: vi.fn<() => void>(),
     globalSetupMock: vi.fn<() => void>(),
 }));
 
 vi.mock('node:fs', () => ({
     existsSync: existsSyncMock,
+    mkdirSync: mkdirSyncMock,
+    rmSync: rmSyncMock,
 }));
 
 vi.mock('./global-setup', () => ({
@@ -46,5 +50,21 @@ describe('electron.fixture', () => {
         const config = createE2eElectronLaunchConfig({ port: '7778' });
 
         expect(config.env['CHIMERA_E2E_FIRST_PLAYER']).toBeUndefined();
+    });
+
+    it('assigns a fresh isolated Electron userData directory to each launch', () => {
+        const hostConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'host' });
+        const clientConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'client' });
+
+        const hostUserDataArg = hostConfig.args.find((arg) => arg.startsWith('--user-data-dir='));
+        const clientUserDataArg = clientConfig.args.find((arg) =>
+            arg.startsWith('--user-data-dir='),
+        );
+
+        expect(hostUserDataArg).toBeDefined();
+        expect(clientUserDataArg).toBeDefined();
+        expect(hostUserDataArg).not.toBe(clientUserDataArg);
+        expect(hostUserDataArg).toContain('chimera-e2e-userdata');
+        expect(clientUserDataArg).toContain('chimera-e2e-userdata');
     });
 });

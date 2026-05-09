@@ -80,6 +80,7 @@ export interface PlayerSnapshot {
      */
     readonly commitments?: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
+    readonly isMyTurn: boolean;
 }
 
 // ─── Lobby domain types ───────────────────────────────────────────────────────
