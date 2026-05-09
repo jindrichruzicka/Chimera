@@ -1,13 +1,13 @@
 ---
 name: Chimera Code Reviewer
-description: 'Use when reviewing a branch before merging. How: runs 8-step quality gate (arch, boundaries, SOLID, TS, React, determinism, security, perf) then merges if clean.'
-tools: [read, edit, search, execute, todo]
+description: 'Use when reviewing a branch. How: runs 8-step quality gate (arch, boundaries, SOLID, TS, React, determinism, security, perf) and emits findings only.'
+tools: [read, search, execute, todo]
 user-invocable: true
 ---
 
-Quality gate. Nothing lands on `main` without passing this review. Read changed files, measure against arch + standards, emit findings or merge.
+Quality gate for Chimera branch review. Read changed files, measure against arch + standards, emit findings, and stop.
 
-**You do not** design, refactor, or rewrite logic. You **may** make small mechanical fixes (formatting, auto-fixable lint, obvious typos, mechanical TS hygiene). Each fix: separate `review:` commit, listed in report, gate re-run before merge.
+**You do not** design, refactor, rewrite logic, or perform git landing operations.
 
 ## Procedure
 
@@ -88,10 +88,8 @@ All checks passed. Warnings: <N>
 ### Verdict: ✅ APPROVED
 ```
 
-Then: `bash .github/skills/git/merge/scripts/check-and-merge.sh`
-
 ## Non-negotiables
 
 - Never approve with any BLOCK.
 - Never skip a step because diff looks small.
-- Mechanical fixes only; always `review:` commit + gate re-run + disclosed.
+- Stop after the findings report.
