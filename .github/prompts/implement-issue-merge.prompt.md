@@ -5,46 +5,10 @@ argument-hint: '<issue-number>'
 
 Given issue number `{{issue-number}}`:
 
-## Step 1 — Load the issue
+1. Load the issue with `gh issue view {{issue-number}} --repo jindrichruzicka/Chimera --json number,title,body,labels,state,milestone,url`; extract acceptance criteria, docs, and invariants.
+2. Load and follow [create-branch](../skills/git/create-branch/SKILL.md), [TDD](../skills/tdd/SKILL.md), [commit-and-push](../skills/git/commit-and-push/SKILL.md), [merge](../skills/git/merge/SKILL.md), and [close-issue](../skills/github/close-issue/SKILL.md).
+3. Load the source docs for the touched area from [architecture overview](../../docs/architecture-overview.md), [module boundaries](../../docs/executive-architecture/module-boundaries-file-tree.md), and [coding standards](../../docs/coding-standards.md).
+4. Implement red -> green -> refactor, keep scope tight, and run focused tests plus the full merge gate (`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`).
+5. Commit/push with the git skill, merge with the merge skill, then close only the implemented task/bug issue after the merge succeeds.
 
-```bash
-gh issue view {{issue-number}} --repo jindrichruzicka/Chimera --json number,title,body,labels,state,milestone
-```
-
-Read the full issue body, acceptance criteria, and invariants before proceeding.
-
-## Step 2 — Create the branch
-
-Load and follow `.github/skills/git/create-branch/SKILL.md`.
-
-Run the script:
-
-```bash
-bash .github/skills/git/create-branch/scripts/create-branch.sh {{issue-number}}
-```
-
-## Step 3 — Implement using TDD
-
-Load and follow `.github/skills/tdd/SKILL.md`.
-
-Work through the full red → green → refactor cycle:
-
-1. Write failing tests first — confirm red with `pnpm test:watch`
-2. Implement minimum code to make tests green
-3. Refactor under green
-
-## Step 4 — Merge
-
-Once all acceptance criteria are met and the full gate passes (`pnpm format:check && pnpm lint && pnpm typecheck && pnpm test`), load and follow `.github/skills/git/merge/SKILL.md`.
-
-Run the merge script:
-
-```bash
-bash .github/skills/git/merge/scripts/check-and-merge.sh
-```
-
-After a successful merge, close the issue:
-
-```bash
-gh issue close {{issue-number}} --repo jindrichruzicka/Chimera --comment "Implemented and merged."
-```
+Report branch, merge commit, closed issue, criteria covered, and gates run.
