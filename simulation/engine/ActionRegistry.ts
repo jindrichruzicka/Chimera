@@ -13,7 +13,12 @@
  *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
  */
 
-import type { ActionDefinition, BaseGameSnapshot } from './types.js';
+import type { ActionDefinition, BaseGameSnapshot, PlayerId } from './types.js';
+
+export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapshot> {
+    /** Called once by the host when a session is being created for this game. */
+    readonly buildInitialEntities?: (hostPlayerId: PlayerId | undefined) => TState['entities'];
+}
 
 // ─── Error classes ────────────────────────────────────────────────────────────
 
@@ -84,6 +89,7 @@ const ENGINE_NAMESPACE = 'engine:' as const;
  */
 export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     readonly #definitions = new Map<string, ActionDefinition<object, TState>>();
+    readonly #gameDefinitions = new Map<string, GameDefinition<TState>>();
 
     /**
      * Register a game-defined ActionDefinition.
@@ -128,6 +134,20 @@ export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             throw new UnknownActionTypeError(type);
         }
         return definition;
+    }
+
+    /**
+     * Register a game-level definition for host-side game initialisation hooks.
+     */
+    registerGame(gameId: string, definition: GameDefinition<TState>): void {
+        this.#gameDefinitions.set(gameId, definition);
+    }
+
+    /**
+     * Look up the game-level definition for the given game id, if one exists.
+     */
+    resolveGame(gameId: string): GameDefinition<TState> | undefined {
+        return this.#gameDefinitions.get(gameId);
     }
 
     /**

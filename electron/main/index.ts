@@ -34,7 +34,6 @@ import {
 } from '@chimera/simulation/persistence/index.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { registerTacticsActions } from '@chimera/games/tactics/actions.js';
-import { buildInitialTacticsEntities } from '@chimera/games/tactics/entities.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
@@ -59,7 +58,11 @@ import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import type { ActionEnvelope, PlayerId } from '@chimera/simulation/engine/types.js';
+import type {
+    ActionEnvelope,
+    BaseGameSnapshot,
+    PlayerId,
+} from '@chimera/simulation/engine/types.js';
 import { gamePhase } from '@chimera/simulation/engine/types.js';
 import {
     CommitmentVerificationError,
@@ -120,6 +123,14 @@ export async function ensureActiveProfile(
         await repository.save(createDefaultPlayerProfile(resolvedProfileId));
     }
     return profileManager.getLocal(profileId);
+}
+
+export function resolveInitialEntitiesForGame(
+    gameRegistry: ActionRegistry<BaseGameSnapshot>,
+    gameId: string,
+    hostPlayerId: PlayerId | undefined,
+): BaseGameSnapshot['entities'] {
+    return gameRegistry.resolveGame(gameId)?.buildInitialEntities?.(hostPlayerId) ?? {};
 }
 
 // ── HarnessFlags ──────────────────────────────────────────────────────────────
@@ -881,7 +892,11 @@ export async function main(): Promise<void> {
             // `applyRestoredFile` (WARN-2) read/write through this runtime.
             const initialPlayerSlots = collectInitialPlayerSlots(metadata);
             const firstPlayer = initialPlayerSlots[0]?.playerId;
-            const initialEntities = buildInitialTacticsEntities(firstPlayer);
+            const initialEntities = resolveInitialEntitiesForGame(
+                gameRegistry,
+                HOSTED_GAME_ID,
+                firstPlayer,
+            );
 
             const initialSnapshot = buildInitialHostedSessionSnapshot({
                 // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).

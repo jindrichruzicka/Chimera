@@ -100,7 +100,7 @@ chimera/
 │   ├── engine/
 │   │   ├── GameState.ts             # BaseGameSnapshot — base state shape all games extend
 │   │   ├── ActionEnvelope.ts        # EngineAction generic envelope; TypedAction<T,P> helper
-│   │   ├── ActionRegistry.ts        # Registry: type string → ActionDefinition; games register here
+│   │   ├── ActionRegistry.ts        # Registry: type string → ActionDefinition plus GameDefinition startup hooks
 │   │   ├── ActionPipeline.ts        # Template Method: parsePayload → validate → reduce (invariant)
 │   │   ├── EngineActions.ts         # Reserved engine ActionDefinitions: undo, redo, end_turn, sync, tick
 │   │   ├── StateReducer.ts          # Delegates to ActionRegistry — no game-specific switch statements

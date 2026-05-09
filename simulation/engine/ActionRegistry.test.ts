@@ -19,6 +19,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import {
     ActionRegistry,
+    type GameDefinition,
     NamespaceCollisionError,
     UnknownActionTypeError,
 } from './ActionRegistry.js';
@@ -245,6 +246,42 @@ describe('ActionRegistry.registeredTypes()', () => {
         // Mutating the returned array should not affect registry state
         (types as string[]).push('game:injected');
         expect(registry.registeredTypes()).not.toContain('game:injected');
+    });
+});
+
+// ─── ActionRegistry — registerGame() / resolveGame() ───────────────────────
+
+describe('ActionRegistry game definitions', () => {
+    let registry: ActionRegistry<BaseGameSnapshot>;
+
+    beforeEach(() => {
+        registry = new ActionRegistry();
+    });
+
+    it('returns undefined for an unregistered game id', () => {
+        expect(registry.resolveGame('missing-game')).toBeUndefined();
+    });
+
+    it('registers and resolves a GameDefinition for a game id', () => {
+        const definition: GameDefinition<BaseGameSnapshot> = {
+            buildInitialEntities: () => ({}),
+        };
+
+        registry.registerGame('tactics', definition);
+
+        expect(registry.resolveGame('tactics')).toBe(definition);
+    });
+
+    it('keeps action definitions and game definitions in separate registries', () => {
+        const definition: GameDefinition<BaseGameSnapshot> = {
+            buildInitialEntities: () => ({}),
+        };
+
+        registry.register(makeDefinition('tactics:move'));
+        registry.registerGame('tactics', definition);
+
+        expect(registry.resolve('tactics:move').type).toBe('tactics:move');
+        expect(registry.resolveGame('tactics')).toBe(definition);
     });
 });
 

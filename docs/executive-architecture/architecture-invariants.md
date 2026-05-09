@@ -48,7 +48,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **9.** `CommitmentScheme.verify()` is always called client-side on receipt of a `REVEAL` message before the revealed value is trusted.
 
-**10.** Game-defined action types must be registered in `ActionRegistry` before the simulation tick loop starts. The engine never switches on raw `type` strings — all delegation goes through `ActionRegistry.resolve()`.
+**10.** Game-defined action types and game definitions must be registered in `ActionRegistry` before the simulation tick loop starts. The engine never switches on raw `type` strings — all action delegation goes through `ActionRegistry.resolve()`, and game-level startup hooks go through `ActionRegistry.resolveGame()`.
 
 **11.** The `engine:` action namespace is reserved. Games must not register action types starting with `engine:`.
 

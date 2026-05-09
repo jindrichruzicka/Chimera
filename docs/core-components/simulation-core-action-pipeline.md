@@ -141,13 +141,22 @@ interface ReduceContext {
 ## ActionRegistry
 
 ```typescript
+interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapshot> {
+    /** Called once by the host when a session is being created for this game. */
+    readonly buildInitialEntities?: (hostPlayerId: PlayerId | undefined) => TState['entities'];
+}
+
 interface ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     register<TPayload extends object>(definition: ActionDefinition<TPayload, TState>): void;
     resolve(type: string): ActionDefinition<object, TState>; // throws UnknownActionTypeError
+    registerGame(gameId: string, definition: GameDefinition<TState>): void;
+    resolveGame(gameId: string): GameDefinition<TState> | undefined;
     has(type: string): boolean;
     registeredTypes(): readonly string[];
 }
 ```
+
+Games register a `GameDefinition` alongside their action definitions during startup. The host uses `resolveGame(gameId)` to ask for game-level initialisation hooks, such as `buildInitialEntities`, without importing game-specific factories directly. A game with no registered definition is valid; hosts treat its initial entity map as empty.
 
 ### Namespace Conventions
 

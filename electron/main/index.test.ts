@@ -5,7 +5,7 @@ import type {
     PlayerProfile,
     ProfileRepository,
 } from '@chimera/simulation/profile/ProfileSchema.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import type { ChimeraRendererUrl } from './index.js';
 
 interface ProjectorOptionsForTest {
@@ -324,12 +324,14 @@ const {
     CHIMERA_RENDERER_URL,
     createDefaultPlayerProfile,
     ensureActiveProfile,
+    resolveInitialEntitiesForGame,
     main,
 } = await import('./index.js');
 const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
 const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
-const { playerId } = await import('@chimera/simulation/engine/types.js');
+const { ActionRegistry } = await import('@chimera/simulation/engine/ActionRegistry.js');
+const { entityId, playerId } = await import('@chimera/simulation/engine/types.js');
 const { ProfileManager } = await import('./profile/ProfileManager.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
@@ -2058,6 +2060,36 @@ describe('parseHarnessFlags', () => {
             CHIMERA_DEV_HARNESS: '1',
         });
         expect(result?.game).toBe('tactics');
+    });
+});
+
+// ─── resolveInitialEntitiesForGame ───────────────────────────────────────────
+
+describe('resolveInitialEntitiesForGame', () => {
+    it('uses the registered GameDefinition initial-entities hook', () => {
+        const registry = new ActionRegistry<BaseGameSnapshot>();
+        const host = playerId('host-game-definition-1');
+        const unitId = entityId('unit-game-definition-1');
+        const initialEntities: BaseGameSnapshot['entities'] = {
+            [unitId]: { id: unitId },
+        };
+        const buildInitialEntities = vi.fn<
+            (hostPlayerId: PlayerId | undefined) => BaseGameSnapshot['entities']
+        >(() => initialEntities);
+        registry.registerGame('custom-game', { buildInitialEntities });
+
+        const resolved = resolveInitialEntitiesForGame(registry, 'custom-game', host);
+
+        expect(resolved).toBe(initialEntities);
+        expect(buildInitialEntities).toHaveBeenCalledWith(host);
+    });
+
+    it('returns an empty entity map when the game has no GameDefinition', () => {
+        const registry = new ActionRegistry<BaseGameSnapshot>();
+
+        expect(
+            resolveInitialEntitiesForGame(registry, 'unregistered-game', playerId('host-empty')),
+        ).toEqual({});
     });
 });
 

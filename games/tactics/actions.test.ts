@@ -9,6 +9,7 @@ import type {
 import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import {
     TACTICS_MOVE_UNIT_ACTION,
+    TACTICS_DEFAULT_UNIT_ID,
     registerTacticsActions,
     tacticsGridCoordinate,
     tacticsMoveUnitDefinition,
@@ -59,6 +60,23 @@ describe('tactics move unit action', () => {
 
         expect(registry.has(TACTICS_MOVE_UNIT_ACTION)).toBe(true);
         expect(registry.resolve(TACTICS_MOVE_UNIT_ACTION).predictable).toBe(true);
+    });
+
+    it('registers a GameDefinition that builds the initial tactics entities', () => {
+        const registry = new ActionRegistry<BaseGameSnapshot>();
+
+        registerTacticsActions(registry);
+
+        const definition = registry.resolveGame('tactics');
+        const initialEntities = definition?.buildInitialEntities?.(P1);
+
+        expect(initialEntities?.[TACTICS_DEFAULT_UNIT_ID]).toMatchObject({
+            id: TACTICS_DEFAULT_UNIT_ID,
+            kind: 'unit',
+            ownerId: P1,
+            x: 0,
+            y: 0,
+        });
     });
 
     it('moves a unit owned by the dispatcher and advances tick once', () => {

@@ -12,6 +12,7 @@ import type {
     ValidationResult,
 } from '@chimera/simulation/engine/types.js';
 import { entityId } from '@chimera/simulation/engine/types.js';
+import { buildInitialTacticsEntities } from './entities.js';
 
 export { TACTICS_MOVE_UNIT_ACTION };
 
@@ -123,4 +124,7 @@ export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload,
 
 export function registerTacticsActions(registry: ActionRegistry<BaseGameSnapshot>): void {
     registry.register(tacticsMoveUnitDefinition);
+    registry.registerGame('tactics', {
+        buildInitialEntities: buildInitialTacticsEntities,
+    });
 }
