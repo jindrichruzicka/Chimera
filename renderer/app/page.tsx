@@ -17,6 +17,7 @@
 // the renderer never touches Node.js APIs directly.
 
 import React, { useEffect } from 'react';
+import Image from 'next/image';
 import { logPlatformOnBoot } from './bootSmoke';
 
 export default function HomePage() {
@@ -41,7 +42,7 @@ export default function HomePage() {
                 margin: 0,
             }}
         >
-            <img src="./chimera-logo-compact.png" alt="Chimera" width={256} height={256} />
+            <Image src="/chimera-logo-compact.png" alt="Chimera" width={256} height={256} />
         </main>
     );
 }
