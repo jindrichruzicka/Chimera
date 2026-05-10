@@ -3,6 +3,11 @@
  *
  * Drives engine:scene_prepare through the real renderer IPC path and verifies
  * the host-side scene manager reaches engine:post-match on both windows.
+ *
+ * Note: scene_ready acknowledgements are sent automatically by useFadeTransition
+ * in SceneRouter after the fade-out animation completes (~300 ms per renderer).
+ * The test does NOT need to send them explicitly; it verifies only the stable
+ * final state after the auto-mechanism has fired.
  */
 import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/direct-match.fixture';
@@ -80,49 +85,6 @@ async function requestPostMatchScene(
             },
         });
     }, 'engine:post-match');
-
-    await expect
-        .poll(async () => (await readHostSnapshot(hostApp)).sceneTransition?.phase ?? null, {
-            timeout: 10_000,
-        })
-        .toBe('preparing');
-}
-
-async function acknowledgeSceneReady(window: Page): Promise<void> {
-    await window.evaluate(async () => {
-        const gameApi = (
-            globalThis as {
-                readonly __chimera?: {
-                    readonly game?: {
-                        readonly sendAction?: (action: unknown) => void;
-                        readonly getCurrentSnapshot?: () => Promise<{
-                            readonly tick: number;
-                            readonly viewerId: string;
-                        } | null>;
-                    };
-                };
-            }
-        ).__chimera?.game;
-
-        if (gameApi === undefined || typeof gameApi.sendAction !== 'function') {
-            throw new Error('window.__chimera.game.sendAction is unavailable');
-        }
-        if (typeof gameApi.getCurrentSnapshot !== 'function') {
-            throw new Error('window.__chimera.game.getCurrentSnapshot is unavailable');
-        }
-
-        const snapshot = await gameApi.getCurrentSnapshot();
-        if (snapshot === null) {
-            throw new Error('Renderer current snapshot was not available');
-        }
-
-        gameApi.sendAction({
-            type: 'engine:scene_ready',
-            playerId: snapshot.viewerId,
-            tick: snapshot.tick,
-            payload: { playerId: snapshot.viewerId },
-        });
-    });
 }
 
 test('host scene_prepare transitions host and client into post-match', async ({
@@ -134,12 +96,14 @@ test('host scene_prepare transitions host and client into post-match', async ({
     const clientMatch = new MatchPage(clientWindow);
 
     await requestPostMatchScene(hostApp, hostWindow);
-    await Promise.all([acknowledgeSceneReady(hostWindow), acknowledgeSceneReady(clientWindow)]);
-
+    // useFadeTransition in each SceneRouter automatically sends engine:scene_ready
+    // after the fade-out animation (~300 ms).  SessionRuntime then auto-dispatches
+    // engine:scene_commit once both players are ready.  No explicit acknowledgement
+    // is required from the test.
     await Promise.all([
-        expect.poll(() => hostMatch.activeSceneId(), { timeout: 5_000 }).toBe('engine:post-match'),
+        expect.poll(() => hostMatch.activeSceneId(), { timeout: 15_000 }).toBe('engine:post-match'),
         expect
-            .poll(() => clientMatch.activeSceneId(), { timeout: 5_000 })
+            .poll(() => clientMatch.activeSceneId(), { timeout: 15_000 })
             .toBe('engine:post-match'),
     ]);
     await expect(hostMatch.transitionOverlay).toHaveCount(0);
