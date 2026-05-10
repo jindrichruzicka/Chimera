@@ -103,7 +103,7 @@ describe('SceneRouter', () => {
         // Consistency guard: DefaultScenes registers engine:post-match with defaultScreen 'summary'.
         // MatchScreenRegistry must also map engine:post-match to 'summary' so simulation
         // and renderer agree — preventing scene/UI divergence (WARN-1).
-        // NOTE: see games/tactics/__tests__/scene-default-screen-consistency.test.ts for a
+        // NOTE: see games/tactics/screens/index.test.tsx for a
         // cross-package assertion that does not depend on the jsdom environment.
         const tacticsPostMatch = MatchScreenRegistry.sceneDefaultScreens?.['engine:post-match'];
         expect(tacticsPostMatch).toBe('summary');

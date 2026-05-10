@@ -1,5 +1,6 @@
 import React from 'react';
 import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
+import { TacticsPostMatchSummary } from './TacticsPostMatchSummary.js';
 
 const TacticsDemoBoard = React.lazy(() => import('./TacticsDemoBoard.js'));
 const TacticsMatchHud = React.lazy(() => import('./TacticsMatchHud.js'));
@@ -8,6 +9,9 @@ const TacticsMatchResultBanner = React.lazy(() => import('./TacticsMatchResultBa
 export const MatchScreenRegistry: GameScreenRegistry = {
     board: TacticsDemoBoard,
     hud: TacticsMatchHud,
+    screens: {
+        summary: TacticsPostMatchSummary,
+    },
     sceneDefaultScreens: {
         'engine:match': 'board',
         'engine:post-match': 'summary',

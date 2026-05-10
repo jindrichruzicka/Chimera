@@ -12,6 +12,7 @@ export class MatchPage {
     readonly hudTick: Locator;
     readonly sceneRouter: Locator;
     readonly transitionOverlay: Locator;
+    readonly postMatchSummary: Locator;
 
     public constructor(private readonly page: Page) {
         this.canvas = page.getByTestId('match-canvas');
@@ -25,6 +26,7 @@ export class MatchPage {
         this.hudTick = page.getByTestId('hud-tick');
         this.sceneRouter = page.getByTestId('scene-router');
         this.transitionOverlay = page.getByTestId('transition-overlay');
+        this.postMatchSummary = page.getByTestId('post-match-summary');
     }
 
     public async attackAdjacentEnemy(): Promise<void> {
@@ -59,5 +61,9 @@ export class MatchPage {
 
     public async activeSceneId(): Promise<string | null> {
         return this.sceneRouter.getAttribute('data-active-scene-id');
+    }
+
+    public async activeScreenKey(): Promise<string | null> {
+        return this.sceneRouter.getAttribute('data-active-screen-key');
     }
 }

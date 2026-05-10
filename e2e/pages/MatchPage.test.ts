@@ -66,6 +66,7 @@ describe('MatchPage', () => {
         expect(matchPage.hudTick).toBeDefined();
         expect(matchPage.sceneRouter).toBeDefined();
         expect(matchPage.transitionOverlay).toBeDefined();
+        expect(matchPage.postMatchSummary).toBeDefined();
         expect(requestedTestIds).toEqual([
             'match-canvas',
             'undo',
@@ -78,6 +79,7 @@ describe('MatchPage', () => {
             'hud-tick',
             'scene-router',
             'transition-overlay',
+            'post-match-summary',
         ]);
     });
 

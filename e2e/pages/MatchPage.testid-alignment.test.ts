@@ -43,6 +43,10 @@ describe('MatchPage POM — testid alignment with renderer', () => {
                 path.join(workspaceRoot, 'games/tactics/screens/TacticsMatchResultBanner.tsx'),
                 'utf-8',
             ),
+            readFileSync(
+                path.join(workspaceRoot, 'games/tactics/screens/TacticsPostMatchSummary.tsx'),
+                'utf-8',
+            ),
         ];
         const rendererSource = rendererSources.join('\n');
 

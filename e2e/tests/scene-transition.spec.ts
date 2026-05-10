@@ -105,7 +105,11 @@ test('host scene_prepare transitions host and client into post-match', async ({
         expect
             .poll(() => clientMatch.activeSceneId(), { timeout: 15_000 })
             .toBe('engine:post-match'),
+        expect.poll(() => hostMatch.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
+        expect.poll(() => clientMatch.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
     ]);
+    await expect(hostMatch.postMatchSummary).toBeVisible();
+    await expect(clientMatch.postMatchSummary).toBeVisible();
     await expect(hostMatch.transitionOverlay).toHaveCount(0);
     await expect(clientMatch.transitionOverlay).toHaveCount(0);
 });
