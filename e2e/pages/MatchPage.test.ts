@@ -59,7 +59,6 @@ describe('MatchPage', () => {
         expect(matchPage.undoButton).toBeDefined();
         expect(matchPage.redoButton).toBeDefined();
         expect(matchPage.endTurnButton).toBeDefined();
-        expect(matchPage.gameOverBanner).toBeDefined();
         expect(matchPage.matchResultBanner).toBeDefined();
         expect(matchPage.matchResultText).toBeDefined();
         expect(matchPage.selectableUnit).toBeDefined();
@@ -70,7 +69,6 @@ describe('MatchPage', () => {
             'undo',
             'redo',
             'end-turn',
-            'game-over-banner',
             'match-result-banner',
             'match-result-text',
             'selectable-unit',

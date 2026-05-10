@@ -5,7 +5,6 @@ export class MatchPage {
     readonly undoButton: Locator;
     readonly redoButton: Locator;
     readonly endTurnButton: Locator;
-    readonly gameOverBanner: Locator;
     readonly matchResultBanner: Locator;
     readonly matchResultText: Locator;
     readonly selectableUnit: Locator;
@@ -17,7 +16,6 @@ export class MatchPage {
         this.undoButton = page.getByTestId('undo');
         this.redoButton = page.getByTestId('redo');
         this.endTurnButton = page.getByTestId('end-turn');
-        this.gameOverBanner = page.getByTestId('game-over-banner');
         this.matchResultBanner = page.getByTestId('match-result-banner');
         this.matchResultText = page.getByTestId('match-result-text');
         this.selectableUnit = page.getByTestId('selectable-unit');

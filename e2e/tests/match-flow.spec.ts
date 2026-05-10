@@ -23,7 +23,7 @@ test.describe('Match flow', () => {
 
         await hostMatch.attackAdjacentEnemy();
 
-        await expect(hostMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
-        await expect(clientMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
+        await expect(hostMatch.matchResultBanner).toBeVisible({ timeout: 60_000 });
+        await expect(clientMatch.matchResultBanner).toBeVisible({ timeout: 60_000 });
     });
 });

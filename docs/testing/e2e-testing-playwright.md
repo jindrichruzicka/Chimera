@@ -244,7 +244,8 @@ export class MatchPage {
     readonly undoButton: Locator;
     readonly redoButton: Locator;
     readonly endTurnButton: Locator;
-    readonly gameOverBanner: Locator;
+    readonly matchResultBanner: Locator;
+    readonly matchResultText: Locator;
     readonly hudTick: Locator;
 
     constructor(private readonly page: Page) {
@@ -252,7 +253,8 @@ export class MatchPage {
         this.undoButton = page.getByTestId('undo');
         this.redoButton = page.getByTestId('redo');
         this.endTurnButton = page.getByTestId('end-turn');
-        this.gameOverBanner = page.getByTestId('game-over-banner');
+        this.matchResultBanner = page.getByTestId('match-result-banner');
+        this.matchResultText = page.getByTestId('match-result-text');
         this.hudTick = page.getByTestId('hud-tick');
     }
 
@@ -569,8 +571,8 @@ test.describe('Match flow', () => {
     test('host and client reach game-over state', async ({ hostWindow, clientWindow }) => {
         const hostMatch = new MatchPage(hostWindow);
         const clientMatch = new MatchPage(clientWindow);
-        await expect(hostMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
-        await expect(clientMatch.gameOverBanner).toBeVisible({ timeout: 60_000 });
+        await expect(hostMatch.matchResultBanner).toBeVisible({ timeout: 60_000 });
+        await expect(clientMatch.matchResultBanner).toBeVisible({ timeout: 60_000 });
     });
 });
 ```

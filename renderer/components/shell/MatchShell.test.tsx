@@ -24,7 +24,8 @@ describe('MatchShell page object locators', () => {
         expect(screen.getByTestId('undo')).toBeTruthy();
         expect(screen.getByTestId('redo')).toBeTruthy();
         expect(screen.getByTestId('end-turn')).toBeTruthy();
-        expect(screen.getByTestId('game-over-banner')).toBeTruthy();
+        expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(screen.queryByTestId('game-over-banner')).toBeNull();
         expect(screen.getByTestId('hud-tick').textContent).toBe('42');
     });
 
@@ -107,7 +108,6 @@ describe('MatchShell page object locators', () => {
             />,
         );
 
-        expect(screen.getByTestId('game-over-banner')).toBeTruthy();
         expect(screen.getByTestId('match-result-banner')).toBeTruthy();
         expect(screen.getByTestId('match-result-text').textContent).toBe('You won');
     });

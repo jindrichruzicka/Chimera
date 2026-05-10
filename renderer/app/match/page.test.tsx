@@ -143,10 +143,10 @@ describe('MatchPage — rendering', () => {
         expect(screen.getByTestId('hud-tick').textContent).toBe('42');
     });
 
-    it('renders game-over banner when phase is ended', () => {
+    it('renders match result banner when phase is ended', () => {
         mockSnapshot = makeSnapshot({ phase: gamePhase('ended') });
         renderMatchPage();
-        expect(screen.getByTestId('game-over-banner')).toBeTruthy();
+        expect(screen.getByTestId('match-result-banner')).toBeTruthy();
     });
 
     it('does not render lobby heading', () => {

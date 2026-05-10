@@ -81,7 +81,7 @@ export function MatchShell({
                 {children}
                 {shouldShowResult && (
                     <div
-                        data-testid="game-over-banner"
+                        data-testid="match-result-banner"
                         role="status"
                         style={{
                             position: 'absolute',
@@ -93,9 +93,7 @@ export function MatchShell({
                             pointerEvents: 'none',
                         }}
                     >
-                        <span data-testid="match-result-banner">
-                            <span data-testid="match-result-text">{resultMessage}</span>
-                        </span>
+                        <span data-testid="match-result-text">{resultMessage}</span>
                     </div>
                 )}
             </section>

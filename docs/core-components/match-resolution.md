@@ -44,7 +44,7 @@ The renderer must consume the projected `PlayerSnapshot` value. It must not impo
 - `winnerIds` is non-empty and does not include the local player: `You lose`
 - `winnerIds` is empty: `Draw`
 
-The result banner exposes `data-testid="match-result-banner"` and the text node exposes `data-testid="match-result-text"`. The legacy `data-testid="game-over-banner"` locator remains available for older E2E flows.
+The result banner exposes `data-testid="match-result-banner"` and the text node exposes `data-testid="match-result-text"`.
 
 ## Undo/Redo Semantics
 
