@@ -12,12 +12,31 @@ describe('lobbyStore', () => {
     beforeEach(() => {
         // Reset the store before each test
         useLobbyStore.getState().applyLobbyState(null);
+        useLobbyStore.getState().markInitialStateLoading();
     });
 
     it('should initialize with null lobby state', () => {
         const store = createLobbyStore();
         const state = store.getState();
         expect(state.lobbyState).toBeNull();
+    });
+
+    it('should initialize before the first lobby-state replay has loaded', () => {
+        const store = createLobbyStore();
+        expect(store.getState().hasLoadedInitialState).toBe(false);
+    });
+
+    it('marks the initial lobby-state replay as loaded', () => {
+        const store = createLobbyStore();
+        store.getState().markInitialStateLoaded();
+        expect(store.getState().hasLoadedInitialState).toBe(true);
+    });
+
+    it('can mark the initial lobby-state replay as loading again', () => {
+        const store = createLobbyStore();
+        store.getState().markInitialStateLoaded();
+        store.getState().markInitialStateLoading();
+        expect(store.getState().hasLoadedInitialState).toBe(false);
     });
 
     it('should apply lobby state correctly', () => {

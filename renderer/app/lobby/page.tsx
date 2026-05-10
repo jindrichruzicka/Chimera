@@ -12,12 +12,11 @@ import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
 import { Button } from '../../components/ui/Button';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
-import { bootstrapLobbyStore } from '../../state/lobbyStoreBootstrap';
 import { defaultTheme } from '../../theme/default-theme';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { useThemeOverride } from '../../theme/useThemeOverride';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
-import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
+import { useLobbyApi } from './useLobbyApi';
 
 type PendingAction = 'hosting' | 'joining' | 'leaving' | 'starting' | 'updating-ready' | null;
 
@@ -63,23 +62,13 @@ export default function LobbyPage() {
         lobbyState.players.length > 0 &&
         lobbyState.players.every((p) => p.ready);
 
-    // Bootstrap the lobby store with the chimera API
+    // Read URL-driven lobby options after mount to avoid hydration drift.
     useEffect(() => {
-        let unsubscribe: (() => void) | undefined;
         isMountedRef.current = true;
-
         setLobbyConfig(parseLobbyConfig(new URLSearchParams(window.location.search)));
-
-        const bridge = getLobbyBridge();
-        if (bridge) {
-            unsubscribe = bootstrapLobbyStore(bridge.lobby, bridge.system);
-        }
 
         return () => {
             isMountedRef.current = false;
-            if (unsubscribe) {
-                unsubscribe();
-            }
         };
     }, []);
 

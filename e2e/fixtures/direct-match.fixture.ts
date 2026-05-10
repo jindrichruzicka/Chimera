@@ -113,7 +113,7 @@ export const test = electronTest.extend<
             port: DIRECT_MATCH_PORT,
             role: 'host',
             directMatchRole: 'host',
-            initialRoute: '/lobby',
+            initialRoute: '/match',
         });
         try {
             await configureFirstPlayer(app, firstPlayer);
@@ -131,7 +131,7 @@ export const test = electronTest.extend<
             role: 'client',
             directMatchRole: 'client',
             directMatchJoinAddress: lobbyCode,
-            initialRoute: '/lobby',
+            initialRoute: '/match',
         });
         try {
             await use(app);
@@ -159,9 +159,8 @@ export const test = electronTest.extend<
             const hostMatch = new MatchPage(hostWindow);
             const clientMatch = new MatchPage(clientWindow);
 
-            // Wait for both windows to navigate to /match and show the canvas.
-            // GameStoreBootstrap navigates from /lobby to /match when the
-            // first snapshot arrives.
+            // Both windows load /match directly; MatchPage waits for the
+            // first snapshot while the hidden direct-match lobby auto-starts.
             await expect(hostMatch.canvas).toBeVisible({ timeout: 15_000 });
             await expect(clientMatch.canvas).toBeVisible({ timeout: 15_000 });
 

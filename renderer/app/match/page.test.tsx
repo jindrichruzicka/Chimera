@@ -18,7 +18,12 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import {
+    gamePhase,
+    playerId,
+    type LobbyState,
+    type PlayerSnapshot,
+} from '@chimera/electron/preload/api-types.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import MatchPage from './page';
@@ -29,6 +34,8 @@ const mockReplace = vi.fn();
 const mockSendAction = vi.fn();
 let mockSnapshot: PlayerSnapshot | null = null;
 let mockLocalPlayerId: string | null = null;
+let mockLobbyState: LobbyState | null = null;
+let mockHasLoadedInitialLobbyState = true;
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockReplace }),
@@ -42,6 +49,19 @@ vi.mock('../../state/gameStore', () => ({
 vi.mock('../../state/lobbyUiStore', () => ({
     useLobbyUiStore: (selector: (state: { readonly localPlayerId: string | null }) => unknown) =>
         selector({ localPlayerId: mockLocalPlayerId }),
+}));
+
+vi.mock('../../state/lobbyStore', () => ({
+    useLobbyStore: (
+        selector: (state: {
+            readonly lobbyState: LobbyState | null;
+            readonly hasLoadedInitialState: boolean;
+        }) => unknown,
+    ) =>
+        selector({
+            lobbyState: mockLobbyState,
+            hasLoadedInitialState: mockHasLoadedInitialLobbyState,
+        }),
 }));
 
 vi.mock('../../bridge/useSendAction', () => ({
@@ -125,11 +145,30 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     };
 }
 
+function makeLobbyState(): LobbyState {
+    return {
+        info: {
+            sessionId: 'session-1',
+            hostId: 'p1',
+            gameId: 'tactics',
+        },
+        players: [
+            {
+                playerId: 'p1',
+                displayName: 'Player One',
+                ready: true,
+            },
+        ],
+    };
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
     mockSnapshot = null;
     mockLocalPlayerId = null;
+    mockLobbyState = null;
+    mockHasLoadedInitialLobbyState = true;
     mockSendAction.mockReset();
     mockReplace.mockReset();
 
@@ -150,6 +189,24 @@ describe('MatchPage — redirect', () => {
         mockSnapshot = null;
         renderMatchPage();
         expect(mockReplace).toHaveBeenCalledWith('/lobby');
+    });
+
+    it('does not redirect before the lobby bootstrap has loaded initial state', () => {
+        mockSnapshot = null;
+        mockHasLoadedInitialLobbyState = false;
+
+        renderMatchPage();
+
+        expect(mockReplace).not.toHaveBeenCalled();
+    });
+
+    it('does not redirect while an active lobby session is waiting for the first match snapshot', () => {
+        mockSnapshot = null;
+        mockLobbyState = makeLobbyState();
+
+        renderMatchPage();
+
+        expect(mockReplace).not.toHaveBeenCalled();
     });
 
     it('renders nothing visible when snapshot is null', () => {

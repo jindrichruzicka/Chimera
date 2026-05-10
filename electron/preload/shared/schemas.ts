@@ -31,6 +31,7 @@ import type {
     CrashRecoveryStatus,
     LocalProfileSlot,
     LobbyInfo,
+    LobbyState,
     PlayerProfile,
     ResolvedSettings,
     SaveSlotMeta,
@@ -109,6 +110,20 @@ export const LobbyInfoSchema = z.object({
     hostId: z.string(),
     gameId: z.string(),
 }) satisfies z.ZodType<LobbyInfo>;
+
+const LobbyPlayerEntrySchema = z.object({
+    playerId: z.string(),
+    displayName: z.string(),
+    ready: z.boolean(),
+});
+
+export const LobbyStateSchema = z.object({
+    info: LobbyInfoSchema,
+    players: z.array(LobbyPlayerEntrySchema).readonly(),
+}) satisfies z.ZodType<LobbyState>;
+
+export const NullableLobbyStateSchema =
+    LobbyStateSchema.nullable() satisfies z.ZodType<LobbyState | null>;
 
 /** Schema for `chimera:lobby:get-local-player-id` invoke result. */
 export const LocalPlayerIdSchema: z.ZodType<PlayerId | null> = z

@@ -43,7 +43,8 @@ function makeLobbyApi(onUpdateImpl?: (cb: (lobby: LobbyState) => void) => Unsubs
     return {
         host: vi.fn(),
         join: vi.fn(),
-        getLocalPlayerId: vi.fn(),
+        getCurrentState: vi.fn(async () => null),
+        getLocalPlayerId: vi.fn(async () => null),
         leave: vi.fn(),
         startMatch: vi.fn(),
         updatePlayerReadyState: vi.fn(),
@@ -67,6 +68,7 @@ function makeSystemApi(
 // Reset the singleton store between tests
 beforeEach(() => {
     useLobbyStore.getState().applyLobbyState(null);
+    useLobbyStore.getState().markInitialStateLoading();
     useLobbyUiStore.getState().clearLocalLobbyContext();
 });
 
@@ -124,6 +126,49 @@ describe('bootstrapLobbyStore()', () => {
 
         const stored = useLobbyStore.getState().lobbyState;
         expect(stored).toBe(incoming);
+    });
+
+    it('replays the current lobby state after registering push listeners', async () => {
+        const currentState = makeLobbyState();
+        const lobbyApi = makeLobbyApi();
+        vi.mocked(lobbyApi.getCurrentState).mockResolvedValueOnce(currentState);
+        const systemApi = makeSystemApi();
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        await Promise.resolve();
+
+        expect(lobbyApi.getCurrentState).toHaveBeenCalledOnce();
+        expect(useLobbyStore.getState().lobbyState).toBe(currentState);
+        expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
+    });
+
+    it('marks the initial lobby-state replay as loaded when no session is active', async () => {
+        const lobbyApi = makeLobbyApi();
+        vi.mocked(lobbyApi.getCurrentState).mockResolvedValueOnce(null);
+        const systemApi = makeSystemApi();
+        useLobbyStore.getState().applyLobbyState(null);
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        await Promise.resolve();
+
+        expect(useLobbyStore.getState().lobbyState).toBeNull();
+        expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
+    });
+
+    it('hydrates local player identity when replaying an active lobby state', async () => {
+        const currentState = makeLobbyState();
+        const lobbyApi = makeLobbyApi();
+        vi.mocked(lobbyApi.getCurrentState).mockResolvedValueOnce(currentState);
+        vi.mocked(lobbyApi.getLocalPlayerId).mockResolvedValueOnce(playerId('player-1'));
+        const systemApi = makeSystemApi();
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(lobbyApi.getLocalPlayerId).toHaveBeenCalledOnce();
+        expect(useLobbyUiStore.getState().localPlayerId).toBe('player-1');
+        expect(useLobbyUiStore.getState().localSeatIds).toEqual(['player-1']);
     });
 
     it('syncs localSeatIds from lobby players when local player identity is known', () => {
@@ -191,6 +236,174 @@ describe('bootstrapLobbyStore()', () => {
 
         expect(useLobbyUiStore.getState().localPlayerId).toBeNull();
         expect(useLobbyUiStore.getState().localSeatIds).toEqual([]);
+    });
+
+    // ── WARN-1: replay should not clobber a newer push ────────────────────────
+
+    it('[WARN-1] does not overwrite a push update that arrived while getCurrentState was in flight', async () => {
+        let resolveCurrentState!: (state: LobbyState | null) => void;
+        const staleState: LobbyState = {
+            info: { sessionId: 'stale-session', hostId: 'player-1', gameId: 'tactics' },
+            players: [{ playerId: 'player-1', displayName: 'Player One', ready: false }],
+        };
+        const freshState: LobbyState = {
+            info: { sessionId: 'fresh-session', hostId: 'player-1', gameId: 'tactics' },
+            players: [{ playerId: 'player-1', displayName: 'Player One', ready: false }],
+        };
+
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+        vi.mocked(lobbyApi.getCurrentState).mockReturnValueOnce(
+            new Promise((resolve) => {
+                resolveCurrentState = resolve;
+            }),
+        );
+        const systemApi = makeSystemApi();
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        expect(capturedLobbyUpdate).toBeDefined();
+
+        // A fresh push arrives while getCurrentState is still in flight
+        capturedLobbyUpdate!(freshState);
+        expect(useLobbyStore.getState().lobbyState).toBe(freshState);
+
+        // Now the stale getCurrentState resolves
+        resolveCurrentState(staleState);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        // The stale replay must NOT have overwritten the fresher push
+        expect(useLobbyStore.getState().lobbyState).toBe(freshState);
+        expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
+    });
+
+    it('[WARN-1] ignores delayed replay when a disconnect event already cleared the lobby', async () => {
+        let resolveCurrentState!: (state: LobbyState | null) => void;
+        let capturedConnectionStatus:
+            | ((status: 'connected' | 'disconnected' | 'connecting' | 'error') => void)
+            | undefined;
+
+        const staleState: LobbyState = {
+            info: { sessionId: 'stale-session', hostId: 'player-1', gameId: 'tactics' },
+            players: [{ playerId: 'player-1', displayName: 'Player One', ready: false }],
+        };
+
+        const lobbyApi = makeLobbyApi();
+        vi.mocked(lobbyApi.getCurrentState).mockReturnValueOnce(
+            new Promise((resolve) => {
+                resolveCurrentState = resolve;
+            }),
+        );
+        const systemApi = makeSystemApi((cb) => {
+            capturedConnectionStatus = cb;
+            return vi.fn();
+        });
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        expect(capturedConnectionStatus).toBeDefined();
+
+        // A fresher disconnect clears lobby state while replay is still in flight.
+        capturedConnectionStatus!('disconnected');
+        expect(useLobbyStore.getState().lobbyState).toBeNull();
+
+        // Delayed replay arrives afterwards with stale data.
+        resolveCurrentState(staleState);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(useLobbyStore.getState().lobbyState).toBeNull();
+        expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
+    });
+
+    // ── WARN-2: replay error must be logged ───────────────────────────────────
+
+    it('[WARN-2] logs a warning when getCurrentState rejects', async () => {
+        const lobbyApi = makeLobbyApi();
+        const err = new Error('IPC schema validation failure');
+        vi.mocked(lobbyApi.getCurrentState).mockRejectedValueOnce(err);
+        const systemApi = makeSystemApi();
+
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(warnSpy).toHaveBeenCalled();
+        expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
+
+        warnSpy.mockRestore();
+    });
+
+    it('[WARN-1] does not clear fresher pushed lobby state when replay rejects late', async () => {
+        let rejectCurrentState!: (err: unknown) => void;
+        const freshState: LobbyState = {
+            info: { sessionId: 'fresh-session', hostId: 'player-1', gameId: 'tactics' },
+            players: [{ playerId: 'player-1', displayName: 'Player One', ready: false }],
+        };
+
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+        vi.mocked(lobbyApi.getCurrentState).mockReturnValueOnce(
+            new Promise((_, reject) => {
+                rejectCurrentState = reject;
+            }),
+        );
+        const systemApi = makeSystemApi();
+
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        expect(capturedLobbyUpdate).toBeDefined();
+
+        // A fresher push is already applied.
+        capturedLobbyUpdate!(freshState);
+        expect(useLobbyStore.getState().lobbyState).toBe(freshState);
+
+        // Replay fails afterwards; fallback must not wipe fresher state.
+        rejectCurrentState(new Error('late replay failure'));
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(useLobbyStore.getState().lobbyState).toBe(freshState);
+        expect(useLobbyStore.getState().hasLoadedInitialState).toBe(true);
+
+        warnSpy.mockRestore();
+    });
+
+    // ── WARN-3: no concurrent getLocalPlayerId invocations ────────────────────
+
+    it('[WARN-3] does not issue concurrent getLocalPlayerId invocations for near-simultaneous updates', async () => {
+        let capturedLobbyUpdate: ((lobby: LobbyState) => void) | undefined;
+        const lobbyApi = makeLobbyApi((cb) => {
+            capturedLobbyUpdate = cb;
+            return vi.fn();
+        });
+
+        // Simulate a slow IPC call that never resolves — lets us count invocations
+        vi.mocked(lobbyApi.getLocalPlayerId).mockImplementation(() => new Promise(() => undefined));
+        vi.mocked(lobbyApi.getCurrentState).mockResolvedValueOnce(null);
+        const systemApi = makeSystemApi();
+
+        bootstrapLobbyStore(lobbyApi, systemApi);
+        expect(capturedLobbyUpdate).toBeDefined();
+
+        const state = makeLobbyState();
+        // Fire three near-simultaneous updates before the IPC round-trip resolves
+        capturedLobbyUpdate!(state);
+        capturedLobbyUpdate!(state);
+        capturedLobbyUpdate!(state);
+
+        await Promise.resolve();
+
+        // Despite three updates, getLocalPlayerId must only have been called once
+        expect(lobbyApi.getLocalPlayerId).toHaveBeenCalledOnce();
     });
 
     it('calls applyLobbyState with null when connection status is disconnected', () => {

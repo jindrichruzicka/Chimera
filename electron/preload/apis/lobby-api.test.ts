@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
+    LOBBY_GET_CURRENT_STATE_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
@@ -191,6 +192,38 @@ describe('createLobbyApi', () => {
             const api = createLobbyApi(stub.port);
 
             await expect(api.getLocalPlayerId()).resolves.toBeNull();
+        });
+    });
+
+    describe('getCurrentState()', () => {
+        it('invokes chimera:lobby:get-current-state and resolves to the active LobbyState', async () => {
+            const stub = makeIpcStub();
+            const state = makeLobbyState();
+            stub.invokeResults.set(LOBBY_GET_CURRENT_STATE_CHANNEL, state);
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.getCurrentState();
+
+            expect(stub.invocations).toEqual([
+                { channel: LOBBY_GET_CURRENT_STATE_CHANNEL, arg: undefined },
+            ]);
+            expect(result).toStrictEqual(state);
+        });
+
+        it('resolves to null when no lobby session is active', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_GET_CURRENT_STATE_CHANNEL, null);
+            const api = createLobbyApi(stub.port);
+
+            await expect(api.getCurrentState()).resolves.toBeNull();
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns malformed current state', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(LOBBY_GET_CURRENT_STATE_CHANNEL, { info: { sessionId: 7 } });
+            const api = createLobbyApi(stub.port);
+
+            await expect(api.getCurrentState()).rejects.toBeInstanceOf(PreloadIpcValidationError);
         });
     });
 

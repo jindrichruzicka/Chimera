@@ -3,7 +3,9 @@
 // renderer/app/match/page.tsx
 //
 // Match route — thin shell that mounts MatchShell with the active snapshot.
-// Redirects to /lobby when snapshot is null (cold load or session end).
+// Redirects to /lobby when snapshot is null after lobby-state hydration shows
+// that no session is active. Direct-match boot can load this route before the
+// first snapshot arrives and wait here while the hidden lobby auto-starts.
 //
 // Architecture reference: §4.33–§4.34 — GameScreenRegistry, MatchShell
 // Module boundary tree: renderer/app/match/page.tsx # Thin shell: mounts MatchShell
@@ -23,6 +25,7 @@ import { MatchScreenRegistry } from '@chimera/games/tactics/screens/index.js';
 import { MatchShell } from '../../components/shell/MatchShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { useGameStore } from '../../state/gameStore';
+import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 type MatchActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
@@ -30,14 +33,16 @@ type MatchActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
 export default function MatchPage(): React.ReactElement | null {
     const router = useRouter();
     const snapshot = useGameStore((state) => state.snapshot);
+    const lobbyState = useLobbyStore((state) => state.lobbyState);
+    const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
     const sendAction = useSendAction();
 
     useEffect(() => {
-        if (snapshot === null) {
+        if (snapshot === null && hasLoadedInitialLobbyState && lobbyState === null) {
             router.replace('/lobby');
         }
-    }, [snapshot, router]);
+    }, [hasLoadedInitialLobbyState, lobbyState, snapshot, router]);
 
     const dispatchMatchAction = (
         snapshotForAction: PlayerSnapshot,

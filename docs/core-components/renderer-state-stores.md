@@ -98,6 +98,18 @@ export function useSendAction(): (action: EngineAction) => void {
 
 ---
 
+## Route-Global Lobby Bootstrap (`renderer/app/LobbyStoreBootstrap.tsx`)
+
+`renderer/app/LobbyStoreBootstrap.tsx` mounts from the root layout so every route,
+including `/match`, receives lobby-state updates. It wires `bootstrapLobbyStore(...)`
+to `window.__chimera.lobby.onUpdate` and `window.__chimera.system.onConnectionStatus`, then
+calls `lobby.getCurrentState()` once to replay an already-active main-process lobby session.
+
+This replay lets deep-linked or E2E direct-match `/match` boots distinguish "no session exists"
+from "a hidden lobby session exists but the first `PlayerSnapshot` has not arrived yet". The
+match route redirects to `/lobby` only after that initial lobby replay has completed and no lobby
+state is active.
+
 ## Lobby Page Integration (`renderer/app/lobby/page.tsx`)
 
 The lobby screen uses two small renderer-local helpers to keep component code typed and boundary-safe:
@@ -120,12 +132,13 @@ The page initializes state with defaults, then updates config in `useEffect` aft
 
 ### `useLobbyApi` (typed lobby bridge access)
 
-`renderer/app/lobby/useLobbyApi.ts` centralizes bridge access for lobby actions:
+`renderer/app/lobby/useLobbyApi.ts` centralizes bridge access for lobby actions and the root
+bootstrap bridge lookup:
 
 - `useLobbyApi()` exposes typed `host`, `join`, and `leave` methods.
-- `getLobbyBridge()` resolves `{ lobby, system }` for bootstrap wiring.
+- `getLobbyBridge()` resolves `{ lobby, system }` for route-global bootstrap wiring.
 
-Component code does not call `window.__chimera.lobby.*` directly. The page delegates writes through `useLobbyApi`, and uses `getLobbyBridge()` only to wire `bootstrapLobbyStore(...)` once in `useEffect`.
+Component code does not call `window.__chimera.lobby.*` directly. The lobby page delegates writes through `useLobbyApi`; route-global bootstrap owns `bootstrapLobbyStore(...)` wiring.
 
 This keeps lobby writes consistent with the typed-hook pattern and makes bridge-availability handling testable in one place.
 

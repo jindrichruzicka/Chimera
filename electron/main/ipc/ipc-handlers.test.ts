@@ -9,6 +9,7 @@ import {
     GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     LOBBY_HOST_CHANNEL,
+    LOBBY_GET_CURRENT_STATE_CHANNEL,
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
@@ -61,7 +62,7 @@ import { IpcRequestValidationError } from './ipc-schemas.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from '../lobby/LobbyManager.js';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
-import type { LobbyInfo } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { LobbyInfo, LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
@@ -558,6 +559,22 @@ describe('registerLobbyHandlers', () => {
         expect(spy).toHaveBeenCalledOnce();
     });
 
+    it('registers chimera:lobby:get-current-state as an invoke handler that calls lobbyManager.getCurrentState', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const currentState: LobbyState = {
+            info: { sessionId: 'sess-1', hostId: toPlayerId('player-1'), gameId: 'tactics' },
+            players: [{ playerId: toPlayerId('player-1'), displayName: 'Host', ready: true }],
+        };
+        const spy = vi.spyOn(lobbyManager, 'getCurrentState').mockReturnValue(currentState);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_GET_CURRENT_STATE_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.({}))).resolves.toBe(currentState);
+        expect(spy).toHaveBeenCalledOnce();
+    });
+
     it('registers chimera:lobby:update-ready-state as an invoke handler that calls lobbyManager.updatePlayerReadyState', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -604,6 +621,7 @@ describe('registerLobbyHandlers', () => {
         expect([...stub.handled.keys()].sort()).toEqual(
             [
                 LOBBY_HOST_CHANNEL,
+                LOBBY_GET_CURRENT_STATE_CHANNEL,
                 LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
                 LOBBY_JOIN_CHANNEL,
                 LOBBY_LEAVE_CHANNEL,

@@ -21,11 +21,20 @@ export interface LobbyStoreState {
     /** Current lobby state, or null if not in a lobby. */
     readonly lobbyState: LobbyState | null;
 
+    /** True once the bootstrap has replayed the main process' current lobby state. */
+    readonly hasLoadedInitialState: boolean;
+
     /**
      * Apply incoming lobby state from IPC (chimera:lobby-update push).
      * ipcClient only — do NOT call from components directly.
      */
     applyLobbyState(state: LobbyState | null): void;
+
+    /** Mark that the initial main-process lobby-state replay is in progress. */
+    markInitialStateLoading(): void;
+
+    /** Mark that the initial main-process lobby-state replay has completed. */
+    markInitialStateLoaded(): void;
 }
 
 // ── Factory (for testing and production use) ──────────────────────────────────
@@ -36,11 +45,20 @@ export interface LobbyStoreState {
 export function createLobbyStore(): StoreApi<LobbyStoreState> {
     return createStore<LobbyStoreState>()((set) => ({
         lobbyState: null,
+        hasLoadedInitialState: false,
 
         applyLobbyState(state: LobbyState | null): void {
             set(() => ({
                 lobbyState: state,
             }));
+        },
+
+        markInitialStateLoading(): void {
+            set(() => ({ hasLoadedInitialState: false }));
+        },
+
+        markInitialStateLoaded(): void {
+            set(() => ({ hasLoadedInitialState: true }));
         },
     }));
 }

@@ -10,6 +10,7 @@ import type { Metadata } from 'next';
 import React from 'react';
 import '../styles/tokens.css';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
+import { LobbyStoreBootstrap } from './LobbyStoreBootstrap';
 import { SettingsBootstrap } from './SettingsBootstrap';
 import { SaveStoreBootstrap } from './SaveStoreBootstrap';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
@@ -34,6 +35,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <body style={{ margin: 0 }}>
                 <ThemeProvider>
                     <SettingsBootstrap />
+                    <LobbyStoreBootstrap />
                     <GameStoreBootstrap />
                     <SaveStoreBootstrap />
                     <CrashRecoveryBanner />

@@ -386,6 +386,10 @@ export class LobbyManager {
         return this.localPlayerId;
     }
 
+    getCurrentState(): LobbyState | null {
+        return this.lobbyState;
+    }
+
     sendAction(action: EngineAction): void {
         const session = this.session;
         if (session === null) {
