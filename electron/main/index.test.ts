@@ -5,7 +5,11 @@ import type {
     PlayerProfile,
     ProfileRepository,
 } from '@chimera/simulation/profile/ProfileSchema.js';
-import type { ActionEnvelope, BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
+import type {
+    ActionEnvelope,
+    BaseGameSnapshot,
+    PlayerId,
+} from '@chimera/simulation/engine/types.js';
 import type { ChimeraRendererUrl } from './index.js';
 
 interface ProjectorOptionsForTest {
