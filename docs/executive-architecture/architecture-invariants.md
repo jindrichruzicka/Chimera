@@ -1,12 +1,12 @@
 ---
 title: 'Architecture Invariants'
-description: 'All 90 numbered invariants that must never be violated in the Chimera engine. Violations are BLOCK findings at review. Thematically indexed for quick navigation.'
+description: 'All numbered invariants that must never be violated in the Chimera engine. Violations are BLOCK findings at review. Thematically indexed for quick navigation.'
 tags: [invariants, architecture, rules, constraints, review-gate]
 ---
 
 # Architecture Invariants
 
-> These 90 invariants are the hard rules of the Chimera engine. A single violation is a BLOCK finding.
+> These invariants are the hard rules of the Chimera engine. A single violation is a BLOCK finding.
 > Related: [System Overview](system-overview-and-context.md) · [Module Boundaries](module-boundaries-file-tree.md)
 
 ---
@@ -16,7 +16,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 | Theme                                  | Invariants                                                                                             |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                               |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78                      |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95                  |
 | **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                      |
 | **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                                             |
 | **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                 |
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–94
+## Invariants 91–95
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -237,6 +237,8 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **93.** Game token override CSS must not be imported directly by any shell page component. Token overrides enter the cascade exclusively as side-effects of game registry initialisation — importing `games/<name>/styles/tokens-override.css` from a shell page file is a module-boundary violation.
 
 **94.** Engine shell pages (`main-menu`, `settings`, `saves`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` parsing helpers but must not import game-specific screen modules, registries, or override stylesheets directly.
+
+**95.** `chimera:game:get-current-snapshot` is a read-only renderer-to-main IPC replay channel. It may return only the most recent projected `PlayerSnapshot` already stored for renderer delivery, or `null` when no snapshot has been sent. It must never expose `GameSnapshot`, accept renderer payload that changes gameplay state, trigger `ActionPipeline`, or mutate simulation state.
 
 ---
 

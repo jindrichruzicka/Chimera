@@ -6,6 +6,7 @@ import {
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
+    GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     createGameApi,
     type GameApiIpcPort,
     type GameApiListener,
@@ -401,6 +402,50 @@ describe('createGameApi', () => {
             await expect(api.getPredictableActionTypes()).rejects.toThrow(
                 PreloadIpcValidationError,
             );
+        });
+    });
+
+    describe('getCurrentSnapshot()', () => {
+        it('invokes chimera:game:get-current-snapshot with no argument', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(GAME_GET_CURRENT_SNAPSHOT_CHANNEL, null);
+            const api = createGameApi(stub.port);
+
+            await api.getCurrentSnapshot();
+
+            expect(stub.invocations).toEqual([
+                { channel: GAME_GET_CURRENT_SNAPSHOT_CHANNEL, arg: undefined },
+            ]);
+        });
+
+        it('returns the PlayerSnapshot supplied by main', async () => {
+            const stub = makeIpcStub();
+            const snapshot = makeSnapshot();
+            stub.invokeResults.set(GAME_GET_CURRENT_SNAPSHOT_CHANNEL, snapshot);
+            const api = createGameApi(stub.port);
+
+            const result = await api.getCurrentSnapshot();
+
+            expect(result).toBe(snapshot);
+        });
+
+        it('returns null when main replies null', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(GAME_GET_CURRENT_SNAPSHOT_CHANNEL, null);
+            const api = createGameApi(stub.port);
+
+            const result = await api.getCurrentSnapshot();
+
+            expect(result).toBeNull();
+        });
+
+        it('returns null when main replies undefined', async () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+
+            const result = await api.getCurrentSnapshot();
+
+            expect(result).toBeNull();
         });
     });
 });

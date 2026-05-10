@@ -101,6 +101,7 @@ function makeE2eHooks(): E2eHooks {
             return state.currentTick;
         },
         firstPlayerRole: 'host',
+        directMatchLobbyCode: null,
         onTick(tick, checksum, snapshot): void {
             state.currentTick = tick;
             state.lastChecksum = checksum;

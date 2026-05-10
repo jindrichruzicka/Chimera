@@ -140,3 +140,32 @@ describe('pushWsFrame', () => {
         expect(hooks.wsFrames).toHaveLength(MAX_WS_FRAMES);
     });
 });
+
+// ---------------------------------------------------------------------------
+// directMatchLobbyCode
+// ---------------------------------------------------------------------------
+
+describe('directMatchLobbyCode', () => {
+    it('defaults to null', () => {
+        const hooks = createE2eHooks();
+
+        expect(hooks.directMatchLobbyCode).toBeNull();
+    });
+
+    it('can be set and read back by the fixture', () => {
+        const hooks = createE2eHooks();
+
+        hooks.directMatchLobbyCode = 'lobby-abc-123';
+
+        expect(hooks.directMatchLobbyCode).toBe('lobby-abc-123');
+    });
+
+    it('can be reset to null', () => {
+        const hooks = createE2eHooks();
+        hooks.directMatchLobbyCode = 'some-code';
+
+        hooks.directMatchLobbyCode = null;
+
+        expect(hooks.directMatchLobbyCode).toBeNull();
+    });
+});

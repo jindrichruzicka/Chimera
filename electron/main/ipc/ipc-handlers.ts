@@ -28,6 +28,7 @@ import {
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
+    GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
 } from '../../preload/apis/game-api.js';
 import {
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
@@ -110,6 +111,7 @@ export {
     GAME_SNAPSHOT_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
+    GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_JOIN_CHANNEL,
@@ -288,6 +290,18 @@ export interface RegisterGameHandlersOptions {
         registeredTypes(): readonly string[];
         resolve(type: string): { readonly predictable?: boolean };
     };
+    /**
+     * Returns the most-recently-sent `PlayerSnapshot` for the main window,
+     * or `null` when no snapshot has been pushed yet. Used by the renderer
+     * to replay a snapshot that arrived before its listener was registered.
+     * When absent the handler returns `null` (safe, graceful degradation).
+     *
+     * Typed as `unknown` because Electron serialises IPC payloads to JSON;
+     * the concrete simulation-layer `PlayerSnapshot` type carries branded
+     * primitives that are not compatible with the preload `PlayerSnapshot`
+     * at the type level but are identical at runtime.
+     */
+    readonly getCurrentSnapshot?: () => unknown;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
 }
@@ -435,6 +449,10 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
         return actionRegistry
             .registeredTypes()
             .filter((type) => actionRegistry.resolve(type).predictable === true);
+    });
+
+    ipcMain.handle(GAME_GET_CURRENT_SNAPSHOT_CHANNEL, () => {
+        return options.getCurrentSnapshot?.() ?? null;
     });
 }
 

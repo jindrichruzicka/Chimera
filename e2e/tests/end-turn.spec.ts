@@ -16,7 +16,7 @@
  * Invariant #3: PlayerSnapshot.isMyTurn computed from turnClock; button disabled
  * when isMyTurn === false (non-active players cannot end turn).
  */
-import { test, expect } from '../fixtures/game.fixture';
+import { test, expect } from '../fixtures/direct-match.fixture';
 import { MatchPage } from '../pages/MatchPage';
 
 test.describe('End turn', () => {

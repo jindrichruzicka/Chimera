@@ -516,6 +516,16 @@ export interface GameAPI {
      * a game session is active, or on builds that omit the prediction module).
      */
     getPredictableActionTypes(): Promise<readonly string[]>;
+    /**
+     * Returns the most-recently-sent {@link PlayerSnapshot} for this window,
+     * or `null` when no snapshot has been pushed yet.
+     *
+     * Used by the renderer to replay a snapshot that arrived before the
+     * `onSnapshot` listener was registered (e.g. direct-match E2E start,
+     * renderer reload mid-session). Safe to call at any time — returns `null`
+     * during the lobby phase.
+     */
+    getCurrentSnapshot(): Promise<PlayerSnapshot | null>;
 }
 
 // ─── lobby namespace ──────────────────────────────────────────────────────────

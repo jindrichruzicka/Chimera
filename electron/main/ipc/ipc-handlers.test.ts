@@ -7,6 +7,7 @@ import {
     GAME_REVEAL_CHANNEL,
     GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
+    GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     LOBBY_HOST_CHANNEL,
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_JOIN_CHANNEL,
@@ -321,6 +322,7 @@ describe('registerGameHandlers', () => {
         expect([...stub.handled.keys()]).toEqual([
             GAME_SWITCH_SEAT_CHANNEL,
             GAME_PREDICTABLE_TYPES_CHANNEL,
+            GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
         ]);
         expect([...stub.listeners.keys()]).toEqual([GAME_SEND_ACTION_CHANNEL]);
         expect(stub.handled.has(GAME_SNAPSHOT_CHANNEL)).toBe(false);
@@ -379,6 +381,40 @@ describe('registerGameHandlers', () => {
 
             const handler = stub.handled.get(GAME_PREDICTABLE_TYPES_CHANNEL);
             await expect(Promise.resolve(handler?.({}))).resolves.toEqual([]);
+        });
+    });
+
+    describe('chimera:game:get-current-snapshot handler', () => {
+        it('returns null when no getCurrentSnapshot is provided', async () => {
+            const stub = makeGameIpcMainStub();
+            registerGameHandlers({ ipcMain: stub.ipcMain });
+
+            const handler = stub.handled.get(GAME_GET_CURRENT_SNAPSHOT_CHANNEL);
+            expect(handler).toBeDefined();
+            await expect(Promise.resolve(handler?.({}))).resolves.toBeNull();
+        });
+
+        it('returns the snapshot from the injected accessor', async () => {
+            const fakeSnapshot = { tick: 42, viewerId: 'player-a' };
+            const stub = makeGameIpcMainStub();
+            registerGameHandlers({
+                ipcMain: stub.ipcMain,
+                getCurrentSnapshot: () => fakeSnapshot,
+            });
+
+            const handler = stub.handled.get(GAME_GET_CURRENT_SNAPSHOT_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).resolves.toEqual(fakeSnapshot);
+        });
+
+        it('returns null when the accessor returns null', async () => {
+            const stub = makeGameIpcMainStub();
+            registerGameHandlers({
+                ipcMain: stub.ipcMain,
+                getCurrentSnapshot: () => null,
+            });
+
+            const handler = stub.handled.get(GAME_GET_CURRENT_SNAPSHOT_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).resolves.toBeNull();
         });
     });
 });

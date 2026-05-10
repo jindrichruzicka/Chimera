@@ -5,7 +5,7 @@
  * Verifies winner propagation from tactics:attack through ActionPipeline,
  * StateProjector, PlayerSnapshot, and MatchShell.
  */
-import { test, expect } from '../fixtures/game.fixture';
+import { test, expect } from '../fixtures/direct-match.fixture';
 import { MatchPage } from '../pages/MatchPage';
 
 test.describe('Match result propagation', () => {

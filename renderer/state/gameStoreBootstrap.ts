@@ -21,7 +21,7 @@
  *          must never call them directly.
  */
 
-import type { GameAPI, Unsubscribe } from '../../electron/preload/api-types.js';
+import type { GameAPI, PlayerSnapshot, Unsubscribe } from '../../electron/preload/api-types.js';
 import { createIpcClient, type IpcPredictionStore } from '../bridge/ipcClient.js';
 import { useGameStore } from './gameStore.js';
 
@@ -54,10 +54,44 @@ export async function bootstrapGameStore(
     clientFactory: IpcClientFactory = createIpcClient,
 ): Promise<Unsubscribe> {
     const resolvedStore: IpcPredictionStore = store ?? useGameStore.getState();
+    let latestSnapshot = currentSnapshotFrom(resolvedStore);
+    const trackedStore: IpcPredictionStore = {
+        addPrediction: (action) => resolvedStore.addPrediction(action),
+        confirmPrediction: (tick) => resolvedStore.confirmPrediction(tick),
+        applySnapshot: (snapshot) => {
+            latestSnapshot = snapshot;
+            resolvedStore.applySnapshot(snapshot);
+        },
+    };
     let predictableTypes = new Set<string>();
     const predictableTypesPromise = api.getPredictableActionTypes();
-    const client = clientFactory(api, resolvedStore, (type: string) => predictableTypes.has(type));
+    const client = clientFactory(api, trackedStore, (type: string) => predictableTypes.has(type));
     const unsubscribe = client.bootstrap();
     predictableTypes = new Set(await predictableTypesPromise);
+
+    // Replay: if a snapshot was sent before this listener was registered
+    // (direct-match E2E start, renderer reload mid-session), apply it now so
+    // the match page does not redirect back to /lobby on mount.
+    const currentSnapshot = await api.getCurrentSnapshot();
+    if (currentSnapshot !== null && isNewerThanLatest(currentSnapshot, latestSnapshot)) {
+        latestSnapshot = currentSnapshot;
+        resolvedStore.applySnapshot(currentSnapshot);
+    }
+
     return unsubscribe;
+}
+
+type SnapshotReadableStore = IpcPredictionStore & {
+    readonly snapshot?: PlayerSnapshot | null;
+};
+
+function currentSnapshotFrom(store: IpcPredictionStore): PlayerSnapshot | null {
+    return (store as SnapshotReadableStore).snapshot ?? null;
+}
+
+function isNewerThanLatest(
+    snapshot: PlayerSnapshot,
+    latestSnapshot: PlayerSnapshot | null,
+): boolean {
+    return latestSnapshot === null || snapshot.tick > latestSnapshot.tick;
 }

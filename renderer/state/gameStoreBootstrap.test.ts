@@ -85,6 +85,9 @@ function makeApi(
         onReveal: onRevealSpy,
         switchActiveSeat: vi.fn(),
         getPredictableActionTypes: getPredictableActionTypesSpy,
+        getCurrentSnapshot: vi.fn<() => Promise<PlayerSnapshot | null>>(() =>
+            Promise.resolve(null),
+        ),
     };
 
     return { api, sendActionSpy, onSnapshotSpy, onActionRejectedSpy, getPredictableActionTypesSpy };
@@ -202,5 +205,46 @@ describe('bootstrapGameStore()', () => {
         // Types NOT in the list must not be recognised as predictable.
         expect(capturedPredicate!('tactics:chat')).toBe(false);
         expect(capturedPredicate!('engine:end_turn')).toBe(false);
+    });
+
+    it('applies a snapshot from getCurrentSnapshot() when it returns non-null', async () => {
+        const replaySnap = makeSnapshot(99);
+        const { api } = makeApi();
+        (api.getCurrentSnapshot as ReturnType<typeof vi.fn>).mockResolvedValueOnce(replaySnap);
+        const store = createGameStore();
+
+        await bootstrapGameStore(api, store.getState());
+
+        expect(store.getState().snapshot).toBe(replaySnap);
+    });
+
+    it('does not overwrite a newer live snapshot with an older replay snapshot', async () => {
+        let captured: SnapshotListener | undefined;
+        let resolveCurrentSnapshot: (snapshot: PlayerSnapshot | null) => void = () => undefined;
+        const currentSnapshotPromise = new Promise<PlayerSnapshot | null>((resolve) => {
+            resolveCurrentSnapshot = resolve;
+        });
+        const { api } = makeApi({ captureSnapshotListener: (cb) => (captured = cb) });
+        (api.getCurrentSnapshot as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+            currentSnapshotPromise,
+        );
+        const store = createGameStore();
+
+        const bootstrapPromise = bootstrapGameStore(api, store.getState());
+        const newerLiveSnapshot = makeSnapshot(11);
+        captured!(newerLiveSnapshot);
+        resolveCurrentSnapshot(makeSnapshot(10));
+        await bootstrapPromise;
+
+        expect(store.getState().snapshot).toBe(newerLiveSnapshot);
+    });
+
+    it('leaves the store empty when getCurrentSnapshot() returns null', async () => {
+        const { api } = makeApi();
+        const store = createGameStore();
+
+        await bootstrapGameStore(api, store.getState());
+
+        expect(store.getState().snapshot).toBeNull();
     });
 });

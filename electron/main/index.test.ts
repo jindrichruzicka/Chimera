@@ -1739,6 +1739,126 @@ describe('main', () => {
         expect(win?.loadURL).toHaveBeenCalledWith(initialUrl);
     });
 
+    it('attaches the current local profile when direct-match client auto-joins', async () => {
+        const origEnv = process.env;
+        const joinLobby = vi.fn(() =>
+            Promise.resolve({ sessionId: 'session', hostId: 'host', gameId: 'tactics' }),
+        );
+        const updatePlayerReadyState = vi.fn(() => Promise.resolve());
+        mockLobbyManagerCtor.mockImplementationOnce(
+            () =>
+                ({
+                    hostLobby: vi.fn(),
+                    joinLobby,
+                    updatePlayerReadyState,
+                    closeLobby: vi.fn(),
+                    getLocalPlayerId: vi.fn(),
+                    sendAction: vi.fn(),
+                    startMatch: vi.fn(),
+                    switchActiveSeat: vi.fn(),
+                }) as never,
+        );
+        process.env = {
+            ...origEnv,
+            CHIMERA_E2E: '1',
+            CHIMERA_E2E_DIRECT_MATCH_ROLE: 'client',
+            CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS: '127.0.0.1:7779:token',
+        };
+        try {
+            await main();
+            await Promise.resolve();
+            await Promise.resolve();
+        } finally {
+            process.env = origEnv;
+        }
+
+        expect(joinLobby).toHaveBeenCalledWith({
+            address: '127.0.0.1:7779:token',
+            profile: expect.objectContaining({
+                localProfileId: 'local-default',
+                displayName: 'Player',
+                locale: 'en-US',
+            }),
+        });
+        expect(updatePlayerReadyState).toHaveBeenCalledWith(true);
+    });
+
+    it('ignores direct-match client auto-join outside E2E mode', async () => {
+        const origEnv = process.env;
+        const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
+        const joinLobby = vi.fn(() =>
+            Promise.resolve({ sessionId: 'session', hostId: 'host', gameId: 'tactics' }),
+        );
+        const updatePlayerReadyState = vi.fn(() => Promise.resolve());
+        mockLobbyManagerCtor.mockImplementationOnce(
+            () =>
+                ({
+                    hostLobby: vi.fn(),
+                    joinLobby,
+                    updatePlayerReadyState,
+                    closeLobby: vi.fn(),
+                    getLocalPlayerId: vi.fn(),
+                    sendAction: vi.fn(),
+                    startMatch: vi.fn(),
+                    switchActiveSeat: vi.fn(),
+                }) as never,
+        );
+        process.env = {
+            ...envWithoutE2e,
+            CHIMERA_E2E_DIRECT_MATCH_ROLE: 'client',
+            CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS: '127.0.0.1:7779:token',
+        };
+        try {
+            await main();
+            await Promise.resolve();
+            await Promise.resolve();
+        } finally {
+            process.env = origEnv;
+        }
+
+        expect(joinLobby).not.toHaveBeenCalled();
+        expect(updatePlayerReadyState).not.toHaveBeenCalled();
+    });
+
+    it('ignores direct-match host auto-start outside E2E mode', async () => {
+        const origEnv = process.env;
+        const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
+        const startMatch = vi.fn(() => Promise.resolve());
+        mockLobbyManagerCtor.mockImplementationOnce(
+            () =>
+                ({
+                    hostLobby: vi.fn(),
+                    joinLobby: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    closeLobby: vi.fn(),
+                    getLocalPlayerId: vi.fn(),
+                    sendAction: vi.fn(),
+                    startMatch,
+                    switchActiveSeat: vi.fn(),
+                }) as never,
+        );
+        process.env = {
+            ...envWithoutE2e,
+            CHIMERA_E2E_DIRECT_MATCH_ROLE: 'host',
+        };
+        try {
+            await main();
+            const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onLobbyStateChanged?: (state: {
+                          players: readonly { ready: boolean }[];
+                      }) => void;
+                  }
+                | undefined;
+            options?.onLobbyStateChanged?.({ players: [{ ready: true }, { ready: true }] });
+            await Promise.resolve();
+        } finally {
+            process.env = origEnv;
+        }
+
+        expect(startMatch).not.toHaveBeenCalled();
+    });
+
     it('ignores CHIMERA_E2E_INITIAL_URL outside E2E mode', async () => {
         const origEnv = process.env;
         const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;

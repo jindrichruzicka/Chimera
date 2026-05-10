@@ -27,7 +27,8 @@ import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { bootstrapGameStore } from '../state/gameStoreBootstrap';
 import { useGameStore } from '../state/gameStore';
-import type { GameAPI } from '@chimera/electron/preload/api-types.js';
+import { useLobbyUiStore } from '../state/lobbyUiStore';
+import type { GameAPI, LobbyAPI } from '@chimera/electron/preload/api-types.js';
 
 export function GameStoreBootstrap(): null {
     const router = useRouter();
@@ -65,6 +66,22 @@ export function GameStoreBootstrap(): null {
             cancelled = true;
             cleanup?.();
         };
+    }, []);
+
+    // Populate localPlayerId without the lobby page when direct-match E2E
+    // boots the renderer directly on /match (or any route that bypasses the
+    // lobby flow). Safe to call unconditionally — it skips if the store is
+    // already populated, and returns null outside of a live session.
+    useEffect(() => {
+        const chimera = (globalThis as { __chimera?: { lobby: LobbyAPI } }).__chimera;
+        if (!chimera?.lobby) return;
+        if (useLobbyUiStore.getState().localPlayerId !== null) return;
+
+        void chimera.lobby.getLocalPlayerId().then((pid) => {
+            if (pid !== null && useLobbyUiStore.getState().localPlayerId === null) {
+                useLobbyUiStore.getState().setLocalLobbyContext(pid, [pid]);
+            }
+        });
     }, []);
 
     return null;

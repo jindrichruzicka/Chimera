@@ -27,6 +27,17 @@ export interface E2eElectronLaunchOptions {
     readonly port: string;
     readonly role?: E2eElectronRole;
     readonly initialRoute?: E2eInitialRoute;
+    /**
+     * When set, the main process auto-hosts or auto-joins a lobby without
+     * going through the lobby UI (`CHIMERA_E2E_DIRECT_MATCH_ROLE` env var).
+     */
+    readonly directMatchRole?: 'host' | 'client';
+    /**
+     * Lobby code the client process should join in direct-match mode
+     * (`CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS` env var). Required when
+     * `directMatchRole === 'client'`.
+     */
+    readonly directMatchJoinAddress?: string;
 }
 
 export interface E2eElectronLaunchConfig {
@@ -113,6 +124,14 @@ export function createE2eElectronLaunchConfig(
             : `${options.initialRoute}/`;
         env['CHIMERA_E2E_INITIAL_URL'] =
             `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}${initialRoute}`;
+    }
+
+    if (options.directMatchRole !== undefined) {
+        env['CHIMERA_E2E_DIRECT_MATCH_ROLE'] = options.directMatchRole;
+    }
+
+    if (options.directMatchJoinAddress !== undefined) {
+        env['CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS'] = options.directMatchJoinAddress;
     }
 
     return {
