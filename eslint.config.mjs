@@ -3,6 +3,7 @@ import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import chimeraPlugin from './tools/eslint-plugin-chimera/plugin.cjs';
+import nextPlugin from '@next/eslint-plugin-next';
 
 /**
  * Chimera ESLint configuration (flat config, ESLint 9).
@@ -237,6 +238,19 @@ export default tseslint.config(
         files: ['simulation/**/*.test.{ts,tsx}', 'simulation/**/*.spec.{ts,tsx}'],
         rules: {
             'chimera/no-fromfloat-in-simulation': 'off',
+        },
+    },
+
+    // Next.js plugin scoped to the renderer package.
+    {
+        files: ['renderer/**/*.{ts,tsx,js,jsx,mjs}'],
+        plugins: {
+            '@next/next': nextPlugin,
+        },
+        rules: {
+            ...nextPlugin.configs.recommended.rules,
+            // Point the pages-link rule at the actual renderer app directory.
+            '@next/next/no-html-link-for-pages': ['warn', 'renderer/app'],
         },
     },
 
