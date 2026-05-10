@@ -68,8 +68,11 @@ export default function MatchPage(): React.ReactElement | null {
             canUndo={snapshot.undoMeta.canUndo}
             canRedo={snapshot.undoMeta.canRedo}
             canEndTurn={snapshot.isMyTurn}
+            snapshot={snapshot}
+            sendAction={sendAction}
             isGameOver={snapshot.phase === 'ended'}
             matchResult={snapshot.matchResult}
+            {...(MatchScreenRegistry.hud === undefined ? {} : { hud: MatchScreenRegistry.hud })}
             {...(MatchScreenRegistry.matchResultBanner === undefined
                 ? {}
                 : { matchResultBanner: MatchScreenRegistry.matchResultBanner })}

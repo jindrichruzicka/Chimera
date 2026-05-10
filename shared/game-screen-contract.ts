@@ -21,9 +21,19 @@ export interface GameScreenProps {
     readonly sendAction: SendAction;
 }
 
+export interface GameHudProps extends GameScreenProps {
+    readonly tick: number;
+    readonly undoDisabled: boolean;
+    readonly redoDisabled: boolean;
+    readonly endTurnDisabled: boolean;
+    readonly handleUndo: () => void;
+    readonly handleRedo: () => void;
+    readonly handleEndTurn: () => void;
+}
+
 export interface GameScreenRegistry {
     readonly board: GameScreenComponent<GameScreenProps>;
-    readonly hud?: GameScreenComponent<GameScreenProps>;
+    readonly hud?: GameScreenComponent<GameHudProps>;
     readonly screens?: Readonly<Record<string, GameScreenComponent<GameScreenProps>>>;
     readonly transitionOverlay?: GameScreenComponent<GameScreenProps>;
     readonly matchResultBanner?: GameScreenComponent<MatchResultBannerProps>;

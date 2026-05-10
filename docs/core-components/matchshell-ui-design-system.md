@@ -24,10 +24,20 @@ tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-spli
 
 export interface GameScreenRegistry {
     readonly board: React.ComponentType; // Required — primary gameplay view
-    readonly hud?: React.ComponentType; // Optional overlay on top of board
+    readonly hud?: React.ComponentType<GameHudProps>; // Optional game-defined match HUD
     readonly screens?: Readonly<Record<string, React.ComponentType>>; // Named full-screen panels
     readonly transitionOverlay?: React.ComponentType; // Optional; engine default used when absent
     readonly matchResultBanner?: React.ComponentType<MatchResultBannerProps>; // Optional winner display
+}
+
+export interface GameHudProps extends GameScreenProps {
+    readonly tick: number;
+    readonly undoDisabled: boolean;
+    readonly redoDisabled: boolean;
+    readonly endTurnDisabled: boolean;
+    readonly handleUndo: () => void;
+    readonly handleRedo: () => void;
+    readonly handleEndTurn: () => void;
 }
 
 export interface MatchResultBannerProps {
@@ -41,6 +51,7 @@ export interface MatchResultBannerProps {
 ```typescript
 // games/tactics/screens/index.ts
 const BoardScreen = React.lazy(() => import('./BoardScreen'));
+const TacticsMatchHud = React.lazy(() => import('./TacticsMatchHud'));
 const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 const DiplomacyScreen = React.lazy(() => import('./DiplomacyScreen'));
 const UnitDetailScreen = React.lazy(() => import('./UnitDetailScreen'));
@@ -48,6 +59,7 @@ const MatchResultBanner = React.lazy(() => import('./MatchResultBanner'));
 
 export const MatchScreenRegistry: GameScreenRegistry = {
     board: BoardScreen,
+    hud: TacticsMatchHud,
     matchResultBanner: MatchResultBanner,
     screens: {
         'tech-tree': TechTreeScreen,
@@ -95,7 +107,7 @@ interface MatchShellProps {
 /**
  * Responsibilities:
  *   1. Mount active screen from registry (driven by useActiveScreen)
- *   2. Overlay HUD on top of board when present
+ *   2. Build engine-owned HUD props and render registry.hud when present
  *   3. Render engine chrome: SeatSwitcher, PerfHud, ChatPanel, ToastHost
  *   4. Pass all engine contexts down the tree (§4.34)
  *   5. Gate screen components behind React.Suspense
@@ -104,6 +116,16 @@ interface MatchShellProps {
  */
 export function MatchShell({ registry }: MatchShellProps): JSX.Element;
 ```
+
+`registry.hud` is a presentation override only. `MatchShell` derives the common engine control
+surface (`tick`, undo/redo/end-turn disabled states, and guarded handlers) from the projected
+`PlayerSnapshot` plus injected action callbacks. Game HUD components should render those props and
+call `handleUndo`, `handleRedo`, and `handleEndTurn`; they should not construct `engine:undo`,
+`engine:redo`, or `engine:end_turn` actions themselves. If a game omits `hud`, `MatchShell` renders
+the engine fallback HUD with the stable `hud-tick`, `undo`, `redo`, and `end-turn` test IDs.
+
+Game-provided HUDs that replace the fallback should preserve those test IDs for the equivalent
+controls when the E2E page object needs to drive the match generically.
 
 When `PlayerSnapshot.matchResult` is non-null, `MatchShell` renders `registry.matchResultBanner`
 with `{ matchResult, localPlayerId }`. If the game omits the slot, `MatchShell` uses the engine

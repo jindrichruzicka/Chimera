@@ -19,6 +19,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import MatchPage from './page';
 
@@ -54,6 +55,46 @@ vi.mock('@chimera/games/tactics/screens/index.js', () => ({
         board: ({ snapshot }: { snapshot: PlayerSnapshot }) => (
             <div data-testid="tactics-board" data-tick={snapshot.tick} />
         ),
+        hud: (props: GameHudProps) => {
+            const {
+                tick,
+                undoDisabled,
+                redoDisabled,
+                endTurnDisabled,
+                handleUndo,
+                handleRedo,
+                handleEndTurn,
+            } = props;
+            return (
+                <footer data-testid="registry-hud" aria-label="Registry HUD">
+                    <output data-testid="hud-tick">{tick}</output>
+                    <button
+                        data-testid="undo"
+                        type="button"
+                        disabled={undoDisabled}
+                        onClick={handleUndo}
+                    >
+                        Undo
+                    </button>
+                    <button
+                        data-testid="redo"
+                        type="button"
+                        disabled={redoDisabled}
+                        onClick={handleRedo}
+                    >
+                        Redo
+                    </button>
+                    <button
+                        data-testid="end-turn"
+                        type="button"
+                        disabled={endTurnDisabled}
+                        onClick={handleEndTurn}
+                    >
+                        End Turn
+                    </button>
+                </footer>
+            );
+        },
     },
 }));
 
@@ -74,7 +115,7 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
         viewerId: id,
         players: { [id]: { id } },
         entities: {},
-        phase: gamePhase('active'),
+        phase: gamePhase('playing'),
         events: [],
         matchResult: null,
         commitments: {},
@@ -141,6 +182,12 @@ describe('MatchPage — rendering', () => {
         mockSnapshot = makeSnapshot({ tick: 42 });
         renderMatchPage();
         expect(screen.getByTestId('hud-tick').textContent).toBe('42');
+    });
+
+    it('renders the HUD override from the active game registry', () => {
+        mockSnapshot = makeSnapshot({ tick: 42 });
+        renderMatchPage();
+        expect(screen.getByTestId('registry-hud')).toBeTruthy();
     });
 
     it('renders match result banner when phase is ended', () => {

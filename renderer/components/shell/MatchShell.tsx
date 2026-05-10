@@ -3,14 +3,16 @@
 // renderer/components/shell/MatchShell.tsx
 
 import React, { type ReactNode } from 'react';
-import type { MatchResult, PlayerId } from '@chimera/electron/preload/api-types.js';
+import type { MatchResult, PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import {
     resolveMatchResultOutcome,
+    type GameHudProps,
     type GameScreenComponent,
     type MatchResultBannerProps,
+    type SendAction,
 } from '@chimera/shared/game-screen-contract.js';
 
-export interface MatchShellProps {
+interface MatchShellBaseProps {
     readonly children?: ReactNode;
     readonly tick: number;
     readonly canUndo: boolean;
@@ -26,21 +28,36 @@ export interface MatchShellProps {
     readonly onEndTurn?: () => void | Promise<void>;
 }
 
-export function MatchShell({
-    children,
-    tick,
-    canUndo,
-    canRedo,
-    canEndTurn = true,
-    isGameOver = false,
-    gameOverMessage = 'Game Over',
-    matchResult,
-    matchResultBanner: MatchResultBanner = DefaultMatchResultBanner,
-    localPlayerId,
-    onUndo,
-    onRedo,
-    onEndTurn,
-}: MatchShellProps): React.ReactElement {
+interface MatchShellDefaultHudProps extends MatchShellBaseProps {
+    readonly hud?: undefined;
+    readonly snapshot?: PlayerSnapshot;
+    readonly sendAction?: SendAction;
+}
+
+interface MatchShellGameHudProps extends MatchShellBaseProps {
+    readonly hud: GameScreenComponent<GameHudProps>;
+    readonly snapshot: PlayerSnapshot;
+    readonly sendAction: SendAction;
+}
+
+export type MatchShellProps = MatchShellDefaultHudProps | MatchShellGameHudProps;
+
+export function MatchShell(props: MatchShellProps): React.ReactElement {
+    const {
+        children,
+        tick,
+        canUndo,
+        canRedo,
+        canEndTurn = true,
+        isGameOver = false,
+        gameOverMessage = 'Game Over',
+        matchResult,
+        matchResultBanner: MatchResultBanner = DefaultMatchResultBanner,
+        localPlayerId,
+        onUndo,
+        onRedo,
+        onEndTurn,
+    } = props;
     const undoDisabled = !canUndo || onUndo === undefined;
     const redoDisabled = !canRedo || onRedo === undefined;
     const endTurnDisabled = !canEndTurn || onEndTurn === undefined;
@@ -48,22 +65,49 @@ export function MatchShell({
     const shouldShowFallbackResult = !shouldShowResolvedResult && isGameOver;
 
     function handleUndo(): void {
-        if (onUndo !== undefined) {
+        if (!undoDisabled && onUndo !== undefined) {
             void onUndo();
         }
     }
 
     function handleRedo(): void {
-        if (onRedo !== undefined) {
+        if (!redoDisabled && onRedo !== undefined) {
             void onRedo();
         }
     }
 
     function handleEndTurn(): void {
-        if (onEndTurn !== undefined) {
+        if (!endTurnDisabled && onEndTurn !== undefined) {
             void onEndTurn();
         }
     }
+
+    const hud =
+        props.hud === undefined ? (
+            <DefaultMatchHud
+                tick={tick}
+                undoDisabled={undoDisabled}
+                redoDisabled={redoDisabled}
+                endTurnDisabled={endTurnDisabled}
+                handleUndo={handleUndo}
+                handleRedo={handleRedo}
+                handleEndTurn={handleEndTurn}
+            />
+        ) : (
+            <GameHudSlot
+                Hud={props.hud}
+                snapshot={props.snapshot}
+                sendAction={props.sendAction}
+                tick={tick}
+                undoDisabled={undoDisabled}
+                redoDisabled={redoDisabled}
+                endTurnDisabled={endTurnDisabled}
+                handleUndo={handleUndo}
+                handleRedo={handleRedo}
+                handleEndTurn={handleEndTurn}
+                {...(localPlayerId === undefined ? {} : { localPlayerId })}
+            />
+        );
 
     return (
         <main aria-label="Match" style={matchShellRootStyle}>
@@ -83,38 +127,74 @@ export function MatchShell({
                 )}
                 {shouldShowFallbackResult && <DefaultGameOverBanner message={gameOverMessage} />}
             </section>
-            <footer aria-label="Match HUD" style={matchShellHudStyle}>
-                <div>
-                    Tick <output data-testid="hud-tick">{tick}</output>
-                </div>
-                <div style={matchShellActionsStyle}>
-                    <button
-                        data-testid="undo"
-                        type="button"
-                        disabled={undoDisabled}
-                        onClick={handleUndo}
-                    >
-                        Undo
-                    </button>
-                    <button
-                        data-testid="redo"
-                        type="button"
-                        disabled={redoDisabled}
-                        onClick={handleRedo}
-                    >
-                        Redo
-                    </button>
-                    <button
-                        data-testid="end-turn"
-                        type="button"
-                        disabled={endTurnDisabled}
-                        onClick={handleEndTurn}
-                    >
-                        End Turn
-                    </button>
-                </div>
-            </footer>
+            {hud}
         </main>
+    );
+}
+
+interface MatchHudControlsProps {
+    readonly tick: number;
+    readonly undoDisabled: boolean;
+    readonly redoDisabled: boolean;
+    readonly endTurnDisabled: boolean;
+    readonly handleUndo: () => void;
+    readonly handleRedo: () => void;
+    readonly handleEndTurn: () => void;
+}
+
+interface GameHudSlotProps extends GameHudProps {
+    readonly Hud: GameScreenComponent<GameHudProps>;
+}
+
+function GameHudSlot({ Hud, ...hudProps }: GameHudSlotProps): React.ReactElement {
+    return (
+        <React.Suspense fallback={null}>
+            <Hud {...hudProps} />
+        </React.Suspense>
+    );
+}
+
+function DefaultMatchHud({
+    tick,
+    undoDisabled,
+    redoDisabled,
+    endTurnDisabled,
+    handleUndo,
+    handleRedo,
+    handleEndTurn,
+}: MatchHudControlsProps): React.ReactElement {
+    return (
+        <footer aria-label="Match HUD" style={matchShellHudStyle}>
+            <div>
+                Tick <output data-testid="hud-tick">{tick}</output>
+            </div>
+            <div style={matchShellActionsStyle}>
+                <button
+                    data-testid="undo"
+                    type="button"
+                    disabled={undoDisabled}
+                    onClick={handleUndo}
+                >
+                    Undo
+                </button>
+                <button
+                    data-testid="redo"
+                    type="button"
+                    disabled={redoDisabled}
+                    onClick={handleRedo}
+                >
+                    Redo
+                </button>
+                <button
+                    data-testid="end-turn"
+                    type="button"
+                    disabled={endTurnDisabled}
+                    onClick={handleEndTurn}
+                >
+                    End Turn
+                </button>
+            </div>
+        </footer>
     );
 }
 
@@ -196,6 +276,7 @@ function resolveMatchResultMessage(
 }
 
 export type {
+    GameHudProps,
     GameScreenProps,
     GameScreenRegistry,
     MatchResultBannerProps,

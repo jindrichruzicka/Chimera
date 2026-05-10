@@ -4,8 +4,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { playerId } from '@chimera/electron/preload/api-types.js';
-import { MatchShell, type MatchResultBannerProps } from './MatchShell';
+import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import { MatchShell, type GameHudProps, type MatchResultBannerProps } from './MatchShell';
 
 afterEach(() => {
     cleanup();
@@ -65,6 +65,78 @@ describe('MatchShell page object locators', () => {
 
         expect(onUndo).toHaveBeenCalledOnce();
         expect(onRedo).toHaveBeenCalledOnce();
+        expect(onEndTurn).toHaveBeenCalledOnce();
+    });
+
+    it('delegates HUD rendering to a game-provided component with engine-owned controls', () => {
+        const onUndo = vi.fn();
+        const onRedo = vi.fn();
+        const onEndTurn = vi.fn();
+        const snapshot = makePlayerSnapshot({
+            tick: 9,
+            undoMeta: { canUndo: true, canRedo: false },
+        });
+        let receivedProps: GameHudProps | null = null;
+
+        function GameHud(props: GameHudProps): React.ReactElement {
+            receivedProps = props;
+            return (
+                <footer aria-label="Custom HUD">
+                    <output data-testid="custom-hud-tick">{props.tick}</output>
+                    <button data-testid="custom-undo" type="button" onClick={props.handleUndo}>
+                        Undo
+                    </button>
+                    <button
+                        data-testid="custom-redo"
+                        type="button"
+                        disabled={props.redoDisabled}
+                        onClick={props.handleRedo}
+                    >
+                        Redo
+                    </button>
+                    <button
+                        data-testid="custom-end-turn"
+                        type="button"
+                        onClick={props.handleEndTurn}
+                    >
+                        End Turn
+                    </button>
+                </footer>
+            );
+        }
+
+        render(
+            <MatchShell
+                tick={9}
+                canUndo={true}
+                canRedo={false}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                hud={GameHud}
+                localPlayerId={playerId('p1')}
+                onUndo={onUndo}
+                onRedo={onRedo}
+                onEndTurn={onEndTurn}
+            />,
+        );
+
+        expect(screen.queryByTestId('undo')).toBeNull();
+        expect(screen.getByTestId('custom-hud-tick').textContent).toBe('9');
+        expect(receivedProps).toMatchObject({
+            snapshot,
+            localPlayerId: playerId('p1'),
+            tick: 9,
+            undoDisabled: false,
+            redoDisabled: true,
+            endTurnDisabled: false,
+        });
+
+        fireEvent.click(screen.getByTestId('custom-undo'));
+        fireEvent.click(screen.getByTestId('custom-redo'));
+        fireEvent.click(screen.getByTestId('custom-end-turn'));
+
+        expect(onUndo).toHaveBeenCalledOnce();
+        expect(onRedo).not.toHaveBeenCalled();
         expect(onEndTurn).toHaveBeenCalledOnce();
     });
 
@@ -243,3 +315,20 @@ describe('MatchShell page object locators', () => {
         expect(style).toContain('var(--ch-font-size-lg)');
     });
 });
+
+function makePlayerSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
+    const id = playerId('p1');
+    return {
+        tick: 1,
+        viewerId: id,
+        players: { [id]: { id } },
+        entities: {},
+        phase: gamePhase('playing'),
+        events: [],
+        matchResult: null,
+        commitments: {},
+        undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
+        ...overrides,
+    };
+}

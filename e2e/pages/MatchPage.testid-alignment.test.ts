@@ -28,6 +28,10 @@ describe('MatchPage POM — testid alignment with renderer', () => {
                 'utf-8',
             ),
             readFileSync(
+                path.join(workspaceRoot, 'games/tactics/screens/TacticsMatchHud.tsx'),
+                'utf-8',
+            ),
+            readFileSync(
                 path.join(workspaceRoot, 'games/tactics/screens/TacticsMatchResultBanner.tsx'),
                 'utf-8',
             ),
