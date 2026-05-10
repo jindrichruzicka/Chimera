@@ -32,6 +32,17 @@ describe('MatchShell page object locators', () => {
         expect(screen.getByTestId('hud-tick').textContent).toBe('42');
     });
 
+    it('keeps shell root layout structure while using tokenized font family', () => {
+        render(<MatchShell tick={1} canUndo={false} canRedo={false} />);
+
+        const shellRoot = screen.getByLabelText('Match');
+        const style = shellRoot.getAttribute('style') ?? '';
+
+        expect(style).toContain('grid-template-rows: 1fr auto');
+        expect(style).toContain('min-height: 100vh');
+        expect(style).toContain('font-family: var(--ch-font-ui)');
+    });
+
     it('wires HUD controls through game-agnostic callbacks', () => {
         const onUndo = vi.fn();
         const onRedo = vi.fn();

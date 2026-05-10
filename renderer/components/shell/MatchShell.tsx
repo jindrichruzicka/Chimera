@@ -66,15 +66,7 @@ export function MatchShell({
     }
 
     return (
-        <main
-            aria-label="Match"
-            style={{
-                display: 'grid',
-                gridTemplateRows: '1fr auto',
-                minHeight: '100vh',
-                fontFamily: 'system-ui, sans-serif',
-            }}
-        >
+        <main aria-label="Match" style={matchShellRootStyle}>
             <section
                 data-testid="match-canvas"
                 aria-label="Match canvas"
@@ -91,21 +83,11 @@ export function MatchShell({
                 )}
                 {shouldShowFallbackResult && <DefaultGameOverBanner message={gameOverMessage} />}
             </section>
-            <footer
-                aria-label="Match HUD"
-                style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'space-between',
-                    gap: '1rem',
-                    padding: '0.75rem 1rem',
-                    borderTop: '1px solid #ddd',
-                }}
-            >
+            <footer aria-label="Match HUD" style={matchShellHudStyle}>
                 <div>
                     Tick <output data-testid="hud-tick">{tick}</output>
                 </div>
-                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <div style={matchShellActionsStyle}>
                     <button
                         data-testid="undo"
                         type="button"
@@ -135,6 +117,27 @@ export function MatchShell({
         </main>
     );
 }
+
+const matchShellRootStyle: React.CSSProperties = {
+    display: 'grid',
+    gridTemplateRows: '1fr auto',
+    minHeight: '100vh',
+    fontFamily: 'var(--ch-font-ui)',
+};
+
+const matchShellHudStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 'var(--ch-space-md)',
+    padding: 'var(--ch-space-sm) var(--ch-space-md)',
+    borderTop: '1px solid var(--ch-color-border-default)',
+};
+
+const matchShellActionsStyle: React.CSSProperties = {
+    display: 'flex',
+    gap: 'var(--ch-space-xs)',
+};
 
 const matchResultBannerStyle: React.CSSProperties = {
     position: 'absolute',
