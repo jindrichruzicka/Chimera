@@ -30,7 +30,7 @@ import {
 } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
-import { entityId, playerId as toPlayerId } from './types.js';
+import { entityId, playerId as toPlayerId, sceneId } from './types.js';
 import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
 import type { Logger } from '@chimera/shared/logging.js';
@@ -717,6 +717,30 @@ describe('engine:start_match definition', () => {
         expect(next.tick).toBe(snapshot.tick + 1);
         expect(next.phase).toBe('playing');
         expect(Object.keys(next.players).sort()).toEqual([guestId, hostId].sort());
+    });
+
+    it('reduce enters the engine match scene and clears any pending scene transition', () => {
+        const snapshot = {
+            ...makeSnapshot(hostId),
+            sceneId: sceneId('engine:lobby'),
+            sceneTransition: {
+                toSceneId: sceneId('engine:match'),
+                phase: 'preparing' as const,
+                startedAtTick: 0,
+                params: {},
+                playersReady: [],
+            },
+        } satisfies BaseGameSnapshot;
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.sceneId).toBe(sceneId('engine:match'));
+        expect(next.sceneTransition).toBeNull();
     });
 
     it('reduce applies initial entities and explicit first player through the match-start action', () => {

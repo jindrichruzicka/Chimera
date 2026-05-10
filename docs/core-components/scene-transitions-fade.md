@@ -40,7 +40,7 @@ interface SceneDescriptor {
     readonly id: SceneId;
     readonly defaultScreen: string; // GameScreenRegistry entry to mount on enter
     readonly requiredAssets: readonly AssetRef[];
-    readonly transitionTimeoutMs?: number; // Default: 30_000
+    readonly timeoutTicks?: number; // Default: 1_800 (30 s at 60 ticks/s)
     readonly onClientTimeout?: 'proceed' | 'drop'; // Default: 'proceed'
 
     /** Pure reducer — initializes level state; called by engine:scene_commit */

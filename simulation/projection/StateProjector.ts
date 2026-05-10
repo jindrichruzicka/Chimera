@@ -28,6 +28,8 @@ import type {
     GamePhase,
     MatchResult,
     PlayerId,
+    SceneId,
+    SceneTransitionState,
     UndoMeta,
 } from '../engine/types.js';
 
@@ -54,6 +56,9 @@ export interface PlayerSnapshot {
     readonly tick: number;
     readonly viewerId: PlayerId;
     readonly phase: GamePhase;
+    readonly sceneId?: SceneId;
+    readonly sceneDefaultScreen?: string;
+    readonly sceneTransition?: SceneTransitionState | null;
     readonly players: Readonly<Record<PlayerId, ObservedPlayerState>>;
     readonly entities: Readonly<Record<EntityId, ObservedEntityState>>;
     readonly events: readonly GameEvent[];
@@ -176,6 +181,13 @@ export class DefaultStateProjector<
             tick: fullState.tick,
             viewerId,
             phase: fullState.phase,
+            ...(fullState.sceneId === undefined ? {} : { sceneId: fullState.sceneId }),
+            ...(fullState.sceneDefaultScreen === undefined
+                ? {}
+                : { sceneDefaultScreen: fullState.sceneDefaultScreen }),
+            ...(fullState.sceneTransition === undefined
+                ? {}
+                : { sceneTransition: fullState.sceneTransition }),
             players,
             entities,
             events,

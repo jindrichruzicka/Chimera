@@ -21,7 +21,7 @@ import type {
     BaseGameSnapshot,
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId, sceneId } from '@chimera/simulation/engine/types.js';
 import { CURRENT_SCHEMA_VERSION } from '@chimera/simulation/persistence/SaveMigrator.js';
 import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
 import {
@@ -112,6 +112,156 @@ describe('SessionRuntime', () => {
 
         expect(apply).toHaveBeenCalledWith(initial, dummyEnvelope);
         expect(runtime.getSnapshot()).toBe(next);
+    });
+
+    it('auto-dispatches engine:scene_commit when a scene_ready action completes the readiness barrier', () => {
+        const initial = makeSnapshot(0, [P1, P2]);
+        const ready = {
+            ...initial,
+            tick: 1,
+            hostPlayerId: P1,
+            sceneId: sceneId('engine:match'),
+            sceneTransition: {
+                toSceneId: sceneId('engine:post-match'),
+                phase: 'ready' as const,
+                startedAtTick: 0,
+                params: {},
+                playersReady: [P1, P2],
+            },
+        } satisfies BaseGameSnapshot;
+        const committed = {
+            ...ready,
+            tick: 2,
+            sceneId: sceneId('engine:post-match'),
+            sceneTransition: null,
+        } satisfies BaseGameSnapshot;
+        const apply: ApplyActionFn = vi
+            .fn()
+            .mockReturnValueOnce(ready)
+            .mockReturnValueOnce(committed);
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot: initial,
+            applyAction: apply,
+        });
+
+        runtime.applyAction({
+            type: 'engine:scene_ready',
+            playerId: P2,
+            tick: 0,
+            payload: { playerId: P2 },
+        });
+
+        expect(apply).toHaveBeenCalledTimes(2);
+        expect(apply).toHaveBeenNthCalledWith(2, ready, {
+            type: 'engine:scene_commit',
+            playerId: P1,
+            tick: 1,
+            payload: {},
+        });
+        expect(runtime.getSnapshot()).toBe(committed);
+    });
+
+    it('auto-dispatches engine:scene_commit when a transition times out with proceed policy', () => {
+        const initial = makeSnapshot(0, [P1, P2]);
+        const timedOutPreparing = {
+            ...initial,
+            tick: 10,
+            hostPlayerId: P1,
+            sceneId: sceneId('engine:match'),
+            sceneTransition: {
+                toSceneId: sceneId('engine:post-match'),
+                phase: 'preparing' as const,
+                startedAtTick: 5,
+                params: {},
+                playersReady: [P1],
+                timeoutTicks: 3,
+                onClientTimeout: 'proceed' as const,
+            },
+        } satisfies BaseGameSnapshot;
+        const committed = {
+            ...timedOutPreparing,
+            tick: 11,
+            sceneId: sceneId('engine:post-match'),
+            sceneTransition: null,
+        } satisfies BaseGameSnapshot;
+        const apply: ApplyActionFn = vi
+            .fn()
+            .mockReturnValueOnce(timedOutPreparing)
+            .mockReturnValueOnce(committed);
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot: initial,
+            applyAction: apply,
+        });
+
+        runtime.applyAction({
+            type: 'engine:tick',
+            playerId: P1,
+            tick: 0,
+            payload: { seed: 1 },
+        });
+
+        expect(apply).toHaveBeenCalledTimes(2);
+        expect(apply).toHaveBeenNthCalledWith(2, timedOutPreparing, {
+            type: 'engine:scene_commit',
+            playerId: P1,
+            tick: timedOutPreparing.tick,
+            payload: {},
+        });
+        expect(runtime.getSnapshot()).toBe(committed);
+    });
+
+    it('auto-dispatches engine:scene_drop when a transition times out with drop policy', () => {
+        const initial = makeSnapshot(0, [P1, P2]);
+        const timedOutPreparing = {
+            ...initial,
+            tick: 10,
+            hostPlayerId: P1,
+            sceneId: sceneId('engine:match'),
+            sceneTransition: {
+                toSceneId: sceneId('engine:post-match'),
+                phase: 'preparing' as const,
+                startedAtTick: 5,
+                params: {},
+                playersReady: [P1],
+                timeoutTicks: 3,
+                onClientTimeout: 'drop' as const,
+            },
+        } satisfies BaseGameSnapshot;
+        const dropped = {
+            ...timedOutPreparing,
+            tick: 11,
+            sceneTransition: null,
+        } satisfies BaseGameSnapshot;
+        const apply: ApplyActionFn = vi
+            .fn()
+            .mockReturnValueOnce(timedOutPreparing)
+            .mockReturnValueOnce(dropped);
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot: initial,
+            applyAction: apply,
+        });
+
+        runtime.applyAction({
+            type: 'engine:tick',
+            playerId: P1,
+            tick: 0,
+            payload: { seed: 1 },
+        });
+
+        expect(apply).toHaveBeenCalledTimes(2);
+        expect(apply).toHaveBeenNthCalledWith(2, timedOutPreparing, {
+            type: 'engine:scene_drop',
+            playerId: P1,
+            tick: timedOutPreparing.tick,
+            payload: {},
+        });
+        expect(runtime.getSnapshot()).toBe(dropped);
     });
 
     it('exposes the gameId from constructor options via a public getter', () => {

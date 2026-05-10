@@ -1,0 +1,93 @@
+'use client';
+
+import React, { useEffect } from 'react';
+import type { PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type {
+    GameScreenComponent,
+    GameScreenProps,
+    GameScreenRegistry,
+    SendAction,
+} from '@chimera/shared/game-screen-contract.js';
+import { useActiveScreen, useUiStore } from '../../state/uiStore.js';
+import { TransitionOverlay } from './TransitionOverlay.js';
+import { useFadeTransition } from './useFadeTransition.js';
+
+export interface SceneRouterProps {
+    readonly registry: GameScreenRegistry;
+    readonly snapshot: PlayerSnapshot;
+    readonly localPlayerId?: PlayerId;
+    readonly sendAction: SendAction;
+    readonly fadeOutMs?: number;
+    readonly fadeInMs?: number;
+}
+
+export function SceneRouter({
+    registry,
+    snapshot,
+    localPlayerId,
+    sendAction,
+    fadeOutMs,
+    fadeInMs,
+}: SceneRouterProps): React.ReactElement {
+    const activeScreenKey = useActiveScreen();
+    const sceneId = snapshot.sceneId ?? 'engine:match';
+    const sceneDefaultScreen = readSceneDefaultScreen(snapshot);
+    const defaultScreenKey =
+        sceneDefaultScreen ?? registry.sceneDefaultScreens?.[String(sceneId)] ?? 'board';
+    useFadeTransition({
+        snapshot,
+        sendAction,
+        ...(localPlayerId === undefined ? {} : { localPlayerId }),
+        ...(fadeOutMs === undefined ? {} : { fadeOutMs }),
+        ...(fadeInMs === undefined ? {} : { fadeInMs }),
+    });
+
+    useEffect(() => {
+        useUiStore.getState().setActiveSceneId(sceneId, defaultScreenKey);
+    }, [defaultScreenKey, sceneId]);
+
+    const Screen = resolveScreen(registry, activeScreenKey);
+    const Overlay = registry.transitionOverlay;
+    const screenProps = {
+        snapshot,
+        sendAction,
+        ...(localPlayerId === undefined ? {} : { localPlayerId }),
+    };
+
+    return (
+        <div
+            className="chimera-scene-router"
+            data-testid="scene-router"
+            data-active-scene-id={sceneId}
+            data-active-screen-key={activeScreenKey}
+        >
+            <React.Suspense fallback={<div data-testid="scene-screen-loading" />}>
+                <Screen {...screenProps} />
+            </React.Suspense>
+            {Overlay === undefined ? (
+                <TransitionOverlay snapshot={snapshot} />
+            ) : (
+                <React.Suspense fallback={null}>
+                    <Overlay {...screenProps} />
+                </React.Suspense>
+            )}
+        </div>
+    );
+}
+
+function readSceneDefaultScreen(snapshot: PlayerSnapshot): string | undefined {
+    const record = snapshot as unknown as Readonly<Record<string, unknown>>;
+    return typeof record['sceneDefaultScreen'] === 'string'
+        ? record['sceneDefaultScreen']
+        : undefined;
+}
+
+function resolveScreen(
+    registry: GameScreenRegistry,
+    activeScreenKey: string,
+): GameScreenComponent<GameScreenProps> {
+    if (activeScreenKey === 'board') {
+        return registry.board;
+    }
+    return registry.screens?.[activeScreenKey] ?? registry.board;
+}

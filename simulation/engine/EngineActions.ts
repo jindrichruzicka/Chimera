@@ -32,7 +32,7 @@ import type {
     PlayerId,
     ValidationResult,
 } from './types.js';
-import { entityId, gamePhase, isReduceContext, playerId } from './types.js';
+import { entityId, gamePhase, isReduceContext, playerId, sceneId } from './types.js';
 import type { ActionRegistry } from './ActionRegistry.js';
 import { TimerManager } from './GameTimer.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
@@ -411,6 +411,8 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
             players: nextPlayers,
             entities: payload.initialEntities ?? state.entities,
             phase: gamePhase('playing'),
+            sceneId: sceneId('engine:match'),
+            sceneTransition: null,
         };
 
         return nextTurnClock === undefined ? nextState : { ...nextState, turnClock: nextTurnClock };

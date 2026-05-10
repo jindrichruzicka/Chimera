@@ -49,6 +49,7 @@ import {
     resolveAgentSlot,
 } from './runtime/HostedSessionAgents.js';
 import { SessionCommitmentRuntime, SessionRuntime } from './runtime/SessionRuntime.js';
+import { wireDefaultSceneActions } from './runtime/SceneActionWiring.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
@@ -868,6 +869,7 @@ export async function main(): Promise<void> {
     // here when F18+ lands.  The registry is immutable after this point.
     const gameRegistry = new ActionRegistry();
     registerEngineActions(gameRegistry);
+    wireDefaultSceneActions(gameRegistry);
     registerTacticsActions(gameRegistry);
 
     // ProfileGate is the sole caller of ProfileSanitizer.admit().

@@ -19,7 +19,13 @@
  *        outside that directory; this file contains only the abstract surface.
  */
 
-import type { PlayerId, EngineAction, MatchResult } from '@chimera/simulation/engine/types.js';
+import type {
+    PlayerId,
+    EngineAction,
+    MatchResult,
+    SceneId,
+    SceneTransitionState,
+} from '@chimera/simulation/engine/types.js';
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
 import type { CommitmentEnvelope, CommitmentId } from '@chimera/simulation/projection/index.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
@@ -72,6 +78,8 @@ export interface PlayerSnapshot {
         Record<string, Readonly<{ id: string }> & Readonly<Record<string, unknown>>>
     >;
     readonly phase: string;
+    readonly sceneId?: SceneId;
+    readonly sceneTransition?: SceneTransitionState | null;
     readonly events: readonly Readonly<{ type: string }>[];
     readonly matchResult: MatchResult | null;
     /**

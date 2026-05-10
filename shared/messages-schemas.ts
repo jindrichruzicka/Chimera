@@ -70,6 +70,18 @@ const MatchResult = z
     })
     .strict();
 
+const SceneTransition = z
+    .object({
+        toSceneId: z.string(),
+        phase: z.enum(['preparing', 'ready', 'committing']),
+        startedAtTick: z.number().int(),
+        params: z.record(z.string(), z.unknown()),
+        playersReady: z.array(PlayerId).readonly(),
+        timeoutTicks: z.number().int().nonnegative().optional(),
+        onClientTimeout: z.enum(['proceed', 'drop']).optional(),
+    })
+    .strict();
+
 const EngineAction = z.object({
     type: z.string(),
     playerId: PlayerId,
@@ -104,6 +116,9 @@ const PlayerSnapshot = z.object({
     players: z.record(z.string(), z.record(z.string(), z.unknown())),
     entities: z.record(z.string(), z.record(z.string(), z.unknown())),
     phase: z.string(),
+    sceneId: z.string().optional(),
+    sceneDefaultScreen: z.string().optional(),
+    sceneTransition: SceneTransition.nullable().optional(),
     events: z.array(z.object({ type: z.string() }).passthrough()),
     matchResult: MatchResult.nullable(),
     commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),

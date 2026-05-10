@@ -46,15 +46,13 @@ export default function MatchPage(): React.ReactElement | null {
 
     const dispatchMatchAction = (
         snapshotForAction: PlayerSnapshot,
+        playerId: NonNullable<PlayerSnapshot['viewerId']>,
         type: MatchActionType,
         payload: Record<string, unknown>,
     ): void => {
-        if (localPlayerId === null) {
-            return;
-        }
         const action: EngineAction = {
             type,
-            playerId: localPlayerId,
+            playerId,
             tick: snapshotForAction.tick,
             payload,
         };
@@ -65,36 +63,25 @@ export default function MatchPage(): React.ReactElement | null {
         return null;
     }
 
-    const Board = MatchScreenRegistry.board;
+    const resolvedPlayerId = localPlayerId ?? snapshot.viewerId;
 
     return (
         <MatchShell
-            tick={snapshot.tick}
-            canUndo={snapshot.undoMeta.canUndo}
-            canRedo={snapshot.undoMeta.canRedo}
-            canEndTurn={snapshot.isMyTurn}
+            registry={MatchScreenRegistry}
             snapshot={snapshot}
             sendAction={sendAction}
-            isGameOver={snapshot.phase === 'ended'}
-            matchResult={snapshot.matchResult}
-            {...(MatchScreenRegistry.hud === undefined ? {} : { hud: MatchScreenRegistry.hud })}
-            {...(MatchScreenRegistry.matchResultBanner === undefined
-                ? {}
-                : { matchResultBanner: MatchScreenRegistry.matchResultBanner })}
-            {...(localPlayerId === null ? {} : { localPlayerId })}
-            {...(localPlayerId === null
-                ? {}
-                : {
-                      onUndo: () => dispatchMatchAction(snapshot, 'engine:undo', { steps: 1 }),
-                      onRedo: () => dispatchMatchAction(snapshot, 'engine:redo', { steps: 1 }),
-                      onEndTurn: () => dispatchMatchAction(snapshot, 'engine:end_turn', {}),
-                  })}
-        >
-            <Board
-                snapshot={snapshot}
-                sendAction={sendAction}
-                {...(localPlayerId === null ? {} : { localPlayerId })}
-            />
-        </MatchShell>
+            canEndTurn={snapshot.isMyTurn}
+            localPlayerId={resolvedPlayerId}
+            {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'
+                ? { fadeOutMs: 0, fadeInMs: 0 }
+                : {})}
+            onUndo={() =>
+                dispatchMatchAction(snapshot, resolvedPlayerId, 'engine:undo', { steps: 1 })
+            }
+            onRedo={() =>
+                dispatchMatchAction(snapshot, resolvedPlayerId, 'engine:redo', { steps: 1 })
+            }
+            onEndTurn={() => dispatchMatchAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})}
+        />
     );
 }

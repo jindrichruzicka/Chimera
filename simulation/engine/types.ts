@@ -73,6 +73,27 @@ export type GamePhase = string & { readonly __brand: 'GamePhase' };
  */
 export const gamePhase = (raw: string): GamePhase => raw as GamePhase;
 
+/**
+ * Opaque scene identifier. Scene ids are namespaced strings such as
+ * `engine:match` or `tactics:level-1`.
+ */
+export type SceneId = string & { readonly __brand: 'SceneId' };
+
+/** Constructs a branded {@link SceneId} from a raw string. */
+export const sceneId = (raw: string): SceneId => raw as SceneId;
+
+export type SceneTransitionPhase = 'preparing' | 'ready' | 'committing';
+
+export interface SceneTransitionState {
+    readonly toSceneId: SceneId;
+    readonly phase: SceneTransitionPhase;
+    readonly startedAtTick: number;
+    readonly params: Readonly<Record<string, unknown>>;
+    readonly playersReady: readonly PlayerId[];
+    readonly timeoutTicks?: number;
+    readonly onClientTimeout?: 'proceed' | 'drop';
+}
+
 // ─── Base state shapes ───────────────────────────────────────────────────────
 
 /**
@@ -195,6 +216,12 @@ export interface BaseGameSnapshot {
      * Architecture reference: §4.38 — Match Resolution & Winner Detection
      */
     readonly matchResult: MatchResult | null;
+    /** Current coarse-grained match scene (§4.18). Optional for pre-F38 fixtures/saves. */
+    readonly sceneId?: SceneId;
+    /** Default renderer screen key for the current scene, projected from SceneDescriptor (§4.18). Optional for pre-F38 fixtures/saves. */
+    readonly sceneDefaultScreen?: string;
+    /** Pending two-phase scene transition, or null between transitions (§4.18). */
+    readonly sceneTransition?: SceneTransitionState | null;
 }
 
 // ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────

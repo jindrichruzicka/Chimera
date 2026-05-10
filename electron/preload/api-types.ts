@@ -21,6 +21,8 @@ import type {
     EntityId,
     GamePhase,
     MatchResult,
+    SceneId,
+    SceneTransitionState,
 } from '@chimera/simulation/engine/types.js';
 import { playerId, entityId, gamePhase } from '@chimera/simulation/engine/types.js';
 import type { EngineSettings } from '@chimera/simulation/settings/SettingsSchema.js';
@@ -38,6 +40,9 @@ export type { CommitmentId };
 
 /** Current phase of the game state machine. Canonical: simulation/ (F03). */
 export type { GamePhase };
+
+/** Current coarse-grained scene identifier. Canonical: simulation/scene (§4.18). */
+export type { SceneId, SceneTransitionState };
 
 /** Resolved match outcome. Canonical: simulation/ (§4.38). */
 export type { MatchResult };
@@ -133,6 +138,9 @@ export interface PlayerSnapshot {
     readonly players: Readonly<Record<PlayerId, ObservedPlayerState>>;
     readonly entities: Readonly<Record<EntityId, ObservedEntityState>>;
     readonly phase: GamePhase;
+    readonly sceneId?: SceneId;
+    readonly sceneDefaultScreen?: string;
+    readonly sceneTransition?: SceneTransitionState | null;
     readonly events: readonly GameEvent[];
     readonly matchResult: MatchResult | null;
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;

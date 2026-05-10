@@ -4,13 +4,18 @@
 
 import React, { type ReactNode } from 'react';
 import type { MatchResult, PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import {
     resolveMatchResultOutcome,
     type GameHudProps,
     type GameScreenComponent,
+    type GameScreenRegistry,
     type MatchResultBannerProps,
     type SendAction,
 } from '@chimera/shared/game-screen-contract.js';
+import { SceneRouter } from '../scene/SceneRouter.js';
+import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
+import { FadeProvider } from './FadeContext.js';
 
 interface MatchShellBaseProps {
     readonly children?: ReactNode;
@@ -40,9 +45,84 @@ interface MatchShellGameHudProps extends MatchShellBaseProps {
     readonly sendAction: SendAction;
 }
 
-export type MatchShellProps = MatchShellDefaultHudProps | MatchShellGameHudProps;
+interface MatchShellRegistryProps {
+    readonly registry: GameScreenRegistry;
+    readonly snapshot: PlayerSnapshot;
+    readonly sendAction: SendAction;
+    readonly localPlayerId?: PlayerId;
+    readonly contentDatabase?: ContentDatabase | null;
+    readonly canEndTurn?: boolean;
+    readonly fadeOutMs?: number;
+    readonly fadeInMs?: number;
+    readonly onUndo?: () => void | Promise<void>;
+    readonly onRedo?: () => void | Promise<void>;
+    readonly onEndTurn?: () => void | Promise<void>;
+}
+
+export type MatchShellProps =
+    | MatchShellDefaultHudProps
+    | MatchShellGameHudProps
+    | MatchShellRegistryProps;
 
 export function MatchShell(props: MatchShellProps): React.ReactElement {
+    if ('registry' in props) {
+        return <RegistryMatchShell {...props} />;
+    }
+
+    return <MatchShellFrame {...props} />;
+}
+
+function RegistryMatchShell({
+    registry,
+    snapshot,
+    sendAction,
+    localPlayerId,
+    contentDatabase = null,
+    canEndTurn,
+    fadeOutMs,
+    fadeInMs,
+    onUndo,
+    onRedo,
+    onEndTurn,
+}: MatchShellRegistryProps): React.ReactElement {
+    return (
+        <ContentDatabaseProvider value={contentDatabase}>
+            <FadeProvider>
+                <MatchShellFrame
+                    tick={snapshot.tick}
+                    canUndo={snapshot.undoMeta.canUndo}
+                    canRedo={snapshot.undoMeta.canRedo}
+                    canEndTurn={canEndTurn ?? snapshot.isMyTurn}
+                    snapshot={snapshot}
+                    sendAction={sendAction}
+                    matchResult={snapshot.matchResult}
+                    isGameOver={snapshot.phase === 'ended'}
+                    {...(registry.hud === undefined ? {} : { hud: registry.hud })}
+                    {...(registry.matchResultBanner === undefined
+                        ? {}
+                        : { matchResultBanner: registry.matchResultBanner })}
+                    {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                    {...(onUndo === undefined ? {} : { onUndo })}
+                    {...(onRedo === undefined ? {} : { onRedo })}
+                    {...(onEndTurn === undefined ? {} : { onEndTurn })}
+                >
+                    <SceneRouter
+                        registry={registry}
+                        snapshot={snapshot}
+                        sendAction={sendAction}
+                        {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                        {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
+                        {...(fadeInMs === undefined ? {} : { fadeInMs })}
+                    />
+                </MatchShellFrame>
+            </FadeProvider>
+        </ContentDatabaseProvider>
+    );
+}
+
+function MatchShellFrame(
+    props: MatchShellDefaultHudProps | MatchShellGameHudProps,
+): React.ReactElement {
     const {
         children,
         tick,

@@ -11,6 +11,7 @@ import {
     playerId,
     gamePhase,
     entityId,
+    sceneId,
     type BaseGameSnapshot,
 } from '@chimera/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
@@ -182,5 +183,19 @@ describe('buildInitialHostedSessionSnapshot', () => {
         });
 
         expect(snapshot.entities).toEqual({});
+    });
+
+    it('serializes the lobby scene as the initial hosted scene', () => {
+        const host = playerId('host-scene-1');
+
+        const snapshot = buildInitialHostedSessionSnapshot({
+            seed: 42,
+            hostPlayerId: host,
+            playerSlots: [{ slotIndex: 0, playerId: host }],
+            phase: gamePhase('lobby'),
+        });
+
+        expect(snapshot.sceneId).toBe(sceneId('engine:lobby'));
+        expect(snapshot.sceneTransition).toBeNull();
     });
 });

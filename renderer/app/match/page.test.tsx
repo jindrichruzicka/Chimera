@@ -306,13 +306,19 @@ describe('MatchPage — action dispatch', () => {
         });
     });
 
-    it('does not dispatch undo when localPlayerId is null', () => {
+    it('falls back to snapshot.viewerId when localPlayerId is null', () => {
         mockLocalPlayerId = null;
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
         renderMatchPage();
 
-        // undo button is disabled when no onUndo handler is wired
-        expect(screen.getByTestId('undo').hasAttribute('disabled')).toBe(true);
+        fireEvent.click(screen.getByTestId('undo'));
+
+        expect(mockSendAction).toHaveBeenCalledWith({
+            type: 'engine:undo',
+            playerId: 'p1',
+            tick: 5,
+            payload: { steps: 1 },
+        });
     });
 });
 

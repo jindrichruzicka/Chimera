@@ -29,8 +29,16 @@
  *          no float arithmetic.
  */
 
-import type { ActionEnvelope, BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
+import type {
+    ActionEnvelope,
+    BaseGameSnapshot,
+    PlayerId,
+} from '@chimera/simulation/engine/types.js';
 import { CURRENT_SCHEMA_VERSION, type SaveFile } from '@chimera/simulation/persistence/index.js';
+import {
+    DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY,
+    DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,
+} from '@chimera/simulation/scene/SceneRegistry.js';
 import {
     CommitmentVerificationError,
     DefaultCommitmentScheme,
@@ -209,6 +217,52 @@ export class SessionRuntime {
      */
     applyAction(action: ActionEnvelope): void {
         this.snapshot = this.applyActionFn(this.snapshot, action);
+        this.resolveTimedOutOrReadySceneTransition();
+    }
+
+    private resolveTimedOutOrReadySceneTransition(): void {
+        const transition = this.snapshot.sceneTransition;
+        const hostPlayerId = this.snapshot.hostPlayerId;
+        if (transition === undefined || transition === null || transition.phase === 'committing') {
+            return;
+        }
+        if (hostPlayerId === undefined) {
+            return;
+        }
+
+        if (transition.phase === 'ready') {
+            this.dispatchHostSceneAction('engine:scene_commit', hostPlayerId);
+            return;
+        }
+
+        const timeoutTicks = Math.max(
+            0,
+            transition.timeoutTicks ?? DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,
+        );
+        const timedOut = this.snapshot.tick - transition.startedAtTick >= timeoutTicks;
+        if (!timedOut) {
+            return;
+        }
+
+        const timeoutPolicy = transition.onClientTimeout ?? DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY;
+        if (timeoutPolicy === 'drop') {
+            this.dispatchHostSceneAction('engine:scene_drop', hostPlayerId);
+            return;
+        }
+
+        this.dispatchHostSceneAction('engine:scene_commit', hostPlayerId);
+    }
+
+    private dispatchHostSceneAction(
+        type: 'engine:scene_commit' | 'engine:scene_drop',
+        hostPlayerId: PlayerId,
+    ): void {
+        this.snapshot = this.applyActionFn(this.snapshot, {
+            type,
+            playerId: hostPlayerId,
+            tick: this.snapshot.tick,
+            payload: {},
+        });
     }
 
     /**

@@ -13,6 +13,27 @@ afterEach(() => {
 });
 
 describe('MatchShell page object locators', () => {
+    it('renders a GameScreenRegistry board through registry mode', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const Board = React.lazy(() =>
+            Promise.resolve({
+                default: () => <div data-testid="registry-board">Registry board</div>,
+            }),
+        );
+
+        render(
+            <MatchShell
+                registry={{ board: Board }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+        );
+
+        expect(await screen.findByTestId('registry-board')).toBeTruthy();
+        expect(screen.getByTestId('match-canvas').textContent).toContain('Registry board');
+    });
+
     it('renders the §13.6 match HUD locator surface', () => {
         render(
             <MatchShell tick={42} canUndo={true} canRedo={false} isGameOver={true}>
@@ -331,4 +352,8 @@ function makePlayerSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnap
         isMyTurn: true,
         ...overrides,
     };
+}
+
+function makeSceneId(raw: string): NonNullable<PlayerSnapshot['sceneId']> {
+    return raw as NonNullable<PlayerSnapshot['sceneId']>;
 }

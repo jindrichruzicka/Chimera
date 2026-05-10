@@ -19,7 +19,7 @@ import type {
     GamePhase,
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
-import { playerId } from '@chimera/simulation/engine/types.js';
+import { playerId, sceneId } from '@chimera/simulation/engine/types.js';
 import type { LobbyAgentSlot } from '@chimera/networking/provider/MultiplayerProvider.js';
 
 export interface HostedSessionAgentMetadata {
@@ -108,6 +108,8 @@ export function buildInitialHostedSessionSnapshot(
             : {}),
         timers: {},
         matchResult: null,
+        sceneId: options.phase === 'playing' ? sceneId('engine:match') : sceneId('engine:lobby'),
+        sceneTransition: null,
     };
 }
 

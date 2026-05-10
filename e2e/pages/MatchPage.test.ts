@@ -64,6 +64,8 @@ describe('MatchPage', () => {
         expect(matchPage.selectableUnit).toBeDefined();
         expect(matchPage.attackTarget).toBeDefined();
         expect(matchPage.hudTick).toBeDefined();
+        expect(matchPage.sceneRouter).toBeDefined();
+        expect(matchPage.transitionOverlay).toBeDefined();
         expect(requestedTestIds).toEqual([
             'match-canvas',
             'undo',
@@ -74,6 +76,8 @@ describe('MatchPage', () => {
             'selectable-unit',
             'attack-target',
             'hud-tick',
+            'scene-router',
+            'transition-overlay',
         ]);
     });
 

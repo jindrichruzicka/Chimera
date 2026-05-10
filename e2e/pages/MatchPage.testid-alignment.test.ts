@@ -24,6 +24,14 @@ describe('MatchPage POM — testid alignment with renderer', () => {
                 'utf-8',
             ),
             readFileSync(
+                path.join(workspaceRoot, 'renderer/components/scene/SceneRouter.tsx'),
+                'utf-8',
+            ),
+            readFileSync(
+                path.join(workspaceRoot, 'renderer/components/scene/TransitionOverlay.tsx'),
+                'utf-8',
+            ),
+            readFileSync(
                 path.join(workspaceRoot, 'games/tactics/screens/TacticsDemoBoard.tsx'),
                 'utf-8',
             ),

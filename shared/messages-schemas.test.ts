@@ -360,6 +360,41 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         }
     });
 
+    it('SNAPSHOT accepts extended sceneTransition timeout fields', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 5,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                sceneId: 'engine:match',
+                sceneTransition: {
+                    toSceneId: 'engine:post-match',
+                    phase: 'preparing',
+                    startedAtTick: 1,
+                    params: {},
+                    playersReady: [],
+                    timeoutTicks: 4_000,
+                    onClientTimeout: 'drop',
+                },
+                events: [],
+                matchResult: null,
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.sceneTransition).toStrictEqual(msg.snapshot.sceneTransition);
+        }
+    });
+
     it('SNAPSHOT preserves null matchResult while the match is in progress', () => {
         const msg = {
             type: 'SNAPSHOT' as const,

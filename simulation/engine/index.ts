@@ -19,6 +19,9 @@ export type {
     PlayerId,
     EntityId,
     GamePhase,
+    SceneId,
+    SceneTransitionPhase,
+    SceneTransitionState,
     BasePlayerState,
     BaseEntityState,
     GameEvent,
@@ -44,7 +47,7 @@ export type {
     SimulationClientRole,
 } from './types.js';
 
-export { isReduceContext, playerId } from './types.js';
+export { isReduceContext, playerId, sceneId } from './types.js';
 
 export type { DeterministicRng } from './DeterministicRng.js';
 export { createRng } from './DeterministicRng.js';

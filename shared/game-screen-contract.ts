@@ -35,6 +35,7 @@ export interface GameScreenRegistry {
     readonly board: GameScreenComponent<GameScreenProps>;
     readonly hud?: GameScreenComponent<GameHudProps>;
     readonly screens?: Readonly<Record<string, GameScreenComponent<GameScreenProps>>>;
+    readonly sceneDefaultScreens?: Readonly<Record<string, string>>;
     readonly transitionOverlay?: GameScreenComponent<GameScreenProps>;
     readonly matchResultBanner?: GameScreenComponent<MatchResultBannerProps>;
 }

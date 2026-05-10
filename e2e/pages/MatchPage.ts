@@ -10,6 +10,8 @@ export class MatchPage {
     readonly selectableUnit: Locator;
     readonly attackTarget: Locator;
     readonly hudTick: Locator;
+    readonly sceneRouter: Locator;
+    readonly transitionOverlay: Locator;
 
     public constructor(private readonly page: Page) {
         this.canvas = page.getByTestId('match-canvas');
@@ -21,6 +23,8 @@ export class MatchPage {
         this.selectableUnit = page.getByTestId('selectable-unit');
         this.attackTarget = page.getByTestId('attack-target');
         this.hudTick = page.getByTestId('hud-tick');
+        this.sceneRouter = page.getByTestId('scene-router');
+        this.transitionOverlay = page.getByTestId('transition-overlay');
     }
 
     public async attackAdjacentEnemy(): Promise<void> {
@@ -51,5 +55,9 @@ export class MatchPage {
             tick,
             { timeout },
         );
+    }
+
+    public async activeSceneId(): Promise<string | null> {
+        return this.sceneRouter.getAttribute('data-active-scene-id');
     }
 }

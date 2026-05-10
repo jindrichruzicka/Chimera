@@ -8,5 +8,9 @@ const TacticsMatchResultBanner = React.lazy(() => import('./TacticsMatchResultBa
 export const MatchScreenRegistry: GameScreenRegistry = {
     board: TacticsDemoBoard,
     hud: TacticsMatchHud,
+    sceneDefaultScreens: {
+        'engine:match': 'board',
+        'engine:post-match': 'summary',
+    },
     matchResultBanner: TacticsMatchResultBanner,
 };

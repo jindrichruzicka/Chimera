@@ -22,7 +22,11 @@ export default function globalSetup(): void {
     mkdirSync(path.dirname(mainOutfile), { recursive: true });
     mkdirSync(path.dirname(preloadOutfile), { recursive: true });
 
-    execSync('pnpm build:renderer', { cwd: root, stdio: 'inherit' });
+    execSync('pnpm build:renderer', {
+        cwd: root,
+        stdio: 'inherit',
+        env: { ...process.env, NEXT_PUBLIC_CHIMERA_E2E: '1' },
+    });
 
     const alias: Record<string, string> = {
         '@chimera/electron': path.join(root, 'electron'),
