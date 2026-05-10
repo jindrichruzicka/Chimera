@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { GameScreenProps } from '@chimera/renderer/components/shell/MatchShell.js';
+import type { GameScreenProps } from '@chimera/shared/game-screen-contract.js';
 import { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
 
 interface TacticsUnit {

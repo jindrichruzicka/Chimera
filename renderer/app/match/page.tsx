@@ -60,6 +60,8 @@ export default function MatchPage(): React.ReactElement | null {
         return null;
     }
 
+    const Board = MatchScreenRegistry.board;
+
     return (
         <MatchShell
             tick={snapshot.tick}
@@ -68,6 +70,9 @@ export default function MatchPage(): React.ReactElement | null {
             canEndTurn={snapshot.isMyTurn}
             isGameOver={snapshot.phase === 'ended'}
             matchResult={snapshot.matchResult}
+            {...(MatchScreenRegistry.matchResultBanner === undefined
+                ? {}
+                : { matchResultBanner: MatchScreenRegistry.matchResultBanner })}
             {...(localPlayerId === null ? {} : { localPlayerId })}
             {...(localPlayerId === null
                 ? {}
@@ -77,7 +82,7 @@ export default function MatchPage(): React.ReactElement | null {
                       onEndTurn: () => dispatchMatchAction(snapshot, 'engine:end_turn', {}),
                   })}
         >
-            <MatchScreenRegistry.board
+            <Board
                 snapshot={snapshot}
                 sendAction={sendAction}
                 {...(localPlayerId === null ? {} : { localPlayerId })}

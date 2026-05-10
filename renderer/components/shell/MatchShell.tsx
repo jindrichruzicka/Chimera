@@ -3,12 +3,12 @@
 // renderer/components/shell/MatchShell.tsx
 
 import React, { type ReactNode } from 'react';
-import type {
-    EngineAction,
-    MatchResult,
-    PlayerId,
-    PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
+import type { MatchResult, PlayerId } from '@chimera/electron/preload/api-types.js';
+import {
+    resolveMatchResultOutcome,
+    type GameScreenComponent,
+    type MatchResultBannerProps,
+} from '@chimera/shared/game-screen-contract.js';
 
 export interface MatchShellProps {
     readonly children?: ReactNode;
@@ -19,6 +19,7 @@ export interface MatchShellProps {
     readonly isGameOver?: boolean;
     readonly gameOverMessage?: string;
     readonly matchResult?: MatchResult | null;
+    readonly matchResultBanner?: GameScreenComponent<MatchResultBannerProps>;
     readonly localPlayerId?: PlayerId;
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
@@ -34,6 +35,7 @@ export function MatchShell({
     isGameOver = false,
     gameOverMessage = 'Game Over',
     matchResult,
+    matchResultBanner: MatchResultBanner = DefaultMatchResultBanner,
     localPlayerId,
     onUndo,
     onRedo,
@@ -42,8 +44,8 @@ export function MatchShell({
     const undoDisabled = !canUndo || onUndo === undefined;
     const redoDisabled = !canRedo || onRedo === undefined;
     const endTurnDisabled = !canEndTurn || onEndTurn === undefined;
-    const resultMessage = resolveMatchResultMessage(matchResult, localPlayerId, gameOverMessage);
-    const shouldShowResult = isGameOver || (matchResult !== undefined && matchResult !== null);
+    const shouldShowResolvedResult = matchResult !== undefined && matchResult !== null;
+    const shouldShowFallbackResult = !shouldShowResolvedResult && isGameOver;
 
     function handleUndo(): void {
         if (onUndo !== undefined) {
@@ -78,24 +80,16 @@ export function MatchShell({
                 aria-label="Match canvas"
                 style={{ minHeight: '20rem', position: 'relative' }}
             >
-                {children}
-                {shouldShowResult && (
-                    <div
-                        data-testid="match-result-banner"
-                        role="status"
-                        style={{
-                            position: 'absolute',
-                            inset: '1rem',
-                            display: 'grid',
-                            placeItems: 'center',
-                            fontSize: '1.25rem',
-                            fontWeight: 700,
-                            pointerEvents: 'none',
-                        }}
-                    >
-                        <span data-testid="match-result-text">{resultMessage}</span>
-                    </div>
+                <React.Suspense fallback={null}>{children}</React.Suspense>
+                {shouldShowResolvedResult && (
+                    <React.Suspense fallback={null}>
+                        <MatchResultBanner
+                            matchResult={matchResult}
+                            {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                        />
+                    </React.Suspense>
                 )}
+                {shouldShowFallbackResult && <DefaultGameOverBanner message={gameOverMessage} />}
             </section>
             <footer
                 aria-label="Match HUD"
@@ -142,14 +136,53 @@ export function MatchShell({
     );
 }
 
+const matchResultBannerStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 'var(--ch-space-md)',
+    display: 'grid',
+    placeItems: 'center',
+    fontSize: 'var(--ch-font-size-lg)',
+    fontWeight: 700,
+    pointerEvents: 'none',
+};
+
+function DefaultMatchResultBanner({
+    matchResult,
+    localPlayerId,
+}: MatchResultBannerProps): React.ReactElement {
+    const outcome = resolveMatchResultOutcome(matchResult, localPlayerId);
+
+    return (
+        <div
+            data-testid="match-result-banner"
+            data-match-result-outcome={outcome}
+            role="status"
+            style={matchResultBannerStyle}
+        >
+            <span data-testid="match-result-text">
+                {resolveMatchResultMessage(matchResult, localPlayerId)}
+            </span>
+        </div>
+    );
+}
+
+function DefaultGameOverBanner({ message }: { readonly message: string }): React.ReactElement {
+    return (
+        <div
+            data-testid="match-result-banner"
+            data-match-result-outcome="unknown"
+            role="status"
+            style={matchResultBannerStyle}
+        >
+            <span data-testid="match-result-text">{message}</span>
+        </div>
+    );
+}
+
 function resolveMatchResultMessage(
-    matchResult: MatchResult | null | undefined,
+    matchResult: MatchResult,
     localPlayerId: PlayerId | undefined,
-    fallback: string,
 ): string {
-    if (matchResult === undefined || matchResult === null) {
-        return fallback;
-    }
     if (matchResult.winnerIds.length === 0) {
         return 'Draw';
     }
@@ -159,17 +192,8 @@ function resolveMatchResultMessage(
     return matchResult.winnerIds.includes(localPlayerId) ? 'You won' : 'You lose';
 }
 
-export type SendAction = (action: EngineAction) => void;
-
-export interface GameScreenProps {
-    readonly snapshot: PlayerSnapshot;
-    readonly localPlayerId?: PlayerId;
-    readonly sendAction: SendAction;
-}
-
-export interface GameScreenRegistry {
-    readonly board: React.ComponentType<GameScreenProps>;
-    readonly hud?: React.ComponentType<GameScreenProps>;
-    readonly screens?: Readonly<Record<string, React.ComponentType<GameScreenProps>>>;
-    readonly transitionOverlay?: React.ComponentType<GameScreenProps>;
-}
+export type {
+    GameScreenProps,
+    GameScreenRegistry,
+    MatchResultBannerProps,
+} from '@chimera/shared/game-screen-contract.js';

@@ -1,6 +1,10 @@
-import type { GameScreenRegistry } from '@chimera/renderer/components/shell/MatchShell.js';
-import { TacticsDemoBoard } from './TacticsDemoBoard.js';
+import React from 'react';
+import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
+
+const TacticsDemoBoard = React.lazy(() => import('./TacticsDemoBoard.js'));
+const TacticsMatchResultBanner = React.lazy(() => import('./TacticsMatchResultBanner.js'));
 
 export const MatchScreenRegistry: GameScreenRegistry = {
     board: TacticsDemoBoard,
+    matchResultBanner: TacticsMatchResultBanner,
 };

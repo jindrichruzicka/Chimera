@@ -9,7 +9,7 @@ import { test, expect } from '../fixtures/direct-match.fixture';
 import { MatchPage } from '../pages/MatchPage';
 
 test.describe('Match result propagation', () => {
-    test('host wins: host sees You won and client sees You lose', async ({
+    test('host wins: host resolves win outcome and client resolves loss outcome', async ({
         hostWindow,
         clientWindow,
     }) => {
@@ -20,14 +20,20 @@ test.describe('Match result propagation', () => {
 
         await expect(hostMatch.matchResultBanner).toBeVisible({ timeout: 30_000 });
         await expect(clientMatch.matchResultBanner).toBeVisible({ timeout: 30_000 });
-        await expect(hostMatch.matchResultText).toHaveText('You won');
-        await expect(clientMatch.matchResultText).toHaveText('You lose');
+        await expect(hostMatch.matchResultBanner).toHaveAttribute(
+            'data-match-result-outcome',
+            'win',
+        );
+        await expect(clientMatch.matchResultBanner).toHaveAttribute(
+            'data-match-result-outcome',
+            'loss',
+        );
     });
 
     test.describe('client first player', () => {
         test.use({ firstPlayer: 'client' });
 
-        test('client wins: client sees You won and host sees You lose', async ({
+        test('client wins: client resolves win outcome and host resolves loss outcome', async ({
             hostWindow,
             clientWindow,
         }) => {
@@ -38,8 +44,14 @@ test.describe('Match result propagation', () => {
 
             await expect(clientMatch.matchResultBanner).toBeVisible({ timeout: 30_000 });
             await expect(hostMatch.matchResultBanner).toBeVisible({ timeout: 30_000 });
-            await expect(clientMatch.matchResultText).toHaveText('You won');
-            await expect(hostMatch.matchResultText).toHaveText('You lose');
+            await expect(clientMatch.matchResultBanner).toHaveAttribute(
+                'data-match-result-outcome',
+                'win',
+            );
+            await expect(hostMatch.matchResultBanner).toHaveAttribute(
+                'data-match-result-outcome',
+                'loss',
+            );
         });
     });
 });

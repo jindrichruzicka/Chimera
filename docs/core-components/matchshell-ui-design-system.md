@@ -27,6 +27,12 @@ export interface GameScreenRegistry {
     readonly hud?: React.ComponentType; // Optional overlay on top of board
     readonly screens?: Readonly<Record<string, React.ComponentType>>; // Named full-screen panels
     readonly transitionOverlay?: React.ComponentType; // Optional; engine default used when absent
+    readonly matchResultBanner?: React.ComponentType<MatchResultBannerProps>; // Optional winner display
+}
+
+export interface MatchResultBannerProps {
+    readonly matchResult: MatchResult;
+    readonly localPlayerId?: PlayerId;
 }
 ```
 
@@ -38,9 +44,11 @@ const BoardScreen = React.lazy(() => import('./BoardScreen'));
 const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 const DiplomacyScreen = React.lazy(() => import('./DiplomacyScreen'));
 const UnitDetailScreen = React.lazy(() => import('./UnitDetailScreen'));
+const MatchResultBanner = React.lazy(() => import('./MatchResultBanner'));
 
 export const MatchScreenRegistry: GameScreenRegistry = {
     board: BoardScreen,
+    matchResultBanner: MatchResultBanner,
     screens: {
         'tech-tree': TechTreeScreen,
         diplomacy: DiplomacyScreen,
@@ -92,9 +100,16 @@ interface MatchShellProps {
  *   4. Pass all engine contexts down the tree (§4.34)
  *   5. Gate screen components behind React.Suspense
  *   6. Delegate scene transitions to SceneRouter (§4.18)
+ *   7. Delegate resolved match-result presentation to registry.matchResultBanner when present
  */
 export function MatchShell({ registry }: MatchShellProps): JSX.Element;
 ```
+
+When `PlayerSnapshot.matchResult` is non-null, `MatchShell` renders `registry.matchResultBanner`
+with `{ matchResult, localPlayerId }`. If the game omits the slot, `MatchShell` uses the engine
+fallback text (`You won`, `You lose`, or `Draw`). Game-provided result banners should expose
+`data-testid="match-result-banner"` on the banner root and `data-testid="match-result-text"` on the
+primary message to keep Playwright page objects stable across games.
 
 ### Invariants
 

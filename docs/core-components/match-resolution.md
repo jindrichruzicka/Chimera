@@ -38,13 +38,19 @@ The renderer must consume the projected `PlayerSnapshot` value. It must not impo
 
 ## Winner Display
 
-`MatchShell` displays the projected result from the current viewer's perspective:
+`MatchShell` consumes the projected result from the current viewer's perspective. Presentation is
+delegated to `GameScreenRegistry.matchResultBanner` when a game provides that optional slot. The
+game component receives only `{ matchResult, localPlayerId }`, derives game-specific copy locally,
+and remains renderer-only.
+
+If no game banner is registered, `MatchShell` displays the default engine fallback:
 
 - `winnerIds` includes the local player: `You won`
 - `winnerIds` is non-empty and does not include the local player: `You lose`
 - `winnerIds` is empty: `Draw`
 
-The result banner exposes `data-testid="match-result-banner"` and the text node exposes `data-testid="match-result-text"`.
+The result banner exposes `data-testid="match-result-banner"` and the text node exposes
+`data-testid="match-result-text"`, whether rendered by the engine fallback or by a game component.
 
 ## Undo/Redo Semantics
 

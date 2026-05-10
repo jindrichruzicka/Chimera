@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId } from '@chimera/electron/preload/api-types.js';
-import { MatchShell } from './MatchShell';
+import { MatchShell, type MatchResultBannerProps } from './MatchShell';
 
 afterEach(() => {
     cleanup();
@@ -25,6 +25,9 @@ describe('MatchShell page object locators', () => {
         expect(screen.getByTestId('redo')).toBeTruthy();
         expect(screen.getByTestId('end-turn')).toBeTruthy();
         expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(
+            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+        ).toBe('unknown');
         expect(screen.queryByTestId('game-over-banner')).toBeNull();
         expect(screen.getByTestId('hud-tick').textContent).toBe('42');
     });
@@ -109,7 +112,40 @@ describe('MatchShell page object locators', () => {
         );
 
         expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(
+            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+        ).toBe('win');
         expect(screen.getByTestId('match-result-text').textContent).toBe('You won');
+    });
+
+    it('delegates resolved match result rendering to a game-provided banner', () => {
+        const localPlayerId = playerId('p1');
+        const matchResult = { winnerIds: [localPlayerId] };
+        let receivedProps: MatchResultBannerProps | null = null;
+
+        function GameResultBanner(props: MatchResultBannerProps): React.ReactElement {
+            receivedProps = props;
+            return (
+                <div data-testid="match-result-banner" role="status">
+                    <span data-testid="match-result-text">Custom tactics victory</span>
+                </div>
+            );
+        }
+
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                localPlayerId={localPlayerId}
+                matchResult={matchResult}
+                matchResultBanner={GameResultBanner}
+            />,
+        );
+
+        expect(receivedProps).toEqual({ matchResult, localPlayerId });
+        expect(screen.getByTestId('match-result-text').textContent).toBe('Custom tactics victory');
     });
 
     it('shows You lose when the local player is not a winner', () => {
@@ -125,6 +161,9 @@ describe('MatchShell page object locators', () => {
         );
 
         expect(screen.getByTestId('match-result-text').textContent).toBe('You lose');
+        expect(
+            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+        ).toBe('loss');
     });
 
     it('shows Draw when matchResult has no winners', () => {
@@ -140,6 +179,9 @@ describe('MatchShell page object locators', () => {
         );
 
         expect(screen.getByTestId('match-result-text').textContent).toBe('Draw');
+        expect(
+            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+        ).toBe('draw');
     });
 
     it('shows neutral message when localPlayerId is undefined (unknown viewer)', () => {
@@ -154,5 +196,39 @@ describe('MatchShell page object locators', () => {
         );
 
         expect(screen.getByTestId('match-result-text').textContent).toBe('Match ended');
+    });
+
+    it('engine fallback banner uses design tokens for spacing and font size', () => {
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                matchResult={{ winnerIds: [] }}
+            />,
+        );
+
+        const banner = screen.getByTestId('match-result-banner');
+        const style = banner.getAttribute('style') ?? '';
+        expect(style).toContain('var(--ch-space-md)');
+        expect(style).toContain('var(--ch-font-size-lg)');
+    });
+
+    it('engine fallback game-over banner uses design tokens for spacing and font size', () => {
+        render(
+            <MatchShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                gameOverMessage="Game Over"
+            />,
+        );
+
+        const banner = screen.getByTestId('match-result-banner');
+        const style = banner.getAttribute('style') ?? '';
+        expect(style).toContain('var(--ch-space-md)');
+        expect(style).toContain('var(--ch-font-size-lg)');
     });
 });
