@@ -108,7 +108,7 @@ interface MatchShellProps {
  * Responsibilities:
  *   1. Mount active screen from registry (driven by useActiveScreen)
  *   2. Build engine-owned HUD props and render registry.hud when present
- *   3. Render engine chrome: SeatSwitcher, PerfHud, ChatPanel, ToastHost
+ *   3. Render engine chrome: PerfHud, ChatPanel, ToastHost
  *   4. Pass all engine contexts down the tree (§4.34)
  *   5. Gate screen components behind React.Suspense
  *   6. Delegate scene transitions to SceneRouter (§4.18)

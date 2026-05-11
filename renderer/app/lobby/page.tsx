@@ -8,7 +8,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlayerList } from '../../components/shell/PlayerList';
-import { SeatSwitcher } from '../../components/shell/SeatSwitcher';
 import { Button } from '../../components/ui/Button';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
@@ -238,8 +237,6 @@ export default function LobbyPage() {
                         Error: {error}
                     </div>
                 )}
-
-                {lobbyState !== null && <SeatSwitcher />}
 
                 {!lobbyState ? (
                     <div>

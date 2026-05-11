@@ -178,14 +178,6 @@ describe('window.__chimera.game — contract', () => {
         expect(sendCalls[0]?.args[0]).toBe(action);
     });
 
-    it('switchActiveSeat() invokes chimera:game:switch-seat with the playerId', async () => {
-        await api.game.switchActiveSeat(playerId('p2'));
-
-        expect(invokeCalls).toEqual([
-            { channel: 'chimera:game:switch-seat', args: [playerId('p2')] },
-        ]);
-    });
-
     it('onSnapshot() registers on chimera:game:snapshot; Unsubscribe removes the listener', () => {
         const seen: PlayerSnapshot[] = [];
         const unsubscribe = api.game.onSnapshot((snapshot) => {

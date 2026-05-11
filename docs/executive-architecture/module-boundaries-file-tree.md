@@ -209,7 +209,6 @@ chimera/
 │   │   │   ├── MatchShell.tsx       # Hosts the active game's screen registry; game-agnostic
 │   │   │   ├── SceneRouter.tsx      # Watches sceneId / sceneTransition; see §4.18
 │   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
-│   │   │   ├── SeatSwitcher.tsx     # Local multi-seat UI for pass-and-play
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
 │   │   │   ├── ToastHost.tsx        # Renders transient notifications; see §4.30
 │   │   │   ├── ChatPanel.tsx        # Lobby + in-match chat UI; see §4.29

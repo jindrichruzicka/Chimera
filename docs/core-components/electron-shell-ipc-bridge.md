@@ -48,11 +48,6 @@ interface GameAPI {
     onSnapshot(listener: (snapshot: PlayerSnapshot) => void): () => void;
     /** Subscribe to action rejection notifications. */
     onActionRejected(listener: (rejection: ActionRejection) => void): () => void;
-    /**
-     * Switches which seat the local machine is actively controlling.
-     * Used for pass-and-play (local multi-seat) — see §4.24.
-     */
-    switchActiveSeat(playerId: PlayerId): void;
 }
 
 interface ActionRejection {
@@ -229,7 +224,7 @@ Every `ipcMain.handle` / `ipcRenderer.invoke` call uses a `chimera:<namespace>/<
 
 | Namespace          | Example channels                                                            |
 | ------------------ | --------------------------------------------------------------------------- |
-| `chimera:game`     | `chimera:game/send-action`, `chimera:game/switch-active-seat`               |
+| `chimera:game`     | `chimera:game/send-action`, `chimera:game/get-current-snapshot`             |
 | `chimera:lobby`    | `chimera:lobby/host`, `chimera:lobby/join`, `chimera:lobby/leave`           |
 | `chimera:saves`    | `chimera:saves/list`, `chimera:saves/save`, `chimera:saves/load`            |
 | `chimera:settings` | `chimera:settings/get`, `chimera:settings/update`, `chimera:settings/reset` |

@@ -4,7 +4,7 @@
  *
  * Verifies the two-local-seat pass-and-play flow: ending a turn automatically
  * hands the same host window to the next local game seat without a manual
- * seat-switcher click.
+ * handoff click.
  *
  * Invariants covered:
  *   #3 — GameSnapshot never leaves the host's main process; PlayerSnapshot is

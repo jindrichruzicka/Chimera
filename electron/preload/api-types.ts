@@ -365,7 +365,7 @@ export type PlayerProfile = EngineProfile;
 
 /**
  * A lightweight entry returned by {@link ProfileAPI.listLocalSlots}.
- * Used by `SeatSwitcher` to populate pass-and-play seat choices.
+ * Used by profile management UI to list locally persisted identities.
  */
 export interface LocalProfileSlot {
     readonly localProfileId: string;
@@ -394,13 +394,13 @@ export interface ProfileAPI {
     ): Unsubscribe;
     /**
      * List all local profile slots on this machine.
-     * Used by `SeatSwitcher` for pass-and-play multi-seat support (§4.24).
+     * Used by profile management UI to present locally persisted identities.
      */
     listLocalSlots(): Promise<readonly LocalProfileSlot[]>;
     /**
      * Switch the active local profile to the given slot.
-     * Used by `SeatSwitcher` — fires `chimera:profile:switch-slot` which
-     * calls `ProfileManager.switchLocalSlot()` on the main side (§4.24).
+     * Fires `chimera:profile:switch-slot` which calls
+     * `ProfileManager.switchLocalSlot()` on the main side (§4.24).
      */
     switchLocalSlot(localProfileId: string): Promise<void>;
 }
@@ -510,8 +510,6 @@ export interface GameAPI {
     onActionRejected(cb: (rejection: ActionRejection) => void): Unsubscribe;
     /** Stream of verified commitment reveals from the main-process trust gate. */
     onReveal(cb: (reveal: CommitmentReveal) => void): Unsubscribe;
-    /** Local multi-seat (pass-and-play): switch the active viewer for the current renderer. */
-    switchActiveSeat(playerId: PlayerId): Promise<void>;
     /**
      * Returns the set of action type strings whose `ActionDefinition.predictable`
      * field is `true` in the main-process `ActionRegistry`.

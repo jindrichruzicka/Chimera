@@ -7,10 +7,6 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
-import type {
-    LocalProfileSlot,
-    ProfileSwitcherApi,
-} from '../../components/shell/useProfileSwitcher';
 
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -40,15 +36,6 @@ interface MockLobbyUiStoreState {
 let mockLocalSeatIds: readonly string[] = [];
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
-let mockProfileSlots: readonly LocalProfileSlot[] = [];
-const mockSwitchToProfile = vi.fn(async () => undefined);
-
-vi.mock('../../components/shell/useProfileSwitcher', () => ({
-    useProfileSwitcher: (): ProfileSwitcherApi => ({
-        slots: mockProfileSlots,
-        switchToProfile: mockSwitchToProfile,
-    }),
-}));
 
 vi.mock('../../state/lobbyStore', () => ({
     useLobbyStore: (selector: (state: MockLobbyStoreState) => unknown) =>
@@ -107,8 +94,6 @@ describe('LobbyPage pending actions', () => {
         mockLocalSeatIds = [];
         mockLocalPlayerId = null;
         mockLobbyState = null;
-        mockProfileSlots = [];
-        mockSwitchToProfile.mockReset();
         mockPush.mockReset();
 
         Object.defineProperty(window, '__chimera', {
@@ -320,47 +305,6 @@ describe('LobbyPage pending actions', () => {
         );
     });
 
-    it('does not render SeatSwitcher outside an active session', () => {
-        mockProfileSlots = [
-            { localProfileId: 'local-a', displayName: 'Alice' },
-            { localProfileId: 'local-b', displayName: 'Bob' },
-        ];
-        mockLobbyState = null;
-
-        renderLobbyPage();
-
-        expect(screen.queryByTestId('seat-switcher')).toBeNull();
-    });
-
-    it('renders SeatSwitcher when session exists and there is more than one local slot', () => {
-        mockProfileSlots = [
-            { localProfileId: 'local-a', displayName: 'Alice' },
-            { localProfileId: 'local-b', displayName: 'Bob' },
-        ];
-        mockLobbyState = {
-            info: {
-                sessionId: 'session-1',
-                hostId: 'p1',
-                gameId: 'tactics',
-            },
-            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
-        };
-
-        renderLobbyPage();
-
-        expect(screen.getByTestId('seat-switcher')).toBeTruthy();
-        expect(screen.getByTestId('seat-btn-local-a')).toBeTruthy();
-        expect(screen.getByTestId('seat-btn-local-b')).toBeTruthy();
-    });
-
-    it('does not render SeatSwitcher when there is only one local slot', () => {
-        mockProfileSlots = [{ localProfileId: 'local-a', displayName: 'Alice' }];
-
-        renderLobbyPage();
-
-        expect(screen.queryByTestId('seat-switcher')).toBeNull();
-    });
-
     it('sets stubbed local seat ids after successful host', async () => {
         const host = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 
@@ -401,7 +345,6 @@ describe('Start Match button enable/disable', () => {
                 { playerId: 'p2', displayName: 'Client', ready: false },
             ],
         };
-        mockProfileSlots = [];
         mockLocalSeatIds = [];
 
         Object.defineProperty(window, '__chimera', {

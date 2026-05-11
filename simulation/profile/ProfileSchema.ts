@@ -97,7 +97,7 @@ export type PlayerProfile = GameProfileSchema<EngineProfile>;
  * Method semantics:
  *   - `load`            — Returns null when the profile does not exist.
  *   - `save`            — Atomic write (tmp-file + rename).
- *   - `listLocalSlots`  — Lightweight listing for pass-and-play seat switching.
+ *   - `listLocalSlots`  — Lightweight listing of locally persisted profiles.
  *   - `delete`          — Removes a profile slot permanently.
  */
 export interface ProfileRepository {

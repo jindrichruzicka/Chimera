@@ -51,7 +51,7 @@ renderer/
 │   ├── layout.tsx            # Root layout with ConnectionStatusIndicator
 │   ├── page.tsx              # Main-menu shell
 │   ├── lobby/
-│   │   └── page.tsx          # Lobby UI — host/join/leave, PlayerList, SeatSwitcher
+│   │   └── page.tsx          # Lobby UI — host/join/leave, PlayerList
 │   ├── saves/
 │   │   └── page.tsx          # Save/Load screen — slot list, save, load, delete, crash-recovery banner
 │   └── settings/
@@ -126,7 +126,7 @@ simulation/
 **Identity & lobby**
 
 - Client-attested player profiles (avatar, display name, locale) with host-side sanitiser.
-- `PlayerDirectory` aggregates all lobby participants; local seat-switcher for pass-and-play.
+- `PlayerDirectory` aggregates all lobby participants; pass-and-play handoff follows projected turn ownership.
 - Lobby browse/discovery capability (optional, provider-specific).
 
 **Input & UI**

@@ -5,7 +5,6 @@ import {
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
     GAME_REVEAL_CHANNEL,
-    GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     LOBBY_HOST_CHANNEL,
@@ -278,41 +277,6 @@ describe('registerGameHandlers', () => {
         expect(sends).toEqual([]);
     });
 
-    it('registers chimera:game:switch-seat as an invoke handler that delegates to seatSwitchManager', async () => {
-        const stub = makeGameIpcMainStub();
-        const switchActiveSeat = vi.fn(async () => undefined);
-        registerGameHandlers({
-            ipcMain: stub.ipcMain,
-            seatSwitchManager: {
-                switchActiveSeat,
-            },
-        });
-
-        const handler = stub.handled.get(GAME_SWITCH_SEAT_CHANNEL);
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.({}, 'p2'))).resolves.toBeUndefined();
-        expect(switchActiveSeat).toHaveBeenCalledWith('p2');
-    });
-
-    it('propagates domain errors from seatSwitchManager.switchActiveSeat', async () => {
-        const stub = makeGameIpcMainStub();
-        const domainError = new Error('Seat switch rejected: player is not a local seat');
-        registerGameHandlers({
-            ipcMain: stub.ipcMain,
-            seatSwitchManager: {
-                switchActiveSeat: async () => {
-                    throw domainError;
-                },
-            },
-        });
-
-        const handler = stub.handled.get(GAME_SWITCH_SEAT_CHANNEL);
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.({}, 'p99'))).rejects.toThrow(
-            'Seat switch rejected: player is not a local seat',
-        );
-    });
-
     it('registers exactly the game request channels (snapshot is push-only, not registered here)', () => {
         const stub = makeGameIpcMainStub();
         registerGameHandlers({ ipcMain: stub.ipcMain });
@@ -321,7 +285,6 @@ describe('registerGameHandlers', () => {
         // from main → renderer via `webContents.send`. They must NOT appear as
         // main-side listeners or invoke handlers.
         expect([...stub.handled.keys()]).toEqual([
-            GAME_SWITCH_SEAT_CHANNEL,
             GAME_PREDICTABLE_TYPES_CHANNEL,
             GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
         ]);
@@ -1279,19 +1242,6 @@ describe('inbound IPC request validation', () => {
             expect(payload.tick).toBe(-1);
             expect(payload.actionType).toBeUndefined();
         }
-    });
-
-    it('chimera:game:switch-seat rejects a non-string or empty playerId', async () => {
-        const stub = makeGameIpcMainStub();
-        registerGameHandlers({ ipcMain: stub.ipcMain });
-        const handler = stub.handled.get(GAME_SWITCH_SEAT_CHANNEL);
-
-        await expect(Promise.resolve().then(() => handler?.({}, ''))).rejects.toBeInstanceOf(
-            IpcRequestValidationError,
-        );
-        await expect(Promise.resolve().then(() => handler?.({}, 42))).rejects.toBeInstanceOf(
-            IpcRequestValidationError,
-        );
     });
 
     it('chimera:lobby:host rejects a malformed HostLobbyParams', async () => {

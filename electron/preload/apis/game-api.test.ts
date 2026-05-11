@@ -4,7 +4,6 @@ import {
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
-    GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     createGameApi,
@@ -112,27 +111,6 @@ describe('createGameApi', () => {
             const result = api.sendAction(makeAction());
 
             expect(result).toBeUndefined();
-        });
-    });
-
-    describe('switchActiveSeat()', () => {
-        it('invokes chimera:game:switch-seat with the playerId argument', async () => {
-            const stub = makeIpcStub();
-            const api = createGameApi(stub.port);
-
-            await api.switchActiveSeat(playerId('p2'));
-
-            expect(stub.invocations).toEqual([
-                { channel: GAME_SWITCH_SEAT_CHANNEL, arg: playerId('p2') },
-            ]);
-        });
-
-        it('resolves to void once the main-side handler replies', async () => {
-            const stub = makeIpcStub();
-            stub.invokeResults.set(GAME_SWITCH_SEAT_CHANNEL, undefined);
-            const api = createGameApi(stub.port);
-
-            await expect(api.switchActiveSeat(playerId('p1'))).resolves.toBeUndefined();
         });
     });
 

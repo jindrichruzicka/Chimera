@@ -31,7 +31,7 @@ Implement `LobbyManager` with injected `MultiplayerProvider`. Wire `chimera:host
 
 ## F12 — Lobby UI and State Sync `§4.4 renderer/state/lobbyStore.ts`
 
-Implement `lobbyStore` (Zustand). Build `lobby/page.tsx` with host / join / leave flows, player list with ready states, connection status indicator, and `SeatSwitcher` for pass-and-play.
+Implement `lobbyStore` (Zustand). Build `lobby/page.tsx` with host / join / leave flows, player list with ready states, connection status indicator, and snapshot-driven pass-and-play handoff.
 
 ---
 

@@ -178,11 +178,11 @@ export class ProfileManager {
 
     /**
      * Loads the profile identified by `id` and activates it as the current
-     * profile (pass-and-play seat switch, §4.24).
+     * profile slot (§4.24).
      *
      * Identical to `getLocal` in effect — exists as a separate method so call
-     * sites that mean "switch seat" are distinguishable from call sites that
-     * mean "load profile on boot".
+     * sites that mean "switch local profile" are distinguishable from call
+     * sites that mean "load profile on boot".
      *
      * Throws `ProfileNotFoundError` when the requested profile does not exist.
      */

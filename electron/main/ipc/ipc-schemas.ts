@@ -120,7 +120,7 @@ export const SlotIdSchema = z
     )
     .transform(toSlotId);
 
-/** Schema for a single `playerId` argument (e.g. `chimera:game:switch-seat`). */
+/** Schema for `playerId` fields inside validated IPC payloads. */
 export const PlayerIdSchema = NonEmptyStringSchema.transform(playerId);
 
 const LobbyAgentSlotSchema = z

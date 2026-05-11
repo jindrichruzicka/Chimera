@@ -21,7 +21,6 @@ import type {
     CommitmentReveal,
     EngineAction,
     GameAPI,
-    PlayerId,
     PlayerSnapshot,
     Unsubscribe,
 } from '../api-types.js';
@@ -60,9 +59,6 @@ export const GAME_ACTION_REJECTED_CHANNEL = 'chimera:game:action-rejected';
  * reveals that passed `CommitmentScheme.verify()`.
  */
 export const GAME_REVEAL_CHANNEL = 'chimera:game:reveal';
-
-/** `ipcRenderer.invoke` target for {@link GameAPI.switchActiveSeat}. */
-export const GAME_SWITCH_SEAT_CHANNEL = 'chimera:game:switch-seat';
 
 /**
  * `ipcRenderer.invoke` target for {@link GameAPI.getCurrentSnapshot}.
@@ -131,9 +127,6 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
                 CommitmentRevealSchema,
                 cb,
             ),
-        switchActiveSeat: async (playerId: PlayerId): Promise<void> => {
-            await ipc.invoke(GAME_SWITCH_SEAT_CHANNEL, playerId);
-        },
         getPredictableActionTypes: (): Promise<readonly string[]> =>
             ipc
                 .invoke(GAME_PREDICTABLE_TYPES_CHANNEL)

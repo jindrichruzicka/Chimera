@@ -83,7 +83,6 @@ function makeApi(
         onSnapshot: onSnapshotSpy,
         onActionRejected: onActionRejectedSpy,
         onReveal: onRevealSpy,
-        switchActiveSeat: vi.fn(),
         getPredictableActionTypes: getPredictableActionTypesSpy,
         getCurrentSnapshot: vi.fn<() => Promise<PlayerSnapshot | null>>(() =>
             Promise.resolve(null),

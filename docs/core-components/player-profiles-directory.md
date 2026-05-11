@@ -172,7 +172,9 @@ All renderers: profileStore.directory = { host: A, clientB: B' }
 
 ## Pass-and-Play Multi-Seat
 
-`ProfileRepository.listLocalSlots()` lists all profiles on the local machine. `SeatSwitcher` reads this list and lets one physical player swap `localProfileId`s between turns. Each seat attests its own profile to the host identically to a remote client.
+Pass-and-play multi-seat handoff is driven by the host's projected `PlayerSnapshot.isMyTurn` value. When a local seat ends its turn, `engine:end_turn` advances the authoritative turn clock, the host reprojects the next local seat's `PlayerSnapshot`, and the renderer enables controls from that snapshot without a manual viewer-switch IPC call.
+
+`ProfileRepository.listLocalSlots()` still lists profiles persisted on the local machine for profile management. Each local seat attests its own profile to the host identically to a remote client, but profile-slot selection is separate from turn handoff.
 
 ---
 

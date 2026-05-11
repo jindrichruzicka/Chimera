@@ -7,6 +7,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- Manual pass-and-play seat-switching UI and `chimera:game:switch-seat` IPC; local turn handoff now follows host-projected `PlayerSnapshot.isMyTurn`.
+
 ## [0.5.0] — 2026-05-05
 
 ### Added
@@ -44,7 +48,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Multiplayer Provider Abstraction — `MultiplayerProvider`, `HostTransport`, `ClientTransport`, `HostedSession`, `JoinedSession`, `BrowsableProvider` interfaces; `isBrowsable()` type-narrowing helper; `InMemoryMultiplayerProvider`; `SteamNetworkProvider` stub (F09)
 - LocalWebSocketProvider — `LobbyServer`, `WsHostTransport`, `MessageRouter`, `ServerConnection` (with reconnect and `PlayerId` persistence), `WsClientTransport`; Zod message validation; `maxPayload` guard; `timingSafeEqual` token check; backpressure and REJECT flush (F10)
 - LobbyManager and IPC Wiring — `LobbyManager` with injected `MultiplayerProvider`; `StateBroadcaster` decoupled from ws; `chimera:lobby:*` IPC handlers (`host`, `join`, `leave`, `ready`, `start`); provider-swap smoke test (F11)
-- Lobby UI and State Sync — `lobbyStore` (Zustand); `lobbyStoreBootstrap` IPC subscription; `lobby/page.tsx` with host / join / leave flows; `PlayerList` with per-player ready states; `ConnectionStatusIndicator`; `SeatSwitcher` for pass-and-play (F12)
+- Lobby UI and State Sync — `lobbyStore` (Zustand); `lobbyStoreBootstrap` IPC subscription; `lobby/page.tsx` with host / join / leave flows; `PlayerList` with per-player ready states; `ConnectionStatusIndicator`; manual pass-and-play controls (F12)
 - WebSocket Message Protocol — full typed wire protocol (`ClientMessage`, `ServerMessage`) in `shared/messages.ts`; CRC32 utility (`shared/crc32.ts`); action checksums; `PING`/`PONG` round-trip latency measurement; `SNAPSHOT` broadcast via `StateBroadcaster` → `HostTransport.sendSnapshot()` (F13)
 - Player Profiles and Directory — `ProfileSchema`; `ProfileRepository` interface; `FileProfileRepository` (atomic writes); `InMemoryProfileRepository`; `ProfileManager`; `PlayerDirectory`; `ProfileSanitizer.admit()` (7 rejection types); JOIN attestation; `PROFILE_UPDATE` side-channel with rate limiting; `chimera:profile:*` IPC bridge; `profileStore` Zustand store; pass-and-play multi-seat support (F14)
 

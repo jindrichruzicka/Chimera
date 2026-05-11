@@ -891,7 +891,6 @@ export async function main(): Promise<void> {
     let activeSession: SessionRuntime | null = null;
     let dispatchRendererAction: ((action: ActionEnvelope) => void) | null = null;
     let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
-    let reprojectHostedRendererForSeat: ((playerIdToProject: PlayerId) => void) | null = null;
     let handleHostedLocalSeatAdded: ((entry: LobbyPlayerEntry) => void) | null = null;
 
     // The single primary renderer window, captured when app.whenReady()
@@ -1046,7 +1045,6 @@ export async function main(): Promise<void> {
                 broadcasterRef.current?.broadcast(sessionRuntime.getSnapshot(), viewerId);
             };
             bindHostRendererRecipient(metadata.hostId);
-            reprojectHostedRendererForSeat = projectHostedRendererForSeat;
 
             const switchHostedRendererSeat = async (viewerId: PlayerId): Promise<void> => {
                 await lobbyManager.switchActiveSeat(viewerId);
@@ -1203,7 +1201,6 @@ export async function main(): Promise<void> {
                     activeE2eHooks = undefined;
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
-                    reprojectHostedRendererForSeat = null;
                     handleHostedLocalSeatAdded = null;
                 }
             };
@@ -1323,8 +1320,7 @@ export async function main(): Promise<void> {
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
     });
 
-    // Register the `chimera:game:*` channels. `switch-seat` delegates to the
-    // same LobbyManager instance used by lobby IPC handlers.
+    // Register the `chimera:game:*` channels.
     registerGameHandlers({
         ipcMain,
         actionDispatcher: (action) => {
@@ -1334,12 +1330,6 @@ export async function main(): Promise<void> {
             }
 
             lobbyManager.sendAction(action);
-        },
-        seatSwitchManager: {
-            switchActiveSeat: async (playerIdToSwitch) => {
-                await lobbyManager.switchActiveSeat(playerIdToSwitch);
-                reprojectHostedRendererForSeat?.(playerIdToSwitch);
-            },
         },
         actionRegistry: gameRegistry,
         getCurrentSnapshot: () => lastSentPlayerSnapshot,

@@ -26,7 +26,6 @@ import {
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
-    GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
 } from '../../preload/apis/game-api.js';
@@ -83,7 +82,6 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     LobbyReadyStateSchema,
-    PlayerIdSchema,
     SaveRequestSchema,
     SlotIdSchema,
     SwitchLocalSlotRequestSchema,
@@ -110,7 +108,6 @@ export {
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
-    GAME_SWITCH_SEAT_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     LOBBY_HOST_CHANNEL,
@@ -273,10 +270,6 @@ export interface RegisterGameHandlersOptions {
     readonly ipcMain: GameHandlersIpcMain;
     /** Dispatches a validated action envelope to the live host session. */
     readonly actionDispatcher?: (action: EngineAction) => void;
-    /** Main-process authority for local pass-and-play seat switching. */
-    readonly seatSwitchManager?: {
-        switchActiveSeat(playerId: PlayerId): Promise<void>;
-    };
     /**
      * Optional `ActionRegistry`-shaped authority for the
      * `chimera:game:predictable-action-types` channel. When provided, the
@@ -342,7 +335,7 @@ function buildIpcValidationRejection(
 
 /**
  * Register every `chimera:game:*` main-side channel. These are deliberate
- * stubs — actual ActionPipeline dispatch, seat switching, and snapshot
+ * stubs — actual ActionPipeline dispatch and snapshot
  * broadcasting are wired in F03–F15. Registering them here lets the preload
  * bridge and renderer already speak their half of the protocol without
  * racing the later wiring.
@@ -355,20 +348,15 @@ function buildIpcValidationRejection(
  *   - #3: `GameSnapshot` never crosses any IPC boundary — the stubs do not
  *         accept or emit a `GameSnapshot`; the eventual snapshot channel
  *         carries `PlayerSnapshot` only.
- *   - #4: The renderer only writes through `sendAction` (and seat switching,
- *         which is state-adjacent but not a game action write).
+ *   - #4: The renderer only writes through `sendAction`.
  *   - #5: Channel constants are imported from `preload/game-api.ts`; there is
  *         no parallel list in this file to drift out of sync.
  */
 export function registerGameHandlers(options: RegisterGameHandlersOptions): void {
-    const { ipcMain, actionDispatcher, seatSwitchManager, actionRegistry } = options;
+    const { ipcMain, actionDispatcher, actionRegistry } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:game:* handlers', {
-        channels: [
-            GAME_SEND_ACTION_CHANNEL,
-            GAME_SWITCH_SEAT_CHANNEL,
-            GAME_PREDICTABLE_TYPES_CHANNEL,
-        ],
+        channels: [GAME_SEND_ACTION_CHANNEL, GAME_PREDICTABLE_TYPES_CHANNEL],
     });
 
     ipcMain.on(GAME_SEND_ACTION_CHANNEL, (event, action) => {
@@ -428,20 +416,6 @@ export function registerGameHandlers(options: RegisterGameHandlersOptions): void
                 actionType: validatedAction.type,
             } satisfies ActionRejection);
         }
-    });
-
-    ipcMain.handle(GAME_SWITCH_SEAT_CHANNEL, (_event, playerId) => {
-        const validatedPlayerId = parseInvokeRequest(
-            PlayerIdSchema,
-            GAME_SWITCH_SEAT_CHANNEL,
-            playerId,
-        );
-
-        if (seatSwitchManager === undefined) {
-            return undefined;
-        }
-
-        return seatSwitchManager.switchActiveSeat(validatedPlayerId);
     });
 
     ipcMain.handle(GAME_PREDICTABLE_TYPES_CHANNEL, () => {
