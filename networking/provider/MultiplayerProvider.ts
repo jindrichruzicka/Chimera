@@ -116,6 +116,8 @@ export interface HostLobbyParams {
 /** Parameters for joining an existing lobby session. */
 export interface JoinLobbyParams {
     readonly address: string;
+    /** Provider-assigned player identity to reclaim after a disconnect. */
+    readonly reconnectPlayerId?: PlayerId;
     /**
      * Raw profile attestation to present to the host's profile gate.
      * Typed as `unknown` here; the host validates it via `ProfileSanitizer.admit()`

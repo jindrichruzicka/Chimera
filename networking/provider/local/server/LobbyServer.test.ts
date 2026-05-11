@@ -34,6 +34,7 @@ function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
 function connectAndJoin(
     server: LobbyServer,
     displayName = 'Tester',
+    reconnectPlayerId?: PlayerId,
 ): Promise<{ ws: WebSocket; playerId: PlayerId }> {
     return new Promise((resolve, reject) => {
         const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
@@ -43,6 +44,7 @@ function connectAndJoin(
                 type: 'JOIN',
                 token: server.token,
                 profile: { playerId: toPlayerId('pending'), displayName },
+                ...(reconnectPlayerId === undefined ? {} : { reconnectPlayerId }),
             };
             ws.send(JSON.stringify(joinMsg));
         });
@@ -128,6 +130,21 @@ describe('LobbyServer — JOIN handshake', () => {
         expect(c1.playerId).not.toBe(c2.playerId);
         c1.ws.close();
         c2.ws.close();
+    });
+
+    it('honors reconnectPlayerId for a previously known disconnected player', async () => {
+        const server = makeServer();
+        await server.ready();
+        const first = await connectAndJoin(server, 'Reconnecting');
+
+        await new Promise<void>((resolve) => {
+            first.ws.once('close', () => resolve());
+            first.ws.close();
+        });
+
+        const second = await connectAndJoin(server, 'Reconnecting', first.playerId);
+        expect(second.playerId).toBe(first.playerId);
+        second.ws.close();
     });
 
     it('sends REJECT when the token is wrong', async () => {

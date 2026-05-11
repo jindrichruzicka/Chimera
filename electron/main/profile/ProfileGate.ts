@@ -79,13 +79,19 @@ export function createProfileGate(directory: PlayerDirectory): ProfileGate {
                 // admit() takes ReadonlySet<string>; LocalProfileId is a branded string
                 // alias — widening to string is safe here because the Set is consumed
                 // only as an opaque membership check inside admit().
-                Object.values(dirSnapshot).map((p) => p.localProfileId as string),
+                Object.entries(dirSnapshot)
+                    .filter(([p]) => p !== pid)
+                    .map(([, profile]) => profile.localProfileId as string),
             );
             const result = admit(rawProfile, existingLocalIds);
             if (!result.ok) {
                 return { admitted: false, reason: `profile:${result.reason}` };
             }
-            directory.add(pid, result.profile);
+            if (dirSnapshot[pid] === undefined) {
+                directory.add(pid, result.profile);
+            } else {
+                directory.update(pid, result.profile);
+            }
             return { admitted: true, displayName: result.profile.displayName };
         },
 

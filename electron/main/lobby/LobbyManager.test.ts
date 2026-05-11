@@ -1151,6 +1151,20 @@ describe('LobbyManager — JOIN profile attestation', () => {
         await manager.closeLobby();
     });
 
+    it('admits a reconnect attestation for the same player profile namespace', () => {
+        const directory = new PlayerDirectory();
+        const gate = createProfileGate(directory);
+        const reconnectingPlayerId = playerId('player-reconnect');
+        const profile = makeValidProfile();
+
+        expect(gate.check(reconnectingPlayerId, profile)).toMatchObject({ admitted: true });
+        expect(gate.check(reconnectingPlayerId, profile)).toMatchObject({ admitted: true });
+
+        const snapshot = directory.snapshot();
+        expect(Object.keys(snapshot)).toStrictEqual([reconnectingPlayerId]);
+        expect(snapshot[reconnectingPlayerId]?.localProfileId).toBe(profile.localProfileId);
+    });
+
     it('rejects a JOIN with an invalid profile (display name too long) and does not add to directory', async () => {
         const directory = new PlayerDirectory();
         const provider = makeProvider();

@@ -1136,12 +1136,21 @@ export async function main(): Promise<void> {
                 }
             };
 
+            const broadcastCurrentMatchSnapshot = (viewerId: PlayerId): void => {
+                const snapshot = sessionRuntime.getSnapshot();
+                if (snapshot.phase === gamePhase('lobby')) {
+                    return;
+                }
+                broadcasterRef.current?.broadcast(snapshot, viewerId);
+            };
+
             handleHostedLocalSeatAdded = (entry): void => {
                 activePlayers.add(entry.playerId);
                 registerSlotAgent(entry.playerId, nextHumanSlotIndex());
                 tryStartGame();
             };
 
+            const registeredPlayers = new Set<PlayerId>(initialPlayerIds);
             for (const slot of initialPlayerSlots) {
                 registerSlotAgent(slot.playerId, slot.slotIndex);
             }
@@ -1149,12 +1158,21 @@ export async function main(): Promise<void> {
 
             const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
                 activePlayers.add(pid);
-                registerSlotAgent(pid, nextHumanSlotIndex());
+                const isReconnect = registeredPlayers.has(pid);
+                if (!isReconnect) {
+                    registeredPlayers.add(pid);
+                    registerSlotAgent(pid, nextHumanSlotIndex());
+                }
                 // Once every expected player has joined and had their agent
                 // registered, notify agents that the game has started
                 // (Invariant #17: projection via host; agents must be fully
                 // wired before onGameStart fires).
                 tryStartGame();
+                // Re-sync only reconnecting peers; first-time joins receive
+                // their first snapshot through normal broadcast flow.
+                if (isReconnect) {
+                    broadcastCurrentMatchSnapshot(pid);
+                }
             });
             const unsubLeft = transport.onPlayerLeft((pid) => {
                 activePlayers.delete(pid);
@@ -1496,10 +1514,14 @@ export async function main(): Promise<void> {
             if (joinAddress === undefined) {
                 return;
             }
+            const reconnectPlayerId = process.env['CHIMERA_E2E_RECONNECT_PLAYER_ID'];
             try {
                 await lobbyManager.joinLobby({
                     address: joinAddress,
                     profile: profileManager.currentAttestation(),
+                    ...(reconnectPlayerId === undefined
+                        ? {}
+                        : { reconnectPlayerId: playerId(reconnectPlayerId) }),
                 });
                 await lobbyManager.updatePlayerReadyState(true);
             } catch (err) {

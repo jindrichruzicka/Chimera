@@ -89,6 +89,7 @@ export type ClientMessage =
     | {
           readonly type: 'JOIN';
           readonly token: string;
+          readonly reconnectPlayerId?: PlayerId;
           /**
            * Raw profile attestation from the joining client.
            * Typed as `Record<string, unknown>` at the transport layer — callers

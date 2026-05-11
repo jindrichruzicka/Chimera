@@ -115,9 +115,15 @@ export class ServerConnection {
      * Rejects if the server sends REJECT, the connection fails, or connect times
      * out after the first attempt.
      */
-    connect(url: string, token: string, profile: unknown): Promise<ConnectResult> {
+    connect(
+        url: string,
+        token: string,
+        profile: unknown,
+        reconnectPlayerId?: PlayerId,
+    ): Promise<ConnectResult> {
         this.url = url;
         this.token = token;
+        this._assignedPlayerId = reconnectPlayerId ?? this._assignedPlayerId;
         // Cast: caller-supplied profile is unknown; server-side Zod schema (ClientMessageSchema)
         // validates the record structure on receipt — widening here is safe.
         this.profile = profile as Record<string, unknown>;
@@ -180,6 +186,9 @@ export class ServerConnection {
                     JSON.stringify({
                         type: 'JOIN',
                         token: this.token,
+                        ...(this._assignedPlayerId === null
+                            ? {}
+                            : { reconnectPlayerId: this._assignedPlayerId }),
                         profile: this.profile!, // profile is always set before attemptConnect
                     } satisfies ClientMessage),
                 );
@@ -212,10 +221,6 @@ export class ServerConnection {
                 if (msg.type === 'WELCOME') {
                     welcomed = true;
                     this._assignedPlayerId = msg.playerId;
-                    // Update profile so reconnect sends the server-assigned ID (T03)
-                    if (this.profile !== null) {
-                        this.profile = { ...this.profile, playerId: msg.playerId };
-                    }
                     // Remove the handshake listener and wire up the ongoing listener
                     ws.off('message', onHandshakeMessage);
                     ws.on('message', (r) => {

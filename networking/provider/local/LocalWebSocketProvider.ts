@@ -102,6 +102,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
                 playerId: toPlayerId('pending'),
                 displayName: 'Player',
             },
+            params.reconnectPlayerId,
         );
 
         const transport = new WsClientTransport(conn, assignedPlayerId);

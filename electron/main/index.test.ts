@@ -1349,6 +1349,150 @@ describe('main', () => {
         );
     });
 
+    it('rebroadcasts the current in-match snapshot to a rejoined player', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main();
+
+        let capturedJoin:
+            | ((entry: { readonly playerId: ReturnType<typeof playerId> }) => void)
+            | undefined;
+        let capturedLeft: ((leftPlayerId: ReturnType<typeof playerId>) => void) | undefined;
+        interface ReconnectTransport {
+            readonly onPlayerJoined: ReturnType<typeof vi.fn>;
+            readonly onPlayerLeft: ReturnType<typeof vi.fn>;
+            readonly onActionReceived: ReturnType<typeof vi.fn>;
+        }
+        const transport: ReconnectTransport = {
+            onPlayerJoined: vi.fn(
+                (cb: (entry: { readonly playerId: ReturnType<typeof playerId> }) => void) => {
+                    capturedJoin = cb;
+                    return () => {};
+                },
+            ),
+            onPlayerLeft: vi.fn((cb: (leftPlayerId: ReturnType<typeof playerId>) => void) => {
+                capturedLeft = cb;
+                return () => {};
+            }),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | {
+                  onSessionHosted?: (
+                      transport: ReconnectTransport,
+                      metadata: {
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly maxPlayers: number;
+                      },
+                  ) => void;
+                  onMatchStartRequested?: (state: {
+                      readonly info: {
+                          readonly sessionId: string;
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly gameId: string;
+                      };
+                      readonly players: readonly {
+                          readonly playerId: ReturnType<typeof playerId>;
+                          readonly displayName: string;
+                          readonly ready: boolean;
+                      }[];
+                  }) => void;
+              }
+            | undefined;
+
+        const hostId = playerId('host-resync');
+        const clientId = playerId('client-resync');
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        capturedJoin?.({ playerId: clientId });
+        options?.onMatchStartRequested?.({
+            info: { sessionId: 'session-resync', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        capturedLeft?.(clientId);
+        capturedJoin?.({ playerId: clientId });
+
+        expect(mockStateBroadcasterInstance.broadcast).toHaveBeenCalledWith(
+            expect.objectContaining({ phase: 'playing', tick: 1 }),
+            clientId,
+        );
+    });
+
+    it('does not rebroadcast the current in-match snapshot for a first-time join', async () => {
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        browserWindowInstances.length = 0;
+
+        await main();
+
+        let capturedJoin:
+            | ((entry: { readonly playerId: ReturnType<typeof playerId> }) => void)
+            | undefined;
+        interface FirstJoinTransport {
+            readonly onPlayerJoined: ReturnType<typeof vi.fn>;
+            readonly onPlayerLeft: ReturnType<typeof vi.fn>;
+            readonly onActionReceived: ReturnType<typeof vi.fn>;
+        }
+        const transport: FirstJoinTransport = {
+            onPlayerJoined: vi.fn(
+                (cb: (entry: { readonly playerId: ReturnType<typeof playerId> }) => void) => {
+                    capturedJoin = cb;
+                    return () => {};
+                },
+            ),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+        const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | {
+                  onSessionHosted?: (
+                      transport: FirstJoinTransport,
+                      metadata: {
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly maxPlayers: number;
+                      },
+                  ) => void;
+                  onMatchStartRequested?: (state: {
+                      readonly info: {
+                          readonly sessionId: string;
+                          readonly hostId: ReturnType<typeof playerId>;
+                          readonly gameId: string;
+                      };
+                      readonly players: readonly {
+                          readonly playerId: ReturnType<typeof playerId>;
+                          readonly displayName: string;
+                          readonly ready: boolean;
+                      }[];
+                  }) => void;
+              }
+            | undefined;
+
+        const hostId = playerId('host-first-join');
+        const clientId = playerId('client-first-join');
+        options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+        options?.onMatchStartRequested?.({
+            info: { sessionId: 'session-first-join', hostId, gameId: 'tactics' },
+            players: [
+                { playerId: hostId, displayName: 'Host', ready: true },
+                { playerId: clientId, displayName: 'Client', ready: true },
+            ],
+        });
+
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        capturedJoin?.({ playerId: clientId });
+
+        expect(mockStateBroadcasterInstance.broadcast).not.toHaveBeenCalledWith(
+            expect.objectContaining({ phase: 'playing' }),
+            clientId,
+        );
+    });
+
     it('starts undo history after engine:start_match so the first tactics move exhausts cleanly', async () => {
         mockLobbyManagerCtor.mockClear();
         mockDefaultStateProjectorCtor.mockClear();

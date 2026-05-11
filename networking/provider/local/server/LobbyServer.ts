@@ -76,6 +76,7 @@ export class LobbyServer implements MessageBus {
     private readonly connectedCbs = new Set<PlayerCallback>();
     private readonly disconnectedCbs = new Set<DisconnectCallback>();
     private latestLobbyState: LobbyState | null = null;
+    private readonly knownPlayers = new Map<PlayerId, LobbyPlayerEntry>();
 
     private readonly opts: LobbyServerOptions;
     private readonly logger: Logger | undefined;
@@ -157,6 +158,7 @@ export class LobbyServer implements MessageBus {
 
     /** Cache and broadcast the authoritative lobby roster for future JOIN welcomes. */
     broadcastLobbyState(state: LobbyState): void {
+        this.rememberPlayers(state.players);
         this.latestLobbyState = state;
         this.broadcast({ type: 'LOBBY_STATE', state });
     }
@@ -303,12 +305,10 @@ export class LobbyServer implements MessageBus {
                     return;
                 }
 
-                // Assign PlayerId (before gate check so gate receives the definitive id)
-                this.idCounter += 1;
-                const pid = toPlayerId(`player-${this.idCounter}`);
+                const pid = this.resolveJoinPlayerId(msg.reconnectPlayerId);
 
                 // Profile gate check (Invariant #61)
-                let displayName: string = pid;
+                let displayName: string = this.knownPlayers.get(pid)?.displayName ?? pid;
                 if (this.joinGate !== null) {
                     const gateResult = this.joinGate(pid, msg.profile);
                     if (!gateResult.admitted) {
@@ -396,7 +396,27 @@ export class LobbyServer implements MessageBus {
             players: [...playersById.values()],
         };
         this.latestLobbyState = lobbyState;
+        this.rememberPlayers(lobbyState.players);
         return lobbyState;
+    }
+
+    private resolveJoinPlayerId(reconnectPlayerId: PlayerId | undefined): PlayerId {
+        if (
+            reconnectPlayerId !== undefined &&
+            !this.connections.has(reconnectPlayerId) &&
+            this.knownPlayers.has(reconnectPlayerId)
+        ) {
+            return reconnectPlayerId;
+        }
+
+        this.idCounter += 1;
+        return toPlayerId(`player-${this.idCounter}`);
+    }
+
+    private rememberPlayers(players: readonly LobbyPlayerEntry[]): void {
+        for (const player of players) {
+            this.knownPlayers.set(player.playerId, player);
+        }
     }
 }
 
