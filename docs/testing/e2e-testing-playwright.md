@@ -80,7 +80,8 @@ export default defineConfig({
     testDir: './tests',
     timeout: 90_000,
     expect: { timeout: 10_000 },
-    fullyParallel: false, // Multiplayer tests bind to fixed localhost ports — run serially
+    fullyParallel: false,
+    workers: 1, // Multiplayer tests bind to fixed localhost ports — run serially
     retries: 1,
     reporter: [
         ['html', { outputFolder: 'playwright-report' }],
@@ -737,7 +738,7 @@ On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed 
 | Concern               | Rule                                                                                                                                            |
 | --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | Test hook surface     | `__e2eHooks` exposes only `dispatchTick` as an active method; all other fields are read-only. All dispatched ticks go through `ActionPipeline`. |
-| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `fullyParallel: false` prevents collision.                                              |
+| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `workers: 1` prevents fixed-port collision.                                             |
 | No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                           |
 | Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                      |
 

@@ -4,7 +4,8 @@ export default defineConfig({
     testDir: './tests',
     timeout: 90_000,
     expect: { timeout: 10_000 },
-    fullyParallel: false, // Multiplayer tests bind to fixed localhost ports — run serially
+    fullyParallel: false,
+    workers: 1, // Multiplayer tests bind to fixed localhost ports — run serially
     retries: 1,
     reporter: [
         ['html', { outputFolder: 'playwright-report' }],

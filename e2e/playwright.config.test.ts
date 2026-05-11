@@ -14,6 +14,10 @@ describe('playwright.config', () => {
         expect(config.fullyParallel).toBe(false);
     });
 
+    it('caps the fixed-port Electron suite to one worker', () => {
+        expect(config.workers).toBe(1);
+    });
+
     it('retries: 1', () => {
         expect(config.retries).toBe(1);
     });
