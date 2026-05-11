@@ -12,6 +12,7 @@
  * Tests written FIRST (red confirmed before implementation).
  */
 
+import { createContext, Script } from 'node:vm';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ElectronApplication } from '@playwright/test';
 
@@ -28,7 +29,11 @@ vi.mock('@playwright/test', () => ({
     _electron: { launch: mockLaunch },
 }));
 
-import { relaunchElectronApplication, type RelaunchConfig } from './relaunch';
+import {
+    captureRelaunchConfig,
+    relaunchElectronApplication,
+    type RelaunchConfig,
+} from './relaunch';
 
 // ---------------------------------------------------------------------------
 // Shared fake ElectronApplication
@@ -36,6 +41,28 @@ import { relaunchElectronApplication, type RelaunchConfig } from './relaunch';
 
 function makeFakeApp(): ElectronApplication {
     return { close: vi.fn() } as unknown as ElectronApplication;
+}
+
+interface SerializedProcessState {
+    readonly argv: readonly string[];
+    readonly env: Readonly<Record<string, string | undefined>>;
+}
+
+function makeSerializedEvaluateApp(processState: SerializedProcessState): ElectronApplication {
+    return {
+        evaluate: vi.fn(async (callback: () => Promise<RelaunchConfig> | RelaunchConfig) => {
+            // Playwright serializes evaluate callbacks into the Electron main process.
+            // Running the callback from source text catches accidental closure captures.
+            const sandbox = createContext({
+                process: {
+                    argv: [...processState.argv],
+                    env: { ...processState.env },
+                },
+            });
+            const result = new Script(`(${callback.toString()})()`).runInContext(sandbox);
+            return (await result) as RelaunchConfig;
+        }),
+    } as unknown as ElectronApplication;
 }
 
 beforeEach(() => {
@@ -47,6 +74,47 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe('relaunchElectronApplication', () => {
+    it('captures only relaunch-safe environment keys, including X11 DISPLAY', async () => {
+        const fakeApp = makeSerializedEvaluateApp({
+            argv: ['/Applications/Electron.app/Contents/MacOS/Electron', '/path/to/main.js'],
+            env: {
+                NODE_ENV: 'test',
+                PATH: '/usr/bin',
+                DISPLAY: ':99',
+                CHIMERA_E2E: '1',
+                CHIMERA_PORT: '7785',
+                CHIMERA_E2E_FOO: 'bar',
+                HOME: '/Users/should-not-forward',
+                SECRET_TOKEN: 'do-not-forward',
+            },
+        });
+
+        const config = await captureRelaunchConfig(fakeApp);
+
+        expect(config.args).toEqual(['/path/to/main.js']);
+        expect(config.env).toMatchObject({
+            NODE_ENV: 'test',
+            PATH: '/usr/bin',
+            DISPLAY: ':99',
+            CHIMERA_E2E: '1',
+            CHIMERA_PORT: '7785',
+            CHIMERA_E2E_FOO: 'bar',
+        });
+        expect(config.env).not.toHaveProperty('HOME');
+        expect(config.env).not.toHaveProperty('SECRET_TOKEN');
+        expect(
+            Object.keys(config.env).every(
+                (key) =>
+                    key === 'CHIMERA_E2E' ||
+                    key === 'CHIMERA_PORT' ||
+                    key === 'DISPLAY' ||
+                    key === 'NODE_ENV' ||
+                    key === 'PATH' ||
+                    key.startsWith('CHIMERA_E2E_'),
+            ),
+        ).toBe(true);
+    });
+
     it('calls electron.launch with the provided args and env', async () => {
         const fakeApp = makeFakeApp();
         mockLaunch.mockResolvedValueOnce(fakeApp);

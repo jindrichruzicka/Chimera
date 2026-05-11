@@ -900,6 +900,7 @@ export async function main(): Promise<void> {
     let dispatchRendererAction: ((action: ActionEnvelope) => void) | null = null;
     let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
     let handleHostedLocalSeatAdded: ((entry: LobbyPlayerEntry) => void) | null = null;
+    let broadcastRestoredSnapshot: (() => void) | null = null;
 
     // The single primary renderer window, captured when app.whenReady()
     // resolves.  Used to target IPC snapshot/reveal messages to the one
@@ -1081,6 +1082,9 @@ export async function main(): Promise<void> {
                 broadcasterRef.current?.broadcast(sessionRuntime.getSnapshot(), viewerId);
             };
             bindHostRendererRecipient(metadata.hostId);
+            broadcastRestoredSnapshot = () => {
+                projectHostedRendererForSeat(boundHostRendererViewerId ?? metadata.hostId);
+            };
 
             const switchHostedRendererSeat = async (viewerId: PlayerId): Promise<void> => {
                 await lobbyManager.switchActiveSeat(viewerId);
@@ -1256,6 +1260,7 @@ export async function main(): Promise<void> {
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
                     handleHostedLocalSeatAdded = null;
+                    broadcastRestoredSnapshot = null;
                 }
             };
         },
@@ -1451,6 +1456,7 @@ export async function main(): Promise<void> {
                     return;
                 }
                 activeSession.applyRestoredFile(file);
+                broadcastRestoredSnapshot?.();
             },
             logger: savesLogger,
             crashRecoveryStatus,

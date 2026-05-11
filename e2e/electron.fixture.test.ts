@@ -46,6 +46,15 @@ describe('electron.fixture', () => {
         expect(config.env['CHIMERA_E2E_INITIAL_URL']).toBeUndefined();
     });
 
+    it('defaults direct-match launches to the match route when initialRoute is omitted', () => {
+        const config = createE2eElectronLaunchConfig({
+            port: '7785',
+            directMatchRole: 'host',
+        });
+
+        expect(config.env['CHIMERA_E2E_INITIAL_URL']).toBe('chimera://renderer/match/');
+    });
+
     it('omits first-player launch configuration by default', () => {
         const config = createE2eElectronLaunchConfig({ port: '7778' });
 

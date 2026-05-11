@@ -120,12 +120,14 @@ export function createE2eElectronLaunchConfig(
         env['CHIMERA_ROLE'] = options.role;
     }
 
-    if (options.initialRoute !== undefined) {
-        const initialRoute = options.initialRoute.endsWith('/')
-            ? options.initialRoute
-            : `${options.initialRoute}/`;
+    const initialRoute =
+        options.initialRoute ?? (options.directMatchRole !== undefined ? '/match' : undefined);
+    if (initialRoute !== undefined) {
+        const initialRouteWithSlash = initialRoute.endsWith('/')
+            ? initialRoute
+            : `${initialRoute}/`;
         env['CHIMERA_E2E_INITIAL_URL'] =
-            `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}${initialRoute}`;
+            `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}${initialRouteWithSlash}`;
     }
 
     if (options.directMatchRole !== undefined) {

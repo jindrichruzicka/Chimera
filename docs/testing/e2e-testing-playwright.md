@@ -60,7 +60,8 @@ e2e/
     ├── undo-redo.spec.ts
     ├── obfuscation.spec.ts
     ├── reconnect.spec.ts
-    └── multiplayer-soak.spec.ts
+    ├── multiplayer-soak.spec.ts
+    └── save-load.spec.ts
 ```
 
 > **Note — Vitest shape-check files in `e2e/` root:** `playwright.config.test.ts` and
@@ -645,6 +646,27 @@ test.describe('Multiplayer soak', () => {
         expect(simTick).toBeGreaterThanOrEqual(1000);
         await expect.poll(() => getSimulationTick(clientApp)).toBeGreaterThanOrEqual(simTick);
         await assertChecksumMatch(hostApp, clientApp);
+    });
+});
+```
+
+### save-load.spec.ts
+
+Single-player persistence spec built on the `saveLoadApp` / `saveLoadWindow` fixture pair. It plays three turns in pass-and-play mode, saves through the preload bridge, captures the relaunch args/env, closes the Electron process, relaunches with the same `--user-data-dir`, loads the saved slot, and asserts that the simulation tick matches the pre-save value.
+
+This spec exercises the save/restore invariants for atomic persistence and restored commitments: it relies on the save IPC returning only after the atomic rename, on the load IPC being the only restore entry point, and on the restored session resuming at the same tick after relaunch.
+
+```typescript
+// e2e/tests/save-load.spec.ts
+import { test, expect } from '../fixtures/electron.fixture';
+import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
+
+test.describe('Save / load', () => {
+    test('tick is restored to pre-save value after relaunch + load', async ({
+        saveLoadApp,
+        saveLoadWindow,
+    }) => {
+        // Play three turns, save, relaunch, load, and assert the tick matches.
     });
 });
 ```

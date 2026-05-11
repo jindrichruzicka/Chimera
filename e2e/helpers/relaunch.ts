@@ -22,6 +22,35 @@ export interface RelaunchConfig {
 }
 
 /**
+ * Capture a relaunch-safe launch config from a live ElectronApplication.
+ *
+ * Only forwards env keys required for relaunch: CHIMERA_E2E, CHIMERA_PORT,
+ * CHIMERA_E2E_*, DISPLAY, NODE_ENV, and PATH. DISPLAY is needed by
+ * headless Linux CI runs that launch Electron through X11. This avoids
+ * forwarding unrelated process secrets from the host environment into the
+ * relaunched instance.
+ */
+export async function captureRelaunchConfig(app: ElectronApplication): Promise<RelaunchConfig> {
+    return app.evaluate(() => ({
+        args: process.argv.slice(1),
+        env: Object.fromEntries(
+            Object.entries(process.env).filter((entry): entry is [string, string] => {
+                const [key, value] = entry;
+                return (
+                    value !== undefined &&
+                    (key === 'CHIMERA_E2E' ||
+                        key === 'CHIMERA_PORT' ||
+                        key === 'DISPLAY' ||
+                        key === 'NODE_ENV' ||
+                        key === 'PATH' ||
+                        key.startsWith('CHIMERA_E2E_'))
+                );
+            }),
+        ),
+    }));
+}
+
+/**
  * Launches a new Electron process using a previously captured launch config.
  *
  * @param config  - Args and env captured from the original process.

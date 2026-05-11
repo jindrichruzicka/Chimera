@@ -1,7 +1,7 @@
 import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/game.fixture';
 import { getSimulationTick } from '../helpers/ipc-spy';
-import { relaunchElectronApplication, type RelaunchConfig } from '../helpers/relaunch';
+import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
 import { MatchPage } from '../pages/MatchPage';
 
 const TICK_TOLERANCE = 2;
@@ -24,17 +24,6 @@ interface RendererChimeraBridge {
 }
 
 type RendererGlobal = typeof globalThis & { readonly __chimera: RendererChimeraBridge };
-
-async function captureRelaunchConfig(app: ElectronApplication): Promise<RelaunchConfig> {
-    return app.evaluate(() => ({
-        args: process.argv.slice(1),
-        env: Object.fromEntries(
-            Object.entries(process.env).filter(
-                (entry): entry is [string, string] => entry[1] !== undefined,
-            ),
-        ),
-    }));
-}
 
 async function localPlayerId(page: Page): Promise<string> {
     const playerId = await page.evaluate(() =>
