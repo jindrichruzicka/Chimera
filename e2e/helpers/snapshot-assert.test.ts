@@ -269,6 +269,30 @@ describe('assertChecksumMatch', () => {
         expect(vi.mocked(ipcSpy.getLastBroadcastChecksums)).toHaveBeenNthCalledWith(1, hostApp);
         expect(vi.mocked(ipcSpy.getLastBroadcastChecksums)).toHaveBeenNthCalledWith(2, clientApp);
     });
+
+    it('rejects when the client process exposes 0 viewer checksums (e.g., reconnect scenario)', async () => {
+        // A client with no checksums yet (not initialized, or lingering old viewer ids).
+        // assertChecksumMatch currently constrains to exactly 1 viewer per client.
+        vi.mocked(ipcSpy.getLastBroadcastChecksums)
+            .mockResolvedValueOnce({ host: 10, client: 42 })
+            .mockResolvedValueOnce({}); // No checksums on client
+
+        await expect(assertChecksumMatch(makeApp(), makeApp())).rejects.toThrow(
+            /API Contract Violation.*requires exactly one viewer per client.*Got 0 viewer checksum entries/,
+        );
+    });
+
+    it('rejects when the client process exposes >1 viewer checksums (e.g., spectator or 3-player variant)', async () => {
+        // A client exposing multiple viewer ids (e.g., spectator mode, or bug where old viewer id lingers).
+        // assertChecksumMatch currently constrains to exactly 1 viewer per client.
+        vi.mocked(ipcSpy.getLastBroadcastChecksums)
+            .mockResolvedValueOnce({ host: 10, client: 42 })
+            .mockResolvedValueOnce({ client1: 42, client2: 42 }); // Multiple viewers on client
+
+        await expect(assertChecksumMatch(makeApp(), makeApp())).rejects.toThrow(
+            /API Contract Violation.*requires exactly one viewer per client.*Got 2 viewer checksum entries/,
+        );
+    });
 });
 
 // ---------------------------------------------------------------------------

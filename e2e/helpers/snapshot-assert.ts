@@ -96,8 +96,21 @@ export function assertNoLeakedFields(
  * host checksum keyed by the client's viewer id, avoiding reliance on Stage-7
  * player-map broadcast ordering.
  *
+ * **CONSTRAINT: This helper enforces a 2-player (host + 1 client) session topology.**
+ * The client process must expose exactly one viewer id and checksum entry.
+ * If a client has 0 checksums (e.g., reconnect scenario with lingering old viewer ids,
+ * or initialization delay), or >1 checksums (e.g., spectator mode, or a multi-client
+ * test variant), this assertion will reject with a clear message indicating the
+ * violation of the 2-player contract.
+ *
+ * For tests that need 3+ players or spectator logic, either:
+ *   1. Extend this helper with an overload that accepts a list of player ids to validate, or
+ *   2. Use getLastBroadcastChecksums + custom assertion logic instead.
+ *
  * @param hostApp   - ElectronApplication instance for the host.
  * @param clientApp - ElectronApplication instance for the client.
+ * @throws when client exposes != 1 viewer checksum (violates 2-player contract)
+ * @throws when host and client checksums do not match
  */
 export async function assertChecksumMatch(
     hostApp: ElectronApplication,
@@ -108,10 +121,15 @@ export async function assertChecksumMatch(
         getLastBroadcastChecksums(clientApp),
     ]);
     const clientEntries = Object.entries(clientChecksums);
-    expect(
-        clientEntries,
-        `Expected client process to expose exactly one viewer checksum, got ${clientEntries.length}`,
-    ).toHaveLength(1);
+
+    // Validate 2-player contract with a clear API contract violation message.
+    if (clientEntries.length !== 1) {
+        throw new Error(
+            `[API Contract Violation] assertChecksumMatch requires exactly one viewer per client ` +
+                `(2-player session). Got ${clientEntries.length} viewer checksum entries. ` +
+                `Tip: For multi-player or spectator tests, use getLastBroadcastChecksums directly.`,
+        );
+    }
 
     const clientEntry = clientEntries[0]!;
     const [clientId, clientChecksum] = clientEntry;
