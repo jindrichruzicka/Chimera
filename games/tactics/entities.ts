@@ -24,12 +24,14 @@ export function buildInitialTacticsEntities(
             x: tacticsGridCoordinate(index),
             y: tacticsGridCoordinate(0),
             hp: 1,
+            visibleTo: [playerId],
         } satisfies BaseEntityState & {
             readonly kind: 'unit';
             readonly ownerId: PlayerId;
             readonly x: ReturnType<typeof tacticsGridCoordinate>;
             readonly y: ReturnType<typeof tacticsGridCoordinate>;
             readonly hp: number;
+            readonly visibleTo: readonly PlayerId[];
         };
 
         entities[unitId] = tacticsUnit;

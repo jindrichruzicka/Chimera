@@ -2,7 +2,11 @@
 
 import React, { useState } from 'react';
 import type { GameScreenProps } from '@chimera/shared/game-screen-contract.js';
-import { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
+import {
+    TACTICS_ATTACK_ACTION,
+    TACTICS_MOVE_UNIT_ACTION,
+    TACTICS_REVEAL_TILE_ACTION,
+} from '@chimera/shared/tactics.js';
 
 interface TacticsUnit {
     readonly id: string;
@@ -58,6 +62,7 @@ export function TacticsDemoBoard({
 
     const canUseControls = localPlayerId !== undefined;
     const canMove = canUseControls && selectedUnitId === demoUnit.id;
+    const canReveal = canUseControls && selectedUnitId === demoUnit.id;
     const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
     const attackTarget =
         canUseControls && selectedUnit !== undefined
@@ -101,6 +106,29 @@ export function TacticsDemoBoard({
                 }}
             >
                 Move
+            </button>
+            <button
+                data-testid="reveal-target"
+                type="button"
+                disabled={!canReveal}
+                onClick={() => {
+                    if (localPlayerId === undefined) {
+                        return;
+                    }
+                    sendAction({
+                        type: TACTICS_REVEAL_TILE_ACTION,
+                        playerId: localPlayerId,
+                        tick: snapshot.tick,
+                        payload: {
+                            scoutId: demoUnit.id,
+                            x: demoUnit.x + 1,
+                            y: demoUnit.y,
+                        },
+                    });
+                    setSelectedUnitId(null);
+                }}
+            >
+                Reveal
             </button>
             {attackTarget !== undefined && (
                 <button

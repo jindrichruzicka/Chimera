@@ -14,6 +14,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
+    TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera/shared/tactics.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
 
@@ -21,11 +22,25 @@ afterEach(() => {
     cleanup();
 });
 
-function makeSnapshot(): PlayerSnapshot {
+function makeSnapshot(options: { readonly includeEnemy?: boolean } = {}): PlayerSnapshot {
     const viewerId = playerId('p1');
     const opponentId = playerId('p2');
     const unitId = entityId(TACTICS_DEFAULT_UNIT_ID_VALUE);
     const enemyUnitId = entityId('unit-2');
+    const entities: PlayerSnapshot['entities'] = {
+        [unitId]: { id: unitId, kind: 'unit', ownerId: viewerId, x: 0, y: 0, hp: 1 },
+    };
+
+    if (options.includeEnemy ?? true) {
+        entities[enemyUnitId] = {
+            id: enemyUnitId,
+            kind: 'unit',
+            ownerId: opponentId,
+            x: 1,
+            y: 0,
+            hp: 1,
+        };
+    }
 
     return {
         tick: 7,
@@ -34,17 +49,7 @@ function makeSnapshot(): PlayerSnapshot {
             [viewerId]: { id: viewerId },
             [opponentId]: { id: opponentId },
         },
-        entities: {
-            [unitId]: { id: unitId, kind: 'unit', ownerId: viewerId, x: 0, y: 0, hp: 1 },
-            [enemyUnitId]: {
-                id: enemyUnitId,
-                kind: 'unit',
-                ownerId: opponentId,
-                x: 1,
-                y: 0,
-                hp: 1,
-            },
-        },
+        entities,
         phase: gamePhase('playing'),
         events: [],
         matchResult: null,
@@ -80,6 +85,34 @@ describe('TacticsDemoBoard', () => {
                 y: 0,
             },
         });
+    });
+
+    it('dispatches a reveal tile action before the enemy is visible', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ includeEnemy: false })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        fireEvent.click(screen.getByTestId('selectable-unit'));
+        fireEvent.click(screen.getByTestId('reveal-target'));
+
+        expect(sendAction).toHaveBeenCalledWith({
+            type: TACTICS_REVEAL_TILE_ACTION,
+            playerId: localPlayerId,
+            tick: 7,
+            payload: {
+                scoutId: TACTICS_DEFAULT_UNIT_ID_VALUE,
+                x: 1,
+                y: 0,
+            },
+        });
+        expect(screen.queryByTestId('attack-target')).not.toBeInTheDocument();
     });
 
     it('shows and dispatches an attack target for a selected adjacent enemy', () => {

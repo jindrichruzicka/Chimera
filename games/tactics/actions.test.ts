@@ -10,11 +10,13 @@ import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
+    TACTICS_REVEAL_TILE_ACTION,
     registerTacticsActions,
     resolveTacticsFirstPlayer,
     tacticsAttackDefinition,
     tacticsGridCoordinate,
     tacticsMoveUnitDefinition,
+    tacticsRevealTileDefinition,
 } from './actions.js';
 
 const P1 = playerId('player-1');
@@ -22,7 +24,7 @@ const P2 = playerId('player-2');
 const UNIT = entityId('unit-1');
 const ENEMY_UNIT = entityId('unit-2');
 
-function makeSnapshot(): BaseGameSnapshot {
+function makeSnapshot(options: { readonly enemyVisibleToP1?: boolean } = {}): BaseGameSnapshot {
     const unit = {
         id: UNIT,
         kind: 'unit',
@@ -30,12 +32,14 @@ function makeSnapshot(): BaseGameSnapshot {
         x: 0,
         y: 0,
         hp: 1,
+        visibleTo: [P1],
     } satisfies BaseEntityState & {
         readonly kind: 'unit';
         readonly ownerId: typeof P1;
         readonly x: number;
         readonly y: number;
         readonly hp: number;
+        readonly visibleTo: readonly (typeof P1)[];
     };
     const enemyUnit = {
         id: ENEMY_UNIT,
@@ -44,12 +48,14 @@ function makeSnapshot(): BaseGameSnapshot {
         x: 1,
         y: 0,
         hp: 1,
+        visibleTo: options.enemyVisibleToP1 === true ? [P2, P1] : [P2],
     } satisfies BaseEntityState & {
         readonly kind: 'unit';
         readonly ownerId: typeof P2;
         readonly x: number;
         readonly y: number;
         readonly hp: number;
+        readonly visibleTo: readonly (typeof P2)[];
     };
     return {
         tick: 1,
@@ -95,6 +101,15 @@ describe('tactics move unit action', () => {
 
         expect(TACTICS_ATTACK_ACTION).toBe('tactics:attack');
         expect(registry.has(TACTICS_ATTACK_ACTION)).toBe(true);
+    });
+
+    it('exports and registers the reveal tile action for fog-of-war reveal', () => {
+        const registry = new ActionRegistry();
+
+        registerTacticsActions(registry);
+
+        expect(TACTICS_REVEAL_TILE_ACTION).toBe('tactics:reveal_tile');
+        expect(registry.has(TACTICS_REVEAL_TILE_ACTION)).toBe(true);
     });
 
     it('registers a GameDefinition that builds the initial tactics entities', () => {
@@ -171,8 +186,102 @@ describe('tactics move unit action', () => {
         });
     });
 
-    it('decrements an adjacent enemy defender by 1 hp and advances tick', () => {
+    it('reveals an adjacent enemy on the targeted tile to the dispatcher and advances tick', () => {
         const snapshot = makeSnapshot();
+        const payload = tacticsRevealTileDefinition.parsePayload({ scoutId: UNIT, x: 1, y: 0 });
+
+        const validation = tacticsRevealTileDefinition.validate(
+            payload,
+            snapshot,
+            P1,
+            makeReduceContext(snapshot),
+        );
+        const next = tacticsRevealTileDefinition.reduce(
+            snapshot,
+            payload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        const revealed = next.entities[ENEMY_UNIT] as unknown as Record<string, unknown>;
+        const original = snapshot.entities[ENEMY_UNIT] as unknown as Record<string, unknown>;
+        expect(validation).toEqual({ ok: true });
+        expect(next.tick).toBe(2);
+        expect(revealed['visibleTo']).toEqual([P2, P1]);
+        expect(original['visibleTo']).toEqual([P2]);
+        expect(next.events[next.events.length - 1]).toMatchObject({
+            type: TACTICS_REVEAL_TILE_ACTION,
+        });
+    });
+
+    it('does not duplicate an existing reveal viewer', () => {
+        const snapshot = makeSnapshot();
+        const alreadyVisible = {
+            ...snapshot,
+            entities: {
+                ...snapshot.entities,
+                [ENEMY_UNIT]: {
+                    ...snapshot.entities[ENEMY_UNIT],
+                    visibleTo: [P2, P1],
+                },
+            },
+        };
+        const payload = tacticsRevealTileDefinition.parsePayload({ scoutId: UNIT, x: 1, y: 0 });
+
+        const next = tacticsRevealTileDefinition.reduce(
+            alreadyVisible,
+            payload,
+            P1,
+            makeReduceContext(alreadyVisible),
+        );
+
+        expect(
+            (next.entities[ENEMY_UNIT] as unknown as Record<string, unknown>)['visibleTo'],
+        ).toEqual([P2, P1]);
+    });
+
+    it('rejects revealing with an opponent scout', () => {
+        const snapshot = makeSnapshot();
+        const payload = tacticsRevealTileDefinition.parsePayload({ scoutId: UNIT, x: 1, y: 0 });
+
+        expect(
+            tacticsRevealTileDefinition.validate(
+                payload,
+                snapshot,
+                P2,
+                makeReduceContext(snapshot),
+            ),
+        ).toEqual({ ok: false, reason: 'not_scout_owner' });
+    });
+
+    it('rejects revealing a non-adjacent tile', () => {
+        const snapshot = makeSnapshot();
+        const payload = tacticsRevealTileDefinition.parsePayload({ scoutId: UNIT, x: 2, y: 0 });
+
+        expect(
+            tacticsRevealTileDefinition.validate(
+                payload,
+                snapshot,
+                P1,
+                makeReduceContext(snapshot),
+            ),
+        ).toEqual({ ok: false, reason: 'target_not_adjacent' });
+    });
+
+    it('rejects attacking an unrevealed enemy defender', () => {
+        const snapshot = makeSnapshot();
+        const payload = tacticsAttackDefinition.parsePayload({
+            attackerId: UNIT,
+            defenderId: ENEMY_UNIT,
+        });
+
+        expect(
+            tacticsAttackDefinition.validate(payload, snapshot, P1, makeReduceContext(snapshot)),
+        ).toEqual({ ok: false, reason: 'defender_not_visible' });
+    });
+
+    it('decrements a revealed adjacent enemy defender by 1 hp and advances tick', () => {
+        const snapshot = makeSnapshot({ enemyVisibleToP1: true });
         const payload = tacticsAttackDefinition.parsePayload({
             attackerId: UNIT,
             defenderId: ENEMY_UNIT,

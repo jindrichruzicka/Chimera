@@ -21,6 +21,7 @@ test.describe('Match flow', () => {
         const hostMatch = new MatchPage(hostWindow);
         const clientMatch = new MatchPage(clientWindow);
 
+        await hostMatch.revealAdjacentTile();
         await hostMatch.attackAdjacentEnemy();
 
         await expect(hostMatch.matchResultBanner).toBeVisible({ timeout: 60_000 });

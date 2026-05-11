@@ -9,6 +9,7 @@ export class MatchPage {
     readonly matchResultText: Locator;
     readonly selectableUnit: Locator;
     readonly moveTarget: Locator;
+    readonly revealTarget: Locator;
     readonly attackTarget: Locator;
     readonly hudTick: Locator;
     readonly sceneRouter: Locator;
@@ -24,6 +25,7 @@ export class MatchPage {
         this.matchResultText = page.getByTestId('match-result-text');
         this.selectableUnit = page.getByTestId('selectable-unit');
         this.moveTarget = page.getByTestId('move-target');
+        this.revealTarget = page.getByTestId('reveal-target');
         this.attackTarget = page.getByTestId('attack-target');
         this.hudTick = page.getByTestId('hud-tick');
         this.sceneRouter = page.getByTestId('scene-router');
@@ -34,6 +36,11 @@ export class MatchPage {
     public async attackAdjacentEnemy(): Promise<void> {
         await this.selectableUnit.click();
         await this.attackTarget.click();
+    }
+
+    public async revealAdjacentTile(): Promise<void> {
+        await this.selectableUnit.click();
+        await this.revealTarget.click();
     }
 
     public async moveOwnedUnit(): Promise<void> {

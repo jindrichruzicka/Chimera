@@ -3,6 +3,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
+    TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera/shared/tactics.js';
 import type {
     ActionDefinition,
@@ -16,7 +17,7 @@ import type {
 import { entityId } from '@chimera/simulation/engine/types.js';
 import { buildInitialTacticsEntities } from './entities.js';
 
-export { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION };
+export { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION, TACTICS_REVEAL_TILE_ACTION };
 
 /**
  * Canonical entity ID for the default unit seeded in the initial game snapshot.
@@ -44,6 +45,12 @@ export interface TacticsAttackPayload {
     readonly defenderId: EntityId;
 }
 
+export interface TacticsRevealTilePayload {
+    readonly scoutId: EntityId;
+    readonly x: TacticsGridCoordinate;
+    readonly y: TacticsGridCoordinate;
+}
+
 export interface TacticsGameInitializationConfig {
     readonly hostPlayerId: PlayerId;
     readonly firstPlayer?: PlayerId;
@@ -59,6 +66,7 @@ interface TacticsUnitEntity extends BaseEntityState {
     readonly x: TacticsGridCoordinate;
     readonly y: TacticsGridCoordinate;
     readonly hp: number;
+    readonly visibleTo?: readonly PlayerId[];
 }
 
 function isTacticsUnitEntity(entity: BaseEntityState | undefined): entity is TacticsUnitEntity {
@@ -71,13 +79,17 @@ function isTacticsUnitEntity(entity: BaseEntityState | undefined): entity is Tac
         readonly x?: unknown;
         readonly y?: unknown;
         readonly hp?: unknown;
+        readonly visibleTo?: unknown;
     };
     return (
         candidate.kind === 'unit' &&
         typeof candidate.ownerId === 'string' &&
         Number.isInteger(candidate.x) &&
         Number.isInteger(candidate.y) &&
-        Number.isInteger(candidate.hp)
+        Number.isInteger(candidate.hp) &&
+        (candidate.visibleTo === undefined ||
+            (Array.isArray(candidate.visibleTo) &&
+                candidate.visibleTo.every((viewer) => typeof viewer === 'string')))
     );
 }
 
@@ -85,6 +97,39 @@ function areAdjacent(first: TacticsUnitEntity, second: TacticsUnitEntity): boole
     const dx = first.x > second.x ? first.x - second.x : second.x - first.x;
     const dy = first.y > second.y ? first.y - second.y : second.y - first.y;
     return dx + dy === 1;
+}
+
+function isAdjacentTile(
+    unit: TacticsUnitEntity,
+    x: TacticsGridCoordinate,
+    y: TacticsGridCoordinate,
+): boolean {
+    const dx = unit.x > x ? unit.x - x : x - unit.x;
+    const dy = unit.y > y ? unit.y - y : y - unit.y;
+    return dx + dy === 1;
+}
+
+function visibleToWithViewer(unit: TacticsUnitEntity, viewerId: PlayerId): readonly PlayerId[] {
+    const seen = new Set<PlayerId>();
+    const visibleTo: PlayerId[] = [];
+
+    const add = (id: PlayerId): void => {
+        if (seen.has(id)) return;
+        seen.add(id);
+        visibleTo.push(id);
+    };
+
+    add(unit.ownerId);
+    for (const existingViewer of unit.visibleTo ?? []) {
+        add(existingViewer);
+    }
+    add(viewerId);
+
+    return visibleTo;
+}
+
+function isUnitVisibleToViewer(unit: TacticsUnitEntity, viewerId: PlayerId): boolean {
+    return unit.ownerId === viewerId || (unit.visibleTo ?? []).includes(viewerId);
 }
 
 export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload, BaseGameSnapshot> =
@@ -180,6 +225,9 @@ export const tacticsAttackDefinition: ActionDefinition<TacticsAttackPayload, Bas
         if (defender.ownerId === playerId) {
             return { ok: false, reason: 'cannot_attack_own_unit' };
         }
+        if (!isUnitVisibleToViewer(defender, playerId)) {
+            return { ok: false, reason: 'defender_not_visible' };
+        }
         if (!areAdjacent(attacker, defender)) {
             return { ok: false, reason: 'defender_not_adjacent' };
         }
@@ -203,6 +251,77 @@ export const tacticsAttackDefinition: ActionDefinition<TacticsAttackPayload, Bas
                 },
             },
             events: [...state.events, { type: TACTICS_ATTACK_ACTION }],
+        };
+    },
+};
+
+export const tacticsRevealTileDefinition: ActionDefinition<
+    TacticsRevealTilePayload,
+    BaseGameSnapshot
+> = {
+    type: TACTICS_REVEAL_TILE_ACTION,
+
+    parsePayload(raw: Readonly<Record<string, unknown>>): TacticsRevealTilePayload {
+        const scoutId = raw['scoutId'];
+        const x = raw['x'];
+        const y = raw['y'];
+        if (typeof scoutId !== 'string' || scoutId.length === 0) {
+            throw new TypeError('tactics:reveal_tile payload must include a non-empty scoutId.');
+        }
+        if (
+            typeof x !== 'number' ||
+            typeof y !== 'number' ||
+            !Number.isInteger(x) ||
+            !Number.isInteger(y)
+        ) {
+            throw new TypeError('tactics:reveal_tile payload x and y must be integers.');
+        }
+        return {
+            scoutId: entityId(scoutId),
+            x: tacticsGridCoordinate(x),
+            y: tacticsGridCoordinate(y),
+        };
+    },
+
+    validate(payload, state, playerId): ValidationResult {
+        const scout = state.entities[payload.scoutId];
+        if (!isTacticsUnitEntity(scout)) {
+            return { ok: false, reason: 'scout_not_found' };
+        }
+        if (scout.ownerId !== playerId) {
+            return { ok: false, reason: 'not_scout_owner' };
+        }
+        if (!isAdjacentTile(scout, payload.x, payload.y)) {
+            return { ok: false, reason: 'target_not_adjacent' };
+        }
+        return { ok: true };
+    },
+
+    reduce(state, payload, playerId): BaseGameSnapshot {
+        const nextEntities: BaseGameSnapshot['entities'] = { ...state.entities };
+
+        for (const entity of Object.values(state.entities)) {
+            if (
+                !isTacticsUnitEntity(entity) ||
+                entity.ownerId === playerId ||
+                entity.x !== payload.x ||
+                entity.y !== payload.y
+            ) {
+                continue;
+            }
+
+            const revealedEntity = {
+                ...entity,
+                visibleTo: visibleToWithViewer(entity, playerId),
+            } satisfies BaseEntityState & Readonly<Record<string, unknown>>;
+            nextEntities[entity.id] = revealedEntity;
+        }
+
+        return {
+            ...state,
+            tick: state.tick + 1,
+            entities: nextEntities,
+            events: [...state.events, { type: TACTICS_REVEAL_TILE_ACTION }],
         };
     },
 };
@@ -241,6 +360,7 @@ function uniquePlayerIds(playerIds: readonly PlayerId[]): PlayerId[] {
 export function registerTacticsActions(registry: ActionRegistry<BaseGameSnapshot>): void {
     registry.register(tacticsMoveUnitDefinition);
     registry.register(tacticsAttackDefinition);
+    registry.register(tacticsRevealTileDefinition);
     registry.registerGame('tactics', {
         buildInitialEntities: buildInitialTacticsEntities,
         resolveMatchResult: resolveTacticsMatchResult,

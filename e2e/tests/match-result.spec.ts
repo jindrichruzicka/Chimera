@@ -16,6 +16,7 @@ test.describe('Match result propagation', () => {
         const hostMatch = new MatchPage(hostWindow);
         const clientMatch = new MatchPage(clientWindow);
 
+        await hostMatch.revealAdjacentTile();
         await hostMatch.attackAdjacentEnemy();
 
         await expect(hostMatch.matchResultBanner).toBeVisible({ timeout: 30_000 });
@@ -40,6 +41,7 @@ test.describe('Match result propagation', () => {
             const hostMatch = new MatchPage(hostWindow);
             const clientMatch = new MatchPage(clientWindow);
 
+            await clientMatch.revealAdjacentTile();
             await clientMatch.attackAdjacentEnemy();
 
             await expect(clientMatch.matchResultBanner).toBeVisible({ timeout: 30_000 });
