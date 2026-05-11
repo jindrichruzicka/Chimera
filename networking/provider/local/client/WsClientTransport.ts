@@ -34,6 +34,7 @@ import type { ServerConnection } from './ServerConnection.js';
  */
 export class WsClientTransport implements ClientTransport {
     private readonly snapshotCbs = new Set<(snapshot: PlayerSnapshot, checksum: number) => void>();
+    private readonly tickCbs = new Set<(tick: number) => void>();
     private readonly sideChannelCbs = new Set<(msg: SideChannelMessage) => void>();
     private readonly revealCbs = new Set<(reveal: WireCommitmentReveal) => void>();
     private readonly lobbyStateCbs = new Set<(state: LobbyState) => void>();
@@ -99,6 +100,13 @@ export class WsClientTransport implements ClientTransport {
         };
     }
 
+    onTickReceived(cb: (tick: number) => void): Unsubscribe {
+        this.tickCbs.add(cb);
+        return (): void => {
+            this.tickCbs.delete(cb);
+        };
+    }
+
     onSideChannelReceived(cb: (msg: SideChannelMessage) => void): Unsubscribe {
         this.sideChannelCbs.add(cb);
         return (): void => {
@@ -144,6 +152,7 @@ export class WsClientTransport implements ClientTransport {
         }
 
         this.snapshotCbs.clear();
+        this.tickCbs.clear();
         this.sideChannelCbs.clear();
         this.revealCbs.clear();
         this.lobbyStateCbs.clear();
@@ -156,6 +165,11 @@ export class WsClientTransport implements ClientTransport {
         switch (msg.type) {
             case 'SNAPSHOT': {
                 for (const cb of this.snapshotCbs) cb(msg.snapshot, msg.checksum);
+                break;
+            }
+
+            case 'TICK': {
+                for (const cb of this.tickCbs) cb(msg.tick);
                 break;
             }
 

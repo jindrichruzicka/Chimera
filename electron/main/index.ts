@@ -63,7 +63,11 @@ import type {
     LobbyState,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } from '../preload/apis/game-api.js';
+import {
+    GAME_REVEAL_CHANNEL,
+    GAME_SNAPSHOT_CHANNEL,
+    GAME_TICK_CHANNEL,
+} from '../preload/apis/game-api.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
 import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
@@ -963,6 +967,14 @@ export async function main(): Promise<void> {
                     }
                     broadcasterRef.current.broadcast(snap, to);
                 },
+                (tick, to) => {
+                    if (broadcasterRef.current === null) {
+                        throw new Error(
+                            'StateBroadcaster used before hosted session wiring completed',
+                        );
+                    }
+                    broadcasterRef.current.broadcastTick(tick, to);
+                },
                 {
                     gameId: HOSTED_GAME_ID,
                     savePort: {
@@ -1041,6 +1053,12 @@ export async function main(): Promise<void> {
                     win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
                 }
             };
+            const sendHostedRendererTick = (tick: number): void => {
+                const win = mainWindow;
+                if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(GAME_TICK_CHANNEL, tick);
+                }
+            };
             let boundHostRendererViewerId: PlayerId | null = null;
             let unsubscribeHostRenderer: Unsubscribe = () => undefined;
             const bindHostRendererRecipient = (viewerId: PlayerId): void => {
@@ -1055,6 +1073,7 @@ export async function main(): Promise<void> {
                 unsubscribeHostRenderer = broadcasterRef.current.registerRendererRecipient({
                     viewerId,
                     sendSnapshot: sendHostedRendererSnapshot,
+                    sendTick: sendHostedRendererTick,
                 });
             };
             const projectHostedRendererForSeat = (viewerId: PlayerId): void => {
@@ -1349,6 +1368,13 @@ export async function main(): Promise<void> {
             const win = mainWindow;
             if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                 win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+            }
+        },
+        onClientTickReceived: (tick) => {
+            resolvedE2eHooks?.onClockTick(tick, 'client');
+            const win = mainWindow;
+            if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(GAME_TICK_CHANNEL, tick);
             }
         },
         // E2E hooks are resolved at the wiring point and injected so

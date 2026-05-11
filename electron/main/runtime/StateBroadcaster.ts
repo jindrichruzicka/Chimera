@@ -35,6 +35,7 @@ import type { E2eHooks } from './e2e-hooks.js';
 export interface RendererSnapshotRecipient {
     readonly viewerId: PlayerId;
     readonly sendSnapshot: (snapshot: PlayerSnapshot) => void;
+    readonly sendTick?: (tick: number) => void;
 }
 
 /**
@@ -106,6 +107,14 @@ export class StateBroadcaster {
         this.notifyE2eHooks(viewerId, playerSnapshot);
     }
 
+    broadcastTick(tick: number, viewerId: PlayerId): void {
+        if (this.disposed) return;
+        this.log.debug('broadcast tick', { viewerId, tick });
+        this.transport.sendTick(viewerId, tick);
+        this.sendTickToRendererRecipients(viewerId, tick);
+        this.options.e2eHooks?.onClockTick(tick, viewerId);
+    }
+
     private notifyE2eHooks(viewerId: PlayerId, snapshot: PlayerSnapshot): void {
         if (this.options.e2eHooks === undefined) return;
         const checksum = crc32Json(snapshot);
@@ -122,6 +131,17 @@ export class StateBroadcaster {
 
         for (const recipient of recipients) {
             recipient.sendSnapshot(snapshot);
+        }
+    }
+
+    private sendTickToRendererRecipients(viewerId: PlayerId, tick: number): void {
+        const recipients = this.rendererRecipients.get(viewerId);
+        if (recipients === undefined) {
+            return;
+        }
+
+        for (const recipient of recipients) {
+            recipient.sendTick?.(tick);
         }
     }
 

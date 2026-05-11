@@ -62,6 +62,7 @@ export async function bootstrapGameStore(
             latestSnapshot = snapshot;
             resolvedStore.applySnapshot(snapshot);
         },
+        applyTick: (tick) => resolvedStore.applyTick(tick),
     };
     let predictableTypes = new Set<string>();
     const predictableTypesPromise = api.getPredictableActionTypes();

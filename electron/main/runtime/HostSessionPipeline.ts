@@ -170,8 +170,15 @@ export interface HostSessionPipelineResult {
 export function buildHostSessionPipeline(
     registry: ActionRegistry,
     broadcastFn: (snapshot: Readonly<BaseGameSnapshot>, viewerId: PlayerId) => void,
+    broadcastTickFnOrOptions?:
+        | ((tick: number, viewerId: PlayerId) => void)
+        | HostSessionPipelineOptions,
     options?: HostSessionPipelineOptions,
 ): HostSessionPipelineResult {
+    const broadcastTickFn =
+        typeof broadcastTickFnOrOptions === 'function' ? broadcastTickFnOrOptions : undefined;
+    const resolvedOptions =
+        typeof broadcastTickFnOrOptions === 'function' ? options : broadcastTickFnOrOptions;
     const history = new InMemoryActionHistory();
     const reducer = new StateReducer(registry);
 
@@ -200,11 +207,12 @@ export function buildHostSessionPipeline(
     const undoManager = new InMemoryUndoManager(history, DEFAULT_UNDO_POLICY, replay);
 
     const pipeline = new ActionPipeline(registry, {
-        ...(options?.gameId !== undefined ? { gameId: options.gameId } : {}),
+        ...(resolvedOptions?.gameId !== undefined ? { gameId: resolvedOptions.gameId } : {}),
         context: {
             undoManager,
             history,
             broadcast: broadcastFn,
+            ...(broadcastTickFn === undefined ? {} : { broadcastTick: broadcastTickFn }),
         },
     });
 
@@ -217,8 +225,8 @@ export function buildHostSessionPipeline(
     // ── Autosave hook (Issue #375) ─────────────────────────────────────────
     // Resolve the optional logger and save port once at construction time so
     // the hot `processAction` path has no conditional property accesses.
-    const log: Logger = options?.logger ?? createNoopLogger();
-    const { gameId, savePort, gameEndPort } = options ?? {};
+    const log: Logger = resolvedOptions?.logger ?? createNoopLogger();
+    const { gameId, savePort, gameEndPort } = resolvedOptions ?? {};
 
     /**
      * Thin wrapper around `ActionPipeline.process` that fires autosave as a

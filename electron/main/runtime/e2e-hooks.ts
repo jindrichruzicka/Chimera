@@ -62,6 +62,7 @@ export interface E2eHooks {
     pushWsFrame(frame: WsFrame): void;
     onBroadcastChecksum(tick: number, viewerId: string, checksum: number): void;
     onTick(tick: number, checksum: number, snapshot: PlayerSnapshot): void;
+    onClockTick(tick: number, viewerId: string): void;
     /**
      * Advance the simulation clock by one tick.
      *
@@ -138,6 +139,9 @@ export function createE2eHooks(): E2eHooks {
             state.lastChecksum = checksum;
             state.broadcastChecksums[snapshot.viewerId] = checksum;
             state.lastHostSnapshot = snapshot;
+        },
+        onClockTick(tick): void {
+            state.currentTick = tick;
         },
         // Guard: throw loudly if called before the session runtime wires a real dispatch
         // function. A silent no-op here would let soak tests (e.g. 1 000-tick convergence)

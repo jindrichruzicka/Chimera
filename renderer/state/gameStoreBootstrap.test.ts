@@ -62,6 +62,7 @@ function makeApi(
     api: GameAPI;
     sendActionSpy: ReturnType<typeof vi.fn>;
     onSnapshotSpy: ReturnType<typeof vi.fn>;
+    onTickSpy: ReturnType<typeof vi.fn>;
     onActionRejectedSpy: ReturnType<typeof vi.fn>;
     getPredictableActionTypesSpy: ReturnType<typeof vi.fn>;
 } {
@@ -70,6 +71,7 @@ function makeApi(
         options.captureSnapshotListener?.(cb);
         return vi.fn();
     });
+    const onTickSpy = vi.fn<(cb: (tick: number) => void) => Unsubscribe>(() => vi.fn());
     const onActionRejectedSpy = vi.fn<(cb: (r: ActionRejection) => void) => Unsubscribe>(() =>
         vi.fn(),
     );
@@ -81,6 +83,7 @@ function makeApi(
     const api: GameAPI = {
         sendAction: sendActionSpy,
         onSnapshot: onSnapshotSpy,
+        onTick: onTickSpy,
         onActionRejected: onActionRejectedSpy,
         onReveal: onRevealSpy,
         getPredictableActionTypes: getPredictableActionTypesSpy,
@@ -89,7 +92,14 @@ function makeApi(
         ),
     };
 
-    return { api, sendActionSpy, onSnapshotSpy, onActionRejectedSpy, getPredictableActionTypesSpy };
+    return {
+        api,
+        sendActionSpy,
+        onSnapshotSpy,
+        onTickSpy,
+        onActionRejectedSpy,
+        getPredictableActionTypesSpy,
+    };
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

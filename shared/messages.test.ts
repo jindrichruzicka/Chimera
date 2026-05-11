@@ -106,6 +106,13 @@ describe('shared/messages — ServerMessage', () => {
         expect(msg.checksum).toBe(42);
     });
 
+    it('TICK message carries only the authoritative tick', () => {
+        const msg: ServerMessage = { type: 'TICK', tick: 12 };
+
+        expect(msg.type).toBe('TICK');
+        expect(msg.tick).toBe(12);
+    });
+
     it('REJECT message has reason and tick', () => {
         const msg: ServerMessage = { type: 'REJECT', reason: 'stale_tick', tick: 7 };
         expect(msg.type).toBe('REJECT');
@@ -167,6 +174,10 @@ describe('shared/messages — isServerMessage type guard', () => {
 
     it('returns true for CLOSE', () => {
         expect(isServerMessage({ type: 'CLOSE', reason: 'host_closed' })).toBe(true);
+    });
+
+    it('returns true for TICK', () => {
+        expect(isServerMessage({ type: 'TICK', tick: 3 })).toBe(true);
     });
 
     it('returns false for an unknown type string', () => {

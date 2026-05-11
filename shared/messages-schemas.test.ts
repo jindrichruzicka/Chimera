@@ -212,6 +212,23 @@ describe('ServerMessageSchema — REJECT', () => {
     });
 });
 
+describe('ServerMessageSchema — TICK', () => {
+    it('parses a valid TICK message', () => {
+        const result = ServerMessageSchema.safeParse({ type: 'TICK', tick: 12 });
+
+        expect(result.success).toBe(true);
+        if (result.success) {
+            expect(result.data).toEqual({ type: 'TICK', tick: 12 });
+        }
+    });
+
+    it('rejects TICK with non-integer tick', () => {
+        const result = ServerMessageSchema.safeParse({ type: 'TICK', tick: 12.5 });
+
+        expect(result.success).toBe(false);
+    });
+});
+
 describe('ServerMessageSchema — CLOSE', () => {
     it('parses a valid CLOSE message', () => {
         const result = ServerMessageSchema.safeParse({

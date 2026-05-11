@@ -433,14 +433,59 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // produce the per-viewer PlayerSnapshot before forwarding to transport
         // (Invariants #3/#8). This ensures undoMeta is computed once by the projector,
         // not redundantly in the pipeline.
-        if (this.#depth === 0 && nextState !== snapshot) {
+        if (this.#depth === 0 && this.#shouldNotifyViewers(action.type, snapshot, nextState)) {
+            const clockOnly = this.#isClockOnlyTick(action.type, snapshot, nextState);
             for (const pid of Object.keys(nextState.players)) {
                 const viewerId = pid as PlayerId;
-                this.#context?.broadcast?.(nextState, viewerId);
+                if (clockOnly && this.#context?.broadcastTick !== undefined) {
+                    this.#context.broadcastTick(nextState.tick, viewerId);
+                } else {
+                    this.#context?.broadcast?.(nextState, viewerId);
+                }
             }
         }
 
         return nextState;
+    }
+
+    #shouldNotifyViewers(
+        actionType: string,
+        snapshot: Readonly<TState>,
+        nextState: TState,
+    ): boolean {
+        return nextState !== snapshot || actionType === 'engine:sync_request';
+    }
+
+    #isClockOnlyTick(actionType: string, snapshot: Readonly<TState>, nextState: TState): boolean {
+        if (actionType !== 'engine:tick') {
+            return false;
+        }
+        if (nextState.tick !== snapshot.tick + 1) {
+            return false;
+        }
+
+        const previous = snapshot as Readonly<Record<string, unknown>>;
+        const next = nextState as Readonly<Record<string, unknown>>;
+        let previousKeyCount = 0;
+        let nextKeyCount = 0;
+
+        for (const key in previous) {
+            if (!Object.prototype.hasOwnProperty.call(previous, key)) {
+                continue;
+            }
+            previousKeyCount += 1;
+            if (key !== 'tick' && previous[key] !== next[key]) {
+                return false;
+            }
+        }
+
+        for (const key in next) {
+            if (Object.prototype.hasOwnProperty.call(next, key)) {
+                nextKeyCount += 1;
+            }
+        }
+
+        return previousKeyCount === nextKeyCount;
     }
 
     #resolveMatchResult(snapshot: TState): TState {

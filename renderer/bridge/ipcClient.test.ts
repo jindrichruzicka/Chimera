@@ -45,20 +45,31 @@ function makePort(): {
     port: IpcGamePort;
     sendActionSpy: ReturnType<typeof vi.fn>;
     onSnapshotSpy: ReturnType<typeof vi.fn>;
+    onTickSpy: ReturnType<typeof vi.fn>;
     capturedListener: ((snapshot: PlayerSnapshot) => void) | null;
+    capturedTickListener: ((tick: number) => void) | null;
 } {
     let capturedListener: ((snapshot: PlayerSnapshot) => void) | null = null;
+    let capturedTickListener: ((tick: number) => void) | null = null;
     const sendActionSpy = vi.fn<(action: EngineAction) => void>();
     const onSnapshotSpy = vi.fn<(cb: (snapshot: PlayerSnapshot) => void) => () => void>((cb) => {
         capturedListener = cb;
         return vi.fn();
     });
+    const onTickSpy = vi.fn<(cb: (tick: number) => void) => () => void>((cb) => {
+        capturedTickListener = cb;
+        return vi.fn();
+    });
     return {
-        port: { sendAction: sendActionSpy, onSnapshot: onSnapshotSpy },
+        port: { sendAction: sendActionSpy, onSnapshot: onSnapshotSpy, onTick: onTickSpy },
         sendActionSpy,
         onSnapshotSpy,
+        onTickSpy,
         get capturedListener() {
             return capturedListener;
+        },
+        get capturedTickListener() {
+            return capturedTickListener;
         },
     };
 }
@@ -68,19 +79,23 @@ function makeStore(): {
     addPredictionSpy: ReturnType<typeof vi.fn>;
     confirmPredictionSpy: ReturnType<typeof vi.fn>;
     applySnapshotSpy: ReturnType<typeof vi.fn>;
+    applyTickSpy: ReturnType<typeof vi.fn>;
 } {
     const addPredictionSpy = vi.fn<(action: EngineAction) => void>();
     const confirmPredictionSpy = vi.fn<(tick: number) => void>();
     const applySnapshotSpy = vi.fn<(snapshot: PlayerSnapshot) => void>();
+    const applyTickSpy = vi.fn<(tick: number) => void>();
     return {
         store: {
             addPrediction: addPredictionSpy,
             confirmPrediction: confirmPredictionSpy,
             applySnapshot: applySnapshotSpy,
+            applyTick: applyTickSpy,
         },
         addPredictionSpy,
         confirmPredictionSpy,
         applySnapshotSpy,
+        applyTickSpy,
     };
 }
 
@@ -172,6 +187,16 @@ describe('createIpcClient.bootstrap()', () => {
         expect(onSnapshotSpy).toHaveBeenCalledOnce();
     });
 
+    it('registers an onTick listener on the port', () => {
+        const { port, onTickSpy } = makePort();
+        const { store } = makeStore();
+        const client = createIpcClient(port, store, () => false);
+
+        client.bootstrap();
+
+        expect(onTickSpy).toHaveBeenCalledOnce();
+    });
+
     it('calls applySnapshot when a snapshot arrives', () => {
         const portFixture = makePort();
         const { store, applySnapshotSpy } = makeStore();
@@ -198,6 +223,18 @@ describe('createIpcClient.bootstrap()', () => {
         expect(confirmPredictionSpy).toHaveBeenCalledWith(7);
     });
 
+    it('calls applyTick when a tick-only update arrives', () => {
+        const portFixture = makePort();
+        const { store, applyTickSpy } = makeStore();
+        const client = createIpcClient(portFixture.port, store, () => false);
+        client.bootstrap();
+
+        portFixture.capturedTickListener?.(88);
+
+        expect(applyTickSpy).toHaveBeenCalledOnce();
+        expect(applyTickSpy).toHaveBeenCalledWith(88);
+    });
+
     it('calls confirmPrediction before applySnapshot (evict first, then apply)', () => {
         const portFixture = makePort();
         const callOrder: string[] = [];
@@ -209,6 +246,7 @@ describe('createIpcClient.bootstrap()', () => {
             applySnapshot: vi.fn(() => {
                 callOrder.push('apply');
             }),
+            applyTick: vi.fn(),
         };
         const client = createIpcClient(portFixture.port, store, () => false);
         client.bootstrap();
@@ -223,6 +261,7 @@ describe('createIpcClient.bootstrap()', () => {
         const port: IpcGamePort = {
             sendAction: vi.fn(),
             onSnapshot: vi.fn(() => unsubSpy),
+            onTick: vi.fn(() => vi.fn()),
         };
         const { store } = makeStore();
         const client = createIpcClient(port, store, () => false);

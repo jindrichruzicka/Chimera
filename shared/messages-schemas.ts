@@ -219,6 +219,13 @@ const SnapshotMessage = z
     })
     .strict();
 
+const TickMessage = z
+    .object({
+        type: z.literal('TICK'),
+        tick: z.number().int(),
+    })
+    .strict();
+
 const DeltaMessage = z
     .object({
         type: z.literal('DELTA'),
@@ -284,6 +291,7 @@ const LobbyStateMessage = z
 export const ServerMessageSchema = z.discriminatedUnion('type', [
     WelcomeMessage,
     SnapshotMessage,
+    TickMessage,
     DeltaMessage,
     RejectMessage,
     CloseMessage,

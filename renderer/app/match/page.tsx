@@ -32,9 +32,17 @@ type MatchActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
 export default function MatchPage(): React.ReactElement | null {
     const router = useRouter();
     const snapshot = useGameStore((state) => state.snapshot);
+    const currentTick = useGameStore((state) => state.currentTick);
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
-    const sendAction = useSendAction();
+    const sendActionToHost = useSendAction();
+    const sendAction = React.useCallback(
+        (action: EngineAction): void => {
+            const actionTick = typeof currentTick === 'number' ? currentTick : action.tick;
+            sendActionToHost({ ...action, tick: actionTick });
+        },
+        [currentTick, sendActionToHost],
+    );
 
     useEffect(() => {
         if (snapshot === null && hasLoadedInitialLobbyState && lobbyState === null) {
@@ -48,10 +56,11 @@ export default function MatchPage(): React.ReactElement | null {
         type: MatchActionType,
         payload: Record<string, unknown>,
     ): void => {
+        const actionTick = typeof currentTick === 'number' ? currentTick : snapshotForAction.tick;
         const action: EngineAction = {
             type,
             playerId,
-            tick: snapshotForAction.tick,
+            tick: actionTick,
             payload,
         };
         sendAction(action);
@@ -67,6 +76,7 @@ export default function MatchPage(): React.ReactElement | null {
         <MatchShell
             registry={MatchScreenRegistry}
             snapshot={snapshot}
+            currentTick={currentTick}
             sendAction={sendAction}
             canEndTurn={snapshot.isMyTurn}
             localPlayerId={resolvedPlayerId}

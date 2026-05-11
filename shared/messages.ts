@@ -118,6 +118,8 @@ export type ClientMessage =
  *                 the current full lobby state.
  * - SNAPSHOT      Full projected PlayerSnapshot for the receiving client.
  *                 GameSnapshot NEVER appears here (Invariant #1).
+ * - TICK          Tiny authoritative clock update for idle ticks where no
+ *                 projected state changed.
  * - DELTA         Incremental event stream optimisation (F13). Placeholder only
  *                 in F10 — hosts always send full SNAPSHOT in this milestone.
  * - REJECT        Signals that the host rejected an ACTION (stale tick, checksum
@@ -140,6 +142,7 @@ export type ServerMessage =
           readonly lobbyState: LobbyState;
       }
     | { readonly type: 'SNAPSHOT'; readonly snapshot: PlayerSnapshot; readonly checksum: number }
+    | { readonly type: 'TICK'; readonly tick: number }
     | {
           readonly type: 'DELTA';
           readonly fromTick: number;
@@ -173,6 +176,7 @@ const CLIENT_MESSAGE_TYPES = new Set<string>([
 const SERVER_MESSAGE_TYPES = new Set<string>([
     'WELCOME',
     'SNAPSHOT',
+    'TICK',
     'DELTA',
     'REJECT',
     'CLOSE',

@@ -347,6 +347,7 @@ export interface UndoMeta {
  */
 export interface BroadcastContext {
     readonly broadcast?: (snapshot: Readonly<BaseGameSnapshot>, to: PlayerId) => void;
+    readonly broadcastTick?: (tick: number, to: PlayerId) => void;
 }
 
 /**

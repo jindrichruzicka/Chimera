@@ -48,6 +48,7 @@ type HostSideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 type PlayerJoinedCb = (player: LobbyPlayerEntry) => void;
 type PlayerLeftCb = (playerId: PlayerId, reason: DisconnectReason) => void;
 type SnapshotCb = (snapshot: PlayerSnapshot, checksum: number) => void;
+type TickCb = (tick: number) => void;
 type LobbyStateCb = (state: LobbyState) => void;
 type ClientSideChannelCb = (msg: SideChannelMessage) => void;
 type RevealCb = (reveal: WireCommitmentReveal) => void;
@@ -64,6 +65,7 @@ function addSub<T>(set: Set<T>, cb: T): Unsubscribe {
 interface ClientRecord {
     readonly playerId: PlayerId;
     readonly snapshotCbs: Set<SnapshotCb>;
+    readonly tickCbs: Set<TickCb>;
     readonly sideChannelCbs: Set<ClientSideChannelCb>;
     readonly revealCbs: Set<RevealCb>;
     readonly lobbyStateCbs: Set<LobbyStateCb>;
@@ -100,6 +102,7 @@ class InMemoryChannel {
         const record: ClientRecord = {
             playerId,
             snapshotCbs: new Set(),
+            tickCbs: new Set(),
             sideChannelCbs: new Set(),
             revealCbs: new Set(),
             lobbyStateCbs: new Set(),
@@ -125,6 +128,7 @@ class InMemoryChannel {
         this.playerLeftCbs.clear();
         for (const client of this.clients.values()) {
             client.snapshotCbs.clear();
+            client.tickCbs.clear();
             client.sideChannelCbs.clear();
             client.revealCbs.clear();
             client.lobbyStateCbs.clear();
@@ -163,6 +167,13 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
                 if (client) {
                     const checksum = crc32Json(snapshot);
                     for (const cb of client.snapshotCbs) cb(snapshot, checksum);
+                }
+            },
+
+            sendTick: (playerId: PlayerId, tick: number): void => {
+                const client = channel.clients.get(playerId);
+                if (client) {
+                    for (const cb of client.tickCbs) cb(tick);
                 }
             },
 
@@ -334,6 +345,8 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             },
 
             onSnapshotReceived: (cb: SnapshotCb): Unsubscribe => addSub(record.snapshotCbs, cb),
+
+            onTickReceived: (cb: TickCb): Unsubscribe => addSub(record.tickCbs, cb),
 
             onSideChannelReceived: (cb: ClientSideChannelCb): Unsubscribe =>
                 addSub(record.sideChannelCbs, cb),

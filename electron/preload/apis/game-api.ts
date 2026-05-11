@@ -43,6 +43,9 @@ export const GAME_SEND_ACTION_CHANNEL = 'chimera:game:send-action';
  */
 export const GAME_SNAPSHOT_CHANNEL = 'chimera:game:snapshot';
 
+/** `ipcRenderer.on` target for authoritative tick-only clock updates. */
+export const GAME_TICK_CHANNEL = 'chimera:game:tick';
+
 /**
  * `ipcRenderer.on` target for {@link GameAPI.onActionRejected}. Main pushes
  * a typed {@link ActionRejection} via `event.sender.send` whenever an
@@ -109,6 +112,8 @@ export function createGameApi(ipc: GameApiIpcPort): GameAPI {
         // declared before the shared helper existed.
         onSnapshot: (cb: (snapshot: PlayerSnapshot) => void): Unsubscribe =>
             subscribePush<PlayerSnapshot>(ipc, GAME_SNAPSHOT_CHANNEL, cb),
+        onTick: (cb: (tick: number) => void): Unsubscribe =>
+            subscribePush<number>(ipc, GAME_TICK_CHANNEL, cb),
         // Schema-validated because a malformed REJECT would otherwise
         // propagate as garbage into the renderer error boundary — the
         // channel-name-aware `PreloadIpcValidationError` thrown by

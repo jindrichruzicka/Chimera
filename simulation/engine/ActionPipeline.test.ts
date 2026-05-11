@@ -44,6 +44,8 @@ import {
     engineUndoDefinition,
     engineRedoDefinition,
     engineEndTurnDefinition,
+    engineSyncRequestDefinition,
+    engineTickDefinition,
 } from './EngineActions.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────
@@ -737,6 +739,62 @@ describe('ActionPipeline — Stage 7: PipelineContext broadcast wiring', () => {
         p.process(snapshot, action);
 
         expect(broadcast).not.toHaveBeenCalled();
+    });
+
+    it('routes idle engine:tick through broadcastTick without full broadcast', () => {
+        const tickRegistry = new ActionRegistry();
+        tickRegistry.registerEngineAction(engineTickDefinition);
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const context: PipelineContext = { broadcast, broadcastTick };
+        const p = new ActionPipeline(tickRegistry, { context });
+        const snapshot = makeSnapshotWithPlayers(0, [PID, PID2]);
+
+        p.process(snapshot, makeEnvelope(0, 'engine:tick', { seed: snapshot.seed }));
+
+        expect(broadcast).not.toHaveBeenCalled();
+        expect(broadcastTick).toHaveBeenCalledTimes(2);
+        expect(broadcastTick).toHaveBeenNthCalledWith(1, 1, PID);
+        expect(broadcastTick).toHaveBeenNthCalledWith(2, 1, PID2);
+    });
+
+    it('uses full broadcast for engine:tick when non-clock state changes', () => {
+        const changingTickRegistry = new ActionRegistry();
+        changingTickRegistry.registerEngineAction({
+            type: 'engine:tick',
+            parsePayload: (raw) => ({ seed: raw['seed'] as number }),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({
+                ...state,
+                tick: state.tick + 1,
+                events: [{ type: 'game:timer-fired' }],
+            }),
+        });
+        const broadcast = vi.fn();
+        const broadcastTick = vi.fn();
+        const context: PipelineContext = { broadcast, broadcastTick };
+        const p = new ActionPipeline(changingTickRegistry, { context });
+        const snapshot = makeSnapshotWithPlayers(0, [PID]);
+
+        p.process(snapshot, makeEnvelope(0, 'engine:tick', { seed: snapshot.seed }));
+
+        expect(broadcastTick).not.toHaveBeenCalled();
+        expect(broadcast).toHaveBeenCalledTimes(1);
+        expect(broadcast).toHaveBeenCalledWith(expect.objectContaining({ tick: 1 }), PID);
+    });
+
+    it('uses full broadcast for engine:sync_request even when state reference is unchanged', () => {
+        const syncRegistry = new ActionRegistry();
+        syncRegistry.registerEngineAction(engineSyncRequestDefinition);
+        const broadcast = vi.fn();
+        const context: PipelineContext = { broadcast };
+        const p = new ActionPipeline(syncRegistry, { context });
+        const snapshot = makeSnapshotWithPlayers(9, [PID]);
+
+        p.process(snapshot, makeEnvelope(9, 'engine:sync_request', {}));
+
+        expect(broadcast).toHaveBeenCalledTimes(1);
+        expect(broadcast).toHaveBeenCalledWith(snapshot, PID);
     });
 
     it('calls broadcast once per player when one player is in nextState.players', () => {

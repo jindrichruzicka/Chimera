@@ -4,6 +4,7 @@ import {
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
+    GAME_TICK_CHANNEL,
     GAME_PREDICTABLE_TYPES_CHANNEL,
     GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
     createGameApi,
@@ -175,6 +176,38 @@ describe('createGameApi', () => {
             }
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('onTick()', () => {
+        it('registers a listener on chimera:game:tick and forwards only the tick payload', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(tick: number) => void>();
+
+            api.onTick(callback);
+
+            const registered = stub.listeners.get(GAME_TICK_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, 23);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(23);
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createGameApi(stub.port);
+            const callback = vi.fn<(tick: number) => void>();
+
+            const unsubscribe = api.onTick(callback);
+            const beforeUnsub = stub.listeners.get(GAME_TICK_CHANNEL)?.size;
+            unsubscribe();
+
+            expect(beforeUnsub).toBe(1);
+            expect(stub.listeners.get(GAME_TICK_CHANNEL)?.size).toBe(0);
         });
     });
 

@@ -63,6 +63,7 @@ export interface LobbyManagerOptions {
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
     readonly profileGate?: ProfileGate;
     readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot, checksum: number) => void;
+    readonly onClientTickReceived?: (tick: number) => void;
     readonly e2eHooks?: E2eHooks;
 }
 
@@ -107,6 +108,7 @@ export class LobbyManager {
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
     private readonly profileGate: LobbyManagerOptions['profileGate'];
     private readonly onClientSnapshotReceived: LobbyManagerOptions['onClientSnapshotReceived'];
+    private readonly onClientTickReceived: LobbyManagerOptions['onClientTickReceived'];
     private readonly e2eHooks: LobbyManagerOptions['e2eHooks'];
 
     constructor(
@@ -123,6 +125,7 @@ export class LobbyManager {
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
         this.profileGate = options.profileGate;
         this.onClientSnapshotReceived = options.onClientSnapshotReceived;
+        this.onClientTickReceived = options.onClientTickReceived;
         this.e2eHooks = options.e2eHooks;
     }
 
@@ -373,6 +376,9 @@ export class LobbyManager {
         this.subscriptions.push(
             session.transport.onSnapshotReceived((snapshot, checksum) => {
                 this.onClientSnapshotReceived?.(snapshot, checksum);
+            }),
+            session.transport.onTickReceived((tick) => {
+                this.onClientTickReceived?.(tick);
             }),
             session.transport.onLobbyStateChanged((state) => {
                 this.publishLobbyState(state);

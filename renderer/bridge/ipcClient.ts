@@ -42,6 +42,8 @@ export interface IpcGamePort {
     sendAction(action: EngineAction): void;
     /** Subscribe to projected `PlayerSnapshot` pushes. */
     onSnapshot(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
+    /** Subscribe to tick-only clock updates. */
+    onTick(cb: (tick: number) => void): Unsubscribe;
 }
 
 // ── Store interface ───────────────────────────────────────────────────────────
@@ -57,6 +59,8 @@ export interface IpcPredictionStore {
     confirmPrediction(tick: number): void;
     /** ipcClient only — applies authoritative snapshot from host. */
     applySnapshot(snapshot: PlayerSnapshot): void;
+    /** ipcClient only — applies authoritative tick-only updates from host. */
+    applyTick(tick: number): void;
 }
 
 // ── IpcClient interface ───────────────────────────────────────────────────────
@@ -100,10 +104,18 @@ export function createIpcClient(
         },
 
         bootstrap(): Unsubscribe {
-            return port.onSnapshot((snapshot: PlayerSnapshot) => {
+            const unsubscribeSnapshot = port.onSnapshot((snapshot: PlayerSnapshot) => {
                 store.confirmPrediction(snapshot.tick);
                 store.applySnapshot(snapshot);
             });
+            const unsubscribeTick = port.onTick((tick: number) => {
+                store.applyTick(tick);
+            });
+
+            return (): void => {
+                unsubscribeSnapshot();
+                unsubscribeTick();
+            };
         },
     };
 }

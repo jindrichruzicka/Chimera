@@ -35,6 +35,7 @@ import type { E2eHooks } from './e2e-hooks.js';
 function makeTransport(): HostTransport {
     return {
         sendSnapshot: vi.fn(),
+        sendTick: vi.fn(),
         broadcastLobbyState: vi.fn(),
         sendSideChannel: vi.fn(),
         sendReveal: vi.fn(),
@@ -116,6 +117,9 @@ function makeE2eHooks(): E2eHooks {
             state.lastChecksum = checksum;
             state.broadcastChecksums[snapshot.viewerId] = checksum;
             state.lastHostSnapshot = snapshot;
+        },
+        onClockTick(tick): void {
+            state.currentTick = tick;
         },
         pushWsFrame(): void {
             // no-op in this test double — StateBroadcaster does not call pushWsFrame
@@ -265,6 +269,19 @@ describe('StateBroadcaster.broadcast', () => {
         expect(hooks.lastChecksum).toBe(crc32Json(projected));
         expect(hooks.broadcastChecksums[PLAYER_B]).toBe(crc32Json(projected));
         expect(hooks.lastHostSnapshot).toBeNull();
+    });
+
+    it('broadcastTick sends only the tick without projecting or sending a full snapshot', () => {
+        const transport = makeTransport();
+        const projector = makeProjector(makeProjectedSnapshot(PLAYER_A));
+        const broadcaster = new StateBroadcaster(transport, projector, createNoopLogger());
+
+        broadcaster.broadcastTick(42, PLAYER_A);
+
+        expect(projector.project).not.toHaveBeenCalled();
+        expect(transport.sendSnapshot).not.toHaveBeenCalled();
+        expect(transport.sendTick).toHaveBeenCalledOnce();
+        expect(transport.sendTick).toHaveBeenCalledWith(PLAYER_A, 42);
     });
 });
 

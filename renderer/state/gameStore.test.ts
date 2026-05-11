@@ -133,6 +133,29 @@ describe('gameStore.applySnapshot()', () => {
 
         expect(store.getState().snapshot?.tick).toBe(7);
     });
+
+    it('mirrors currentTick from the incoming snapshot', () => {
+        const store = createGameStore();
+
+        store.getState().applySnapshot(makeSnapshot(11));
+
+        expect(store.getState().currentTick).toBe(11);
+    });
+});
+
+// ── gameStore.applyTick() ─────────────────────────────────────────────────────
+
+describe('gameStore.applyTick()', () => {
+    it('updates currentTick without replacing the current snapshot', () => {
+        const store = createGameStore();
+        const snap = makeSnapshot(5);
+        store.getState().applySnapshot(snap);
+
+        store.getState().applyTick(6);
+
+        expect(store.getState().currentTick).toBe(6);
+        expect(store.getState().snapshot).toBe(snap);
+    });
 });
 
 // ── gameStore.addPrediction() ─────────────────────────────────────────────────

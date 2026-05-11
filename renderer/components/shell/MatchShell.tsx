@@ -48,6 +48,7 @@ interface MatchShellGameHudProps extends MatchShellBaseProps {
 interface MatchShellRegistryProps {
     readonly registry: GameScreenRegistry;
     readonly snapshot: PlayerSnapshot;
+    readonly currentTick?: number;
     readonly sendAction: SendAction;
     readonly localPlayerId?: PlayerId;
     readonly contentDatabase?: ContentDatabase | null;
@@ -75,6 +76,7 @@ export function MatchShell(props: MatchShellProps): React.ReactElement {
 function RegistryMatchShell({
     registry,
     snapshot,
+    currentTick,
     sendAction,
     localPlayerId,
     contentDatabase = null,
@@ -89,7 +91,7 @@ function RegistryMatchShell({
         <ContentDatabaseProvider value={contentDatabase}>
             <FadeProvider>
                 <MatchShellFrame
-                    tick={snapshot.tick}
+                    tick={currentTick ?? snapshot.tick}
                     canUndo={snapshot.undoMeta.canUndo}
                     canRedo={snapshot.undoMeta.canRedo}
                     canEndTurn={canEndTurn ?? snapshot.isMyTurn}

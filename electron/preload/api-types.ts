@@ -500,6 +500,8 @@ export interface GameAPI {
     sendAction(action: EngineAction): void;
     /** Stream of projected PlayerSnapshot for the active viewer. */
     onSnapshot(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
+    /** Stream of authoritative tick-only clock updates for the active viewer. */
+    onTick(cb: (tick: number) => void): Unsubscribe;
     /**
      * Stream of {@link ActionRejection}s for actions dispatched from this
      * renderer that main refused to apply. Mirror of the §4.3 WebSocket

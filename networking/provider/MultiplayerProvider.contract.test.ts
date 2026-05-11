@@ -281,6 +281,43 @@ export function testMultiplayerProviderContract(
                 expect(received).toHaveLength(0);
                 provider.dispose();
             });
+
+            it('sendTick is received by the matching client via onTickReceived', async () => {
+                const provider = factory();
+                const hosted = await provider.hostLobby({
+                    gameId: 'contract-test',
+                    maxPlayers: 4,
+                });
+
+                const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+
+                const received: number[] = [];
+                joined.transport.onTickReceived((tick) => received.push(tick));
+
+                hosted.transport.sendTick(joined.localPlayerId, 77);
+
+                expect(received).toEqual([77]);
+                provider.dispose();
+            });
+
+            it('unsubscribing from onTickReceived stops tick delivery', async () => {
+                const provider = factory();
+                const hosted = await provider.hostLobby({
+                    gameId: 'contract-test',
+                    maxPlayers: 4,
+                });
+
+                const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+
+                const received: number[] = [];
+                const unsub = joined.transport.onTickReceived((tick) => received.push(tick));
+                unsub();
+
+                hosted.transport.sendTick(joined.localPlayerId, 78);
+
+                expect(received).toHaveLength(0);
+                provider.dispose();
+            });
         });
 
         // ── Action receipt ────────────────────────────────────────────────────

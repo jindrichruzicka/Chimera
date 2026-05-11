@@ -99,9 +99,11 @@ const { mockStateBroadcasterCtor, mockStateBroadcasterInstance } = vi.hoisted(()
     interface MockRendererRecipient {
         readonly viewerId: string;
         readonly sendSnapshot: (snapshot: unknown) => void;
+        readonly sendTick?: (tick: number) => void;
     }
     const instance = {
         broadcast: vi.fn(),
+        broadcastTick: vi.fn(),
         registerRendererRecipient: vi.fn<(recipient: MockRendererRecipient) => () => undefined>(
             () => () => undefined,
         ),

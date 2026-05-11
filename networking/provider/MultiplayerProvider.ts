@@ -249,6 +249,8 @@ export interface HostedSession {
 export interface HostTransport {
     /** Push a projected PlayerSnapshot to one connected client. */
     sendSnapshot(playerId: PlayerId, snapshot: PlayerSnapshot): void;
+    /** Push an authoritative tick-only clock update to one connected client. */
+    sendTick(playerId: PlayerId, tick: number): void;
     /** Push updated lobby state to all connected clients. */
     broadcastLobbyState(state: LobbyState): void;
     /**
@@ -327,6 +329,8 @@ export interface ClientTransport {
     sendSideChannel(msg: SideChannelMessage): void;
     /** Subscribe to projected PlayerSnapshot pushes from the host. */
     onSnapshotReceived(cb: (snapshot: PlayerSnapshot, checksum: number) => void): Unsubscribe;
+    /** Subscribe to authoritative tick-only clock updates from the host. */
+    onTickReceived(cb: (tick: number) => void): Unsubscribe;
     /** Subscribe to inbound side-channel messages from the host. */
     onSideChannelReceived(cb: (msg: SideChannelMessage) => void): Unsubscribe;
     /** Subscribe to commitment reveal messages from the host.

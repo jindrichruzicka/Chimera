@@ -50,6 +50,10 @@ export class WsHostTransport implements HostTransport {
         this.server.sendToPlayer(playerId, msg);
     }
 
+    sendTick(playerId: PlayerId, tick: number): void {
+        this.server.sendToPlayer(playerId, { type: 'TICK', tick });
+    }
+
     broadcastLobbyState(state: LobbyState): void {
         this.server.broadcastLobbyState(state);
     }

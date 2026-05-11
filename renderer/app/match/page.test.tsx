@@ -33,6 +33,7 @@ import MatchPage from './page';
 const mockReplace = vi.fn();
 const mockSendAction = vi.fn();
 let mockSnapshot: PlayerSnapshot | null = null;
+let mockCurrentTick: number | undefined = undefined;
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: LobbyState | null = null;
 let mockHasLoadedInitialLobbyState = true;
@@ -42,8 +43,12 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('../../state/gameStore', () => ({
-    useGameStore: (selector: (state: { readonly snapshot: PlayerSnapshot | null }) => unknown) =>
-        selector({ snapshot: mockSnapshot }),
+    useGameStore: (
+        selector: (state: {
+            readonly snapshot: PlayerSnapshot | null;
+            readonly currentTick: number | undefined;
+        }) => unknown,
+    ) => selector({ snapshot: mockSnapshot, currentTick: mockCurrentTick }),
 }));
 
 vi.mock('../../state/lobbyUiStore', () => ({
@@ -166,6 +171,7 @@ function makeLobbyState(): LobbyState {
 
 beforeEach(() => {
     mockSnapshot = null;
+    mockCurrentTick = undefined;
     mockLocalPlayerId = null;
     mockLobbyState = null;
     mockHasLoadedInitialLobbyState = true;
@@ -237,8 +243,9 @@ describe('MatchPage — rendering', () => {
 
     it('displays the current tick in hud-tick', () => {
         mockSnapshot = makeSnapshot({ tick: 42 });
+        mockCurrentTick = 43;
         renderMatchPage();
-        expect(screen.getByTestId('hud-tick').textContent).toBe('42');
+        expect(screen.getByTestId('hud-tick').textContent).toBe('43');
     });
 
     it('renders the HUD override from the active game registry', () => {
@@ -302,6 +309,22 @@ describe('MatchPage — action dispatch', () => {
             type: 'engine:end_turn',
             playerId: 'p1',
             tick: 5,
+            payload: {},
+        });
+    });
+
+    it('dispatches with currentTick when it is newer than snapshot.tick', () => {
+        mockLocalPlayerId = 'p1';
+        mockCurrentTick = 12;
+        mockSnapshot = makeSnapshot({ tick: 5, isMyTurn: true });
+        renderMatchPage();
+
+        fireEvent.click(screen.getByTestId('end-turn'));
+
+        expect(mockSendAction).toHaveBeenCalledWith({
+            type: 'engine:end_turn',
+            playerId: 'p1',
+            tick: 12,
             payload: {},
         });
     });

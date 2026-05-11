@@ -29,12 +29,16 @@ import type { EngineAction, PlayerSnapshot } from '../../electron/preload/api-ty
 export interface SnapshotStore {
     /** Projected per-viewer snapshot; null before the first IPC push. */
     readonly snapshot: PlayerSnapshot | null;
+    /** Latest authoritative logical tick, including tick-only updates. */
+    readonly currentTick: number;
 
     /**
      * Apply incoming `PlayerSnapshot` from IPC.
      * ipcClient only — do NOT call from components.
      */
     applySnapshot(snapshot: PlayerSnapshot): void;
+    /** Apply an authoritative tick-only update without replacing snapshot. */
+    applyTick(tick: number): void;
 }
 
 /**
@@ -80,6 +84,7 @@ export type GameStore = SnapshotStore & PredictionStore;
 export function createGameStore(): StoreApi<GameStore> {
     return createStore<GameStore>()((set) => ({
         snapshot: null,
+        currentTick: 0,
         predictedActions: [],
         latencyMs: 0,
         canUndo: false,
@@ -88,9 +93,14 @@ export function createGameStore(): StoreApi<GameStore> {
         applySnapshot(snapshot: PlayerSnapshot): void {
             set(() => ({
                 snapshot,
+                currentTick: snapshot.tick,
                 canUndo: snapshot.undoMeta.canUndo,
                 canRedo: snapshot.undoMeta.canRedo,
             }));
+        },
+
+        applyTick(tick: number): void {
+            set(() => ({ currentTick: tick }));
         },
 
         addPrediction(action: EngineAction): void {
