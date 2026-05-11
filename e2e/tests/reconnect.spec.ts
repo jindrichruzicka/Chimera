@@ -1,14 +1,10 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test';
+import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/game.fixture';
 import { getSimulationTick } from '../helpers/ipc-spy';
+import { relaunchElectronApplication, type RelaunchConfig } from '../helpers/relaunch';
 import { MatchPage } from '../pages/MatchPage';
 
 const TICK_TOLERANCE = 2;
-
-interface RelaunchConfig {
-    readonly args: readonly string[];
-    readonly env: Readonly<Record<string, string>>;
-}
 
 interface ReconnectTicket {
     readonly address: string;
@@ -98,9 +94,8 @@ test.describe('Client reconnect', () => {
             .poll(() => connectedPlayerIds(hostWindow))
             .not.toContain(originalClientPlayerId);
 
-        const relaunchedClientApp = await electron.launch({
-            args: [...relaunchConfig.args],
-            env: { ...relaunchConfig.env, CHIMERA_ROLE: 'client' },
+        const relaunchedClientApp = await relaunchElectronApplication(relaunchConfig, {
+            CHIMERA_ROLE: 'client',
         });
 
         try {
