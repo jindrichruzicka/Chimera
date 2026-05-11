@@ -59,10 +59,16 @@ export interface LobbyManagerOptions {
     readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void;
     readonly onMatchStartRequested?: (state: LobbyState) => void | Promise<void>;
     readonly onLobbyStateChanged?: (state: LobbyState) => void;
+    readonly onLocalSeatAdded?: (player: LobbyPlayerEntry) => void;
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
     readonly profileGate?: ProfileGate;
     readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot) => void;
     readonly e2eHooks?: E2eHooks;
+}
+
+export interface AddLocalSeatOptions {
+    readonly displayName?: string;
+    readonly ready?: boolean;
 }
 
 /**
@@ -78,6 +84,7 @@ export class LobbyManager {
     private session: HostedSession | JoinedSession | null = null;
     private localPlayerId: PlayerId | null = null;
     private lobbyState: LobbyState | null = null;
+    private readonly localSeatIds = new Set<PlayerId>();
     /** Active transport subscriptions; cleared and invoked on every closeLobby(). */
     private readonly subscriptions: Unsubscribe[] = [];
     /**
@@ -96,6 +103,7 @@ export class LobbyManager {
     private readonly onSessionJoined: LobbyManagerOptions['onSessionJoined'];
     private readonly onMatchStartRequested: LobbyManagerOptions['onMatchStartRequested'];
     private readonly onLobbyStateChanged: LobbyManagerOptions['onLobbyStateChanged'];
+    private readonly onLocalSeatAdded: LobbyManagerOptions['onLocalSeatAdded'];
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
     private readonly profileGate: LobbyManagerOptions['profileGate'];
     private readonly onClientSnapshotReceived: LobbyManagerOptions['onClientSnapshotReceived'];
@@ -111,6 +119,7 @@ export class LobbyManager {
         this.onSessionJoined = options.onSessionJoined;
         this.onMatchStartRequested = options.onMatchStartRequested;
         this.onLobbyStateChanged = options.onLobbyStateChanged;
+        this.onLocalSeatAdded = options.onLocalSeatAdded;
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
         this.profileGate = options.profileGate;
         this.onClientSnapshotReceived = options.onClientSnapshotReceived;
@@ -168,6 +177,8 @@ export class LobbyManager {
             gameId: params.gameId,
         };
         this.localPlayerId = info.hostId;
+        this.localSeatIds.clear();
+        this.localSeatIds.add(info.hostId);
 
         const initialState: LobbyState = {
             info,
@@ -353,6 +364,8 @@ export class LobbyManager {
         }
         this.session = session;
         this.localPlayerId = session.localPlayerId;
+        this.localSeatIds.clear();
+        this.localSeatIds.add(session.localPlayerId);
         this.publishLobbyState(session.initialLobbyState);
 
         // Wire transport callbacks and capture Unsubscribe handles so
@@ -390,6 +403,54 @@ export class LobbyManager {
         return this.lobbyState;
     }
 
+    isLocalSeat(playerId: PlayerId): boolean {
+        return this.localSeatIds.has(playerId);
+    }
+
+    addLocalSeat(playerId: PlayerId, options: AddLocalSeatOptions = {}): Promise<void> {
+        const session = this.session;
+        if (session === null) {
+            return Promise.reject(
+                new Error('LobbyManager: adding a local seat requires an active session'),
+            );
+        }
+
+        if (!('close' in session)) {
+            return Promise.reject(
+                new Error('LobbyManager: only hosted sessions can add local seats'),
+            );
+        }
+
+        if (this.lobbyState === null) {
+            return Promise.reject(new Error('LobbyManager: lobby state is not available'));
+        }
+
+        const existing = this.lobbyState.players.find((entry) => entry.playerId === playerId);
+        const entry: LobbyPlayerEntry = {
+            playerId,
+            displayName: options.displayName ?? existing?.displayName ?? playerId,
+            ready: options.ready ?? existing?.ready ?? false,
+        };
+        const wasLocal = this.localSeatIds.has(playerId);
+        this.localSeatIds.add(playerId);
+        if (!wasLocal) {
+            this.onLocalSeatAdded?.(entry);
+        }
+
+        const nextState: LobbyState = {
+            info: this.lobbyState.info,
+            players:
+                existing === undefined
+                    ? [...this.lobbyState.players, entry]
+                    : this.lobbyState.players.map((player) =>
+                          player.playerId === playerId ? entry : player,
+                      ),
+        };
+
+        this.publishLobbyState(nextState);
+        return Promise.resolve();
+    }
+
     sendAction(action: EngineAction): void {
         const session = this.session;
         if (session === null) {
@@ -421,6 +482,10 @@ export class LobbyManager {
             return Promise.reject(
                 new Error('LobbyManager: requested seat is not present in the lobby roster'),
             );
+        }
+
+        if (!this.localSeatIds.has(playerId)) {
+            return Promise.reject(new Error('LobbyManager: requested seat is not a local seat'));
         }
 
         this.localPlayerId = playerId;
@@ -498,6 +563,7 @@ export class LobbyManager {
         this.session = null;
         this.localPlayerId = null;
         this.lobbyState = null;
+        this.localSeatIds.clear();
         // Clear rate-limit timestamps so they do not bleed into the next session
         // (Invariant #62).
         this.profileUpdateTimestamps.clear();

@@ -55,6 +55,7 @@ import { createProfileGate } from './profile/ProfileGate.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import type {
     ClientTransport,
+    LobbyPlayerEntry,
     LobbyState,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
@@ -68,12 +69,13 @@ import type {
     BaseGameSnapshot,
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
-import { gamePhase } from '@chimera/simulation/engine/types.js';
+import { gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import {
     CommitmentVerificationError,
     DefaultStateProjector,
     toCommitmentId,
     type CommitmentReveal,
+    type PlayerSnapshot,
 } from '@chimera/simulation/projection/index.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
@@ -104,6 +106,7 @@ export { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL, CHIMERA_RENDERER_URL 
 export type { ChimeraRendererUrl };
 
 export const DEFAULT_LOCAL_PROFILE_ID = 'local-default';
+const LOCAL_SEAT_HANDOFF_DELAY_MS = 150;
 
 export function createDefaultPlayerProfile(
     rawLocalProfileId: string = DEFAULT_LOCAL_PROFILE_ID,
@@ -888,6 +891,8 @@ export async function main(): Promise<void> {
     let activeSession: SessionRuntime | null = null;
     let dispatchRendererAction: ((action: ActionEnvelope) => void) | null = null;
     let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
+    let reprojectHostedRendererForSeat: ((playerIdToProject: PlayerId) => void) | null = null;
+    let handleHostedLocalSeatAdded: ((entry: LobbyPlayerEntry) => void) | null = null;
 
     // The single primary renderer window, captured when app.whenReady()
     // resolves.  Used to target IPC snapshot/reveal messages to the one
@@ -1003,16 +1008,6 @@ export async function main(): Promise<void> {
                 lobbyLogger,
                 broadcasterOptions,
             );
-            const unsubscribeHostRenderer = broadcasterRef.current.registerRendererRecipient({
-                viewerId: metadata.hostId,
-                sendSnapshot: (snapshot) => {
-                    lastSentPlayerSnapshot = snapshot;
-                    const win = mainWindow;
-                    if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
-                        win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
-                    }
-                },
-            });
 
             const sessionRuntime = new SessionRuntime({
                 gameId: HOSTED_GAME_ID,
@@ -1022,9 +1017,71 @@ export async function main(): Promise<void> {
                 commitmentRuntime: sessionCommitmentRuntime,
             });
             activeSession = sessionRuntime;
+
+            const sendHostedRendererSnapshot = (snapshot: PlayerSnapshot): void => {
+                lastSentPlayerSnapshot = snapshot;
+                const win = mainWindow;
+                if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+                }
+            };
+            let boundHostRendererViewerId: PlayerId | null = null;
+            let unsubscribeHostRenderer: Unsubscribe = () => undefined;
+            const bindHostRendererRecipient = (viewerId: PlayerId): void => {
+                if (boundHostRendererViewerId === viewerId) {
+                    return;
+                }
+                unsubscribeHostRenderer();
+                boundHostRendererViewerId = viewerId;
+                if (broadcasterRef.current === null) {
+                    return;
+                }
+                unsubscribeHostRenderer = broadcasterRef.current.registerRendererRecipient({
+                    viewerId,
+                    sendSnapshot: sendHostedRendererSnapshot,
+                });
+            };
+            const projectHostedRendererForSeat = (viewerId: PlayerId): void => {
+                bindHostRendererRecipient(viewerId);
+                broadcasterRef.current?.broadcast(sessionRuntime.getSnapshot(), viewerId);
+            };
+            bindHostRendererRecipient(metadata.hostId);
+            reprojectHostedRendererForSeat = projectHostedRendererForSeat;
+
+            const switchHostedRendererSeat = async (viewerId: PlayerId): Promise<void> => {
+                await lobbyManager.switchActiveSeat(viewerId);
+                projectHostedRendererForSeat(viewerId);
+            };
+            let pendingSeatHandoffTimer: ReturnType<typeof setTimeout> | null = null;
+            const scheduleAutoLocalSeatHandoff = (action: ActionEnvelope): void => {
+                if (action.type !== 'engine:end_turn') {
+                    return;
+                }
+                const nextPlayerId = sessionRuntime.getSnapshot().turnClock?.activePlayerId;
+                if (nextPlayerId === undefined) {
+                    return;
+                }
+                if (!lobbyManager.isLocalSeat(nextPlayerId)) {
+                    return;
+                }
+                if (lobbyManager.getLocalPlayerId() === nextPlayerId) {
+                    return;
+                }
+
+                pendingSeatHandoffTimer = setTimeout(() => {
+                    pendingSeatHandoffTimer = null;
+                    void switchHostedRendererSeat(nextPlayerId).catch((err: unknown) => {
+                        lobbyLogger.warn('hosted session: auto seat handoff failed', {
+                            playerId: nextPlayerId,
+                            error: err instanceof Error ? err.message : String(err),
+                        });
+                    });
+                }, LOCAL_SEAT_HANDOFF_DELAY_MS);
+            };
             dispatchRendererAction = (action) => {
                 sessionRuntime.applyAction(action);
                 simulationHost.afterTick(sessionRuntime.getSnapshot());
+                scheduleAutoLocalSeatHandoff(action);
             };
             saveInitialTurnMemento = (playerIdForMemento) => {
                 undoManager.saveTurnMemento(sessionRuntime.getSnapshot(), playerIdForMemento);
@@ -1081,6 +1138,12 @@ export async function main(): Promise<void> {
                 }
             };
 
+            handleHostedLocalSeatAdded = (entry): void => {
+                activePlayers.add(entry.playerId);
+                registerSlotAgent(entry.playerId, nextHumanSlotIndex());
+                tryStartGame();
+            };
+
             for (const slot of initialPlayerSlots) {
                 registerSlotAgent(slot.playerId, slot.slotIndex);
             }
@@ -1111,6 +1174,7 @@ export async function main(): Promise<void> {
                     // Fan-out to all registered agents after the tick advances
                     // (Invariant #17: routing through SimulationHost/AgentManager).
                     simulationHost.afterTick(sessionRuntime.getSnapshot());
+                    scheduleAutoLocalSeatHandoff(action);
                 } catch (err) {
                     lobbyLogger.warn('hosted session: applyAction threw', {
                         actionType: action.type,
@@ -1124,6 +1188,10 @@ export async function main(): Promise<void> {
                 if (finalSnapshot.matchResult === null) {
                     simulationHost.onGameEnd(finalSnapshot, { winnerIds: [] });
                 }
+                if (pendingSeatHandoffTimer !== null) {
+                    clearTimeout(pendingSeatHandoffTimer);
+                    pendingSeatHandoffTimer = null;
+                }
                 unsubJoined();
                 unsubLeft();
                 unsubAction();
@@ -1135,8 +1203,13 @@ export async function main(): Promise<void> {
                     activeE2eHooks = undefined;
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
+                    reprojectHostedRendererForSeat = null;
+                    handleHostedLocalSeatAdded = null;
                 }
             };
+        },
+        onLocalSeatAdded: (entry) => {
+            handleHostedLocalSeatAdded?.(entry);
         },
         onSessionJoined: (transport) => {
             const clientCommitments = new SessionCommitmentRuntime();
@@ -1262,7 +1335,12 @@ export async function main(): Promise<void> {
 
             lobbyManager.sendAction(action);
         },
-        seatSwitchManager: lobbyManager,
+        seatSwitchManager: {
+            switchActiveSeat: async (playerIdToSwitch) => {
+                await lobbyManager.switchActiveSeat(playerIdToSwitch);
+                reprojectHostedRendererForSeat?.(playerIdToSwitch);
+            },
+        },
         actionRegistry: gameRegistry,
         getCurrentSnapshot: () => lastSentPlayerSnapshot,
         logger: logger.child({ module: 'game' }),
@@ -1400,6 +1478,7 @@ export async function main(): Promise<void> {
 
         if (directMatchRole === 'host') {
             try {
+                const passAndPlay = process.env['CHIMERA_E2E_PASS_AND_PLAY'] === '1';
                 const info = await lobbyManager.hostLobby({
                     gameId: HOSTED_GAME_ID,
                     maxPlayers: 2,
@@ -1408,6 +1487,12 @@ export async function main(): Promise<void> {
                     resolvedE2eHooks.directMatchLobbyCode = info.sessionId;
                 }
                 await lobbyManager.updatePlayerReadyState(true);
+                if (passAndPlay) {
+                    await lobbyManager.addLocalSeat(playerId(`${info.hostId}-local-2`), {
+                        displayName: 'Player Two',
+                        ready: true,
+                    });
+                }
             } catch (err) {
                 logger.warn('direct-match E2E: host bootstrap failed', {
                     error: err instanceof Error ? err.message : String(err),

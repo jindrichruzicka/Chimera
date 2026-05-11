@@ -26,7 +26,6 @@ import { MatchShell } from '../../components/shell/MatchShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
-import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 type MatchActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
 
@@ -35,7 +34,6 @@ export default function MatchPage(): React.ReactElement | null {
     const snapshot = useGameStore((state) => state.snapshot);
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
-    const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
     const sendAction = useSendAction();
 
     useEffect(() => {
@@ -63,7 +61,7 @@ export default function MatchPage(): React.ReactElement | null {
         return null;
     }
 
-    const resolvedPlayerId = localPlayerId ?? snapshot.viewerId;
+    const resolvedPlayerId = snapshot.viewerId;
 
     return (
         <MatchShell

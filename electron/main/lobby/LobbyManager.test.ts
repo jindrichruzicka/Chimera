@@ -432,10 +432,53 @@ describe('LobbyManager.sendAction', () => {
     });
 });
 
+// ── addLocalSeat ─────────────────────────────────────────────────────────────
+
+describe('LobbyManager.addLocalSeat', () => {
+    it('does not broadcast lobby state to network peers when adding a local seat', async () => {
+        let capturedTransport: HostTransport | null = null;
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            onSessionHosted: (transport) => {
+                capturedTransport = transport;
+            },
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        expect(capturedTransport).not.toBeNull();
+
+        const broadcastSpy = vi.spyOn(capturedTransport!, 'broadcastLobbyState');
+
+        await manager.addLocalSeat(playerId('local-seat-2'));
+
+        expect(broadcastSpy).not.toHaveBeenCalled();
+
+        await manager.closeLobby();
+    });
+});
+
 // ── switchActiveSeat ─────────────────────────────────────────────────────────
 
 describe('LobbyManager.switchActiveSeat', () => {
-    it('updates local player context when switching to a seat in the local lobby roster', async () => {
+    it('adds a pass-and-play local seat to the hosted roster and switches to it', async () => {
+        const manager = makeManager();
+        await manager.hostLobby(HOST_PARAMS);
+        const secondSeatId = playerId('local-seat-2');
+
+        await expect(
+            manager.addLocalSeat(secondSeatId, { displayName: 'Player Two', ready: true }),
+        ).resolves.toBeUndefined();
+        await expect(manager.switchActiveSeat(secondSeatId)).resolves.toBeUndefined();
+
+        expect(manager.getLocalPlayerId()).toBe(secondSeatId);
+        expect(manager.getCurrentState()?.players).toContainEqual({
+            playerId: secondSeatId,
+            displayName: 'Player Two',
+            ready: true,
+        });
+
+        await manager.closeLobby();
+    });
+
+    it('rejects switching to a remote roster seat that is not local', async () => {
         const provider = makeProvider();
         const hostManager = makeManager(provider);
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
@@ -448,8 +491,7 @@ describe('LobbyManager.switchActiveSeat', () => {
 
         await new Promise<void>((resolve) => setTimeout(resolve, 0));
 
-        await expect(hostManager.switchActiveSeat(joinedSeatId!)).resolves.toBeUndefined();
-        expect(hostManager.getLocalPlayerId()).toBe(joinedSeatId);
+        await expect(hostManager.switchActiveSeat(joinedSeatId!)).rejects.toThrow(/local seat/i);
 
         await joinManager.closeLobby();
         await hostManager.closeLobby();

@@ -62,6 +62,7 @@ describe('MatchPage', () => {
         expect(matchPage.matchResultBanner).toBeDefined();
         expect(matchPage.matchResultText).toBeDefined();
         expect(matchPage.selectableUnit).toBeDefined();
+        expect(matchPage.moveTarget).toBeDefined();
         expect(matchPage.attackTarget).toBeDefined();
         expect(matchPage.hudTick).toBeDefined();
         expect(matchPage.sceneRouter).toBeDefined();
@@ -75,6 +76,7 @@ describe('MatchPage', () => {
             'match-result-banner',
             'match-result-text',
             'selectable-unit',
+            'move-target',
             'attack-target',
             'hud-tick',
             'scene-router',

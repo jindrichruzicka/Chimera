@@ -27,6 +27,8 @@ export interface E2eElectronLaunchOptions {
     readonly port: string;
     readonly role?: E2eElectronRole;
     readonly initialRoute?: E2eInitialRoute;
+    /** Configure direct-match host boot as a single-window two-local-seat match. */
+    readonly passAndPlay?: boolean;
     /**
      * When set, the main process auto-hosts or auto-joins a lobby without
      * going through the lobby UI (`CHIMERA_E2E_DIRECT_MATCH_ROLE` env var).
@@ -132,6 +134,10 @@ export function createE2eElectronLaunchConfig(
 
     if (options.directMatchJoinAddress !== undefined) {
         env['CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS'] = options.directMatchJoinAddress;
+    }
+
+    if (options.passAndPlay === true) {
+        env['CHIMERA_E2E_PASS_AND_PLAY'] = '1';
     }
 
     return {

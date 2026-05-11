@@ -8,6 +8,7 @@ export class MatchPage {
     readonly matchResultBanner: Locator;
     readonly matchResultText: Locator;
     readonly selectableUnit: Locator;
+    readonly moveTarget: Locator;
     readonly attackTarget: Locator;
     readonly hudTick: Locator;
     readonly sceneRouter: Locator;
@@ -22,6 +23,7 @@ export class MatchPage {
         this.matchResultBanner = page.getByTestId('match-result-banner');
         this.matchResultText = page.getByTestId('match-result-text');
         this.selectableUnit = page.getByTestId('selectable-unit');
+        this.moveTarget = page.getByTestId('move-target');
         this.attackTarget = page.getByTestId('attack-target');
         this.hudTick = page.getByTestId('hud-tick');
         this.sceneRouter = page.getByTestId('scene-router');
@@ -32,6 +34,11 @@ export class MatchPage {
     public async attackAdjacentEnemy(): Promise<void> {
         await this.selectableUnit.click();
         await this.attackTarget.click();
+    }
+
+    public async moveOwnedUnit(): Promise<void> {
+        await this.selectableUnit.first().click();
+        await this.moveTarget.first().click();
     }
 
     public async currentTick(): Promise<number> {

@@ -32,6 +32,7 @@ export type E2eFirstPlayer = 'host' | 'client';
 
 export interface DirectMatchFixtureOptions {
     readonly firstPlayer: E2eFirstPlayer;
+    readonly passAndPlay: boolean;
 }
 
 export interface DirectMatchFixtures {
@@ -107,13 +108,15 @@ export const test = electronTest.extend<
     DirectMatchFixtureOptions & { readonly _matchStarted: void } & DirectMatchFixtures
 >({
     firstPlayer: ['host', { option: true }],
+    passAndPlay: [false, { option: true }],
 
-    hostApp: async ({ firstPlayer }, use) => {
+    hostApp: async ({ firstPlayer, passAndPlay }, use) => {
         const app = await launchE2eElectronApplication({
             port: DIRECT_MATCH_PORT,
             role: 'host',
             directMatchRole: 'host',
             initialRoute: '/match',
+            passAndPlay,
         });
         try {
             await configureFirstPlayer(app, firstPlayer);
@@ -123,7 +126,12 @@ export const test = electronTest.extend<
         }
     },
 
-    clientApp: async ({ hostApp }, use) => {
+    clientApp: async ({ hostApp, passAndPlay }, use) => {
+        if (passAndPlay) {
+            await use(hostApp);
+            return;
+        }
+
         const lobbyCode = await waitForLobbyCode(hostApp);
 
         const app = await launchE2eElectronApplication({

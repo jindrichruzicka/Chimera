@@ -320,6 +320,24 @@ describe('MatchPage — action dispatch', () => {
             payload: { steps: 1 },
         });
     });
+
+    it('dispatches with snapshot.viewerId when the local lobby context is stale', () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({
+            viewerId: playerId('p2'),
+            isMyTurn: true,
+        });
+        renderMatchPage();
+
+        fireEvent.click(screen.getByTestId('end-turn'));
+
+        expect(mockSendAction).toHaveBeenCalledWith({
+            type: 'engine:end_turn',
+            playerId: 'p2',
+            tick: 5,
+            payload: {},
+        });
+    });
 });
 
 describe('MatchPage — button states', () => {
