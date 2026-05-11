@@ -14,6 +14,7 @@ import {
     SessionCommitmentRuntime,
     SessionRuntime,
     type ApplyActionFn,
+    type E2eSessionRuntime,
 } from './SessionRuntime.js';
 import { toSlotId } from '../../preload/api-types.js';
 import type {
@@ -125,7 +126,11 @@ describe('SessionRuntime', () => {
             applyAction: apply,
         });
 
-        runtime.dispatchTick(P1);
+        // Cast to the narrow E2E interface — the method is intentionally private
+        // on SessionRuntime and exposed only through E2eSessionRuntime so
+        // production callers cannot inadvertently trigger a bare engine:tick.
+        // @chimera-review: cast is the ONLY permitted path to dispatchTick (WARN-1 fix).
+        (runtime as unknown as E2eSessionRuntime).dispatchTick(P1);
 
         expect(apply).toHaveBeenCalledWith(initial, {
             type: 'engine:tick',
@@ -134,6 +139,22 @@ describe('SessionRuntime', () => {
             payload: { seed: initial.seed },
         });
         expect(runtime.getSnapshot()).toBe(next);
+    });
+
+    it('dispatchTick is not accessible on the production SessionRuntime public API (compile-time enforcement)', () => {
+        const initial = makeSnapshot(0);
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot: initial,
+            applyAction: vi.fn(),
+        });
+
+        // Type-level guarantee: SessionRuntime has no public `dispatchTick`.
+        // If this @ts-expect-error is ever reported as "unused", the method has
+        // been accidentally made public again — make this test RED and fix.
+        // @ts-expect-error — dispatchTick must not be accessible on SessionRuntime
+        void runtime.dispatchTick;
     });
 
     it('auto-dispatches engine:scene_commit when a scene_ready action completes the readiness barrier', () => {

@@ -139,6 +139,32 @@ export interface CommitmentRuntimePort {
     verifyReveal(reveal: CommitmentReveal): unknown;
 }
 
+/**
+ * Narrow interface that exposes {@link SessionRuntime.dispatchTick} to the
+ * CHIMERA_E2E wiring site in `electron/main/index.ts`.
+ *
+ * `dispatchTick` is `private` on the concrete class so production code holding
+ * a `SessionRuntime` reference cannot call it accidentally and inject a bare
+ * `engine:tick` outside the real-time scheduler.  The E2E gate must cast
+ * explicitly:
+ *
+ * ```ts
+ * const e2e = sessionRuntime as unknown as E2eSessionRuntime;
+ * hooks.dispatchTick = () => e2e.dispatchTick(metadata.hostId);
+ * ```
+ *
+ * `as unknown as E2eSessionRuntime` is intentional (WARN-1 fix, SOLID §ISP);
+ * the cast is safe because the concrete class implements the method — it is
+ * only hidden from the public type surface.
+ *
+ * Architecture: §13.9 — E2E hooks contract.
+ * @chimera-review: only `electron/main/index.ts` may hold a value of this type;
+ *   do not pass it to any other production module.
+ */
+export interface E2eSessionRuntime {
+    dispatchTick(playerId: PlayerId): void;
+}
+
 export interface SessionRuntimeOptions {
     /**
      * Game identifier for the active session, e.g. `'tactics'`.  Stamped on
@@ -220,8 +246,19 @@ export class SessionRuntime {
         this.resolveTimedOutOrReadySceneTransition();
     }
 
-    /** @internal - E2E-only; wired by {@link createE2eHooks} */
-    dispatchTick(playerId: PlayerId): void {
+    /**
+     * Advance the simulation clock by one tick.
+     *
+     * Intentionally `private` — production callers must never reach this
+     * directly.  The only permitted access path is via {@link E2eSessionRuntime}
+     * cast at the CHIMERA_E2E wiring site in `electron/main/index.ts`.
+     *
+     * All tick dispatches still traverse the full `ActionPipeline`
+     * (Invariant #6); no state is injected.
+     *
+     * @see E2eSessionRuntime
+     */
+    private dispatchTick(playerId: PlayerId): void {
         this.applyAction({
             type: 'engine:tick',
             playerId,

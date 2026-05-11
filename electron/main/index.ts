@@ -48,7 +48,11 @@ import {
     collectInitialPlayerSlots,
     resolveAgentSlot,
 } from './runtime/HostedSessionAgents.js';
-import { SessionCommitmentRuntime, SessionRuntime } from './runtime/SessionRuntime.js';
+import {
+    SessionCommitmentRuntime,
+    SessionRuntime,
+    type E2eSessionRuntime,
+} from './runtime/SessionRuntime.js';
 import { wireDefaultSceneActions } from './runtime/SceneActionWiring.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
@@ -1017,8 +1021,15 @@ export async function main(): Promise<void> {
             });
             activeSession = sessionRuntime;
             if (metadata.e2eHooks !== undefined) {
+                // Cast to the narrow E2E interface — dispatchTick is private on
+                // SessionRuntime so production callers cannot reach it.
+                // This is the sole permitted path (WARN-1 fix, §ISP).
+                // @chimera-review: as unknown as E2eSessionRuntime is safe here;
+                //   the concrete class implements the method; it is only hidden
+                //   from the public type surface.
+                const e2eRuntime = sessionRuntime as unknown as E2eSessionRuntime;
                 metadata.e2eHooks.dispatchTick = () => {
-                    sessionRuntime.dispatchTick(metadata.hostId);
+                    e2eRuntime.dispatchTick(metadata.hostId);
                     simulationHost.afterTick(sessionRuntime.getSnapshot());
                 };
             }
