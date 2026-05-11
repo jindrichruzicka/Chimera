@@ -41,6 +41,7 @@ import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import { registerE2eHooks, type E2eHooks } from '../runtime/e2e-hooks.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -1387,7 +1388,7 @@ describe('LobbyManager — PROFILE_UPDATE side-channel', () => {
 
 describe('LobbyManager — onClientSnapshotReceived', () => {
     async function hostAndJoin(
-        onClientSnapshotReceived?: (snapshot: PlayerSnapshot) => void,
+        onClientSnapshotReceived?: (snapshot: PlayerSnapshot, checksum: number) => void,
     ): Promise<{
         hostManager: LobbyManager;
         joinManager: LobbyManager;
@@ -1418,6 +1419,7 @@ describe('LobbyManager — onClientSnapshotReceived', () => {
 
     it('invokes onClientSnapshotReceived when host sends a snapshot to the joined client', async () => {
         const received: PlayerSnapshot[] = [];
+        const receivedChecksums: number[] = [];
         const provider = makeProvider();
 
         // Capture HostTransport from the host manager
@@ -1431,8 +1433,9 @@ describe('LobbyManager — onClientSnapshotReceived', () => {
         // Host and join
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
         const joinManager = new LobbyManager(provider, createNoopLogger(), {
-            onClientSnapshotReceived: (snap) => {
+            onClientSnapshotReceived: (snap, checksum) => {
                 received.push(snap);
+                receivedChecksums.push(checksum);
             },
         });
         await joinManager.joinLobby({ address: hostInfo.sessionId });
@@ -1447,6 +1450,7 @@ describe('LobbyManager — onClientSnapshotReceived', () => {
         // Verify callback was invoked with the snapshot
         expect(received).toHaveLength(1);
         expect(received[0]).toEqual(testSnapshot);
+        expect(receivedChecksums).toEqual([crc32Json(testSnapshot)]);
 
         // Teardown
         await joinManager.closeLobby();

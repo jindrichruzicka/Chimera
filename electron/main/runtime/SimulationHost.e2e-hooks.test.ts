@@ -45,8 +45,10 @@ describe('registerE2eHooks', () => {
         expect(globalThis.__e2eHooks).toBe(hooks);
         expect(hooks.lastHostSnapshot).toBeNull();
         expect(hooks.lastChecksum).toBe(0);
+        expect(hooks.broadcastChecksums).toEqual({});
         expect(hooks.currentTick).toBe(0);
         expect(typeof hooks.onTick).toBe('function');
+        expect(typeof hooks.onBroadcastChecksum).toBe('function');
         expect(typeof hooks.dispatchTick).toBe('function');
     });
 
@@ -89,6 +91,7 @@ describe('registerE2eHooks', () => {
         assertPlayerSnapshot(hooks.lastHostSnapshot);
         expect(hooks.currentTick).toBe(17);
         expect(hooks.lastChecksum).toBe(12_345);
+        expect(hooks.broadcastChecksums[snapshot.viewerId]).toBe(12_345);
         expect(hooks.lastHostSnapshot).toBe(snapshot);
 
         const storedSnapshot = hooks.lastHostSnapshot;
@@ -96,5 +99,21 @@ describe('registerE2eHooks', () => {
             throw new Error('Expected onTick to store a PlayerSnapshot');
         }
         expect('seed' in storedSnapshot).toBe(false);
+    });
+
+    it('updates currentTick, lastChecksum, and per-viewer checksum from onBroadcastChecksum without replacing lastHostSnapshot', () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+        const snapshot = makeStubPlayerSnapshot(17);
+        hooks.onTick(17, 12_345, snapshot);
+
+        hooks.onBroadcastChecksum(18, 'remote-player', 67_890);
+
+        expect(hooks.currentTick).toBe(18);
+        expect(hooks.lastChecksum).toBe(67_890);
+        expect(hooks.broadcastChecksums).toEqual({
+            [snapshot.viewerId]: 12_345,
+            'remote-player': 67_890,
+        });
+        expect(hooks.lastHostSnapshot).toBe(snapshot);
     });
 });

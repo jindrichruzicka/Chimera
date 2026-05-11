@@ -191,10 +191,10 @@ describe('engine:tick definition', () => {
         expect(result.ok).toBe(true);
     });
 
-    it('reduce with empty timer registry returns the same state reference (no allocation)', () => {
+    it('reduce with empty timer registry advances the logical tick by one', () => {
         const snapshot = makeSnapshot();
         const next = definition().reduce(snapshot, { seed: 7 }, hostId, stubCtx);
-        expect(next).toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick + 1);
         expect(next.timers).toStrictEqual({});
     });
 
@@ -267,6 +267,7 @@ describe('engine:tick — timer wiring (§4.20)', () => {
         const timer = makeTickTimer({ id: 'tmr-1' as TimerId, remainingTicks: 2 });
         const snapshot = makeTimerSnapshot({ ['tmr-1' as TimerId]: timer });
         const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
+        expect(next.tick).toBe(snapshot.tick + 1);
         expect(next.timers?.['tmr-1' as TimerId]?.remainingTicks).toBe(1);
     });
 
@@ -408,7 +409,7 @@ describe('engine:tick — timer wiring (§4.20)', () => {
         expect(capturedPlayerId).toBe(hostId);
     });
 
-    it('dispatched envelope carries the current tick from state', () => {
+    it('dispatched envelope carries the tick advanced by the outer engine:tick', () => {
         let capturedTick: number | undefined;
         const dispatchCtx: ReduceContext = {
             ...stubCtx,
@@ -420,21 +421,23 @@ describe('engine:tick — timer wiring (§4.20)', () => {
         const timer = makeTickTimer({ id: 'tmr-1' as TimerId, remainingTicks: 1 });
         const snapshot = { ...makeTimerSnapshot({ ['tmr-1' as TimerId]: timer }), tick: 7 };
         definition().reduce(snapshot, { seed: 1 }, hostId, dispatchCtx);
-        expect(capturedTick).toBe(7);
+        expect(capturedTick).toBe(8);
     });
 
-    // ── WARN-1 regression: no spurious allocation for all-inactive registries ──
+    // ── WARN-1 regression: no spurious timer-registry allocation for inactive timers ──
 
-    it('returns same state reference when registry has only inactive timers (no-op tick)', () => {
-        // Inactive timers (e.g. spent one-shots) must not cause a new state object
-        // to be allocated — Stage-7 broadcast guard relies on reference equality.
+    it('preserves the timer registry reference when registry has only inactive timers', () => {
+        // Inactive timers (e.g. spent one-shots) must not cause a new timer registry
+        // to be allocated; engine:tick itself still advances the logical clock.
         const inactiveTimer = makeTickTimer({ id: 'tmr-spent' as TimerId, active: false });
         const snapshot = makeTimerSnapshot({ ['tmr-spent' as TimerId]: inactiveTimer });
         const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
-        expect(next).toBe(snapshot);
+        expect(next).not.toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick + 1);
+        expect(next.timers).toBe(snapshot.timers);
     });
 
-    it('returns same state reference when registry has multiple inactive timers', () => {
+    it('preserves the timer registry reference when registry has multiple inactive timers', () => {
         const timerA = makeTickTimer({ id: 'tmr-a' as TimerId, active: false });
         const timerB = makeTickTimer({ id: 'tmr-b' as TimerId, active: false });
         const snapshot = makeTimerSnapshot({
@@ -442,7 +445,9 @@ describe('engine:tick — timer wiring (§4.20)', () => {
             ['tmr-b' as TimerId]: timerB,
         });
         const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
-        expect(next).toBe(snapshot);
+        expect(next).not.toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick + 1);
+        expect(next.timers).toBe(snapshot.timers);
     });
 
     it('does NOT return same reference when an active timer is decremented (state changed)', () => {
@@ -457,10 +462,10 @@ describe('engine:tick — timer wiring (§4.20)', () => {
         expect(next).not.toBe(snapshot);
     });
 
-    it('uses O(1) fast path when advance() returns next === orig (WARN-1)', () => {
+    it('uses O(1) timer-registry fast path when advance() returns next === orig (WARN-1)', () => {
         // Performance guard: when all timers are inactive, TimerManager.advance()
         // returns the same registry reference (next === orig) without allocating.
-        // EngineActions should skip the O(n) key-scan loop and return immediately.
+        // EngineActions must preserve that registry while still advancing tick.
         // This test verifies the fast-path behavior even with a large registry.
         const largeRegistry: TimerRegistry = {};
         for (let i = 0; i < 100; i++) {
@@ -471,9 +476,9 @@ describe('engine:tick — timer wiring (§4.20)', () => {
         }
         const snapshot = makeTimerSnapshot(largeRegistry);
         const next = definition().reduce(snapshot, { seed: 1 }, hostId, stubCtx);
-        // Must return same state reference — this ensures no O(n) allocation occurred
-        // and the Stage-7 broadcast guard can skip viewer snapshots.
-        expect(next).toBe(snapshot);
+        expect(next).not.toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick + 1);
+        expect(next.timers).toBe(snapshot.timers);
     });
 });
 

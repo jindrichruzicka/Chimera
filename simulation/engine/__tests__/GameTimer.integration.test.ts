@@ -244,7 +244,7 @@ describe('GameTimer integration — non-fatal validation failure', () => {
 
         // The result should be a valid state (engine:tick completed despite the validation failure)
         expect(result).toBeDefined();
-        expect(result.tick).toBe(0);
+        expect(result.tick).toBe(snapshot.tick + 1);
 
         // A warning should have been logged
         expect(loggedWarnings).toHaveLength(1);

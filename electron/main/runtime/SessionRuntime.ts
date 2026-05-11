@@ -220,6 +220,16 @@ export class SessionRuntime {
         this.resolveTimedOutOrReadySceneTransition();
     }
 
+    /** @internal - E2E-only; wired by {@link createE2eHooks} */
+    dispatchTick(playerId: PlayerId): void {
+        this.applyAction({
+            type: 'engine:tick',
+            playerId,
+            tick: this.snapshot.tick,
+            payload: { seed: this.snapshot.seed },
+        });
+    }
+
     private resolveTimedOutOrReadySceneTransition(): void {
         const transition = this.snapshot.sceneTransition;
         const hostPlayerId = this.snapshot.hostPlayerId;

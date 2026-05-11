@@ -326,7 +326,7 @@ export interface ClientTransport {
      */
     sendSideChannel(msg: SideChannelMessage): void;
     /** Subscribe to projected PlayerSnapshot pushes from the host. */
-    onSnapshotReceived(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe;
+    onSnapshotReceived(cb: (snapshot: PlayerSnapshot, checksum: number) => void): Unsubscribe;
     /** Subscribe to inbound side-channel messages from the host. */
     onSideChannelReceived(cb: (msg: SideChannelMessage) => void): Unsubscribe;
     /** Subscribe to commitment reveal messages from the host.

@@ -10,6 +10,28 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createE2eHooks, registerE2eHooks, getE2eHooks, MAX_WS_FRAMES } from './e2e-hooks';
 import type { WsFrame } from './e2e-hooks';
+import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+
+const HOST_VIEWER_ID = toPlayerId('player-host');
+
+function makeSnapshot(viewerId: typeof HOST_VIEWER_ID): PlayerSnapshot {
+    return {
+        tick: 12,
+        viewerId,
+        phase: 'playing' as PlayerSnapshot['phase'],
+        players: {},
+        entities: {},
+        events: [],
+        matchResult: null,
+        commitments: {},
+        undoMeta: {
+            canUndo: false,
+            canRedo: false,
+        },
+        isMyTurn: true,
+    };
+}
 
 afterEach(() => {
     // Restore env and clear global hook between tests
@@ -138,6 +160,34 @@ describe('pushWsFrame', () => {
         }
 
         expect(hooks.wsFrames).toHaveLength(MAX_WS_FRAMES);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// checksum tracking
+// ---------------------------------------------------------------------------
+
+describe('checksum tracking', () => {
+    it('records host viewer checksum from onTick', () => {
+        const hooks = createE2eHooks();
+        const snapshot = makeSnapshot(HOST_VIEWER_ID);
+
+        hooks.onTick(12, 987, snapshot);
+
+        expect(hooks.currentTick).toBe(12);
+        expect(hooks.lastChecksum).toBe(987);
+        expect(hooks.lastHostSnapshot).toBe(snapshot);
+        expect(hooks.broadcastChecksums).toEqual({ [HOST_VIEWER_ID]: 987 });
+    });
+
+    it('records per-viewer checksum updates from onBroadcastChecksum', () => {
+        const hooks = createE2eHooks();
+
+        hooks.onBroadcastChecksum(12, HOST_VIEWER_ID, 654);
+
+        expect(hooks.currentTick).toBe(12);
+        expect(hooks.lastChecksum).toBe(654);
+        expect(hooks.broadcastChecksums).toEqual({ [HOST_VIEWER_ID]: 654 });
     });
 });
 

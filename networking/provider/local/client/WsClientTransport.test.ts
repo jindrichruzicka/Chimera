@@ -337,10 +337,13 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
         // the same bytes, not Zod's reordered output.
         const { server, playerId, transport } = await makeClientTransport();
 
-        const snapshotReceived = new Promise<PlayerSnapshot>((resolve) => {
-            const unsubscribe = transport.onSnapshotReceived((snapshot) => {
+        const snapshotReceived = new Promise<{
+            readonly snapshot: PlayerSnapshot;
+            readonly checksum: number;
+        }>((resolve) => {
+            const unsubscribe = transport.onSnapshotReceived((snapshot, receivedChecksum) => {
                 unsubscribe();
-                resolve(snapshot);
+                resolve({ snapshot, checksum: receivedChecksum });
             });
         });
 
@@ -365,11 +368,12 @@ describe('WsClientTransport — CRC32 validation on inbound SNAPSHOT', () => {
             snapshot: nonSchemaOrderSnapshot,
             checksum,
         });
-        const snapshot = await snapshotReceived;
+        const { snapshot, checksum: receivedChecksum } = await snapshotReceived;
 
         // After the fix: snapshot accepted (CRC validated against pre-Zod bytes)
         // Before the fix: snapshot rejected (CRC computed from Zod-reordered keys)
         expect(snapshot.tick).toBe(77);
+        expect(receivedChecksum).toBe(checksum);
     });
 });
 

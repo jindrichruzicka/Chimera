@@ -108,8 +108,10 @@ export class StateBroadcaster {
 
     private notifyE2eHooks(viewerId: PlayerId, snapshot: PlayerSnapshot): void {
         if (this.options.e2eHooks === undefined) return;
+        const checksum = crc32Json(snapshot);
+        this.options.e2eHooks.onBroadcastChecksum(snapshot.tick, viewerId, checksum);
         if (viewerId !== this.options.hostViewerId) return;
-        this.options.e2eHooks.onTick(snapshot.tick, crc32Json(snapshot), snapshot);
+        this.options.e2eHooks.onTick(snapshot.tick, checksum, snapshot);
     }
 
     private sendToRendererRecipients(viewerId: PlayerId, snapshot: PlayerSnapshot): void {

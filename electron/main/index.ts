@@ -1016,6 +1016,12 @@ export async function main(): Promise<void> {
                 commitmentRuntime: sessionCommitmentRuntime,
             });
             activeSession = sessionRuntime;
+            if (metadata.e2eHooks !== undefined) {
+                metadata.e2eHooks.dispatchTick = () => {
+                    sessionRuntime.dispatchTick(metadata.hostId);
+                    simulationHost.afterTick(sessionRuntime.getSnapshot());
+                };
+            }
 
             const sendHostedRendererSnapshot = (snapshot: PlayerSnapshot): void => {
                 lastSentPlayerSnapshot = snapshot;
@@ -1326,8 +1332,9 @@ export async function main(): Promise<void> {
             });
         },
         profileGate,
-        onClientSnapshotReceived: (snapshot) => {
+        onClientSnapshotReceived: (snapshot, checksum) => {
             lastSentPlayerSnapshot = snapshot;
+            resolvedE2eHooks?.onBroadcastChecksum(snapshot.tick, snapshot.viewerId, checksum);
             const win = mainWindow;
             if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                 win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);

@@ -45,10 +45,23 @@ export async function getSimulationTick(app: ElectronApplication): Promise<numbe
 }
 
 /**
- * Retrieve the last checksum broadcast by StateBroadcaster.
- * Used by soak tests to compare host vs client tick convergence.
+ * Retrieve the last checksum observed by the process.
+ * Prefer getLastBroadcastChecksums() when comparing multiplayer convergence;
+ * this scalar is retained for lower-level hook diagnostics.
  * Returns 0 when __e2eHooks is absent.
  */
 export async function getLastBroadcastChecksum(app: ElectronApplication): Promise<number> {
     return app.evaluate(() => globalThis.__e2eHooks?.lastChecksum ?? 0);
+}
+
+/**
+ * Retrieve the last broadcast checksum keyed by projected viewer id.
+ * Used by soak tests so the host's checksum for a specific remote viewer is
+ * compared with that same client's received checksum, independent of player-map
+ * broadcast ordering.
+ */
+export async function getLastBroadcastChecksums(
+    app: ElectronApplication,
+): Promise<Readonly<Record<string, number>>> {
+    return app.evaluate(() => globalThis.__e2eHooks?.broadcastChecksums ?? {});
 }

@@ -26,6 +26,7 @@ import type { ElectronApplication } from '@playwright/test';
 
 vi.mock('./ipc-spy', () => ({
     getLastBroadcastChecksum: vi.fn(),
+    getLastBroadcastChecksums: vi.fn(),
     getSimulationTick: vi.fn(),
 }));
 
@@ -232,29 +233,41 @@ describe('assertNoLeakedFields', () => {
 
 describe('assertChecksumMatch', () => {
     it('resolves without throwing when host and client checksums match', async () => {
-        vi.mocked(ipcSpy.getLastBroadcastChecksum).mockResolvedValue(42);
+        vi.mocked(ipcSpy.getLastBroadcastChecksums)
+            .mockResolvedValueOnce({ host: 10, client: 42 })
+            .mockResolvedValueOnce({ client: 42 });
 
         await expect(assertChecksumMatch(makeApp(), makeApp())).resolves.toBeUndefined();
     });
 
     it('rejects when host checksum differs from client checksum', async () => {
-        vi.mocked(ipcSpy.getLastBroadcastChecksum)
-            .mockResolvedValueOnce(42)
-            .mockResolvedValueOnce(99);
+        vi.mocked(ipcSpy.getLastBroadcastChecksums)
+            .mockResolvedValueOnce({ host: 10, client: 42 })
+            .mockResolvedValueOnce({ client: 99 });
 
         await expect(assertChecksumMatch(makeApp(), makeApp())).rejects.toThrow();
     });
 
-    it('calls getLastBroadcastChecksum with the host app and then the client app', async () => {
+    it('rejects when the host did not broadcast a checksum for the client viewer', async () => {
+        vi.mocked(ipcSpy.getLastBroadcastChecksums)
+            .mockResolvedValueOnce({ host: 10 })
+            .mockResolvedValueOnce({ client: 42 });
+
+        await expect(assertChecksumMatch(makeApp(), makeApp())).rejects.toThrow();
+    });
+
+    it('calls getLastBroadcastChecksums with the host app and then the client app', async () => {
         const hostApp = makeApp();
         const clientApp = makeApp();
-        vi.mocked(ipcSpy.getLastBroadcastChecksum).mockResolvedValue(7);
+        vi.mocked(ipcSpy.getLastBroadcastChecksums)
+            .mockResolvedValueOnce({ client: 7 })
+            .mockResolvedValueOnce({ client: 7 });
 
         await assertChecksumMatch(hostApp, clientApp);
 
-        expect(vi.mocked(ipcSpy.getLastBroadcastChecksum)).toHaveBeenCalledTimes(2);
-        expect(vi.mocked(ipcSpy.getLastBroadcastChecksum)).toHaveBeenNthCalledWith(1, hostApp);
-        expect(vi.mocked(ipcSpy.getLastBroadcastChecksum)).toHaveBeenNthCalledWith(2, clientApp);
+        expect(vi.mocked(ipcSpy.getLastBroadcastChecksums)).toHaveBeenCalledTimes(2);
+        expect(vi.mocked(ipcSpy.getLastBroadcastChecksums)).toHaveBeenNthCalledWith(1, hostApp);
+        expect(vi.mocked(ipcSpy.getLastBroadcastChecksums)).toHaveBeenNthCalledWith(2, clientApp);
     });
 });
 

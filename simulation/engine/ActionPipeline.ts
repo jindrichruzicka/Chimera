@@ -417,10 +417,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
         // ── Stage 7 — snapshot broadcast ───────────────────────────────────
         // Policy: broadcast is skipped when nextState === snapshot (same reference).
-        // Engine actions MUST preserve reference equality when state does not actually
-        // change (e.g., engine:tick on idle ticks with no timers returns snapshot unchanged).
-        // This prevents spurious network broadcasts. If "always broadcast" semantics are
-        // ever required (e.g. for sync-on-join), revisit this guard here and in
+        // Engine actions that truly do not change state MUST preserve reference equality.
+        // `engine:tick` is a state change even when no timers fire: it always advances
+        // the logical clock and therefore returns a new snapshot reference, causing a
+        // broadcast. If "always broadcast" semantics are ever required for unchanged
+        // state (e.g. for sync-on-join), revisit this guard here and in
         // StateBroadcaster (F26).
         //
         // Skipped for nested dispatches (this.#depth > 0): only the outer action's

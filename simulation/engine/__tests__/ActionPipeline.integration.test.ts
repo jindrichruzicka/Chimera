@@ -67,10 +67,10 @@ describe('ActionPipeline integration with engine-reserved actions', () => {
 
         const next = pipeline.process(snapshot, makeEnvelope('engine:tick', hostId, { seed: 7 }));
 
-        // No timers in the registry → no-op tick: reduce returns the same state
-        // reference (WARN-1 regression), so timers remains an empty object through
-        // any downstream pipeline stages.
-        expect(next).toBe(snapshot);
+        // No timers in the registry: the logical clock still advances, while
+        // timers remains an empty object through downstream pipeline stages.
+        expect(next).not.toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick + 1);
         expect(next.timers).toStrictEqual({});
     });
 

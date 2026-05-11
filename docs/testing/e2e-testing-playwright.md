@@ -304,11 +304,14 @@ export async function getSimulationTick(app: ElectronApplication): Promise<numbe
 }
 
 /**
- * Retrieve the last checksum broadcast by StateBroadcaster.
- * Used by soak tests to compare host vs client convergence.
+ * Retrieve the last broadcast checksum keyed by projected viewer id.
+ * Used by soak tests to compare the host's remote-viewer projection with
+ * that same client's received projection, independent of broadcast ordering.
  */
-export async function getLastBroadcastChecksum(app: ElectronApplication): Promise<number> {
-    return app.evaluate(() => globalThis.__e2eHooks?.lastChecksum ?? 0);
+export async function getLastBroadcastChecksums(
+    app: ElectronApplication,
+): Promise<Readonly<Record<string, number>>> {
+    return app.evaluate(() => globalThis.__e2eHooks?.broadcastChecksums ?? {});
 }
 ```
 
@@ -440,7 +443,7 @@ export async function tick(
 // e2e/helpers/snapshot-assert.ts
 import { expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { getLastBroadcastChecksum, getSimulationTick } from './ipc-spy';
+import { getLastBroadcastChecksums, getSimulationTick } from './ipc-spy';
 
 /**
  * PlayerSnapshot type derived from the globally-declared __e2eHooks shape
@@ -510,9 +513,15 @@ export async function assertChecksumMatch(
     hostApp: ElectronApplication,
     clientApp: ElectronApplication,
 ): Promise<void> {
-    const hostChecksum = await getLastBroadcastChecksum(hostApp);
-    const clientChecksum = await getLastBroadcastChecksum(clientApp);
-    expect(hostChecksum).toBe(clientChecksum);
+    const [hostChecksums, clientChecksums] = await Promise.all([
+        getLastBroadcastChecksums(hostApp),
+        getLastBroadcastChecksums(clientApp),
+    ]);
+    const clientEntries = Object.entries(clientChecksums);
+    expect(clientEntries).toHaveLength(1);
+    const clientEntry = clientEntries[0]!;
+    const [clientId, clientChecksum] = clientEntry;
+    expect(hostChecksums[clientId]).toBe(clientChecksum);
 }
 
 export async function assertTickAdvanced(
@@ -631,9 +640,9 @@ import { tick } from '../helpers/tick-driver';
 test.describe('Multiplayer soak', () => {
     test('checksums converge after 1000 ticks', async ({ hostApp, clientApp }) => {
         await tick(hostApp, 1000);
-        await hostApp.evaluate(() => new Promise((r) => setTimeout(r, 200)));
         const simTick = await getSimulationTick(hostApp);
         expect(simTick).toBeGreaterThanOrEqual(1000);
+        await expect.poll(() => getSimulationTick(clientApp)).toBeGreaterThanOrEqual(simTick);
         await assertChecksumMatch(hostApp, clientApp);
     });
 });
@@ -650,10 +659,17 @@ if (process.env.CHIMERA_E2E === '1') {
     (globalThis as Record<string, unknown>).__e2eHooks = {
         lastHostSnapshot: null as PlayerSnapshot | null,
         lastChecksum: 0,
+        broadcastChecksums: {} as Record<string, number>,
         currentTick: 0,
+        onBroadcastChecksum(tick: number, viewerId: string, checksum: number): void {
+            this.currentTick = tick;
+            this.lastChecksum = checksum;
+            this.broadcastChecksums[viewerId] = checksum;
+        },
         onTick(tick: number, checksum: number, hostSnapshot: PlayerSnapshot): void {
             this.currentTick = tick;
             this.lastChecksum = checksum;
+            this.broadcastChecksums[hostSnapshot.viewerId] = checksum;
             this.lastHostSnapshot = hostSnapshot;
         },
         // No-op until the session runtime wires the real ActionPipeline dispatch.

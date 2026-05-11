@@ -62,7 +62,7 @@ export interface LobbyManagerOptions {
     readonly onLocalSeatAdded?: (player: LobbyPlayerEntry) => void;
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
     readonly profileGate?: ProfileGate;
-    readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot) => void;
+    readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot, checksum: number) => void;
     readonly e2eHooks?: E2eHooks;
 }
 
@@ -371,8 +371,8 @@ export class LobbyManager {
         // Wire transport callbacks and capture Unsubscribe handles so
         // closeLobby() can tear them down cleanly.
         this.subscriptions.push(
-            session.transport.onSnapshotReceived((snapshot) => {
-                this.onClientSnapshotReceived?.(snapshot);
+            session.transport.onSnapshotReceived((snapshot, checksum) => {
+                this.onClientSnapshotReceived?.(snapshot, checksum);
             }),
             session.transport.onLobbyStateChanged((state) => {
                 this.publishLobbyState(state);

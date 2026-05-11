@@ -198,21 +198,10 @@ export const engineTickDefinition: ActionDefinition<EngineTickPayload> = {
         const orig = state.timers;
         const { next, fired } = TimerManager.advance(orig);
 
-        // Early-return guards: preserve reference equality so the Stage-7
-        // broadcast guard can skip viewer snapshots on no-op ticks.
-        //
-        // Fast path (O(1)): when advance() finds all timers inactive, it returns
-        // next === orig (same registry reference). We can return immediately
-        // without the O(n) key scan below (WARN-1 optimization).
-        //
-        // Slow path: when any timer is active, advance() always produces new
-        // object references (Object.fromEntries + per-timer spread), so
-        // next !== orig is guaranteed. No content scan needed.
-        if (fired.length === 0 && next === orig) {
-            return state;
-        }
-
-        let nextState: BaseGameSnapshot = { ...state, timers: next };
+        let nextState: BaseGameSnapshot =
+            next === orig
+                ? { ...state, tick: state.tick + 1 }
+                : { ...state, tick: state.tick + 1, timers: next };
 
         // ── Dispatch fired timer actions (Stages 1–5; Stages 6+7 suppressed by depth guard) ──
         // New or cancelled timers created by child actions do NOT fire in this

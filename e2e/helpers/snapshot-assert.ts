@@ -19,7 +19,7 @@
 
 import { expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
-import { getLastBroadcastChecksum, getSimulationTick } from './ipc-spy';
+import { getLastBroadcastChecksums, getSimulationTick } from './ipc-spy';
 
 /**
  * PlayerSnapshot type derived from the globally-declared __e2eHooks shape
@@ -91,9 +91,10 @@ export function assertNoLeakedFields(
 }
 
 /**
- * Assert that the last broadcast checksum matches between the host process and
- * a client process. Uses `expect(hostChecksum).toBe(clientChecksum)` — no
- * manual throw.
+ * Assert that the host's last projected checksum for the client viewer matches
+ * the checksum received by that client process. This intentionally compares the
+ * host checksum keyed by the client's viewer id, avoiding reliance on Stage-7
+ * player-map broadcast ordering.
  *
  * @param hostApp   - ElectronApplication instance for the host.
  * @param clientApp - ElectronApplication instance for the client.
@@ -102,9 +103,22 @@ export async function assertChecksumMatch(
     hostApp: ElectronApplication,
     clientApp: ElectronApplication,
 ): Promise<void> {
-    const hostChecksum = await getLastBroadcastChecksum(hostApp);
-    const clientChecksum = await getLastBroadcastChecksum(clientApp);
-    expect(hostChecksum).toBe(clientChecksum);
+    const [hostChecksums, clientChecksums] = await Promise.all([
+        getLastBroadcastChecksums(hostApp),
+        getLastBroadcastChecksums(clientApp),
+    ]);
+    const clientEntries = Object.entries(clientChecksums);
+    expect(
+        clientEntries,
+        `Expected client process to expose exactly one viewer checksum, got ${clientEntries.length}`,
+    ).toHaveLength(1);
+
+    const clientEntry = clientEntries[0]!;
+    const [clientId, clientChecksum] = clientEntry;
+    expect(
+        hostChecksums[clientId],
+        `Host checksum for viewer=${clientId} should match client process checksum`,
+    ).toBe(clientChecksum);
 }
 
 /**

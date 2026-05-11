@@ -33,7 +33,7 @@ import type { ServerConnection } from './ServerConnection.js';
  * ServerConnection.connect() resolves with a PlayerId.
  */
 export class WsClientTransport implements ClientTransport {
-    private readonly snapshotCbs = new Set<(snapshot: PlayerSnapshot) => void>();
+    private readonly snapshotCbs = new Set<(snapshot: PlayerSnapshot, checksum: number) => void>();
     private readonly sideChannelCbs = new Set<(msg: SideChannelMessage) => void>();
     private readonly revealCbs = new Set<(reveal: WireCommitmentReveal) => void>();
     private readonly lobbyStateCbs = new Set<(state: LobbyState) => void>();
@@ -92,7 +92,7 @@ export class WsClientTransport implements ClientTransport {
 
     // ─── Subscriptions ────────────────────────────────────────────────────────
 
-    onSnapshotReceived(cb: (snapshot: PlayerSnapshot) => void): Unsubscribe {
+    onSnapshotReceived(cb: (snapshot: PlayerSnapshot, checksum: number) => void): Unsubscribe {
         this.snapshotCbs.add(cb);
         return (): void => {
             this.snapshotCbs.delete(cb);
@@ -155,7 +155,7 @@ export class WsClientTransport implements ClientTransport {
     private route(msg: ServerMessage): void {
         switch (msg.type) {
             case 'SNAPSHOT': {
-                for (const cb of this.snapshotCbs) cb(msg.snapshot);
+                for (const cb of this.snapshotCbs) cb(msg.snapshot, msg.checksum);
                 break;
             }
 

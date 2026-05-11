@@ -114,6 +114,28 @@ describe('SessionRuntime', () => {
         expect(runtime.getSnapshot()).toBe(next);
     });
 
+    it('dispatchTick sends an engine:tick envelope stamped from the current snapshot', () => {
+        const initial = makeSnapshot(4);
+        const next = makeSnapshot(5);
+        const apply: ApplyActionFn = vi.fn().mockReturnValue(next);
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot: initial,
+            applyAction: apply,
+        });
+
+        runtime.dispatchTick(P1);
+
+        expect(apply).toHaveBeenCalledWith(initial, {
+            type: 'engine:tick',
+            playerId: P1,
+            tick: initial.tick,
+            payload: { seed: initial.seed },
+        });
+        expect(runtime.getSnapshot()).toBe(next);
+    });
+
     it('auto-dispatches engine:scene_commit when a scene_ready action completes the readiness barrier', () => {
         const initial = makeSnapshot(0, [P1, P2]);
         const ready = {

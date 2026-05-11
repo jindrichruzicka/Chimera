@@ -11,7 +11,12 @@
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import type { ElectronApplication } from '@playwright/test';
-import { getHostSnapshot, getSimulationTick, getLastBroadcastChecksum } from './ipc-spy';
+import {
+    getHostSnapshot,
+    getSimulationTick,
+    getLastBroadcastChecksum,
+    getLastBroadcastChecksums,
+} from './ipc-spy';
 
 // ---------------------------------------------------------------------------
 // Test helper — mock ElectronApplication that executes callbacks in-process
@@ -54,6 +59,7 @@ describe('getHostSnapshot', () => {
             lastHostSnapshot: snapshot,
             currentTick: 3,
             lastChecksum: 7,
+            broadcastChecksums: { p1: 7 },
             onTick: () => undefined,
         };
 
@@ -75,6 +81,7 @@ describe('getHostSnapshot', () => {
             lastHostSnapshot: null,
             currentTick: 0,
             lastChecksum: 0,
+            broadcastChecksums: {},
             onTick: () => undefined,
         };
 
@@ -103,6 +110,7 @@ describe('getSimulationTick', () => {
             lastHostSnapshot: null,
             currentTick: 42,
             lastChecksum: 0,
+            broadcastChecksums: {},
             onTick: () => undefined,
         };
 
@@ -139,6 +147,7 @@ describe('getLastBroadcastChecksum', () => {
             lastHostSnapshot: null,
             currentTick: 0,
             lastChecksum: 99,
+            broadcastChecksums: { p2: 99 },
             onTick: () => undefined,
         };
 
@@ -160,6 +169,43 @@ describe('getLastBroadcastChecksum', () => {
         const app = makeApp();
 
         await getLastBroadcastChecksum(app);
+
+        expect(app.evaluate).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// getLastBroadcastChecksums
+// ---------------------------------------------------------------------------
+
+describe('getLastBroadcastChecksums', () => {
+    it('returns broadcastChecksums from __e2eHooks when hooks are registered', async () => {
+        g['__e2eHooks'] = {
+            lastHostSnapshot: null,
+            currentTick: 0,
+            lastChecksum: 99,
+            broadcastChecksums: { p1: 11, p2: 99 },
+            onTick: () => undefined,
+        };
+
+        const result = await getLastBroadcastChecksums(makeApp());
+
+        expect(result).toEqual({ p1: 11, p2: 99 });
+    });
+
+    it('returns an empty checksum map when __e2eHooks is absent', async () => {
+        globalThis.__e2eHooks = undefined;
+
+        const result = await getLastBroadcastChecksums(makeApp());
+
+        expect(result).toEqual({});
+    });
+
+    it('calls app.evaluate exactly once', async () => {
+        globalThis.__e2eHooks = undefined;
+        const app = makeApp();
+
+        await getLastBroadcastChecksums(app);
 
         expect(app.evaluate).toHaveBeenCalledTimes(1);
     });

@@ -37,6 +37,7 @@ import type {
 } from './MultiplayerProvider.js';
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
+import { crc32Json } from '@chimera/shared/crc32.js';
 import { playerId as toPlayerId } from './MultiplayerProvider.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────
@@ -46,7 +47,7 @@ type ReadyStateCb = (from: PlayerId, ready: boolean) => void;
 type HostSideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 type PlayerJoinedCb = (player: LobbyPlayerEntry) => void;
 type PlayerLeftCb = (playerId: PlayerId, reason: DisconnectReason) => void;
-type SnapshotCb = (snapshot: PlayerSnapshot) => void;
+type SnapshotCb = (snapshot: PlayerSnapshot, checksum: number) => void;
 type LobbyStateCb = (state: LobbyState) => void;
 type ClientSideChannelCb = (msg: SideChannelMessage) => void;
 type RevealCb = (reveal: WireCommitmentReveal) => void;
@@ -160,7 +161,8 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             sendSnapshot: (playerId: PlayerId, snapshot: PlayerSnapshot): void => {
                 const client = channel.clients.get(playerId);
                 if (client) {
-                    for (const cb of client.snapshotCbs) cb(snapshot);
+                    const checksum = crc32Json(snapshot);
+                    for (const cb of client.snapshotCbs) cb(snapshot, checksum);
                 }
             },
 

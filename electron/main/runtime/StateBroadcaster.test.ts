@@ -88,6 +88,7 @@ function makeE2eHooks(): E2eHooks {
     const state = {
         lastHostSnapshot: null as PlayerSnapshot | null,
         lastChecksum: 0,
+        broadcastChecksums: {} as Record<string, number>,
         currentTick: 0,
     };
     return {
@@ -97,14 +98,23 @@ function makeE2eHooks(): E2eHooks {
         get lastChecksum() {
             return state.lastChecksum;
         },
+        get broadcastChecksums() {
+            return { ...state.broadcastChecksums };
+        },
         get currentTick() {
             return state.currentTick;
         },
         firstPlayerRole: 'host',
         directMatchLobbyCode: null,
+        onBroadcastChecksum(tick, viewerId, checksum): void {
+            state.currentTick = tick;
+            state.lastChecksum = checksum;
+            state.broadcastChecksums[viewerId] = checksum;
+        },
         onTick(tick, checksum, snapshot): void {
             state.currentTick = tick;
             state.lastChecksum = checksum;
+            state.broadcastChecksums[snapshot.viewerId] = checksum;
             state.lastHostSnapshot = snapshot;
         },
         pushWsFrame(): void {
@@ -234,11 +244,12 @@ describe('StateBroadcaster.broadcast', () => {
 
         expect(hooks.currentTick).toBe(projected.tick);
         expect(hooks.lastChecksum).toBe(crc32Json(projected));
+        expect(hooks.broadcastChecksums[PLAYER_A]).toBe(crc32Json(projected));
         expect(hooks.lastHostSnapshot).toBe(projected);
         expect(hooks.lastHostSnapshot).not.toBe(snapshot);
     });
 
-    it('does not update E2E hooks for non-host viewer snapshots', () => {
+    it('updates E2E checksum but not host snapshot for non-host viewer snapshots', () => {
         const transport = makeTransport();
         const projected = makeProjectedSnapshot(PLAYER_B);
         const projector = makeProjector(projected);
@@ -250,8 +261,9 @@ describe('StateBroadcaster.broadcast', () => {
 
         broadcaster.broadcast(makeSnapshot(PLAYER_B), PLAYER_B);
 
-        expect(hooks.currentTick).toBe(0);
-        expect(hooks.lastChecksum).toBe(0);
+        expect(hooks.currentTick).toBe(projected.tick);
+        expect(hooks.lastChecksum).toBe(crc32Json(projected));
+        expect(hooks.broadcastChecksums[PLAYER_B]).toBe(crc32Json(projected));
         expect(hooks.lastHostSnapshot).toBeNull();
     });
 });

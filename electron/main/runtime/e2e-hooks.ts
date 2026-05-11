@@ -33,7 +33,9 @@ export type E2eFirstPlayerRole = 'host' | 'client';
 
 export interface E2eHooks {
     readonly lastHostSnapshot: PlayerSnapshot | null;
+    /** Reflects the last broadcast viewer processed by StateBroadcaster, not necessarily the host. */
     readonly lastChecksum: number;
+    readonly broadcastChecksums: Readonly<Record<string, number>>;
     readonly currentTick: number;
     firstPlayerRole: E2eFirstPlayerRole;
     /**
@@ -58,6 +60,7 @@ export interface E2eHooks {
      * Networking-layer CHIMERA_E2E hooks must use this method rather than pushing directly.
      */
     pushWsFrame(frame: WsFrame): void;
+    onBroadcastChecksum(tick: number, viewerId: string, checksum: number): void;
     onTick(tick: number, checksum: number, snapshot: PlayerSnapshot): void;
     /**
      * Advance the simulation clock by one tick.
@@ -83,6 +86,7 @@ export function createE2eHooks(): E2eHooks {
     const state = {
         lastHostSnapshot: null as PlayerSnapshot | null,
         lastChecksum: 0,
+        broadcastChecksums: {} as Record<string, number>,
         currentTick: 0,
     };
 
@@ -98,6 +102,9 @@ export function createE2eHooks(): E2eHooks {
         },
         get lastChecksum() {
             return state.lastChecksum;
+        },
+        get broadcastChecksums() {
+            return { ...state.broadcastChecksums };
         },
         get currentTick() {
             return state.currentTick;
@@ -121,9 +128,15 @@ export function createE2eHooks(): E2eHooks {
             // O(1): createRingBuffer overrides push with ring-eviction logic.
             _ring.push(frame);
         },
+        onBroadcastChecksum(tick, viewerId, checksum): void {
+            state.currentTick = tick;
+            state.lastChecksum = checksum;
+            state.broadcastChecksums[viewerId] = checksum;
+        },
         onTick(tick, checksum, snapshot): void {
             state.currentTick = tick;
             state.lastChecksum = checksum;
+            state.broadcastChecksums[snapshot.viewerId] = checksum;
             state.lastHostSnapshot = snapshot;
         },
         // Guard: throw loudly if called before the session runtime wires a real dispatch
