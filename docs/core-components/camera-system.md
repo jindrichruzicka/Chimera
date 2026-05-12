@@ -115,7 +115,14 @@ interface GameCanvasProps {
 ```typescript
 // renderer/hooks/useCamera.ts
 
-export type Vector3Tuple = [x: number, y: number, z: number];
+export type Vector3Tuple = readonly [x: number, y: number, z: number];
+
+export type EasingFn = (progress: number) => number;
+
+export type CameraAnimationTarget = Readonly<{
+    position: Vector3Tuple;
+    lookAt?: Vector3Tuple;
+}>;
 
 export interface CameraController {
     setPosition(x: number, y: number, z: number): void;
@@ -124,24 +131,28 @@ export interface CameraController {
 
     /**
      * Smooth animated move to a new position/look-at.
-     * Internally uses useTween (§4.21).
+     * Frame-driven via `useFrame`; will migrate to `useTween` (§4.21) when F37 lands.
      *
      * Resolution contract:
      *   • Resolves on animation complete.
-     *   • Rejects with CameraAnimationCancelled when superseded or component unmounts.
+     *   • Rejects with CameraAnimationCancelled when manually cancelled,
+     *     superseded, or component unmounts.
      *   • Consumers that await must catch CameraAnimationCancelled.
      */
-    animateTo(
-        target: { position: Vector3Tuple; lookAt?: Vector3Tuple },
-        durationMs: number,
-        easing?: EasingFn,
-    ): Promise<void>;
+    animateTo(target: CameraAnimationTarget, durationMs: number, easing?: EasingFn): Promise<void>;
+
+    /**
+     * Cancels the currently active camera animation, if any.
+     * Returns true when an animation was cancelled.
+     */
+    cancelAnimation(): boolean;
 }
 
 export class CameraAnimationCancelled extends Error {
-    constructor(public readonly reason: 'unmount' | 'superseded') {
+    constructor(public readonly reason: 'unmount' | 'superseded' | 'manual') {
         super(`Camera animation cancelled: ${reason}`);
         this.name = 'CameraAnimationCancelled';
+        Object.setPrototypeOf(this, CameraAnimationCancelled.prototype);
     }
 }
 
@@ -184,5 +195,5 @@ Camera state is **never** part of `GameSnapshot`, never sent over the network, a
 
 ## Cross-References
 
-- [Curves, Tweening & Interaction](curves-tweening-interaction.md) — `useTween` used internally by `animateTo()`
+- [Curves, Tweening & Interaction](curves-tweening-interaction.md) — `useTween` will be used internally by `animateTo()` when F37 lands
 - [Scene Transitions & Fade](scene-transitions-fade.md) — camera may animate during scene transition
