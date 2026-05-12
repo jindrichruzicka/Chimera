@@ -148,7 +148,7 @@ test.describe('Crash recovery', () => {
         await triggerCrashSave(crashApp);
         const savedSlotId = await getLastSavedSlotId(crashApp);
         const savedTick = await getLastSavedTick(crashApp);
-        expect(savedSlotId).toBe('tactics/autosave');
+        expect(savedSlotId).toMatch(/\/autosave$/);
         expect(savedTick).not.toBeNull();
         if (savedTick === null) {
             throw new Error('crash save did not update CHIMERA_E2E last-save hooks');

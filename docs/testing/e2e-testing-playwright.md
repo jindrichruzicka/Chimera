@@ -1,6 +1,6 @@
 ---
 title: 'E2E Testing Layer (Playwright)'
-description: 'Playwright-driven E2E suite for real Electron instances. Covers tooling rationale, directory structure, playwright.config.ts, electron.fixture.ts, lobby.fixture.ts, LobbyPage/MatchPage POMs, ipc-spy.ts, snapshot-assert.ts, tick-driver.ts, all test specs (lobby/match-flow/undo-redo/obfuscation/reconnect/multiplayer-soak), __e2eHooks main-process contract, CHIMERA_E2E flag, CI YAML, and security notes.'
+description: 'Playwright-driven E2E suite for real Electron instances. Covers tooling rationale, directory structure, fixtures, page objects, helpers, mandatory specs including save/load, crash recovery, settings persistence, the __e2eHooks main-process contract, CHIMERA_E2E flag, CI YAML, and security notes.'
 tags: [testing, e2e, playwright, electron, multiplayer, fixtures, page-objects, ci]
 ---
 
@@ -42,6 +42,7 @@ e2e/
 ├── global-setup.ts
 ├── fixtures/
 │   ├── electron.fixture.ts      # Base: launch / close one ElectronApplication
+│   ├── direct-match.fixture.ts  # Host/client direct-match boot helpers
 │   ├── lobby.fixture.ts         # Extends base: two instances + lobby helpers
 │   └── game.fixture.ts          # Extends lobby: match started, tick driver wired
 ├── pages/
@@ -53,15 +54,27 @@ e2e/
 │   ├── ipc-spy.ts               # Read main-process state via electronApp.evaluate()
 │   ├── ws-inspector.ts          # Tap raw WebSocket frames
 │   ├── snapshot-assert.ts       # assertNoLeakedFields(), assertTickAdvanced(), assertChecksumMatch()
-│   └── tick-driver.ts           # Programmatic tick dispatch — used in soak specs
+│   ├── tick-driver.ts           # Programmatic tick dispatch — used in soak specs
+│   └── relaunch.ts              # Relaunch an Electron process with captured args/env
 └── tests/
+    ├── boot-smoke.spec.ts
+    ├── main-menu.spec.ts
     ├── lobby.spec.ts
+    ├── lobby-fixture.spec.ts
     ├── match-flow.spec.ts
+    ├── match-navigation.spec.ts
+    ├── match-result.spec.ts
+    ├── end-turn.spec.ts
+    ├── pass-and-play-auto-handoff.spec.ts
+    ├── scene-transition.spec.ts
+    ├── theme.spec.ts
     ├── undo-redo.spec.ts
     ├── obfuscation.spec.ts
     ├── reconnect.spec.ts
     ├── multiplayer-soak.spec.ts
-    └── save-load.spec.ts
+    ├── save-load.spec.ts
+    ├── crash-recovery.spec.ts
+    └── settings-persistence.spec.ts
 ```
 
 > **Note — Vitest shape-check files in `e2e/` root:** `playwright.config.test.ts` and
@@ -675,14 +688,110 @@ This spec exercises the save/restore invariants for atomic persistence and resto
 ```typescript
 // e2e/tests/save-load.spec.ts
 import { test, expect } from '../fixtures/electron.fixture';
+import { getLastSavedSlotId, getLastSavedTick, getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
+import { MatchPage } from '../pages/MatchPage';
 
 test.describe('Save / load', () => {
     test('tick is restored to pre-save value after relaunch + load', async ({
         saveLoadApp,
         saveLoadWindow,
     }) => {
-        // Play three turns, save, relaunch, load, and assert the tick matches.
+        const match = new MatchPage(saveLoadWindow);
+        await expect(match.canvas).toBeVisible({ timeout: 30_000 });
+
+        for (let turn = 0; turn < 3; turn++) {
+            await match.moveOwnedUnit();
+            await match.endTurnButton.click();
+            await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
+        }
+
+        await saveLoadWindow.evaluate(() =>
+            globalThis.__chimera.saves.save({ gameId: 'tactics', label: 'save-load-spec' }),
+        );
+        const slotId = await getLastSavedSlotId(saveLoadApp);
+        const savedTick = await getLastSavedTick(saveLoadApp);
+        expect(slotId).not.toBeNull();
+        expect(savedTick).toBeGreaterThan(0);
+
+        const relaunchConfig = await captureRelaunchConfig(saveLoadApp);
+        await saveLoadApp.close();
+        const relaunchedApp = await relaunchElectronApplication(relaunchConfig);
+        const relaunchedWindow = await relaunchedApp.firstWindow();
+        await relaunchedWindow.evaluate((id) => globalThis.__chimera.saves.load(id), slotId);
+
+        await expect.poll(() => getSimulationTick(relaunchedApp)).toBe(savedTick);
+    });
+});
+```
+
+### crash-recovery.spec.ts
+
+Single-player crash-recovery spec built on the same pass-and-play direct-match boot path. It advances the match, calls the CHIMERA_E2E-only `triggerCrashSave()` hook to exercise the crash autosave path, exits the Electron process without `before-quit` so `lastCleanExit.flag` is not written, relaunches with the same `--user-data-dir`, asserts the Resume prompt is visible, accepts it through the renderer UI, and asserts the simulation tick matches the crash-save checkpoint.
+
+The spec validates recovery through the preload bridge and normal save/load IPC path. It does not import `electron/main/`, `simulation/`, or `networking/` helpers directly.
+
+```typescript
+// e2e/tests/crash-recovery.spec.ts
+test.describe('Crash recovery', () => {
+    test('tick is restored to crash-save value after unclean exit, relaunch, and Resume', async ({
+        crashApp,
+        crashWindow,
+    }) => {
+        const match = new MatchPage(crashWindow);
+        await expect(match.canvas).toBeVisible({ timeout: 30_000 });
+        await playThreePassAndPlayTurns(match);
+
+        await triggerCrashSave(crashApp);
+        const savedSlotId = await getLastSavedSlotId(crashApp);
+        const savedTick = await getLastSavedTick(crashApp);
+        expect(savedSlotId).toMatch(/\/autosave$/);
+        expect(savedTick).toBeGreaterThan(0);
+
+        const relaunchConfig = await captureRelaunchConfig(crashApp);
+        await exitWithoutCleanQuit(crashApp);
+
+        const relaunchedApp = await relaunchElectronApplication(relaunchConfig);
+        const relaunchedWindow = await relaunchedApp.firstWindow();
+        await expect(relaunchedWindow.getByTestId('crash-recovery-banner')).toBeVisible();
+        await relaunchedWindow.getByRole('button', { name: /resume last session/i }).click();
+
+        await expect.poll(() => getSimulationTick(relaunchedApp)).toBe(savedTick);
+    });
+});
+```
+
+### settings-persistence.spec.ts
+
+Settings persistence spec built on an Electron instance launched directly to `/settings`. It changes `audio.masterVolume` through the `SettingsPage` page object, verifies the value through the renderer-facing settings bridge, relaunches with the same `--user-data-dir`, and asserts the displayed value persists. A second test resets settings to defaults, verifies the engine default immediately, relaunches again, and verifies the reset persisted.
+
+The spec intentionally reads only `window.__chimera.settings` and Settings page DOM state. It never inspects `GameSnapshot`, `SaveFile`, `PlayerSnapshot`, or simulation internals, preserving invariant #32.
+
+```typescript
+// e2e/tests/settings-persistence.spec.ts
+test.describe('Settings persistence', () => {
+    test('masterVolume persists across relaunch', async ({ settingsApp, settingsWindow }) => {
+        const settingsPage = new SettingsPage(settingsWindow);
+        await settingsPage.setMasterVolume(0.42);
+        await expectPersistedMasterVolume(settingsWindow, 0.42);
+
+        const relaunched = await relaunchSettingsApp(settingsApp);
+        await expectDisplayedMasterVolume(new SettingsPage(relaunched.window), 0.42);
+    });
+
+    test('reset returns masterVolume to default and persists across relaunch', async ({
+        settingsApp,
+        settingsWindow,
+    }) => {
+        await new SettingsPage(settingsWindow).setMasterVolume(0.42);
+        const persistedRelaunch = await relaunchSettingsApp(settingsApp);
+
+        const settingsPage = new SettingsPage(persistedRelaunch.window);
+        await settingsPage.resetToDefaults();
+        await expectPersistedMasterVolume(persistedRelaunch.window, 1.0);
+
+        const resetRelaunch = await relaunchSettingsApp(persistedRelaunch.app);
+        await expectDisplayedMasterVolume(new SettingsPage(resetRelaunch.window), 1.0);
     });
 });
 ```
@@ -692,38 +801,41 @@ test.describe('Save / load', () => {
 ## §13.9 Test Hooks in Main Process (`__e2eHooks`)
 
 ```typescript
-// electron/main/simulation-host.ts — behind env guard
+// electron/main/runtime/e2e-hooks.ts — behind env guard
 
-if (process.env.CHIMERA_E2E === '1') {
-    (globalThis as Record<string, unknown>).__e2eHooks = {
-        lastHostSnapshot: null as PlayerSnapshot | null,
-        lastChecksum: 0,
-        broadcastChecksums: {} as Record<string, number>,
-        currentTick: 0,
-        lastSavedSlotId: null as string | null,
-        lastSavedTick: null as number | null,
-        onBroadcastChecksum(tick: number, viewerId: string, checksum: number): void {
-            this.currentTick = tick;
-            this.lastChecksum = checksum;
-            this.broadcastChecksums[viewerId] = checksum;
-        },
-        onTick(tick: number, checksum: number, hostSnapshot: PlayerSnapshot): void {
-            this.currentTick = tick;
-            this.lastChecksum = checksum;
-            this.broadcastChecksums[hostSnapshot.viewerId] = checksum;
-            this.lastHostSnapshot = hostSnapshot;
-        },
-        // No-op until the session runtime wires the real ActionPipeline dispatch.
-        // The session runtime replaces this property after creating the hooks object.
-        dispatchTick(): void {},
-        // No-op until the session runtime wires the crash autosave path.
-        // The session runtime replaces this property after creating the hooks object.
-        triggerCrashSave(): void {},
-    };
+export interface E2eHooks {
+    readonly lastHostSnapshot: PlayerSnapshot | null;
+    readonly lastChecksum: number;
+    readonly broadcastChecksums: Readonly<Record<string, number>>;
+    readonly currentTick: number;
+    lastSavedSlotId: string | null;
+    lastSavedTick: number | null;
+    firstPlayerRole: 'host' | 'client';
+    directMatchLobbyCode: string | null;
+    wsFrames: WsFrame[] | undefined;
+    pushWsFrame(frame: WsFrame): void;
+    onBroadcastChecksum(tick: number, viewerId: string, checksum: number): void;
+    onTick(tick: number, checksum: number, snapshot: PlayerSnapshot): void;
+    onClockTick(tick: number, viewerId: string): void;
+    dispatchTick: () => void;
+    triggerCrashSave: () => void;
+}
+
+export function registerE2eHooks(env = process.env): E2eHooks | undefined {
+    if (env['CHIMERA_E2E'] !== '1') {
+        Reflect.deleteProperty(globalThis, '__e2eHooks');
+        return undefined;
+    }
+
+    const hooks = createE2eHooks();
+    globalThis.__e2eHooks = hooks;
+    return hooks;
 }
 ```
 
-The block is a compile-time dead-code elimination target in production builds. The hook surface is primarily **read-only from tests** — tests inspect state and do not mutate snapshots directly. `lastSavedSlotId` and `lastSavedTick` are set internally after successful save operations so persistence specs can load the exact saved slot without hardcoding. The `dispatchTick` property allows soak specs to programmatically advance the simulation clock, and `triggerCrashSave` allows crash-recovery specs to exercise the autosave-before-crash-dump path without sending an OS kill signal. All tick dispatches still go through the full `ActionPipeline` path (Invariant #6); no state is injected.
+The hook object is created by `createE2eHooks()` and registered only when `CHIMERA_E2E=1`; absent or `0` deletes the global hook. The surface is primarily **read-only from tests** — tests inspect state and do not mutate snapshots directly. `lastSavedSlotId` and `lastSavedTick` are set internally after successful save operations so persistence specs can load the exact saved slot without hardcoding. `wsFrames` is activated by `tapWebSocketFrames()` and written through `pushWsFrame()` so capture remains bounded by `MAX_WS_FRAMES`. `dispatchTick` allows soak specs to programmatically advance the simulation clock through the wired `ActionPipeline` path, and `triggerCrashSave` allows crash-recovery specs to exercise autosave-before-crash-dump behavior without sending an OS kill signal.
+
+Until the session runtime wires active methods, `dispatchTick` throws loudly and `triggerCrashSave` is a no-op. Session startup replaces both with functions that route through the real pipeline/crash-autosave path; no test code injects snapshot state.
 
 ---
 
@@ -738,7 +850,8 @@ The flag is not forwarded to the renderer process. Main-process code paths that 
 
 | Location                                          | Effect                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `simulation-host.ts`                              | Registers `__e2eHooks` on the window object.                                                                                                                                                                                                                                                                                                                           |
+| `runtime/e2e-hooks.ts`                            | Registers `__e2eHooks` on `globalThis` only when `CHIMERA_E2E=1`; deletes the hook otherwise.                                                                                                                                                                                                                                                                          |
+| `runtime/SessionRuntime.ts`                       | Wires `dispatchTick` through the real tick action path and `triggerCrashSave` through the crash-autosave callback.                                                                                                                                                                                                                                                     |
 | `lobby-manager.ts`                                | Binds to a fixed `CHIMERA_PORT`; skips NAT checks.                                                                                                                                                                                                                                                                                                                     |
 | `electron/main/index.ts` — `createWindow` closure | Reads `CHIMERA_E2E_INITIAL_URL` and, after validation through `sanitiseE2eInitialUrl`, passes it as `initialUrl` to `createMainWindow` so the window opens on a specific app route. Only `chimera://renderer/…` URLs are accepted; any other value (remote URL, wrong protocol, malformed string) is silently replaced by the default `chimera://renderer/index.html`. |
 
