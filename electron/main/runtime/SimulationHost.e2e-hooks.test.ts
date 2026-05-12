@@ -47,9 +47,12 @@ describe('registerE2eHooks', () => {
         expect(hooks.lastChecksum).toBe(0);
         expect(hooks.broadcastChecksums).toEqual({});
         expect(hooks.currentTick).toBe(0);
+        expect(hooks.lastSavedSlotId).toBeNull();
+        expect(hooks.lastSavedTick).toBeNull();
         expect(typeof hooks.onTick).toBe('function');
         expect(typeof hooks.onBroadcastChecksum).toBe('function');
         expect(typeof hooks.dispatchTick).toBe('function');
+        expect(typeof hooks.triggerCrashSave).toBe('function');
     });
 
     it('dispatchTick throws before the session runtime wires it — fails loudly in CI', () => {
@@ -66,6 +69,34 @@ describe('registerE2eHooks', () => {
         hooks.dispatchTick();
 
         expect(stub).toHaveBeenCalledOnce();
+    });
+
+    it('triggerCrashSave is a no-op before the session runtime wires it', () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+
+        expect(() => hooks.triggerCrashSave()).not.toThrow();
+        expect(hooks.lastSavedSlotId).toBeNull();
+        expect(hooks.lastSavedTick).toBeNull();
+    });
+
+    it('triggerCrashSave can be replaced by the session runtime', () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+        const stub = vi.fn();
+
+        hooks.triggerCrashSave = stub;
+        hooks.triggerCrashSave();
+
+        expect(stub).toHaveBeenCalledOnce();
+    });
+
+    it('lastSavedSlotId and lastSavedTick can be set by save wiring', () => {
+        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
+
+        hooks.lastSavedSlotId = 'tactics/slot-1';
+        hooks.lastSavedTick = 12;
+
+        expect(hooks.lastSavedSlotId).toBe('tactics/slot-1');
+        expect(hooks.lastSavedTick).toBe(12);
     });
 
     it('does not define __e2eHooks when CHIMERA_E2E is absent', () => {

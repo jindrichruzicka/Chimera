@@ -91,6 +91,8 @@ function makeE2eHooks(): E2eHooks {
         lastChecksum: 0,
         broadcastChecksums: {} as Record<string, number>,
         currentTick: 0,
+        lastSavedSlotId: null as string | null,
+        lastSavedTick: null as number | null,
     };
     return {
         get lastHostSnapshot() {
@@ -104,6 +106,18 @@ function makeE2eHooks(): E2eHooks {
         },
         get currentTick() {
             return state.currentTick;
+        },
+        get lastSavedSlotId() {
+            return state.lastSavedSlotId;
+        },
+        set lastSavedSlotId(value: string | null) {
+            state.lastSavedSlotId = value;
+        },
+        get lastSavedTick() {
+            return state.lastSavedTick;
+        },
+        set lastSavedTick(value: number | null) {
+            state.lastSavedTick = value;
         },
         firstPlayerRole: 'host',
         directMatchLobbyCode: null,
@@ -127,6 +141,8 @@ function makeE2eHooks(): E2eHooks {
         wsFrames: undefined,
         // no-op in this test double — StateBroadcaster does not call dispatchTick
         dispatchTick: () => {},
+        // no-op in this test double — StateBroadcaster does not call triggerCrashSave
+        triggerCrashSave: () => {},
     };
 }
 

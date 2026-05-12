@@ -2139,6 +2139,62 @@ describe('main', () => {
         expect(calledWithFile?.header?.gameId).toBe('tactics');
     });
 
+    it('triggerCrashSave routes through the crash autosave path and records E2E save metadata', async () => {
+        const e2eHooks = {
+            lastSavedSlotId: null as string | null,
+            lastSavedTick: null as number | null,
+            triggerCrashSave: vi.fn(),
+        };
+        mockGetE2eHooks.mockReturnValue(e2eHooks);
+        mockLobbyManagerCtor.mockClear();
+        await main();
+
+        const onSessionHosted = (
+            mockLobbyManagerCtor.mock.calls[0]?.[2] as
+                | {
+                      onSessionHosted?: (
+                          transport: {
+                              onPlayerJoined(
+                                  cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
+                              ): () => void;
+                              onPlayerLeft(
+                                  cb: (id: ReturnType<typeof playerId>) => void,
+                              ): () => void;
+                              onActionReceived(
+                                  cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
+                              ): () => void;
+                          },
+                          metadata: {
+                              readonly hostId: ReturnType<typeof playerId>;
+                              readonly maxPlayers: number;
+                              readonly e2eHooks?: typeof e2eHooks;
+                          },
+                      ) => () => void;
+                  }
+                | undefined
+        )?.onSessionHosted;
+        expect(onSessionHosted).toBeTypeOf('function');
+
+        const fakeTransport = {
+            onPlayerJoined: vi.fn(() => () => {}),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn(() => () => {}),
+        };
+        onSessionHosted?.(fakeTransport, {
+            hostId: playerId('host-1'),
+            maxPlayers: 1,
+            e2eHooks,
+        });
+
+        e2eHooks.triggerCrashSave();
+        await vi.waitFor(() => {
+            expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
+        });
+
+        expect(e2eHooks.lastSavedSlotId).toBe('tactics/autosave');
+        expect(e2eHooks.lastSavedTick).toBeTypeOf('number');
+    });
+
     it('autosave callback does not call saveManager.autoSave when no session is active', async () => {
         await main();
 

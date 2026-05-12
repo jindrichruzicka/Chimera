@@ -25,6 +25,8 @@ import type { ElectronApplication } from '@playwright/test';
  * a cross-module import from electron/main/ or simulation/.
  */
 type HostSnapshot = NonNullable<typeof globalThis.__e2eHooks>['lastHostSnapshot'];
+type LastSavedSlotId = NonNullable<typeof globalThis.__e2eHooks>['lastSavedSlotId'];
+type LastSavedTick = NonNullable<typeof globalThis.__e2eHooks>['lastSavedTick'];
 
 /**
  * Read the last PlayerSnapshot delivered to the host renderer.
@@ -64,4 +66,20 @@ export async function getLastBroadcastChecksums(
     app: ElectronApplication,
 ): Promise<Readonly<Record<string, number>>> {
     return app.evaluate(() => globalThis.__e2eHooks?.broadcastChecksums ?? {});
+}
+
+/**
+ * Retrieve the qualified slot id persisted by the last successful save.
+ * Returns null when __e2eHooks is absent or no save has completed yet.
+ */
+export async function getLastSavedSlotId(app: ElectronApplication): Promise<LastSavedSlotId> {
+    return app.evaluate(() => globalThis.__e2eHooks?.lastSavedSlotId ?? null);
+}
+
+/**
+ * Retrieve the checkpoint tick captured by the last successful save.
+ * Returns null when __e2eHooks is absent or no save has completed yet.
+ */
+export async function getLastSavedTick(app: ElectronApplication): Promise<LastSavedTick> {
+    return app.evaluate(() => globalThis.__e2eHooks?.lastSavedTick ?? null);
 }

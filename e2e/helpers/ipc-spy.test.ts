@@ -16,6 +16,8 @@ import {
     getSimulationTick,
     getLastBroadcastChecksum,
     getLastBroadcastChecksums,
+    getLastSavedSlotId,
+    getLastSavedTick,
 } from './ipc-spy';
 
 // ---------------------------------------------------------------------------
@@ -206,6 +208,84 @@ describe('getLastBroadcastChecksums', () => {
         const app = makeApp();
 
         await getLastBroadcastChecksums(app);
+
+        expect(app.evaluate).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// getLastSavedSlotId
+// ---------------------------------------------------------------------------
+
+describe('getLastSavedSlotId', () => {
+    it('returns lastSavedSlotId from __e2eHooks when hooks are registered', async () => {
+        g['__e2eHooks'] = {
+            lastHostSnapshot: null,
+            currentTick: 0,
+            lastChecksum: 0,
+            broadcastChecksums: {},
+            lastSavedSlotId: 'tactics/slot-1',
+            lastSavedTick: 42,
+            onTick: () => undefined,
+        };
+
+        const result = await getLastSavedSlotId(makeApp());
+
+        expect(result).toBe('tactics/slot-1');
+    });
+
+    it('returns null when __e2eHooks is absent', async () => {
+        globalThis.__e2eHooks = undefined;
+
+        const result = await getLastSavedSlotId(makeApp());
+
+        expect(result).toBeNull();
+    });
+
+    it('calls app.evaluate exactly once', async () => {
+        globalThis.__e2eHooks = undefined;
+        const app = makeApp();
+
+        await getLastSavedSlotId(app);
+
+        expect(app.evaluate).toHaveBeenCalledTimes(1);
+    });
+});
+
+// ---------------------------------------------------------------------------
+// getLastSavedTick
+// ---------------------------------------------------------------------------
+
+describe('getLastSavedTick', () => {
+    it('returns lastSavedTick from __e2eHooks when hooks are registered', async () => {
+        g['__e2eHooks'] = {
+            lastHostSnapshot: null,
+            currentTick: 0,
+            lastChecksum: 0,
+            broadcastChecksums: {},
+            lastSavedSlotId: 'tactics/slot-1',
+            lastSavedTick: 42,
+            onTick: () => undefined,
+        };
+
+        const result = await getLastSavedTick(makeApp());
+
+        expect(result).toBe(42);
+    });
+
+    it('returns null when __e2eHooks is absent', async () => {
+        globalThis.__e2eHooks = undefined;
+
+        const result = await getLastSavedTick(makeApp());
+
+        expect(result).toBeNull();
+    });
+
+    it('calls app.evaluate exactly once', async () => {
+        globalThis.__e2eHooks = undefined;
+        const app = makeApp();
+
+        await getLastSavedTick(app);
 
         expect(app.evaluate).toHaveBeenCalledTimes(1);
     });

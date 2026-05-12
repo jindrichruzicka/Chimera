@@ -6,18 +6,17 @@
  *
  * Verifies the crash-recovery lifecycle:
  *   1. Launch a single-player (pass-and-play) match.
- *   2. Play several turns to advance the simulation tick and trigger autosave.
- *   3. Wait for autosave to write the `tactics/autosave` slot (fire-and-forget
- *      after engine:end_turn; polled here before kill so the kill is deterministic).
- *   4. Record the pre-kill simulation tick via getSimulationTick().
- *   5. Force-kill the Electron process with SIGKILL (no `before-quit` handler runs
- *      so `lastCleanExit.flag` is NOT written — simulates a crash).
+ *   2. Play several turns to advance the simulation tick.
+ *   3. Trigger the crash autosave path through __e2eHooks.triggerCrashSave().
+ *   4. Read the saved checkpoint tick via getLastSavedTick().
+ *   5. Exit the Electron process without `before-quit` so `lastCleanExit.flag`
+ *      is NOT written — simulates an unclean shutdown without SIGKILL.
  *   6. Relaunch with the same `--user-data-dir` so the saved data is available.
  *   7. Assert that the `crash-recovery-banner` is visible ("Resume" prompt shown).
  *   8. Wait for the match canvas to be visible before clicking Resume, so
  *      SessionRuntime.applyRestoredFile() has an active session to restore into.
  *   9. Click "Resume last session".
- *  10. Assert getSimulationTick() matches the tick recorded before force-kill.
+ *  10. Assert getSimulationTick() matches the saved checkpoint tick.
  *
  * Invariants upheld:
  *   #23 — FileSaveRepository writes via .tmp rename; the autosave slot we read
@@ -26,9 +25,8 @@
  *          the test triggers load via the preload bridge ("Resume last session"
  *          button), which calls window.__chimera.saves.load(slotId) → IPC →
  *          SessionRuntime.applyRestoredFile().
- *   #68 — Crash reporter runs autosave before crash dump; SIGKILL bypasses the
- *          uncaughtException handler, so the autosave created by end_turn is
- *          the recovery source — never from the crash dump path.
+ *   #68 — Crash reporter runs autosave before crash dump; triggerCrashSave
+ *          drives that autosave path without terminating the process.
  *
  * Module boundary: must NOT import from electron/main/, simulation/, or
  * networking/. ElectronApplication, Page, and the Playwright test types are
@@ -38,20 +36,12 @@
 import type { ElectronApplication, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { launchE2eElectronApplication, test as electronTest } from '../fixtures/electron.fixture';
-import { getSimulationTick } from '../helpers/ipc-spy';
+import { getLastSavedSlotId, getLastSavedTick, getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
 import { MatchPage } from '../pages/MatchPage';
 
 // ─── Renderer bridge types ────────────────────────────────────────────────────
 // Derived from electron/preload/api-types.ts without importing from that module.
-
-interface SaveSlotMetaResult {
-    readonly slotId: string;
-    readonly gameId: string;
-    readonly tick: number;
-    readonly savedAt: number;
-    readonly label?: string;
-}
 
 interface CrashRecoveryStatusResult {
     readonly needsRecovery: boolean;
@@ -59,7 +49,6 @@ interface CrashRecoveryStatusResult {
 }
 
 interface RendererSavesBridge {
-    list(gameId: string): Promise<SaveSlotMetaResult[]>;
     checkCrashRecovery(): Promise<CrashRecoveryStatusResult>;
 }
 
@@ -70,42 +59,30 @@ type RendererGlobal = typeof globalThis & {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Poll `window.__chimera.saves.list('tactics')` until the autosave slot
- * reports a tick value >= the supplied baseline, then return the saved tick.
+ * Trigger the crash-reporter autosave path from the main-process E2E hook.
  *
- * Autosave is fire-and-forget after engine:end_turn. We must not kill the
- * process until the autosave file has landed on disk to avoid recovering
- * from an older snapshot than expected.
+ * The hook is CHIMERA_E2E-gated and wired by the session runtime. It is a
+ * void trigger, so this helper polls until the save metadata lands.
  */
-async function waitForAutosave(page: Page, minimumTick: number, timeout = 30_000): Promise<number> {
-    let savedTick = 0;
-    await expect
-        .poll(
-            async () => {
-                const slots = await page.evaluate(() =>
-                    (globalThis as RendererGlobal).__chimera.saves.list('tactics'),
-                );
-                const autosave = slots.find((s) => s.slotId === 'tactics/autosave');
-                savedTick = autosave?.tick ?? 0;
-                return savedTick;
-            },
-            { timeout },
-        )
-        .toBeGreaterThanOrEqual(minimumTick);
-    return savedTick;
+async function triggerCrashSave(app: ElectronApplication): Promise<void> {
+    await app.evaluate(() => {
+        globalThis.__e2eHooks?.triggerCrashSave();
+    });
+    await expect.poll(() => getLastSavedTick(app), { timeout: 30_000 }).not.toBeNull();
 }
 
 /**
- * Force-kill the Electron process with SIGKILL and wait for Playwright's
- * 'close' event, confirming the OS has reaped the child.
- *
- * `electronApp.close()` triggers a graceful shutdown and writes
- * `lastCleanExit.flag`; SIGKILL bypasses all handlers so the flag is absent
- * on relaunch, which is the precondition for crash recovery.
+ * Exit the Electron main process without running Electron's before-quit
+ * lifecycle. This leaves `lastCleanExit.flag` absent without using SIGKILL.
  */
-async function forceKill(app: ElectronApplication): Promise<void> {
+async function exitWithoutCleanQuit(app: ElectronApplication): Promise<void> {
     const closeEvent = app.waitForEvent('close');
-    app.process().kill('SIGKILL');
+    await app.evaluate(() => {
+        // Exit code 1 signals an abnormal exit. The crash-recovery detection
+        // mechanism is flag-file-based (lastCleanExit.flag), not exit-code-based,
+        // but using a non-zero code better represents an unclean shutdown.
+        setImmediate(() => process.exit(1));
+    });
     await closeEvent;
 }
 
@@ -146,7 +123,7 @@ const test = electronTest.extend<CrashRecoveryFixtures>({
 // ─── Spec ────────────────────────────────────────────────────────────────────
 
 test.describe('Crash recovery', () => {
-    test('tick is restored to pre-kill value after SIGKILL, relaunch, and Resume', async ({
+    test('tick is restored to crash-save value after unclean exit, relaunch, and Resume', async ({
         crashApp,
         crashWindow,
     }) => {
@@ -155,8 +132,8 @@ test.describe('Crash recovery', () => {
         // Wait for the match canvas — direct-match boot may need a moment.
         await expect(match.canvas).toBeVisible({ timeout: 30_000 });
 
-        // Play 3 turns in pass-and-play mode. Each end_turn fires autosave
-        // as a fire-and-forget side-effect (HostSessionPipeline, Invariant #25).
+        // Play 3 turns in pass-and-play mode so the crash save captures a
+        // non-zero checkpoint tick.
         for (let turn = 0; turn < 3; turn++) {
             await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
             await match.moveOwnedUnit();
@@ -166,24 +143,25 @@ test.describe('Crash recovery', () => {
             await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
         }
 
-        // Record the live tick before killing. This is the value the test
-        // asserts must match after recovery.
-        const tickBeforeKill = await getSimulationTick(crashApp);
-        expect(tickBeforeKill).toBeGreaterThan(0);
-
-        // Wait until the autosave slot reports a tick >= tickBeforeKill so
-        // we do not kill before the autosave I/O has completed.
-        await waitForAutosave(crashWindow, tickBeforeKill);
+        // Drive the crash autosave path through the E2E hook rather than
+        // depending on end_turn autosave timing or a hardcoded slot lookup.
+        await triggerCrashSave(crashApp);
+        const savedSlotId = await getLastSavedSlotId(crashApp);
+        const savedTick = await getLastSavedTick(crashApp);
+        expect(savedSlotId).toBe('tactics/autosave');
+        expect(savedTick).not.toBeNull();
+        if (savedTick === null) {
+            throw new Error('crash save did not update CHIMERA_E2E last-save hooks');
+        }
+        expect(savedTick).toBeGreaterThan(0);
 
         // Capture the launch config (args carry --user-data-dir so the
         // relaunched process finds the same saves directory).
         const relaunchConfig = await captureRelaunchConfig(crashApp);
 
-        // Force-kill with SIGKILL — no before-quit handler runs, so
-        // lastCleanExit.flag is NOT written. This is what makes the relaunch
-        // present the "Resume" prompt (Invariant #68 concern is irrelevant
-        // here: SIGKILL bypasses uncaughtException too).
-        await forceKill(crashApp);
+        // Exit without before-quit — no lastCleanExit.flag is written, which
+        // makes the relaunch present the "Resume" prompt.
+        await exitWithoutCleanQuit(crashApp);
 
         // Relaunch with the same userData dir; CHIMERA_E2E=1 preserved.
         const relaunchedApp = await relaunchElectronApplication(relaunchConfig);
@@ -217,10 +195,10 @@ test.describe('Crash recovery', () => {
             await relaunchedWindow.getByRole('button', { name: /resume last session/i }).click();
 
             // Assert tick equality: the restored GameSnapshot checkpoint must
-            // have the same tick as the one we recorded before force-kill.
+            // have the same tick as the one captured by triggerCrashSave().
             await expect
                 .poll(() => getSimulationTick(relaunchedApp), { timeout: 30_000 })
-                .toBe(tickBeforeKill);
+                .toBe(savedTick);
         } finally {
             await relaunchedApp.close();
         }

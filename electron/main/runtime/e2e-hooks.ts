@@ -4,11 +4,12 @@
  * CHIMERA_E2E-gated __e2eHooks main-process contract.
  *
  * Registers a global `__e2eHooks` object when `CHIMERA_E2E=1` so E2E tests
- * can read live tick/checksum/snapshot state from the host process without
- * going through IPC.
+ * can read live tick/checksum/snapshot/save state from the host process
+ * without going through IPC.
  *
  * Architecture reference: §13.9, §13.10 — E2E hooks and CHIMERA_E2E flag.
  * Issue: #458
+ * Issue: #530
  *
  * Invariants upheld:
  *   #3  — lastHostSnapshot stores PlayerSnapshot only, never GameSnapshot.
@@ -37,6 +38,10 @@ export interface E2eHooks {
     readonly lastChecksum: number;
     readonly broadcastChecksums: Readonly<Record<string, number>>;
     readonly currentTick: number;
+    /** Last qualified save slot persisted through the CHIMERA_E2E path, or null before the first save. */
+    lastSavedSlotId: string | null;
+    /** GameSnapshot.tick captured in the last persisted save, or null before the first save. */
+    lastSavedTick: number | null;
     firstPlayerRole: E2eFirstPlayerRole;
     /**
      * Lobby code set by the host process in direct-match E2E mode
@@ -77,6 +82,20 @@ export interface E2eHooks {
      *   to connect the hook to the real ActionPipeline dispatch.
      */
     dispatchTick: () => void;
+    /**
+     * Trigger the crash-reporter autosave path without terminating the process.
+     *
+     * No-op until wired by the session runtime. The runtime replaces this
+     * property after creating the hooks object so crash-recovery E2E specs can
+     * exercise autosave-before-crash-dump behavior deterministically.
+     *
+     * Must NOT be called from `simulation/` or `renderer/` — this property
+     * exists only for the CHIMERA_E2E test path.
+     *
+     * @chimera-review: intentionally mutable — replaced by session runtime
+     *   to connect the hook to the real crash autosave path.
+     */
+    triggerCrashSave: () => void;
 }
 
 declare global {
@@ -89,6 +108,8 @@ export function createE2eHooks(): E2eHooks {
         lastChecksum: 0,
         broadcastChecksums: {} as Record<string, number>,
         currentTick: 0,
+        lastSavedSlotId: null as string | null,
+        lastSavedTick: null as number | null,
     };
 
     // Internal ring-buffer. `undefined` means the buffer has not yet been
@@ -109,6 +130,18 @@ export function createE2eHooks(): E2eHooks {
         },
         get currentTick() {
             return state.currentTick;
+        },
+        get lastSavedSlotId() {
+            return state.lastSavedSlotId;
+        },
+        set lastSavedSlotId(value: string | null) {
+            state.lastSavedSlotId = value;
+        },
+        get lastSavedTick() {
+            return state.lastSavedTick;
+        },
+        set lastSavedTick(value: number | null) {
+            state.lastSavedTick = value;
         },
         firstPlayerRole: 'host',
         directMatchLobbyCode: null,
@@ -155,6 +188,7 @@ export function createE2eHooks(): E2eHooks {
                     'in SessionRuntime (or equivalent) before calling tick() from E2E specs.',
             );
         },
+        triggerCrashSave: () => undefined,
     };
     return hooks;
 }

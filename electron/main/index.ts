@@ -809,15 +809,7 @@ export async function main(): Promise<void> {
             pinoSink.flushSync();
         },
         getSnapshot: () => null, // F14 wires the live snapshot when simulation is running
-        autosave: async () => {
-            if (activeSession === null) {
-                crashLogger.warn('autosave skipped: no active session at crash time');
-                return;
-            }
-            await saveManager.autoSave(
-                activeSession.captureSaveFile({ gameId: activeSession.gameId }),
-            );
-        },
+        autosave: autosaveActiveSessionBeforeCrash,
     });
 
     // Create the SaveManager with FileSaveRepository (invariant #37: concrete
@@ -1048,6 +1040,9 @@ export async function main(): Promise<void> {
                     e2eRuntime.dispatchTick(metadata.hostId);
                     simulationHost.afterTick(sessionRuntime.getSnapshot());
                 };
+                metadata.e2eHooks.triggerCrashSave = () => {
+                    void autosaveActiveSessionBeforeCrash();
+                };
             }
 
             const sendHostedRendererSnapshot = (snapshot: PlayerSnapshot): void => {
@@ -1259,6 +1254,9 @@ export async function main(): Promise<void> {
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
+                    if (metadata.e2eHooks !== undefined) {
+                        metadata.e2eHooks.triggerCrashSave = () => undefined;
+                    }
                     activeE2eHooks = undefined;
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
@@ -1436,6 +1434,7 @@ export async function main(): Promise<void> {
     registerSavesHandlers({
         ipcMain,
         logger: savesLogger,
+        ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
         saves: createSavesIpcPort({
             saveManager,
             captureSaveFile: (request) => {
@@ -1472,6 +1471,21 @@ export async function main(): Promise<void> {
             });
         },
     });
+
+    async function autosaveActiveSessionBeforeCrash(): Promise<void> {
+        if (activeSession === null) {
+            crashLogger.warn('autosave skipped: no active session at crash time');
+            return;
+        }
+        const file = activeSession.captureSaveFile({ gameId: activeSession.gameId });
+        await saveManager.autoSave(file);
+        if (resolvedE2eHooks !== undefined) {
+            // Slot id is derived from the naming convention used by SaveManager.autoSave()
+            // (`<gameId>/autosave`). If that convention changes, this line must be updated too.
+            resolvedE2eHooks.lastSavedSlotId = `${file.header.gameId}/autosave`;
+            resolvedE2eHooks.lastSavedTick = file.checkpoint.tick;
+        }
+    }
 
     // Register the `chimera:settings:*` channels backed by SettingsManager.
     // FileSettingsRepository persists user overrides under `<userData>/settings/`.

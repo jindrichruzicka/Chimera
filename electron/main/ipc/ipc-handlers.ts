@@ -94,6 +94,7 @@ import {
     type LoggerSink,
     type MemorySink,
 } from '../logging/logger.js';
+import type { E2eHooks } from '../runtime/e2e-hooks.js';
 import type { SettingsManager } from '../settings/SettingsManager.js';
 import type { LobbyManager } from '../lobby/LobbyManager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/apis/logs-api.js';
@@ -573,6 +574,8 @@ export interface RegisterSavesHandlersOptions {
     readonly ipcMain: SavesHandlersIpcMain;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
+    /** CHIMERA_E2E-only hook sink for save metadata. Omitted in production. */
+    readonly e2eHooks?: Pick<E2eHooks, 'lastSavedSlotId' | 'lastSavedTick'>;
     /**
      * Live saves coordinator. Required — every saves IPC request is
      * delegated to this port. Production wires the real
@@ -618,7 +621,7 @@ export interface RegisterSavesHandlersOptions {
  * `SavesIpcPort` is built and injected by the wiring layer.
  */
 export function registerSavesHandlers(options: RegisterSavesHandlersOptions): void {
-    const { ipcMain, saves, broadcastSlotsChanged } = options;
+    const { ipcMain, saves, broadcastSlotsChanged, e2eHooks } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:saves:* handlers', {
         channels: [
@@ -638,6 +641,10 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
     ipcMain.handle(SAVES_SAVE_CHANNEL, async (_event, request) => {
         const validated = parseInvokeRequest(SaveRequestSchema, SAVES_SAVE_CHANNEL, request);
         const meta = await saves.save(validated);
+        if (e2eHooks !== undefined) {
+            e2eHooks.lastSavedSlotId = meta.slotId;
+            e2eHooks.lastSavedTick = meta.tick;
+        }
         if (broadcastSlotsChanged !== undefined) {
             try {
                 const refreshed = await saves.list(validated.gameId);

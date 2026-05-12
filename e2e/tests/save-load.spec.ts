@@ -7,11 +7,11 @@
  * Verifies the full save → close → relaunch → load lifecycle:
  *   1. Launch a single-player (pass-and-play) match.
  *   2. Play exactly 3 turns via MatchPage actions to advance the simulation tick.
- *   3. Save via chimera:saves:save IPC; record tick pre-close.
+ *   3. Save via chimera:saves:save IPC; read saved slot/tick from __e2eHooks.
  *   4. Close the Electron process.
  *   5. Relaunch using the captured process args + env (same userData dir).
  *   6. Load the saved slot via chimera:saves:load IPC.
- *   7. Assert getSimulationTick() post-relaunch equals the tick recorded pre-close.
+ *   7. Assert getSimulationTick() post-relaunch equals the saved checkpoint tick.
  *
  * Invariants upheld:
  *   #23 — FileSaveRepository writes via .tmp rename; test observes only the
@@ -32,26 +32,15 @@
 import type { ElectronApplication, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { launchE2eElectronApplication, test as electronTest } from '../fixtures/electron.fixture';
-import { getSimulationTick } from '../helpers/ipc-spy';
+import { getLastSavedSlotId, getLastSavedTick, getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
 import { MatchPage } from '../pages/MatchPage';
 
 // ─── Renderer bridge types ────────────────────────────────────────────────────
 // Derived from electron/preload/api-types.ts without importing from that module.
 
-interface SaveSlotMetaResult {
-    readonly slotId: string;
-    readonly gameId: string;
-    readonly tick: number;
-    readonly savedAt: number;
-    readonly label?: string;
-}
-
 interface RendererSavesBridge {
-    save(request: {
-        readonly gameId: string;
-        readonly label?: string;
-    }): Promise<SaveSlotMetaResult>;
+    save(request: { readonly gameId: string; readonly label?: string }): Promise<unknown>;
     load(slotId: string): Promise<void>;
 }
 
@@ -62,17 +51,16 @@ type RendererGlobal = typeof globalThis & {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Trigger a save via the preload bridge and return the assigned slotId.
+ * Trigger a save via the preload bridge.
  * Uses gameId 'tactics' which is the active game in all E2E fixtures.
  */
-async function saveCurrentState(page: Page): Promise<string> {
-    const meta = await page.evaluate(() =>
+async function saveCurrentState(page: Page): Promise<void> {
+    await page.evaluate(() =>
         (globalThis as RendererGlobal).__chimera.saves.save({
             gameId: 'tactics',
             label: 'save-load-spec',
         }),
     );
-    return meta.slotId;
 }
 
 /**
@@ -145,12 +133,19 @@ test.describe('Save / load', () => {
             await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
         }
 
-        // Record tick before persisting.
-        const tickBeforeSave = await getSimulationTick(saveLoadApp);
-        expect(tickBeforeSave).toBeGreaterThan(0);
-
         // Persist via IPC — resolves only after the atomic .tmp rename (Invariant #23).
-        const slotId = await saveCurrentState(saveLoadWindow);
+        await saveCurrentState(saveLoadWindow);
+
+        // Read the actual slot/checkpoint captured by the save handler. This
+        // avoids assuming how the save manager names auto-generated slots.
+        const slotId = await getLastSavedSlotId(saveLoadApp);
+        const savedTick = await getLastSavedTick(saveLoadApp);
+        expect(slotId).not.toBeNull();
+        expect(savedTick).not.toBeNull();
+        if (slotId === null || savedTick === null) {
+            throw new Error('save did not update CHIMERA_E2E last-save hooks');
+        }
+        expect(savedTick).toBeGreaterThan(0);
 
         // Capture launch config (args include --user-data-dir so the relaunched
         // process finds the same saves directory).
@@ -179,7 +174,7 @@ test.describe('Save / load', () => {
             // pendingCommitments (Invariants #24, #26).
             await expect
                 .poll(() => getSimulationTick(relaunchedApp), { timeout: 30_000 })
-                .toBe(tickBeforeSave);
+                .toBe(savedTick);
         } finally {
             await relaunchedApp.close();
         }

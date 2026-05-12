@@ -804,6 +804,22 @@ describe('registerSavesHandlers', () => {
             ]);
         });
 
+        it('save records last saved slot and tick on the E2E hooks after a successful save', async () => {
+            const stub = makeSavesIpcMainStub();
+            const fake = makeFakePort();
+            const e2eHooks = {
+                lastSavedSlotId: null as string | null,
+                lastSavedTick: null as number | null,
+            };
+            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port, e2eHooks });
+
+            const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
+            await Promise.resolve(handler?.({}, { gameId: 'sample-game' }));
+
+            expect(e2eHooks.lastSavedSlotId).toBe('sample-game/slot-1');
+            expect(e2eHooks.lastSavedTick).toBe(42);
+        });
+
         it('load delegates to port and resolves to undefined', async () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();

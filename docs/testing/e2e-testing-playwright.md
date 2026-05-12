@@ -315,6 +315,22 @@ export async function getLastBroadcastChecksums(
 ): Promise<Readonly<Record<string, number>>> {
     return app.evaluate(() => globalThis.__e2eHooks?.broadcastChecksums ?? {});
 }
+
+/**
+ * Retrieve the qualified slot id persisted by the last successful save.
+ * Returns null when __e2eHooks is absent or no save has completed yet.
+ */
+export async function getLastSavedSlotId(app: ElectronApplication): Promise<string | null> {
+    return app.evaluate(() => globalThis.__e2eHooks?.lastSavedSlotId ?? null);
+}
+
+/**
+ * Retrieve the checkpoint tick captured by the last successful save.
+ * Returns null when __e2eHooks is absent or no save has completed yet.
+ */
+export async function getLastSavedTick(app: ElectronApplication): Promise<number | null> {
+    return app.evaluate(() => globalThis.__e2eHooks?.lastSavedTick ?? null);
+}
 ```
 
 ### ws-inspector.ts
@@ -652,7 +668,7 @@ test.describe('Multiplayer soak', () => {
 
 ### save-load.spec.ts
 
-Single-player persistence spec built on the `saveLoadApp` / `saveLoadWindow` fixture pair. It plays three turns in pass-and-play mode, saves through the preload bridge, captures the relaunch args/env, closes the Electron process, relaunches with the same `--user-data-dir`, loads the saved slot, and asserts that the simulation tick matches the pre-save value.
+Single-player persistence spec built on the `saveLoadApp` / `saveLoadWindow` fixture pair. It plays three turns in pass-and-play mode, saves through the preload bridge, reads the exact saved slot and checkpoint tick from `__e2eHooks.lastSavedSlotId` / `lastSavedTick`, captures the relaunch args/env, closes the Electron process, relaunches with the same `--user-data-dir`, loads the saved slot, and asserts that the simulation tick matches the saved checkpoint tick.
 
 This spec exercises the save/restore invariants for atomic persistence and restored commitments: it relies on the save IPC returning only after the atomic rename, on the load IPC being the only restore entry point, and on the restored session resuming at the same tick after relaunch.
 
@@ -684,6 +700,8 @@ if (process.env.CHIMERA_E2E === '1') {
         lastChecksum: 0,
         broadcastChecksums: {} as Record<string, number>,
         currentTick: 0,
+        lastSavedSlotId: null as string | null,
+        lastSavedTick: null as number | null,
         onBroadcastChecksum(tick: number, viewerId: string, checksum: number): void {
             this.currentTick = tick;
             this.lastChecksum = checksum;
@@ -698,11 +716,14 @@ if (process.env.CHIMERA_E2E === '1') {
         // No-op until the session runtime wires the real ActionPipeline dispatch.
         // The session runtime replaces this property after creating the hooks object.
         dispatchTick(): void {},
+        // No-op until the session runtime wires the crash autosave path.
+        // The session runtime replaces this property after creating the hooks object.
+        triggerCrashSave(): void {},
     };
 }
 ```
 
-The block is a compile-time dead-code elimination target in production builds. The hook surface is primarily **read-only from tests** — tests inspect state and do not mutate snapshots directly. The `dispatchTick` property is the sole exception: it allows soak specs to programmatically advance the simulation clock. All tick dispatches still go through the full `ActionPipeline` path (Invariant #6); no state is injected.
+The block is a compile-time dead-code elimination target in production builds. The hook surface is primarily **read-only from tests** — tests inspect state and do not mutate snapshots directly. `lastSavedSlotId` and `lastSavedTick` are set internally after successful save operations so persistence specs can load the exact saved slot without hardcoding. The `dispatchTick` property allows soak specs to programmatically advance the simulation clock, and `triggerCrashSave` allows crash-recovery specs to exercise the autosave-before-crash-dump path without sending an OS kill signal. All tick dispatches still go through the full `ActionPipeline` path (Invariant #6); no state is injected.
 
 ---
 
@@ -757,12 +778,12 @@ On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed 
 
 ## §13.12 Security Notes
 
-| Concern               | Rule                                                                                                                                            |
-| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test hook surface     | `__e2eHooks` exposes only `dispatchTick` as an active method; all other fields are read-only. All dispatched ticks go through `ActionPipeline`. |
-| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `workers: 1` prevents fixed-port collision.                                             |
-| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                           |
-| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                      |
+| Concern               | Rule                                                                                                                                                                                                                                                          |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test hook surface     | `__e2eHooks` exposes only `dispatchTick` and `triggerCrashSave` as active methods; all other fields are read-only from tests. All dispatched ticks go through `ActionPipeline`; crash saves go through the same autosave callback used by the crash reporter. |
+| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `workers: 1` prevents fixed-port collision.                                                                                                                                                           |
+| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                                                                                                                                         |
+| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                                                                                                                                    |
 
 ---
 
