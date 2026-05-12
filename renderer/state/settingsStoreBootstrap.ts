@@ -17,6 +17,8 @@
 import type { SettingsAPI, Unsubscribe } from '../../electron/preload/api-types';
 import { useSettingsStore } from './settingsStore';
 
+const ENGINE_SETTINGS_GAME_ID = '__engine__';
+
 /**
  * Register the `onChange` push listener on the supplied bridge and route
  * incoming `(gameId, settings)` events into the settingsStore via
@@ -26,7 +28,31 @@ import { useSettingsStore } from './settingsStore';
  * up when the component unmounts or the bridge is replaced.
  */
 export function bootstrapSettingsStore(api: SettingsAPI): Unsubscribe {
-    return api.onChange((gameId, settings) => {
+    let disposed = false;
+    let engineSettingsEpoch = 0;
+    const initialEngineSettingsEpoch = engineSettingsEpoch;
+
+    const unsubscribe = api.onChange((gameId, settings) => {
+        if (gameId === ENGINE_SETTINGS_GAME_ID) {
+            engineSettingsEpoch += 1;
+        }
         useSettingsStore.getState()._applySettings(gameId, settings);
     });
+
+    api.get(ENGINE_SETTINGS_GAME_ID)
+        .then((settings) => {
+            if (!disposed && initialEngineSettingsEpoch === engineSettingsEpoch) {
+                useSettingsStore.getState()._applySettings(ENGINE_SETTINGS_GAME_ID, settings);
+            }
+        })
+        .catch((error: unknown) => {
+            if (!disposed) {
+                console.warn('[settingsStoreBootstrap] Failed to replay engine settings:', error);
+            }
+        });
+
+    return () => {
+        disposed = true;
+        unsubscribe();
+    };
 }

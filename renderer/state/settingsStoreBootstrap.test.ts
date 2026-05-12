@@ -34,11 +34,16 @@ function makeApi(
     onChangeImpl?: (cb: (gameId: string, settings: ResolvedSettings) => void) => Unsubscribe,
 ): SettingsAPI {
     return {
-        get: vi.fn(),
+        get: vi.fn().mockResolvedValue(makeSettings()),
         update: vi.fn(),
         reset: vi.fn(),
         onChange: vi.fn(onChangeImpl ?? (() => vi.fn())),
     };
+}
+
+async function flushPromiseJobs(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
 }
 
 // Reset the singleton store between tests
@@ -86,6 +91,63 @@ describe('bootstrapSettingsStore()', () => {
 
         const stored = useSettingsStore.getState().settings['tactics'];
         expect(stored).toBe(incoming);
+    });
+
+    it('loads initial engine settings into the store', async () => {
+        const incoming = makeSettings(0.42);
+        const api = makeApi();
+        vi.mocked(api.get).mockResolvedValue(incoming);
+
+        bootstrapSettingsStore(api);
+        await flushPromiseJobs();
+
+        expect(api.get).toHaveBeenCalledWith('__engine__');
+        expect(useSettingsStore.getState().settings['__engine__']).toBe(incoming);
+    });
+
+    it('does not let initial engine replay overwrite a fresher engine push event', async () => {
+        let captured: ((gameId: string, settings: ResolvedSettings) => void) | undefined;
+        let resolveInitial!: (settings: ResolvedSettings) => void;
+        const api = makeApi((cb) => {
+            captured = cb;
+            return vi.fn();
+        });
+        vi.mocked(api.get).mockReturnValue(
+            new Promise<ResolvedSettings>((resolve) => {
+                resolveInitial = resolve;
+            }),
+        );
+
+        bootstrapSettingsStore(api);
+        expect(captured).toBeDefined();
+
+        const staleInitialSettings = makeSettings(0.1);
+        const fresherPushedSettings = makeSettings(0.9);
+        captured!('__engine__', fresherPushedSettings);
+
+        resolveInitial(staleInitialSettings);
+        await flushPromiseJobs();
+
+        expect(useSettingsStore.getState().settings['__engine__']).toBe(fresherPushedSettings);
+    });
+
+    it('warns when initial engine settings replay fails', async () => {
+        const error = new Error('settings unavailable');
+        const api = makeApi();
+        vi.mocked(api.get).mockRejectedValue(error);
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+
+        try {
+            bootstrapSettingsStore(api);
+            await flushPromiseJobs();
+
+            expect(warn).toHaveBeenCalledWith(
+                '[settingsStoreBootstrap] Failed to replay engine settings:',
+                error,
+            );
+        } finally {
+            warn.mockRestore();
+        }
     });
 
     it('routes push events for multiple games independently', () => {
