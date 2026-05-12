@@ -71,12 +71,12 @@ describe('registerE2eHooks', () => {
         expect(stub).toHaveBeenCalledOnce();
     });
 
-    it('triggerCrashSave is a no-op before the session runtime wires it', () => {
+    it('triggerCrashSave throws before the session runtime wires it — fails loudly in CI', () => {
         const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
 
-        expect(() => hooks.triggerCrashSave()).not.toThrow();
-        expect(hooks.lastSavedSlotId).toBeNull();
-        expect(hooks.lastSavedTick).toBeNull();
+        expect(() => hooks.triggerCrashSave()).toThrow(
+            /triggerCrashSave.*not.*wired|session runtime/i,
+        );
     });
 
     it('triggerCrashSave can be replaced by the session runtime', () => {

@@ -188,7 +188,19 @@ export function createE2eHooks(): E2eHooks {
                     'in SessionRuntime (or equivalent) before calling tick() from E2E specs.',
             );
         },
-        triggerCrashSave: () => undefined,
+        // Guard: throw loudly if called before the session runtime wires a real save
+        // function. A silent no-op here would let crash-recovery E2E specs (e.g.
+        // crash-recovery.spec.ts) complete their poll on a stale lastSavedTick value
+        // and silently pass without triggering any save at all.
+        // The session runtime must assign: hooks.triggerCrashSave = () => autosaveActiveSessionBeforeCrash()
+        // before any E2E spec calls triggerCrashSave() (§13.7).
+        triggerCrashSave: () => {
+            throw new Error(
+                'triggerCrashSave has not been wired by the session runtime. ' +
+                    'Assign hooks.triggerCrashSave = () => autosaveActiveSessionBeforeCrash() ' +
+                    'in SessionRuntime (or equivalent) before calling triggerCrashSave() from E2E specs.',
+            );
+        },
     };
     return hooks;
 }
