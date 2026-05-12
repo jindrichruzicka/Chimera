@@ -114,3 +114,34 @@ describe('useCameraStore', () => {
         expect(state.zoom).toBe(1);
     });
 });
+
+// ── Invariant #57 — camera state must not leak into GameSnapshot ──────────────
+
+describe('Invariant #57 — camera state is renderer-only', () => {
+    it('cameraStore data fields do not appear in BaseGameSnapshot', () => {
+        const store = createCameraStore();
+        const state = store.getState();
+
+        // Collect the non-setter (data) keys from the camera store state.
+        const cameraDataKeys = (Object.keys(state) as (keyof typeof state)[]).filter(
+            (k) => typeof state[k] !== 'function',
+        );
+
+        // Exhaustive field list of BaseGameSnapshot (simulation/engine/types.ts).
+        // Camera fields (position, lookAt, zoom) must never appear here.
+        const baseGameSnapshotKeys = new Set([
+            'tick',
+            'seed',
+            'players',
+            'entities',
+            'phase',
+            'events',
+            'turnClock',
+            'turnNumber',
+        ]);
+
+        for (const key of cameraDataKeys) {
+            expect(baseGameSnapshotKeys.has(key)).toBe(false);
+        }
+    });
+});
