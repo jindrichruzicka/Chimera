@@ -7,6 +7,8 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-05-12
+
 ### Removed
 
 - Manual pass-and-play seat-switching UI and `chimera:game:switch-seat` IPC; local turn handoff now follows host-projected `PlayerSnapshot.isMyTurn`.
@@ -78,9 +80,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover
 - Crash dump write guarded against circular refs and oversized payloads; `process.exit(1)` after fatal crash dump
 
+[0.6.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.6.0
 [0.5.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.5.0
 [0.4.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.1.0
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.6.0...HEAD
