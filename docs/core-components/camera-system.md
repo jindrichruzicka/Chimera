@@ -25,14 +25,45 @@ React Three Fiber provides full camera control via `useThree()`, `three`'s `Pers
 export type CameraMode = 'perspective' | 'orthographic';
 export type CameraPreset = 'isometric' | 'top-down' | 'side-scrolling' | 'free';
 
+export type Vector3Tuple = readonly [x: number, y: number, z: number];
+
+/** Pass a custom position/lookAt object instead of one of the named presets. */
+export type CameraPresetConfig = Readonly<{
+    position: Vector3Tuple;
+    lookAt: Vector3Tuple;
+}>;
+
+/** Override any subset of PerspectiveCamera constructor args (defaults below). */
+export type PerspectiveCameraOptions = Readonly<{
+    fov?: number; // default 50
+    aspect?: number; // default 1
+    near?: number; // default 0.1
+    far?: number; // default 1000
+}>;
+
+/** Override any subset of OrthographicCamera constructor args (defaults below). */
+export type OrthographicCameraOptions = Readonly<{
+    left?: number; // default -10
+    right?: number; // default  10
+    top?: number; // default  10
+    bottom?: number; // default -10
+    near?: number; // default 0.1
+    far?: number; // default 1000
+}>;
+
 interface GameCanvasProps {
     cameraMode: CameraMode;
-    cameraPreset: CameraPreset;
+    /** Named built-in preset OR a custom { position, lookAt } object. */
+    cameraPreset: CameraPreset | CameraPresetConfig;
+    /** Optional fine-grained PerspectiveCamera constructor overrides. */
+    perspectiveCameraOptions?: PerspectiveCameraOptions;
+    /** Optional fine-grained OrthographicCamera constructor overrides. */
+    orthographicCameraOptions?: OrthographicCameraOptions;
     children: React.ReactNode;
 }
 ```
 
-### Preset Defaults
+### Named Preset Defaults
 
 | Preset           | Mode         | Initial position | Look-at     |
 | ---------------- | ------------ | ---------------- | ----------- |
@@ -40,6 +71,42 @@ interface GameCanvasProps {
 | `top-down`       | orthographic | `(0, 20, 0)`     | `(0, 0, 0)` |
 | `side-scrolling` | perspective  | `(0, 5, 15)`     | `(0, 5, 0)` |
 | `free`           | perspective  | `(0, 5, 10)`     | `(0, 0, 0)` |
+
+### Custom preset example
+
+```typescript
+// Pass any position/lookAt without defining a new named preset
+<GameCanvas
+    cameraMode="perspective"
+    cameraPreset={{ position: [5, 8, 3], lookAt: [0, 2, 0] }}
+>
+    …
+</GameCanvas>
+```
+
+### Constructor options example
+
+```typescript
+// Wider view frustum + deeper far plane for a space game
+<GameCanvas
+    cameraMode="perspective"
+    cameraPreset="free"
+    perspectiveCameraOptions={{ fov: 75, far: 5000 }}
+>
+    …
+</GameCanvas>
+
+// Expanded ortho bounds for a zoomed-out tactics map
+<GameCanvas
+    cameraMode="orthographic"
+    cameraPreset="isometric"
+    orthographicCameraOptions={{ left: -25, right: 25, top: 20, bottom: -20 }}
+>
+    …
+</GameCanvas>
+```
+
+> **Stability note:** if `cameraPreset` or the camera option props are constructed inline (e.g. `{{ position: … }}`), a new camera object is recreated on every render because `useMemo` compares by reference. Hoist them to a module-level constant or `useMemo` in the parent component to avoid unnecessary recreation.
 
 ---
 
