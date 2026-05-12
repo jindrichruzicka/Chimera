@@ -65,7 +65,7 @@ export interface AutoSavePort {
      * The concrete implementation must be non-blocking; errors are caught
      * and logged by the caller so they never propagate to the pipeline.
      */
-    readonly autoSave: (gameId: string) => Promise<void>;
+    readonly autoSave: (gameId: string, snapshot: BaseGameSnapshot) => Promise<void>;
 }
 
 export interface GameEndPort {
@@ -79,8 +79,8 @@ export interface GameEndPort {
  * Optional per-session configuration for `buildHostSessionPipeline`.
  *
  * When `gameId` and `savePort` are both supplied, `processAction` fires
- * `savePort.autoSave(gameId)` as a fire-and-forget call after every
- * successful `engine:end_turn` (Invariant #25, #43).
+ * `savePort.autoSave(gameId, nextState)` as a fire-and-forget call after
+ * every successful `engine:end_turn` (Invariant #25, #43).
  */
 export interface HostSessionPipelineOptions {
     /**
@@ -251,7 +251,7 @@ export function buildHostSessionPipeline(
         }
 
         if (action.type === 'engine:end_turn' && gameId !== undefined && savePort !== undefined) {
-            void savePort.autoSave(gameId).catch((err: unknown) => {
+            void savePort.autoSave(gameId, nextState).catch((err: unknown) => {
                 log.error(
                     'autosave failed after engine:end_turn',
                     err instanceof Error ? err : new Error(String(err)),

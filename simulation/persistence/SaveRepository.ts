@@ -36,6 +36,8 @@ export interface SaveSlotMeta {
     /** Qualified slot identifier: `'<gameId>/<slotName>'`. */
     readonly slotId: string;
     readonly gameId: string;
+    /** Simulation tick of the saved checkpoint. */
+    readonly tick?: number;
     readonly savedAt: number;
     readonly turnNumber: number;
     readonly playerNames: readonly string[];

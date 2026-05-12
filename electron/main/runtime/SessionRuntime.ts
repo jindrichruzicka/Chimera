@@ -362,9 +362,10 @@ export class SessionRuntime {
      * `PlayerDirectory` is wired into the session the host can swap in
      * actual display names.
      */
-    captureSaveFile(request: SaveRequest): SaveFile {
+    captureSaveFile(request: SaveRequest, snapshotOverride?: BaseGameSnapshot): SaveFile {
+        const snapshot = snapshotOverride ?? this.snapshot;
         const slotId = request.slotId ?? 'autosave';
-        const playerNames = Object.keys(this.snapshot.players);
+        const playerNames = Object.keys(snapshot.players);
         return {
             header: {
                 schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -373,10 +374,10 @@ export class SessionRuntime {
                 gameVersion: this.gameVersion,
                 slotId,
                 savedAt: this.now(),
-                turnNumber: this.snapshot.turnNumber,
+                turnNumber: snapshot.turnNumber,
                 playerNames,
             },
-            checkpoint: this.snapshot,
+            checkpoint: snapshot,
             deltaActions: [],
             pendingCommitments: this.commitments.capturePendingCommitments(),
         };

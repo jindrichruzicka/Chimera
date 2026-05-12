@@ -979,9 +979,12 @@ export async function main(): Promise<void> {
                 {
                     gameId: HOSTED_GAME_ID,
                     savePort: {
-                        autoSave: async (gameId: string): Promise<void> => {
+                        autoSave: async (
+                            gameId: string,
+                            snapshot: BaseGameSnapshot,
+                        ): Promise<void> => {
                             if (activeSession === null) return;
-                            const file = activeSession.captureSaveFile({ gameId });
+                            const file = activeSession.captureSaveFile({ gameId }, snapshot);
                             await saveManager.autoSave(file);
                         },
                     },

@@ -10,9 +10,9 @@
  * Two shape conversions happen here:
  *
  *   1. Simulation `SaveSlotMeta` (with `turnNumber`, `playerNames`,
- *      `sizeBytes`, `schemaVersion`) → preload `SaveSlotMeta` (with `tick`,
- *      `label?`). Simulation-only fields stay inside main and never cross
- *      IPC.
+ *      `turnNumber`, `playerNames`, `sizeBytes`, `schemaVersion`) → preload
+ *      `SaveSlotMeta` (with checkpoint `tick`, `label?`). Simulation-only
+ *      fields stay inside main and never cross IPC.
  *
  *   2. `SaveRequest` (gameId + optional slotId/label) → `SaveFile`
  *      (full simulation memento). The capture step is delegated to the
@@ -134,7 +134,8 @@ export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpc
 
 /**
  * Project a simulation `SaveSlotMeta` onto the preload `SaveSlotMeta`
- * shape. `turnNumber` becomes `tick` (the renderer-facing turn label);
+ * shape. The checkpoint simulation tick becomes the renderer-facing `tick`;
+ * legacy test doubles that do not provide it fall back to `turnNumber`.
  * `playerNames`, `sizeBytes`, `schemaVersion`, and `thumbnailDataUrl` are
  * intentionally dropped because the preload type does not carry them.
  */
@@ -142,7 +143,7 @@ function toPreloadMeta(meta: SimSaveSlotMeta): PreloadSaveSlotMeta {
     return {
         slotId: toSlotId(meta.slotId),
         gameId: meta.gameId,
-        tick: meta.turnNumber,
+        tick: meta.tick ?? meta.turnNumber,
         savedAt: meta.savedAt,
     };
 }
@@ -160,6 +161,7 @@ function simMetaFromFile(file: SaveFile): SimSaveSlotMeta {
     return {
         slotId: `${file.header.gameId}/${file.header.slotId}`,
         gameId: file.header.gameId,
+        tick: file.checkpoint.tick,
         savedAt: file.header.savedAt,
         turnNumber: file.header.turnNumber,
         playerNames: file.header.playerNames,

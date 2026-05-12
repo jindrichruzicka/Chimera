@@ -163,10 +163,24 @@ describe('buildHostSessionPipeline — AC1: autoSave triggered by engine:end_tur
         });
 
         const s0 = makeSnapshotWithTurnClock(0, P1, P2);
-        processAction(s0, endTurnEnvelope(0, P1));
+        const next = processAction(s0, endTurnEnvelope(0, P1));
 
         expect(autoSaveFn).toHaveBeenCalledOnce();
-        expect(autoSaveFn).toHaveBeenCalledWith('tactics');
+        expect(autoSaveFn).toHaveBeenCalledWith('tactics', next);
+    });
+
+    it('passes the post-reduce snapshot to autoSave so persistence captures the ended turn', () => {
+        const { processAction } = buildHostSessionPipeline(makeRegistry(), vi.fn(), {
+            gameId: 'tactics',
+            savePort,
+        });
+
+        const s0 = makeSnapshotWithTurnClock(6, P1, P2);
+        const next = processAction(s0, endTurnEnvelope(6, P1));
+
+        expect(next.tick).toBe(7);
+        expect(next.turnNumber).toBe(1);
+        expect(autoSaveFn.mock.calls[0]?.[1]).toBe(next);
     });
 
     it('calls savePort.autoSave even when engine:end_turn does not change state (no turnClock)', () => {
@@ -177,10 +191,10 @@ describe('buildHostSessionPipeline — AC1: autoSave triggered by engine:end_tur
 
         // Snapshot without turnClock: engine:end_turn reduce() returns `state` unchanged.
         const s0 = makeBaseSnapshot(0, [P1, P2]);
-        processAction(s0, endTurnEnvelope(0, P1));
+        const next = processAction(s0, endTurnEnvelope(0, P1));
 
         expect(autoSaveFn).toHaveBeenCalledOnce();
-        expect(autoSaveFn).toHaveBeenCalledWith('tactics');
+        expect(autoSaveFn).toHaveBeenCalledWith('tactics', next);
     });
 
     it('does not call autoSave when no savePort is provided', () => {

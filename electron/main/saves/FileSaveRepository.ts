@@ -113,6 +113,7 @@ export class FileSaveRepository implements SaveRepository {
         const meta: SaveSlotMeta = {
             slotId: qualified,
             gameId: file.header.gameId,
+            tick: file.checkpoint.tick,
             savedAt: file.header.savedAt,
             turnNumber: file.header.turnNumber,
             playerNames: file.header.playerNames,

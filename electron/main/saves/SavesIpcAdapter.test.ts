@@ -25,7 +25,12 @@ import { createSavesIpcPort } from './SavesIpcAdapter.js';
 
 const TACTICS = 'tactics';
 
-function makeFile(slotId: string, savedAt: number, turnNumber: number): SaveFile {
+function makeFile(
+    slotId: string,
+    savedAt: number,
+    turnNumber: number,
+    checkpointTick = turnNumber,
+): SaveFile {
     return {
         header: {
             schemaVersion: 1,
@@ -38,7 +43,7 @@ function makeFile(slotId: string, savedAt: number, turnNumber: number): SaveFile
             playerNames: ['Alice', 'Bob'],
         },
         checkpoint: {
-            tick: turnNumber,
+            tick: checkpointTick,
             engineMetadata: {
                 gameId: TACTICS,
                 version: 0,
@@ -114,6 +119,19 @@ describe('createSavesIpcPort', () => {
             // (turnNumber, playerNames, sizeBytes, schemaVersion) must
             // leak across the IPC boundary.
             expect(Object.keys(beta).sort()).toEqual(['gameId', 'savedAt', 'slotId', 'tick']);
+        });
+
+        it('maps tick from the saved checkpoint rather than the turn counter', async () => {
+            await repo.save(makeFile('autosave', 1_700_000_004_000, 2, 7));
+
+            const result = await port.list(TACTICS);
+
+            expect(result[0]).toMatchObject({
+                slotId: toSlotId('tactics/autosave'),
+                gameId: TACTICS,
+                tick: 7,
+                savedAt: 1_700_000_004_000,
+            } satisfies PreloadSaveSlotMeta);
         });
     });
 

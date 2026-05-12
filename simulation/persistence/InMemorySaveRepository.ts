@@ -34,6 +34,7 @@ export class InMemorySaveRepository implements SaveRepository {
         const meta: SaveSlotMeta = {
             slotId: qualifiedSlotId,
             gameId: file.header.gameId,
+            tick: file.checkpoint.tick,
             savedAt: file.header.savedAt,
             turnNumber: file.header.turnNumber,
             playerNames: file.header.playerNames,
