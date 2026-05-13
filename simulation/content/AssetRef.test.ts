@@ -103,6 +103,14 @@ describe('buildAssetRef — path-traversal rejection', () => {
             MalformedAssetRefError,
         );
     });
+
+    it('throws MalformedAssetRefError when gameId is ".."', () => {
+        expect(() => buildAssetRef('..', 'textures/grass.webp')).toThrow(MalformedAssetRefError);
+    });
+
+    it('throws MalformedAssetRefError when gameId is "."', () => {
+        expect(() => buildAssetRef('.', 'textures/grass.webp')).toThrow(MalformedAssetRefError);
+    });
 });
 
 describe('parseAssetRef — path-traversal rejection', () => {
@@ -114,6 +122,16 @@ describe('parseAssetRef — path-traversal rejection', () => {
     it('throws MalformedAssetRefError when relativePath starts with /', () => {
         // constructed directly to bypass buildAssetRef validation
         const bad = 'tactics//absolute' as AssetRef;
+        expect(() => parseAssetRef(bad)).toThrow(MalformedAssetRefError);
+    });
+
+    it('throws MalformedAssetRefError when gameId is ".."', () => {
+        const bad = '../textures/grass.webp' as AssetRef;
+        expect(() => parseAssetRef(bad)).toThrow(MalformedAssetRefError);
+    });
+
+    it('throws MalformedAssetRefError when gameId is "."', () => {
+        const bad = './textures/grass.webp' as AssetRef;
         expect(() => parseAssetRef(bad)).toThrow(MalformedAssetRefError);
     });
 });

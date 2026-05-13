@@ -1,6 +1,11 @@
 // simulation/content/AssetRef.ts
 // §4.8 / §4.10 — Typed asset reference primitives.
 //
+// parseAssetRef, MalformedAssetRefError, and isTraversalUnsafe live in
+// shared/asset-ref-parse.ts so that renderer/assets/AssetResolver.ts can
+// import them without violating the renderer→simulation runtime-value boundary.
+// They are re-exported here for backwards compatibility.
+//
 // AssetRef<T> is a phantom-typed branded string of the form
 // "<game-id>/<relative-path-under-assets/>".
 // Examples:
@@ -13,6 +18,14 @@
 //
 // Invariants: #1 (no renderer / DOM / Three.js deps), #20 (simulation never
 // resolves AssetRef values — they remain opaque strings to the engine).
+
+import {
+    isTraversalUnsafe,
+    MalformedAssetRefError,
+    parseAssetRef as parseAssetRefBase,
+} from '@chimera/shared/asset-ref-parse.js';
+
+export { MalformedAssetRefError } from '@chimera/shared/asset-ref-parse.js';
 
 // ---------------------------------------------------------------------------
 // Phantom asset-kind types — compile-time documentation only; no runtime
@@ -96,74 +109,25 @@ export function buildAssetRef<T extends AssetKind>(
 }
 
 // ---------------------------------------------------------------------------
-// parseAssetRef — decompose an AssetRef
+// parseAssetRef — typed wrapper around the shared utility
 // ---------------------------------------------------------------------------
 
 /**
  * Decompose an `AssetRef` into its `gameId` and `relativePath` parts.
  *
- * @throws {MalformedAssetRefError} When the ref does not contain a `/`, or
- *   when the slash appears at position 0 (empty game id).
+ * Delegates to the shared `parseAssetRef` in `shared/asset-ref-parse.ts`;
+ * this typed overload narrows the parameter to `AssetRef` for simulation-layer
+ * callers without duplicating validation logic.
+ *
+ * @throws {MalformedAssetRefError} When the ref does not contain a `/`, when
+ *   the slash is at position 0 (empty game id), or when the ref contains
+ *   path-traversal components.
  */
 export function parseAssetRef(ref: AssetRef): {
     readonly gameId: string;
     readonly relativePath: string;
 } {
-    const slash = ref.indexOf('/');
-    if (slash < 1) throw new MalformedAssetRefError(ref);
-    const gameId = ref.slice(0, slash);
-    const relativePath = ref.slice(slash + 1);
-    if (isTraversalUnsafe(gameId, relativePath)) {
-        throw new MalformedAssetRefError(ref);
-    }
-    return { gameId, relativePath };
-}
-
-// ---------------------------------------------------------------------------
-// Internal helpers
-// ---------------------------------------------------------------------------
-
-/**
- * Returns true when the gameId or relativePath contain path-traversal
- * components that would allow escaping the assets root when resolved by
- * the AssetManager (F10). Pure string check — no filesystem access.
- *
- * Rejects:
- *   - empty gameId (would produce a filesystem-absolute-looking ref)
- *   - gameId containing `/` (would embed a directory separator)
- *   - relativePath starting with `/` (absolute path injection)
- *   - relativePath containing `..` as a path segment (directory traversal)
- *   - NUL bytes in either argument (filesystem escape on some OS)
- */
-function isTraversalUnsafe(gameId: string, relativePath: string): boolean {
-    if (gameId.length === 0) return true;
-    if (gameId.includes('/') || gameId.includes('\0')) return true;
-    if (relativePath.startsWith('/')) return true;
-    if (relativePath.includes('\0')) return true;
-    // Check each segment for '..'
-    const segments = relativePath.split('/');
-    return segments.some((s) => s === '..');
-}
-
-// ---------------------------------------------------------------------------
-// MalformedAssetRefError
-// ---------------------------------------------------------------------------
-
-/**
- * Thrown by `parseAssetRef` when a string does not conform to the
- * `"<game-id>/<relative/path.ext>"` format.
- */
-export class MalformedAssetRefError extends Error {
-    /** The raw string that could not be parsed. */
-    public readonly ref: string;
-
-    constructor(ref: string) {
-        super(`AssetRef '${ref}' is malformed — expected format: 'game-id/relative/path.ext'`);
-        this.name = 'MalformedAssetRefError';
-        this.ref = ref;
-        // Maintain proper prototype chain in environments that transpile classes.
-        Object.setPrototypeOf(this, new.target.prototype);
-    }
+    return parseAssetRefBase(ref);
 }
 
 // AssetManifest types (AssetPriority, AssetManifestEntry, AssetManifest) have been

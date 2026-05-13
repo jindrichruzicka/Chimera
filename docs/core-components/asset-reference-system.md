@@ -15,15 +15,16 @@ tags: [assets, asset-ref, three-js, renderer, content, r3f]
 
 The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-system access — yet content data objects must be able to name binary assets (textures, models, audio). `AssetRef<T>` is a **phantom-typed branded string**: the simulation stores and passes these strings but never resolves them. Only the renderer's `AssetManager` converts an `AssetRef` into a loaded `THREE.Texture`, `AudioBuffer`, or `GLTF`.
 
-| Layer                               | Responsibility                                              |
-| ----------------------------------- | ----------------------------------------------------------- |
-| `simulation/content/AssetRef.ts`    | `AssetRef<T>` type + `buildAssetRef()` helper — zero deps   |
-| `games/<name>/data/*.json`          | JSON data objects carry `AssetRef` strings as plain strings |
-| `games/<name>/asset-manifest.ts`    | Declares every `AssetRef` the game exposes + load priority  |
-| `renderer/assets/AssetResolver.ts`  | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)      |
-| `renderer/assets/AssetManager.ts`   | Loads, caches, and disposes resolved assets                 |
-| `renderer/assets/AssetPreloader.ts` | Bulk-preloads all `critical` manifest entries before match  |
-| `renderer/assets/useAsset.ts`       | React hook — returns loaded asset or `null` + loading flag  |
+| Layer                               | Responsibility                                                                                                                       |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `shared/asset-ref-parse.ts`         | `parseAssetRef`, `isTraversalUnsafe`, `MalformedAssetRefError` — pure string logic, no deps; shared by `simulation/` and `renderer/` |
+| `simulation/content/AssetRef.ts`    | `AssetRef<T>` type + `buildAssetRef()` helper; re-exports parsing utilities from `shared/asset-ref-parse.ts`                         |
+| `games/<name>/data/*.json`          | JSON data objects carry `AssetRef` strings as plain strings                                                                          |
+| `games/<name>/asset-manifest.ts`    | Declares every `AssetRef` the game exposes + load priority                                                                           |
+| `renderer/assets/AssetResolver.ts`  | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                               |
+| `renderer/assets/AssetManager.ts`   | Loads, caches, and disposes resolved assets                                                                                          |
+| `renderer/assets/AssetPreloader.ts` | Bulk-preloads all `critical` manifest entries before match                                                                           |
+| `renderer/assets/useAsset.ts`       | React hook — returns loaded asset or `null` + loading flag                                                                           |
 
 ---
 
@@ -32,12 +33,23 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 ```typescript
 // simulation/content/AssetRef.ts
 
-// Phantom types — document intent only. No runtime class; no Three.js import.
-export interface TextureAsset {} // → THREE.Texture
-export interface AudioClipAsset {} // → AudioBuffer (Web Audio API)
-export interface GLTFModelAsset {} // → GLTF
-export interface SpriteSheetAsset {} // → THREE.Texture + SpriteAtlas frame map
-export interface ParticleConfigAsset {} // → plain JSON
+// Phantom types — each carries a unique __kind literal brand so that
+// AssetRef<TextureAsset> and AssetRef<AudioClipAsset> are mutually incompatible.
+export interface TextureAsset {
+    readonly __kind: 'texture';
+}
+export interface AudioClipAsset {
+    readonly __kind: 'audio-clip';
+}
+export interface GLTFModelAsset {
+    readonly __kind: 'gltf-model';
+}
+export interface SpriteSheetAsset {
+    readonly __kind: 'sprite-sheet';
+}
+export interface ParticleConfigAsset {
+    readonly __kind: 'particle-config';
+}
 
 export type AssetKind =
     | TextureAsset
@@ -50,17 +62,26 @@ export type AssetKind =
 // Example: "tactics/textures/units/warrior-portrait.webp"
 export type AssetRef<T extends AssetKind = AssetKind> = string & { readonly __assetRef: T };
 
+// Parsing and traversal-safety utilities live in shared/asset-ref-parse.ts
+// so both simulation/ and renderer/ can import them without a cross-boundary
+// runtime-value import.
 export function buildAssetRef<T extends AssetKind>(
     gameId: string,
     relativePath: string,
 ): AssetRef<T> {
-    return `${gameId}/${relativePath}` as AssetRef<T>;
+    const ref = `${gameId}/${relativePath}`;
+    if (isTraversalUnsafe(gameId, relativePath)) {
+        throw new MalformedAssetRefError(ref);
+    }
+    return ref as AssetRef<T>;
 }
 
-export function parseAssetRef(ref: AssetRef): { gameId: string; relativePath: string } {
-    const slash = ref.indexOf('/');
-    if (slash < 1) throw new MalformedAssetRefError(ref);
-    return { gameId: ref.slice(0, slash), relativePath: ref.slice(slash + 1) };
+// Delegates to shared/asset-ref-parse.ts — no logic duplication.
+export function parseAssetRef(ref: AssetRef): {
+    readonly gameId: string;
+    readonly relativePath: string;
+} {
+    return parseAssetRefBase(ref);
 }
 ```
 
