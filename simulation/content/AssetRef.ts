@@ -129,12 +129,14 @@ export function parseAssetRef(ref: AssetRef): {
  * the AssetManager (F10). Pure string check — no filesystem access.
  *
  * Rejects:
+ *   - empty gameId (would produce a filesystem-absolute-looking ref)
  *   - gameId containing `/` (would embed a directory separator)
  *   - relativePath starting with `/` (absolute path injection)
  *   - relativePath containing `..` as a path segment (directory traversal)
  *   - NUL bytes in either argument (filesystem escape on some OS)
  */
 function isTraversalUnsafe(gameId: string, relativePath: string): boolean {
+    if (gameId.length === 0) return true;
     if (gameId.includes('/') || gameId.includes('\0')) return true;
     if (relativePath.startsWith('/')) return true;
     if (relativePath.includes('\0')) return true;
@@ -164,35 +166,5 @@ export class MalformedAssetRefError extends Error {
     }
 }
 
-// ---------------------------------------------------------------------------
-// AssetManifest types — simulation-side, zero Three.js / DOM dependency
-// ---------------------------------------------------------------------------
-
-/**
- * Load priority for a manifest entry.
- *
- * - `critical`  — preloaded before match starts; game will not begin until loaded.
- * - `deferred`  — lazy-loaded on first use; a fallback asset is shown while loading.
- */
-export type AssetPriority = 'critical' | 'deferred';
-
-/** A single entry in an `AssetManifest`. */
-export interface AssetManifestEntry<T extends AssetKind = AssetKind> {
-    readonly ref: AssetRef<T>;
-    readonly priority: AssetPriority;
-}
-
-/**
- * Complete asset inventory for a game.
- *
- * Defined in `games/<name>/asset-manifest.ts` as a VALUE of this type.
- * The type itself is owned by `simulation/content/` — no Three.js or
- * renderer dependency is permitted here.
- *
- * Injected into the renderer via `AssetManagerContext` at session start
- * (dependency injection, not import) — see Invariant #47.
- */
-export interface AssetManifest {
-    readonly gameId: string;
-    readonly entries: readonly AssetManifestEntry[];
-}
+// AssetManifest types (AssetPriority, AssetManifestEntry, AssetManifest) have been
+// extracted to ./AssetManifest.ts — see §4.10.

@@ -12,13 +12,12 @@ export {
     type GLTFModelAsset,
     type SpriteSheetAsset,
     type ParticleConfigAsset,
-    type AssetPriority,
-    type AssetManifestEntry,
-    type AssetManifest,
     MalformedAssetRefError,
     buildAssetRef,
     parseAssetRef,
 } from './AssetRef';
+
+export { type AssetPriority, type AssetManifestEntry, type AssetManifest } from './AssetManifest';
 
 export {
     type ContentDatabase,

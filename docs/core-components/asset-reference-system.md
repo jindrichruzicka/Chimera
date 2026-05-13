@@ -48,7 +48,7 @@ export type AssetKind =
 
 // Format: "<game-id>/<relative-path-under-assets/>"
 // Example: "tactics/textures/units/warrior-portrait.webp"
-export type AssetRef<_T extends AssetKind = AssetKind> = string & { readonly __assetRef: void };
+export type AssetRef<T extends AssetKind = AssetKind> = string & { readonly __assetRef: T };
 
 export function buildAssetRef<T extends AssetKind>(
     gameId: string,
@@ -63,6 +63,8 @@ export function parseAssetRef(ref: AssetRef): { gameId: string; relativePath: st
     return { gameId: ref.slice(0, slash), relativePath: ref.slice(slash + 1) };
 }
 ```
+
+The `T` parameter is intentionally embedded in the brand. This keeps refs for different asset kinds structurally incompatible at compile time, so an `AssetRef<TextureAsset>` cannot be passed where an `AssetRef<AudioClipAsset>` is required even though both are plain strings at runtime.
 
 ---
 

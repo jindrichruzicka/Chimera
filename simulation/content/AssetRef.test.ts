@@ -3,9 +3,6 @@ import {
     type AssetRef,
     type AudioClipAsset,
     type GLTFModelAsset,
-    type AssetManifest,
-    type AssetManifestEntry,
-    type AssetPriority,
     type ParticleConfigAsset,
     type SpriteSheetAsset,
     type TextureAsset,
@@ -77,6 +74,10 @@ describe('parseAssetRef', () => {
 });
 
 describe('buildAssetRef — path-traversal rejection', () => {
+    it('throws MalformedAssetRefError when gameId is empty', () => {
+        expect(() => buildAssetRef('', 'textures/grass.webp')).toThrow(MalformedAssetRefError);
+    });
+
     it('throws MalformedAssetRefError when relativePath contains a .. segment', () => {
         expect(() => buildAssetRef('tactics', '../etc/shadow')).toThrow(MalformedAssetRefError);
     });
@@ -183,45 +184,4 @@ describe('AssetKind nominal brand discrimination', () => {
     });
 });
 
-// ---------------------------------------------------------------------------
-// AssetManifest types — structural checks
-// ---------------------------------------------------------------------------
-
-describe('AssetManifest types', () => {
-    it("AssetPriority literal values are 'critical' and 'deferred'", () => {
-        const critical: AssetPriority = 'critical';
-        const deferred: AssetPriority = 'deferred';
-        expect(critical).toBe('critical');
-        expect(deferred).toBe('deferred');
-    });
-
-    it('AssetManifestEntry holds a ref and a priority', () => {
-        const entry: AssetManifestEntry<TextureAsset> = {
-            ref: buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp'),
-            priority: 'critical',
-        };
-        expect(entry.ref).toBe('tactics/textures/grass.webp');
-        expect(entry.priority).toBe('critical');
-    });
-
-    it('AssetManifest holds gameId and readonly entries array', () => {
-        const manifest: AssetManifest = {
-            gameId: 'tactics',
-            entries: [
-                {
-                    ref: buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp'),
-                    priority: 'critical',
-                },
-                {
-                    ref: buildAssetRef<GLTFModelAsset>('tactics', 'models/warrior.glb'),
-                    priority: 'deferred',
-                },
-            ],
-        };
-        expect(manifest.gameId).toBe('tactics');
-        expect(manifest.entries).toHaveLength(2);
-        const [first, second] = manifest.entries;
-        expect(first?.priority).toBe('critical');
-        expect(second?.priority).toBe('deferred');
-    });
-});
+// AssetManifest structural tests live in AssetManifest.test.ts (§4.10).
