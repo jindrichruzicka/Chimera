@@ -35,7 +35,7 @@ Implement `GameCanvas` with `cameraMode` and `cameraPreset` props, built-in came
 
 ## F36 — Asset Manager and Resolver `§4.10`
 
-Implement `AssetResolver` (dev + production variants), `AssetManager` (`preloadCritical`, `get`, `load`, `dispose`), `AssetPreloader` (progress callback), and `useAsset<T>` hook. Wire `AssetManagerContext`. Implement `tools/validate-assets.ts` CI script.
+Implement `AssetResolver` (dev + production variants), open `AssetKindRegistry` typing, `AssetLoaderRegistry` (built-in + game-contributed loaders keyed by manifest `kind`), `AssetManager` (`registerManifest`, `preloadCritical`, `get`, `load`, `dispose`), `AssetPreloader` (progress callback), and `useAsset<T>` hook. Wire `AssetManagerContext`. Implement `tools/validate-assets.ts` CI script and verify both file existence and manifest-kind coverage.
 
 ---
 

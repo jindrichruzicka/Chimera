@@ -1,6 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { buildAssetRef, type GLTFModelAsset, type TextureAsset } from './AssetRef';
+import {
+    type AssetKindBrand,
+    buildAssetRef,
+    type GLTFModelAsset,
+    type TextureAsset,
+} from './AssetRef';
 import { type AssetManifest, type AssetManifestEntry, type AssetPriority } from './AssetManifest';
+
+interface TacticsShaderAsset extends AssetKindBrand<'tactics:shader'> {
+    readonly __tacticsShaderAsset: unique symbol;
+}
+
+declare module './AssetRef' {
+    interface AssetKindRegistry {
+        readonly 'tactics:shader': TacticsShaderAsset;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // AssetManifest types — structural checks
@@ -20,18 +35,44 @@ describe('AssetManifestEntry', () => {
     it('holds a ref and a priority', () => {
         const entry: AssetManifestEntry<TextureAsset> = {
             ref: buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp'),
+            kind: 'texture',
             priority: 'critical',
         };
         expect(entry.ref).toBe('tactics/textures/grass.webp');
+        expect(entry.kind).toBe('texture');
         expect(entry.priority).toBe('critical');
     });
 
     it('accepts deferred priority', () => {
         const entry: AssetManifestEntry<GLTFModelAsset> = {
             ref: buildAssetRef<GLTFModelAsset>('tactics', 'models/warrior.glb'),
+            kind: 'gltf-model',
             priority: 'deferred',
         };
         expect(entry.priority).toBe('deferred');
+    });
+
+    it('accepts custom asset kinds contributed by a game package', () => {
+        const entry: AssetManifestEntry<TacticsShaderAsset> = {
+            ref: buildAssetRef<TacticsShaderAsset>('tactics', 'shaders/fog.shader.json'),
+            kind: 'tactics:shader',
+            priority: 'deferred',
+            metadata: { stage: 'fragment' },
+        };
+
+        expect(entry.kind).toBe('tactics:shader');
+        expect(entry.metadata).toEqual({ stage: 'fragment' });
+    });
+
+    it('rejects a kind that does not match the ref phantom type at compile time', () => {
+        const textureRef = buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp');
+        // @ts-expect-error — AssetManifestEntry kind must match the AssetRef phantom type
+        const entry: AssetManifestEntry = {
+            ref: textureRef,
+            kind: 'gltf-model',
+            priority: 'deferred',
+        };
+        void entry;
     });
 });
 
@@ -42,10 +83,12 @@ describe('AssetManifest', () => {
             entries: [
                 {
                     ref: buildAssetRef<TextureAsset>('tactics', 'textures/grass.webp'),
+                    kind: 'texture',
                     priority: 'critical',
                 },
                 {
                     ref: buildAssetRef<GLTFModelAsset>('tactics', 'models/warrior.glb'),
+                    kind: 'gltf-model',
                     priority: 'deferred',
                 },
             ],
@@ -67,9 +110,9 @@ describe('AssetManifest', () => {
         const manifest: AssetManifest = {
             gameId: 'tactics',
             entries: [
-                { ref: refs[0], priority: 'critical' },
-                { ref: refs[1], priority: 'critical' },
-                { ref: refs[2], priority: 'deferred' },
+                { ref: refs[0], kind: 'texture', priority: 'critical' },
+                { ref: refs[1], kind: 'gltf-model', priority: 'critical' },
+                { ref: refs[2], kind: 'texture', priority: 'deferred' },
             ],
         };
 
@@ -83,7 +126,11 @@ describe('AssetManifest', () => {
         // pnpm typecheck, turning this test red at the type level.
         const manifest: AssetManifest = { gameId: 'x', entries: [] };
         // @ts-expect-error — readonly array: push is not permitted
-        manifest.entries.push({ ref: buildAssetRef('x', 'a.png'), priority: 'critical' });
+        manifest.entries.push({
+            ref: buildAssetRef('x', 'a.png'),
+            kind: 'texture',
+            priority: 'critical',
+        });
         void manifest;
     });
 });

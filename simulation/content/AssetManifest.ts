@@ -8,7 +8,7 @@
 //
 // Zero-dependency: no Three.js, no DOM, no renderer, no electron imports.
 
-import type { AssetKind, AssetRef } from './AssetRef.js';
+import type { AssetKind, AssetKindId, AssetRef } from './AssetRef.js';
 
 // ---------------------------------------------------------------------------
 // AssetPriority
@@ -27,10 +27,14 @@ export type AssetPriority = 'critical' | 'deferred';
 // ---------------------------------------------------------------------------
 
 /** A single entry in an {@link AssetManifest}. */
-export interface AssetManifestEntry<T extends AssetKind = AssetKind> {
-    readonly ref: AssetRef<T>;
-    readonly priority: AssetPriority;
-}
+export type AssetManifestEntry<T extends AssetKind = AssetKind> = T extends AssetKind
+    ? {
+          readonly ref: AssetRef<T>;
+          readonly kind: AssetKindId<T>;
+          readonly priority: AssetPriority;
+          readonly metadata?: unknown;
+      }
+    : never;
 
 // ---------------------------------------------------------------------------
 // AssetManifest

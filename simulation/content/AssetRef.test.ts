@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
+    type AssetKindBrand,
+    type AssetKindId,
     type AssetRef,
     type AudioClipAsset,
     type GLTFModelAsset,
@@ -10,6 +12,16 @@ import {
     buildAssetRef,
     parseAssetRef,
 } from './AssetRef';
+
+interface TacticsVoxelAsset extends AssetKindBrand<'tactics:voxel'> {
+    readonly __tacticsVoxelAsset: unique symbol;
+}
+
+declare module './AssetRef' {
+    interface AssetKindRegistry {
+        readonly 'tactics:voxel': TacticsVoxelAsset;
+    }
+}
 
 // ---------------------------------------------------------------------------
 // AssetRef<T> — Typed Asset References
@@ -184,6 +196,14 @@ describe('AssetKind phantom types', () => {
         const ref = buildAssetRef<ParticleConfigAsset>('tactics', 'particles/blood-burst.json');
         expect(typeof ref).toBe('string');
     });
+
+    it('game packages can extend AssetKindRegistry with custom phantom kinds', () => {
+        const ref = buildAssetRef<TacticsVoxelAsset>('tactics', 'voxels/castle.vox');
+        const customKind: AssetKindId<TacticsVoxelAsset> = 'tactics:voxel';
+
+        expect(ref).toBe('tactics/voxels/castle.vox');
+        expect(customKind).toBe('tactics:voxel');
+    });
 });
 
 // ---------------------------------------------------------------------------
@@ -199,6 +219,13 @@ describe('AssetKind nominal brand discrimination', () => {
         // @ts-expect-error — AssetRef<TextureAsset> must not be assignable to AssetRef<AudioClipAsset>
         const _audioRef: AssetRef<AudioClipAsset> = textureRef;
         void _audioRef;
+    });
+
+    it('custom AssetRef types remain incompatible with built-in AssetRef types', () => {
+        const voxelRef = buildAssetRef<TacticsVoxelAsset>('tactics', 'voxels/castle.vox');
+        // @ts-expect-error — AssetRef<TacticsVoxelAsset> must not be assignable to AssetRef<TextureAsset>
+        const _textureRef: AssetRef<TextureAsset> = voxelRef;
+        void _textureRef;
     });
 });
 

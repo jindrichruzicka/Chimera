@@ -1,6 +1,6 @@
 ---
 title: 'Asset Reference System'
-description: 'AssetRef<T> phantom-typed branded string, AssetManifest, AssetResolver (dev/prod), AssetManager (preload/get/load/dispose), useAsset<T> hook, and the simulation/renderer separation contract.'
+description: 'AssetRef<T> phantom-typed branded string, extensible AssetKindRegistry, AssetManifest, AssetResolver (dev/prod), AssetLoaderRegistry, AssetManager (preload/get/load/dispose), useAsset<T> hook, and the simulation/renderer separation contract.'
 tags: [assets, asset-ref, three-js, renderer, content, r3f]
 ---
 
@@ -15,16 +15,17 @@ tags: [assets, asset-ref, three-js, renderer, content, r3f]
 
 The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-system access — yet content data objects must be able to name binary assets (textures, models, audio). `AssetRef<T>` is a **phantom-typed branded string**: the simulation stores and passes these strings but never resolves them. Only the renderer's `AssetManager` converts an `AssetRef` into a loaded `THREE.Texture`, `AudioBuffer`, or `GLTF`.
 
-| Layer                               | Responsibility                                                                                                                       |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `shared/asset-ref-parse.ts`         | `parseAssetRef`, `isTraversalUnsafe`, `MalformedAssetRefError` — pure string logic, no deps; shared by `simulation/` and `renderer/` |
-| `simulation/content/AssetRef.ts`    | `AssetRef<T>` type + `buildAssetRef()` helper; re-exports parsing utilities from `shared/asset-ref-parse.ts`                         |
-| `games/<name>/data/*.json`          | JSON data objects carry `AssetRef` strings as plain strings                                                                          |
-| `games/<name>/asset-manifest.ts`    | Declares every `AssetRef` the game exposes + load priority                                                                           |
-| `renderer/assets/AssetResolver.ts`  | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                               |
-| `renderer/assets/AssetManager.ts`   | Loads, caches, and disposes resolved assets                                                                                          |
-| `renderer/assets/AssetPreloader.ts` | Bulk-preloads all `critical` manifest entries before match                                                                           |
-| `renderer/assets/useAsset.ts`       | React hook — returns loaded asset or `null` + loading flag                                                                           |
+| Layer                                    | Responsibility                                                                                                                        |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `shared/asset-ref-parse.ts`              | `parseAssetRef`, `isTraversalUnsafe`, `MalformedAssetRefError` — pure string logic, no deps; shared by `simulation/` and `renderer/`  |
+| `simulation/content/AssetRef.ts`         | `AssetRef<T>` type, open `AssetKindRegistry`, `buildAssetRef()` helper; re-exports parsing utilities from `shared/asset-ref-parse.ts` |
+| `games/<name>/data/*.json`               | JSON data objects carry `AssetRef` strings as plain strings                                                                           |
+| `games/<name>/asset-manifest.ts`         | Declares every `AssetRef` the game exposes, runtime kind id, load priority, and optional loader metadata                              |
+| `renderer/assets/AssetResolver.ts`       | `AssetRef<T>` → `file://` URL (env-aware: dev vs prod)                                                                                |
+| `renderer/assets/AssetLoaderRegistry.ts` | Runtime kind id → loader, open to game-contributed loaders without engine edits                                                       |
+| `renderer/assets/AssetManager.ts`        | Loads, caches, and disposes resolved assets                                                                                           |
+| `renderer/assets/AssetPreloader.ts`      | Bulk-preloads all `critical` manifest entries before match                                                                            |
+| `renderer/assets/useAsset.ts`            | React hook — returns loaded asset or `null` + loading flag                                                                            |
 
 ---
 
@@ -35,28 +36,28 @@ The simulation layer is pure TypeScript with no DOM, no Three.js, and no file-sy
 
 // Phantom types — each carries a unique __kind literal brand so that
 // AssetRef<TextureAsset> and AssetRef<AudioClipAsset> are mutually incompatible.
-export interface TextureAsset {
-    readonly __kind: 'texture';
-}
-export interface AudioClipAsset {
-    readonly __kind: 'audio-clip';
-}
-export interface GLTFModelAsset {
-    readonly __kind: 'gltf-model';
-}
-export interface SpriteSheetAsset {
-    readonly __kind: 'sprite-sheet';
-}
-export interface ParticleConfigAsset {
-    readonly __kind: 'particle-config';
+export interface AssetKindBrand<TKind extends string> {
+    readonly __kind: TKind;
 }
 
-export type AssetKind =
-    | TextureAsset
-    | AudioClipAsset
-    | GLTFModelAsset
-    | SpriteSheetAsset
-    | ParticleConfigAsset;
+export type TextureAsset = AssetKindBrand<'texture'>;
+export type AudioClipAsset = AssetKindBrand<'audio-clip'>;
+export type GLTFModelAsset = AssetKindBrand<'gltf-model'>;
+export type SpriteSheetAsset = AssetKindBrand<'sprite-sheet'>;
+export type ParticleConfigAsset = AssetKindBrand<'particle-config'>;
+
+// Open registry: games and extension packages add their own kind ids here
+// through TypeScript declaration merging.
+export interface AssetKindRegistry {
+    readonly texture: TextureAsset;
+    readonly 'audio-clip': AudioClipAsset;
+    readonly 'gltf-model': GLTFModelAsset;
+    readonly 'sprite-sheet': SpriteSheetAsset;
+    readonly 'particle-config': ParticleConfigAsset;
+}
+
+export type AssetKind = AssetKindRegistry[keyof AssetKindRegistry];
+export type AssetKindId<T extends AssetKind = AssetKind> = T['__kind'];
 
 // Format: "<game-id>/<relative-path-under-assets/>"
 // Example: "tactics/textures/units/warrior-portrait.webp"
@@ -87,6 +88,27 @@ export function parseAssetRef(ref: AssetRef): {
 
 The `T` parameter is intentionally embedded in the brand. This keeps refs for different asset kinds structurally incompatible at compile time, so an `AssetRef<TextureAsset>` cannot be passed where an `AssetRef<AudioClipAsset>` is required even though both are plain strings at runtime.
 
+### Game-Contributed Asset Kinds
+
+Games and first-party extension libraries may contribute new phantom kinds without changing `simulation/content/AssetRef.ts`:
+
+```typescript
+// games/tactics/assets/asset-kinds.ts
+import type { AssetKindBrand } from '@chimera/simulation/content/AssetRef.js';
+
+export interface TacticsVoxelAsset extends AssetKindBrand<'tactics:voxel'> {
+    readonly __tacticsVoxelAsset: unique symbol;
+}
+
+declare module '@chimera/simulation/content/AssetRef.js' {
+    interface AssetKindRegistry {
+        readonly 'tactics:voxel': TacticsVoxelAsset;
+    }
+}
+```
+
+Custom kind ids should be namespaced by game or package (`tactics:voxel`, `cards:deck-art`) so independent extensions cannot collide accidentally.
+
 ---
 
 ## Asset References in Content JSON
@@ -111,10 +133,14 @@ The `T` parameter is intentionally embedded in the brand. This keeps refs for di
 // simulation/content/AssetManifest.ts — engine-level, game-agnostic
 export type AssetPriority = 'critical' | 'deferred';
 
-export interface AssetManifestEntry<T extends AssetKind = AssetKind> {
-    readonly ref: AssetRef<T>;
-    readonly priority: AssetPriority;
-}
+export type AssetManifestEntry<T extends AssetKind = AssetKind> = T extends AssetKind
+    ? {
+          readonly ref: AssetRef<T>;
+          readonly kind: AssetKindId<T>;
+          readonly priority: AssetPriority;
+          readonly metadata?: unknown;
+      }
+    : never;
 
 export interface AssetManifest {
     readonly gameId: string;
@@ -122,7 +148,7 @@ export interface AssetManifest {
 }
 ```
 
-The manifest value is **injected via `AssetManagerContext`** at game session start — the renderer never imports from any `games/*` path.
+The manifest value is **injected via `AssetManagerContext`** at game session start — the renderer never imports from any `games/*` path. `kind` is the runtime bridge from the phantom type to the renderer loader registry. `metadata` is loader-owned structured data for cases such as atlas descriptors, compression options, or game-specific decode hints.
 
 > **Invariant #47** — `AssetManager` never imports from `games/*`.
 > **Invariant #22** — All `AssetRef` strings in content JSON must pass `tools/validate-assets.ts` before merge.
@@ -159,12 +185,38 @@ export function createDevResolver(projectRoot: string): AssetResolver {
 
 The correct resolver is constructed in `electron/main/index.ts` and injected into the renderer — the renderer never constructs paths itself.
 
+## `AssetLoaderRegistry` — Extensible Runtime Loading
+
+```typescript
+export interface AssetLoadRequest<T extends AssetKind = AssetKind> {
+    readonly ref: AssetRef<T>;
+    readonly kind: AssetKindId<T>;
+    readonly url: string;
+    readonly metadata?: unknown;
+}
+
+export interface AssetLoader<T extends AssetKind = AssetKind, TLoaded = unknown> {
+    readonly kind: AssetKindId<T>;
+    load(request: AssetLoadRequest<T>): Promise<TLoaded>;
+}
+
+export interface AssetLoaderRegistry {
+    register<T extends AssetKind>(loader: AssetLoader<T>): void;
+    get<T extends AssetKind>(kind: AssetKindId<T>): AssetLoader<T>;
+    has(kind: string): boolean;
+}
+```
+
+The default registry contains the built-in loaders for `texture`, `gltf-model`, `sprite-sheet`, `audio-clip`, and `particle-config`. Games register additional loaders during renderer/session wiring and pass the composed registry into `AssetManager`; engine renderer code still receives it by dependency injection rather than importing any specific game package.
+
 ---
 
 ## `AssetManager` — Load, Cache, Dispose
 
 ```typescript
 export interface AssetManager {
+    // Register the active session manifest; load(ref) rejects refs not listed here.
+    registerManifest(manifest: AssetManifest): void;
     // Preload all 'critical' entries; resolves when done
     preloadCritical(
         manifest: AssetManifest,
@@ -180,6 +232,8 @@ export interface AssetManager {
 ```
 
 > **Invariant #21** — `AssetManager.dispose()` is called unconditionally at game session end. Components must never hold direct references to loaded Three.js assets.
+
+`AssetManager.load(ref)` resolves `ref` to a URL through `AssetResolver`, looks up the matching `AssetManifestEntry`, then dispatches to the loader registered for `entry.kind`. It does not infer semantic type from file extension. Extension sniffing is allowed inside a loader implementation, but the engine-level dispatch key is always the manifest kind.
 
 ---
 

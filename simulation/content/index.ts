@@ -5,7 +5,10 @@
 export { type DataObject, type DataRef, MalformedRefError, buildRef, parseRef } from './DataRef';
 
 export {
+    type AssetKindBrand,
     type AssetKind,
+    type AssetKindId,
+    type AssetKindRegistry,
     type AssetRef,
     type TextureAsset,
     type AudioClipAsset,
