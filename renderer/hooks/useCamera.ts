@@ -1,12 +1,14 @@
 'use client';
 
-import { useFrame, useThree } from '@react-three/fiber';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { useThree } from '@react-three/fiber';
+import { useCallback, useEffect, useMemo, useReducer, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import type { MutableRefObject } from 'react';
 import type { Camera } from 'three';
 import { Vector3 } from 'three';
-import type { EasingFn } from '../utils/curves.js';
+import { lerp, type EasingFn } from '../utils/curves.js';
 import type { Vector3Tuple } from '../types/r3f-types.js';
+import { useTweenCallback } from './useTweenCallback.js';
 
 export type { Vector3Tuple } from '../types/r3f-types.js';
 
@@ -43,15 +45,18 @@ type ActiveAnimation = Readonly<{
     targetPosition: Vector3;
     startLookAt: Vector3 | null;
     targetLookAt: Vector3 | null;
+    resolve: () => void;
+    reject: (err: CameraAnimationCancelled) => void;
+    cancelReason: { value: CameraAnimationCancelReason };
+}>;
+
+type TweenConfig = Readonly<{
     durationMs: number;
     easing: EasingFn;
-    resolve: () => void;
-    reject: (reason: CameraAnimationCancelled) => void;
-}> & {
-    elapsedMs: number;
-};
+}>;
 
 const linear: EasingFn = (progress) => progress;
+const DEFAULT_TWEEN_CONFIG: TweenConfig = { durationMs: 1, easing: linear };
 
 export function useCamera(): CameraController {
     const { camera } = useThree();
@@ -61,24 +66,67 @@ export function useCamera(): CameraController {
     const nextPositionRef = useRef(new Vector3());
     const nextLookAtRef = useRef(new Vector3());
 
+    // Tween config stored in state so useTweenCallback re-renders with the correct duration/easing
+    // before start() is called (via flushSync in animateTo).
+    const [tweenConfig, setTweenConfig] = useReducer(
+        (_prev: TweenConfig, next: TweenConfig) => next,
+        DEFAULT_TWEEN_CONFIG,
+    );
+
     cameraRef.current = camera;
 
-    const cancelActiveAnimation = useCallback((reason: CameraAnimationCancelReason): boolean => {
-        const animation = activeAnimationRef.current;
-        if (animation === null) {
-            return false;
-        }
+    const tween = useTweenCallback(tweenConfig.durationMs, tweenConfig.easing, {
+        onTick(value: number): void {
+            const animation = activeAnimationRef.current;
+            if (animation === null) {
+                return;
+            }
+            applyAnimationProgress(
+                cameraRef.current,
+                animation,
+                value,
+                explicitLookAtRef,
+                nextPositionRef.current,
+                nextLookAtRef.current,
+            );
+        },
+        onComplete(): void {
+            const animation = activeAnimationRef.current;
+            if (animation === null) {
+                return;
+            }
+            applyAnimationProgress(
+                cameraRef.current,
+                animation,
+                1,
+                explicitLookAtRef,
+                nextPositionRef.current,
+                nextLookAtRef.current,
+            );
+            activeAnimationRef.current = null;
+            animation.resolve();
+        },
+        onCancel(): void {
+            const animation = activeAnimationRef.current;
+            if (animation !== null) {
+                activeAnimationRef.current = null;
+                animation.reject(new CameraAnimationCancelled(animation.cancelReason.value));
+            }
+        },
+    });
 
-        activeAnimationRef.current = null;
-        animation.reject(new CameraAnimationCancelled(reason));
-        return true;
-    }, []);
+    const tweenRef = useRef(tween);
+    tweenRef.current = tween;
 
     useEffect(() => {
         return () => {
-            cancelActiveAnimation('unmount');
+            const animation = activeAnimationRef.current;
+            if (animation !== null) {
+                animation.cancelReason.value = 'unmount';
+            }
+            tweenRef.current.stop();
         };
-    }, [cancelActiveAnimation]);
+    }, []);
 
     const setPosition = useCallback((x: number, y: number, z: number): void => {
         const activeCamera = cameraRef.current;
@@ -105,19 +153,30 @@ export function useCamera(): CameraController {
         activeCamera.updateMatrixWorld();
     }, []);
 
-    const cancelAnimation = useCallback(
-        (): boolean => cancelActiveAnimation('manual'),
-        [cancelActiveAnimation],
-    );
+    const cancelAnimation = useCallback((): boolean => {
+        const animation = activeAnimationRef.current;
+        if (animation === null) {
+            return false;
+        }
+        animation.cancelReason.value = 'manual';
+        tweenRef.current.stop();
+        return true;
+    }, []);
 
-    // TODO(F37): refactor animateTo to use useTween from renderer/hooks/useTween.ts once curves.ts/useTween.ts land.
     const animateTo = useCallback(
         (
             target: CameraAnimationTarget,
             durationMs: number,
             easing: EasingFn = linear,
         ): Promise<void> => {
-            cancelActiveAnimation('superseded');
+            // Supersede any in-flight animation before starting a new one.
+            // The cancelReason is set first so that onCancel() fires with the correct reason
+            // when stop() is called synchronously.
+            const prev = activeAnimationRef.current;
+            if (prev !== null) {
+                prev.cancelReason.value = 'superseded';
+                tweenRef.current.stop();
+            }
 
             const activeCamera = cameraRef.current;
             const targetPosition = vectorFromTuple(target.position);
@@ -138,8 +197,10 @@ export function useCamera(): CameraController {
             }
 
             return new Promise<void>((resolve, reject) => {
+                const cancelReason: { value: CameraAnimationCancelReason } = {
+                    value: 'superseded',
+                };
                 activeAnimationRef.current = {
-                    elapsedMs: 0,
                     startPosition: activeCamera.position.clone(),
                     targetPosition,
                     startLookAt:
@@ -148,48 +209,19 @@ export function useCamera(): CameraController {
                             : (explicitLookAtRef.current?.clone() ??
                               deriveCurrentLookAt(activeCamera)),
                     targetLookAt,
-                    durationMs: duration,
-                    easing,
                     resolve,
                     reject,
+                    cancelReason,
                 };
+
+                // flushSync forces an immediate re-render so useTweenCallback picks up
+                // the correct durationMs and easing before start() is called.
+                flushSync(() => setTweenConfig({ durationMs: duration, easing }));
+                tweenRef.current.start();
             });
         },
-        [cancelActiveAnimation],
+        [],
     );
-
-    useFrame((_state, deltaSeconds) => {
-        const animation = activeAnimationRef.current;
-        if (animation === null) {
-            return;
-        }
-
-        animation.elapsedMs += deltaSeconds * 1000;
-        const progress = Math.min(animation.elapsedMs / animation.durationMs, 1);
-        applyAnimationProgress(
-            cameraRef.current,
-            animation,
-            animation.easing(progress),
-            explicitLookAtRef,
-            nextPositionRef.current,
-            nextLookAtRef.current,
-        );
-
-        if (progress < 1) {
-            return;
-        }
-
-        applyAnimationProgress(
-            cameraRef.current,
-            animation,
-            1,
-            explicitLookAtRef,
-            nextPositionRef.current,
-            nextLookAtRef.current,
-        );
-        activeAnimationRef.current = null;
-        animation.resolve();
-    });
 
     return useMemo(
         () => ({ setPosition, lookAt, zoom, animateTo, cancelAnimation }),
@@ -213,12 +245,19 @@ function applyAnimationProgress(
     nextPosition: Vector3,
     nextLookAt: Vector3,
 ): void {
-    camera.position.copy(
-        nextPosition.lerpVectors(animation.startPosition, animation.targetPosition, progress),
+    nextPosition.set(
+        lerp(animation.startPosition.x, animation.targetPosition.x, progress),
+        lerp(animation.startPosition.y, animation.targetPosition.y, progress),
+        lerp(animation.startPosition.z, animation.targetPosition.z, progress),
     );
+    camera.position.copy(nextPosition);
 
     if (animation.startLookAt !== null && animation.targetLookAt !== null) {
-        nextLookAt.lerpVectors(animation.startLookAt, animation.targetLookAt, progress);
+        nextLookAt.set(
+            lerp(animation.startLookAt.x, animation.targetLookAt.x, progress),
+            lerp(animation.startLookAt.y, animation.targetLookAt.y, progress),
+            lerp(animation.startLookAt.z, animation.targetLookAt.z, progress),
+        );
         camera.lookAt(nextLookAt);
         explicitLookAtRef.current = nextLookAt.clone();
     } else {

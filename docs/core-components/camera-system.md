@@ -131,7 +131,7 @@ export interface CameraController {
 
     /**
      * Smooth animated move to a new position/look-at.
-     * Frame-driven via `useFrame`; will migrate to `useTween` (§4.21) when F37 lands.
+     * Frame-driven via `useTweenCallback` (§4.21).
      *
      * Resolution contract:
      *   • Resolves on animation complete.
@@ -195,5 +195,5 @@ Camera state is **never** part of `GameSnapshot`, never sent over the network, a
 
 ## Cross-References
 
-- [Curves, Tweening & Interaction](curves-tweening-interaction.md) — `useTween` will be used internally by `animateTo()` when F37 lands
+- [Curves, Tweening & Interaction](curves-tweening-interaction.md) — `animateTo()` is driven by `useTweenCallback` (§4.21)
 - [Scene Transitions & Fade](scene-transitions-fade.md) — camera may animate during scene transition

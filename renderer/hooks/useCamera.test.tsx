@@ -2,21 +2,38 @@
 
 import { act, cleanup, render } from '@testing-library/react';
 import React from 'react';
+import { type useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PerspectiveCamera, Vector3 } from 'three';
 import { CameraAnimationCancelled, type CameraController, useCamera } from './useCamera.js';
 
-type FrameCallback = (state: unknown, deltaSeconds: number) => void;
+interface FrameState {
+    invalidate(): void;
+}
+
+type FrameCallback = (state: FrameState, deltaSeconds: number) => void;
 
 let activeCamera: PerspectiveCamera;
 let frameCallbacks: FrameCallback[] = [];
+let invalidate: ReturnType<typeof vi.fn>;
 
-vi.mock('@react-three/fiber', () => ({
-    useThree: vi.fn(() => ({ camera: activeCamera })),
-    useFrame: vi.fn((callback: FrameCallback) => {
-        frameCallbacks.push(callback);
-    }),
-}));
+vi.mock('@react-three/fiber', async () => {
+    const { useRef: useReactRef } = await vi.importActual<{ useRef: typeof useRef }>('react');
+
+    return {
+        useFrame: vi.fn((callback: FrameCallback) => {
+            const callbackIndexRef = useReactRef<number | null>(null);
+            callbackIndexRef.current ??= frameCallbacks.length;
+            frameCallbacks[callbackIndexRef.current] = callback;
+        }),
+        useThree: vi.fn(
+            (selector?: (state: FrameState & { camera: PerspectiveCamera }) => unknown) => {
+                const state = { camera: activeCamera, invalidate };
+                return selector ? selector(state) : state;
+            },
+        ),
+    };
+});
 
 beforeEach(() => {
     activeCamera = new PerspectiveCamera();
@@ -24,6 +41,7 @@ beforeEach(() => {
     activeCamera.lookAt(new Vector3(0, 0, 0));
     activeCamera.updateMatrixWorld();
     frameCallbacks = [];
+    invalidate = vi.fn();
 });
 
 afterEach(() => {
@@ -181,6 +199,19 @@ describe('useCamera', () => {
 
         expect(activeCamera.zoom).toBe(2);
     });
+
+    it('resolves animateTo driven by useTweenCallback after a single frame advance', async () => {
+        const controller = renderUseCamera();
+
+        const animation = controller.animateTo({ position: [10, 0, 10] }, 1000);
+
+        await act(async () => {
+            advanceFrames(1);
+        });
+
+        await expect(animation).resolves.toBeUndefined();
+        expectVectorToBeClose(activeCamera.position.toArray(), [10, 0, 10]);
+    });
 });
 
 function renderUseCamera(): CameraController {
@@ -209,7 +240,7 @@ function renderUseCameraWithUnmount(): Readonly<{
 
 function advanceFrames(deltaSeconds: number): void {
     frameCallbacks.forEach((callback) => {
-        callback(undefined, deltaSeconds);
+        callback({ invalidate }, deltaSeconds);
     });
 }
 
