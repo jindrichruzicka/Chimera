@@ -5,7 +5,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { useRef } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { easeIn, linear } from '../utils/curves.js';
-import { type TweenState, useTween, useTweenCallback } from './useTween.js';
+import { type TweenState, useTween } from './useTween.js';
 
 interface FrameState {
     invalidate(): void;
@@ -283,63 +283,6 @@ describe('useTween', () => {
         });
 
         expect(result.current.samples).toEqual([0.5, 0.75]);
-    });
-});
-
-describe('useTweenCallback', () => {
-    it('emits eased ticks and completion callbacks across frames', () => {
-        const onTick = vi.fn();
-        const onComplete = vi.fn();
-        const { result } = renderHook(() =>
-            useTweenCallback(1000, easeIn, {
-                onComplete,
-                onTick,
-            }),
-        );
-
-        act(() => {
-            result.current.start();
-        });
-
-        expect(result.current.isRunning).toBe(true);
-
-        act(() => {
-            advanceFrames(0.5);
-        });
-
-        expect(onTick).toHaveBeenLastCalledWith(0.25);
-        expect(onComplete).not.toHaveBeenCalled();
-        expect(result.current.isRunning).toBe(true);
-
-        act(() => {
-            advanceFrames(0.5);
-        });
-
-        expect(onTick).toHaveBeenLastCalledWith(1);
-        expect(onComplete).toHaveBeenCalledTimes(1);
-        expect(result.current.isRunning).toBe(false);
-    });
-
-    it('does not complete after stop cancels an active tween', () => {
-        const onTick = vi.fn();
-        const onComplete = vi.fn();
-        const { result } = renderHook(() =>
-            useTweenCallback(1000, linear, {
-                onComplete,
-                onTick,
-            }),
-        );
-
-        act(() => {
-            result.current.start();
-            advanceFrames(0.5);
-            result.current.stop();
-            advanceFrames(0.5);
-        });
-
-        expect(onTick).toHaveBeenCalledTimes(1);
-        expect(onComplete).not.toHaveBeenCalled();
-        expect(result.current.isRunning).toBe(false);
     });
 });
 

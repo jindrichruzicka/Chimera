@@ -71,13 +71,15 @@ useFrame(() => {
 export function useTweenCallback(
     durationMs: number,
     easingFn: EasingFn,
-    callbacks: { onTick: (value: number) => void; onComplete: () => void },
+    callbacks: { onTick: (value: number) => void; onComplete: () => void; onCancel: () => void },
 ): Pick<TweenState, 'start' | 'stop' | 'isRunning'>;
 ```
 
+`onComplete` fires exactly once after natural completion. `onCancel` fires exactly once when `stop()` cancels an active tween. These lifecycle callbacks are mutually exclusive for a single animation lifecycle.
+
 ### Invariant
 
-**#56** — `curves.ts` and `useTween` are renderer-only. They must never be imported by anything under `simulation/`. Visual smoothing is a client-local concern; authoritative state does not move smoothly.
+**#56** — `curves.ts`, `useTween`, and `useTweenCallback` are renderer-only. They must never be imported by anything under `simulation/`. Visual smoothing is a client-local concern; authoritative state does not move smoothly.
 
 ---
 

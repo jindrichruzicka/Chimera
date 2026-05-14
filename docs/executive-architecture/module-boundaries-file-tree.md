@@ -250,6 +250,7 @@ chimera/
 │   │   └── curves.ts                # Pure math: lerp, easeIn, easeOut, easeInOut; see §4.21
 │   ├── hooks/
 │   │   ├── useTween.ts              # see §4.21
+│   │   ├── useTweenCallback.ts      # see §4.21
 │   │   ├── useCamera.ts             # see §4.22
 │   │   ├── useGameInteraction.ts    # see §4.23
 │   │   └── useFadeTransition.ts     # see §4.19

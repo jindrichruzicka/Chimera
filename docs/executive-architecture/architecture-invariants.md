@@ -148,7 +148,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **55.** `TimerManager.advance()` is a pure function. The `engine:tick` reducer is the ONLY consumer of `TimerManager.advance()`. Game action reducers may create or cancel timers but must NOT call `TimerManager.advance()`.
 
-**56.** `curves.ts` and `useTween` are renderer-only modules. They must never be imported by anything under `simulation/`. Visual smoothing is a client-local concern; the authoritative state does not move smoothly.
+**56.** `curves.ts`, `useTween`, and `useTweenCallback` are renderer-only modules. They must never be imported by anything under `simulation/`. Visual smoothing is a client-local concern; the authoritative state does not move smoothly.
 
 **57.** Camera state is renderer-only. `GameSnapshot` must never contain camera position, look-at, zoom, or any other camera parameter. Camera configuration is driven by game board components in response to snapshot data — it is never driven by authoritative simulation actions.
 
