@@ -5,7 +5,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
-import { MatchShell, type GameHudProps, type MatchResultBannerProps } from './MatchShell';
+import type { AssetManager } from '../../assets/AssetManager';
+import { useAssetManager } from '../../assets/AssetManagerContext.js';
+import {
+    MatchShell,
+    type GameHudProps,
+    type GameScreenProps,
+    type MatchResultBannerProps,
+} from './MatchShell';
 
 afterEach(() => {
     cleanup();
@@ -13,6 +20,40 @@ afterEach(() => {
 });
 
 describe('MatchShell page object locators', () => {
+    it('provides AssetManagerContext in registry mode and disposes it on unmount', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const assetManager = createAssetManagerStub();
+
+        function Board(_props: GameScreenProps): React.ReactElement {
+            const injectedAssetManager = useAssetManager();
+            return (
+                <div
+                    data-testid="asset-context-board"
+                    data-asset-manager={
+                        injectedAssetManager === assetManager ? 'provided' : 'wrong'
+                    }
+                />
+            );
+        }
+
+        const { unmount } = render(
+            <MatchShell
+                registry={{ board: Board }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                assetManager={assetManager}
+            />,
+        );
+
+        expect(
+            (await screen.findByTestId('asset-context-board')).getAttribute('data-asset-manager'),
+        ).toBe('provided');
+
+        unmount();
+        expect(assetManager.dispose).toHaveBeenCalledOnce();
+    });
+
     it('renders a GameScreenRegistry board through registry mode', async () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
         const Board = React.lazy(() =>
@@ -356,4 +397,18 @@ function makePlayerSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnap
 
 function makeSceneId(raw: string): NonNullable<PlayerSnapshot['sceneId']> {
     return raw as NonNullable<PlayerSnapshot['sceneId']>;
+}
+
+function createAssetManagerStub(): AssetManager {
+    return {
+        registerManifest: vi.fn(),
+        async preloadCritical(): Promise<void> {},
+        get(): null {
+            return null;
+        },
+        async load(): Promise<never> {
+            throw new Error('unused asset manager stub');
+        },
+        dispose: vi.fn(),
+    };
 }

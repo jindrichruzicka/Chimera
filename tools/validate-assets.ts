@@ -1,6 +1,6 @@
 import { constants, type Dirent } from 'node:fs';
 import { access, readdir, readFile } from 'node:fs/promises';
-import { relative, resolve } from 'node:path';
+import { basename, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
     ScriptKind,
@@ -9,19 +9,31 @@ import {
     forEachChild,
     isArrayLiteralExpression,
     isAsExpression,
+    isCallExpression,
     isIdentifier,
     isNoSubstitutionTemplateLiteral,
+    isObjectLiteralExpression,
+    isPropertyAccessExpression,
     isPropertyAssignment,
+    isPropertyDeclaration,
     isSatisfiesExpression,
     isStringLiteral,
 } from 'typescript';
-import type { ArrayLiteralExpression, Expression, Node, PropertyName } from 'typescript';
+import type {
+    ArrayLiteralExpression,
+    Expression,
+    Node,
+    ObjectLiteralExpression,
+    PropertyName,
+} from 'typescript';
 
 import { MalformedAssetRefError, parseAssetRef } from '../shared/asset-ref-parse.js';
 
 export interface WorkspaceFileHost {
     findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]>;
     findSceneSourceFiles(workspaceRoot: string): Promise<readonly string[]>;
+    findAssetManifestFiles?(workspaceRoot: string): Promise<readonly string[]>;
+    findAssetLoaderSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
     readFile(filePath: string): Promise<string>;
     fileExists(filePath: string): Promise<boolean>;
 }
@@ -29,9 +41,10 @@ export interface WorkspaceFileHost {
 export interface ValidateAssetWorkspaceOptions {
     readonly workspaceRoot: string;
     readonly host?: WorkspaceFileHost;
+    readonly assetLoaderKinds?: readonly string[];
 }
 
-export type AssetReferenceSourceKind = 'data-json' | 'scene-required-assets';
+export type AssetReferenceSourceKind = 'data-json' | 'scene-required-assets' | 'asset-manifest';
 
 export interface AssetReferenceSource {
     readonly kind: AssetReferenceSourceKind;
@@ -56,11 +69,21 @@ export interface MalformedAssetReference {
     readonly reason: string;
 }
 
+export type UnmanifestedAssetReference = AssetReference;
+
+export interface UnknownAssetManifestKind {
+    readonly kind: string;
+    readonly source: AssetReferenceSource;
+    readonly ref?: string;
+}
+
 export interface AssetValidationReport {
     readonly ok: boolean;
     readonly checkedRefs: number;
     readonly missing: readonly MissingAssetReference[];
     readonly malformed: readonly MalformedAssetReference[];
+    readonly unmanifested: readonly UnmanifestedAssetReference[];
+    readonly unknownKinds: readonly UnknownAssetManifestKind[];
 }
 
 interface CollectedAssetReferences {
@@ -68,9 +91,20 @@ interface CollectedAssetReferences {
     readonly malformed: readonly MalformedAssetReference[];
 }
 
+interface CollectedAssetManifestReferences extends CollectedAssetReferences {
+    readonly kinds: readonly UnknownAssetManifestKind[];
+}
+
 export type AssetValidationExitCode = 0 | 1;
 
 const assetRefCandidatePattern = /^[^\0/]+\/[^\0]*$/u;
+const defaultAssetLoaderKinds = new Set([
+    'texture',
+    'audio-clip',
+    'gltf-model',
+    'sprite-sheet',
+    'particle-config',
+]);
 
 export async function validateAssetWorkspace(
     options: ValidateAssetWorkspaceOptions,
@@ -79,8 +113,16 @@ export async function validateAssetWorkspace(
     const host = options.host ?? createNodeWorkspaceFileHost();
     const dataJsonFiles = [...(await host.findDataJsonFiles(workspaceRoot))].sort();
     const sceneSourceFiles = [...(await host.findSceneSourceFiles(workspaceRoot))].sort();
+    const assetManifestFiles = [
+        ...(await (host.findAssetManifestFiles?.(workspaceRoot) ?? [])),
+    ].sort();
+    const assetLoaderSourceFiles = [
+        ...(await (host.findAssetLoaderSourceFiles?.(workspaceRoot) ?? [])),
+    ].sort();
 
     const refs: AssetReference[] = [];
+    const manifestRefs: AssetReference[] = [];
+    const manifestKinds: UnknownAssetManifestKind[] = [];
     const malformed: MalformedAssetReference[] = [];
 
     for (const filePath of dataJsonFiles) {
@@ -98,8 +140,27 @@ export async function validateAssetWorkspace(
         malformed.push(...collected.malformed);
     }
 
+    for (const filePath of assetManifestFiles) {
+        const sourceText = await host.readFile(filePath);
+        const collected = collectAssetManifestRefs(sourceText, filePath);
+        manifestRefs.push(...collected.refs);
+        manifestKinds.push(...collected.kinds);
+        malformed.push(...collected.malformed);
+    }
+
+    const assetLoaderKinds = new Set<string>([
+        ...defaultAssetLoaderKinds,
+        ...(options.assetLoaderKinds ?? []),
+    ]);
+    for (const filePath of assetLoaderSourceFiles) {
+        const sourceText = await host.readFile(filePath);
+        for (const kind of collectAssetLoaderKinds(sourceText, filePath)) {
+            assetLoaderKinds.add(kind);
+        }
+    }
+
     const missing: MissingAssetReference[] = [];
-    for (const ref of refs) {
+    for (const ref of [...refs, ...manifestRefs]) {
         const expectedPath = resolve(
             workspaceRoot,
             'games',
@@ -112,14 +173,26 @@ export async function validateAssetWorkspace(
         }
     }
 
+    const manifestRefSet = new Set(manifestRefs.map((ref) => ref.ref));
+    const unmanifested = refs.filter((ref) => !manifestRefSet.has(ref.ref));
+    const unknownKinds = manifestKinds.filter((entry) => !assetLoaderKinds.has(entry.kind));
+
     missing.sort(compareReferenceFailures);
     malformed.sort(compareMalformedFailures);
+    unmanifested.sort(compareAssetReferenceFailures);
+    unknownKinds.sort(compareUnknownKindFailures);
 
     return {
-        ok: missing.length === 0 && malformed.length === 0,
+        ok:
+            missing.length === 0 &&
+            malformed.length === 0 &&
+            unmanifested.length === 0 &&
+            unknownKinds.length === 0,
         checkedRefs: refs.length,
         missing,
         malformed,
+        unmanifested,
+        unknownKinds,
     };
 }
 
@@ -160,6 +233,24 @@ export function formatAssetValidationReport(
         }
     }
 
+    if (report.unmanifested.length > 0) {
+        lines.push('', 'Asset refs missing from manifests:');
+        for (const reference of report.unmanifested) {
+            lines.push(`- ${reference.ref}`, `  source: ${formatSource(reference.source, root)}`);
+        }
+    }
+
+    if (report.unknownKinds.length > 0) {
+        lines.push('', 'Manifest kinds without loader coverage:');
+        for (const unknownKind of report.unknownKinds) {
+            lines.push(
+                `- ${unknownKind.kind}`,
+                `  source: ${formatSource(unknownKind.source, root)}`,
+                ...(unknownKind.ref === undefined ? [] : [`  ref: ${unknownKind.ref}`]),
+            );
+        }
+    }
+
     return `${lines.join('\n')}\n`;
 }
 
@@ -167,6 +258,9 @@ export function createNodeWorkspaceFileHost(): WorkspaceFileHost {
     return {
         findDataJsonFiles: async (workspaceRoot) => findDataJsonFiles(workspaceRoot),
         findSceneSourceFiles: async (workspaceRoot) => findSceneSourceFiles(workspaceRoot),
+        findAssetManifestFiles: async (workspaceRoot) => findAssetManifestFiles(workspaceRoot),
+        findAssetLoaderSourceFiles: async (workspaceRoot) =>
+            findAssetLoaderSourceFiles(workspaceRoot),
         readFile: async (filePath) => readFile(filePath, 'utf8'),
         fileExists: async (filePath) => {
             try {
@@ -262,6 +356,98 @@ function collectSceneRequiredAssetRefs(
     }
 }
 
+function collectAssetManifestRefs(
+    sourceText: string,
+    filePath: string,
+): CollectedAssetManifestReferences {
+    const sourceFile = createSourceFile(
+        filePath,
+        sourceText,
+        ScriptTarget.Latest,
+        true,
+        getScriptKind(filePath),
+    );
+    const refs: AssetReference[] = [];
+    const malformed: MalformedAssetReference[] = [];
+    const kinds: UnknownAssetManifestKind[] = [];
+
+    visit(sourceFile);
+
+    return { refs, malformed, kinds };
+
+    function visit(node: Node): void {
+        if (isPropertyAssignment(node) && isPropertyName(node.name, 'entries')) {
+            const arrayLiteral = unwrapArrayLiteral(node.initializer);
+            if (arrayLiteral !== undefined) {
+                collectManifestEntries(arrayLiteral);
+            }
+        }
+
+        forEachChild(node, visit);
+    }
+
+    function collectManifestEntries(arrayLiteral: ArrayLiteralExpression): void {
+        arrayLiteral.elements.forEach((element, index) => {
+            const entry = unwrapObjectLiteral(element);
+            if (entry === undefined) {
+                return;
+            }
+
+            const ref = readStringProperty(entry, 'ref');
+            const kind = readStringProperty(entry, 'kind');
+            const source = {
+                kind: 'asset-manifest' as const,
+                filePath,
+                location: `entries[${index}]`,
+            };
+
+            if (ref !== undefined) {
+                collectCandidate(
+                    ref,
+                    { ...source, location: `${source.location}.ref` },
+                    refs,
+                    malformed,
+                );
+            }
+
+            if (kind !== undefined) {
+                const kindReference: UnknownAssetManifestKind = { kind, source };
+                kinds.push(ref === undefined ? kindReference : { ...kindReference, ref });
+            }
+        });
+    }
+}
+
+function collectAssetLoaderKinds(sourceText: string, filePath: string): readonly string[] {
+    const sourceFile = createSourceFile(
+        filePath,
+        sourceText,
+        ScriptTarget.Latest,
+        true,
+        getScriptKind(filePath),
+    );
+    const kinds = new Set<string>();
+
+    visit(sourceFile);
+
+    return [...kinds].sort();
+
+    function visit(node: Node): void {
+        if (
+            (isPropertyAssignment(node) || isPropertyDeclaration(node)) &&
+            isPropertyName(node.name, 'kind') &&
+            node.initializer !== undefined
+        ) {
+            const kind = readStringExpression(node.initializer);
+            if (kind !== undefined) {
+                kinds.add(kind);
+            }
+        }
+
+        forEachChild(node, visit);
+    }
+}
+
 function collectCandidate(
     value: string,
     source: AssetReferenceSource,
@@ -299,9 +485,65 @@ function unwrapArrayLiteral(expression: Expression): ArrayLiteralExpression | un
     return undefined;
 }
 
+function unwrapObjectLiteral(expression: Expression): ObjectLiteralExpression | undefined {
+    if (isObjectLiteralExpression(expression)) {
+        return expression;
+    }
+    if (isAsExpression(expression) || isSatisfiesExpression(expression)) {
+        return unwrapObjectLiteral(expression.expression);
+    }
+    return undefined;
+}
+
+function readStringProperty(
+    objectLiteral: ObjectLiteralExpression,
+    propertyName: string,
+): string | undefined {
+    for (const property of objectLiteral.properties) {
+        if (!isPropertyAssignment(property) || !isPropertyName(property.name, propertyName)) {
+            continue;
+        }
+        return readStringExpression(property.initializer);
+    }
+    return undefined;
+}
+
+function readStringExpression(expression: Expression): string | undefined {
+    if (isStringLiteral(expression) || isNoSubstitutionTemplateLiteral(expression)) {
+        return expression.text;
+    }
+    if (isAsExpression(expression) || isSatisfiesExpression(expression)) {
+        return readStringExpression(expression.expression);
+    }
+    if (isCallExpression(expression) && isBuildAssetRefCall(expression.expression)) {
+        const [gameIdArg, relativePathArg] = expression.arguments;
+        const gameId = gameIdArg === undefined ? undefined : readStringExpression(gameIdArg);
+        const relativePath =
+            relativePathArg === undefined ? undefined : readStringExpression(relativePathArg);
+        if (gameId !== undefined && relativePath !== undefined) {
+            return `${gameId}/${relativePath}`;
+        }
+    }
+    return undefined;
+}
+
+function isBuildAssetRefCall(expression: Expression): boolean {
+    if (isIdentifier(expression)) {
+        return expression.text === 'buildAssetRef';
+    }
+    if (isPropertyAccessExpression(expression)) {
+        return expression.name.text === 'buildAssetRef';
+    }
+    return false;
+}
+
 function isRequiredAssetsName(name: PropertyName): boolean {
+    return isPropertyName(name, 'requiredAssets');
+}
+
+function isPropertyName(name: PropertyName, expected: string): boolean {
     if (isIdentifier(name) || isStringLiteral(name)) {
-        return name.text === 'requiredAssets';
+        return name.text === expected;
     }
     return false;
 }
@@ -331,6 +573,22 @@ async function findSceneSourceFiles(workspaceRoot: string): Promise<readonly str
 
     for (const root of roots) {
         files.push(...(await collectFiles(root, isSceneSourceFile)));
+    }
+
+    return files.sort();
+}
+
+async function findAssetManifestFiles(workspaceRoot: string): Promise<readonly string[]> {
+    const gamesRoot = resolve(workspaceRoot, 'games');
+    return collectFiles(gamesRoot, (filePath) => basename(filePath) === 'asset-manifest.ts');
+}
+
+async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
+    const roots = [resolve(workspaceRoot, 'games'), resolve(workspaceRoot, 'renderer', 'assets')];
+    const files: string[] = [];
+
+    for (const root of roots) {
+        files.push(...(await collectFiles(root, isAssetLoaderSourceFile)));
     }
 
     return files.sort();
@@ -376,6 +634,14 @@ function isSceneSourceFile(filePath: string): boolean {
     return /\.tsx?$/u.test(filePath);
 }
 
+function isAssetLoaderSourceFile(filePath: string): boolean {
+    if (!isSceneSourceFile(filePath)) {
+        return false;
+    }
+    const fileName = basename(filePath).toLowerCase();
+    return fileName.includes('asset-loader') || fileName.includes('assetloaders');
+}
+
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -398,6 +664,10 @@ function compareReferenceFailures(
     return compareStrings(referenceSortKey(left), referenceSortKey(right));
 }
 
+function compareAssetReferenceFailures(left: AssetReference, right: AssetReference): number {
+    return compareStrings(referenceSortKey(left), referenceSortKey(right));
+}
+
 function compareMalformedFailures(
     left: MalformedAssetReference,
     right: MalformedAssetReference,
@@ -405,8 +675,20 @@ function compareMalformedFailures(
     return compareStrings(referenceSortKey(left), referenceSortKey(right));
 }
 
-function referenceSortKey(reference: AssetReference | MalformedAssetReference): string {
-    return `${reference.source.filePath}\u0000${reference.source.location}\u0000${reference.ref}`;
+function compareUnknownKindFailures(
+    left: UnknownAssetManifestKind,
+    right: UnknownAssetManifestKind,
+): number {
+    return compareStrings(
+        `${referenceSortKey(left)}\u0000${left.kind}`,
+        `${referenceSortKey(right)}\u0000${right.kind}`,
+    );
+}
+
+function referenceSortKey(
+    reference: AssetReference | MalformedAssetReference | UnknownAssetManifestKind,
+): string {
+    return `${reference.source.filePath}\u0000${reference.source.location}\u0000${'ref' in reference ? (reference.ref ?? '') : ''}`;
 }
 
 function compareStrings(left: string, right: string): number {

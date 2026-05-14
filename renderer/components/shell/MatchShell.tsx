@@ -4,6 +4,7 @@
 
 import React, { type ReactNode } from 'react';
 import type { MatchResult, PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import {
     resolveMatchResultOutcome,
@@ -13,6 +14,9 @@ import {
     type MatchResultBannerProps,
     type SendAction,
 } from '@chimera/shared/game-screen-contract.js';
+import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
+import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
+import type { AssetResolver } from '../../assets/AssetResolver';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
 import { FadeProvider } from './FadeContext.js';
@@ -51,6 +55,8 @@ interface MatchShellRegistryProps {
     readonly currentTick?: number;
     readonly sendAction: SendAction;
     readonly localPlayerId?: PlayerId;
+    readonly assetManager?: AssetManager;
+    readonly assetManifest?: AssetManifest;
     readonly contentDatabase?: ContentDatabase | null;
     readonly canEndTurn?: boolean;
     readonly fadeOutMs?: number;
@@ -79,6 +85,8 @@ function RegistryMatchShell({
     currentTick,
     sendAction,
     localPlayerId,
+    assetManager,
+    assetManifest,
     contentDatabase = null,
     canEndTurn,
     fadeOutMs,
@@ -87,39 +95,77 @@ function RegistryMatchShell({
     onRedo,
     onEndTurn,
 }: MatchShellRegistryProps): React.ReactElement {
+    const resolvedAssetManager = useMatchAssetManager(assetManager, assetManifest);
+
     return (
-        <ContentDatabaseProvider value={contentDatabase}>
-            <FadeProvider>
-                <MatchShellFrame
-                    tick={currentTick ?? snapshot.tick}
-                    canUndo={snapshot.undoMeta.canUndo}
-                    canRedo={snapshot.undoMeta.canRedo}
-                    canEndTurn={canEndTurn ?? snapshot.isMyTurn}
-                    snapshot={snapshot}
-                    sendAction={sendAction}
-                    matchResult={snapshot.matchResult}
-                    isGameOver={snapshot.phase === 'ended'}
-                    {...(registry.hud === undefined ? {} : { hud: registry.hud })}
-                    {...(registry.matchResultBanner === undefined
-                        ? {}
-                        : { matchResultBanner: registry.matchResultBanner })}
-                    {...(localPlayerId === undefined ? {} : { localPlayerId })}
-                    {...(onUndo === undefined ? {} : { onUndo })}
-                    {...(onRedo === undefined ? {} : { onRedo })}
-                    {...(onEndTurn === undefined ? {} : { onEndTurn })}
-                >
-                    <SceneRouter
-                        registry={registry}
+        <AssetManagerContext.Provider value={resolvedAssetManager}>
+            <ContentDatabaseProvider value={contentDatabase}>
+                <FadeProvider>
+                    <MatchShellFrame
+                        tick={currentTick ?? snapshot.tick}
+                        canUndo={snapshot.undoMeta.canUndo}
+                        canRedo={snapshot.undoMeta.canRedo}
+                        canEndTurn={canEndTurn ?? snapshot.isMyTurn}
                         snapshot={snapshot}
                         sendAction={sendAction}
+                        matchResult={snapshot.matchResult}
+                        isGameOver={snapshot.phase === 'ended'}
+                        {...(registry.hud === undefined ? {} : { hud: registry.hud })}
+                        {...(registry.matchResultBanner === undefined
+                            ? {}
+                            : { matchResultBanner: registry.matchResultBanner })}
                         {...(localPlayerId === undefined ? {} : { localPlayerId })}
-                        {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
-                        {...(fadeInMs === undefined ? {} : { fadeInMs })}
-                    />
-                </MatchShellFrame>
-            </FadeProvider>
-        </ContentDatabaseProvider>
+                        {...(onUndo === undefined ? {} : { onUndo })}
+                        {...(onRedo === undefined ? {} : { onRedo })}
+                        {...(onEndTurn === undefined ? {} : { onEndTurn })}
+                    >
+                        <SceneRouter
+                            registry={registry}
+                            snapshot={snapshot}
+                            sendAction={sendAction}
+                            {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                            {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
+                            {...(fadeInMs === undefined ? {} : { fadeInMs })}
+                        />
+                    </MatchShellFrame>
+                </FadeProvider>
+            </ContentDatabaseProvider>
+        </AssetManagerContext.Provider>
     );
+}
+
+function useMatchAssetManager(
+    injectedAssetManager: AssetManager | undefined,
+    assetManifest: AssetManifest | undefined,
+): AssetManager {
+    const assetManager = React.useMemo(
+        () => injectedAssetManager ?? createAssetManager(createUnconfiguredAssetResolver()),
+        [injectedAssetManager],
+    );
+
+    React.useEffect(() => {
+        if (assetManifest !== undefined) {
+            assetManager.registerManifest(assetManifest);
+        }
+    }, [assetManager, assetManifest]);
+
+    React.useEffect(() => {
+        return () => {
+            assetManager.dispose();
+        };
+    }, [assetManager]);
+
+    return assetManager;
+}
+
+function createUnconfiguredAssetResolver(): AssetResolver {
+    return {
+        resolve(): string {
+            throw new Error(
+                'AssetResolver is not configured for this match; inject an AssetManager into MatchShell.',
+            );
+        },
+    };
 }
 
 function MatchShellFrame(

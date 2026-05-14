@@ -35,10 +35,21 @@ describe('validateAssetWorkspace', () => {
                             requiredAssets: ['tactics/models/arena.glb'],
                         };
                     `,
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/portraits/soldier.webp', kind: 'texture', priority: 'critical' },
+                                { ref: 'tactics/audio/sword.ogg', kind: 'audio-clip', priority: 'critical' },
+                                { ref: 'tactics/models/arena.glb', kind: 'gltf-model', priority: 'critical' },
+                            ],
+                        };
+                    `,
                     'games/tactics/assets/portraits/soldier.webp': '',
                     'games/tactics/assets/audio/sword.ogg': '',
                     'games/tactics/assets/models/arena.glb': '',
                 },
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -86,8 +97,18 @@ describe('validateAssetWorkspace', () => {
                             ],
                         };
                     `,
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/models/missing-arena.glb', kind: 'gltf-model', priority: 'critical' },
+                                { ref: 'tactics/textures/existing-floor.webp', kind: 'texture', priority: 'critical' },
+                            ],
+                        };
+                    `,
                     'games/tactics/assets/textures/existing-floor.webp': '',
                 },
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -98,11 +119,92 @@ describe('validateAssetWorkspace', () => {
         expect(output).toContain('tactics/models/missing-arena.glb');
         expect(output).not.toContain('tactics/textures/existing-floor.webp');
     });
+
+    it('returns exit 1 when a data JSON ref is not declared in an asset manifest', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/soldier.json'],
+                files: {
+                    'games/tactics/data/units/soldier.json': JSON.stringify({
+                        portrait: 'tactics/portraits/soldier.webp',
+                    }),
+                    'games/tactics/assets/portraits/soldier.webp': '',
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(toAssetValidationExitCode(report)).toBe(1);
+        expect(output).toContain('Asset refs missing from manifests:');
+        expect(output).toContain('tactics/portraits/soldier.webp');
+    });
+
+    it('returns exit 1 when a manifest entry kind has no loader coverage', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                files: {
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/voxels/castle.vox', kind: 'tactics:voxel', priority: 'critical' },
+                            ],
+                        };
+                    `,
+                    'games/tactics/assets/voxels/castle.vox': '',
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(output).toContain('Manifest kinds without loader coverage:');
+        expect(output).toContain('tactics:voxel');
+    });
+
+    it('accepts game-contributed loader kinds discovered from loader source files', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetLoaderSourceFiles: ['games/tactics/asset-loaders.ts'],
+                files: {
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/voxels/castle.vox', kind: 'tactics:voxel', priority: 'critical' },
+                            ],
+                        };
+                    `,
+                    'games/tactics/asset-loaders.ts': `
+                        export const tacticsVoxelLoader = {
+                            kind: 'tactics:voxel',
+                            async load() {
+                                return {};
+                            },
+                        };
+                    `,
+                    'games/tactics/assets/voxels/castle.vox': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+    });
 });
 
 interface HostFixture {
     readonly dataJsonFiles?: readonly string[];
     readonly sceneSourceFiles?: readonly string[];
+    readonly assetManifestFiles?: readonly string[];
+    readonly assetLoaderSourceFiles?: readonly string[];
     readonly files: Readonly<Record<string, string>>;
 }
 
@@ -119,6 +221,12 @@ function createHost(fixture: HostFixture): WorkspaceFileHost {
             (fixture.dataJsonFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
         findSceneSourceFiles: async () =>
             (fixture.sceneSourceFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
+        findAssetManifestFiles: async () =>
+            (fixture.assetManifestFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
+        findAssetLoaderSourceFiles: async () =>
+            (fixture.assetLoaderSourceFiles ?? []).map((relativePath) =>
+                toAbsolutePath(relativePath),
+            ),
         readFile: async (filePath) => {
             const contents = files.get(filePath);
             if (contents === undefined) {
@@ -272,9 +380,19 @@ describe('data JSON collection edge cases', () => {
                     'games/tactics/data/units/unit.json': JSON.stringify({
                         sounds: ['tactics/audio/step.ogg', 'tactics/audio/hit.ogg'],
                     }),
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/audio/step.ogg', kind: 'audio-clip', priority: 'deferred' },
+                                { ref: 'tactics/audio/hit.ogg', kind: 'audio-clip', priority: 'deferred' },
+                            ],
+                        };
+                    `,
                     'games/tactics/assets/audio/step.ogg': '',
                     'games/tactics/assets/audio/hit.ogg': '',
                 },
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -316,8 +434,17 @@ describe('scene source file collection edge cases', () => {
                             requiredAssets: ['tactics/models/board.glb'] as const,
                         };
                     `,
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/models/board.glb', kind: 'gltf-model', priority: 'critical' },
+                            ],
+                        };
+                    `,
                     'games/tactics/assets/models/board.glb': '',
                 },
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -336,8 +463,17 @@ describe('scene source file collection edge cases', () => {
                             requiredAssets: ['tactics/models/board.glb'],
                         } satisfies { requiredAssets: string[] };
                     `,
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/models/board.glb', kind: 'gltf-model', priority: 'critical' },
+                            ],
+                        };
+                    `,
                     'games/tactics/assets/models/board.glb': '',
                 },
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -356,8 +492,17 @@ describe('scene source file collection edge cases', () => {
                             'requiredAssets': ['tactics/textures/floor.webp'],
                         };
                     `,
+                    'games/tactics/asset-manifest.ts': `
+                        export const tacticsAssetManifest = {
+                            gameId: 'tactics',
+                            entries: [
+                                { ref: 'tactics/textures/floor.webp', kind: 'texture', priority: 'critical' },
+                            ],
+                        };
+                    `,
                     'games/tactics/assets/textures/floor.webp': '',
                 },
+                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
             }),
         });
 
