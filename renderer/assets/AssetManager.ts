@@ -1,6 +1,8 @@
 import { TextureLoader } from 'three';
 import type { Texture } from 'three';
 
+import { isTraversalUnsafe } from '@chimera/shared/asset-ref-parse.js';
+
 import type {
     AssetKind,
     AssetKindId,
@@ -356,16 +358,23 @@ function readSpriteSheetAtlas(value: unknown, url: string): SpriteSheetAtlasData
         throw new Error(`Sprite sheet atlas '${url}' must declare meta.image.`);
     }
 
+    const imagePath = meta['image'];
+    if (isTraversalUnsafe('atlas', imagePath)) {
+        throw new Error(
+            `Sprite sheet atlas '${url}' declares traversal-unsafe meta.image '${imagePath}'.`,
+        );
+    }
+
     const frames = value['frames'];
     if (frames === undefined) {
-        return { image: meta['image'] };
+        return { image: imagePath };
     }
 
     if (!isRecord(frames)) {
         throw new Error(`Sprite sheet atlas '${url}' must declare frames as an object.`);
     }
 
-    return { image: meta['image'], frames };
+    return { image: imagePath, frames };
 }
 
 function resolveRelativeAssetUrl(baseUrl: string, assetPath: string): string {

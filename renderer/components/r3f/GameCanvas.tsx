@@ -4,11 +4,11 @@ import { Canvas } from '@react-three/fiber';
 import React from 'react';
 import type { ReactNode } from 'react';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
+import type { Vector3Tuple } from '../../types/r3f-types.js';
 
 export type CameraMode = 'perspective' | 'orthographic';
 export type CameraPreset = 'isometric' | 'top-down' | 'side-scrolling' | 'free';
-
-export type Vector3Tuple = readonly [x: number, y: number, z: number];
+export type { Vector3Tuple } from '../../types/r3f-types.js';
 
 export type CameraPresetConfig = Readonly<{
     position: Vector3Tuple;

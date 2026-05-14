@@ -587,6 +587,30 @@ describe('DefaultAssetManager', () => {
         }
     });
 
+    it('rejects sprite-sheet JSON atlases with traversal-unsafe meta.image paths', async () => {
+        const ref = buildAssetRef<SpriteSheetAsset>('tactics', 'sprites/units/warrior.json');
+        const fetch = vi.fn(async () => ({
+            ok: true,
+            json: async () => ({
+                meta: {
+                    image: '../outside.webp',
+                },
+            }),
+        }));
+        vi.stubGlobal('fetch', fetch);
+        const manager = new DefaultAssetManager(createResolver());
+        registerManifest(manager, [createManifestEntry(ref, 'sprite-sheet')]);
+
+        try {
+            await expect(manager.load(ref)).rejects.toThrow(
+                "Sprite sheet atlas 'resolved://tactics/sprites/units/warrior.json' declares traversal-unsafe meta.image '../outside.webp'.",
+            );
+            expect(fetch).toHaveBeenCalledWith('resolved://tactics/sprites/units/warrior.json');
+        } finally {
+            vi.unstubAllGlobals();
+        }
+    });
+
     it('preserves cached assets for refs that are unchanged across manifest replacement', async () => {
         const unchangedRef = buildAssetRef<TextureAsset>('tactics', 'textures/unchanged.webp');
         const removedRef = buildAssetRef<TextureAsset>('tactics', 'textures/removed.webp');

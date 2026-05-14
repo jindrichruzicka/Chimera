@@ -5,13 +5,10 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { MutableRefObject } from 'react';
 import type { Camera } from 'three';
 import { Vector3 } from 'three';
+import type { EasingFn } from '../utils/curves.js';
+import type { Vector3Tuple } from '../types/r3f-types.js';
 
-// TODO(F37): consolidate with the Vector3Tuple in renderer/components/r3f/GameCanvas.tsx once
-// a shared renderer types module (e.g. renderer/types/r3f-types.ts) is created.
-export type Vector3Tuple = readonly [x: number, y: number, z: number];
-
-// TODO(F37): replace with EasingFn imported from renderer/utils/curves.ts once that module lands.
-export type EasingFn = (progress: number) => number;
+export type { Vector3Tuple } from '../types/r3f-types.js';
 
 export type CameraAnimationCancelReason = 'unmount' | 'superseded' | 'manual';
 
