@@ -1,0 +1,494 @@
+import { mkdtemp, mkdir, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+
+import { describe, expect, it, vi } from 'vitest';
+
+import {
+    createNodeWorkspaceFileHost,
+    formatAssetValidationReport,
+    isDirectInvocation,
+    runValidateAssetsCli,
+    toAssetValidationExitCode,
+    validateAssetWorkspace,
+    type WorkspaceFileHost,
+} from './validate-assets.js';
+
+const workspaceRoot = '/repo';
+
+describe('validateAssetWorkspace', () => {
+    it('returns exit 0 when data JSON and scene requiredAssets refs exist', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/soldier.json'],
+                sceneSourceFiles: ['games/tactics/scenes/tactics-scenes.ts'],
+                files: {
+                    'games/tactics/data/units/soldier.json': JSON.stringify({
+                        id: 'soldier',
+                        portrait: 'tactics/portraits/soldier.webp',
+                        nested: { sound: 'tactics/audio/sword.ogg' },
+                    }),
+                    'games/tactics/scenes/tactics-scenes.ts': `
+                        export const scene = {
+                            sceneId: 'tactics:arena',
+                            requiredAssets: ['tactics/models/arena.glb'],
+                        };
+                    `,
+                    'games/tactics/assets/portraits/soldier.webp': '',
+                    'games/tactics/assets/audio/sword.ogg': '',
+                    'games/tactics/assets/models/arena.glb': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(3);
+        expect(toAssetValidationExitCode(report)).toBe(0);
+    });
+
+    it('returns exit 1 and lists every missing data JSON ref', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/soldier.json'],
+                files: {
+                    'games/tactics/data/units/soldier.json': JSON.stringify({
+                        portrait: 'tactics/portraits/missing.webp',
+                        attack: 'tactics/audio/missing.ogg',
+                    }),
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(toAssetValidationExitCode(report)).toBe(1);
+        expect(output).toContain('tactics/portraits/missing.webp');
+        expect(output).toContain('tactics/audio/missing.ogg');
+        expect(output).toContain('games/tactics/data/units/soldier.json');
+    });
+
+    it('validates SceneDescriptor.requiredAssets refs in located scene source files', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                sceneSourceFiles: ['games/tactics/scenes/tactics-scenes.ts'],
+                files: {
+                    'games/tactics/scenes/tactics-scenes.ts': `
+                        export const scene = {
+                            sceneId: 'tactics:arena',
+                            defaultScreen: 'board',
+                            requiredAssets: [
+                                'tactics/models/missing-arena.glb',
+                                'tactics/textures/existing-floor.webp',
+                            ],
+                        };
+                    `,
+                    'games/tactics/assets/textures/existing-floor.webp': '',
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(report.checkedRefs).toBe(2);
+        expect(output).toContain('tactics/models/missing-arena.glb');
+        expect(output).not.toContain('tactics/textures/existing-floor.webp');
+    });
+});
+
+interface HostFixture {
+    readonly dataJsonFiles?: readonly string[];
+    readonly sceneSourceFiles?: readonly string[];
+    readonly files: Readonly<Record<string, string>>;
+}
+
+function createHost(fixture: HostFixture): WorkspaceFileHost {
+    const files = new Map(
+        Object.entries(fixture.files).map(([relativePath, contents]) => [
+            toAbsolutePath(relativePath),
+            contents,
+        ]),
+    );
+
+    return {
+        findDataJsonFiles: async () =>
+            (fixture.dataJsonFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
+        findSceneSourceFiles: async () =>
+            (fixture.sceneSourceFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
+        readFile: async (filePath) => {
+            const contents = files.get(filePath);
+            if (contents === undefined) {
+                throw new Error(`Missing fixture file: ${filePath}`);
+            }
+            return contents;
+        },
+        fileExists: async (filePath) => files.has(filePath),
+    };
+}
+
+function toAbsolutePath(relativePath: string): string {
+    return `${workspaceRoot}/${relativePath}`;
+}
+
+// ── formatAssetValidationReport ───────────────────────────────────────────────
+
+describe('formatAssetValidationReport', () => {
+    it('returns the success message when the report is ok', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                files: {
+                    'games/tactics/data/units/unit.json': JSON.stringify({ id: 'soldier' }),
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(true);
+        expect(output).toBe('[validate-assets] Checked 0 asset refs; all files exist.\n');
+    });
+});
+
+// ── malformed AssetRef strings ────────────────────────────────────────────────
+
+describe('malformed asset refs', () => {
+    it('reports a path-traversal ref in data JSON as malformed', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/bad.json'],
+                files: {
+                    'games/tactics/data/units/bad.json': JSON.stringify({
+                        portrait: 'game/../traversal.webp',
+                    }),
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(report.malformed).toHaveLength(1);
+        expect(toAssetValidationExitCode(report)).toBe(1);
+        expect(output).toContain('game/../traversal.webp');
+        expect(output).toContain('Malformed asset refs:');
+        expect(output).toContain('reason:');
+    });
+
+    it('sorts multiple malformed refs deterministically', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/bad.json'],
+                files: {
+                    'games/tactics/data/units/bad.json': JSON.stringify({
+                        z: 'zzz/../z.webp',
+                        a: 'aaa/../a.webp',
+                    }),
+                },
+            }),
+        });
+
+        expect(report.malformed).toHaveLength(2);
+        expect(report.malformed[0]!.ref).toBe('aaa/../a.webp');
+        expect(report.malformed[1]!.ref).toBe('zzz/../z.webp');
+    });
+
+    it('reports a path-traversal ref in requiredAssets as malformed', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                sceneSourceFiles: ['games/tactics/scenes/scenes.ts'],
+                files: {
+                    'games/tactics/scenes/scenes.ts': `
+                        export const scene = {
+                            requiredAssets: ['game/../bad.glb'],
+                        };
+                    `,
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(report.malformed).toHaveLength(1);
+        expect(report.malformed[0]!.ref).toBe('game/../bad.glb');
+    });
+});
+
+// ── data JSON collection edge cases ───────────────────────────────────────────
+
+describe('data JSON collection edge cases', () => {
+    it('reports missing parser-accepted refs with broad game ids and paths', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                files: {
+                    'games/tactics/data/units/unit.json': JSON.stringify({
+                        hidden: 'tactics/_hidden/missing.webp',
+                        dottedGame: 'my.game/textures/missing.webp',
+                    }),
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(false);
+        expect(report.missing.map((missing) => missing.ref)).toEqual([
+            'my.game/textures/missing.webp',
+            'tactics/_hidden/missing.webp',
+        ]);
+    });
+
+    it('ignores strings that do not match the AssetRef candidate pattern', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                files: {
+                    'games/tactics/data/units/unit.json': JSON.stringify({
+                        id: 'soldier',
+                        displayName: 'Soldier',
+                    }),
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(0);
+    });
+
+    it('collects refs inside array-valued fields and records JSON path with index notation', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                files: {
+                    'games/tactics/data/units/unit.json': JSON.stringify({
+                        sounds: ['tactics/audio/step.ogg', 'tactics/audio/hit.ogg'],
+                    }),
+                    'games/tactics/assets/audio/step.ogg': '',
+                    'games/tactics/assets/audio/hit.ogg': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(2);
+    });
+
+    it('formats special-character JSON keys in bracket notation in the missing-ref report', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                files: {
+                    'games/tactics/data/units/unit.json': JSON.stringify({
+                        'some-key': 'tactics/textures/special.webp',
+                    }),
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(output).toContain('["some-key"]');
+    });
+});
+
+// ── scene source file collection edge cases ───────────────────────────────────
+
+describe('scene source file collection edge cases', () => {
+    it('handles requiredAssets wrapped in `as const`', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                sceneSourceFiles: ['games/tactics/scenes/scenes.ts'],
+                files: {
+                    'games/tactics/scenes/scenes.ts': `
+                        export const scene = {
+                            requiredAssets: ['tactics/models/board.glb'] as const,
+                        };
+                    `,
+                    'games/tactics/assets/models/board.glb': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(1);
+    });
+
+    it('handles requiredAssets wrapped in `satisfies` in a .tsx scene file', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                sceneSourceFiles: ['games/tactics/scenes/scenes.tsx'],
+                files: {
+                    'games/tactics/scenes/scenes.tsx': `
+                        export const scene = {
+                            requiredAssets: ['tactics/models/board.glb'],
+                        } satisfies { requiredAssets: string[] };
+                    `,
+                    'games/tactics/assets/models/board.glb': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(1);
+    });
+
+    it('handles requiredAssets declared with a string-literal property key', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                sceneSourceFiles: ['games/tactics/scenes/scenes.ts'],
+                files: {
+                    'games/tactics/scenes/scenes.ts': `
+                        export const scene = {
+                            'requiredAssets': ['tactics/textures/floor.webp'],
+                        };
+                    `,
+                    'games/tactics/assets/textures/floor.webp': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(1);
+    });
+});
+
+// ── isDirectInvocation ────────────────────────────────────────────────────────
+
+describe('isDirectInvocation', () => {
+    it('returns false when argv1 is undefined', () => {
+        expect(isDirectInvocation('file:///path/to/file.ts', undefined)).toBe(false);
+    });
+
+    it('returns false when importMetaUrl does not start with file://', () => {
+        expect(isDirectInvocation('https://example.com/file.ts', '/path/to/file.ts')).toBe(false);
+    });
+
+    it('returns true when importMetaUrl resolves to the same absolute path as argv1', () => {
+        const filePath = resolve('/tmp/validate-assets.ts');
+        expect(isDirectInvocation(`file://${filePath}`, filePath)).toBe(true);
+    });
+
+    it('returns false when importMetaUrl resolves to a different path', () => {
+        expect(isDirectInvocation('file:///tmp/a.ts', '/tmp/b.ts')).toBe(false);
+    });
+});
+
+// ── createNodeWorkspaceFileHost (real FS integration) ─────────────────────────
+
+describe('createNodeWorkspaceFileHost', () => {
+    it('fileExists returns true for an existing file', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const filePath = join(dir, 'asset.webp');
+        await writeFile(filePath, '');
+
+        const host = createNodeWorkspaceFileHost();
+
+        expect(await host.fileExists(filePath)).toBe(true);
+    });
+
+    it('fileExists returns false for a file that does not exist', async () => {
+        const host = createNodeWorkspaceFileHost();
+
+        expect(await host.fileExists('/nonexistent-path-chimera/asset.webp')).toBe(false);
+    });
+
+    it('readFile returns the file contents as a string', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const filePath = join(dir, 'data.json');
+        await writeFile(filePath, '{"ok":true}');
+
+        const host = createNodeWorkspaceFileHost();
+
+        expect(await host.readFile(filePath)).toBe('{"ok":true}');
+    });
+
+    it('findDataJsonFiles returns JSON files under games/*/data/ recursively', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dataDir = join(dir, 'games', 'tactics', 'data', 'units');
+        await mkdir(dataDir, { recursive: true });
+        await writeFile(join(dataDir, 'soldier.json'), '{}');
+        await writeFile(join(dataDir, 'soldier.ts'), ''); // must be excluded
+
+        const host = createNodeWorkspaceFileHost();
+        const files = await host.findDataJsonFiles(dir);
+
+        expect(files).toHaveLength(1);
+        expect(files[0]).toContain('soldier.json');
+    });
+
+    it('findDataJsonFiles returns an empty array when the games/ directory does not exist', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+
+        const host = createNodeWorkspaceFileHost();
+        const files = await host.findDataJsonFiles(dir);
+
+        expect(files).toEqual([]);
+    });
+
+    it('findSceneSourceFiles returns .ts files and excludes .d.ts and test files', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const scenesDir = join(dir, 'games', 'tactics', 'scenes');
+        await mkdir(scenesDir, { recursive: true });
+        await writeFile(join(scenesDir, 'scenes.ts'), '');
+        await writeFile(join(scenesDir, 'scenes.d.ts'), ''); // excluded
+        await writeFile(join(scenesDir, 'scenes.test.ts'), ''); // excluded
+        await writeFile(join(scenesDir, 'scenes.spec.ts'), ''); // excluded
+
+        const host = createNodeWorkspaceFileHost();
+        const files = await host.findSceneSourceFiles(dir);
+
+        expect(files).toHaveLength(1);
+        expect(files[0]).toContain('scenes.ts');
+    });
+
+    it('findSceneSourceFiles returns an empty array when neither search root exists', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+
+        const host = createNodeWorkspaceFileHost();
+        const files = await host.findSceneSourceFiles(dir);
+
+        expect(files).toEqual([]);
+    });
+});
+
+// ── runValidateAssetsCli (real FS integration) ────────────────────────────────
+
+describe('runValidateAssetsCli', () => {
+    it('returns exit code 0 for a workspace that contains no game data files', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        vi.spyOn(process.stdout, 'write').mockImplementation(() => true);
+
+        const exitCode = await runValidateAssetsCli([dir]);
+
+        expect(exitCode).toBe(0);
+    });
+
+    it('returns exit code 1 for a workspace with a missing asset reference', async () => {
+        const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
+        const dataDir = join(dir, 'games', 'tactics', 'data');
+        await mkdir(dataDir, { recursive: true });
+        await writeFile(
+            join(dataDir, 'unit.json'),
+            JSON.stringify({ portrait: 'tactics/missing.webp' }),
+        );
+        vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+
+        const exitCode = await runValidateAssetsCli([dir]);
+
+        expect(exitCode).toBe(1);
+    });
+});

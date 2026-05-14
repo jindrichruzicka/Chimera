@@ -22,6 +22,7 @@ pnpm test:watch        # vitest — interactive watch mode
 pnpm test:coverage     # vitest run --coverage
 pnpm test:e2e          # playwright test --config=e2e/playwright.config.ts --project=electron-e2e
 pnpm lint              # eslint with all chimera/* rules
+pnpm validate:assets   # check AssetRef strings in game data and SceneDescriptor.requiredAssets
 pnpm format            # prettier --write on the tracked tree
 pnpm format:check      # prettier --check — CI-gated, must pass
 pnpm dev               # electron dev with hot-reload harness
