@@ -149,12 +149,20 @@ return (
 ```typescript
 // renderer/components/r3f/InteractionBlocker.tsx
 
-export const InteractionContext = createContext<{ isBlocked: boolean }>({ isBlocked: false });
+export const InteractionContext = createContext<{ isBlocked: boolean } | null>(null);
+
+export function useInteractionContext(): { isBlocked: boolean } {
+    const context = useContext(InteractionContext);
+    if (context === null) {
+        throw new Error('useInteractionContext must be called inside an <InteractionBlocker> provider.');
+    }
+    return context;
+}
 
 export function InteractionBlocker({ children }: { children: ReactNode }) {
-    const sceneTransition = useGameStore(s => s.sceneTransition);
+    const sceneTransition = useGameStore(s => s.snapshot?.sceneTransition);
     return (
-        <InteractionContext.Provider value={{ isBlocked: sceneTransition !== null }}>
+        <InteractionContext.Provider value={{ isBlocked: sceneTransition != null }}>
             {children}
         </InteractionContext.Provider>
     );
