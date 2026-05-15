@@ -15,11 +15,13 @@
 
 import noFromFloatInSimulation from './rules/no-fromfloat-in-simulation.js';
 import noHardcodedDesignValues from './rules/no-hardcoded-design-values.js';
+import noShellGamesImport from './rules/no-shell-games-import.js';
 
 const plugin = {
     rules: {
         'no-fromfloat-in-simulation': noFromFloatInSimulation,
         'no-hardcoded-design-values': noHardcodedDesignValues,
+        'no-shell-games-import': noShellGamesImport,
     },
 } as const;
 

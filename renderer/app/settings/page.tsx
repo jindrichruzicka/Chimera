@@ -20,6 +20,7 @@
 
 import React from 'react';
 import { useShallow } from 'zustand/shallow';
+import { Button } from '../../components/ui/Button';
 import { useSettingsStore } from '../../state/settingsStore';
 import type {
     ResolvedSettings,
@@ -467,14 +468,14 @@ export default function SettingsPage(): React.ReactElement {
             )}
 
             {/* ── Reset ── */}
-            <button
+            <Button
                 data-testid="reset-to-defaults"
-                type="button"
+                variant="danger"
+                size="sm"
                 onClick={handleReset}
-                style={{ marginTop: 'var(--ch-space-md)' }}
             >
                 Reset to defaults
-            </button>
+            </Button>
         </main>
     );
 }

@@ -1,0 +1,30 @@
+/*
+ * games/tactics/styles/tokens-override.css
+ *
+ * Tactics game token overrides — redefines a subset of tokens declared in
+ * renderer/styles/tokens.css to give Tactics its own visual identity.
+ *
+ * Rules (Invariant #85):
+ *   - May ONLY redefine custom properties that are already declared in
+ *     renderer/styles/tokens.css. Introducing a new --ch-* name here is
+ *     a module-boundary violation and is rejected by lint.
+ *   - Import only as a side-effect from games/tactics/screens/index.ts.
+ *     Shell page components must never import this file directly (Invariant #93).
+ *
+ * Architecture reference: section 4.35 — UI Design System, 4.37 — Shell Pages UI Contract
+ * Issue: #561
+ */
+
+:root {
+    /* Shift the primary surface toward a dark parchment tone */
+    --ch-color-surface: #1b1a17;
+    --ch-color-surface-raised: #252318;
+
+    /* Muted gold accent for the tactical theme */
+    --ch-color-accent: #c9a84c;
+    --ch-color-accent-hover: #e0c070;
+
+    /* Slightly sharper corner radius — crisper tactical UI feel */
+    --ch-radius-md: 2px;
+    --ch-radius-lg: 4px;
+}

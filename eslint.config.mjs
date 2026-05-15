@@ -300,6 +300,23 @@ export default tseslint.config(
         },
     },
 
+    // Invariants #93 and #94 — engine shell pages must not import game token
+    // override CSS or any games/* path.
+    // Rule implementation: tools/eslint-plugin-chimera/rules/no-shell-games-import.ts
+    // Issue: #561
+    {
+        files: [
+            'renderer/app/main-menu/**/*.{ts,tsx,js,jsx,mjs}',
+            'renderer/app/lobby/**/*.{ts,tsx,js,jsx,mjs}',
+            'renderer/app/settings/**/*.{ts,tsx,js,jsx,mjs}',
+            'renderer/app/saves/**/*.{ts,tsx,js,jsx,mjs}',
+        ],
+        plugins: { chimera: chimeraPlugin },
+        rules: {
+            'chimera/no-shell-games-import': 'error',
+        },
+    },
+
     // Prettier compatibility — must be last.
     prettier,
 );

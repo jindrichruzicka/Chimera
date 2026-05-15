@@ -23,6 +23,7 @@
 import React, { useCallback, useState } from 'react';
 import { toSlotId } from '@chimera/electron/preload/api-types.js';
 import type { SaveSlotMeta, SlotId } from '@chimera/electron/preload/api-types.js';
+import { Button } from '../../components/ui/Button';
 import { useSaveStore } from '../../state/saveStore.js';
 import { useSavesApi } from './useSavesApi.js';
 
@@ -48,7 +49,12 @@ function SaveSlotRow({ slot, onSave, onLoad, onDelete }: SaveSlotRowProps): Reac
                 borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-border-subtle)',
             }}
         >
-            <span style={{ minWidth: 'calc(var(--ch-space-md) * 8)', fontWeight: 'bold' }}>
+            <span
+                style={{
+                    minWidth: 'calc(var(--ch-space-md) * 8)',
+                    fontWeight: 'var(--ch-font-weight-semibold)',
+                }}
+            >
                 {slot.slotId}
             </span>
             <span style={{ minWidth: 'calc(var(--ch-space-md) * 4)' }}>{slot.tick}</span>
@@ -65,33 +71,36 @@ function SaveSlotRow({ slot, onSave, onLoad, onDelete }: SaveSlotRowProps): Reac
                 <span style={{ flex: 1, fontStyle: 'italic' }}>{slot.label}</span>
             )}
             <span style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--ch-space-sm)' }}>
-                <button
-                    type="button"
+                <Button
+                    size="sm"
+                    variant="secondary"
                     aria-label={`Save ${slot.slotId}`}
                     onClick={() => {
                         onSave(slot);
                     }}
                 >
                     Save
-                </button>
-                <button
-                    type="button"
+                </Button>
+                <Button
+                    size="sm"
+                    variant="ghost"
                     aria-label={`Load ${slot.slotId}`}
                     onClick={() => {
                         onLoad(slot.slotId);
                     }}
                 >
                     Load
-                </button>
-                <button
-                    type="button"
+                </Button>
+                <Button
+                    size="sm"
+                    variant="danger"
                     aria-label={`Delete ${slot.slotId}`}
                     onClick={() => {
                         onDelete(slot.slotId);
                     }}
                 >
                     Delete
-                </button>
+                </Button>
             </span>
         </li>
     );
@@ -137,7 +146,9 @@ function NewSaveForm({ gameId, onNewSave }: NewSaveFormProps): React.ReactElemen
                 placeholder="optional — auto-generated if blank"
                 style={{ flex: 1 }}
             />
-            <button type="submit">New Save</button>
+            <Button type="submit" variant="secondary" size="sm">
+                New Save
+            </Button>
         </form>
     );
 }
