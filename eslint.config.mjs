@@ -286,6 +286,16 @@ export default tseslint.config(
             'chimera/no-hardcoded-design-values': 'error',
         },
     },
+    {
+        files: ['games/*/styles/tokens-override.css'],
+        language: 'css/css',
+        plugins: { css, chimera: chimeraPlugin },
+        rules: {
+            ...jsRecommendedRulesOff,
+            ...typescriptEslintRulesOff,
+            'chimera/no-unknown-token-overrides': 'error',
+        },
+    },
 
     // Next.js plugin scoped to the renderer package.
     {
