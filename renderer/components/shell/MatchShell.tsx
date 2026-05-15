@@ -339,7 +339,7 @@ const matchShellHudStyle: React.CSSProperties = {
     justifyContent: 'space-between',
     gap: 'var(--ch-space-md)',
     padding: 'var(--ch-space-sm) var(--ch-space-md)',
-    borderTop: '1px solid var(--ch-color-border-default)',
+    borderTop: '1px solid var(--ch-color-border)',
 };
 
 const matchShellActionsStyle: React.CSSProperties = {

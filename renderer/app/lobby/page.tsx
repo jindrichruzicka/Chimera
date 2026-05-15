@@ -21,7 +21,7 @@ type PendingAction = 'hosting' | 'joining' | 'leaving' | 'starting' | 'updating-
 
 const sectionCardStyle = {
     padding: 'var(--ch-space-md)',
-    border: '1px solid var(--ch-color-border-default)',
+    border: '1px solid var(--ch-color-border)',
     borderRadius: 'var(--ch-radius-sm)',
 };
 
@@ -214,7 +214,7 @@ export default function LobbyPage() {
                 {/* Display current configuration */}
                 <div
                     style={{
-                        backgroundColor: 'var(--ch-color-surface-subtle)',
+                        backgroundColor: 'var(--ch-color-surface-raised)',
                         padding: 'var(--ch-space-xs)',
                         borderRadius: 'var(--ch-radius-sm)',
                         marginBottom: 'var(--ch-space-md)',
@@ -229,7 +229,7 @@ export default function LobbyPage() {
                 {error && (
                     <div
                         style={{
-                            color: 'var(--ch-color-feedback-error)',
+                            color: 'var(--ch-color-error)',
                             marginBottom: 'var(--ch-space-md)',
                         }}
                         role="alert"
@@ -259,8 +259,8 @@ export default function LobbyPage() {
                             <div
                                 id="host-config-info"
                                 style={{
-                                    fontSize: 'var(--ch-font-size-xs)',
-                                    color: 'var(--ch-color-text-muted)',
+                                    fontSize: 'var(--ch-font-size-sm)',
+                                    color: 'var(--ch-color-text-secondary)',
                                     marginTop: 'var(--ch-space-xs)',
                                 }}
                             >
@@ -293,9 +293,9 @@ export default function LobbyPage() {
                                 <div
                                     id="lobby-code-help"
                                     style={{
-                                        fontSize: 'var(--ch-font-size-xs)',
-                                        color: 'var(--ch-color-text-muted)',
-                                        marginTop: 'var(--ch-space-xxs)',
+                                        fontSize: 'var(--ch-font-size-sm)',
+                                        color: 'var(--ch-color-text-secondary)',
+                                        marginTop: 'var(--ch-space-xs)',
                                     }}
                                 >
                                     Enter the code provided by the lobby host

@@ -1,0 +1,70 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { describe, expect, it } from 'vitest';
+
+const tokenFilePath = fileURLToPath(new URL('./tokens.css', import.meta.url));
+
+const expectedTokens = [
+    '--ch-color-surface',
+    '--ch-color-surface-raised',
+    '--ch-color-surface-overlay',
+    '--ch-color-accent',
+    '--ch-color-accent-hover',
+    '--ch-color-text-primary',
+    '--ch-color-text-secondary',
+    '--ch-color-text-disabled',
+    '--ch-color-border',
+    '--ch-color-success',
+    '--ch-color-warning',
+    '--ch-color-error',
+    '--ch-space-xs',
+    '--ch-space-sm',
+    '--ch-space-md',
+    '--ch-space-lg',
+    '--ch-space-xl',
+    '--ch-radius-sm',
+    '--ch-radius-md',
+    '--ch-radius-lg',
+    '--ch-font-ui',
+    '--ch-font-game',
+    '--ch-font-mono',
+    '--ch-font-size-sm',
+    '--ch-font-size-md',
+    '--ch-font-size-lg',
+    '--ch-font-size-xl',
+    '--ch-shadow-sm',
+    '--ch-shadow-md',
+    '--ch-shadow-lg',
+    '--ch-duration-fast',
+    '--ch-duration-normal',
+    '--ch-duration-slow',
+    '--ch-easing-standard',
+] as const;
+
+function readTokensCss(): string {
+    return readFileSync(tokenFilePath, 'utf8');
+}
+
+function extractDeclaredTokens(css: string): readonly string[] {
+    return Array.from(css.matchAll(/(--ch-[\w-]+)\s*:/g), (match) => match[1]).filter(
+        (v): v is string => v !== undefined,
+    );
+}
+
+describe('renderer design tokens', () => {
+    it('declares exactly the UI design system tokens from architecture section 4.35', () => {
+        const declarations = extractDeclaredTokens(readTokensCss());
+
+        expect(new Set(declarations)).toEqual(new Set(expectedTokens));
+    });
+
+    it('wires reduced motion preferences into instant linear motion tokens', () => {
+        const css = readTokensCss();
+
+        expect(css).toContain('@media (prefers-reduced-motion: reduce)');
+        expect(css).toContain('--ch-duration-fast: 0ms;');
+        expect(css).toContain('--ch-duration-normal: 0ms;');
+        expect(css).toContain('--ch-duration-slow: 0ms;');
+        expect(css).toContain('--ch-easing-standard: linear;');
+    });
+});

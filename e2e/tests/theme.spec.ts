@@ -27,17 +27,17 @@ test.describe('Theme system', () => {
             {
                 button: mainMenu.playButton,
                 variant: 'primary',
-                token: 'var(--ch-color-action-primary)',
+                token: 'var(--ch-color-accent)',
             },
             {
                 button: mainMenu.settingsButton,
                 variant: 'secondary',
-                token: 'var(--ch-color-action-secondary)',
+                token: 'var(--ch-color-surface-raised)',
             },
             {
                 button: mainMenu.quitButton,
                 variant: 'danger',
-                token: 'var(--ch-color-action-danger)',
+                token: 'var(--ch-color-error)',
             },
         ] as const;
 
@@ -66,6 +66,6 @@ test.describe('Theme system', () => {
 
         // The registered engine-default theme's primary button style is active
         const inlineStyle = (await hostButton.getAttribute('style')) ?? '';
-        expect(inlineStyle).toContain('var(--ch-color-action-primary)');
+        expect(inlineStyle).toContain('var(--ch-color-accent)');
     });
 });
