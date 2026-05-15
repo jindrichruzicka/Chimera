@@ -1,0 +1,70 @@
+.button {
+    align-items: center;
+    appearance: none;
+    border-color: var(--ch-button-border-color);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-button-border-width);
+    color: var(--ch-button-color);
+    cursor: pointer;
+    display: inline-flex;
+    font-family: var(--ch-font-ui);
+    font-size: var(--ch-button-font-size);
+    font-weight: var(--ch-button-font-weight);
+    justify-content: center;
+    line-height: var(--ch-button-line-height);
+    min-width: var(--ch-button-min-width);
+    padding: var(--ch-button-padding);
+    text-align: center;
+    transition: var(--ch-button-transition);
+    user-select: none;
+}
+
+.button:disabled {
+    border-color: var(--ch-color-border);
+    color: var(--ch-color-text-disabled);
+    cursor: var(--ch-cursor-disabled);
+    opacity: var(--ch-opacity-disabled);
+}
+
+.primary {
+    background-color: var(--ch-color-accent);
+    --ch-button-border-color: var(--ch-color-accent-hover);
+    --ch-button-color: var(--ch-color-text-primary);
+}
+
+.secondary {
+    background-color: var(--ch-color-surface-raised);
+    --ch-button-border-color: var(--ch-color-border);
+    --ch-button-color: var(--ch-color-text-primary);
+}
+
+.ghost {
+    background-color: var(--ch-color-transparent);
+    --ch-button-border-color: var(--ch-color-border);
+    --ch-button-color: var(--ch-color-text-secondary);
+}
+
+.danger {
+    background-color: var(--ch-color-error);
+    --ch-button-border-color: var(--ch-color-error);
+    --ch-button-color: var(--ch-color-text-primary);
+}
+
+.sm {
+    --ch-button-font-size: var(--ch-font-size-sm);
+    --ch-button-min-width: var(--ch-button-min-width-sm);
+    --ch-button-padding: var(--ch-button-padding-sm);
+}
+
+.md {
+    --ch-button-font-size: var(--ch-font-size-md);
+    --ch-button-min-width: var(--ch-button-min-width-md);
+    --ch-button-padding: var(--ch-button-padding-md);
+}
+
+.lg {
+    --ch-button-font-size: var(--ch-font-size-lg);
+    --ch-button-min-width: var(--ch-button-min-width-lg);
+    --ch-button-padding: var(--ch-button-padding-lg);
+}

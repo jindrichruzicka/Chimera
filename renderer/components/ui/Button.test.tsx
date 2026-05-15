@@ -4,12 +4,10 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { defaultTheme } from '../../theme/default-theme';
-import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Button } from './Button';
 
 function renderButton(button: React.ReactElement): void {
-    render(<ThemeProvider>{button}</ThemeProvider>);
+    render(button);
 }
 
 afterEach(() => {
@@ -18,19 +16,10 @@ afterEach(() => {
 });
 
 describe('Button', () => {
-    it('renders the primary variant with the default engine palette styles', () => {
-        renderButton(<Button variant="primary">Play</Button>);
+    it('renders children', () => {
+        renderButton(<Button>Play</Button>);
 
-        const playButton = screen.getByRole('button', { name: 'Play' });
-        expect(playButton.getAttribute('style')).toContain(
-            `background-color: ${defaultTheme.palette.button.variants.primary.backgroundColor}`,
-        );
-        expect(playButton.getAttribute('style')).toContain(
-            `border-color: ${defaultTheme.palette.button.variants.primary.borderColor}`,
-        );
-        expect(playButton.getAttribute('style')).toContain(
-            `color: ${defaultTheme.palette.button.variants.primary.color}`,
-        );
+        expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
     });
 
     it('defaults to type="button" and the primary variant', () => {
@@ -42,39 +31,45 @@ describe('Button', () => {
         expect(button).toHaveAttribute('data-ch-button-size', 'md');
     });
 
-    it('applies non-default size styles from the theme palette', () => {
+    it('applies variant classes', () => {
+        renderButton(
+            <Button data-testid="secondary-button" variant="secondary">
+                Settings
+            </Button>,
+        );
+
+        const button = screen.getByTestId('secondary-button');
+        expect(button.className).toContain('button');
+        expect(button.className).toContain('secondary');
+        expect(button).toHaveAttribute('data-ch-button-variant', 'secondary');
+    });
+
+    it('changes classes when size changes', () => {
         render(
-            <ThemeProvider>
+            <>
                 <Button data-testid="medium-button">Default Size</Button>
                 <Button data-testid="large-button" size="lg">
                     Large Size
                 </Button>
-            </ThemeProvider>,
+            </>,
         );
 
         const mediumButton = screen.getByTestId('medium-button');
         const largeButton = screen.getByTestId('large-button');
 
-        expect(mediumButton.getAttribute('style')).toContain(
-            `padding: ${defaultTheme.palette.button.sizes.md.padding}`,
-        );
-        expect(largeButton.getAttribute('style')).toContain(
-            `padding: ${defaultTheme.palette.button.sizes.lg.padding}`,
-        );
-        expect(largeButton.getAttribute('style')).toContain(
-            `min-width: ${defaultTheme.palette.button.sizes.lg.minWidth}`,
-        );
-        expect(largeButton.getAttribute('style')).not.toBe(mediumButton.getAttribute('style'));
+        expect(mediumButton.className).toContain('md');
+        expect(largeButton.className).toContain('lg');
+        expect(largeButton.className).not.toBe(mediumButton.className);
     });
 
     it('renders all semantic variants for shell actions', () => {
         render(
-            <ThemeProvider>
+            <>
                 <Button variant="primary">Primary</Button>
                 <Button variant="secondary">Secondary</Button>
                 <Button variant="ghost">Ghost</Button>
                 <Button variant="danger">Danger</Button>
-            </ThemeProvider>,
+            </>,
         );
 
         expect(screen.getByRole('button', { name: 'Primary' })).toHaveAttribute(
@@ -93,6 +88,20 @@ describe('Button', () => {
             'data-ch-button-variant',
             'danger',
         );
+    });
+
+    it('prevents clicks when disabled', () => {
+        const onClick = vi.fn();
+
+        renderButton(
+            <Button disabled onClick={onClick}>
+                Disabled
+            </Button>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Disabled' }));
+
+        expect(onClick).not.toHaveBeenCalled();
     });
 
     it('preserves button events and consumer-supplied token override styles', () => {

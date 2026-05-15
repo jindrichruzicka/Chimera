@@ -11,6 +11,7 @@
     --ch-color-success: #4caf50;
     --ch-color-warning: #ff9800;
     --ch-color-error: #f44336;
+    --ch-color-transparent: transparent;
 
     --ch-space-xs: 4px;
     --ch-space-sm: 8px;
@@ -29,6 +30,24 @@
     --ch-font-size-md: 14px;
     --ch-font-size-lg: 18px;
     --ch-font-size-xl: 24px;
+    --ch-font-weight-semibold: 600;
+    --ch-line-height-tight: 1.1;
+
+    --ch-button-border-width: 1px;
+    --ch-button-font-weight: var(--ch-font-weight-semibold);
+    --ch-button-line-height: var(--ch-line-height-tight);
+    --ch-button-transition:
+        background-color var(--ch-duration-fast) var(--ch-easing-standard),
+        border-color var(--ch-duration-fast) var(--ch-easing-standard),
+        color var(--ch-duration-fast) var(--ch-easing-standard);
+    --ch-button-min-width-sm: calc(var(--ch-space-xl) * 4);
+    --ch-button-min-width-md: calc(var(--ch-space-xl) * 5);
+    --ch-button-min-width-lg: calc(var(--ch-space-xl) * 6);
+    --ch-button-padding-sm: var(--ch-space-sm) 0;
+    --ch-button-padding-md: var(--ch-space-md) 0;
+    --ch-button-padding-lg: var(--ch-space-lg) 0;
+    --ch-opacity-disabled: 0.6;
+    --ch-cursor-disabled: not-allowed;
 
     --ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
