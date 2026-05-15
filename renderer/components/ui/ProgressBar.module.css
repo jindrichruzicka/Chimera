@@ -1,0 +1,18 @@
+.root {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-button-border-width);
+    display: block;
+    height: var(--ch-space-sm);
+    overflow: hidden;
+    width: var(--ch-button-min-width-lg);
+}
+
+.fill {
+    background-color: var(--ch-color-accent);
+    display: block;
+    height: var(--ch-space-sm);
+    transition: width var(--ch-duration-normal) var(--ch-easing-standard);
+}

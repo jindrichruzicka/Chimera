@@ -18,6 +18,7 @@
     --ch-space-md: 16px;
     --ch-space-lg: 24px;
     --ch-space-xl: 40px;
+    --ch-space-none: 0;
 
     --ch-radius-sm: 4px;
     --ch-radius-md: 8px;
@@ -43,11 +44,18 @@
     --ch-button-min-width-sm: calc(var(--ch-space-xl) * 4);
     --ch-button-min-width-md: calc(var(--ch-space-xl) * 5);
     --ch-button-min-width-lg: calc(var(--ch-space-xl) * 6);
+    --ch-divider-length-sm: var(--ch-button-min-width-sm);
+    --ch-divider-length-lg: var(--ch-button-min-width-lg);
     --ch-button-padding-sm: var(--ch-space-sm) 0;
     --ch-button-padding-md: var(--ch-space-md) 0;
     --ch-button-padding-lg: var(--ch-space-lg) 0;
     --ch-opacity-disabled: 0.6;
+    --ch-opacity-full: 1;
+    --ch-spinner-opacity-min: 0.3;
     --ch-cursor-disabled: not-allowed;
+
+    --ch-z-tooltip: 90;
+    --ch-z-modal: 100;
 
     --ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
     --ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);

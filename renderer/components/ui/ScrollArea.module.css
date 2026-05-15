@@ -1,0 +1,21 @@
+.scrollArea {
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-button-border-width);
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-ui);
+    max-height: calc(var(--ch-space-xl) * 8);
+    overflow: auto;
+    padding: var(--ch-space-md);
+    scrollbar-color: var(--ch-color-border) var(--ch-color-transparent);
+}
+
+.scrollArea::-webkit-scrollbar {
+    width: var(--ch-space-sm);
+}
+
+.scrollArea::-webkit-scrollbar-thumb {
+    background-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+}

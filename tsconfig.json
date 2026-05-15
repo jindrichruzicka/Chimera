@@ -48,6 +48,10 @@
         "build",
         "out",
         "**/out/**",
-        "simulation/engine/__tests__/fixtures/**"
+        "simulation/engine/__tests__/fixtures/**",
+        // renderer/ is compiled exclusively by renderer/tsconfig.json (Next.js plugin + JSX).
+        // Excluding it here prevents double-compilation and plugin conflicts.
+        // Cross-package type checks run via renderer/tsconfig.json in CI.
+        "renderer/**"
     ]
 }

@@ -4,6 +4,16 @@ import { describe, expect, it } from 'vitest';
 
 const tokenFilePath = fileURLToPath(new URL('./tokens.css', import.meta.url));
 
+function readTokensCss(): string {
+    return readFileSync(tokenFilePath, 'utf8');
+}
+
+function extractDeclaredTokens(css: string): readonly string[] {
+    return Array.from(css.matchAll(/(--ch-[\w-]+)\s*:/g), (match) => match[1]).filter(
+        (v): v is string => v !== undefined,
+    );
+}
+
 const expectedTokens = [
     '--ch-color-surface',
     '--ch-color-surface-raised',
@@ -23,6 +33,7 @@ const expectedTokens = [
     '--ch-space-md',
     '--ch-space-lg',
     '--ch-space-xl',
+    '--ch-space-none',
     '--ch-radius-sm',
     '--ch-radius-md',
     '--ch-radius-lg',
@@ -42,11 +53,17 @@ const expectedTokens = [
     '--ch-button-min-width-sm',
     '--ch-button-min-width-md',
     '--ch-button-min-width-lg',
+    '--ch-divider-length-sm',
+    '--ch-divider-length-lg',
     '--ch-button-padding-sm',
     '--ch-button-padding-md',
     '--ch-button-padding-lg',
     '--ch-opacity-disabled',
+    '--ch-opacity-full',
+    '--ch-spinner-opacity-min',
     '--ch-cursor-disabled',
+    '--ch-z-tooltip',
+    '--ch-z-modal',
     '--ch-shadow-sm',
     '--ch-shadow-md',
     '--ch-shadow-lg',
@@ -55,16 +72,6 @@ const expectedTokens = [
     '--ch-duration-slow',
     '--ch-easing-standard',
 ] as const;
-
-function readTokensCss(): string {
-    return readFileSync(tokenFilePath, 'utf8');
-}
-
-function extractDeclaredTokens(css: string): readonly string[] {
-    return Array.from(css.matchAll(/(--ch-[\w-]+)\s*:/g), (match) => match[1]).filter(
-        (v): v is string => v !== undefined,
-    );
-}
 
 describe('renderer design tokens', () => {
     it('declares exactly the UI design system tokens from architecture section 4.35', () => {

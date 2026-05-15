@@ -1,0 +1,17 @@
+.divider {
+    border-color: var(--ch-color-border);
+    border-style: solid;
+    flex: none;
+    margin: var(--ch-space-none);
+}
+
+.horizontal {
+    border-width: var(--ch-button-border-width) var(--ch-space-none) var(--ch-space-none);
+    width: var(--ch-divider-length-lg);
+}
+
+.vertical {
+    border-width: var(--ch-space-none) var(--ch-button-border-width) var(--ch-space-none)
+        var(--ch-space-none);
+    min-height: var(--ch-divider-length-sm);
+}

@@ -5,7 +5,6 @@
 // without actually spawning Electron or touching the filesystem.
 
 import { describe, it, expect, vi } from 'vitest';
-import type { SpawnOptions } from 'node:child_process';
 import {
     createRestartController,
     startWatching,
@@ -14,8 +13,17 @@ import {
     registerDevServerSignalHandlers,
     type RestartController,
     type FileWatcherLike,
+    type SpawnFn,
     type WatchFn,
 } from './dev-server.js';
+
+function firstSpawnCall(spawnFn: ReturnType<typeof vi.fn<SpawnFn>>): Parameters<SpawnFn> {
+    const call = spawnFn.mock.calls[0];
+    if (call === undefined) {
+        throw new Error('Expected spawnFn to have been called');
+    }
+    return call;
+}
 
 describe('createRestartController', () => {
     it('calls the restart callback when a change is reported', () => {
@@ -165,34 +173,37 @@ describe('startWatching', () => {
 describe('spawnElectronProcess', () => {
     it('spawns with detached: true and shell: false', () => {
         const fakeChild = { pid: 42 };
-        const spawnFn = vi.fn(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
+        const spawnFn = vi.fn<SpawnFn>(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
         const env = { PATH: '/usr/bin' } as unknown as NodeJS.ProcessEnv;
 
         spawnElectronProcess(spawnFn, env);
 
         expect(spawnFn).toHaveBeenCalledOnce();
-        const [, , opts] = spawnFn.mock.calls[0] as unknown as [string, string[], SpawnOptions];
+        const call = firstSpawnCall(spawnFn);
+        const opts = call[2];
         expect(opts).toMatchObject({ detached: true, shell: false });
     });
 
     it('spawns pnpm with the electron . args', () => {
         const fakeChild = { pid: 42 };
-        const spawnFn = vi.fn(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
+        const spawnFn = vi.fn<SpawnFn>(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
 
-        spawnElectronProcess(spawnFn, {} as unknown as NodeJS.ProcessEnv);
+        spawnElectronProcess(spawnFn, {});
 
-        const [cmd, args] = spawnFn.mock.calls[0] as unknown as [string, string[], SpawnOptions];
+        const call = firstSpawnCall(spawnFn);
+        const [cmd, args] = call;
         expect(cmd).toBe('pnpm');
         expect(args).toEqual(['electron', '.']);
     });
 
     it('sets CHIMERA_DEV_HARNESS and NODE_ENV in the child env', () => {
         const fakeChild = { pid: 42 };
-        const spawnFn = vi.fn(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
+        const spawnFn = vi.fn<SpawnFn>(() => fakeChild as ReturnType<typeof spawnElectronProcess>);
 
-        spawnElectronProcess(spawnFn, { MY_VAR: 'hello' } as unknown as NodeJS.ProcessEnv);
+        spawnElectronProcess(spawnFn, { MY_VAR: 'hello' });
 
-        const [, , opts] = spawnFn.mock.calls[0] as unknown as [string, string[], SpawnOptions];
+        const call = firstSpawnCall(spawnFn);
+        const opts = call[2];
         expect(opts.env).toMatchObject({
             MY_VAR: 'hello',
             CHIMERA_DEV_HARNESS: '1',

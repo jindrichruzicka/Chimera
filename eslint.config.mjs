@@ -76,6 +76,12 @@ export default tseslint.config(
                 'error',
                 { prefer: 'type-imports', fixStyle: 'inline-type-imports' },
             ],
+            // Allow bracket notation for index-signature properties (e.g. process.env['KEY']).
+            // Aligns with TypeScript's noPropertyAccessFromIndexSignature: true.
+            '@typescript-eslint/dot-notation': [
+                'error',
+                { allowIndexSignaturePropertyAccess: true },
+            ],
             '@typescript-eslint/no-unused-vars': [
                 'error',
                 {

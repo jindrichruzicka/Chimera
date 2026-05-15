@@ -765,7 +765,7 @@ export async function main(): Promise<void> {
     assertProductionDebugGuard(process.env);
 
     // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
-    if (process.env['CHIMERA_DEV_HARNESS'] === '1' && process.env.NODE_ENV === 'production') {
+    if (process.env['CHIMERA_DEV_HARNESS'] === '1' && process.env['NODE_ENV'] === 'production') {
         throw new Error('CHIMERA_DEV_HARNESS is enabled in a production build. Refusing to start.');
     }
 

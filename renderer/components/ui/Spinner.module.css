@@ -1,0 +1,30 @@
+.spinner {
+    align-items: center;
+    color: var(--ch-color-accent);
+    display: inline-flex;
+    justify-content: center;
+}
+
+.indicator {
+    animation: ch-spinner-rotate var(--ch-duration-slow) var(--ch-easing-standard) infinite;
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-lg);
+    border-style: solid;
+    border-top-color: var(--ch-color-accent);
+    border-width: var(--ch-button-border-width);
+    display: inline-block;
+    height: var(--ch-space-lg);
+    width: var(--ch-space-lg);
+}
+
+@keyframes ch-spinner-rotate {
+    from {
+        opacity: var(--ch-spinner-opacity-min);
+        transform: rotate(0deg);
+    }
+
+    to {
+        opacity: var(--ch-opacity-full);
+        transform: rotate(360deg);
+    }
+}

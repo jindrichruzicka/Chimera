@@ -1,0 +1,34 @@
+.panel {
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-button-border-width);
+    color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-md);
+    padding: var(--ch-space-lg);
+}
+
+.surface {
+    background-color: var(--ch-color-surface);
+    box-shadow: var(--ch-shadow-sm);
+}
+
+.raised {
+    background-color: var(--ch-color-surface-raised);
+    box-shadow: var(--ch-shadow-md);
+}
+
+.title {
+    font-size: var(--ch-font-size-lg);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+    margin: var(--ch-space-none);
+}
+
+.body {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-md);
+}

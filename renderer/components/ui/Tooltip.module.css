@@ -1,0 +1,26 @@
+.root {
+    display: inline-flex;
+    position: relative;
+}
+
+.content {
+    background-color: var(--ch-color-surface-overlay);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-button-border-width);
+    box-shadow: var(--ch-shadow-md);
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-ui);
+    font-size: var(--ch-font-size-sm);
+    inset-block-end: calc(var(--ch-space-xl) + var(--ch-space-sm));
+    inset-inline-start: var(--ch-space-none);
+    padding: var(--ch-space-sm);
+    position: absolute;
+    white-space: nowrap;
+    z-index: var(--ch-z-tooltip);
+}
+
+.content[hidden] {
+    display: none;
+}

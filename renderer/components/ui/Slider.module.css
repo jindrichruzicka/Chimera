@@ -1,0 +1,23 @@
+.root {
+    color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-sm);
+}
+
+.label {
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+}
+
+.input {
+    accent-color: var(--ch-color-accent);
+    cursor: pointer;
+    width: var(--ch-button-min-width-lg);
+}
+
+.input:disabled {
+    cursor: var(--ch-cursor-disabled);
+    opacity: var(--ch-opacity-disabled);
+}
