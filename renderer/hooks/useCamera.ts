@@ -6,7 +6,7 @@ import { flushSync } from 'react-dom';
 import type { MutableRefObject } from 'react';
 import type { Camera } from 'three';
 import { Vector3 } from 'three';
-import { lerp, type EasingFn } from '../utils/curves.js';
+import { lerp, linear, type EasingFn } from '../utils/curves.js';
 import type { Vector3Tuple } from '../types/r3f-types.js';
 import { useTweenCallback } from './useTweenCallback.js';
 
@@ -55,7 +55,6 @@ type TweenConfig = Readonly<{
     easing: EasingFn;
 }>;
 
-const linear: EasingFn = (progress) => progress;
 const DEFAULT_TWEEN_CONFIG: TweenConfig = { durationMs: 1, easing: linear };
 
 export function useCamera(): CameraController {

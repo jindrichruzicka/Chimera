@@ -198,6 +198,52 @@ describe('useTweenCallback', () => {
         expect(latestOnComplete).toHaveBeenCalledTimes(1);
         expect(latestOnCancel).not.toHaveBeenCalled();
     });
+
+    it('completes immediately on start when durationMs is 0', () => {
+        const onTick = vi.fn();
+        const onComplete = vi.fn();
+        const onCancel = vi.fn();
+        const { result } = renderHook(() =>
+            useTweenCallback(0, linear, {
+                onCancel,
+                onComplete,
+                onTick,
+            }),
+        );
+
+        act(() => {
+            result.current.start();
+        });
+
+        expect(onTick).toHaveBeenCalledOnce();
+        expect(onTick).toHaveBeenCalledWith(1);
+        expect(onComplete).toHaveBeenCalledOnce();
+        expect(onCancel).not.toHaveBeenCalled();
+        expect(result.current.isRunning).toBe(false);
+    });
+
+    it('completes immediately on start when durationMs is negative', () => {
+        const onTick = vi.fn();
+        const onComplete = vi.fn();
+        const onCancel = vi.fn();
+        const { result } = renderHook(() =>
+            useTweenCallback(-500, linear, {
+                onCancel,
+                onComplete,
+                onTick,
+            }),
+        );
+
+        act(() => {
+            result.current.start();
+        });
+
+        expect(onTick).toHaveBeenCalledOnce();
+        expect(onTick).toHaveBeenCalledWith(1);
+        expect(onComplete).toHaveBeenCalledOnce();
+        expect(onCancel).not.toHaveBeenCalled();
+        expect(result.current.isRunning).toBe(false);
+    });
 });
 
 function advanceFrames(deltaSeconds: number): void {
