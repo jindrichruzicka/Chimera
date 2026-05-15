@@ -14,6 +14,64 @@ function extractDeclaredTokens(css: string): readonly string[] {
     );
 }
 
+function extractTokenValue(css: string, tokenName: string): string {
+    const pattern = new RegExp(`${tokenName}:\\s*([^;]+);`);
+    const match = css.match(pattern);
+
+    if (match?.[1] === undefined) {
+        throw new Error(`Missing token ${tokenName}`);
+    }
+
+    return match[1].trim();
+}
+
+interface HslColor {
+    readonly hue: number;
+    readonly saturation: number;
+    readonly lightness: number;
+}
+
+function hexChannelToNumber(channel: string): number {
+    return Number.parseInt(channel, 16) / 255;
+}
+
+function parseHexColor(value: string): HslColor {
+    const match = /^#([\da-f]{2})([\da-f]{2})([\da-f]{2})$/iu.exec(value);
+
+    if (!match) {
+        throw new Error(`Expected a six-digit hex color token, received ${value}`);
+    }
+
+    const red = hexChannelToNumber(match[1]!);
+    const green = hexChannelToNumber(match[2]!);
+    const blue = hexChannelToNumber(match[3]!);
+    const max = Math.max(red, green, blue);
+    const min = Math.min(red, green, blue);
+    const delta = max - min;
+    const lightness = (max + min) / 2;
+    const saturation = delta === 0 ? 0 : delta / (1 - Math.abs(2 * lightness - 1));
+    const hue = (() => {
+        if (delta === 0) return 0;
+        if (max === red) return 60 * (((green - blue) / delta) % 6);
+        if (max === green) return 60 * ((blue - red) / delta + 2);
+        return 60 * ((red - green) / delta + 4);
+    })();
+
+    return {
+        hue: hue < 0 ? hue + 360 : hue,
+        saturation,
+        lightness,
+    };
+}
+
+function expectNeutralToken(value: string, minLightness: number, maxLightness: number): void {
+    const color = parseHexColor(value);
+
+    expect(color.saturation).toBeLessThanOrEqual(0.12);
+    expect(color.lightness).toBeGreaterThanOrEqual(minLightness);
+    expect(color.lightness).toBeLessThanOrEqual(maxLightness);
+}
+
 const expectedTokens = [
     '--ch-color-surface',
     '--ch-color-surface-raised',
@@ -114,5 +172,29 @@ describe('renderer design tokens', () => {
         expect(css).toContain('--ch-duration-normal: 0ms;');
         expect(css).toContain('--ch-duration-slow: 0ms;');
         expect(css).toContain('--ch-easing-standard: linear;');
+    });
+
+    it('uses a neutral engine shell palette for the default theme tokens', () => {
+        const css = readTokensCss();
+        const surface = extractTokenValue(css, '--ch-color-surface');
+        const raised = extractTokenValue(css, '--ch-color-surface-raised');
+        const overlay = extractTokenValue(css, '--ch-color-surface-overlay');
+        const accent = extractTokenValue(css, '--ch-color-accent');
+        const accentHover = extractTokenValue(css, '--ch-color-accent-hover');
+        const textPrimary = extractTokenValue(css, '--ch-color-text-primary');
+        const textSecondary = extractTokenValue(css, '--ch-color-text-secondary');
+        const border = extractTokenValue(css, '--ch-color-border');
+
+        expectNeutralToken(surface, 0.04, 0.1);
+        expectNeutralToken(raised, 0.08, 0.16);
+        expectNeutralToken(overlay, 0.12, 0.2);
+        expectNeutralToken(accent, 0.22, 0.34);
+        expectNeutralToken(accentHover, 0.28, 0.4);
+        expectNeutralToken(textPrimary, 0.9, 1);
+        expectNeutralToken(textSecondary, 0.55, 0.72);
+        expectNeutralToken(border, 0.22, 0.34);
+        expect(parseHexColor(surface).lightness).toBeLessThan(parseHexColor(raised).lightness);
+        expect(parseHexColor(raised).lightness).toBeLessThan(parseHexColor(overlay).lightness);
+        expect(parseHexColor(accent).lightness).toBeLessThan(parseHexColor(accentHover).lightness);
     });
 });

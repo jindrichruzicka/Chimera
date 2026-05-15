@@ -32,7 +32,14 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                     content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'"
                 />
             </head>
-            <body style={{ margin: 0 }}>
+            <body
+                style={{
+                    margin: 0,
+                    backgroundColor: 'var(--ch-color-surface)',
+                    color: 'var(--ch-color-text-primary)',
+                    fontFamily: 'var(--ch-font-ui)',
+                }}
+            >
                 <ThemeProvider>
                     <SettingsBootstrap />
                     <LobbyStoreBootstrap />

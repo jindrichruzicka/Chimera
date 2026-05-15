@@ -234,18 +234,18 @@ All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 /* renderer/styles/tokens.css — engine defaults */
 
 /* ── Colour ─────────────────────────────────────────────── */
---ch-color-surface: #1a1a2e;
---ch-color-surface-raised: #16213e;
---ch-color-surface-overlay: #0f3460;
---ch-color-accent: #e94560;
---ch-color-accent-hover: #ff6b81;
---ch-color-text-primary: #eaeaea;
---ch-color-text-secondary: #a0a0b0;
---ch-color-text-disabled: #555577;
---ch-color-border: #2a2a4a;
---ch-color-success: #4caf50;
---ch-color-warning: #ff9800;
---ch-color-error: #f44336;
+--ch-color-surface: #111113;
+--ch-color-surface-raised: #1b1b1f;
+--ch-color-surface-overlay: #27272a;
+--ch-color-accent: #3f3f46;
+--ch-color-accent-hover: #52525b;
+--ch-color-text-primary: #f4f4f5;
+--ch-color-text-secondary: #a1a1aa;
+--ch-color-text-disabled: #71717a;
+--ch-color-border: #3f3f46;
+--ch-color-success: #16a34a;
+--ch-color-warning: #d97706;
+--ch-color-error: #dc2626;
 
 /* ── Spacing ─────────────────────────────────────────────── */
 --ch-space-xs: 4px;
@@ -269,9 +269,9 @@ All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 --ch-font-size-xl: 24px;
 
 /* ── Shadows ─────────────────────────────────────────────── */
---ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.4);
---ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.6);
---ch-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.8);
+--ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
+--ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.36);
+--ch-shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.44);
 
 /* ── Motion ──────────────────────────────────────────────── */
 --ch-duration-fast: 120ms;

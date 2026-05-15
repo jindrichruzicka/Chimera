@@ -269,6 +269,39 @@ describe('LobbyPage pending actions', () => {
         expect(actionButtons[1]).toBe(startButton);
     });
 
+    it('uses readable token colors for the active lobby shell and information surfaces', () => {
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: {
+                sessionId: 'session-1',
+                hostId: 'p1',
+                gameId: 'tactics',
+            },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: true }],
+        };
+
+        renderLobbyPage();
+
+        expect(screen.getByRole('main')).toHaveStyle({
+            backgroundColor: 'var(--ch-color-surface)',
+            color: 'var(--ch-color-text-primary)',
+            minHeight: '100vh',
+        });
+
+        const configSummary = screen.getByTestId('lobby-config-summary');
+        expect(configSummary).toHaveStyle({
+            backgroundColor: 'var(--ch-color-surface-raised)',
+            color: 'var(--ch-color-text-primary)',
+        });
+
+        const infoSection = screen.getByTestId('lobby-session-id').closest('div');
+        expect(infoSection).not.toBeNull();
+        expect(infoSection).toHaveStyle({
+            backgroundColor: 'var(--ch-color-surface-raised)',
+            color: 'var(--ch-color-text-primary)',
+        });
+    });
+
     it('uses shared themed variants for lobby shell actions', () => {
         renderLobbyPage();
 

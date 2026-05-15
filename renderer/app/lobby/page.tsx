@@ -20,9 +20,12 @@ import { useLobbyApi } from './useLobbyApi';
 type PendingAction = 'hosting' | 'joining' | 'leaving' | 'starting' | 'updating-ready' | null;
 
 const sectionCardStyle = {
+    backgroundColor: 'var(--ch-color-surface-raised)',
+    color: 'var(--ch-color-text-primary)',
     padding: 'var(--ch-space-md)',
     border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
     borderRadius: 'var(--ch-radius-sm)',
+    boxShadow: 'var(--ch-shadow-sm)',
 };
 
 const activeLobbyStyle = {
@@ -206,16 +209,26 @@ export default function LobbyPage() {
     return (
         <ThemeProvider theme={lobbyTheme}>
             <main
-                style={{ fontFamily: 'var(--ch-font-ui)', padding: 'var(--ch-space-lg)' }}
+                style={{
+                    minHeight: '100vh',
+                    boxSizing: 'border-box',
+                    backgroundColor: 'var(--ch-color-surface)',
+                    color: 'var(--ch-color-text-primary)',
+                    fontFamily: 'var(--ch-font-ui)',
+                    padding: 'var(--ch-space-lg)',
+                }}
                 role="main"
                 aria-labelledby="lobby-heading"
             >
                 <h1 id="lobby-heading">Multiplayer Lobby</h1>
                 {/* Display current configuration */}
                 <div
+                    data-testid="lobby-config-summary"
                     style={{
                         backgroundColor: 'var(--ch-color-surface-raised)',
+                        color: 'var(--ch-color-text-primary)',
                         padding: 'var(--ch-space-xs)',
+                        border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
                         borderRadius: 'var(--ch-radius-sm)',
                         marginBottom: 'var(--ch-space-md)',
                         fontSize: 'var(--ch-font-size-sm)',
@@ -287,6 +300,10 @@ export default function LobbyPage() {
                                     style={{
                                         padding: 'var(--ch-space-xs)',
                                         marginRight: 'var(--ch-space-md)',
+                                        backgroundColor: 'var(--ch-color-surface-raised)',
+                                        color: 'var(--ch-color-text-primary)',
+                                        border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
+                                        borderRadius: 'var(--ch-radius-sm)',
                                     }}
                                     aria-describedby="lobby-code-help"
                                 />

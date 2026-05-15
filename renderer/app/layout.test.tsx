@@ -3,6 +3,7 @@
 // Tests for the root layout CSP meta tag (WARN-1 / #193).
 // @vitest-environment jsdom
 
+import '@testing-library/jest-dom/vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -57,5 +58,14 @@ describe('RootLayout', () => {
 
         const node = renderedDocument.querySelector('[data-testid="connection-status"]');
         expect(node).toBeTruthy();
+    });
+
+    it('seeds shell pages with readable token background and text colors', () => {
+        const renderedDocument = renderLayoutDocument();
+        const bodyStyle = renderedDocument.body.getAttribute('style') ?? '';
+
+        expect(bodyStyle).toContain('background-color:var(--ch-color-surface)');
+        expect(bodyStyle).toContain('color:var(--ch-color-text-primary)');
+        expect(bodyStyle).toContain('font-family:var(--ch-font-ui)');
     });
 });

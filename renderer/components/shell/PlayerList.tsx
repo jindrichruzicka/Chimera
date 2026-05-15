@@ -4,6 +4,7 @@
 // Displays a list of players with their ready states.
 
 import React from 'react';
+import { Button } from '../ui/Button';
 import { useLobbyStore } from '../../state/lobbyStore';
 import type { LobbyPlayerEntry, PlayerId } from '@chimera/shared/messages-schemas.js';
 
@@ -88,19 +89,17 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: Pl
                     {player.ready ? 'Ready' : 'Not Ready'}
                 </span>
                 {isLocalPlayer && onToggleReady && (
-                    <button
+                    <Button
                         data-testid="ready-toggle"
                         onClick={() => {
                             void onToggleReady(!player.ready);
                         }}
                         disabled={isTogglePending}
-                        style={{
-                            padding: 'var(--ch-space-xs) var(--ch-space-sm)',
-                            fontSize: 'var(--ch-font-size-sm)',
-                        }}
+                        size="sm"
+                        variant="secondary"
                     >
                         {isTogglePending ? 'Updating...' : 'Toggle Ready'}
-                    </button>
+                    </Button>
                 )}
             </div>
         </li>
