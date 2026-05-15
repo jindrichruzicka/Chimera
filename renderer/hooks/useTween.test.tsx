@@ -162,6 +162,20 @@ describe('useTween', () => {
         expect(result.current.isRunning).toBe(false);
     });
 
+    it('does not rerender when stop is called while already idle', () => {
+        const { result } = renderHook(() => useTweenRenderProbe());
+
+        const renderCountAtRest = result.current.renderCount;
+
+        act(() => {
+            result.current.stop();
+        });
+
+        expect(result.current.value).toBe(0);
+        expect(result.current.isRunning).toBe(false);
+        expect(result.current.renderCount).toBe(renderCountAtRest);
+    });
+
     it('ignores later frames after stop until restarted', () => {
         const { result } = renderHook(() => useTween(1000, linear));
 

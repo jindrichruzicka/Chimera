@@ -17,22 +17,12 @@ export function useTween(durationMs: number, easingFn: EasingFn = linear): Tween
     return useTweenController(durationMs, easingFn);
 }
 
-interface TweenCallbacks {
-    readonly onTick: (value: number) => void;
-    readonly onComplete: () => void;
-}
-
-function useTweenController(
-    durationMs: number,
-    easingFn: EasingFn,
-    callbacks?: TweenCallbacks,
-): TweenState {
+function useTweenController(durationMs: number, easingFn: EasingFn): TweenState {
     const invalidate = useThree((state) => state.invalidate);
     const [, forceLifecycleRender] = useReducer((version: number) => version + 1, 0);
     const elapsedMsRef = useRef(0);
     const durationMsRef = useRef(durationMs);
     const easingFnRef = useRef(easingFn);
-    const callbacksRef = useRef(callbacks);
     const invalidateRef = useRef(invalidate);
     const tweenRef = useRef<Pick<TweenState, 'value' | 'isRunning'>>({
         isRunning: false,
@@ -41,7 +31,6 @@ function useTweenController(
 
     durationMsRef.current = durationMs;
     easingFnRef.current = easingFn;
-    callbacksRef.current = callbacks;
     invalidateRef.current = invalidate;
 
     const publishTween = useCallback((value: number, isRunning: boolean): void => {
@@ -52,7 +41,7 @@ function useTweenController(
         elapsedMsRef.current = 0;
 
         if (normalizeDurationMs(durationMsRef.current) === 0) {
-            completeTween(callbacksRef.current, publishTween, invalidateRef.current);
+            completeTween(publishTween, invalidateRef.current);
             forceLifecycleRender();
             return;
         }
@@ -63,6 +52,9 @@ function useTweenController(
     }, [publishTween]);
 
     const stop = useCallback((): void => {
+        if (!tweenRef.current.isRunning) {
+            return;
+        }
         elapsedMsRef.current = 0;
         publishTween(0, false);
         forceLifecycleRender();
@@ -77,7 +69,7 @@ function useTweenController(
         const activeDurationMs = normalizeDurationMs(durationMsRef.current);
         if (activeDurationMs === 0) {
             elapsedMsRef.current = 0;
-            completeTween(callbacksRef.current, publishTween, state.invalidate);
+            completeTween(publishTween, state.invalidate);
             forceLifecycleRender();
             return;
         }
@@ -87,14 +79,13 @@ function useTweenController(
 
         if (progress >= 1) {
             elapsedMsRef.current = activeDurationMs;
-            completeTween(callbacksRef.current, publishTween, state.invalidate);
+            completeTween(publishTween, state.invalidate);
             forceLifecycleRender();
             return;
         }
 
         const value = clampUnit(easingFnRef.current(progress));
         publishTween(value, true);
-        callbacksRef.current?.onTick(value);
         state.invalidate();
     });
 
@@ -114,13 +105,10 @@ function useTweenController(
 }
 
 function completeTween(
-    callbacks: TweenCallbacks | undefined,
     publishTween: (value: number, isRunning: boolean) => void,
     invalidate: () => void,
 ): void {
     publishTween(1, false);
-    callbacks?.onTick(1);
-    callbacks?.onComplete();
     invalidate();
 }
 
