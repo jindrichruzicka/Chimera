@@ -6,4 +6,13 @@ describe('MatchScreenRegistry', () => {
         expect(MatchScreenRegistry.sceneDefaultScreens?.['engine:post-match']).toBe('summary');
         expect(MatchScreenRegistry.screens?.['summary']).toBeDefined();
     });
+
+    it('code-splits the summary screen behind React.lazy (Invariant #87)', () => {
+        const summary = MatchScreenRegistry.screens?.['summary'];
+        // React.lazy components are exotic objects, not plain functions.
+        // Invariant #87: every screen exported from screens/index.ts must be
+        // wrapped in React.lazy so it does not bloat the initial registry bundle.
+        expect(typeof summary).toBe('object');
+        expect(summary).not.toBeNull();
+    });
 });
