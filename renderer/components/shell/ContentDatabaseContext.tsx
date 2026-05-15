@@ -22,7 +22,7 @@ export function ContentDatabaseProvider({
 export function useContentDatabase(): ContentDatabase {
     const ctx = useContext(ContentDatabaseContext);
     if (ctx === null) {
-        throw new Error('useContentDatabase() must be used inside <MatchShell>.');
+        throw new Error('useContentDatabase() must be used inside <GameShell>.');
     }
     return ctx;
 }

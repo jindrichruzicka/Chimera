@@ -1,17 +1,17 @@
-// renderer/app/match/page.test.tsx
 // @vitest-environment jsdom
+// renderer/app/match/page.test.tsx
 //
 // Unit tests for the match route page.
 //
 // Tests written first — confirmed RED before match/page.tsx was created.
 //
-// Architecture reference: §4.33–§4.34 — GameScreenRegistry, MatchShell
+// Architecture reference: §4.33–§4.34 — GameScreenRegistry, GameShell
 // Task: issue #494 — Extract match UI into renderer/app/match/page.tsx
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
-//   #48 — MatchShell is game-agnostic; MatchScreenRegistry is the sole
-//          coupling point and lives in match/page.tsx, not in MatchShell.
+//   #48 — GameShell is game-agnostic; MatchScreenRegistry is the sole
+//          coupling point and lives in match/page.tsx, not in GameShell.
 //   #80 — Verified by the board being injected via registry prop (children).
 
 import '@testing-library/jest-dom/vitest';
@@ -74,7 +74,7 @@ vi.mock('../../bridge/useSendAction', () => ({
 }));
 
 // Minimal stub for TacticsDemoBoard (games/* import; kept in match/page.tsx
-// per invariant #48 — MatchShell itself never imports from games/*).
+// per invariant #48 — GameShell itself never imports from games/*).
 vi.mock('@chimera/games/tactics/screens/index.js', () => ({
     MatchScreenRegistry: {
         board: ({ snapshot }: { snapshot: PlayerSnapshot }) => (
@@ -229,13 +229,13 @@ describe('MatchPage — redirect', () => {
 });
 
 describe('MatchPage — rendering', () => {
-    it('renders MatchShell (match-canvas testid) when snapshot is active', () => {
+    it('renders GameShell (match-canvas testid) when snapshot is active', () => {
         mockSnapshot = makeSnapshot();
         renderMatchPage();
         expect(screen.getByTestId('match-canvas')).toBeTruthy();
     });
 
-    it('renders the game board inside MatchShell', () => {
+    it('renders the game board inside GameShell', () => {
         mockSnapshot = makeSnapshot();
         renderMatchPage();
         expect(screen.getByTestId('tactics-board')).toBeTruthy();

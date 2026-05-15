@@ -3,7 +3,7 @@
  * §4.38 Match Resolution & Winner Detection
  *
  * Verifies winner propagation from tactics:attack through ActionPipeline,
- * StateProjector, PlayerSnapshot, and MatchShell.
+ * StateProjector, PlayerSnapshot, and GameShell.
  */
 import { test, expect } from '../fixtures/direct-match.fixture';
 import { MatchPage } from '../pages/MatchPage';

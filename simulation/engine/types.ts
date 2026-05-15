@@ -142,7 +142,7 @@ export interface MatchResult {
  * - `in_progress` — no winner has been determined yet.
  * - `resolved`    — the match has ended; `result` carries the winner list.
  *
- * Downstream consumers (PlayerSnapshot, MatchShell) use this union to
+ * Downstream consumers (PlayerSnapshot, GameShell) use this union to
  * distinguish an ongoing game from a decided one without a nullable sentinel.
  *
  * Architecture reference: §4.38
@@ -209,7 +209,7 @@ export interface BaseGameSnapshot {
      * Set by the `resolveMatchResult` hook in `ActionPipeline` after each
      * `reduce()` step (§4.38). The initial snapshot must always set this to
      * `null`. Downstream tasks (#509–#511) propagate this through
-     * `PlayerSnapshot`, `HostSessionPipeline`, and `MatchShell`.
+     * `PlayerSnapshot`, `HostSessionPipeline`, and `GameShell`.
      *
      * `winnerIds: []` encodes a draw. `null` means no decision yet.
      *

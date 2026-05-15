@@ -132,7 +132,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **47.** `StateBroadcaster`, `MessageRouter`, `LobbyManager`, `SaveManager` and all other main-process orchestration modules must not import from `networking/provider/local/` or any other provider-specific subdirectory. Cross-module communication goes exclusively through `MultiplayerProvider`, `HostTransport`, and `ClientTransport`.
 
-**48.** Game UI beyond engine chrome lives in `games/<name>/screens/` and is registered via `GameScreenRegistry`. `MatchShell.tsx` is game-agnostic — it never imports from any specific game package.
+**48.** Game UI beyond engine chrome lives in `games/<name>/screens/` and is registered via `GameScreenRegistry`. `GameShell.tsx` is game-agnostic — it never imports from any specific game package.
 
 **49.** Scene transitions are host-authoritative. `engine:scene_prepare` and `engine:scene_commit` are rejected if the dispatcher is not the host player. (See [Scene Transitions](../core-components/scene-transitions-fade.md).)
 
@@ -200,7 +200,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **79.** All `registerExtension()` calls must complete before `api.ts` is loaded. `buildExtensionsApi()` is called exactly once, immediately before `contextBridge.exposeInMainWorld`. A late registration after `buildExtensionsApi()` has run will mutate the internal registry but the frozen copy already handed to `exposeInMainWorld` will not reflect it.
 
-**80.** `MatchShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code.
+**80.** `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code.
 
 ---
 
@@ -220,7 +220,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **87.** Every screen component exported from `games/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports of large screen components into the registry module are forbidden — they defeat the bundle split and load all game UI on match entry.
 
-**88.** `MatchShell` wraps every active screen in a `<React.Suspense>` boundary. No game screen component may assume it renders without a Suspense ancestor.
+**88.** `GameShell` wraps every active screen in a `<React.Suspense>` boundary. No game screen component may assume it renders without a Suspense ancestor.
 
 **89.** `ctx.dispatch()` nesting depth is bounded by `MAX_NESTED_DISPATCH = 16`. `ActionPipeline` throws `RecursiveDispatchError` when this ceiling is exceeded. Only `engine:tick` may call `ctx.dispatch()`. This bound is reflected in `ReduceContext.dispatchDepth` and is invariant-backed per the ReduceContext JSDoc contract (lines 366–421 of `types.ts`): adding fields to `ReduceContext` requires a dedicated invariant in this document.
 

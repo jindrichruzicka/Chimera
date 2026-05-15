@@ -51,7 +51,7 @@ interface PerfSample {
     triangles: number;
 }
 
-// Mounted once in MatchShell. Self-contained: subscribes to store + R3F hooks.
+// Mounted once in GameShell. Self-contained: subscribes to store + R3F hooks.
 // Visible if F3-toggled OR engine.gameplay.showPerfHud === true
 export function PerfHud(): JSX.Element | null;
 ```
@@ -82,7 +82,7 @@ interface EngineSettings {
 
 ### Overview
 
-Exposes reliable Electron-detectable desktop facts — OS, screen layout, window size class, active input modalities — to game screens and MatchShell for layout and affordance decisions.
+Exposes reliable Electron-detectable desktop facts — OS, screen layout, window size class, active input modalities — to game screens and GameShell for layout and affordance decisions.
 
 > **Not** a fingerprinting or mobile-detection tool. Electron is desktop-only; `formFactor` is a conservative heuristic among desktop variants.
 
@@ -183,7 +183,7 @@ electron/main/
 
 | Consumer           | Use                                                           |
 | ------------------ | ------------------------------------------------------------- |
-| `MatchShell.tsx`   | HUD layout based on `windowSizeClass`                         |
+| `GameShell.tsx`    | HUD layout based on `windowSizeClass`                         |
 | `SettingsPage.tsx` | "About" block: OS / locale / Electron version for bug reports |
 | `PerfHud.tsx`      | Optional extra line: `primary: mouse · 2560×1440@144`         |
 | Game screens       | Swap pointer vs. touch affordances via `usePrimaryInput()`    |

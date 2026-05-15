@@ -32,18 +32,18 @@ Resolvers must be deterministic, idempotent, and free of host, renderer, network
 2. `DefaultStateProjector.project(...)`
 3. `PlayerSnapshot.matchResult`
 4. shared message schemas and provider/preload boundary types
-5. renderer state and `MatchShell`
+5. renderer state and `GameShell`
 
 The renderer must consume the projected `PlayerSnapshot` value. It must not import simulation engine modules or call game-specific result logic. This keeps IPC/network contracts explicit and follows the renderer boundary rules in §4.33.
 
 ## Winner Display
 
-`MatchShell` consumes the projected result from the current viewer's perspective. Presentation is
+`GameShell` consumes the projected result from the current viewer's perspective. Presentation is
 delegated to `GameScreenRegistry.matchResultBanner` when a game provides that optional slot. The
 game component receives only `{ matchResult, localPlayerId }`, derives game-specific copy locally,
 and remains renderer-only.
 
-If no game banner is registered, `MatchShell` displays the default engine fallback:
+If no game banner is registered, `GameShell` displays the default engine fallback:
 
 - `winnerIds` includes the local player: `You won`
 - `winnerIds` is non-empty and does not include the local player: `You lose`

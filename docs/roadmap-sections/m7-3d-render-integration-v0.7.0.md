@@ -1,6 +1,6 @@
 ---
 title: 'M7 — 3D Render Integration (v0.7.0)'
-description: 'F35–F42, F50: R3F GameCanvas/Camera, Asset Manager/Resolver, Curves/Tweening/Interaction, UI Design System, Scene Transitions/MatchShell, Audio System, Input/Keybindings, Performance HUD, and Device Info. R3F canvas renders game entities; asset pipeline is production-ready; scene transitions work end-to-end.'
+description: 'F35–F42, F50: R3F GameCanvas/Camera, Asset Manager/Resolver, Curves/Tweening/Interaction, UI Design System, Scene Transitions/GameShell, Audio System, Input/Keybindings, Performance HUD, and Device Info. R3F canvas renders game entities; asset pipeline is production-ready; scene transitions work end-to-end.'
 tags:
     [
         milestone,
@@ -13,7 +13,7 @@ tags:
         audio,
         input,
         scene-transitions,
-        matchshell,
+        gameshell,
         performance,
         device-info,
         ui-design-system,
@@ -51,17 +51,17 @@ Implement `renderer/components/ui/` primitive library: `Button`, `Modal`, `Panel
 
 ---
 
-## F38 — Scene Transition System + MatchShell `§4.18, §4.19, §4.33, §4.34, §4.36`
+## F38 — Scene Transition System + GameShell `§4.18, §4.19, §4.33, §4.34, §4.36`
 
 Implement `SceneDescriptor`, `SceneRegistry`, `SceneManager` (two-phase prepare / commit protocol), reserved actions (`engine:scene_prepare`, `engine:scene_ready`, `engine:scene_commit`), `SceneRouter`, `TransitionOverlay`, and `useFadeTransition`. Add scene invariants 49–52 to validator.
 
-Implement `GameScreenRegistry` (typed slot interface: `board` required; `hud`, `screens`, `transitionOverlay` optional) and `MatchShell.tsx` — the game-agnostic match chrome that receives a `GameScreenRegistry` prop, never imports from any `games/*` path (Invariant #48, #80). `MatchShell` assembles the full context provider tree (`AssetManagerContext`, `ContentDatabaseContext`, `AudioManagerContext`, `DeviceInfoContext`, `FadeContext`) per §4.34, wraps each screen in `<React.Suspense>` per §4.36, and wires `useActiveScreen()` / `useNavigateToScreen()` hooks backed by `uiStore.activeScreenKey`. Implement `ContentDatabaseContext` and `FadeContext`; wire the remaining contexts from F36 (`AssetManagerContext`), F39 (`AudioManagerContext`), and F42 (`DeviceInfoContext`). All screen components registered in a game's `screens/index.ts` must be wrapped in `React.lazy()` (Invariant #87, #88). Invariants #80–#88 apply.
+Implement `GameScreenRegistry` (typed slot interface: `board` required; `hud`, `screens`, `transitionOverlay` optional) and `GameShell.tsx` — the game-agnostic match chrome that receives a `GameScreenRegistry` prop, never imports from any `games/*` path (Invariant #48, #80). `GameShell` assembles the full context provider tree (`AssetManagerContext`, `ContentDatabaseContext`, `AudioManagerContext`, `DeviceInfoContext`, `FadeContext`) per §4.34, wraps each screen in `<React.Suspense>` per §4.36, and wires `useActiveScreen()` / `useNavigateToScreen()` hooks backed by `uiStore.activeScreenKey`. Implement `ContentDatabaseContext` and `FadeContext`; wire the remaining contexts from F36 (`AssetManagerContext`), F39 (`AudioManagerContext`), and F42 (`DeviceInfoContext`). All screen components registered in a game's `screens/index.ts` must be wrapped in `React.lazy()` (Invariant #87, #88). Invariants #80–#88 apply.
 
 ---
 
 ## F39 — Audio System `§4.25`
 
-Implement `AudioManager`, `AudioBus` (gain + ducking), `EventAudioBinding`, `useSound` hook, and `<EventAudioPlayer>` component. Wire volume buses to `SettingsStore.audio.*`. Implement pool (32-voice default) with priority-based preemption. Define lifecycle owner (`MatchShell`).
+Implement `AudioManager`, `AudioBus` (gain + ducking), `EventAudioBinding`, `useSound` hook, and `<EventAudioPlayer>` component. Wire volume buses to `SettingsStore.audio.*`. Implement pool (32-voice default) with priority-based preemption. Define lifecycle owner (`GameShell`).
 
 ---
 
@@ -89,7 +89,7 @@ Implement `DeviceInfo`, `device-probe.ts` (main process), `DeviceInfoProvider`, 
 - [Asset Reference System](../core-components/asset-reference-system.md)
 - [Curves, Tweening & Interaction](../core-components/curves-tweening-interaction.md)
 - [Scene Transitions & Fade](../core-components/scene-transitions-fade.md)
-- [MatchShell & UI Design System](../core-components/matchshell-ui-design-system.md)
+- [GameShell & UI Design System](../core-components/gameshell-ui-design-system.md)
 - [Audio System](../core-components/audio-system.md)
 - [Input & Keybindings](../core-components/input-keybindings.md)
 - [Performance HUD & Device Info](../core-components/performance-hud-device-info.md)

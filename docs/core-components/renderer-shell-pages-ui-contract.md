@@ -7,14 +7,14 @@ tags: [renderer, ui, design-tokens, shell-pages, button, theming, lobby, main-me
 # Renderer Shell Pages UI Contract
 
 > §4.37 of the Chimera architecture.
-> Related: [MatchShell, GameScreenRegistry & UI Design System](matchshell-ui-design-system.md) · [Renderer State Stores](renderer-state-stores.md) · [Multiplayer Provider & WebSocket](multiplayer-provider-websocket.md)
+> Related: [GameShell, GameScreenRegistry & UI Design System](gameshell-ui-design-system.md) · [Renderer State Stores](renderer-state-stores.md) · [Multiplayer Provider & WebSocket](multiplayer-provider-websocket.md)
 
 ---
 
 ## Overview
 
 §4.35 defines the engine design-token system and `renderer/components/ui/` component library for
-content that renders _inside_ `MatchShell`. This section documents the same contract for
+content that renders _inside_ `GameShell`. This section documents the same contract for
 **engine shell pages** — top-level Next.js pages that exist outside of any game match:
 
 | Page path                 | Purpose                               | Game-owned? |
@@ -143,13 +143,13 @@ has been imported. Shell pages therefore receive game theming without any explic
 
 ### Scope Rules
 
-| Page               | Receives game override?                                   |
-| ------------------ | --------------------------------------------------------- |
-| `main-menu`        | Never (no game loaded yet)                                |
-| `settings`         | Never (engine-owned, game-agnostic)                       |
-| `saves`            | Never (engine-owned, game-agnostic)                       |
-| `lobby`            | Yes — after `gameId` is resolved and registry is imported |
-| Match / MatchShell | Yes — always (registry imported before scene render)      |
+| Page              | Receives game override?                                   |
+| ----------------- | --------------------------------------------------------- |
+| `main-menu`       | Never (no game loaded yet)                                |
+| `settings`        | Never (engine-owned, game-agnostic)                       |
+| `saves`           | Never (engine-owned, game-agnostic)                       |
+| `lobby`           | Yes — after `gameId` is resolved and registry is imported |
+| Match / GameShell | Yes — always (registry imported before scene render)      |
 
 ---
 
@@ -195,7 +195,7 @@ renderer/
 
 ## Cross-References
 
-- [MatchShell, GameScreenRegistry & UI Design System](matchshell-ui-design-system.md) — §4.35 token catalogue, §4.36 game screen code splitting
+- [GameShell, GameScreenRegistry & UI Design System](gameshell-ui-design-system.md) — §4.35 token catalogue, §4.36 game screen code splitting
 - [Renderer State Stores](renderer-state-stores.md) — store catalogue, `lobbyConfig`, `useLobbyApi()`
 - [Scene Transitions & Fade](scene-transitions-fade.md) — `TransitionOverlay`, `useFade()`
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #91–94

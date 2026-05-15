@@ -10,14 +10,14 @@ afterEach(() => {
 });
 
 describe('ContentDatabaseContext', () => {
-    it('throws a descriptive error when used outside MatchShell', () => {
+    it('throws a descriptive error when used outside GameShell', () => {
         function Consumer(): React.ReactElement {
             useContentDatabase();
             return <div />;
         }
 
         expect(() => render(<Consumer />)).toThrow(
-            'useContentDatabase() must be used inside <MatchShell>.',
+            'useContentDatabase() must be used inside <GameShell>.',
         );
     });
 });

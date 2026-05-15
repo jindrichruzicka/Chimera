@@ -304,5 +304,5 @@ function UnitMesh({ portraitRef }: UnitMeshProps) {
 ## Cross-References
 
 - [Content Database](content-database-data-refs.md) — `DataRef<T>` for cross-collection data references
-- [Renderer Contexts](matchshell-ui-design-system.md) — `AssetManagerContext` injection in `MatchShell`
+- [Renderer Contexts](gameshell-ui-design-system.md) — `AssetManagerContext` injection in `GameShell`
 - [Module Boundaries](../executive-architecture/module-boundaries-file-tree.md) — `renderer/assets/` file tree

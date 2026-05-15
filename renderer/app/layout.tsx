@@ -1,7 +1,7 @@
 // renderer/app/layout.tsx
 //
 // Root layout required by Next.js App Router. Kept intentionally minimal —
-// the engine shell (MatchShell, SceneRouter, TransitionOverlay, etc.) is
+// the engine shell (GameShell, SceneRouter, TransitionOverlay, etc.) is
 // introduced by later features (§4.18–§4.19). For the M1 boot-smoke all we
 // need is a valid HTML scaffold that hosts `page.tsx`.
 

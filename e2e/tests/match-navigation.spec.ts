@@ -1,7 +1,7 @@
 /**
  * F38 — match-navigation.spec.ts
  *
- * Verifies the MatchShell route is entered through the normal lobby flow and
+ * Verifies the GameShell route is entered through the normal lobby flow and
  * that a bare /match visit without a snapshot returns to the lobby UI.
  */
 import { test as gameTest, expect } from '../fixtures/game.fixture';
@@ -13,7 +13,7 @@ import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron
 const MATCH_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/match/`;
 
 gameTest(
-    'lobby start navigates host and client into the registry MatchShell',
+    'lobby start navigates host and client into the registry GameShell',
     async ({ hostWindow, clientWindow }) => {
         const hostMatch = new MatchPage(hostWindow);
         const clientMatch = new MatchPage(clientWindow);

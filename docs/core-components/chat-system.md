@@ -123,7 +123,7 @@ Rolling buffer: when size exceeds 500, the oldest entry is dropped from the head
 
 ## ChatPanel.tsx
 
-The renderer side: `renderer/components/shell/ChatPanel.tsx`. Reads from `chatStore`, filters muted players at render time. Mounted by `MatchShell` as engine chrome (§4.33). No game-specific code.
+The renderer side: `renderer/components/shell/ChatPanel.tsx`. Reads from `chatStore`, filters muted players at render time. Mounted by `GameShell` as engine chrome (§4.33). No game-specific code.
 
 ---
 

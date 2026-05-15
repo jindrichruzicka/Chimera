@@ -43,7 +43,7 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         },
         // Non-shell renderer file importing from games is not a shell-page issue
         {
-            filename: 'renderer/components/shell/MatchShell.tsx',
+            filename: 'renderer/components/shell/GameShell.tsx',
             code: `import React from 'react';`,
         },
         // settings page importing from non-games path is allowed

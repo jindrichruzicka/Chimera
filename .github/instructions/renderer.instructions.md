@@ -9,7 +9,7 @@ Source of truth:
 - [React/Zustand standards](../../docs/coding-standards-sections/react-zustand.md)
 - [React Three Fiber standards](../../docs/coding-standards-sections/react-three-fiber.md)
 - [Renderer state stores](../../docs/core-components/renderer-state-stores.md)
-- [MatchShell UI design system](../../docs/core-components/matchshell-ui-design-system.md)
+- [GameShell UI design system](../../docs/core-components/gameshell-ui-design-system.md)
 - [Renderer shell pages UI contract](../../docs/core-components/renderer-shell-pages-ui-contract.md)
 - [Module boundaries](../../docs/executive-architecture/module-boundaries-file-tree.md)
 - [Architecture invariants](../../docs/executive-architecture/architecture-invariants.md)

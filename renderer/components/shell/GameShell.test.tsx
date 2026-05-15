@@ -1,5 +1,5 @@
-// renderer/components/shell/MatchShell.test.tsx
 // @vitest-environment jsdom
+// renderer/components/shell/GameShell.test.tsx
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
@@ -8,18 +8,18 @@ import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/prel
 import type { AssetManager } from '../../assets/AssetManager';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import {
-    MatchShell,
+    GameShell,
     type GameHudProps,
     type GameScreenProps,
     type MatchResultBannerProps,
-} from './MatchShell';
+} from './GameShell';
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
 });
 
-describe('MatchShell page object locators', () => {
+describe('GameShell page object locators', () => {
     it('provides AssetManagerContext in registry mode and disposes it on unmount', async () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
         const assetManager = createAssetManagerStub();
@@ -37,7 +37,7 @@ describe('MatchShell page object locators', () => {
         }
 
         const { unmount } = render(
-            <MatchShell
+            <GameShell
                 registry={{ board: Board }}
                 snapshot={snapshot}
                 sendAction={vi.fn()}
@@ -63,7 +63,7 @@ describe('MatchShell page object locators', () => {
         );
 
         render(
-            <MatchShell
+            <GameShell
                 registry={{ board: Board }}
                 snapshot={snapshot}
                 sendAction={vi.fn()}
@@ -77,9 +77,9 @@ describe('MatchShell page object locators', () => {
 
     it('renders the §13.6 match HUD locator surface', () => {
         render(
-            <MatchShell tick={42} canUndo={true} canRedo={false} isGameOver={true}>
+            <GameShell tick={42} canUndo={true} canRedo={false} isGameOver={true}>
                 <div>Board slot</div>
-            </MatchShell>,
+            </GameShell>,
         );
 
         expect(screen.getByTestId('match-canvas').textContent).toContain('Board slot');
@@ -95,7 +95,7 @@ describe('MatchShell page object locators', () => {
     });
 
     it('keeps shell root layout structure while using tokenized font family', () => {
-        render(<MatchShell tick={1} canUndo={false} canRedo={false} />);
+        render(<GameShell tick={1} canUndo={false} canRedo={false} />);
 
         const shellRoot = screen.getByLabelText('Match');
         const style = shellRoot.getAttribute('style') ?? '';
@@ -111,7 +111,7 @@ describe('MatchShell page object locators', () => {
         const onEndTurn = vi.fn();
 
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={true}
                 canRedo={true}
@@ -168,7 +168,7 @@ describe('MatchShell page object locators', () => {
         }
 
         render(
-            <MatchShell
+            <GameShell
                 tick={9}
                 canUndo={true}
                 canRedo={false}
@@ -206,7 +206,7 @@ describe('MatchShell page object locators', () => {
         const onEndTurn = vi.fn();
 
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={true}
                 canRedo={true}
@@ -226,7 +226,7 @@ describe('MatchShell page object locators', () => {
         const onEndTurn = vi.fn();
 
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={true}
                 canRedo={true}
@@ -246,7 +246,7 @@ describe('MatchShell page object locators', () => {
         const localPlayerId = playerId('p1');
 
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={false}
                 canRedo={false}
@@ -278,7 +278,7 @@ describe('MatchShell page object locators', () => {
         }
 
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={false}
                 canRedo={false}
@@ -295,7 +295,7 @@ describe('MatchShell page object locators', () => {
 
     it('shows You lose when the local player is not a winner', () => {
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={false}
                 canRedo={false}
@@ -313,7 +313,7 @@ describe('MatchShell page object locators', () => {
 
     it('shows Draw when matchResult has no winners', () => {
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={false}
                 canRedo={false}
@@ -331,7 +331,7 @@ describe('MatchShell page object locators', () => {
 
     it('shows neutral message when localPlayerId is undefined (unknown viewer)', () => {
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={false}
                 canRedo={false}
@@ -345,7 +345,7 @@ describe('MatchShell page object locators', () => {
 
     it('engine fallback banner uses design tokens for spacing and font size', () => {
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={false}
                 canRedo={false}
@@ -362,7 +362,7 @@ describe('MatchShell page object locators', () => {
 
     it('engine fallback game-over banner uses design tokens for spacing and font size', () => {
         render(
-            <MatchShell
+            <GameShell
                 tick={7}
                 canUndo={false}
                 canRedo={false}

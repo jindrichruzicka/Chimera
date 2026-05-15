@@ -185,7 +185,7 @@ describe('LobbyPage pending actions', () => {
         expect(screen.getByTestId('start-match')).toBeTruthy();
     });
 
-    it('still renders lobby heading when a snapshot is active (no MatchShell in lobby)', () => {
+    it('still renders lobby heading when a snapshot is active (no GameShell in lobby)', () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
             info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
@@ -194,7 +194,7 @@ describe('LobbyPage pending actions', () => {
 
         renderLobbyPage();
 
-        // Lobby heading must remain; MatchShell must NOT be rendered.
+        // Lobby heading must remain; GameShell must NOT be rendered.
         expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
         expect(screen.queryByTestId('match-canvas')).toBeNull();
     });

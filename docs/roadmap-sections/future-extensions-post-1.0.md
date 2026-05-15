@@ -45,5 +45,5 @@ EWMA RTT + jitter + loss estimate in `NetworkProbe`, `connectionHealthStore`, pe
 
 - [Player Profiles & Directory](../core-components/player-profiles-directory.md) — `PlayerProfile.locale` (E4)
 - [State Projection Interfaces](../core-components/state-projection-interfaces.md) — `projectForSpectator()` (E3)
-- [MatchShell & UI Design System](../core-components/matchshell-ui-design-system.md) — `--ch-motion-*` tokens tie to `reducedMotion` (E2)
+- [GameShell & UI Design System](../core-components/gameshell-ui-design-system.md) — `--ch-motion-*` tokens tie to `reducedMotion` (E2)
 - [Multiplayer Provider & WebSocket](../core-components/multiplayer-provider-websocket.md) — `WELCOME` handshake version check (E1)

@@ -1,10 +1,10 @@
 ---
-title: 'MatchShell, GameScreenRegistry, Renderer Contexts & UI Design System'
-description: 'GameScreenRegistry interface (board required; hud/screens/transitionOverlay optional), MatchShell.tsx rendering contract, within-scene screen navigation (useActiveScreen/useNavigateToScreen), Renderer Context Map (AssetManagerContext/ContentDatabaseContext/AudioManagerContext/DeviceInfoContext/FadeContext), null-bang prohibition, UI design token system (--ch-* tokens), component categories, game token overrides, and code splitting (registry-level dynamic import + screen-level React.lazy).'
-tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-splitting, matchshell]
+title: 'GameShell, GameScreenRegistry, Renderer Contexts & UI Design System'
+description: 'GameScreenRegistry interface (board required; hud/screens/transitionOverlay optional), GameShell.tsx rendering contract, within-scene screen navigation (useActiveScreen/useNavigateToScreen), Renderer Context Map (AssetManagerContext/ContentDatabaseContext/AudioManagerContext/DeviceInfoContext/FadeContext), null-bang prohibition, UI design token system (--ch-* tokens), component categories, game token overrides, and code splitting (registry-level dynamic import + screen-level React.lazy).'
+tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-splitting, gameshell]
 ---
 
-# MatchShell, GameScreenRegistry, Renderer Contexts & UI Design System
+# GameShell, GameScreenRegistry, Renderer Contexts & UI Design System
 
 > §4.33–§4.36 of the Chimera architecture.
 > Related: [Renderer State Stores](renderer-state-stores.md) · [Scene Transitions & Fade](scene-transitions-fade.md) · [Asset Reference System](asset-reference-system.md) · [Performance HUD & Device Info](performance-hud-device-info.md)
@@ -15,12 +15,12 @@ tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-spli
 
 ### Overview
 
-`MatchShell.tsx` renders the match experience without knowing which game it is rendering. The contract between a game and the engine is `GameScreenRegistry`: a typed object mapping slot names to React component types.
+`GameShell.tsx` renders the match experience without knowing which game it is rendering. The contract between a game and the engine is `GameScreenRegistry`: a typed object mapping slot names to React component types.
 
 ### GameScreenRegistry Interface
 
 ```typescript
-// renderer/components/shell/MatchShell.tsx (exported for game packages to satisfy)
+// renderer/components/shell/GameShell.tsx (exported for game packages to satisfy)
 
 export interface GameScreenRegistry {
     readonly board: React.ComponentType; // Required — primary gameplay view
@@ -69,7 +69,7 @@ export const MatchScreenRegistry: GameScreenRegistry = {
 };
 ```
 
-### MatchShell Resolution
+### GameShell Resolution
 
 ```typescript
 // renderer/app/match/page.tsx
@@ -97,10 +97,10 @@ export function useNavigateToScreen(): (screenKey: string) => void;
 
 These hooks read/write `uiStore.activeScreenKey`. No IPC involved. `SceneRouter` resets the key to `'board'` on every `sceneId` change in `PlayerSnapshot`.
 
-### MatchShell Rendering Contract
+### GameShell Rendering Contract
 
 ```typescript
-interface MatchShellProps {
+interface GameShellProps {
     registry: GameScreenRegistry;
 }
 
@@ -114,21 +114,21 @@ interface MatchShellProps {
  *   6. Delegate scene transitions to SceneRouter (§4.18)
  *   7. Delegate resolved match-result presentation to registry.matchResultBanner when present
  */
-export function MatchShell({ registry }: MatchShellProps): JSX.Element;
+export function GameShell({ registry }: GameShellProps): JSX.Element;
 ```
 
-`registry.hud` is a presentation override only. `MatchShell` derives the common engine control
+`registry.hud` is a presentation override only. `GameShell` derives the common engine control
 surface (`tick`, undo/redo/end-turn disabled states, and guarded handlers) from the projected
 `PlayerSnapshot` plus injected action callbacks. Game HUD components should render those props and
 call `handleUndo`, `handleRedo`, and `handleEndTurn`; they should not construct `engine:undo`,
-`engine:redo`, or `engine:end_turn` actions themselves. If a game omits `hud`, `MatchShell` renders
+`engine:redo`, or `engine:end_turn` actions themselves. If a game omits `hud`, `GameShell` renders
 the engine fallback HUD with the stable `hud-tick`, `undo`, `redo`, and `end-turn` test IDs.
 
 Game-provided HUDs that replace the fallback should preserve those test IDs for the equivalent
 controls when the E2E page object needs to drive the match generically.
 
-When `PlayerSnapshot.matchResult` is non-null, `MatchShell` renders `registry.matchResultBanner`
-with `{ matchResult, localPlayerId }`. If the game omits the slot, `MatchShell` uses the engine
+When `PlayerSnapshot.matchResult` is non-null, `GameShell` renders `registry.matchResultBanner`
+with `{ matchResult, localPlayerId }`. If the game omits the slot, `GameShell` uses the engine
 fallback text (`You won`, `You lose`, or `Draw`). Game-provided result banners should expose
 `data-testid="match-result-banner"` on the banner root and `data-testid="match-result-text"` on the
 primary message to keep Playwright page objects stable across games.
@@ -137,7 +137,7 @@ primary message to keep Playwright page objects stable across games.
 
 | #   | Rule                                                                                                                                                             |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #80 | `MatchShell.tsx` must never import from any `games/*` path. `GameScreenRegistry` is the sole coupling point.                                                     |
+| #80 | `GameShell.tsx` must never import from any `games/*` path. `GameScreenRegistry` is the sole coupling point.                                                      |
 | #81 | `GameScreenRegistry.board` is the only required slot. A game providing only `board` is fully valid.                                                              |
 | #82 | Within-scene panel navigation (`useNavigateToScreen`) is renderer-local state. It must never trigger an IPC call, advance `tick`, or dispatch an `EngineAction`. |
 
@@ -163,16 +163,16 @@ primary message to keep Playwright page objects stable across games.
 export const AssetManagerContext = createContext<AssetManager | null>(null);
 export function useAssetManager(): AssetManager {
     const ctx = useContext(AssetManagerContext);
-    if (!ctx) throw new Error('useAssetManager() must be used inside <MatchShell>.');
+    if (!ctx) throw new Error('useAssetManager() must be used inside <GameShell>.');
     return ctx;
 }
 // Same pattern for ContentDatabaseContext, AudioManagerContext
 ```
 
-### Provider Wiring in MatchShell
+### Provider Wiring in GameShell
 
 ```typescript
-export function MatchShell({ registry }: MatchShellProps): JSX.Element {
+export function GameShell({ registry }: GameShellProps): JSX.Element {
     const assetManager    = useMatchAssetManager();
     const contentDatabase = useMatchContentDatabase();
     const audioManager    = useMatchAudioManager();
@@ -371,7 +371,7 @@ const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 ### Suspense Integration
 
 ```typescript
-// renderer/components/shell/MatchShell.tsx
+// renderer/components/shell/GameShell.tsx
 const ActiveScreen = resolveActiveScreen(registry, activeScreenKey);
 return (
     <React.Suspense fallback={<ScreenLoadingFallback />}>
@@ -387,7 +387,7 @@ return (
 | #   | Rule                                                                                                                                                  |
 | --- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | #87 | Every screen component exported from `games/<name>/screens/index.ts` must be wrapped in `React.lazy()`. Eager static imports defeat the bundle split. |
-| #88 | `MatchShell` wraps every active screen in `<React.Suspense>`. No game screen may assume it renders without a Suspense ancestor.                       |
+| #88 | `GameShell` wraps every active screen in `<React.Suspense>`. No game screen may assume it renders without a Suspense ancestor.                        |
 
 ---
 

@@ -2,27 +2,27 @@
 
 // renderer/app/match/page.tsx
 //
-// Match route — thin shell that mounts MatchShell with the active snapshot.
+// Match route — thin shell that mounts GameShell with the active snapshot.
 // Redirects to /lobby when snapshot is null after lobby-state hydration shows
 // that no session is active. Direct-match boot can load this route before the
 // first snapshot arrives and wait here while the hidden lobby auto-starts.
 //
-// Architecture reference: §4.33–§4.34 — GameScreenRegistry, MatchShell
-// Module boundary tree: renderer/app/match/page.tsx # Thin shell: mounts MatchShell
+// Architecture reference: §4.33–§4.34 — GameScreenRegistry, GameShell
+// Module boundary tree: renderer/app/match/page.tsx # Thin shell: mounts GameShell
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) is consumed here.
-//   #48 — MatchShell is game-agnostic; MatchScreenRegistry is the only
-//          coupling point and lives HERE, not inside MatchShell.
-//   #80 — MatchShell never imports from games/*; the board is passed as
+//   #48 — GameShell is game-agnostic; MatchScreenRegistry is the only
+//          coupling point and lives HERE, not inside GameShell.
+//   #80 — GameShell never imports from games/*; the board is passed as
 //          children (GameScreenRegistry.board rendered by this page).
-//   #88 — MatchShell wraps every screen in React.Suspense (see MatchShell.tsx).
+//   #88 — GameShell wraps every screen in React.Suspense (see GameShell.tsx).
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { type EngineAction, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import { MatchScreenRegistry } from '@chimera/games/tactics/screens/index.js';
-import { MatchShell } from '../../components/shell/MatchShell';
+import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
@@ -73,7 +73,7 @@ export default function MatchPage(): React.ReactElement | null {
     const resolvedPlayerId = snapshot.viewerId;
 
     return (
-        <MatchShell
+        <GameShell
             registry={MatchScreenRegistry}
             snapshot={snapshot}
             currentTick={currentTick}

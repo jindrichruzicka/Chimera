@@ -1,6 +1,6 @@
 'use client';
 
-// renderer/components/shell/MatchShell.tsx
+// renderer/components/shell/GameShell.tsx
 
 import React, { type ReactNode } from 'react';
 import type { MatchResult, PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
@@ -21,7 +21,7 @@ import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
 import { FadeProvider } from './FadeContext.js';
 
-interface MatchShellBaseProps {
+interface GameShellBaseProps {
     readonly children?: ReactNode;
     readonly tick: number;
     readonly canUndo: boolean;
@@ -37,19 +37,19 @@ interface MatchShellBaseProps {
     readonly onEndTurn?: () => void | Promise<void>;
 }
 
-interface MatchShellDefaultHudProps extends MatchShellBaseProps {
+interface GameShellDefaultHudProps extends GameShellBaseProps {
     readonly hud?: undefined;
     readonly snapshot?: PlayerSnapshot;
     readonly sendAction?: SendAction;
 }
 
-interface MatchShellGameHudProps extends MatchShellBaseProps {
+interface GameShellGameHudProps extends GameShellBaseProps {
     readonly hud: GameScreenComponent<GameHudProps>;
     readonly snapshot: PlayerSnapshot;
     readonly sendAction: SendAction;
 }
 
-interface MatchShellRegistryProps {
+interface GameShellRegistryProps {
     readonly registry: GameScreenRegistry;
     readonly snapshot: PlayerSnapshot;
     readonly currentTick?: number;
@@ -66,20 +66,20 @@ interface MatchShellRegistryProps {
     readonly onEndTurn?: () => void | Promise<void>;
 }
 
-export type MatchShellProps =
-    | MatchShellDefaultHudProps
-    | MatchShellGameHudProps
-    | MatchShellRegistryProps;
+export type GameShellProps =
+    | GameShellDefaultHudProps
+    | GameShellGameHudProps
+    | GameShellRegistryProps;
 
-export function MatchShell(props: MatchShellProps): React.ReactElement {
+export function GameShell(props: GameShellProps): React.ReactElement {
     if ('registry' in props) {
-        return <RegistryMatchShell {...props} />;
+        return <RegistryGameShell {...props} />;
     }
 
-    return <MatchShellFrame {...props} />;
+    return <GameShellFrame {...props} />;
 }
 
-function RegistryMatchShell({
+function RegistryGameShell({
     registry,
     snapshot,
     currentTick,
@@ -94,14 +94,14 @@ function RegistryMatchShell({
     onUndo,
     onRedo,
     onEndTurn,
-}: MatchShellRegistryProps): React.ReactElement {
+}: GameShellRegistryProps): React.ReactElement {
     const resolvedAssetManager = useMatchAssetManager(assetManager, assetManifest);
 
     return (
         <AssetManagerContext.Provider value={resolvedAssetManager}>
             <ContentDatabaseProvider value={contentDatabase}>
                 <FadeProvider>
-                    <MatchShellFrame
+                    <GameShellFrame
                         tick={currentTick ?? snapshot.tick}
                         canUndo={snapshot.undoMeta.canUndo}
                         canRedo={snapshot.undoMeta.canRedo}
@@ -127,7 +127,7 @@ function RegistryMatchShell({
                             {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
                         />
-                    </MatchShellFrame>
+                    </GameShellFrame>
                 </FadeProvider>
             </ContentDatabaseProvider>
         </AssetManagerContext.Provider>
@@ -162,14 +162,14 @@ function createUnconfiguredAssetResolver(): AssetResolver {
     return {
         resolve(): string {
             throw new Error(
-                'AssetResolver is not configured for this match; inject an AssetManager into MatchShell.',
+                'AssetResolver is not configured for this match; inject an AssetManager into GameShell.',
             );
         },
     };
 }
 
-function MatchShellFrame(
-    props: MatchShellDefaultHudProps | MatchShellGameHudProps,
+function GameShellFrame(
+    props: GameShellDefaultHudProps | GameShellGameHudProps,
 ): React.ReactElement {
     const {
         children,
@@ -238,7 +238,7 @@ function MatchShellFrame(
         );
 
     return (
-        <main aria-label="Match" style={matchShellRootStyle}>
+        <main aria-label="Match" style={gameShellRootStyle}>
             <section
                 data-testid="match-canvas"
                 aria-label="Match canvas"
@@ -292,11 +292,11 @@ function DefaultMatchHud({
     handleEndTurn,
 }: MatchHudControlsProps): React.ReactElement {
     return (
-        <footer aria-label="Match HUD" style={matchShellHudStyle}>
+        <footer aria-label="Match HUD" style={gameShellHudStyle}>
             <div>
                 Tick <output data-testid="hud-tick">{tick}</output>
             </div>
-            <div style={matchShellActionsStyle}>
+            <div style={gameShellActionsStyle}>
                 <button
                     data-testid="undo"
                     type="button"
@@ -326,14 +326,14 @@ function DefaultMatchHud({
     );
 }
 
-const matchShellRootStyle: React.CSSProperties = {
+const gameShellRootStyle: React.CSSProperties = {
     display: 'grid',
     gridTemplateRows: '1fr auto',
     minHeight: '100vh',
     fontFamily: 'var(--ch-font-ui)',
 };
 
-const matchShellHudStyle: React.CSSProperties = {
+const gameShellHudStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -342,7 +342,7 @@ const matchShellHudStyle: React.CSSProperties = {
     borderTop: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
 };
 
-const matchShellActionsStyle: React.CSSProperties = {
+const gameShellActionsStyle: React.CSSProperties = {
     display: 'flex',
     gap: 'var(--ch-space-xs)',
 };

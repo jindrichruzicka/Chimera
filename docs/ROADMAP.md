@@ -56,7 +56,7 @@ F30–F34. Full Playwright suite green in CI. Covers: Playwright Infrastructure,
 
 ### [M7 — 3D Render Integration (v0.7.0)](roadmap-sections/m7-3d-render-integration-v0.7.0.md)
 
-F35–F42, F50. R3F canvas renders game entities; asset pipeline production-ready; scene transitions end-to-end. Covers: R3F GameCanvas/Camera, Asset Manager, Curves/Tweening/Interaction, UI Design System, Scene Transitions/MatchShell, Audio System, Input/Keybindings, Performance HUD, Device Info.
+F35–F42, F50. R3F canvas renders game entities; asset pipeline production-ready; scene transitions end-to-end. Covers: R3F GameCanvas/Camera, Asset Manager, Curves/Tweening/Interaction, UI Design System, Scene Transitions/GameShell, Audio System, Input/Keybindings, Performance HUD, Device Info.
 
 ### [M8 — Hardening (v1.0.0)](roadmap-sections/m8-hardening-v1.0.0.md)
 

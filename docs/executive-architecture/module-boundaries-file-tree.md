@@ -170,7 +170,7 @@ chimera/
 │       │   └── index.ts             # Creates AIBrain with registered states + initial state
 │       ├── projection/
 │       │   └── VisibilityRules.ts   # Implements the VisibilityRules interface for this game
-│       ├── screens/                 # Game-declared React UI; registered in index.ts; hosted by MatchShell
+│       ├── screens/                 # Game-declared React UI; registered in index.ts; hosted by GameShell
 │       │   ├── index.ts             # Exports GameScreenRegistry { board, hud?, menus?, ... }
 │       │   ├── BoardScreen.tsx      # The one mandatory screen
 │       │   └── *.tsx                # Optional named screens (TechTree, Diplomacy, etc.)
@@ -201,12 +201,12 @@ chimera/
 │   │   ├── layout.tsx
 │   │   ├── page.tsx                 # Main menu entry
 │   │   ├── lobby/page.tsx
-│   │   ├── match/page.tsx           # Thin shell: mounts MatchShell
+│   │   ├── match/page.tsx           # Thin shell: mounts GameShell
 │   │   ├── settings/page.tsx
 │   │   └── debug/page.tsx           # debug-only: Inspector Window UI
 │   ├── components/
 │   │   ├── shell/                   # Engine-provided navigation chrome
-│   │   │   ├── MatchShell.tsx       # Hosts the active game's screen registry; game-agnostic
+│   │   │   ├── GameShell.tsx       # Hosts the active game's screen registry; game-agnostic
 │   │   │   ├── SceneRouter.tsx      # Watches sceneId / sceneTransition; see §4.18
 │   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
@@ -298,7 +298,7 @@ chimera/
 
 - **Invariant #2** — `simulation/` has zero runtime dependencies on React, DOM, or networking.
 - **Invariant #47** — `AssetManager` never imports from `games/*`.
-- **Invariant #48** — `MatchShell.tsx` must never import from any `games/*` path.
+- **Invariant #48** — `GameShell.tsx` must never import from any `games/*` path.
 
 ---
 
