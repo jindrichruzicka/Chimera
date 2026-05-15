@@ -11,7 +11,7 @@ export const defaultTheme = {
                 appearance: 'none',
                 borderRadius: 'var(--ch-radius-sm)',
                 borderStyle: 'solid',
-                borderWidth: '1px',
+                borderWidth: 'var(--ch-border-width-sm)',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 fontFamily: 'var(--ch-font-ui)',

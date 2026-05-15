@@ -132,8 +132,8 @@ describe('PlayerList', () => {
         const notReadyBgColor = notReadyBadge.style.backgroundColor;
 
         expect(readyBgColor).not.toBe(notReadyBgColor);
-        expect(readyBgColor).toContain('rgb'); // Verify a color is set
-        expect(notReadyBgColor).toContain('rgb');
+        expect(readyBgColor).toBe('var(--ch-color-success-surface-muted)');
+        expect(notReadyBgColor).toBe('var(--ch-color-error-surface-soft)');
     });
 
     it('exposes each player ready state on the row data-ready attribute', () => {

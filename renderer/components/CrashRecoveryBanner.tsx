@@ -68,12 +68,12 @@ export function CrashRecoveryBanner(): React.ReactElement | null {
             style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '1rem',
-                padding: '0.75rem 1rem',
-                backgroundColor: '#fffbeb',
-                borderBottom: '1px solid #fcd34d',
-                color: '#92400e',
-                fontFamily: 'system-ui, sans-serif',
+                gap: 'var(--ch-space-md)',
+                padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
+                backgroundColor: 'var(--ch-color-warning-surface)',
+                borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-warning-border)',
+                color: 'var(--ch-color-warning-text)',
+                fontFamily: 'var(--ch-font-ui)',
             }}
         >
             <span>

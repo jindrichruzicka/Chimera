@@ -8,11 +8,35 @@
     --ch-color-text-secondary: #a0a0b0;
     --ch-color-text-disabled: #555577;
     --ch-color-border: #2a2a4a;
+    --ch-color-border-subtle: #ddd;
+    --ch-color-border-muted: #eee;
     --ch-color-success: #4caf50;
+    --ch-color-success-border: #86efac;
+    --ch-color-success-surface: #f0fdf4;
+    --ch-color-success-surface-muted: #d4edda;
+    --ch-color-success-text: #166534;
+    --ch-color-success-text-strong: #155724;
     --ch-color-warning: #ff9800;
+    --ch-color-warning-border: #fcd34d;
+    --ch-color-warning-surface: #fffbeb;
+    --ch-color-warning-text: #92400e;
     --ch-color-error: #f44336;
+    --ch-color-error-border: #fca5a5;
+    --ch-color-error-border-muted: #f5c2c0;
+    --ch-color-error-border-strong: #f87171;
+    --ch-color-error-surface: #fef2f2;
+    --ch-color-error-surface-muted: #fdecea;
+    --ch-color-error-surface-soft: #f8d7da;
+    --ch-color-error-surface-strong: #fee2e2;
+    --ch-color-error-text: #991b1b;
+    --ch-color-error-text-muted: #611a15;
+    --ch-color-error-text-deep: #721c24;
+    --ch-color-error-text-strong: #7f1d1d;
     --ch-color-transparent: transparent;
 
+    --ch-space-screen-reader: 1px;
+    --ch-space-status-padding-y: 6px;
+    --ch-space-status-padding-x: 10px;
     --ch-space-xs: 4px;
     --ch-space-sm: 8px;
     --ch-space-md: 16px;
@@ -23,6 +47,9 @@
     --ch-radius-sm: 4px;
     --ch-radius-md: 8px;
     --ch-radius-lg: 12px;
+    --ch-radius-pill: 999px;
+
+    --ch-border-width-sm: 1px;
 
     --ch-font-ui: 'Inter', system-ui, sans-serif;
     --ch-font-game: 'Cinzel', serif;
@@ -34,7 +61,7 @@
     --ch-font-weight-semibold: 600;
     --ch-line-height-tight: 1.1;
 
-    --ch-button-border-width: 1px;
+    --ch-button-border-width: var(--ch-border-width-sm);
     --ch-button-font-weight: var(--ch-font-weight-semibold);
     --ch-button-line-height: var(--ch-line-height-tight);
     --ch-button-transition:

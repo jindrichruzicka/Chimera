@@ -4,6 +4,20 @@ import tseslint from 'typescript-eslint';
 import prettier from 'eslint-config-prettier';
 import chimeraPlugin from './tools/eslint-plugin-chimera/plugin.cjs';
 import nextPlugin from '@next/eslint-plugin-next';
+import css from '@eslint/css';
+
+const jsRecommendedRulesOff = Object.fromEntries(
+    Object.keys(js.configs.recommended.rules).map((ruleId) => [ruleId, 'off']),
+);
+const typescriptEslintRulesOff = Object.fromEntries(
+    [
+        ...tseslint.configs.recommendedTypeChecked,
+        ...tseslint.configs.stylisticTypeChecked,
+        tseslint.configs.disableTypeChecked,
+    ]
+        .flatMap((config) => Object.keys(config.rules ?? {}))
+        .map((ruleId) => [ruleId, 'off']),
+);
 
 /**
  * Chimera ESLint configuration (flat config, ESLint 9).
@@ -244,6 +258,32 @@ export default tseslint.config(
         files: ['simulation/**/*.test.{ts,tsx}', 'simulation/**/*.spec.{ts,tsx}'],
         rules: {
             'chimera/no-fromfloat-in-simulation': 'off',
+        },
+    },
+
+    // Invariants #86 and #91 — renderer UI and game screens must use
+    // `var(--ch-*)` tokens for design values instead of hardcoded literals.
+    // Rule implementation: tools/eslint-plugin-chimera/rules/no-hardcoded-design-values.ts
+    // Issue: #560
+    {
+        files: ['renderer/**/*.{ts,tsx,js,jsx,mjs}', 'games/*/screens/**/*.{ts,tsx,js,jsx,mjs}'],
+        plugins: { chimera: chimeraPlugin },
+        rules: {
+            'chimera/no-hardcoded-design-values': 'error',
+        },
+    },
+    {
+        files: [
+            'renderer/styles/tokens.css',
+            'renderer/**/*.module.css',
+            'games/*/screens/**/*.module.css',
+        ],
+        language: 'css/css',
+        plugins: { css, chimera: chimeraPlugin },
+        rules: {
+            ...jsRecommendedRulesOff,
+            ...typescriptEslintRulesOff,
+            'chimera/no-hardcoded-design-values': 'error',
         },
     },
 

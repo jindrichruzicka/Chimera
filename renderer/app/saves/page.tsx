@@ -43,23 +43,28 @@ function SaveSlotRow({ slot, onSave, onLoad, onDelete }: SaveSlotRowProps): Reac
             style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '1rem',
-                padding: '0.75rem 1rem',
-                borderBottom: '1px solid #ddd',
+                gap: 'var(--ch-space-md)',
+                padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
+                borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-border-subtle)',
             }}
         >
-            <span style={{ minWidth: '8rem', fontWeight: 'bold' }}>{slot.slotId}</span>
-            <span style={{ minWidth: '4rem' }}>{slot.tick}</span>
+            <span style={{ minWidth: 'calc(var(--ch-space-md) * 8)', fontWeight: 'bold' }}>
+                {slot.slotId}
+            </span>
+            <span style={{ minWidth: 'calc(var(--ch-space-md) * 4)' }}>{slot.tick}</span>
             <span
                 data-testid={`slot-saved-at-${slot.slotId}`}
-                style={{ minWidth: '12rem', color: '#555' }}
+                style={{
+                    minWidth: 'calc(var(--ch-space-md) * 12)',
+                    color: 'var(--ch-color-text-disabled)',
+                }}
             >
                 {savedAtDate}
             </span>
             {slot.label !== undefined && (
                 <span style={{ flex: 1, fontStyle: 'italic' }}>{slot.label}</span>
             )}
-            <span style={{ marginLeft: 'auto', display: 'flex', gap: '0.5rem' }}>
+            <span style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--ch-space-sm)' }}>
                 <button
                     type="button"
                     aria-label={`Save ${slot.slotId}`}
@@ -112,7 +117,12 @@ function NewSaveForm({ gameId, onNewSave }: NewSaveFormProps): React.ReactElemen
     return (
         <form
             onSubmit={handleSubmit}
-            style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginBottom: '1rem' }}
+            style={{
+                display: 'flex',
+                gap: 'var(--ch-space-sm)',
+                alignItems: 'center',
+                marginBottom: 'var(--ch-space-md)',
+            }}
         >
             <label htmlFor="new-save-slot-id" style={{ whiteSpace: 'nowrap' }}>
                 Slot ID
@@ -190,7 +200,9 @@ export default function SavesPage(): React.ReactElement {
 
     if (isLoading) {
         return (
-            <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}>
+            <main
+                style={{ fontFamily: 'var(--ch-font-ui)', padding: 'calc(var(--ch-space-md) * 2)' }}
+            >
                 <h1>Saves</h1>
                 <div role="status" aria-label="Loading save slots">
                     Loading…
@@ -200,18 +212,18 @@ export default function SavesPage(): React.ReactElement {
     }
 
     return (
-        <main style={{ fontFamily: 'system-ui, sans-serif', padding: '2rem' }}>
+        <main style={{ fontFamily: 'var(--ch-font-ui)', padding: 'calc(var(--ch-space-md) * 2)' }}>
             <h1>Saves</h1>
             {error !== null && (
                 <div
                     role="alert"
                     style={{
-                        padding: '0.75rem 1rem',
-                        marginBottom: '1rem',
-                        background: '#fdecea',
-                        border: '1px solid #f5c2c0',
-                        borderRadius: 4,
-                        color: '#611a15',
+                        padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
+                        marginBottom: 'var(--ch-space-md)',
+                        background: 'var(--ch-color-error-surface-muted)',
+                        border: 'var(--ch-border-width-sm) solid var(--ch-color-error-border-muted)',
+                        borderRadius: 'var(--ch-radius-sm)',
+                        color: 'var(--ch-color-error-text-muted)',
                     }}
                 >
                     {error}

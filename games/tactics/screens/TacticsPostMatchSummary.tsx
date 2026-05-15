@@ -13,7 +13,7 @@ const summaryContainerStyle: React.CSSProperties = {
     justifyItems: 'start',
     alignContent: 'start',
     padding: 'var(--ch-space-md)',
-    border: '1px solid var(--ch-color-border)',
+    border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
     background: 'var(--ch-color-surface-raised)',
     boxShadow: 'var(--ch-shadow-md)',
 };

@@ -63,22 +63,26 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: Pl
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
-                padding: '0.5rem',
-                borderBottom: '1px solid #eee',
+                padding: 'var(--ch-space-sm)',
+                borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-border-muted)',
             }}
         >
             <span>
                 {player.displayName || player.playerId}
                 {isLocalPlayer && ' (You)'}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}>
                 <span
                     style={{
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '0.25rem',
-                        backgroundColor: player.ready ? '#d4edda' : '#f8d7da',
-                        color: player.ready ? '#155724' : '#721c24',
-                        fontSize: '0.8rem',
+                        padding: 'var(--ch-space-xs) var(--ch-space-sm)',
+                        borderRadius: 'var(--ch-radius-sm)',
+                        backgroundColor: player.ready
+                            ? 'var(--ch-color-success-surface-muted)'
+                            : 'var(--ch-color-error-surface-soft)',
+                        color: player.ready
+                            ? 'var(--ch-color-success-text-strong)'
+                            : 'var(--ch-color-error-text-deep)',
+                        fontSize: 'var(--ch-font-size-sm)',
                     }}
                 >
                     {player.ready ? 'Ready' : 'Not Ready'}
@@ -91,8 +95,8 @@ function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: Pl
                         }}
                         disabled={isTogglePending}
                         style={{
-                            padding: '0.25rem 0.5rem',
-                            fontSize: '0.8rem',
+                            padding: 'var(--ch-space-xs) var(--ch-space-sm)',
+                            fontSize: 'var(--ch-font-size-sm)',
                         }}
                     >
                         {isTogglePending ? 'Updating...' : 'Toggle Ready'}

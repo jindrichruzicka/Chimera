@@ -16,7 +16,7 @@ const bannerStyle: React.CSSProperties = {
 
 const messageStyle: React.CSSProperties = {
     padding: 'var(--ch-space-sm) var(--ch-space-md)',
-    border: '1px solid var(--ch-color-border)',
+    border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
     background: 'var(--ch-color-surface-raised)',
     color: 'var(--ch-color-text-primary)',
     boxShadow: 'var(--ch-shadow-md)',

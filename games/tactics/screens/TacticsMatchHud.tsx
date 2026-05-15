@@ -56,7 +56,7 @@ const tacticsHudStyle: React.CSSProperties = {
     justifyContent: 'space-between',
     gap: 'var(--ch-space-md)',
     padding: 'var(--ch-space-sm) var(--ch-space-md)',
-    borderTop: '1px solid var(--ch-color-border)',
+    borderTop: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
     fontFamily: 'var(--ch-font-ui)',
 };
 

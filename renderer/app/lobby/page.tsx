@@ -21,7 +21,7 @@ type PendingAction = 'hosting' | 'joining' | 'leaving' | 'starting' | 'updating-
 
 const sectionCardStyle = {
     padding: 'var(--ch-space-md)',
-    border: '1px solid var(--ch-color-border)',
+    border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
     borderRadius: 'var(--ch-radius-sm)',
 };
 
@@ -333,10 +333,10 @@ export default function LobbyPage() {
                                 id="leave-warning"
                                 style={{
                                     position: 'absolute',
-                                    width: '1px',
-                                    height: '1px',
+                                    width: 'var(--ch-space-screen-reader)',
+                                    height: 'var(--ch-space-screen-reader)',
                                     padding: 0,
-                                    margin: '-1px',
+                                    margin: 'calc(var(--ch-space-screen-reader) * -1)',
                                     overflow: 'hidden',
                                     clip: 'rect(0, 0, 0, 0)',
                                     whiteSpace: 'nowrap',

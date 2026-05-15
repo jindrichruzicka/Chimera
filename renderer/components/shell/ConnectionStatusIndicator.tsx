@@ -17,24 +17,24 @@ const STATUS_STYLES: Record<
     }
 > = {
     connected: {
-        borderColor: '#86efac',
-        backgroundColor: '#f0fdf4',
-        color: '#166534',
+        borderColor: 'var(--ch-color-success-border)',
+        backgroundColor: 'var(--ch-color-success-surface)',
+        color: 'var(--ch-color-success-text)',
     },
     connecting: {
-        borderColor: '#fcd34d',
-        backgroundColor: '#fffbeb',
-        color: '#92400e',
+        borderColor: 'var(--ch-color-warning-border)',
+        backgroundColor: 'var(--ch-color-warning-surface)',
+        color: 'var(--ch-color-warning-text)',
     },
     disconnected: {
-        borderColor: '#fca5a5',
-        backgroundColor: '#fef2f2',
-        color: '#991b1b',
+        borderColor: 'var(--ch-color-error-border)',
+        backgroundColor: 'var(--ch-color-error-surface)',
+        color: 'var(--ch-color-error-text)',
     },
     error: {
-        borderColor: '#f87171',
-        backgroundColor: '#fee2e2',
-        color: '#7f1d1d',
+        borderColor: 'var(--ch-color-error-border-strong)',
+        backgroundColor: 'var(--ch-color-error-surface-strong)',
+        color: 'var(--ch-color-error-text-strong)',
     },
 };
 
@@ -64,15 +64,15 @@ export function ConnectionStatusIndicator(): React.ReactElement {
             aria-live="polite"
             style={{
                 position: 'fixed',
-                right: '12px',
-                top: '12px',
-                borderRadius: '999px',
-                border: `1px solid ${statusStyle.borderColor}`,
+                right: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
+                top: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
+                borderRadius: 'var(--ch-radius-pill)',
+                border: `var(--ch-border-width-sm) solid ${statusStyle.borderColor}`,
                 backgroundColor: statusStyle.backgroundColor,
                 color: statusStyle.color,
-                fontSize: '12px',
+                fontSize: 'var(--ch-font-size-sm)',
                 fontWeight: 600,
-                padding: '6px 10px',
+                padding: 'var(--ch-space-status-padding-y) var(--ch-space-status-padding-x)',
                 textTransform: 'capitalize',
                 zIndex: 1000,
             }}

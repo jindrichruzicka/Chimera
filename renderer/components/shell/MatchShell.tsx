@@ -242,7 +242,7 @@ function MatchShellFrame(
             <section
                 data-testid="match-canvas"
                 aria-label="Match canvas"
-                style={{ minHeight: '20rem', position: 'relative' }}
+                style={{ minHeight: 'calc(var(--ch-space-md) * 20)', position: 'relative' }}
             >
                 <React.Suspense fallback={null}>{children}</React.Suspense>
                 {shouldShowResolvedResult && (
@@ -339,7 +339,7 @@ const matchShellHudStyle: React.CSSProperties = {
     justifyContent: 'space-between',
     gap: 'var(--ch-space-md)',
     padding: 'var(--ch-space-sm) var(--ch-space-md)',
-    borderTop: '1px solid var(--ch-color-border)',
+    borderTop: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
 };
 
 const matchShellActionsStyle: React.CSSProperties = {
