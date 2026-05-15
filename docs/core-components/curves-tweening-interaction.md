@@ -68,10 +68,16 @@ useFrame(() => {
 ### Callback Variant
 
 ```typescript
+export interface TweenCallbackHandlers {
+    readonly onTick: (value: number) => void;
+    readonly onComplete: () => void;
+    readonly onCancel: () => void;
+}
+
 export function useTweenCallback(
     durationMs: number,
     easingFn: EasingFn,
-    callbacks: { onTick: (value: number) => void; onComplete: () => void; onCancel: () => void },
+    callbacks: TweenCallbackHandlers,
 ): Pick<TweenState, 'start' | 'stop' | 'isRunning'>;
 ```
 
