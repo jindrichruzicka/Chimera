@@ -85,6 +85,7 @@ class FakeAudioContext {
     public readonly createdPannerNodes: FakePannerNode[] = [];
     public readonly createdSources: FakeAudioBufferSourceNode[] = [];
     public readonly destination = asAudioNode<AudioDestinationNode>(new FakeAudioNode());
+    public readonly close = vi.fn((): Promise<void> => Promise.resolve());
 
     public createGain(): GainNode {
         const node = new FakeGainNode();
@@ -389,6 +390,14 @@ describe('DefaultAudioManager', () => {
         for (const busGain of busGains) {
             expect(busGain.disconnect).toHaveBeenCalledOnce();
         }
+    });
+
+    it('closes the AudioContext when dispose is called', () => {
+        const { context, manager } = createManager();
+
+        manager.dispose();
+
+        expect(context.close).toHaveBeenCalledOnce();
     });
 
     it('creates managers through the public factory', () => {

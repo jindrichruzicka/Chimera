@@ -167,6 +167,7 @@ export class DefaultAudioManager implements AudioManager {
         for (const busId of BUS_IDS) {
             this.getBus(busId).dispose();
         }
+        void this.audioContext.close();
     }
 
     private createBuses(options?: AudioBusOptions): void {
