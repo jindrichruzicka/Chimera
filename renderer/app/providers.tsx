@@ -6,7 +6,7 @@ import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/Asset
 import type { AssetManager } from '../assets/AssetManager';
 import { AssetManagerContext } from '../assets/AssetManagerContext.js';
 import { createDelegatingAssetManager } from '../assets/DelegatingAssetManager';
-import { SetMatchAssetManagerContext } from '../assets/SetMatchAssetManagerContext';
+import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import { createAudioManager, type AudioHandle, type AudioManager } from '../audio/AudioManager';
 import { AudioManagerContext } from '../audio/AudioManagerContext.js';
 
@@ -16,9 +16,9 @@ export interface ProvidersProps {
 
 export function Providers({ children }: ProvidersProps): React.ReactElement {
     // DelegatingAssetManager forwards load/get/registerManifest calls to whatever
-    // match-level AssetManager GameShell registers via SetMatchAssetManagerContext.
-    // This allows the app-level AudioManager to load match-specific audio assets
-    // without owning the match AssetManager lifecycle.
+    // game-level AssetManager GameShell registers via SetGameAssetManagerContext.
+    // This allows the app-level AudioManager to load game-specific audio assets
+    // without owning the game AssetManager lifecycle.
     const delegatingAssetManager = React.useMemo(() => createDelegatingAssetManager(), []);
     const audioManager = React.useMemo(
         () => createAudioManagerForEnvironment(delegatingAssetManager),
@@ -32,7 +32,7 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         };
     }, [audioManager, delegatingAssetManager]);
 
-    const setMatchAssetManager = React.useCallback(
+    const setGameAssetManager = React.useCallback(
         (manager: AssetManager | null) => {
             delegatingAssetManager.setDelegate(manager);
         },
@@ -40,13 +40,13 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
     );
 
     return (
-        <SetMatchAssetManagerContext.Provider value={setMatchAssetManager}>
+        <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
             <AssetManagerContext.Provider value={delegatingAssetManager}>
                 <AudioManagerContext.Provider value={audioManager}>
                     {children}
                 </AudioManagerContext.Provider>
             </AssetManagerContext.Provider>
-        </SetMatchAssetManagerContext.Provider>
+        </SetGameAssetManagerContext.Provider>
     );
 }
 

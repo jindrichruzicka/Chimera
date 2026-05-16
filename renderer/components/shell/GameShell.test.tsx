@@ -8,7 +8,7 @@ import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/prel
 import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { AssetManager } from '../../assets/AssetManager';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
-import { SetMatchAssetManagerContext } from '../../assets/SetMatchAssetManagerContext';
+import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
 import { createAudioManagerSpy } from '../../audio/__test-support__/AudioManagerStubs.js';
 import {
@@ -585,14 +585,14 @@ function wrapWithAudio(
     );
 }
 
-describe('SetMatchAssetManagerContext delegation wiring', () => {
-    it('registers the match AssetManager with the app-level delegate on mount and clears it on unmount', () => {
+describe('SetGameAssetManagerContext delegation wiring', () => {
+    it('registers the game AssetManager with the app-level delegate on mount and clears it on unmount', () => {
         const assetManager = createAssetManagerStub();
-        const setMatchAssetManager = vi.fn();
+        const setGameAssetManager = vi.fn();
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
 
         const { unmount } = render(
-            <SetMatchAssetManagerContext.Provider value={setMatchAssetManager}>
+            <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
                 <AudioManagerContext.Provider value={createAudioManagerSpy()}>
                     <GameShell
                         registry={{ board: () => <div /> }}
@@ -602,17 +602,17 @@ describe('SetMatchAssetManagerContext delegation wiring', () => {
                         assetManager={assetManager}
                     />
                 </AudioManagerContext.Provider>
-            </SetMatchAssetManagerContext.Provider>,
+            </SetGameAssetManagerContext.Provider>,
         );
 
-        expect(setMatchAssetManager).toHaveBeenCalledWith(assetManager);
+        expect(setGameAssetManager).toHaveBeenCalledWith(assetManager);
 
         unmount();
 
-        expect(setMatchAssetManager).toHaveBeenLastCalledWith(null);
+        expect(setGameAssetManager).toHaveBeenLastCalledWith(null);
     });
 
-    it('silently skips delegation wiring when SetMatchAssetManagerContext is not provided', () => {
+    it('silently skips delegation wiring when SetGameAssetManagerContext is not provided', () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
 
         // Should not throw even when the context is absent (tests / non-Providers trees)

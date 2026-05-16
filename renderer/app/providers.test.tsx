@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssetManager } from '../assets/AssetManager';
 import { useAssetManager } from '../assets/AssetManagerContext.js';
 import type { DelegatingAssetManager } from '../assets/DelegatingAssetManager';
-import { SetMatchAssetManagerContext } from '../assets/SetMatchAssetManagerContext';
+import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import type { AudioManager } from '../audio/AudioManager';
 import { useAudioManager } from '../audio/AudioManagerContext.js';
 import { Providers } from './providers';
@@ -115,17 +115,17 @@ describe('Providers', () => {
         expect(providerMocks.createAudioManager).toHaveBeenCalledOnce();
     });
 
-    it('provides SetMatchAssetManagerContext so GameShell can wire its match AssetManager', () => {
-        const matchManager = createMatchAssetManagerStub();
+    it('provides SetGameAssetManagerContext so GameShell can wire its game AssetManager', () => {
+        const gameManager = createGameAssetManagerStub();
         const { unmount } = render(
             <Providers>
-                <DelegateSetterProbe manager={matchManager} />
+                <DelegateSetterProbe manager={gameManager} />
             </Providers>,
         );
 
         const probe = screen.getByTestId('delegate-setter-probe');
-        expect(probe.getAttribute('data-set-match-delegate')).toBe('provided');
-        expect(providerMocks.delegatingAssetManager.setDelegate).toHaveBeenCalledWith(matchManager);
+        expect(probe.getAttribute('data-set-game-delegate')).toBe('provided');
+        expect(providerMocks.delegatingAssetManager.setDelegate).toHaveBeenCalledWith(gameManager);
 
         unmount();
 
@@ -159,7 +159,7 @@ describe('Providers', () => {
 function ContextProbe(): React.ReactElement {
     const assetManager = useAssetManager();
     const audioManager = useAudioManager();
-    const setMatchAssetManager = React.useContext(SetMatchAssetManagerContext);
+    const setGameAssetManager = React.useContext(SetGameAssetManagerContext);
     const expectedAudioManager = providerMocks.audioManager as unknown as AudioManager;
     const expectedAssetManager =
         providerMocks.delegatingAssetManager as unknown as DelegatingAssetManager;
@@ -169,28 +169,28 @@ function ContextProbe(): React.ReactElement {
             data-testid="provider-probe"
             data-asset-manager={assetManager === expectedAssetManager ? 'provided' : 'wrong'}
             data-audio-manager={audioManager === expectedAudioManager ? 'provided' : 'wrong'}
-            data-set-match-delegate={
-                typeof setMatchAssetManager === 'function' ? 'provided' : 'missing'
+            data-set-game-delegate={
+                typeof setGameAssetManager === 'function' ? 'provided' : 'missing'
             }
         />
     );
 }
 
 function DelegateSetterProbe({ manager }: { readonly manager: AssetManager }): React.ReactElement {
-    const setMatchAssetManager = React.useContext(SetMatchAssetManagerContext);
+    const setGameAssetManager = React.useContext(SetGameAssetManagerContext);
 
     React.useEffect(() => {
-        setMatchAssetManager?.(manager);
+        setGameAssetManager?.(manager);
         return () => {
-            setMatchAssetManager?.(null);
+            setGameAssetManager?.(null);
         };
-    }, [manager, setMatchAssetManager]);
+    }, [manager, setGameAssetManager]);
 
     return (
         <div
             data-testid="delegate-setter-probe"
-            data-set-match-delegate={
-                typeof setMatchAssetManager === 'function' ? 'provided' : 'missing'
+            data-set-game-delegate={
+                typeof setGameAssetManager === 'function' ? 'provided' : 'missing'
             }
         />
     );
@@ -210,7 +210,7 @@ function NoopAudioProbe(): React.ReactElement {
     );
 }
 
-function createMatchAssetManagerStub(): AssetManager {
+function createGameAssetManagerStub(): AssetManager {
     return {
         registerManifest: vi.fn(),
         preloadCritical: vi.fn(async () => undefined),

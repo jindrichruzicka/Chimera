@@ -19,7 +19,7 @@ import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
 import type { AudioManager } from '../../audio/AudioManager.js';
 import { useAudioManager } from '../../audio/AudioManagerContext.js';
-import { SetMatchAssetManagerContext } from '../../assets/SetMatchAssetManagerContext';
+import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
@@ -99,7 +99,7 @@ function RegistryGameShell({
     onRedo,
     onEndTurn,
 }: GameShellRegistryProps): React.ReactElement {
-    const resolvedAssetManager = useMatchAssetManager(assetManager, assetManifest);
+    const resolvedAssetManager = useGameAssetManager(assetManager, assetManifest);
     const eventAudioBinding = registry.eventAudioBinding;
     const audioManager = useAudioManager();
     const isMatchEnded = snapshot.phase === 'ended';
@@ -154,15 +154,15 @@ function RegistryGameShell({
     );
 }
 
-function useMatchAssetManager(
+function useGameAssetManager(
     injectedAssetManager: AssetManager | undefined,
     assetManifest: AssetManifest | undefined,
 ): AssetManager {
-    // SetMatchAssetManagerContext is provided by Providers and allows GameShell to wire the
-    // match-level AssetManager into the app-level DelegatingAssetManager so the AudioManager
-    // (which is app-level) can load match-specific audio assets.  If the context is absent
+    // SetGameAssetManagerContext is provided by Providers and allows GameShell to wire the
+    // game-level AssetManager into the app-level DelegatingAssetManager so the AudioManager
+    // (which is app-level) can load game-specific audio assets.  If the context is absent
     // (e.g. in unit tests that don't mount Providers), the wiring is simply skipped.
-    const setMatchAssetManager = React.useContext(SetMatchAssetManagerContext);
+    const setGameAssetManager = React.useContext(SetGameAssetManagerContext);
 
     const assetManager = React.useMemo(
         () => injectedAssetManager ?? createAssetManager(createUnconfiguredAssetResolver()),
@@ -175,13 +175,13 @@ function useMatchAssetManager(
         }
     }, [assetManager, assetManifest]);
 
-    // Register the match AssetManager as the active delegate for the app-level AudioManager.
+    // Register the game AssetManager as the active delegate for the app-level AudioManager.
     React.useEffect(() => {
-        setMatchAssetManager?.(assetManager);
+        setGameAssetManager?.(assetManager);
         return () => {
-            setMatchAssetManager?.(null);
+            setGameAssetManager?.(null);
         };
-    }, [assetManager, setMatchAssetManager]);
+    }, [assetManager, setGameAssetManager]);
 
     React.useEffect(() => {
         return () => {

@@ -173,9 +173,9 @@ export function useAssetManager(): AssetManager {
 
 ```typescript
 export function GameShell({ registry }: GameShellProps): JSX.Element {
-    const assetManager    = useMatchAssetManager();
-    const contentDatabase = useMatchContentDatabase();
-    const audioManager    = useMatchAudioManager();
+    const assetManager    = useGameAssetManager();
+    const contentDatabase = useGameContentDatabase();
+    const audioManager    = useGameAudioManager();
 
     return (
         <AssetManagerContext.Provider value={assetManager}>
