@@ -224,6 +224,10 @@ function getSettingsVolume(id: AudioBusId, audio: AudioSettingsSnapshot): number
         case 'sfx':
             return audio.sfxVolume;
         case 'voice':
+            // EngineSettings.audio has no voiceVolume field (§4.13), so the voice bus
+            // is intentionally excluded from settings-driven gain.  If a voiceVolume
+            // slider is added to EngineSettings in a future milestone, add the field
+            // to AudioSettingsSnapshot and return it here.
             return null;
     }
 }
