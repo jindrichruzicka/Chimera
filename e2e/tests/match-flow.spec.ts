@@ -14,12 +14,12 @@
  * never by directly mutating tick.
  */
 import { test, expect } from '../fixtures/game.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 test.describe('Match flow', () => {
     test('host and client reach game-over state', async ({ hostWindow, clientWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
-        const clientMatch = new MatchPage(clientWindow);
+        const hostMatch = new GamePage(hostWindow);
+        const clientMatch = new GamePage(clientWindow);
 
         await hostMatch.revealAdjacentTile();
         await hostMatch.attackAdjacentEnemy();

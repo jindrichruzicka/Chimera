@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { test as lobbyTest } from './lobby.fixture';
 import { LobbyPage } from '../pages/LobbyPage';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 export type E2eFirstPlayer = 'host' | 'client';
 
@@ -89,8 +89,8 @@ async function advanceToMatch(
     // render the Match screen before the URL reflects `/match`. Gate on
     // visible match UI instead of URL assertions.
 
-    const hostMatch = new MatchPage(hostWindow);
-    const clientMatch = new MatchPage(clientWindow);
+    const hostMatch = new GamePage(hostWindow);
+    const clientMatch = new GamePage(clientWindow);
     await hostMatch.canvas.waitFor({ state: 'visible' });
     await clientMatch.canvas.waitFor({ state: 'visible' });
 }

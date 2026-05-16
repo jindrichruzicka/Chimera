@@ -72,7 +72,7 @@ export const MatchScreenRegistry: GameScreenRegistry = {
 ### GameShell Resolution
 
 ```typescript
-// renderer/app/match/page.tsx
+// renderer/app/game/page.tsx
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
         case 'tactics':
@@ -342,15 +342,15 @@ renderer/
 
 ### Two Split Tiers
 
-| Boundary                         | Mechanism          | When loaded                                    |
-| -------------------------------- | ------------------ | ---------------------------------------------- |
-| **Game registry module**         | Dynamic `import()` | When match page mounts; after game ID is known |
-| **Individual screen components** | `React.lazy()`     | On first render of that screen                 |
+| Boundary                         | Mechanism          | When loaded                                   |
+| -------------------------------- | ------------------ | --------------------------------------------- |
+| **Game registry module**         | Dynamic `import()` | When game page mounts; after game ID is known |
+| **Individual screen components** | `React.lazy()`     | On first render of that screen                |
 
 ### Registry-Level Split
 
 ```typescript
-// renderer/app/match/page.tsx
+// renderer/app/game/page.tsx
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
         case 'tactics':

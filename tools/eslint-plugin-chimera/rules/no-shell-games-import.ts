@@ -10,7 +10,7 @@
  *      exclusively as side-effects of game registry initialisation.
  *
  *   2. Any import from a games package path in a shell page component
- *      (Invariant #94). Shell pages must be game-agnostic; match/page delegates
+ *      (Invariant #94). Shell pages must be game-agnostic; game/page delegates
  *      game registry resolution to renderer-owned loader helpers.
  *
  * Architecture reference: section 4.35 UI Design System, 4.37 Shell Pages UI Contract
@@ -32,7 +32,7 @@ function normalizeFilename(filename: string): string {
  */
 function isShellPage(filename: string): boolean {
     const n = normalizeFilename(filename);
-    const SHELL_DIRS = ['main-menu', 'lobby', 'match', 'settings', 'saves'];
+    const SHELL_DIRS = ['main-menu', 'lobby', 'game', 'settings', 'saves'];
     return SHELL_DIRS.some(
         (dir) => n.includes(`/app/${dir}/`) || n.includes(`renderer/app/${dir}/`),
     );

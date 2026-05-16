@@ -15,7 +15,7 @@
 import { test, expect } from '../fixtures/game.fixture';
 import { getHostSnapshot } from '../helpers/ipc-spy';
 import { assertNoLeakedFields } from '../helpers/snapshot-assert';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 type FogHiddenMarker = Readonly<{ readonly __fogHidden?: boolean }>;
 const OPPONENT_UNIT_ID = 'unit-2';
@@ -49,7 +49,7 @@ test.describe('State obfuscation', () => {
         expect(fogHiddenEntities).toHaveLength(0);
         expect(readProjectedEntity(snapshot, OPPONENT_UNIT_ID)).toBeUndefined();
 
-        const match = new MatchPage(hostWindow);
+        const match = new GamePage(hostWindow);
         await match.revealAdjacentTile();
 
         await expect

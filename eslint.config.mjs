@@ -318,7 +318,7 @@ export default tseslint.config(
         files: [
             'renderer/app/main-menu/**/*.{ts,tsx,js,jsx,mjs}',
             'renderer/app/lobby/**/*.{ts,tsx,js,jsx,mjs}',
-            'renderer/app/match/**/*.{ts,tsx,js,jsx,mjs}',
+            'renderer/app/game/**/*.{ts,tsx,js,jsx,mjs}',
             'renderer/app/settings/**/*.{ts,tsx,js,jsx,mjs}',
             'renderer/app/saves/**/*.{ts,tsx,js,jsx,mjs}',
         ],

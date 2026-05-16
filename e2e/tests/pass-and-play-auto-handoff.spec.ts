@@ -14,7 +14,7 @@
  *   #8 — Each host-window view is a projected PlayerSnapshot for the active seat.
  */
 import { test, expect } from '../fixtures/direct-match.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 test.describe('Pass-and-play auto handoff', () => {
     test.use({ passAndPlay: true });
@@ -22,7 +22,7 @@ test.describe('Pass-and-play auto handoff', () => {
     test('end-turn automatically hands the host window between local seats', async ({
         hostWindow,
     }) => {
-        const match = new MatchPage(hostWindow);
+        const match = new GamePage(hostWindow);
 
         await match.moveOwnedUnit();
         await expect(match.undoButton).toBeEnabled();

@@ -1,5 +1,5 @@
 /**
- * Cross-reference guard: asserts every `getByTestId` string in MatchPage.ts
+ * Cross-reference guard: asserts every `getByTestId` string in GamePage.ts
  * has a matching `data-testid="..."` attribute in the renderer game shell
  * source. This prevents silent POM/renderer testid drift — the same class of
  * bug that caused BLOCK-1 in the F31 review (documented in
@@ -15,9 +15,9 @@ import { describe, expect, it } from 'vitest';
 
 const workspaceRoot = path.resolve(import.meta.dirname, '../..');
 
-describe('MatchPage POM — testid alignment with renderer', () => {
-    it('every getByTestId call in MatchPage.ts resolves against a data-testid in the renderer game shell', () => {
-        const pomSource = readFileSync(path.join(workspaceRoot, 'e2e/pages/MatchPage.ts'), 'utf-8');
+describe('GamePage POM — testid alignment with renderer', () => {
+    it('every getByTestId call in GamePage.ts resolves against a data-testid in the renderer game shell', () => {
+        const pomSource = readFileSync(path.join(workspaceRoot, 'e2e/pages/GamePage.ts'), 'utf-8');
         const rendererSources = [
             readFileSync(
                 path.join(workspaceRoot, 'renderer/components/shell/GameShell.tsx'),
@@ -63,7 +63,7 @@ describe('MatchPage POM — testid alignment with renderer', () => {
         for (const testId of pomTestIds) {
             expect(
                 rendererSource,
-                `MatchPage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from renderer/components/shell/GameShell.tsx`,
+                `GamePage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from renderer/components/shell/GameShell.tsx`,
             ).toContain(`data-testid="${testId}"`);
         }
     });

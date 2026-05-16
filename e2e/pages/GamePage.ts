@@ -1,6 +1,6 @@
 import type { Locator, Page } from '@playwright/test';
 
-export class MatchPage {
+export class GamePage {
     readonly canvas: Locator;
     readonly undoButton: Locator;
     readonly redoButton: Locator;

@@ -6,7 +6,7 @@
  *
  * Verifies the full save → close → relaunch → load lifecycle:
  *   1. Launch a single-player (pass-and-play) match.
- *   2. Play exactly 3 turns via MatchPage actions to advance the simulation tick.
+ *   2. Play exactly 3 turns via GamePage actions to advance the simulation tick.
  *   3. Save via chimera:saves:save IPC; read saved slot/tick from __e2eHooks.
  *   4. Close the Electron process.
  *   5. Relaunch using the captured process args + env (same userData dir).
@@ -34,7 +34,7 @@ import { expect } from '@playwright/test';
 import { launchE2eElectronApplication, test as electronTest } from '../fixtures/electron.fixture';
 import { getLastSavedSlotId, getLastSavedTick, getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 // ─── Renderer bridge types ────────────────────────────────────────────────────
 // Derived from electron/preload/api-types.ts without importing from that module.
@@ -116,7 +116,7 @@ test.describe('Save / load', () => {
         saveLoadApp,
         saveLoadWindow,
     }) => {
-        const match = new MatchPage(saveLoadWindow);
+        const match = new GamePage(saveLoadWindow);
 
         // Wait for the match canvas — direct-match boot may need a moment.
         await expect(match.canvas).toBeVisible({ timeout: 30_000 });
@@ -164,7 +164,7 @@ test.describe('Save / load', () => {
             // applyRestoredFile silently no-ops when activeSession === null;
             // the canvas becoming visible is the reliable signal that both
             // local seats are ready and auto-start has fired.
-            await expect(new MatchPage(relaunchedWindow).canvas).toBeVisible({ timeout: 30_000 });
+            await expect(new GamePage(relaunchedWindow).canvas).toBeVisible({ timeout: 30_000 });
 
             // Load the saved slot — dispatches load via IPC (Invariant #24).
             await loadSavedState(relaunchedWindow, slotId);

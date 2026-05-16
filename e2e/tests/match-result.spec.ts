@@ -6,15 +6,15 @@
  * StateProjector, PlayerSnapshot, and GameShell.
  */
 import { test, expect } from '../fixtures/direct-match.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 test.describe('Match result propagation', () => {
     test('host wins: host resolves win outcome and client resolves loss outcome', async ({
         hostWindow,
         clientWindow,
     }) => {
-        const hostMatch = new MatchPage(hostWindow);
-        const clientMatch = new MatchPage(clientWindow);
+        const hostMatch = new GamePage(hostWindow);
+        const clientMatch = new GamePage(clientWindow);
 
         await hostMatch.revealAdjacentTile();
         await hostMatch.attackAdjacentEnemy();
@@ -38,8 +38,8 @@ test.describe('Match result propagation', () => {
             hostWindow,
             clientWindow,
         }) => {
-            const hostMatch = new MatchPage(hostWindow);
-            const clientMatch = new MatchPage(clientWindow);
+            const hostMatch = new GamePage(hostWindow);
+            const clientMatch = new GamePage(clientWindow);
 
             await clientMatch.revealAdjacentTile();
             await clientMatch.attackAdjacentEnemy();

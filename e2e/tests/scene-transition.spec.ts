@@ -11,7 +11,7 @@
  */
 import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/direct-match.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 interface HostSnapshotView {
     readonly tick: number;
@@ -92,8 +92,8 @@ test('host scene_prepare transitions host and client into post-match', async ({
     hostWindow,
     clientWindow,
 }) => {
-    const hostMatch = new MatchPage(hostWindow);
-    const clientMatch = new MatchPage(clientWindow);
+    const hostMatch = new GamePage(hostWindow);
+    const clientMatch = new GamePage(clientWindow);
 
     await requestPostMatchScene(hostApp, hostWindow);
     // useFadeTransition in each SceneRouter automatically sends engine:scene_ready

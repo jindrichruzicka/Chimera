@@ -31,9 +31,9 @@ const ruleTester = new RuleTester({
 ruleTester.run('chimera/no-shell-games-import', rule, {
     // ── Valid — rule must NOT fire ───────────────────────────────────────────
     valid: [
-        // match/page.tsx may depend on renderer-owned game loading helpers.
+        // game/page.tsx may depend on renderer-owned game loading helpers.
         {
-            filename: 'renderer/app/match/page.tsx',
+            filename: 'renderer/app/game/page.tsx',
             code: `import { loadRendererGame } from '../../game/rendererGameRegistry';`,
         },
         // Shell pages may import from renderer/ — only games/* is blocked
@@ -96,9 +96,9 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
             code: `import { MatchScreenRegistry } from 'games/tactics/screens/index';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
-        // Invariant #94: match page importing from games/* directly
+        // Invariant #94: game page importing from games/* directly
         {
-            filename: 'renderer/app/match/page.tsx',
+            filename: 'renderer/app/game/page.tsx',
             code: `import { MatchScreenRegistry } from 'games/tactics/screens/index';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },

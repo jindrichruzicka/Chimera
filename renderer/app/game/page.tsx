@@ -1,14 +1,14 @@
 'use client';
 
-// renderer/app/match/page.tsx
+// renderer/app/game/page.tsx
 //
-// Match route — thin shell that mounts GameShell with the active snapshot.
+// Game route — thin shell that mounts GameShell with the active snapshot.
 // Redirects to /lobby when snapshot is null after lobby-state hydration shows
 // that no session is active. Direct-match boot can load this route before the
 // first snapshot arrives and wait here while the hidden lobby auto-starts.
 //
 // Architecture reference: §4.33–§4.34 — GameScreenRegistry, GameShell
-// Module boundary tree: renderer/app/match/page.tsx # Thin shell: mounts GameShell
+// Module boundary tree: renderer/app/game/page.tsx # Thin shell: mounts GameShell
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) is consumed here.
@@ -28,7 +28,7 @@ import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGa
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 
-type MatchActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
+type GameActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
 
 type RendererGameLoadState =
     | { readonly status: 'idle' }
@@ -36,7 +36,7 @@ type RendererGameLoadState =
     | { readonly status: 'loaded'; readonly gameId: string; readonly game: LoadedRendererGame }
     | { readonly status: 'error'; readonly gameId: string; readonly error: Error };
 
-export default function MatchPage(): React.ReactElement | null {
+export default function GamePage(): React.ReactElement | null {
     const router = useRouter();
     const snapshot = useGameStore((state) => state.snapshot);
     const currentTick = useGameStore((state) => state.currentTick);
@@ -69,7 +69,7 @@ export default function MatchPage(): React.ReactElement | null {
     const dispatchMatchAction = (
         snapshotForAction: PlayerSnapshot,
         playerId: NonNullable<PlayerSnapshot['viewerId']>,
-        type: MatchActionType,
+        type: GameActionType,
         payload: Record<string, unknown>,
     ): void => {
         const actionTick = typeof currentTick === 'number' ? currentTick : snapshotForAction.tick;

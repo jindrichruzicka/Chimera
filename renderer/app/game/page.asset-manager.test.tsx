@@ -15,7 +15,7 @@ import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js
 import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
 
 import type { AssetManager } from '../../assets/AssetManager';
-import MatchPage from './page';
+import GamePage from './page';
 
 const audioRefs = vi.hoisted(() => ({
     step: 'tactics/audio/sfx/step.wav' as AssetRef<AudioClipAsset>,
@@ -109,9 +109,9 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('MatchPage asset wiring', () => {
+describe('GamePage asset wiring', () => {
     it('passes a manifest-backed AssetManager from the active game loader into GameShell', async () => {
-        render(<MatchPage />);
+        render(<GamePage />);
 
         expect(await screen.findByTestId('mock-game-shell')).toBeInTheDocument();
         expect(loadRendererGameMock).toHaveBeenCalledWith('tactics');

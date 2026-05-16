@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Locator, Page } from '@playwright/test';
-import { MatchPage } from './MatchPage';
+import { GamePage } from './GamePage';
 
 interface WaitForFunctionCall {
     readonly tick: number;
@@ -49,11 +49,11 @@ const buildPageDouble = (tickText = '0'): BuildPageDoubleResult => {
     };
 };
 
-describe('MatchPage', () => {
+describe('GamePage', () => {
     it('binds all match locators using test ids', () => {
         const { page, requestedTestIds } = buildPageDouble();
 
-        const matchPage = new MatchPage(page);
+        const matchPage = new GamePage(page);
 
         expect(matchPage.canvas).toBeDefined();
         expect(matchPage.undoButton).toBeDefined();
@@ -89,7 +89,7 @@ describe('MatchPage', () => {
 
     it('parses the current HUD tick as an integer', async () => {
         const { page } = buildPageDouble('42');
-        const matchPage = new MatchPage(page);
+        const matchPage = new GamePage(page);
 
         const tick = await matchPage.currentTick();
 
@@ -98,7 +98,7 @@ describe('MatchPage', () => {
 
     it('waits for a target tick with a default timeout of 30 seconds', async () => {
         const { page, waitForFunctionCalls } = buildPageDouble();
-        const matchPage = new MatchPage(page);
+        const matchPage = new GamePage(page);
 
         await matchPage.waitForTick(12);
 
@@ -107,7 +107,7 @@ describe('MatchPage', () => {
 
     it('waits for a target tick with a custom timeout', async () => {
         const { page, waitForFunctionCalls } = buildPageDouble();
-        const matchPage = new MatchPage(page);
+        const matchPage = new GamePage(page);
 
         await matchPage.waitForTick(17, 5_000);
 

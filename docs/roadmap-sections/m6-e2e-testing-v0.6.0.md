@@ -21,7 +21,7 @@ Set up `e2e/playwright.config.ts`, `global-setup.ts`, `CHIMERA_E2E=1` flag, and 
 
 ## F31 — Page Object Model `§13.6`
 
-Implement `MainMenuPage`, `LobbyPage`, `MatchPage`, and `SettingsPage` page objects covering all primary interactions. Add `data-testid` attributes to all engine shell components.
+Implement `MainMenuPage`, `LobbyPage`, `GamePage`, and `SettingsPage` page objects covering all primary interactions. Add `data-testid` attributes to all engine shell components.
 
 ---
 

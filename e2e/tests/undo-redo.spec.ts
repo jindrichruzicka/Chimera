@@ -12,14 +12,14 @@
  * the spec verifies the UI reflects canUndo=false / canRedo=false, proving no
  * side-door undo/redo path was taken.
  *
- * All interactions go through MatchPage POM locators and hostWindow only.
+ * All interactions go through GamePage POM locators and hostWindow only.
  */
 import { test, expect } from '../fixtures/direct-match.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 test.describe('Undo/redo', () => {
     test('undo reflects canUndo=false after exhausting turn history', async ({ hostWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
+        const hostMatch = new GamePage(hostWindow);
 
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
@@ -32,7 +32,7 @@ test.describe('Undo/redo', () => {
     });
 
     test('redo reflects canRedo=false after exhausting redo history', async ({ hostWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
+        const hostMatch = new GamePage(hostWindow);
 
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
@@ -51,8 +51,8 @@ test.describe('Undo/redo', () => {
         hostWindow,
         clientWindow,
     }) => {
-        const hostMatch = new MatchPage(hostWindow);
-        const clientMatch = new MatchPage(clientWindow);
+        const hostMatch = new GamePage(hostWindow);
+        const clientMatch = new GamePage(clientWindow);
 
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
@@ -66,8 +66,8 @@ test.describe('Undo/redo', () => {
         test.use({ firstPlayer: 'client' });
 
         test('host cannot undo when client goes first', async ({ hostWindow, clientWindow }) => {
-            const hostMatch = new MatchPage(hostWindow);
-            const clientMatch = new MatchPage(clientWindow);
+            const hostMatch = new GamePage(hostWindow);
+            const clientMatch = new GamePage(clientWindow);
 
             await clientWindow.getByTestId('selectable-unit').first().click();
             await clientWindow.getByTestId('move-target').first().click();

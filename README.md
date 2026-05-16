@@ -90,7 +90,7 @@ e2e/
 │   ├── ws-inspector.ts           # WebSocket frame tap
 │   ├── snapshot-assert.ts        # assertNoLeakedFields, assertChecksumMatch, assertTickAdvanced
 │   └── tick-driver.ts            # Programmatic tick dispatch
-├── pages/                        # Page Object Model (MainMenuPage, LobbyPage, MatchPage, SettingsPage)
+├── pages/                        # Page Object Model (MainMenuPage, LobbyPage, GamePage, SettingsPage)
 └── tests/
     ├── lobby.spec.ts
     ├── match-flow.spec.ts

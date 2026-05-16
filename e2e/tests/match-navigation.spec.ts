@@ -6,7 +6,7 @@
  */
 import { test as gameTest, expect } from '../fixtures/game.fixture';
 import { test as electronTest } from '../fixtures/electron.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 import { LobbyPage } from '../pages/LobbyPage';
 import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
 
@@ -15,8 +15,8 @@ const MATCH_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/match
 gameTest(
     'lobby start navigates host and client into the registry GameShell',
     async ({ hostWindow, clientWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
-        const clientMatch = new MatchPage(clientWindow);
+        const hostMatch = new GamePage(hostWindow);
+        const clientMatch = new GamePage(clientWindow);
 
         await expect(hostMatch.canvas).toBeVisible();
         await expect(clientMatch.canvas).toBeVisible();

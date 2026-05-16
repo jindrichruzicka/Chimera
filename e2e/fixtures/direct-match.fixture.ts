@@ -26,7 +26,7 @@
 import type { ElectronApplication, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 import { launchE2eElectronApplication, test as electronTest } from './electron.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 export type E2eFirstPlayer = 'host' | 'client';
 
@@ -164,8 +164,8 @@ export const test = electronTest.extend<
     // trigger dependency resolution.
     _matchStarted: [
         async ({ hostWindow, clientWindow }, use) => {
-            const hostMatch = new MatchPage(hostWindow);
-            const clientMatch = new MatchPage(clientWindow);
+            const hostMatch = new GamePage(hostWindow);
+            const clientMatch = new GamePage(clientWindow);
 
             // Both windows load /match directly; MatchPage waits for the
             // first snapshot while the hidden direct-match lobby auto-starts.

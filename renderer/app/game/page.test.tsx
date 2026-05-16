@@ -1,16 +1,16 @@
 // @vitest-environment jsdom
-// renderer/app/match/page.test.tsx
+// renderer/app/game/page.test.tsx
 //
-// Unit tests for the match route page.
+// Unit tests for the game route page.
 //
-// Tests written first — confirmed RED before match/page.tsx was created.
+// Tests written first — confirmed RED before game/page.tsx was created.
 //
 // Architecture reference: §4.33–§4.34 — GameScreenRegistry, GameShell
-// Task: issue #494 — Extract match UI into renderer/app/match/page.tsx
+// Task: issue #494 — Extract match UI into renderer/app/game/page.tsx
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
-//   #48 — GameShell is game-agnostic; match/page receives renderer game
+//   #48 — GameShell is game-agnostic; game/page receives renderer game
 //          modules from renderer/game/rendererGameRegistry.
 //   #80 — Verified by the board being injected via registry prop.
 
@@ -31,7 +31,7 @@ import type {
 } from '@chimera/shared/game-screen-contract.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Providers } from '../providers';
-import MatchPage from './page';
+import GamePage from './page';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
 
@@ -131,11 +131,11 @@ const testRegistry: GameScreenRegistry = {
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
-function renderMatchPage(): ReturnType<typeof render> {
+function renderGamePage(): ReturnType<typeof render> {
     return render(
         <Providers>
             <ThemeProvider>
-                <MatchPage />
+                <GamePage />
             </ThemeProvider>
         </Providers>,
     );
@@ -204,7 +204,7 @@ describe('MatchPage — redirect', () => {
     it('calls router.replace("/lobby") when snapshot is null', () => {
         mockSnapshot = null;
         mockLobbyState = null;
-        renderMatchPage();
+        renderGamePage();
         expect(mockReplace).toHaveBeenCalledWith('/lobby');
     });
 
@@ -213,7 +213,7 @@ describe('MatchPage — redirect', () => {
         mockHasLoadedInitialLobbyState = false;
         mockLobbyState = null;
 
-        renderMatchPage();
+        renderGamePage();
 
         expect(mockReplace).not.toHaveBeenCalled();
     });
@@ -222,7 +222,7 @@ describe('MatchPage — redirect', () => {
         mockSnapshot = null;
         mockLobbyState = makeLobbyState();
 
-        renderMatchPage();
+        renderGamePage();
 
         expect(mockReplace).not.toHaveBeenCalled();
     });
@@ -230,13 +230,13 @@ describe('MatchPage — redirect', () => {
     it('renders nothing visible when snapshot is null', () => {
         mockSnapshot = null;
         mockLobbyState = null;
-        renderMatchPage();
+        renderGamePage();
         expect(screen.queryByTestId('match-canvas')).toBeNull();
     });
 
     it('does not redirect when snapshot is active', async () => {
         mockSnapshot = makeSnapshot();
-        renderMatchPage();
+        renderGamePage();
         await screen.findByTestId('match-canvas');
         expect(mockReplace).not.toHaveBeenCalled();
     });
@@ -246,7 +246,7 @@ describe('MatchPage — rendering', () => {
     it('loads the active game renderer bundle from the lobby game id', async () => {
         mockLobbyState = makeLobbyState('space-arena');
         mockSnapshot = makeSnapshot();
-        renderMatchPage();
+        renderGamePage();
 
         await screen.findByTestId('match-canvas');
 
@@ -255,38 +255,38 @@ describe('MatchPage — rendering', () => {
 
     it('renders GameShell (match-canvas testid) when snapshot is active', async () => {
         mockSnapshot = makeSnapshot();
-        renderMatchPage();
+        renderGamePage();
         expect(await screen.findByTestId('match-canvas')).toBeTruthy();
     });
 
     it('renders the game board inside GameShell', async () => {
         mockSnapshot = makeSnapshot();
-        renderMatchPage();
+        renderGamePage();
         expect(await screen.findByTestId('test-board')).toBeTruthy();
     });
 
     it('displays the current tick in hud-tick', async () => {
         mockSnapshot = makeSnapshot({ tick: 42 });
         mockCurrentTick = 43;
-        renderMatchPage();
+        renderGamePage();
         expect((await screen.findByTestId('hud-tick')).textContent).toBe('43');
     });
 
     it('renders the HUD override from the active game registry', async () => {
         mockSnapshot = makeSnapshot({ tick: 42 });
-        renderMatchPage();
+        renderGamePage();
         expect(await screen.findByTestId('registry-hud')).toBeTruthy();
     });
 
     it('renders match result banner when phase is ended', async () => {
         mockSnapshot = makeSnapshot({ phase: gamePhase('ended') });
-        renderMatchPage();
+        renderGamePage();
         expect(await screen.findByTestId('match-result-banner')).toBeTruthy();
     });
 
     it('does not render lobby heading', async () => {
         mockSnapshot = makeSnapshot();
-        renderMatchPage();
+        renderGamePage();
         await screen.findByTestId('match-canvas');
         expect(screen.queryByRole('heading', { name: 'Multiplayer Lobby' })).toBeNull();
     });
@@ -296,7 +296,7 @@ describe('MatchPage — action dispatch', () => {
     it('dispatches engine:undo with localPlayerId and tick when undo is clicked', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
-        renderMatchPage();
+        renderGamePage();
 
         fireEvent.click(await screen.findByTestId('undo'));
 
@@ -311,7 +311,7 @@ describe('MatchPage — action dispatch', () => {
     it('dispatches engine:redo with localPlayerId and tick when redo is clicked', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: true } });
-        renderMatchPage();
+        renderGamePage();
 
         fireEvent.click(await screen.findByTestId('redo'));
 
@@ -326,7 +326,7 @@ describe('MatchPage — action dispatch', () => {
     it('dispatches engine:end_turn with localPlayerId and tick when end-turn is clicked', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ isMyTurn: true });
-        renderMatchPage();
+        renderGamePage();
 
         fireEvent.click(await screen.findByTestId('end-turn'));
 
@@ -342,7 +342,7 @@ describe('MatchPage — action dispatch', () => {
         mockLocalPlayerId = 'p1';
         mockCurrentTick = 12;
         mockSnapshot = makeSnapshot({ tick: 5, isMyTurn: true });
-        renderMatchPage();
+        renderGamePage();
 
         fireEvent.click(await screen.findByTestId('end-turn'));
 
@@ -357,7 +357,7 @@ describe('MatchPage — action dispatch', () => {
     it('falls back to snapshot.viewerId when localPlayerId is null', async () => {
         mockLocalPlayerId = null;
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
-        renderMatchPage();
+        renderGamePage();
 
         fireEvent.click(await screen.findByTestId('undo'));
 
@@ -375,7 +375,7 @@ describe('MatchPage — action dispatch', () => {
             viewerId: playerId('p2'),
             isMyTurn: true,
         });
-        renderMatchPage();
+        renderGamePage();
 
         fireEvent.click(await screen.findByTestId('end-turn'));
 
@@ -392,42 +392,42 @@ describe('MatchPage — button states', () => {
     it('disables undo button when canUndo is false', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: false } });
-        renderMatchPage();
+        renderGamePage();
         expect((await screen.findByTestId('undo')).hasAttribute('disabled')).toBe(true);
     });
 
     it('enables undo button when canUndo is true', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
-        renderMatchPage();
+        renderGamePage();
         expect((await screen.findByTestId('undo')).hasAttribute('disabled')).toBe(false);
     });
 
     it('disables redo button when canRedo is false', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: false } });
-        renderMatchPage();
+        renderGamePage();
         expect((await screen.findByTestId('redo')).hasAttribute('disabled')).toBe(true);
     });
 
     it('enables redo button when canRedo is true', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: true } });
-        renderMatchPage();
+        renderGamePage();
         expect((await screen.findByTestId('redo')).hasAttribute('disabled')).toBe(false);
     });
 
     it('disables end-turn button when isMyTurn is false', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ isMyTurn: false });
-        renderMatchPage();
+        renderGamePage();
         expect((await screen.findByTestId('end-turn')).hasAttribute('disabled')).toBe(true);
     });
 
     it('enables end-turn button when isMyTurn is true', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ isMyTurn: true });
-        renderMatchPage();
+        renderGamePage();
         expect((await screen.findByTestId('end-turn')).hasAttribute('disabled')).toBe(false);
     });
 });

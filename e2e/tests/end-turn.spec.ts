@@ -17,11 +17,11 @@
  * when isMyTurn === false (non-active players cannot end turn).
  */
 import { test, expect } from '../fixtures/direct-match.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 test.describe('End turn', () => {
     test('end turn clears undo and redo history', async ({ hostWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
+        const hostMatch = new GamePage(hostWindow);
 
         // Make a move
         await hostWindow.getByTestId('selectable-unit').first().click();
@@ -38,7 +38,7 @@ test.describe('End turn', () => {
     });
 
     test('end turn after partial undo also clears redo', async ({ hostWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
+        const hostMatch = new GamePage(hostWindow);
 
         // Make a move
         await hostWindow.getByTestId('selectable-unit').first().click();
@@ -62,8 +62,8 @@ test.describe('End turn', () => {
         hostWindow,
         clientWindow,
     }) => {
-        const hostMatch = new MatchPage(hostWindow);
-        const clientMatch = new MatchPage(clientWindow);
+        const hostMatch = new GamePage(hostWindow);
+        const clientMatch = new GamePage(clientWindow);
 
         // Host makes a move (host is active first)
         await hostWindow.getByTestId('selectable-unit').first().click();
@@ -85,8 +85,8 @@ test.describe('End turn', () => {
         hostWindow,
         clientWindow,
     }) => {
-        const hostMatch = new MatchPage(hostWindow);
-        const clientMatch = new MatchPage(clientWindow);
+        const hostMatch = new GamePage(hostWindow);
+        const clientMatch = new GamePage(clientWindow);
 
         // Host makes a move
         await hostWindow.getByTestId('selectable-unit').first().click();
@@ -113,8 +113,8 @@ test.describe('End turn', () => {
             hostWindow,
             clientWindow,
         }) => {
-            const hostMatch = new MatchPage(hostWindow);
-            const clientMatch = new MatchPage(clientWindow);
+            const hostMatch = new GamePage(hostWindow);
+            const clientMatch = new GamePage(clientWindow);
 
             // Client makes a move (client is active first in this context)
             await clientWindow.getByTestId('selectable-unit').first().click();

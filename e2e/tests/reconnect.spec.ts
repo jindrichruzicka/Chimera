@@ -2,7 +2,7 @@ import type { ElectronApplication, Page } from '@playwright/test';
 import { test, expect } from '../fixtures/game.fixture';
 import { getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 const TICK_TOLERANCE = 2;
 
@@ -75,7 +75,7 @@ test.describe('Client reconnect', () => {
         await primeRelaunchReconnectEnv(clientApp, ticket);
         const relaunchConfig = await captureRelaunchConfig(clientApp);
         const originalClientPlayerId = ticket.playerId;
-        const originalClientMatch = new MatchPage(clientWindow);
+        const originalClientMatch = new GamePage(clientWindow);
         await expect(originalClientMatch.canvas).toBeVisible();
 
         await clientApp.close();
@@ -108,7 +108,7 @@ test.describe('Client reconnect', () => {
                 { timeout: 30_000 },
             );
 
-            const relaunchedClientMatch = new MatchPage(relaunchedClientWindow);
+            const relaunchedClientMatch = new GamePage(relaunchedClientWindow);
             await expect(relaunchedClientMatch.canvas).toBeVisible({ timeout: 30_000 });
 
             await expect

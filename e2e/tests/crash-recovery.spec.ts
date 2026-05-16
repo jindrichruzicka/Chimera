@@ -38,7 +38,7 @@ import { expect } from '@playwright/test';
 import { launchE2eElectronApplication, test as electronTest } from '../fixtures/electron.fixture';
 import { getLastSavedSlotId, getLastSavedTick, getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 // ─── Renderer bridge types ────────────────────────────────────────────────────
 // Derived from electron/preload/api-types.ts without importing from that module.
@@ -127,7 +127,7 @@ test.describe('Crash recovery', () => {
         crashApp,
         crashWindow,
     }) => {
-        const match = new MatchPage(crashWindow);
+        const match = new GamePage(crashWindow);
 
         // Wait for the match canvas — direct-match boot may need a moment.
         await expect(match.canvas).toBeVisible({ timeout: 30_000 });
@@ -187,7 +187,7 @@ test.describe('Crash recovery', () => {
             // SessionRuntime.applyRestoredFile() has an active session.
             // Without this, the load IPC call is silently skipped
             // (see electron/main/index.ts: "snapshot will not be applied").
-            await expect(new MatchPage(relaunchedWindow).canvas).toBeVisible({ timeout: 30_000 });
+            await expect(new GamePage(relaunchedWindow).canvas).toBeVisible({ timeout: 30_000 });
 
             // Accept the prompt — this calls window.__chimera.saves.load(slotId)
             // via the banner's handleResume(), which routes through IPC to
