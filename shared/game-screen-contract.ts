@@ -4,6 +4,7 @@ import type {
     PlayerId,
     PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
+import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
 import type * as React from 'react';
 
 export type GameScreenComponent<TProps> =
@@ -31,6 +32,17 @@ export interface GameHudProps extends GameScreenProps {
     readonly handleEndTurn: () => void;
 }
 
+export type GameEventAudioBinding = Readonly<
+    Record<
+        string,
+        {
+            readonly ref: AssetRef<AudioClipAsset>;
+            readonly bus?: 'master' | 'music' | 'sfx' | 'voice';
+            readonly volume?: number;
+        }
+    >
+>;
+
 export interface GameScreenRegistry {
     readonly board: GameScreenComponent<GameScreenProps>;
     readonly hud?: GameScreenComponent<GameHudProps>;
@@ -38,6 +50,7 @@ export interface GameScreenRegistry {
     readonly sceneDefaultScreens?: Readonly<Record<string, string>>;
     readonly transitionOverlay?: GameScreenComponent<GameScreenProps>;
     readonly matchResultBanner?: GameScreenComponent<MatchResultBannerProps>;
+    readonly eventAudioBinding?: GameEventAudioBinding;
 }
 
 export type SendAction = (action: EngineAction) => void;

@@ -17,6 +17,13 @@ import {
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
+import {
+    createAudioManager,
+    type AudioHandle,
+    type AudioManager,
+} from '../../audio/AudioManager.js';
+import { AudioManagerContext } from '../../audio/AudioManagerContext.js';
+import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
 import { FadeProvider } from './FadeContext.js';
@@ -96,8 +103,10 @@ function RegistryGameShell({
     onEndTurn,
 }: GameShellRegistryProps): React.ReactElement {
     const resolvedAssetManager = useMatchAssetManager(assetManager, assetManifest);
+    const eventAudioBinding = registry.eventAudioBinding;
+    const audioManager = useMatchAudioManager(resolvedAssetManager, eventAudioBinding);
 
-    return (
+    const gameShell = (
         <AssetManagerContext.Provider value={resolvedAssetManager}>
             <ContentDatabaseProvider value={contentDatabase}>
                 <FadeProvider>
@@ -132,6 +141,17 @@ function RegistryGameShell({
             </ContentDatabaseProvider>
         </AssetManagerContext.Provider>
     );
+
+    if (eventAudioBinding === undefined || audioManager === null) {
+        return gameShell;
+    }
+
+    return (
+        <AudioManagerContext.Provider value={audioManager}>
+            {gameShell}
+            <EventAudioPlayer binding={eventAudioBinding} />
+        </AudioManagerContext.Provider>
+    );
 }
 
 function useMatchAssetManager(
@@ -156,6 +176,65 @@ function useMatchAssetManager(
     }, [assetManager]);
 
     return assetManager;
+}
+
+function useMatchAudioManager(
+    assetManager: AssetManager,
+    eventAudioBinding: GameShellRegistryProps['registry']['eventAudioBinding'] | undefined,
+): AudioManager | null {
+    const audioManager = React.useMemo(() => {
+        if (eventAudioBinding === undefined) {
+            return null;
+        }
+
+        if (!isAudioContextSupported()) {
+            return createNoopAudioManager();
+        }
+
+        try {
+            return createAudioManager(assetManager);
+        } catch {
+            return createNoopAudioManager();
+        }
+    }, [assetManager, eventAudioBinding]);
+
+    React.useEffect(() => {
+        return () => {
+            audioManager?.dispose();
+        };
+    }, [audioManager]);
+
+    return audioManager;
+}
+
+function isAudioContextSupported(): boolean {
+    return typeof AudioContext !== 'undefined' || 'webkitAudioContext' in window;
+}
+
+function createNoopAudioManager(): AudioManager {
+    return {
+        play(ref, opts = {}): AudioHandle {
+            return {
+                id: 'noop-audio-handle',
+                ref,
+                bus: opts.bus ?? 'sfx',
+                priority: opts.priority ?? 0,
+                valid: false,
+            };
+        },
+        stop(): void {
+            return;
+        },
+        stopAll(): void {
+            return;
+        },
+        duck(): void {
+            return;
+        },
+        dispose(): void {
+            return;
+        },
+    };
 }
 
 function createUnconfiguredAssetResolver(): AssetResolver {

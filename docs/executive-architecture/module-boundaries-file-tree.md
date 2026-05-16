@@ -216,6 +216,7 @@ chimera/
 │   │   │       ├── PerfHud.tsx
 │   │   │       ├── PerfProbe.tsx
 │   │   │       └── perfStore.ts
+│   │   ├── audio/                   # Event-driven audio playback components (e.g. EventAudioPlayer)
 │   │   ├── ui/                      # Pure 2D React UI primitives (buttons, modals)
 │   │   └── r3f/                     # Reusable R3F building blocks
 │   │       ├── GameCanvas.tsx       # <Canvas> root; cameraMode + cameraPreset props; see §4.22

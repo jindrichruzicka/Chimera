@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { AssetManager } from '../../assets/AssetManager';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import {
@@ -14,12 +15,50 @@ import {
     type MatchResultBannerProps,
 } from './GameShell';
 
+const eventAudioPlayerSpy = vi.fn(
+    (_props: { readonly binding: Readonly<Record<string, unknown>> }) => null,
+);
+
+vi.mock('../audio/EventAudioPlayer.js', () => ({
+    EventAudioPlayer: (props: { readonly binding: Readonly<Record<string, unknown>> }) => {
+        eventAudioPlayerSpy(props);
+        return null;
+    },
+}));
+
+const TEST_AUDIO_REF = 'tactics/audio/sfx/test-hit.ogg' as AssetRef<AudioClipAsset>;
+
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    eventAudioPlayerSpy.mockReset();
 });
 
 describe('GameShell page object locators', () => {
+    it('mounts EventAudioPlayer when registry mode provides an event audio binding', () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+
+        render(
+            <GameShell
+                registry={{
+                    board: () => <div data-testid="registry-board">Registry board</div>,
+                    eventAudioBinding: {
+                        'combat:hit': { ref: TEST_AUDIO_REF, bus: 'sfx', volume: 0.5 },
+                    },
+                }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+        );
+
+        expect(eventAudioPlayerSpy).toHaveBeenCalledWith({
+            binding: {
+                'combat:hit': { ref: TEST_AUDIO_REF, bus: 'sfx', volume: 0.5 },
+            },
+        });
+    });
+
     it('provides AssetManagerContext in registry mode and disposes it on unmount', async () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
         const assetManager = createAssetManagerStub();
