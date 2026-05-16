@@ -13,7 +13,7 @@ tags: [audio, sound, renderer, event-driven, bus]
 
 ## Overview
 
-Renderer-only audio playback for music, sound effects, and voice cues. Zero coupling to the simulation — game reducers emit `GameEvent`s; the renderer's `EventAudioBinding` maps event types to `AssetRef<AudioAsset>` and plays them through `AudioManager`.
+Renderer-only audio playback for music, sound effects, and voice cues. Zero coupling to the simulation — game reducers emit `GameEvent`s; the renderer's `EventAudioBinding` maps event types to `AssetRef<AudioClipAsset>` and plays them through `AudioManager`.
 
 ---
 
@@ -23,7 +23,7 @@ Renderer-only audio playback for music, sound effects, and voice cues. Zero coup
 GameEvent[] in PlayerSnapshot   ← simulation emits; renderer observes
          │
          ▼
-[EventAudioBinding]             ← pure config: eventType → AssetRef<AudioAsset>
+[EventAudioBinding]             ← pure config: eventType → AssetRef<AudioClipAsset>
          │
          ▼
 [AudioManager.play(ref, opts)]  ← resolves via AssetManager (§4.10)
@@ -53,7 +53,7 @@ export interface PlayOptions {
 export type AudioBusId = 'master' | 'music' | 'sfx' | 'voice';
 
 export interface AudioManager {
-    play(ref: AssetRef<AudioAsset>, opts?: PlayOptions): AudioHandle;
+    play(ref: AssetRef<AudioClipAsset>, opts?: PlayOptions): AudioHandle;
     stop(handle: AudioHandle): void;
     stopAll(bus?: AudioBusId): void;
     /** Duck a bus to duckedVolume for durationMs, then restore. */
@@ -72,7 +72,7 @@ export interface AudioManager {
 
 export type EventAudioBinding = {
     [eventType: string]: {
-        ref: AssetRef<AudioAsset>;
+        ref: AssetRef<AudioClipAsset>;
         bus?: AudioBusId;
         volume?: number;
     };
