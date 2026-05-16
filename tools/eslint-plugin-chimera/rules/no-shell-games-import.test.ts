@@ -31,10 +31,10 @@ const ruleTester = new RuleTester({
 ruleTester.run('chimera/no-shell-games-import', rule, {
     // ── Valid — rule must NOT fire ───────────────────────────────────────────
     valid: [
-        // match/page.tsx is allowed to import from games/* (it loads the registry)
+        // match/page.tsx may depend on renderer-owned game loading helpers.
         {
             filename: 'renderer/app/match/page.tsx',
-            code: `import { MatchScreenRegistry } from 'games/tactics/screens/index.js';`,
+            code: `import { loadRendererGame } from '../../game/rendererGameRegistry';`,
         },
         // Shell pages may import from renderer/ — only games/* is blocked
         {
@@ -93,6 +93,12 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         // Invariant #94: lobby page importing from games/* screen module directly
         {
             filename: 'renderer/app/lobby/page.tsx',
+            code: `import { MatchScreenRegistry } from 'games/tactics/screens/index';`,
+            errors: [{ messageId: 'shellGamesImport' }],
+        },
+        // Invariant #94: match page importing from games/* directly
+        {
+            filename: 'renderer/app/match/page.tsx',
             code: `import { MatchScreenRegistry } from 'games/tactics/screens/index';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },

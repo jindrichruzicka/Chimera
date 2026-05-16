@@ -3,7 +3,12 @@ import { describe, expect, it } from 'vitest';
 import { MalformedAssetRefError } from '@chimera/shared/asset-ref-parse.js';
 import { buildAssetRef, type AssetRef } from '@chimera/simulation/content/AssetRef.js';
 
-import { createDevResolver, createProductionResolver, type AssetResolver } from './AssetResolver';
+import {
+    createDevResolver,
+    createProductionResolver,
+    createRendererProtocolAssetResolver,
+    type AssetResolver,
+} from './AssetResolver';
 
 describe('createDevResolver', () => {
     it('resolves an AssetRef to the source-tree game assets URL', () => {
@@ -72,5 +77,32 @@ describe('createProductionResolver', () => {
         const traversalRef = 'tactics/../etc/shadow' as AssetRef;
 
         expect(() => resolver.resolve(traversalRef)).toThrow(MalformedAssetRefError);
+    });
+});
+
+describe('createRendererProtocolAssetResolver', () => {
+    it('resolves an AssetRef to the renderer asset protocol URL', () => {
+        const resolver: AssetResolver = createRendererProtocolAssetResolver();
+        const ref = buildAssetRef('tactics', 'audio/sfx/step.ogg');
+
+        const resolved = resolver.resolve(ref);
+
+        expect(resolved).toBe('chimera://renderer/assets/tactics/audio/sfx/step.ogg');
+    });
+
+    it('normalises a custom base URL with a trailing slash', () => {
+        const resolver: AssetResolver = createRendererProtocolAssetResolver('/assets/');
+        const ref = buildAssetRef('tactics', 'audio/sfx/sword hit.ogg');
+
+        const resolved = resolver.resolve(ref);
+
+        expect(resolved).toBe('/assets/tactics/audio/sfx/sword%20hit.ogg');
+    });
+
+    it('propagates MalformedAssetRefError for malformed refs', () => {
+        const resolver = createRendererProtocolAssetResolver();
+        const malformedRef = 'noslash' as AssetRef;
+
+        expect(() => resolver.resolve(malformedRef)).toThrow(MalformedAssetRefError);
     });
 });

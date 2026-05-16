@@ -12,22 +12,29 @@
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) is consumed here.
-//   #48 — GameShell is game-agnostic; MatchScreenRegistry is the only
-//          coupling point and lives HERE, not inside GameShell.
-//   #80 — GameShell never imports from games/*; the board is passed as
-//          children (GameScreenRegistry.board rendered by this page).
+//   #48 — GameShell is game-agnostic; this route delegates game-specific
+//          registry resolution to renderer/game/rendererGameRegistry.
+//   #80 — GameShell never imports from games/*; the registry is passed as data.
 //   #88 — GameShell wraps every screen in React.Suspense (see GameShell.tsx).
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { type EngineAction, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
-import { MatchScreenRegistry } from '@chimera/games/tactics/screens/index.js';
+import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
+import { createRendererProtocolAssetResolver } from '../../assets/AssetResolver';
 import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
+import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 
 type MatchActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
+
+type RendererGameLoadState =
+    | { readonly status: 'idle' }
+    | { readonly status: 'loading'; readonly gameId: string }
+    | { readonly status: 'loaded'; readonly gameId: string; readonly game: LoadedRendererGame }
+    | { readonly status: 'error'; readonly gameId: string; readonly error: Error };
 
 export default function MatchPage(): React.ReactElement | null {
     const router = useRouter();
@@ -35,6 +42,15 @@ export default function MatchPage(): React.ReactElement | null {
     const currentTick = useGameStore((state) => state.currentTick);
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
+    const gameId = lobbyState?.info.gameId ?? null;
+    const loadedGame = useLoadedRendererGame(gameId);
+    const assetManager = React.useMemo<AssetManager | null>(() => {
+        if (loadedGame === null) {
+            return null;
+        }
+
+        return createAssetManager(createRendererProtocolAssetResolver());
+    }, [loadedGame]);
     const sendActionToHost = useSendAction();
     const sendAction = React.useCallback(
         (action: EngineAction): void => {
@@ -70,11 +86,19 @@ export default function MatchPage(): React.ReactElement | null {
         return null;
     }
 
+    if (gameId === null || loadedGame === null || assetManager === null) {
+        return null;
+    }
+
     const resolvedPlayerId = snapshot.viewerId;
 
     return (
         <GameShell
-            registry={MatchScreenRegistry}
+            registry={loadedGame.registry}
+            assetManager={assetManager}
+            {...(loadedGame.assetManifest === undefined
+                ? {}
+                : { assetManifest: loadedGame.assetManifest })}
             snapshot={snapshot}
             currentTick={currentTick}
             sendAction={sendAction}
@@ -92,4 +116,48 @@ export default function MatchPage(): React.ReactElement | null {
             onEndTurn={() => dispatchMatchAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})}
         />
     );
+}
+
+function useLoadedRendererGame(gameId: string | null): LoadedRendererGame | null {
+    const [loadState, setLoadState] = React.useState<RendererGameLoadState>({ status: 'idle' });
+
+    React.useEffect(() => {
+        if (gameId === null) {
+            setLoadState({ status: 'idle' });
+            return;
+        }
+
+        let isActive = true;
+        setLoadState({ status: 'loading', gameId });
+
+        loadRendererGame(gameId)
+            .then((game) => {
+                if (isActive) {
+                    setLoadState({ status: 'loaded', gameId, game });
+                }
+            })
+            .catch((error: unknown) => {
+                if (isActive) {
+                    setLoadState({ status: 'error', gameId, error: toError(error) });
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [gameId]);
+
+    if (loadState.status === 'error' && loadState.gameId === gameId) {
+        throw loadState.error;
+    }
+
+    if (loadState.status === 'loaded' && loadState.gameId === gameId) {
+        return loadState.game;
+    }
+
+    return null;
+}
+
+function toError(value: unknown): Error {
+    return value instanceof Error ? value : new Error(String(value));
 }

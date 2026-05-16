@@ -316,9 +316,11 @@ const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
     '.js': 'application/javascript; charset=utf-8',
     '.json': 'application/json; charset=utf-8',
     '.map': 'application/json; charset=utf-8',
+    '.ogg': 'audio/ogg',
     '.png': 'image/png',
     '.svg': 'image/svg+xml; charset=utf-8',
     '.txt': RSC_CONTENT_TYPE,
+    '.wav': 'audio/wav',
     '.webp': 'image/webp',
 };
 

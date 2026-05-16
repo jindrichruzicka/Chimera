@@ -10,9 +10,9 @@
 //
 // Invariants upheld:
 //   #1  — Only PlayerSnapshot (never GameSnapshot) enters the store mock.
-//   #48 — GameShell is game-agnostic; MatchScreenRegistry is the sole
-//          coupling point and lives in match/page.tsx, not in GameShell.
-//   #80 — Verified by the board being injected via registry prop (children).
+//   #48 — GameShell is game-agnostic; match/page receives renderer game
+//          modules from renderer/game/rendererGameRegistry.
+//   #80 — Verified by the board being injected via registry prop.
 
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
@@ -24,7 +24,11 @@ import {
     type LobbyState,
     type PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
-import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
+import type {
+    GameHudProps,
+    GameScreenProps,
+    GameScreenRegistry,
+} from '@chimera/shared/game-screen-contract.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Providers } from '../providers';
 import MatchPage from './page';
@@ -38,6 +42,7 @@ let mockCurrentTick: number | undefined = undefined;
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: LobbyState | null = null;
 let mockHasLoadedInitialLobbyState = true;
+const loadRendererGameMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockReplace }),
@@ -74,55 +79,55 @@ vi.mock('../../bridge/useSendAction', () => ({
     useSendAction: () => mockSendAction,
 }));
 
-// Minimal stub for TacticsDemoBoard (games/* import; kept in match/page.tsx
-// per invariant #48 — GameShell itself never imports from games/*).
-vi.mock('@chimera/games/tactics/screens/index.js', () => ({
-    MatchScreenRegistry: {
-        board: ({ snapshot }: { snapshot: PlayerSnapshot }) => (
-            <div data-testid="tactics-board" data-tick={snapshot.tick} />
-        ),
-        hud: (props: GameHudProps) => {
-            const {
-                tick,
-                undoDisabled,
-                redoDisabled,
-                endTurnDisabled,
-                handleUndo,
-                handleRedo,
-                handleEndTurn,
-            } = props;
-            return (
-                <footer data-testid="registry-hud" aria-label="Registry HUD">
-                    <output data-testid="hud-tick">{tick}</output>
-                    <button
-                        data-testid="undo"
-                        type="button"
-                        disabled={undoDisabled}
-                        onClick={handleUndo}
-                    >
-                        Undo
-                    </button>
-                    <button
-                        data-testid="redo"
-                        type="button"
-                        disabled={redoDisabled}
-                        onClick={handleRedo}
-                    >
-                        Redo
-                    </button>
-                    <button
-                        data-testid="end-turn"
-                        type="button"
-                        disabled={endTurnDisabled}
-                        onClick={handleEndTurn}
-                    >
-                        End Turn
-                    </button>
-                </footer>
-            );
-        },
-    },
+vi.mock('../../game/rendererGameRegistry', () => ({
+    loadRendererGame: loadRendererGameMock,
 }));
+
+const testRegistry: GameScreenRegistry = {
+    board: ({ snapshot }: GameScreenProps) => (
+        <div data-testid="test-board" data-tick={snapshot.tick} />
+    ),
+    hud: (props: GameHudProps) => {
+        const {
+            tick,
+            undoDisabled,
+            redoDisabled,
+            endTurnDisabled,
+            handleUndo,
+            handleRedo,
+            handleEndTurn,
+        } = props;
+        return (
+            <footer data-testid="registry-hud" aria-label="Registry HUD">
+                <output data-testid="hud-tick">{tick}</output>
+                <button
+                    data-testid="undo"
+                    type="button"
+                    disabled={undoDisabled}
+                    onClick={handleUndo}
+                >
+                    Undo
+                </button>
+                <button
+                    data-testid="redo"
+                    type="button"
+                    disabled={redoDisabled}
+                    onClick={handleRedo}
+                >
+                    Redo
+                </button>
+                <button
+                    data-testid="end-turn"
+                    type="button"
+                    disabled={endTurnDisabled}
+                    onClick={handleEndTurn}
+                >
+                    End Turn
+                </button>
+            </footer>
+        );
+    },
+};
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -153,12 +158,12 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     };
 }
 
-function makeLobbyState(): LobbyState {
+function makeLobbyState(gameId = 'test-game'): LobbyState {
     return {
         info: {
             sessionId: 'session-1',
             hostId: 'p1',
-            gameId: 'tactics',
+            gameId,
         },
         players: [
             {
@@ -176,10 +181,12 @@ beforeEach(() => {
     mockSnapshot = null;
     mockCurrentTick = undefined;
     mockLocalPlayerId = null;
-    mockLobbyState = null;
+    mockLobbyState = makeLobbyState();
     mockHasLoadedInitialLobbyState = true;
     mockSendAction.mockReset();
     mockReplace.mockReset();
+    loadRendererGameMock.mockReset();
+    loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
 
     Object.defineProperty(window, '__chimera', {
         value: { game: { sendAction: vi.fn() } },
@@ -196,6 +203,7 @@ afterEach(() => {
 describe('MatchPage — redirect', () => {
     it('calls router.replace("/lobby") when snapshot is null', () => {
         mockSnapshot = null;
+        mockLobbyState = null;
         renderMatchPage();
         expect(mockReplace).toHaveBeenCalledWith('/lobby');
     });
@@ -203,6 +211,7 @@ describe('MatchPage — redirect', () => {
     it('does not redirect before the lobby bootstrap has loaded initial state', () => {
         mockSnapshot = null;
         mockHasLoadedInitialLobbyState = false;
+        mockLobbyState = null;
 
         renderMatchPage();
 
@@ -220,63 +229,76 @@ describe('MatchPage — redirect', () => {
 
     it('renders nothing visible when snapshot is null', () => {
         mockSnapshot = null;
+        mockLobbyState = null;
         renderMatchPage();
         expect(screen.queryByTestId('match-canvas')).toBeNull();
     });
 
-    it('does not redirect when snapshot is active', () => {
+    it('does not redirect when snapshot is active', async () => {
         mockSnapshot = makeSnapshot();
         renderMatchPage();
+        await screen.findByTestId('match-canvas');
         expect(mockReplace).not.toHaveBeenCalled();
     });
 });
 
 describe('MatchPage — rendering', () => {
-    it('renders GameShell (match-canvas testid) when snapshot is active', () => {
+    it('loads the active game renderer bundle from the lobby game id', async () => {
+        mockLobbyState = makeLobbyState('space-arena');
         mockSnapshot = makeSnapshot();
         renderMatchPage();
-        expect(screen.getByTestId('match-canvas')).toBeTruthy();
+
+        await screen.findByTestId('match-canvas');
+
+        expect(loadRendererGameMock).toHaveBeenCalledWith('space-arena');
     });
 
-    it('renders the game board inside GameShell', () => {
+    it('renders GameShell (match-canvas testid) when snapshot is active', async () => {
         mockSnapshot = makeSnapshot();
         renderMatchPage();
-        expect(screen.getByTestId('tactics-board')).toBeTruthy();
+        expect(await screen.findByTestId('match-canvas')).toBeTruthy();
     });
 
-    it('displays the current tick in hud-tick', () => {
+    it('renders the game board inside GameShell', async () => {
+        mockSnapshot = makeSnapshot();
+        renderMatchPage();
+        expect(await screen.findByTestId('test-board')).toBeTruthy();
+    });
+
+    it('displays the current tick in hud-tick', async () => {
         mockSnapshot = makeSnapshot({ tick: 42 });
         mockCurrentTick = 43;
         renderMatchPage();
-        expect(screen.getByTestId('hud-tick').textContent).toBe('43');
+        expect((await screen.findByTestId('hud-tick')).textContent).toBe('43');
     });
 
-    it('renders the HUD override from the active game registry', () => {
+    it('renders the HUD override from the active game registry', async () => {
         mockSnapshot = makeSnapshot({ tick: 42 });
         renderMatchPage();
-        expect(screen.getByTestId('registry-hud')).toBeTruthy();
+        expect(await screen.findByTestId('registry-hud')).toBeTruthy();
     });
 
-    it('renders match result banner when phase is ended', () => {
+    it('renders match result banner when phase is ended', async () => {
         mockSnapshot = makeSnapshot({ phase: gamePhase('ended') });
         renderMatchPage();
-        expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(await screen.findByTestId('match-result-banner')).toBeTruthy();
     });
 
-    it('does not render lobby heading', () => {
+    it('does not render lobby heading', async () => {
         mockSnapshot = makeSnapshot();
         renderMatchPage();
+        await screen.findByTestId('match-canvas');
         expect(screen.queryByRole('heading', { name: 'Multiplayer Lobby' })).toBeNull();
     });
 });
 
 describe('MatchPage — action dispatch', () => {
-    it('dispatches engine:undo with localPlayerId and tick when undo is clicked', () => {
+    it('dispatches engine:undo with localPlayerId and tick when undo is clicked', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
         renderMatchPage();
 
-        fireEvent.click(screen.getByTestId('undo'));
+        fireEvent.click(await screen.findByTestId('undo'));
 
         expect(mockSendAction).toHaveBeenCalledWith({
             type: 'engine:undo',
@@ -286,12 +308,12 @@ describe('MatchPage — action dispatch', () => {
         });
     });
 
-    it('dispatches engine:redo with localPlayerId and tick when redo is clicked', () => {
+    it('dispatches engine:redo with localPlayerId and tick when redo is clicked', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: true } });
         renderMatchPage();
 
-        fireEvent.click(screen.getByTestId('redo'));
+        fireEvent.click(await screen.findByTestId('redo'));
 
         expect(mockSendAction).toHaveBeenCalledWith({
             type: 'engine:redo',
@@ -301,12 +323,12 @@ describe('MatchPage — action dispatch', () => {
         });
     });
 
-    it('dispatches engine:end_turn with localPlayerId and tick when end-turn is clicked', () => {
+    it('dispatches engine:end_turn with localPlayerId and tick when end-turn is clicked', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ isMyTurn: true });
         renderMatchPage();
 
-        fireEvent.click(screen.getByTestId('end-turn'));
+        fireEvent.click(await screen.findByTestId('end-turn'));
 
         expect(mockSendAction).toHaveBeenCalledWith({
             type: 'engine:end_turn',
@@ -316,13 +338,13 @@ describe('MatchPage — action dispatch', () => {
         });
     });
 
-    it('dispatches with currentTick when it is newer than snapshot.tick', () => {
+    it('dispatches with currentTick when it is newer than snapshot.tick', async () => {
         mockLocalPlayerId = 'p1';
         mockCurrentTick = 12;
         mockSnapshot = makeSnapshot({ tick: 5, isMyTurn: true });
         renderMatchPage();
 
-        fireEvent.click(screen.getByTestId('end-turn'));
+        fireEvent.click(await screen.findByTestId('end-turn'));
 
         expect(mockSendAction).toHaveBeenCalledWith({
             type: 'engine:end_turn',
@@ -332,12 +354,12 @@ describe('MatchPage — action dispatch', () => {
         });
     });
 
-    it('falls back to snapshot.viewerId when localPlayerId is null', () => {
+    it('falls back to snapshot.viewerId when localPlayerId is null', async () => {
         mockLocalPlayerId = null;
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
         renderMatchPage();
 
-        fireEvent.click(screen.getByTestId('undo'));
+        fireEvent.click(await screen.findByTestId('undo'));
 
         expect(mockSendAction).toHaveBeenCalledWith({
             type: 'engine:undo',
@@ -347,7 +369,7 @@ describe('MatchPage — action dispatch', () => {
         });
     });
 
-    it('dispatches with snapshot.viewerId when the local lobby context is stale', () => {
+    it('dispatches with snapshot.viewerId when the local lobby context is stale', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({
             viewerId: playerId('p2'),
@@ -355,7 +377,7 @@ describe('MatchPage — action dispatch', () => {
         });
         renderMatchPage();
 
-        fireEvent.click(screen.getByTestId('end-turn'));
+        fireEvent.click(await screen.findByTestId('end-turn'));
 
         expect(mockSendAction).toHaveBeenCalledWith({
             type: 'engine:end_turn',
@@ -367,45 +389,45 @@ describe('MatchPage — action dispatch', () => {
 });
 
 describe('MatchPage — button states', () => {
-    it('disables undo button when canUndo is false', () => {
+    it('disables undo button when canUndo is false', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: false } });
         renderMatchPage();
-        expect(screen.getByTestId('undo').hasAttribute('disabled')).toBe(true);
+        expect((await screen.findByTestId('undo')).hasAttribute('disabled')).toBe(true);
     });
 
-    it('enables undo button when canUndo is true', () => {
+    it('enables undo button when canUndo is true', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
         renderMatchPage();
-        expect(screen.getByTestId('undo').hasAttribute('disabled')).toBe(false);
+        expect((await screen.findByTestId('undo')).hasAttribute('disabled')).toBe(false);
     });
 
-    it('disables redo button when canRedo is false', () => {
+    it('disables redo button when canRedo is false', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: false } });
         renderMatchPage();
-        expect(screen.getByTestId('redo').hasAttribute('disabled')).toBe(true);
+        expect((await screen.findByTestId('redo')).hasAttribute('disabled')).toBe(true);
     });
 
-    it('enables redo button when canRedo is true', () => {
+    it('enables redo button when canRedo is true', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: true } });
         renderMatchPage();
-        expect(screen.getByTestId('redo').hasAttribute('disabled')).toBe(false);
+        expect((await screen.findByTestId('redo')).hasAttribute('disabled')).toBe(false);
     });
 
-    it('disables end-turn button when isMyTurn is false', () => {
+    it('disables end-turn button when isMyTurn is false', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ isMyTurn: false });
         renderMatchPage();
-        expect(screen.getByTestId('end-turn').hasAttribute('disabled')).toBe(true);
+        expect((await screen.findByTestId('end-turn')).hasAttribute('disabled')).toBe(true);
     });
 
-    it('enables end-turn button when isMyTurn is true', () => {
+    it('enables end-turn button when isMyTurn is true', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ isMyTurn: true });
         renderMatchPage();
-        expect(screen.getByTestId('end-turn').hasAttribute('disabled')).toBe(false);
+        expect((await screen.findByTestId('end-turn')).hasAttribute('disabled')).toBe(false);
     });
 });

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { tacticsAssetManifest } from '../asset-manifest.js';
 import { MatchScreenRegistry } from './index.js';
 
 describe('MatchScreenRegistry', () => {
@@ -7,6 +8,16 @@ describe('MatchScreenRegistry', () => {
         expect(MatchScreenRegistry.eventAudioBinding?.['tactics:move_unit']).toBeDefined();
         expect(MatchScreenRegistry.eventAudioBinding?.['tactics:attack']).toBeDefined();
         expect(MatchScreenRegistry.eventAudioBinding?.['tactics:reveal_tile']).toBeDefined();
+    });
+
+    it('declares every event audio ref in the tactics asset manifest', () => {
+        const manifestRefs = new Set(tacticsAssetManifest.entries.map((entry) => entry.ref));
+        const eventAudioRefs = Object.values(MatchScreenRegistry.eventAudioBinding ?? {}).map(
+            (binding) => binding.ref,
+        );
+
+        expect(eventAudioRefs).not.toHaveLength(0);
+        expect(eventAudioRefs.every((ref) => manifestRefs.has(ref))).toBe(true);
     });
 
     it('registers a concrete summary screen for engine:post-match', () => {

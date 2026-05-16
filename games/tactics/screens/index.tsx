@@ -1,11 +1,11 @@
 import React from 'react';
 import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
 } from '../actions.js';
+import { tacticsAudioRefs } from '../asset-manifest.js';
 // Side-effect import: redefines --ch-* tokens for the Tactics visual language.
 // Must be the only place this file is imported (Invariants #85, #93).
 import '../styles/tokens-override.css';
@@ -18,17 +18,17 @@ const TacticsPostMatchSummary = React.lazy(() => import('./TacticsPostMatchSumma
 
 const TACTICS_EVENT_AUDIO_BINDING = {
     [TACTICS_MOVE_UNIT_ACTION]: {
-        ref: 'tactics/audio/sfx/step.ogg' as AssetRef<AudioClipAsset>,
+        ref: tacticsAudioRefs.step,
         bus: 'sfx',
         volume: 0.45,
     },
     [TACTICS_ATTACK_ACTION]: {
-        ref: 'tactics/audio/sfx/sword-hit.ogg' as AssetRef<AudioClipAsset>,
+        ref: tacticsAudioRefs.swordHit,
         bus: 'sfx',
         volume: 0.65,
     },
     [TACTICS_REVEAL_TILE_ACTION]: {
-        ref: 'tactics/audio/sfx/reveal.ogg' as AssetRef<AudioClipAsset>,
+        ref: tacticsAudioRefs.reveal,
         bus: 'sfx',
         volume: 0.4,
     },

@@ -10,9 +10,8 @@
  *      exclusively as side-effects of game registry initialisation.
  *
  *   2. Any import from a games package path in a shell page component
- *      (Invariant #94). Shell pages must be game-agnostic. The one exception
- *      is renderer/app/match/page.tsx which loads the GameScreenRegistry
- *      by design (see Architecture section 4.33).
+ *      (Invariant #94). Shell pages must be game-agnostic; match/page delegates
+ *      game registry resolution to renderer-owned loader helpers.
  *
  * Architecture reference: section 4.35 UI Design System, 4.37 Shell Pages UI Contract
  * Invariants #93 and #94
@@ -29,12 +28,11 @@ function normalizeFilename(filename: string): string {
 
 /**
  * Returns true if the file is one of the engine shell pages that must not
- * import from `games/*`. The `match/page.tsx` route is intentionally excluded
- * because it is responsible for loading the `GameScreenRegistry`.
+ * import from `games/*` directly.
  */
 function isShellPage(filename: string): boolean {
     const n = normalizeFilename(filename);
-    const SHELL_DIRS = ['main-menu', 'lobby', 'settings', 'saves'];
+    const SHELL_DIRS = ['main-menu', 'lobby', 'match', 'settings', 'saves'];
     return SHELL_DIRS.some(
         (dir) => n.includes(`/app/${dir}/`) || n.includes(`renderer/app/${dir}/`),
     );
@@ -73,7 +71,7 @@ const rule: Rule.RuleModule = {
             shellGamesTokenOverrideImport:
                 'Shell page components must not import game token override CSS directly (Invariant #93). Token overrides enter the cascade as a side-effect of game registry initialisation.',
             shellGamesImport:
-                'Shell page components must not import from any games/* path (Invariant #94). Shell pages are game-agnostic; the match page is the only valid entry point for game registry loading.',
+                'Shell page components must not import from any games/* path (Invariant #94). Shell pages are game-agnostic; load game registries through renderer-owned loader helpers.',
         },
         schema: [],
     },
