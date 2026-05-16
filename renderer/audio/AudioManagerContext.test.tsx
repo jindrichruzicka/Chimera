@@ -14,7 +14,7 @@ afterEach(() => {
 describe('AudioManagerContext', () => {
     it('throws a descriptive error when used outside the provider', () => {
         expect(() => renderHook(() => useAudioManager())).toThrow(
-            'useAudioManager() must be used inside <GameShell>.',
+            'useAudioManager() must be used within the app root (inside <Providers>).',
         );
     });
 

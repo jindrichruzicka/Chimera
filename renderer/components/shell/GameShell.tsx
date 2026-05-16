@@ -17,12 +17,9 @@ import {
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
-import {
-    createAudioManager,
-    type AudioHandle,
-    type AudioManager,
-} from '../../audio/AudioManager.js';
-import { AudioManagerContext } from '../../audio/AudioManagerContext.js';
+import type { AudioManager } from '../../audio/AudioManager.js';
+import { useAudioManager } from '../../audio/AudioManagerContext.js';
+import { SetMatchAssetManagerContext } from '../../assets/SetMatchAssetManagerContext';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
@@ -104,7 +101,10 @@ function RegistryGameShell({
 }: GameShellRegistryProps): React.ReactElement {
     const resolvedAssetManager = useMatchAssetManager(assetManager, assetManifest);
     const eventAudioBinding = registry.eventAudioBinding;
-    const audioManager = useMatchAudioManager(resolvedAssetManager, eventAudioBinding);
+    const audioManager = useAudioManager();
+    const isMatchEnded = snapshot.phase === 'ended';
+
+    useStopAudioOnMatchEnd(audioManager, isMatchEnded);
 
     const gameShell = (
         <AssetManagerContext.Provider value={resolvedAssetManager}>
@@ -142,15 +142,15 @@ function RegistryGameShell({
         </AssetManagerContext.Provider>
     );
 
-    if (eventAudioBinding === undefined || audioManager === null) {
+    if (eventAudioBinding === undefined) {
         return gameShell;
     }
 
     return (
-        <AudioManagerContext.Provider value={audioManager}>
+        <>
             {gameShell}
             <EventAudioPlayer binding={eventAudioBinding} />
-        </AudioManagerContext.Provider>
+        </>
     );
 }
 
@@ -158,6 +158,12 @@ function useMatchAssetManager(
     injectedAssetManager: AssetManager | undefined,
     assetManifest: AssetManifest | undefined,
 ): AssetManager {
+    // SetMatchAssetManagerContext is provided by Providers and allows GameShell to wire the
+    // match-level AssetManager into the app-level DelegatingAssetManager so the AudioManager
+    // (which is app-level) can load match-specific audio assets.  If the context is absent
+    // (e.g. in unit tests that don't mount Providers), the wiring is simply skipped.
+    const setMatchAssetManager = React.useContext(SetMatchAssetManagerContext);
+
     const assetManager = React.useMemo(
         () => injectedAssetManager ?? createAssetManager(createUnconfiguredAssetResolver()),
         [injectedAssetManager],
@@ -169,6 +175,14 @@ function useMatchAssetManager(
         }
     }, [assetManager, assetManifest]);
 
+    // Register the match AssetManager as the active delegate for the app-level AudioManager.
+    React.useEffect(() => {
+        setMatchAssetManager?.(assetManager);
+        return () => {
+            setMatchAssetManager?.(null);
+        };
+    }, [assetManager, setMatchAssetManager]);
+
     React.useEffect(() => {
         return () => {
             assetManager.dispose();
@@ -178,63 +192,14 @@ function useMatchAssetManager(
     return assetManager;
 }
 
-function useMatchAudioManager(
-    assetManager: AssetManager,
-    eventAudioBinding: GameShellRegistryProps['registry']['eventAudioBinding'] | undefined,
-): AudioManager | null {
-    const audioManager = React.useMemo(() => {
-        if (eventAudioBinding === undefined) {
-            return null;
-        }
-
-        if (!isAudioContextSupported()) {
-            return createNoopAudioManager();
-        }
-
-        try {
-            return createAudioManager(assetManager);
-        } catch {
-            return createNoopAudioManager();
-        }
-    }, [assetManager, eventAudioBinding]);
-
+function useStopAudioOnMatchEnd(audioManager: AudioManager, isMatchEnded: boolean): void {
     React.useEffect(() => {
-        return () => {
-            audioManager?.dispose();
-        };
-    }, [audioManager]);
+        if (!isMatchEnded) {
+            return;
+        }
 
-    return audioManager;
-}
-
-function isAudioContextSupported(): boolean {
-    return typeof AudioContext !== 'undefined' || 'webkitAudioContext' in window;
-}
-
-function createNoopAudioManager(): AudioManager {
-    return {
-        play(ref, opts = {}): AudioHandle {
-            return {
-                id: 'noop-audio-handle',
-                ref,
-                bus: opts.bus ?? 'sfx',
-                priority: opts.priority ?? 0,
-                valid: false,
-            };
-        },
-        stop(): void {
-            return;
-        },
-        stopAll(): void {
-            return;
-        },
-        duck(): void {
-            return;
-        },
-        dispose(): void {
-            return;
-        },
-    };
+        audioManager.stopAll();
+    }, [audioManager, isMatchEnded]);
 }
 
 function createUnconfiguredAssetResolver(): AssetResolver {

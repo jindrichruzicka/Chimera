@@ -97,16 +97,22 @@ Default pool: **32 concurrent voices**. When saturated, the lowest-priority curr
 
 ## Lifecycle Ownership
 
-`AudioManager` is constructed once per app launch by `renderer/app/providers.tsx` and exposed via `AudioManagerContext`. `GameShell.tsx` is the **sole designated owner** of session lifecycle: it calls `AudioManager.stopAll()` on match end and `AudioManager.dispose()` on engine shutdown.
+`AudioManager` is constructed once per app launch by `renderer/app/providers.tsx` and exposed via `AudioManagerContext`. `Providers` owns `dispose()` — it is called at engine shutdown (app exit), not at game session end.
+
+`GameShell.tsx` manages the session lifecycle:
+
+- On match start it registers the match-level `AssetManager` with the app-level `DelegatingAssetManager` via `SetMatchAssetManagerContext`. This allows `AudioManager.play()` to load match-specific audio assets through the match resolver and manifest.
+- On match end (`phase: ended`) it calls `AudioManager.stopAll()` to stop all active voices.
+- On unmount it clears the delegate (`setMatchAssetManager(null)`) and disposes the match-level `AssetManager`.
 
 ---
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                        |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #63 | The simulation never produces audio. No reducer, validator, or `ActionDefinition` may import from `renderer/audio/`.                                                        |
-| #64 | `AudioManager.dispose()` is called unconditionally at game session end. `GameShell` is the unique owner of `dispose()`. Active `AudioHandle`s become invalid after dispose. |
+| #   | Rule                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #63 | The simulation never produces audio. No reducer, validator, or `ActionDefinition` may import from `renderer/audio/`.                                                                                                                                                                                                                                                                                          |
+| #64 | `AudioManager.dispose()` is called unconditionally at engine shutdown (app exit). `Providers` (`renderer/app/providers.tsx`) is the unique owner of `dispose()` for the app-level `AudioManager`. At game session end (match phase `ended`), `GameShell` calls `AudioManager.stopAll()` to stop all active voices — it does **not** call `dispose()`. Active `AudioHandle`s become invalid after `dispose()`. |
 
 ---
 

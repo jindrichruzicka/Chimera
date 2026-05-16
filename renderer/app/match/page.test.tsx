@@ -26,6 +26,7 @@ import {
 } from '@chimera/electron/preload/api-types.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
+import { Providers } from '../providers';
 import MatchPage from './page';
 
 // ── Mocks ──────────────────────────────────────────────────────────────────────
@@ -127,9 +128,11 @@ vi.mock('@chimera/games/tactics/screens/index.js', () => ({
 
 function renderMatchPage(): ReturnType<typeof render> {
     return render(
-        <ThemeProvider>
-            <MatchPage />
-        </ThemeProvider>,
+        <Providers>
+            <ThemeProvider>
+                <MatchPage />
+            </ThemeProvider>
+        </Providers>,
     );
 }
 

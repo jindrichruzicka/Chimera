@@ -9,7 +9,7 @@ export const AudioManagerContext = createContext<AudioManager | null>(null);
 export function useAudioManager(): AudioManager {
     const audioManager = useContext(AudioManagerContext);
     if (audioManager === null) {
-        throw new Error('useAudioManager() must be used inside <GameShell>.');
+        throw new Error('useAudioManager() must be used within the app root (inside <Providers>).');
     }
 
     return audioManager;

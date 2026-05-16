@@ -8,6 +8,9 @@ import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/prel
 import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { AssetManager } from '../../assets/AssetManager';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
+import { SetMatchAssetManagerContext } from '../../assets/SetMatchAssetManagerContext';
+import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
+import { createAudioManagerSpy } from '../../audio/__test-support__/AudioManagerStubs.js';
 import {
     GameShell,
     type GameHudProps,
@@ -38,7 +41,7 @@ describe('GameShell page object locators', () => {
     it('mounts EventAudioPlayer when registry mode provides an event audio binding', () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
 
-        render(
+        renderWithAudio(
             <GameShell
                 registry={{
                     board: () => <div data-testid="registry-board">Registry board</div>,
@@ -59,6 +62,134 @@ describe('GameShell page object locators', () => {
         });
     });
 
+    it('provides the app AudioManagerContext to registry screens', async () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const audioManager = createAudioManagerSpy();
+
+        function Board(_props: GameScreenProps): React.ReactElement {
+            const injectedAudioManager = useAudioManager();
+            return (
+                <div
+                    data-testid="audio-context-board"
+                    data-audio-manager={
+                        injectedAudioManager === audioManager ? 'provided' : 'wrong'
+                    }
+                />
+            );
+        }
+
+        renderWithAudio(
+            <GameShell
+                registry={{
+                    board: Board,
+                    eventAudioBinding: {
+                        'combat:hit': { ref: TEST_AUDIO_REF, bus: 'sfx', volume: 0.5 },
+                    },
+                }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+            audioManager,
+        );
+
+        expect(
+            (await screen.findByTestId('audio-context-board')).getAttribute('data-audio-manager'),
+        ).toBe('provided');
+    });
+
+    it('stops all audio when the registry match phase ends', () => {
+        const audioManager = createAudioManagerSpy();
+        const registry = { board: () => <div data-testid="registry-board">Registry board</div> };
+        const sendAction = vi.fn();
+        const localPlayerId = playerId('p1');
+        const playingSnapshot = makePlayerSnapshot({
+            sceneId: makeSceneId('engine:match'),
+            phase: gamePhase('playing'),
+        });
+        const endedSnapshot = makePlayerSnapshot({
+            sceneId: makeSceneId('engine:match'),
+            phase: gamePhase('ended'),
+        });
+
+        const { rerender } = renderWithAudio(
+            <GameShell
+                registry={registry}
+                snapshot={playingSnapshot}
+                sendAction={sendAction}
+                localPlayerId={localPlayerId}
+            />,
+            audioManager,
+        );
+
+        expect(audioManager.stopAll).not.toHaveBeenCalled();
+
+        rerender(
+            wrapWithAudio(
+                <GameShell
+                    registry={registry}
+                    snapshot={endedSnapshot}
+                    sendAction={sendAction}
+                    localPlayerId={localPlayerId}
+                />,
+                audioManager,
+            ),
+        );
+
+        expect(audioManager.stopAll).toHaveBeenCalledOnce();
+        expect(audioManager.stopAll).toHaveBeenCalledWith();
+    });
+
+    it('does not dispose the context AudioManager on registry shell unmount — lifecycle owned by Providers', () => {
+        const audioManager = createAudioManagerSpy();
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+
+        const { unmount } = renderWithAudio(
+            <GameShell
+                registry={{ board: () => <div data-testid="registry-board">Registry board</div> }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+            audioManager,
+        );
+
+        unmount();
+
+        expect(audioManager.dispose).not.toHaveBeenCalled();
+    });
+
+    it('does not dispose the context AudioManager when GameShell remounts under the same Providers instance', () => {
+        const audioManager = createAudioManagerSpy();
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const registry = { board: () => <div data-testid="registry-board">Registry board</div> };
+
+        const { unmount } = renderWithAudio(
+            <GameShell
+                registry={registry}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+            audioManager,
+        );
+
+        unmount();
+        expect(audioManager.dispose).not.toHaveBeenCalled();
+
+        renderWithAudio(
+            <GameShell
+                registry={registry}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+            audioManager,
+        );
+
+        expect(audioManager.dispose).not.toHaveBeenCalled();
+    });
+
     it('provides AssetManagerContext in registry mode and disposes it on unmount', async () => {
         const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
         const assetManager = createAssetManagerStub();
@@ -75,7 +206,7 @@ describe('GameShell page object locators', () => {
             );
         }
 
-        const { unmount } = render(
+        const { unmount } = renderWithAudio(
             <GameShell
                 registry={{ board: Board }}
                 snapshot={snapshot}
@@ -101,7 +232,7 @@ describe('GameShell page object locators', () => {
             }),
         );
 
-        render(
+        renderWithAudio(
             <GameShell
                 registry={{ board: Board }}
                 snapshot={snapshot}
@@ -437,6 +568,68 @@ function makePlayerSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnap
 function makeSceneId(raw: string): NonNullable<PlayerSnapshot['sceneId']> {
     return raw as NonNullable<PlayerSnapshot['sceneId']>;
 }
+
+function renderWithAudio(
+    element: React.ReactElement,
+    audioManager = createAudioManagerSpy(),
+): ReturnType<typeof render> {
+    return render(wrapWithAudio(element, audioManager));
+}
+
+function wrapWithAudio(
+    element: React.ReactElement,
+    audioManager = createAudioManagerSpy(),
+): React.ReactElement {
+    return (
+        <AudioManagerContext.Provider value={audioManager}>{element}</AudioManagerContext.Provider>
+    );
+}
+
+describe('SetMatchAssetManagerContext delegation wiring', () => {
+    it('registers the match AssetManager with the app-level delegate on mount and clears it on unmount', () => {
+        const assetManager = createAssetManagerStub();
+        const setMatchAssetManager = vi.fn();
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+
+        const { unmount } = render(
+            <SetMatchAssetManagerContext.Provider value={setMatchAssetManager}>
+                <AudioManagerContext.Provider value={createAudioManagerSpy()}>
+                    <GameShell
+                        registry={{ board: () => <div /> }}
+                        snapshot={snapshot}
+                        sendAction={vi.fn()}
+                        localPlayerId={playerId('p1')}
+                        assetManager={assetManager}
+                    />
+                </AudioManagerContext.Provider>
+            </SetMatchAssetManagerContext.Provider>,
+        );
+
+        expect(setMatchAssetManager).toHaveBeenCalledWith(assetManager);
+
+        unmount();
+
+        expect(setMatchAssetManager).toHaveBeenLastCalledWith(null);
+    });
+
+    it('silently skips delegation wiring when SetMatchAssetManagerContext is not provided', () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+
+        // Should not throw even when the context is absent (tests / non-Providers trees)
+        expect(() =>
+            render(
+                wrapWithAudio(
+                    <GameShell
+                        registry={{ board: () => <div /> }}
+                        snapshot={snapshot}
+                        sendAction={vi.fn()}
+                        localPlayerId={playerId('p1')}
+                    />,
+                ),
+            ),
+        ).not.toThrow();
+    });
+});
 
 function createAssetManagerStub(): AssetManager {
     return {

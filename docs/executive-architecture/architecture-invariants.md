@@ -168,7 +168,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **63.** The simulation never produces audio. Audio playback is initiated only by the renderer in response to `GameEvent`s or direct UI interactions. No reducer, validator, or `ActionDefinition` may import from `renderer/audio/`.
 
-**64.** `AudioManager.dispose()` is called unconditionally at game session end, mirroring the asset disposal contract (invariant 21). Active `AudioHandle`s become invalid after dispose.
+**64.** `AudioManager.dispose()` is called unconditionally at engine shutdown (app exit). `Providers` (`renderer/app/providers.tsx`) is the unique owner of `dispose()` for the app-level `AudioManager`. At game session end (match phase `ended`), `GameShell` calls `AudioManager.stopAll()` to stop all active voices — it does **not** call `dispose()`. Active `AudioHandle`s become invalid after `dispose()`.
 
 **65.** `InputManager` is renderer-only. The simulation has no knowledge of keyboard or gamepad state. Input translates into `EngineAction`s via `sendAction()` at the renderer boundary — never directly into reducers.
 

@@ -17,6 +17,7 @@ import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusI
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { Providers } from './providers';
 
 export const metadata: Metadata = {
     title: 'Chimera',
@@ -40,16 +41,18 @@ export default function RootLayout({ children }: { children: ReactNode }) {
                     fontFamily: 'var(--ch-font-ui)',
                 }}
             >
-                <ThemeProvider>
-                    <SettingsBootstrap />
-                    <LobbyStoreBootstrap />
-                    <GameStoreBootstrap />
-                    <SaveStoreBootstrap />
-                    <CrashRecoveryBanner />
-                    <ConnectionStatusIndicator />
-                    <RootErrorBoundary>{children}</RootErrorBoundary>
-                    {/* ToastHost will be added here as a sibling in §4.30 */}
-                </ThemeProvider>
+                <Providers>
+                    <ThemeProvider>
+                        <SettingsBootstrap />
+                        <LobbyStoreBootstrap />
+                        <GameStoreBootstrap />
+                        <SaveStoreBootstrap />
+                        <CrashRecoveryBanner />
+                        <ConnectionStatusIndicator />
+                        <RootErrorBoundary>{children}</RootErrorBoundary>
+                        {/* ToastHost will be added here as a sibling in §4.30 */}
+                    </ThemeProvider>
+                </Providers>
             </body>
         </html>
     );
