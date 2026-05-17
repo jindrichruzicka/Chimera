@@ -324,6 +324,7 @@ export default function LobbyPage() {
                                     }}
                                     disabled={pendingAction !== null}
                                     variant="primary"
+                                    style={{ marginTop: 'var(--ch-space-sm)' }}
                                 >
                                     {pendingAction === 'joining' ? 'Joining...' : 'Join Lobby'}
                                 </Button>

@@ -11,10 +11,12 @@ describe('defaultTheme', () => {
         expect(theme.id).toBe('engine-default');
         expect(theme.name).toBe('Engine Default');
         expect(palette.button.base).toMatchObject({
-            borderRadius: 'var(--ch-radius-sm)',
+            borderRadius: 'var(--ch-button-radius)',
+            boxShadow: 'var(--ch-button-shadow)',
             fontSize: 'var(--ch-font-size-lg)',
             fontWeight: 600,
             lineHeight: 1.1,
+            transform: 'var(--ch-button-transform)',
         });
         expect(palette.button.variants[variant]).toEqual({
             backgroundColor: 'var(--ch-color-accent)',

@@ -131,8 +131,14 @@ const expectedTokens = [
     '--ch-font-weight-semibold',
     '--ch-line-height-tight',
     '--ch-button-border-width',
+    '--ch-button-radius',
     '--ch-button-font-weight',
     '--ch-button-line-height',
+    '--ch-button-shadow',
+    '--ch-button-shadow-hover',
+    '--ch-button-shadow-hover-danger',
+    '--ch-button-transform',
+    '--ch-button-transform-hover',
     '--ch-button-transition',
     '--ch-button-min-width-sm',
     '--ch-button-min-width-md',
@@ -196,5 +202,20 @@ describe('renderer design tokens', () => {
         expect(parseHexColor(surface).lightness).toBeLessThan(parseHexColor(raised).lightness);
         expect(parseHexColor(raised).lightness).toBeLessThan(parseHexColor(overlay).lightness);
         expect(parseHexColor(accent).lightness).toBeLessThan(parseHexColor(accentHover).lightness);
+    });
+
+    it('declares modern button shape and elevation tokens without changing palette tokens', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-button-radius')).toBe('var(--ch-radius-pill)');
+        expect(extractTokenValue(css, '--ch-button-shadow')).toContain('rgba(0, 0, 0');
+        expect(extractTokenValue(css, '--ch-button-shadow-hover')).toContain('rgba(0, 0, 0');
+        expect(extractTokenValue(css, '--ch-button-shadow-hover-danger')).toContain(
+            'rgba(220, 38, 38',
+        );
+        expect(extractTokenValue(css, '--ch-button-transform')).toBe('scale(1)');
+        expect(extractTokenValue(css, '--ch-button-transform-hover')).toBe('scale(1.05)');
+        expect(extractTokenValue(css, '--ch-color-accent')).toBe('#3f3f46');
+        expect(extractTokenValue(css, '--ch-color-error')).toBe('#dc2626');
     });
 });

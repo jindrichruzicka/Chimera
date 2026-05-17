@@ -9,9 +9,10 @@ export const defaultTheme = {
             base: {
                 alignItems: 'center',
                 appearance: 'none',
-                borderRadius: 'var(--ch-radius-sm)',
+                borderRadius: 'var(--ch-button-radius)',
                 borderStyle: 'solid',
-                borderWidth: 'var(--ch-border-width-sm)',
+                borderWidth: 'var(--ch-button-border-width)',
+                boxShadow: 'var(--ch-button-shadow)',
                 cursor: 'pointer',
                 display: 'inline-flex',
                 fontFamily: 'var(--ch-font-ui)',
@@ -24,8 +25,8 @@ export const defaultTheme = {
                 // Games may not override button line-height; contact engine team if override is needed.
                 lineHeight: 1.1,
                 textAlign: 'center',
-                transition:
-                    'background-color var(--ch-duration-fast) var(--ch-easing-standard), border-color var(--ch-duration-fast) var(--ch-easing-standard), color var(--ch-duration-fast) var(--ch-easing-standard)',
+                transform: 'var(--ch-button-transform)',
+                transition: 'var(--ch-button-transition)',
                 userSelect: 'none',
             },
             variants: {

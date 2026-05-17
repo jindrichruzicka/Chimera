@@ -1,10 +1,18 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Button } from './Button';
+
+const buttonCssPath = path.resolve(import.meta.dirname, 'Button.module.css');
+
+function readButtonCss(): string {
+    return readFileSync(buttonCssPath, 'utf8');
+}
 
 function renderButton(button: React.ReactElement): void {
     render(button);
@@ -123,5 +131,17 @@ describe('Button', () => {
         expect(screen.getByRole('button', { name: 'Settings' })).toHaveStyle({
             width: 'var(--ch-button-width)',
         });
+    });
+
+    it('uses tokenized pill shape, elevation, and hover motion styles', () => {
+        const css = readButtonCss();
+
+        expect(css).toContain('border-radius: var(--ch-button-radius);');
+        expect(css).toContain('box-shadow: var(--ch-button-shadow);');
+        expect(css).toContain('transform: var(--ch-button-transform);');
+        expect(css).toContain('.button:not(:disabled):hover');
+        expect(css).toContain('border-color: var(--ch-button-hover-border-color);');
+        expect(css).toContain('box-shadow: var(--ch-button-shadow-hover);');
+        expect(css).toContain('transform: var(--ch-button-transform-hover);');
     });
 });

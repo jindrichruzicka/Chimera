@@ -62,12 +62,20 @@
     --ch-line-height-tight: 1.1;
 
     --ch-button-border-width: var(--ch-border-width-sm);
+    --ch-button-radius: var(--ch-radius-pill);
     --ch-button-font-weight: var(--ch-font-weight-semibold);
     --ch-button-line-height: var(--ch-line-height-tight);
+    --ch-button-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+    --ch-button-shadow-hover: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    --ch-button-shadow-hover-danger: 0 25px 50px -12px rgba(220, 38, 38, 0.5);
+    --ch-button-transform: scale(1);
+    --ch-button-transform-hover: scale(1.05);
     --ch-button-transition:
         background-color var(--ch-duration-fast) var(--ch-easing-standard),
         border-color var(--ch-duration-fast) var(--ch-easing-standard),
-        color var(--ch-duration-fast) var(--ch-easing-standard);
+        box-shadow var(--ch-duration-fast) var(--ch-easing-standard),
+        color var(--ch-duration-fast) var(--ch-easing-standard),
+        transform var(--ch-duration-fast) var(--ch-easing-standard);
     --ch-button-min-width-sm: calc(var(--ch-space-xl) * 4);
     --ch-button-min-width-md: calc(var(--ch-space-xl) * 5);
     --ch-button-min-width-lg: calc(var(--ch-space-xl) * 6);
