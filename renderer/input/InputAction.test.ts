@@ -122,6 +122,18 @@ describe('RebindResult', () => {
         }
     });
 
+    it('supports a typed persistence-failure variant', () => {
+        const result: RebindResult = {
+            ok: false,
+            reason: 'persist_failed',
+        };
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) {
+            expect(result.reason).toBe('persist_failed');
+        }
+    });
+
     it('exhaustive switch on ok compiles cleanly over both variants', () => {
         const assertNever = (x: never): never => {
             throw new Error(`Unhandled RebindResult: ${JSON.stringify(x)}`);
@@ -135,7 +147,13 @@ describe('RebindResult', () => {
                 case true:
                     return 'success';
                 case false:
-                    return `conflict with ${r.conflictingAction}`;
+                    if (r.reason === 'conflict') {
+                        return `conflict with ${r.conflictingAction}`;
+                    }
+                    if (r.reason === 'persist_failed') {
+                        return 'persist failed';
+                    }
+                    return assertNever(r);
                 default:
                     return assertNever(r);
             }
@@ -145,11 +163,22 @@ describe('RebindResult', () => {
         expect(classify({ ok: false, reason: 'conflict', conflictingAction: 'engine:undo' })).toBe(
             'conflict with engine:undo',
         );
+        expect(classify({ ok: false, reason: 'persist_failed' })).toBe('persist failed');
     });
 
     it('rejects conflict variant missing conflictingAction at compile time', () => {
         // @ts-expect-error: conflict variant requires a conflictingAction field
         const _: RebindResult = { ok: false, reason: 'conflict' };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects persist_failed variant containing conflictingAction at compile time', () => {
+        const _: RebindResult = {
+            ok: false,
+            reason: 'persist_failed',
+            // @ts-expect-error: persist_failed variant must not include conflictingAction
+            conflictingAction: 'engine:undo',
+        };
         expect(_).toBeDefined();
     });
 });

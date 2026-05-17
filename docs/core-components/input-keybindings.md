@@ -84,55 +84,46 @@ export type GameBindingSchema<T> = T extends { readonly [K in keyof T]: KeyBindi
 ```typescript
 // renderer/input/InputManager.ts
 
-export class InputManager {
-    constructor(
-        private readonly registry: InputActionRegistry,
-        private readonly bindings: KeyBindingRepository,
-    ) {}
-
+export interface InputManager {
     start(): void; // Attaches window listeners (called once on app mount)
     stop(): void;
 
     onAction(id: InputActionId, cb: (event: InputEvent) => void): Unsubscribe;
+    setActiveCategory(category: string | null): void; // null = all categories
     isPressed(id: InputActionId): boolean; // For continuous held-key detection
 
     /** Rebind at runtime. Persists via KeyBindingRepository.save(). */
     rebind(id: InputActionId, binding: KeyBinding): Promise<RebindResult>;
+
+    /**
+     * Execute one gamepad poll cycle. Called automatically via requestAnimationFrame
+     * when running in the browser; exposed for deterministic testing.
+     */
+    pollGamepad(): void;
 }
+
+export function createInputManager(
+    registry: InputActionRegistry,
+    bindings: KeyBindingRepository,
+): InputManager;
 
 export type RebindResult =
     | { ok: true }
-    | { ok: false; reason: 'conflict'; conflictingAction: InputActionId };
-```
-
----
-
-## useInputAction Hook
-
-```typescript
-// renderer/input/useInputAction.ts
-export function useInputAction(id: InputActionId, callback: (event: InputEvent) => void): void;
-```
-
-Components subscribe declaratively:
-
-```typescript
-useInputAction('engine:undo', () => sendAction(UndoAction.build()));
-useInputAction('game:end-turn', () => sendAction(EndTurnAction.build()));
-useInputAction('game:cycle-unit', cycleNextUnit);
+    | { ok: false; reason: 'conflict'; conflictingAction: InputActionId }
+    | { ok: false; reason: 'persist_failed' };
 ```
 
 ---
 
 ## Settings Integration
 
-Key bindings are stored in `settings.controls.bindings: GameBindingSchema<EngineBindings>`. The rebind UI reads from and writes to `settingsStore`. `KeyBindingRepository` is a thin wrapper around the `settings.controls` namespace — no separate repository file needed.
+Key bindings are stored in `settings.controls.bindings: GameBindingSchema<EngineBindings>`. The rebind UI reads from and writes to `settingsStore`. `KeyBindingRepository` is implemented as a dedicated thin wrapper module over the `settings.controls` namespace.
 
 ---
 
 ## Conflict Detection
 
-`InputManager.rebind()` rejects bindings that collide with an existing one (same key + modifier + category scope). The UI offers "unbind existing action" as a resolution. Engine-reserved bindings (`engine:*`) may be rebound but not removed.
+`InputManager.rebind()` rejects bindings that collide with an existing one in the same category (same key + modifier + category scope). Cross-category duplicates are allowed, but dispatch uses explicit category routing: call `setActiveCategory(...)` to resolve which category receives a combo when duplicates exist. When no active category is set and a combo matches multiple categories, no action is dispatched because the combo is ambiguous. The UI offers "unbind existing action" as a resolution. Engine-reserved bindings (`engine:*`) may be rebound but not removed.
 
 ---
 

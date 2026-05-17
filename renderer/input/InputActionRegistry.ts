@@ -36,7 +36,7 @@ export class UnknownInputActionError extends Error {
  *
  * The engine registers its built-in actions at startup; games register their
  * actions before InputManager.start(). This registry is consumed by
- * InputManager and useInputAction.
+ * InputManager.
  */
 export interface InputActionRegistry {
     /**

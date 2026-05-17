@@ -43,6 +43,8 @@ export interface InputAction {
  *  - `{ ok: true }` — the rebind succeeded.
  *  - `{ ok: false; reason: 'conflict'; conflictingAction: InputActionId }` —
  *    the binding collides with an existing one.
+ *  - `{ ok: false; reason: 'persist_failed' }` — saving the binding failed,
+ *    so runtime bindings were not updated.
  */
 export type RebindResult =
     | { readonly ok: true }
@@ -50,11 +52,14 @@ export type RebindResult =
           readonly ok: false;
           readonly reason: 'conflict';
           readonly conflictingAction: InputActionId;
+      }
+    | {
+          readonly ok: false;
+          readonly reason: 'persist_failed';
       };
 
 /**
- * Describes an input event passed to `onAction` callbacks and `useInputAction`
- * subscribers.
+ * Describes an input event passed to `onAction` callbacks.
  *
  * Intentionally renderer-local — this type must not cross the IPC boundary or
  * appear in GameSnapshot, PlayerSnapshot, or EngineAction payloads.
