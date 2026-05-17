@@ -20,7 +20,7 @@ Centralise keyboard and gamepad input behind named `InputAction`s. Decouple resp
 ## Core Types
 
 ```typescript
-// simulation/input/InputAction.ts
+// renderer/input/InputAction.ts
 
 /** 'engine:undo' | 'engine:redo' | 'engine:toggle-menu' | 'game:end-turn' | ... */
 export type InputActionId = `engine:${string}` | `game:${string}`;
@@ -38,7 +38,7 @@ export interface InputAction {
 ## KeyBinding
 
 ```typescript
-// simulation/input/InputBindingSchema.ts
+// renderer/input/InputBindingSchema.ts
 
 export interface KeyBinding {
     readonly primary: string; // KeyboardEvent.code or gamepad button id
