@@ -74,6 +74,10 @@ vi.mock('../../game/rendererGameRegistry', () => ({
     loadRendererGame: loadRendererGameMock,
 }));
 
+vi.mock('../../input/useInputAction.js', () => ({
+    useInputAction: () => undefined,
+}));
+
 vi.mock('../../components/shell/GameShell', async () => {
     const react = await import('react');
     return {

@@ -9,6 +9,34 @@ import { createDelegatingAssetManager } from '../assets/DelegatingAssetManager';
 import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import { createAudioManager, type AudioHandle, type AudioManager } from '../audio/AudioManager';
 import { AudioManagerContext } from '../audio/AudioManagerContext.js';
+import type { InputAction } from '../input/InputAction.js';
+import { createInputManager } from '../input/InputManager.js';
+import { createInputActionRegistry } from '../input/InputActionRegistry.js';
+import { createKeyBindingRepository } from '../input/KeyBindingRepository.js';
+import { InputManagerContext } from '../input/InputManagerContext.js';
+
+const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
+    { id: 'engine:undo', description: 'Undo last action', category: 'Engine', oneShot: true },
+    {
+        id: 'engine:redo',
+        description: 'Redo last undone action',
+        category: 'Engine',
+        oneShot: true,
+    },
+    { id: 'game:end-turn', description: 'End current turn', category: 'Game', oneShot: true },
+    {
+        id: 'engine:toggle-menu',
+        description: 'Toggle game menu',
+        category: 'Engine',
+        oneShot: true,
+    },
+    {
+        id: 'engine:toggle-perf-hud',
+        description: 'Toggle performance HUD',
+        category: 'Engine',
+        oneShot: true,
+    },
+];
 
 export interface ProvidersProps {
     readonly children: ReactNode;
@@ -25,12 +53,26 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         [delegatingAssetManager],
     );
 
+    const inputRegistry = React.useMemo(() => createInputActionRegistry(ENGINE_INPUT_ACTIONS), []);
+    const inputBindings = React.useMemo(() => createKeyBindingRepository(), []);
+    const inputManager = React.useMemo(
+        () => createInputManager(inputRegistry, inputBindings),
+        [inputRegistry, inputBindings],
+    );
+
     React.useEffect(() => {
         return () => {
             audioManager.dispose();
             delegatingAssetManager.dispose();
         };
     }, [audioManager, delegatingAssetManager]);
+
+    React.useEffect(() => {
+        inputManager.start();
+        return () => {
+            inputManager.stop();
+        };
+    }, [inputManager]);
 
     const setGameAssetManager = React.useCallback(
         (manager: AssetManager | null) => {
@@ -43,7 +85,9 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
             <AssetManagerContext.Provider value={delegatingAssetManager}>
                 <AudioManagerContext.Provider value={audioManager}>
-                    {children}
+                    <InputManagerContext.Provider value={inputManager}>
+                        {children}
+                    </InputManagerContext.Provider>
                 </AudioManagerContext.Provider>
             </AssetManagerContext.Provider>
         </SetGameAssetManagerContext.Provider>

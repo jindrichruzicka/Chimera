@@ -83,6 +83,19 @@ vi.mock('../../game/rendererGameRegistry', () => ({
     loadRendererGame: loadRendererGameMock,
 }));
 
+// useInputAction mock — captures registered callbacks so tests can fire them manually.
+interface InputEvent {
+    pressed: boolean;
+}
+type InputActionId = string;
+type InputCallback = (event: InputEvent) => void;
+const inputActionCallbacks = new Map<InputActionId, InputCallback>();
+vi.mock('../../input/useInputAction.js', () => ({
+    useInputAction: (id: InputActionId, cb: InputCallback) => {
+        inputActionCallbacks.set(id, cb);
+    },
+}));
+
 const testRegistry: GameScreenRegistry = {
     board: ({ snapshot }: GameScreenProps) => (
         <div data-testid="test-board" data-tick={snapshot.tick} />
@@ -187,6 +200,7 @@ beforeEach(() => {
     mockReplace.mockReset();
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
+    inputActionCallbacks.clear();
 
     Object.defineProperty(window, '__chimera', {
         value: { game: { sendAction: vi.fn() } },
@@ -429,5 +443,107 @@ describe('GamePage — button states', () => {
         mockSnapshot = makeSnapshot({ isMyTurn: true });
         renderGamePage();
         expect((await screen.findByTestId('end-turn')).hasAttribute('disabled')).toBe(false);
+    });
+});
+
+describe('GamePage — keyboard-triggered action dispatch', () => {
+    it('dispatches engine:undo when engine:undo key action fires and canUndo=true', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        const cb = inputActionCallbacks.get('engine:undo');
+        expect(cb).toBeDefined();
+        cb!({ pressed: true });
+
+        expect(mockSendAction).toHaveBeenCalledWith({
+            type: 'engine:undo',
+            playerId: 'p1',
+            tick: 5,
+            payload: { steps: 1 },
+        });
+    });
+
+    it('does not dispatch engine:undo when canUndo=false', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: false } });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        inputActionCallbacks.get('engine:undo')?.({ pressed: true });
+
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+
+    it('dispatches engine:redo when engine:redo key action fires and canRedo=true', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: true } });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        const cb = inputActionCallbacks.get('engine:redo');
+        expect(cb).toBeDefined();
+        cb!({ pressed: true });
+
+        expect(mockSendAction).toHaveBeenCalledWith({
+            type: 'engine:redo',
+            playerId: 'p1',
+            tick: 5,
+            payload: { steps: 1 },
+        });
+    });
+
+    it('does not dispatch engine:redo when canRedo=false', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: false } });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        inputActionCallbacks.get('engine:redo')?.({ pressed: true });
+
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+
+    it('dispatches engine:end_turn when game:end-turn key action fires and isMyTurn=true', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ isMyTurn: true });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        const cb = inputActionCallbacks.get('game:end-turn');
+        expect(cb).toBeDefined();
+        cb!({ pressed: true });
+
+        expect(mockSendAction).toHaveBeenCalledWith({
+            type: 'engine:end_turn',
+            playerId: 'p1',
+            tick: 5,
+            payload: {},
+        });
+    });
+
+    it('does not dispatch engine:end_turn when isMyTurn=false', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ isMyTurn: false });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        inputActionCallbacks.get('game:end-turn')?.({ pressed: true });
+
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+
+    it('does not dispatch on key-up events (pressed=false)', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: true }, isMyTurn: true });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        inputActionCallbacks.get('engine:undo')?.({ pressed: false });
+        inputActionCallbacks.get('engine:redo')?.({ pressed: false });
+        inputActionCallbacks.get('game:end-turn')?.({ pressed: false });
+
+        expect(mockSendAction).not.toHaveBeenCalled();
     });
 });

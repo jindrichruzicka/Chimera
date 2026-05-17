@@ -27,6 +27,8 @@ import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
+import { useInputAction } from '../../input/useInputAction.js';
+import type { InputEvent } from '../../input/InputAction.js';
 
 type GameActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
 
@@ -81,6 +83,52 @@ export default function GamePage(): React.ReactElement | null {
         };
         sendAction(action);
     };
+
+    const onUndoKey = React.useCallback(
+        (event: InputEvent) => {
+            if (!event.pressed || snapshot === null) return;
+            if (!snapshot.undoMeta.canUndo) return;
+            const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
+            sendAction({
+                type: 'engine:undo',
+                playerId: snapshot.viewerId,
+                tick: actionTick,
+                payload: { steps: 1 },
+            });
+        },
+        [snapshot, sendAction, currentTick],
+    );
+    const onRedoKey = React.useCallback(
+        (event: InputEvent) => {
+            if (!event.pressed || snapshot === null) return;
+            if (!snapshot.undoMeta.canRedo) return;
+            const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
+            sendAction({
+                type: 'engine:redo',
+                playerId: snapshot.viewerId,
+                tick: actionTick,
+                payload: { steps: 1 },
+            });
+        },
+        [snapshot, sendAction, currentTick],
+    );
+    const onEndTurnKey = React.useCallback(
+        (event: InputEvent) => {
+            if (!event.pressed || snapshot === null) return;
+            if (!snapshot.isMyTurn) return;
+            const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
+            sendAction({
+                type: 'engine:end_turn',
+                playerId: snapshot.viewerId,
+                tick: actionTick,
+                payload: {},
+            });
+        },
+        [snapshot, sendAction, currentTick],
+    );
+    useInputAction('engine:undo', onUndoKey);
+    useInputAction('engine:redo', onRedoKey);
+    useInputAction('game:end-turn', onEndTurnKey);
 
     if (snapshot === null) {
         return null;

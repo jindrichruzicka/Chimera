@@ -11,6 +11,8 @@ import type { DelegatingAssetManager } from '../assets/DelegatingAssetManager';
 import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import type { AudioManager } from '../audio/AudioManager';
 import { useAudioManager } from '../audio/AudioManagerContext.js';
+import type { InputManager } from '../input/InputManager.js';
+import { useInputManager } from '../input/InputManagerContext.js';
 import { Providers } from './providers';
 
 const providerMocks = vi.hoisted(() => {
@@ -37,12 +39,34 @@ const providerMocks = vi.hoisted(() => {
         duck: vi.fn(),
         dispose: vi.fn(),
     };
+    const inputManager = {
+        start: vi.fn(),
+        stop: vi.fn(),
+        isPressed: vi.fn().mockReturnValue(false),
+        onAction: vi.fn(() => vi.fn()),
+        setActiveCategory: vi.fn(),
+        rebind: vi.fn().mockResolvedValue({ ok: true }),
+        pollGamepad: vi.fn(),
+    };
 
     return {
         delegatingAssetManager,
         audioManager,
+        inputManager,
         createDelegatingAssetManager: vi.fn(() => delegatingAssetManager),
         createAudioManager: vi.fn(() => audioManager),
+        createInputManager: vi.fn(() => inputManager),
+        createInputActionRegistry: vi.fn(() => ({
+            register: vi.fn(),
+            get: vi.fn(),
+            has: vi.fn(),
+            getAll: vi.fn(() => []),
+        })),
+        createKeyBindingRepository: vi.fn(() => ({
+            getAll: vi.fn(() => ({})),
+            get: vi.fn(),
+            save: vi.fn(),
+        })),
     };
 });
 
@@ -54,12 +78,29 @@ vi.mock('../audio/AudioManager', () => ({
     createAudioManager: providerMocks.createAudioManager,
 }));
 
+vi.mock('../input/InputManager.js', () => ({
+    createInputManager: providerMocks.createInputManager,
+}));
+
+vi.mock('../input/InputActionRegistry.js', () => ({
+    createInputActionRegistry: providerMocks.createInputActionRegistry,
+}));
+
+vi.mock('../input/KeyBindingRepository.js', () => ({
+    createKeyBindingRepository: providerMocks.createKeyBindingRepository,
+}));
+
 beforeEach(() => {
     providerMocks.createDelegatingAssetManager.mockClear();
     providerMocks.createAudioManager.mockClear();
+    providerMocks.createInputManager.mockClear();
+    providerMocks.createInputActionRegistry.mockClear();
+    providerMocks.createKeyBindingRepository.mockClear();
     providerMocks.delegatingAssetManager.dispose.mockClear();
     providerMocks.delegatingAssetManager.setDelegate.mockClear();
     providerMocks.audioManager.dispose.mockClear();
+    providerMocks.inputManager.start.mockClear();
+    providerMocks.inputManager.stop.mockClear();
 });
 
 afterEach(() => {
@@ -221,3 +262,72 @@ function createGameAssetManagerStub(): AssetManager {
         dispose: vi.fn(),
     };
 }
+
+function InputManagerProbe(): React.ReactElement {
+    const inputManager = useInputManager();
+    const expected = providerMocks.inputManager as unknown as InputManager;
+
+    return (
+        <div
+            data-testid="input-manager-probe"
+            data-input-manager={inputManager === expected ? 'provided' : 'wrong'}
+        />
+    );
+}
+
+describe('Providers — InputManager lifecycle', () => {
+    it('creates one InputManager via createInputManager', () => {
+        const { rerender } = render(
+            <Providers>
+                <InputManagerProbe />
+            </Providers>,
+        );
+
+        expect(providerMocks.createInputManager).toHaveBeenCalledOnce();
+
+        rerender(
+            <Providers>
+                <InputManagerProbe />
+            </Providers>,
+        );
+
+        expect(providerMocks.createInputManager).toHaveBeenCalledOnce();
+    });
+
+    it('calls start() on the InputManager when Providers mounts', () => {
+        render(
+            <Providers>
+                <InputManagerProbe />
+            </Providers>,
+        );
+
+        expect(providerMocks.inputManager.start).toHaveBeenCalledOnce();
+    });
+
+    it('calls stop() on the InputManager when Providers unmounts', () => {
+        const { unmount } = render(
+            <Providers>
+                <InputManagerProbe />
+            </Providers>,
+        );
+
+        expect(providerMocks.inputManager.stop).not.toHaveBeenCalled();
+
+        unmount();
+
+        expect(providerMocks.inputManager.stop).toHaveBeenCalledOnce();
+    });
+
+    it('provides InputManager via InputManagerContext', () => {
+        render(
+            <Providers>
+                <InputManagerProbe />
+            </Providers>,
+        );
+
+        expect(screen.getByTestId('input-manager-probe')).toHaveAttribute(
+            'data-input-manager',
+            'provided',
+        );
+    });
+});
