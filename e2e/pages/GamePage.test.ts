@@ -50,32 +50,32 @@ const buildPageDouble = (tickText = '0'): BuildPageDoubleResult => {
 };
 
 describe('GamePage', () => {
-    it('binds all match locators using test ids', () => {
+    it('binds all game locators using test ids', () => {
         const { page, requestedTestIds } = buildPageDouble();
 
-        const matchPage = new GamePage(page);
+        const gamePage = new GamePage(page);
 
-        expect(matchPage.canvas).toBeDefined();
-        expect(matchPage.undoButton).toBeDefined();
-        expect(matchPage.redoButton).toBeDefined();
-        expect(matchPage.endTurnButton).toBeDefined();
-        expect(matchPage.matchResultBanner).toBeDefined();
-        expect(matchPage.matchResultText).toBeDefined();
-        expect(matchPage.selectableUnit).toBeDefined();
-        expect(matchPage.moveTarget).toBeDefined();
-        expect(matchPage.revealTarget).toBeDefined();
-        expect(matchPage.attackTarget).toBeDefined();
-        expect(matchPage.hudTick).toBeDefined();
-        expect(matchPage.sceneRouter).toBeDefined();
-        expect(matchPage.transitionOverlay).toBeDefined();
-        expect(matchPage.postMatchSummary).toBeDefined();
+        expect(gamePage.canvas).toBeDefined();
+        expect(gamePage.undoButton).toBeDefined();
+        expect(gamePage.redoButton).toBeDefined();
+        expect(gamePage.endTurnButton).toBeDefined();
+        expect(gamePage.gameResultBanner).toBeDefined();
+        expect(gamePage.gameResultText).toBeDefined();
+        expect(gamePage.selectableUnit).toBeDefined();
+        expect(gamePage.moveTarget).toBeDefined();
+        expect(gamePage.revealTarget).toBeDefined();
+        expect(gamePage.attackTarget).toBeDefined();
+        expect(gamePage.hudTick).toBeDefined();
+        expect(gamePage.sceneRouter).toBeDefined();
+        expect(gamePage.transitionOverlay).toBeDefined();
+        expect(gamePage.postMatchSummary).toBeDefined();
         expect(requestedTestIds).toEqual([
-            'match-canvas',
+            'game-canvas',
             'undo',
             'redo',
             'end-turn',
-            'match-result-banner',
-            'match-result-text',
+            'game-result-banner',
+            'game-result-text',
             'selectable-unit',
             'move-target',
             'reveal-target',
@@ -89,27 +89,27 @@ describe('GamePage', () => {
 
     it('parses the current HUD tick as an integer', async () => {
         const { page } = buildPageDouble('42');
-        const matchPage = new GamePage(page);
+        const gamePage = new GamePage(page);
 
-        const tick = await matchPage.currentTick();
+        const tick = await gamePage.currentTick();
 
         expect(tick).toBe(42);
     });
 
     it('waits for a target tick with a default timeout of 30 seconds', async () => {
         const { page, waitForFunctionCalls } = buildPageDouble();
-        const matchPage = new GamePage(page);
+        const gamePage = new GamePage(page);
 
-        await matchPage.waitForTick(12);
+        await gamePage.waitForTick(12);
 
         expect(waitForFunctionCalls).toEqual([{ tick: 12, timeout: 30_000 }]);
     });
 
     it('waits for a target tick with a custom timeout', async () => {
         const { page, waitForFunctionCalls } = buildPageDouble();
-        const matchPage = new GamePage(page);
+        const gamePage = new GamePage(page);
 
-        await matchPage.waitForTick(17, 5_000);
+        await gamePage.waitForTick(17, 5_000);
 
         expect(waitForFunctionCalls).toEqual([{ tick: 17, timeout: 5_000 }]);
     });

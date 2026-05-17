@@ -196,10 +196,10 @@ describe('LobbyPage pending actions', () => {
 
         // Lobby heading must remain; GameShell must NOT be rendered.
         expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
-        expect(screen.queryByTestId('match-canvas')).toBeNull();
+        expect(screen.queryByTestId('game-canvas')).toBeNull();
     });
 
-    it('calls router.push("/match") after handleStartMatch succeeds', async () => {
+    it('calls router.push("/game") after handleStartMatch succeeds', async () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
             info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
@@ -214,7 +214,7 @@ describe('LobbyPage pending actions', () => {
         fireEvent.click(screen.getByTestId('start-match'));
 
         await waitFor(() => {
-            expect(mockPush).toHaveBeenCalledWith('/match');
+            expect(mockPush).toHaveBeenCalledWith('/game');
         });
     });
 

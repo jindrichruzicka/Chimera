@@ -49,8 +49,9 @@ If no game banner is registered, `GameShell` displays the default engine fallbac
 - `winnerIds` is non-empty and does not include the local player: `You lose`
 - `winnerIds` is empty: `Draw`
 
-The result banner exposes `data-testid="match-result-banner"` and the text node exposes
-`data-testid="match-result-text"`, whether rendered by the engine fallback or by a game component.
+The result banner exposes `data-testid="game-result-banner"`, the text node exposes
+`data-testid="game-result-text"`, and the banner root carries `data-game-result-outcome`, whether
+rendered by the engine fallback or by a game component.
 
 ## Undo/Redo Semantics
 

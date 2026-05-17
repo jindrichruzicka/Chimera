@@ -5,8 +5,8 @@ export class GamePage {
     readonly undoButton: Locator;
     readonly redoButton: Locator;
     readonly endTurnButton: Locator;
-    readonly matchResultBanner: Locator;
-    readonly matchResultText: Locator;
+    readonly gameResultBanner: Locator;
+    readonly gameResultText: Locator;
     readonly selectableUnit: Locator;
     readonly moveTarget: Locator;
     readonly revealTarget: Locator;
@@ -17,12 +17,12 @@ export class GamePage {
     readonly postMatchSummary: Locator;
 
     public constructor(private readonly page: Page) {
-        this.canvas = page.getByTestId('match-canvas');
+        this.canvas = page.getByTestId('game-canvas');
         this.undoButton = page.getByTestId('undo');
         this.redoButton = page.getByTestId('redo');
         this.endTurnButton = page.getByTestId('end-turn');
-        this.matchResultBanner = page.getByTestId('match-result-banner');
-        this.matchResultText = page.getByTestId('match-result-text');
+        this.gameResultBanner = page.getByTestId('game-result-banner');
+        this.gameResultText = page.getByTestId('game-result-text');
         this.selectableUnit = page.getByTestId('selectable-unit');
         this.moveTarget = page.getByTestId('move-target');
         this.revealTarget = page.getByTestId('reveal-target');

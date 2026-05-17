@@ -22,6 +22,7 @@ import React from 'react';
 import { useShallow } from 'zustand/shallow';
 import { Button } from '../../components/ui/Button';
 import { useSettingsStore } from '../../state/settingsStore';
+import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import type {
     ResolvedSettings,
     AudioSettings,
@@ -48,7 +49,7 @@ const TARGET_FPS_OPTIONS: readonly (30 | 60 | 120 | 0)[] = [30, 60, 120, 0];
  * This id is validated end-to-end by the main process SettingsManager.
  */
 function selectGameId(s: { activeGameId: string | null }): string {
-    return s.activeGameId ?? '__engine__';
+    return s.activeGameId ?? ENGINE_SETTINGS_GAME_ID;
 }
 
 /**
@@ -61,7 +62,7 @@ function selectGameSpecificSettings(s: {
     activeGameId: string | null;
     settings: Record<string, ResolvedSettings>;
 }): Readonly<Record<string, unknown>> | undefined {
-    const resolved = s.settings[s.activeGameId ?? '__engine__'];
+    const resolved = s.settings[s.activeGameId ?? ENGINE_SETTINGS_GAME_ID];
     if (!resolved) return undefined;
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(resolved)) {

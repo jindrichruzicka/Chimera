@@ -47,7 +47,18 @@ interface EngineSettings {
         showPerfHud: boolean; // Forces PerfHud; overrides F3 toggle
     };
     controls: {
-        keyBindings: Record<string, string>; // actionId → key ('undo' → 'Ctrl+Z')
+        /** Key bindings keyed by namespaced InputActionId (e.g. 'engine:undo').
+         *  Invariant #66: stored here, never in profile data. */
+        bindings: Readonly<
+            Record<
+                string,
+                {
+                    readonly primary: string;
+                    readonly secondary?: string;
+                    readonly modifiers?: readonly ('Ctrl' | 'Shift' | 'Alt' | 'Meta')[];
+                }
+            >
+        >;
     };
 }
 ```
@@ -185,7 +196,7 @@ interface SettingsStore {
 
 ## Cross-References
 
-- [Input/Keybindings](input-keybindings.md) — `controls.keyBindings` in `EngineSettings` (§4.26)
+- [Input/Keybindings](input-keybindings.md) — `controls.bindings` in `EngineSettings` (§4.26)
 - [Audio System](audio-system.md) — `audio.*` settings drive AudioBus volumes (§4.25)
 - [Performance HUD](performance-hud-device-info.md) — `gameplay.showPerfHud` forces PerfHud (§4.16)
 - [Electron Shell](electron-shell-ipc-bridge.md) — `SettingsAPI` IPC namespace

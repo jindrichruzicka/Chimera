@@ -112,7 +112,7 @@ interface GameShellProps {
  *   4. Pass all engine contexts down the tree (§4.34)
  *   5. Gate screen components behind React.Suspense
  *   6. Delegate scene transitions to SceneRouter (§4.18)
- *   7. Delegate resolved match-result presentation to registry.matchResultBanner when present
+ *   7. Delegate resolved game-result presentation to registry.matchResultBanner when present
  */
 export function GameShell({ registry }: GameShellProps): JSX.Element;
 ```
@@ -130,8 +130,9 @@ controls when the E2E page object needs to drive the match generically.
 When `PlayerSnapshot.matchResult` is non-null, `GameShell` renders `registry.matchResultBanner`
 with `{ matchResult, localPlayerId }`. If the game omits the slot, `GameShell` uses the engine
 fallback text (`You won`, `You lose`, or `Draw`). Game-provided result banners should expose
-`data-testid="match-result-banner"` on the banner root and `data-testid="match-result-text"` on the
-primary message to keep Playwright page objects stable across games.
+`data-testid="game-result-banner"` on the banner root, `data-testid="game-result-text"` on the
+primary message, and `data-game-result-outcome` on the banner root to keep Playwright page objects
+stable across games.
 
 ### Invariants
 

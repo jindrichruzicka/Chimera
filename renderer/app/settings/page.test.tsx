@@ -71,7 +71,7 @@ function makeSettings(
             showHints: true,
             showPerfHud: false,
         },
-        controls: { keyBindings: {} },
+        controls: { bindings: {} },
     };
 }
 

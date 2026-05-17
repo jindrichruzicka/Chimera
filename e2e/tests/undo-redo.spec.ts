@@ -14,7 +14,7 @@
  *
  * All interactions go through GamePage POM locators and hostWindow only.
  */
-import { test, expect } from '../fixtures/direct-match.fixture';
+import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';
 
 test.describe('Undo/redo', () => {

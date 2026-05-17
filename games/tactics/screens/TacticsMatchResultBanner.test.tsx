@@ -21,11 +21,11 @@ describe('TacticsMatchResultBanner', () => {
             />,
         );
 
-        expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(screen.getByTestId('game-result-banner')).toBeTruthy();
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('win');
-        expect(screen.getByTestId('match-result-text').textContent).toBe('Tactical Victory');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Tactical Victory');
     });
 
     it('shows a tactics defeat message when another player won', () => {
@@ -36,9 +36,9 @@ describe('TacticsMatchResultBanner', () => {
             />,
         );
 
-        expect(screen.getByTestId('match-result-text').textContent).toBe('Tactical Defeat');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Tactical Defeat');
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('loss');
     });
 
@@ -50,18 +50,18 @@ describe('TacticsMatchResultBanner', () => {
             />,
         );
 
-        expect(screen.getByTestId('match-result-text').textContent).toBe('Stalemate');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Stalemate');
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('draw');
     });
 
     it('shows a neutral tactics message when the viewer is unknown', () => {
         render(<TacticsMatchResultBanner matchResult={{ winnerIds: [playerId('p2')] }} />);
 
-        expect(screen.getByTestId('match-result-text').textContent).toBe('Battle Concluded');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Battle Concluded');
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('unknown');
     });
 });

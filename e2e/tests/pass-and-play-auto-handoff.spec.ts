@@ -13,7 +13,7 @@
  *        the renderer reads state, never writes it.
  *   #8 — Each host-window view is a projected PlayerSnapshot for the active seat.
  */
-import { test, expect } from '../fixtures/direct-match.fixture';
+import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';
 
 test.describe('Pass-and-play auto handoff', () => {

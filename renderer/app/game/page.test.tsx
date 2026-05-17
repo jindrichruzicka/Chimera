@@ -231,13 +231,13 @@ describe('MatchPage — redirect', () => {
         mockSnapshot = null;
         mockLobbyState = null;
         renderGamePage();
-        expect(screen.queryByTestId('match-canvas')).toBeNull();
+        expect(screen.queryByTestId('game-canvas')).toBeNull();
     });
 
     it('does not redirect when snapshot is active', async () => {
         mockSnapshot = makeSnapshot();
         renderGamePage();
-        await screen.findByTestId('match-canvas');
+        await screen.findByTestId('game-canvas');
         expect(mockReplace).not.toHaveBeenCalled();
     });
 });
@@ -248,15 +248,15 @@ describe('MatchPage — rendering', () => {
         mockSnapshot = makeSnapshot();
         renderGamePage();
 
-        await screen.findByTestId('match-canvas');
+        await screen.findByTestId('game-canvas');
 
         expect(loadRendererGameMock).toHaveBeenCalledWith('space-arena');
     });
 
-    it('renders GameShell (match-canvas testid) when snapshot is active', async () => {
+    it('renders GameShell (game-canvas testid) when snapshot is active', async () => {
         mockSnapshot = makeSnapshot();
         renderGamePage();
-        expect(await screen.findByTestId('match-canvas')).toBeTruthy();
+        expect(await screen.findByTestId('game-canvas')).toBeTruthy();
     });
 
     it('renders the game board inside GameShell', async () => {
@@ -278,16 +278,16 @@ describe('MatchPage — rendering', () => {
         expect(await screen.findByTestId('registry-hud')).toBeTruthy();
     });
 
-    it('renders match result banner when phase is ended', async () => {
+    it('renders game result banner when phase is ended', async () => {
         mockSnapshot = makeSnapshot({ phase: gamePhase('ended') });
         renderGamePage();
-        expect(await screen.findByTestId('match-result-banner')).toBeTruthy();
+        expect(await screen.findByTestId('game-result-banner')).toBeTruthy();
     });
 
     it('does not render lobby heading', async () => {
         mockSnapshot = makeSnapshot();
         renderGamePage();
-        await screen.findByTestId('match-canvas');
+        await screen.findByTestId('game-canvas');
         expect(screen.queryByRole('heading', { name: 'Multiplayer Lobby' })).toBeNull();
     });
 });

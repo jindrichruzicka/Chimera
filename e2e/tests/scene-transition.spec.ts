@@ -10,7 +10,7 @@
  * final state after the auto-mechanism has fired.
  */
 import type { ElectronApplication, Page } from '@playwright/test';
-import { test, expect } from '../fixtures/direct-match.fixture';
+import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';
 
 interface HostSnapshotView {

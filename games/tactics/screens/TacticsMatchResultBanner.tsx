@@ -42,12 +42,12 @@ export function TacticsMatchResultBanner(props: MatchResultBannerProps): React.R
 
     return (
         <div
-            data-testid="match-result-banner"
-            data-match-result-outcome={outcome}
+            data-testid="game-result-banner"
+            data-game-result-outcome={outcome}
             role="status"
             style={bannerStyle}
         >
-            <span data-testid="match-result-text" style={messageStyle}>
+            <span data-testid="game-result-text" style={messageStyle}>
                 {resolveTacticsResultMessage(props)}
             </span>
         </div>

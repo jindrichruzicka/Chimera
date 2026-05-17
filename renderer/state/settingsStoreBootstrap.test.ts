@@ -14,6 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { SettingsAPI, Unsubscribe, ResolvedSettings } from '../../electron/preload/api-types';
 import { bootstrapSettingsStore } from './settingsStoreBootstrap';
 import { useSettingsStore } from './settingsStore';
+import { ENGINE_SETTINGS_GAME_ID } from '../input/KeyBindingRepository.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -27,7 +28,13 @@ const makeSettings = (masterVolume = 1.0): ResolvedSettings => ({
         showHints: true,
         showPerfHud: false,
     },
-    controls: { keyBindings: { undo: 'Ctrl+Z', redo: 'Ctrl+Y', endTurn: 'Enter' } },
+    controls: {
+        bindings: {
+            'engine:undo': { primary: 'KeyZ', modifiers: ['Ctrl'] },
+            'engine:redo': { primary: 'KeyZ', modifiers: ['Ctrl', 'Shift'] },
+            'engine:toggle-menu': { primary: 'Escape' },
+        },
+    },
 });
 
 function makeApi(
@@ -101,8 +108,8 @@ describe('bootstrapSettingsStore()', () => {
         bootstrapSettingsStore(api);
         await flushPromiseJobs();
 
-        expect(api.get).toHaveBeenCalledWith('__engine__');
-        expect(useSettingsStore.getState().settings['__engine__']).toBe(incoming);
+        expect(api.get).toHaveBeenCalledWith(ENGINE_SETTINGS_GAME_ID);
+        expect(useSettingsStore.getState().settings[ENGINE_SETTINGS_GAME_ID]).toBe(incoming);
     });
 
     it('does not let initial engine replay overwrite a fresher engine push event', async () => {

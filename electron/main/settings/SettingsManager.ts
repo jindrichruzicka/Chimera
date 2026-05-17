@@ -102,10 +102,14 @@ export class SettingsManager {
             );
         }
 
-        // Invariant #35: game-specific keys must not shadow engine namespace keys.
-        const gameSpecificKeys = Object.keys(schema.defaults).filter(
-            (k) => !ENGINE_NAMESPACE_KEYS.has(k),
-        );
+        // Invariant #35: game-specific keys (keys beyond the five engine namespaces)
+        // must not shadow engine namespace keys. Extract only the game-specific keys.
+        const allKeys = Object.keys(schema.defaults);
+        const gameSpecificKeys = allKeys.filter((k) => !ENGINE_NAMESPACE_KEYS.has(k));
+
+        // If the game has added custom keys, verify none of them conflict with engine namespaces.
+        // This check is redundant if gameSpecificKeys are truly outside ENGINE_NAMESPACE_KEYS,
+        // but is kept here for clarity and as a defence-in-depth check.
         const colliding = gameSpecificKeys.filter((k) => ENGINE_NAMESPACE_KEYS.has(k));
         if (colliding.length > 0) {
             throw new SettingsNamespaceCollisionError(
@@ -125,10 +129,19 @@ export class SettingsManager {
         const schema = this.schemas.get(gameId);
         const defaults = schema?.defaults ?? ENGINE_DEFAULTS;
         const rawOverrides = await this.repo.load(gameId);
-        let userOverrides: UserSettings = rawOverrides;
-        if (schema !== undefined && Object.keys(rawOverrides).length > 0) {
+
+        // ── Legacy migration: controls.keyBindings → controls.bindings ──────
+        // Pre-v0.7 settings files used controls.keyBindings (flat string map).
+        // The new schema uses controls.bindings (structured KeyBinding objects).
+        // We cannot reliably convert the old combo strings to KeyBinding objects,
+        // so we strip the legacy key, reset bindings to defaults, and warn once.
+        // The cleaned-up overrides are written back so this path is never hit again.
+        const migratedOverrides = this.stripLegacyKeyBindings(gameId, rawOverrides);
+
+        let userOverrides: UserSettings = migratedOverrides;
+        if (schema !== undefined && Object.keys(migratedOverrides).length > 0) {
             try {
-                userOverrides = SettingsMerger.validatePatch(schema.schema, rawOverrides);
+                userOverrides = SettingsMerger.validatePatch(schema.schema, migratedOverrides);
             } catch {
                 this.logger?.warn(
                     'Stored settings for game failed schema validation; falling back to defaults.',
@@ -138,6 +151,50 @@ export class SettingsManager {
             }
         }
         return SettingsMerger.mergeAll(defaults, userOverrides);
+    }
+
+    /**
+     * Detects the legacy `controls.keyBindings` field written by pre-v0.7 builds,
+     * removes it from the overrides, logs a one-time warning, and re-persists the
+     * cleaned-up overrides so the migration path is only executed once per file.
+     *
+     * Returns the (possibly unchanged) overrides object.
+     */
+    private stripLegacyKeyBindings(gameId: string, raw: UserSettings): UserSettings {
+        const controls = (raw as Record<string, unknown>)['controls'];
+        if (
+            controls === null ||
+            typeof controls !== 'object' ||
+            Array.isArray(controls) ||
+            !('keyBindings' in controls)
+        ) {
+            return raw;
+        }
+
+        this.logger?.warn(
+            'Legacy key-binding format (controls.keyBindings) detected; ' +
+                'migrating to controls.bindings — custom key bindings have been reset to defaults.',
+            { gameId },
+        );
+
+        // Drop keyBindings; keep any other controls sub-keys (e.g. bindings).
+        const { keyBindings: _dropped, ...restControls } = controls as Record<string, unknown>;
+        const cleaned: UserSettings = {
+            ...(raw as Record<string, unknown>),
+            controls: restControls,
+        };
+
+        // Persist the cleaned overrides so this migration runs only once per file.
+        // Errors are caught and logged; a failure means the migration will re-run
+        // on the next boot (harmless but noisy).
+        this.repo.save(gameId, cleaned).catch((err: unknown) => {
+            this.logger?.warn(
+                'Failed to persist migrated key-binding overrides; migration will re-run on next boot.',
+                { gameId, err },
+            );
+        });
+
+        return cleaned;
     }
 
     /**

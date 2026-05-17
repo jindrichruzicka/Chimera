@@ -1,8 +1,8 @@
 /**
- * F38 — match-navigation.spec.ts
+ * F38 — game-navigation.spec.ts
  *
  * Verifies the GameShell route is entered through the normal lobby flow and
- * that a bare /match visit without a snapshot returns to the lobby UI.
+ * that a bare /game visit without a snapshot returns to the lobby UI.
  */
 import { test as gameTest, expect } from '../fixtures/game.fixture';
 import { test as electronTest } from '../fixtures/electron.fixture';
@@ -10,7 +10,7 @@ import { GamePage } from '../pages/GamePage';
 import { LobbyPage } from '../pages/LobbyPage';
 import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
 
-const MATCH_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/match/`;
+const GAME_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/game/`;
 
 gameTest(
     'lobby start navigates host and client into the registry GameShell',
@@ -29,12 +29,12 @@ gameTest(
 );
 
 electronTest(
-    'direct /match without a snapshot redirects to the lobby screen',
+    'direct /game without a snapshot redirects to the lobby screen',
     async ({ mainWindow }) => {
-        await mainWindow.goto(MATCH_URL);
+        await mainWindow.goto(GAME_URL);
 
         const lobby = new LobbyPage(mainWindow);
         await lobby.waitForPreLobbyScreen();
-        await expect(mainWindow.getByTestId('match-canvas')).toHaveCount(0);
+        await expect(mainWindow.getByTestId('game-canvas')).toHaveCount(0);
     },
 );

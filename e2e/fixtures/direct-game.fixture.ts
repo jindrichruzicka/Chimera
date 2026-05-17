@@ -1,8 +1,8 @@
 /**
- * e2e/fixtures/direct-match.fixture.ts
+ * e2e/fixtures/direct-game.fixture.ts
  *
- * Direct-match fixture — launches a host + client pair that bootstrap directly
- * into a running match without going through the lobby UI.
+ * Direct-game fixture — launches a host + client pair that bootstrap directly
+ * into a running game without going through the lobby UI.
  *
  * Both processes use `CHIMERA_E2E_DIRECT_MATCH_ROLE` (host | client) to
  * trigger auto-host / auto-join in the main process.  The host stores its
@@ -10,12 +10,12 @@
  * it is non-null, then passes it to the client via
  * `CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS`.
  *
- * Use this fixture for specs that test in-match behaviour and do NOT need to
- * exercise the lobby → match transition.  The only test that SHOULD keep
- * using `game.fixture` (the full lobby flow) is `match-flow.spec.ts`.
+ * Use this fixture for specs that test in-game behaviour and do NOT need to
+ * exercise the lobby → game transition.  The only test that SHOULD keep
+ * using `game.fixture` (the full lobby flow) is `game-flow.spec.ts`.
  *
- * §13.8: direct-match.fixture.ts — Bypasses lobby UI; both windows start on
- * /match with an established host + client connection.
+ * §13.8: direct-game.fixture.ts — Bypasses lobby UI; both windows start on
+ * /game with an established host + client connection.
  *
  * Invariants upheld:
  *   #27 — CHIMERA_E2E is set by the launcher — not here.
@@ -98,14 +98,14 @@ async function configureFirstPlayer(
 }
 
 /**
- * Direct-match fixture — extends the base Electron fixture with a host+client
- * pair that starts directly in match state, bypassing lobby UI.
+ * Direct-game fixture — extends the base Electron fixture with a host+client
+ * pair that starts directly in game state, bypassing lobby UI.
  *
- * The `_matchStarted` auto-fixture blocks every test until both windows show
- * the match canvas.
+ * The `_gameStarted` auto-fixture blocks every test until both windows show
+ * the game canvas.
  */
 export const test = electronTest.extend<
-    DirectMatchFixtureOptions & { readonly _matchStarted: void } & DirectMatchFixtures
+    DirectMatchFixtureOptions & { readonly _gameStarted: void } & DirectMatchFixtures
 >({
     firstPlayer: ['host', { option: true }],
     passAndPlay: [false, { option: true }],
@@ -115,7 +115,7 @@ export const test = electronTest.extend<
             port: DIRECT_MATCH_PORT,
             role: 'host',
             directMatchRole: 'host',
-            initialRoute: '/match',
+            initialRoute: '/game',
             passAndPlay,
         });
         try {
@@ -139,7 +139,7 @@ export const test = electronTest.extend<
             role: 'client',
             directMatchRole: 'client',
             directMatchJoinAddress: lobbyCode,
-            initialRoute: '/match',
+            initialRoute: '/game',
         });
         try {
             await use(app);
@@ -162,13 +162,13 @@ export const test = electronTest.extend<
 
     // @chimera-review: auto fixture must reference hostWindow/clientWindow to
     // trigger dependency resolution.
-    _matchStarted: [
+    _gameStarted: [
         async ({ hostWindow, clientWindow }, use) => {
             const hostMatch = new GamePage(hostWindow);
             const clientMatch = new GamePage(clientWindow);
 
-            // Both windows load /match directly; MatchPage waits for the
-            // first snapshot while the hidden direct-match lobby auto-starts.
+            // Both windows load /game directly; GamePage waits for the
+            // first snapshot while the hidden direct-game lobby auto-starts.
             await expect(hostMatch.canvas).toBeVisible({ timeout: 15_000 });
             await expect(clientMatch.canvas).toBeVisible({ timeout: 15_000 });
 

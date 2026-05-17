@@ -282,10 +282,10 @@ function GameShellFrame(
         );
 
     return (
-        <main aria-label="Match" style={gameShellRootStyle}>
+        <main aria-label="Game" style={gameShellRootStyle}>
             <section
-                data-testid="match-canvas"
-                aria-label="Match canvas"
+                data-testid="game-canvas"
+                aria-label="Game canvas"
                 style={{ minHeight: 'calc(var(--ch-space-md) * 20)', position: 'relative' }}
             >
                 <React.Suspense fallback={null}>{children}</React.Suspense>
@@ -336,7 +336,7 @@ function DefaultMatchHud({
     handleEndTurn,
 }: MatchHudControlsProps): React.ReactElement {
     return (
-        <footer aria-label="Match HUD" style={gameShellHudStyle}>
+        <footer aria-label="Game HUD" style={gameShellHudStyle}>
             <div>
                 Tick <output data-testid="hud-tick">{tick}</output>
             </div>
@@ -409,12 +409,12 @@ function DefaultMatchResultBanner({
 
     return (
         <div
-            data-testid="match-result-banner"
-            data-match-result-outcome={outcome}
+            data-testid="game-result-banner"
+            data-game-result-outcome={outcome}
             role="status"
             style={matchResultBannerStyle}
         >
-            <span data-testid="match-result-text">
+            <span data-testid="game-result-text">
                 {resolveMatchResultMessage(matchResult, localPlayerId)}
             </span>
         </div>
@@ -424,12 +424,12 @@ function DefaultMatchResultBanner({
 function DefaultGameOverBanner({ message }: { readonly message: string }): React.ReactElement {
     return (
         <div
-            data-testid="match-result-banner"
-            data-match-result-outcome="unknown"
+            data-testid="game-result-banner"
+            data-game-result-outcome="unknown"
             role="status"
             style={matchResultBannerStyle}
         >
-            <span data-testid="match-result-text">{message}</span>
+            <span data-testid="game-result-text">{message}</span>
         </div>
     );
 }

@@ -27,7 +27,21 @@ export interface EngineSettings {
         readonly showPerfHud: boolean;
     };
     readonly controls: {
-        readonly keyBindings: Readonly<Record<string, string>>; // actionId → key
+        /** Key bindings keyed by namespaced InputActionId (e.g. 'engine:undo').
+         *  Each value is a KeyBinding-compatible object with a required `primary`
+         *  key code and optional `secondary` / `modifiers`.
+         *  Invariant #66: stored here, never in profile data.
+         */
+        readonly bindings: Readonly<
+            Record<
+                string,
+                {
+                    readonly primary: string;
+                    readonly secondary?: string | undefined;
+                    readonly modifiers?: readonly ('Ctrl' | 'Shift' | 'Alt' | 'Meta')[] | undefined;
+                }
+            >
+        >;
     };
 }
 
@@ -54,10 +68,11 @@ export const ENGINE_DEFAULTS: EngineSettings = {
         showPerfHud: false,
     },
     controls: {
-        keyBindings: {
-            undo: 'Ctrl+Z',
-            redo: 'Ctrl+Y',
-            endTurn: 'Enter',
+        bindings: {
+            'engine:undo': { primary: 'KeyZ', modifiers: ['Ctrl'] },
+            'engine:redo': { primary: 'KeyZ', modifiers: ['Ctrl', 'Shift'] },
+            'engine:toggle-menu': { primary: 'Escape' },
+            'engine:toggle-perf-hud': { primary: 'F3' },
         },
     },
 } as const;
@@ -130,6 +145,13 @@ export const engineSettingsZodShape = {
         showPerfHud: z.boolean(),
     }),
     controls: z.object({
-        keyBindings: z.record(z.string(), z.string()),
+        bindings: z.record(
+            z.string(),
+            z.object({
+                primary: z.string(),
+                secondary: z.string().optional(),
+                modifiers: z.array(z.enum(['Ctrl', 'Shift', 'Alt', 'Meta'])).optional(),
+            }),
+        ),
     }),
 } as const;

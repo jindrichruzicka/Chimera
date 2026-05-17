@@ -121,7 +121,7 @@ export function createE2eElectronLaunchConfig(
     }
 
     const initialRoute =
-        options.initialRoute ?? (options.directMatchRole !== undefined ? '/match' : undefined);
+        options.initialRoute ?? (options.directMatchRole !== undefined ? '/game' : undefined);
     if (initialRoute !== undefined) {
         const initialRouteWithSlash = initialRoute.endsWith('/')
             ? initialRoute

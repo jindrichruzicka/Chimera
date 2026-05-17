@@ -242,7 +242,7 @@ describe('GameShell page object locators', () => {
         );
 
         expect(await screen.findByTestId('registry-board')).toBeTruthy();
-        expect(screen.getByTestId('match-canvas').textContent).toContain('Registry board');
+        expect(screen.getByTestId('game-canvas').textContent).toContain('Registry board');
     });
 
     it('renders the §13.6 match HUD locator surface', () => {
@@ -252,13 +252,13 @@ describe('GameShell page object locators', () => {
             </GameShell>,
         );
 
-        expect(screen.getByTestId('match-canvas').textContent).toContain('Board slot');
+        expect(screen.getByTestId('game-canvas').textContent).toContain('Board slot');
         expect(screen.getByTestId('undo')).toBeTruthy();
         expect(screen.getByTestId('redo')).toBeTruthy();
         expect(screen.getByTestId('end-turn')).toBeTruthy();
-        expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(screen.getByTestId('game-result-banner')).toBeTruthy();
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('unknown');
         expect(screen.queryByTestId('game-over-banner')).toBeNull();
         expect(screen.getByTestId('hud-tick').textContent).toBe('42');
@@ -267,7 +267,7 @@ describe('GameShell page object locators', () => {
     it('keeps shell root layout structure while using tokenized font family', () => {
         render(<GameShell tick={1} canUndo={false} canRedo={false} />);
 
-        const shellRoot = screen.getByLabelText('Match');
+        const shellRoot = screen.getByLabelText('Game');
         const style = shellRoot.getAttribute('style') ?? '';
 
         expect(style).toContain('grid-template-rows: 1fr auto');
@@ -426,11 +426,11 @@ describe('GameShell page object locators', () => {
             />,
         );
 
-        expect(screen.getByTestId('match-result-banner')).toBeTruthy();
+        expect(screen.getByTestId('game-result-banner')).toBeTruthy();
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('win');
-        expect(screen.getByTestId('match-result-text').textContent).toBe('You won');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('You won');
     });
 
     it('delegates resolved match result rendering to a game-provided banner', () => {
@@ -441,8 +441,8 @@ describe('GameShell page object locators', () => {
         function GameResultBanner(props: MatchResultBannerProps): React.ReactElement {
             receivedProps = props;
             return (
-                <div data-testid="match-result-banner" role="status">
-                    <span data-testid="match-result-text">Custom tactics victory</span>
+                <div data-testid="game-result-banner" role="status">
+                    <span data-testid="game-result-text">Custom tactics victory</span>
                 </div>
             );
         }
@@ -460,7 +460,7 @@ describe('GameShell page object locators', () => {
         );
 
         expect(receivedProps).toEqual({ matchResult, localPlayerId });
-        expect(screen.getByTestId('match-result-text').textContent).toBe('Custom tactics victory');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Custom tactics victory');
     });
 
     it('shows You lose when the local player is not a winner', () => {
@@ -475,9 +475,9 @@ describe('GameShell page object locators', () => {
             />,
         );
 
-        expect(screen.getByTestId('match-result-text').textContent).toBe('You lose');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('You lose');
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('loss');
     });
 
@@ -493,9 +493,9 @@ describe('GameShell page object locators', () => {
             />,
         );
 
-        expect(screen.getByTestId('match-result-text').textContent).toBe('Draw');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Draw');
         expect(
-            screen.getByTestId('match-result-banner').getAttribute('data-match-result-outcome'),
+            screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('draw');
     });
 
@@ -510,7 +510,7 @@ describe('GameShell page object locators', () => {
             />,
         );
 
-        expect(screen.getByTestId('match-result-text').textContent).toBe('Match ended');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Match ended');
     });
 
     it('engine fallback banner uses design tokens for spacing and font size', () => {
@@ -524,7 +524,7 @@ describe('GameShell page object locators', () => {
             />,
         );
 
-        const banner = screen.getByTestId('match-result-banner');
+        const banner = screen.getByTestId('game-result-banner');
         const style = banner.getAttribute('style') ?? '';
         expect(style).toContain('var(--ch-space-md)');
         expect(style).toContain('var(--ch-font-size-lg)');
@@ -541,7 +541,7 @@ describe('GameShell page object locators', () => {
             />,
         );
 
-        const banner = screen.getByTestId('match-result-banner');
+        const banner = screen.getByTestId('game-result-banner');
         const style = banner.getAttribute('style') ?? '';
         expect(style).toContain('var(--ch-space-md)');
         expect(style).toContain('var(--ch-font-size-lg)');

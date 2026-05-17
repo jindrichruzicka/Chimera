@@ -248,28 +248,28 @@ export class LobbyPage {
 }
 ```
 
-### MatchPage
+### GamePage
 
 ```typescript
-// e2e/pages/MatchPage.ts
+// e2e/pages/GamePage.ts
 import { Page, Locator } from '@playwright/test';
 
-export class MatchPage {
+export class GamePage {
     readonly canvas: Locator;
     readonly undoButton: Locator;
     readonly redoButton: Locator;
     readonly endTurnButton: Locator;
-    readonly matchResultBanner: Locator;
-    readonly matchResultText: Locator;
+    readonly gameResultBanner: Locator;
+    readonly gameResultText: Locator;
     readonly hudTick: Locator;
 
     constructor(private readonly page: Page) {
-        this.canvas = page.getByTestId('match-canvas');
+        this.canvas = page.getByTestId('game-canvas');
         this.undoButton = page.getByTestId('undo');
         this.redoButton = page.getByTestId('redo');
         this.endTurnButton = page.getByTestId('end-turn');
-        this.matchResultBanner = page.getByTestId('match-result-banner');
-        this.matchResultText = page.getByTestId('match-result-text');
+        this.gameResultBanner = page.getByTestId('game-result-banner');
+        this.gameResultText = page.getByTestId('game-result-text');
         this.hudTick = page.getByTestId('hud-tick');
     }
 
@@ -600,19 +600,19 @@ test.describe('Lobby lifecycle', () => {
 });
 ```
 
-### match-flow.spec.ts
+### game-flow.spec.ts
 
 ```typescript
-// e2e/tests/match-flow.spec.ts
+// e2e/tests/game-flow.spec.ts
 import { test, expect } from '../fixtures/game.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
-test.describe('Match flow', () => {
+test.describe('Game flow', () => {
     test('host and client reach game-over state', async ({ hostWindow, clientWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
-        const clientMatch = new MatchPage(clientWindow);
-        await expect(hostMatch.matchResultBanner).toBeVisible({ timeout: 60_000 });
-        await expect(clientMatch.matchResultBanner).toBeVisible({ timeout: 60_000 });
+        const hostGame = new GamePage(hostWindow);
+        const clientGame = new GamePage(clientWindow);
+        await expect(hostGame.gameResultBanner).toBeVisible({ timeout: 60_000 });
+        await expect(clientGame.gameResultBanner).toBeVisible({ timeout: 60_000 });
     });
 });
 ```

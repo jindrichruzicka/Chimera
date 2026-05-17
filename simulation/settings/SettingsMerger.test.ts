@@ -27,7 +27,14 @@ const makeEngineZod = () =>
             showPerfHud: z.boolean(),
         }),
         controls: z.object({
-            keyBindings: z.record(z.string(), z.string()),
+            bindings: z.record(
+                z.string(),
+                z.object({
+                    primary: z.string(),
+                    secondary: z.string().optional(),
+                    modifiers: z.array(z.enum(['Ctrl', 'Shift', 'Alt', 'Meta'])).optional(),
+                }),
+            ),
         }),
     });
 

@@ -37,7 +37,7 @@ export interface InputAction {
 
 ## KeyBinding
 
-```typescript
+````typescript
 // renderer/input/InputBindingSchema.ts
 
 export interface KeyBinding {
@@ -47,8 +47,26 @@ export interface KeyBinding {
 }
 
 export type EngineBindings = Record<InputActionId, KeyBinding>;
-export type GameBindingSchema<T extends EngineBindings> = T;
-```
+
+/**
+ * Type-safe game binding schema constraint. Accepts a record of KeyBindings
+ * keyed by InputActionIds and ensures all keys conform to InputActionId.
+ * Evaluates to `never` if the record contains any key outside the InputActionId union.
+ *
+ * @example
+ * ```ts
+ * type TacticsBindings = GameBindingSchema<{
+ *     'engine:undo': KeyBinding;
+ *     'game:end-turn': KeyBinding;
+ * }>;
+ * ```
+ */
+export type GameBindingSchema<T> = T extends { readonly [K in keyof T]: KeyBinding }
+    ? Exclude<keyof T, InputActionId> extends never
+        ? T
+        : never
+    : never;
+````
 
 ### Engine Default Bindings
 
@@ -135,5 +153,5 @@ Key bindings are stored in `settings.controls.bindings: GameBindingSchema<Engine
 
 ## Cross-References
 
-- [Settings System](settings-system.md) — `EngineSettings.controls.keyBindings`
+- [Settings System](settings-system.md) — `EngineSettings.controls.bindings`
 - [Simulation Core](simulation-core-action-pipeline.md) — `EngineAction` dispatched on key press

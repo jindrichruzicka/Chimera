@@ -50,7 +50,7 @@ describe('engineSettingsZodShape (WARN-1)', () => {
                 showPerfHud: false,
             },
             controls: {
-                keyBindings: { endTurn: 'Enter' },
+                bindings: { 'engine:toggle-menu': { primary: 'Escape' } },
             },
             showGrid: true,
         });
@@ -72,7 +72,7 @@ describe('engineSettingsZodShape (WARN-1)', () => {
                 showHints: true,
                 showPerfHud: false,
             },
-            controls: { keyBindings: {} },
+            controls: { bindings: {} },
             showGrid: true,
         });
         expect(result.success).toBe(false);
@@ -117,7 +117,7 @@ describe('GameSettingsSchema<T>.schema field', () => {
                     showHints: true,
                     showPerfHud: false,
                 },
-                controls: { keyBindings: {} },
+                controls: { bindings: {} },
             },
             schema: mockSchema,
         };

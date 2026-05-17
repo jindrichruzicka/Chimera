@@ -7,7 +7,11 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { z } from 'zod';
-import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
+import type {
+    EngineSettings,
+    GameSettingsSchema,
+    UserSettings,
+} from '@chimera/simulation/settings/index.js';
 import {
     ENGINE_DEFAULTS,
     InMemorySettingsRepository,
@@ -38,7 +42,14 @@ const engineSchema = z.object({
         showPerfHud: z.boolean(),
     }),
     controls: z.object({
-        keyBindings: z.record(z.string(), z.string()),
+        bindings: z.record(
+            z.string(),
+            z.object({
+                primary: z.string(),
+                secondary: z.string().optional(),
+                modifiers: z.array(z.enum(['Ctrl', 'Shift', 'Alt', 'Meta'])).optional(),
+            }),
+        ),
     }),
 });
 
@@ -331,5 +342,106 @@ describe('SettingsManager.updateSettings() — overrides-only persistence (BLOCK
         // Repo must remain empty — patch must not have been saved
         const persisted = await repo.load('test-game');
         expect(persisted).toEqual({});
+    });
+});
+
+// ── Legacy keyBindings migration (WARN-1 fix) ─────────────────────────────────
+
+describe('SettingsManager.getSettings() — legacy controls.keyBindings migration', () => {
+    function makeLogger() {
+        const warnSpy = vi.fn();
+        return {
+            logger: {
+                trace: vi.fn(),
+                debug: vi.fn(),
+                info: vi.fn(),
+                warn: warnSpy,
+                error: vi.fn(),
+                fatal: vi.fn(),
+                child: vi.fn().mockReturnThis(),
+            },
+            warnSpy,
+        };
+    }
+
+    it('logs a warning when controls.keyBindings is present in persisted overrides', async () => {
+        const repo = new InMemorySettingsRepository();
+        // Simulate a settings file written by the old schema (keyBindings = flat string map).
+        // @chimera-review: double-cast needed to inject a legacy on-disk shape that no longer
+        // matches UserSettings — this is the only way to exercise the migration path in tests.
+        await repo.save('test-game', {
+            controls: { keyBindings: { undo: 'Ctrl+Z' } },
+        } as unknown as UserSettings);
+        const { logger, warnSpy } = makeLogger();
+        const mgr = new SettingsManager(repo, undefined, logger);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await mgr.getSettings('test-game');
+
+        expect(warnSpy).toHaveBeenCalledOnce();
+        expect(warnSpy.mock.calls[0]?.[0]).toContain('keyBindings');
+    });
+
+    it('returns engine-default bindings (not old keyBindings) after migration', async () => {
+        const repo = new InMemorySettingsRepository();
+        await repo.save('test-game', {
+            controls: { keyBindings: { undo: 'Ctrl+Z' } },
+        } as unknown as UserSettings);
+        const { logger } = makeLogger();
+        const mgr = new SettingsManager(repo, undefined, logger);
+        mgr.registerSchema(engineSettingsSchema);
+
+        const settings = await mgr.getSettings('test-game');
+
+        expect(settings.controls.bindings).toEqual(ENGINE_DEFAULTS.controls.bindings);
+    });
+
+    it('rewrites the repo without controls.keyBindings so the warning does not repeat', async () => {
+        const repo = new InMemorySettingsRepository();
+        await repo.save('test-game', {
+            controls: { keyBindings: { undo: 'Ctrl+Z' } },
+        } as unknown as UserSettings);
+        const { logger } = makeLogger();
+        const mgr = new SettingsManager(repo, undefined, logger);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await mgr.getSettings('test-game');
+
+        const persisted = await repo.load('test-game');
+        expect(persisted).not.toHaveProperty('controls.keyBindings');
+    });
+
+    it('preserves other controls overrides that coexist with keyBindings', async () => {
+        const repo = new InMemorySettingsRepository();
+        // Old file had keyBindings alongside a valid bindings override – the
+        // bindings entry must survive migration; only keyBindings is dropped.
+        await repo.save('test-game', {
+            controls: {
+                keyBindings: { undo: 'Ctrl+Z' },
+                bindings: { 'engine:toggle-menu': { primary: 'Escape' } },
+            },
+        } as unknown as UserSettings);
+        const { logger } = makeLogger();
+        const mgr = new SettingsManager(repo, undefined, logger);
+        mgr.registerSchema(engineSettingsSchema);
+
+        const settings = await mgr.getSettings('test-game');
+
+        // The valid bindings override should have been kept
+        expect(settings.controls.bindings['engine:toggle-menu']).toEqual({ primary: 'Escape' });
+    });
+
+    it('does not warn or mutate the repo when controls.keyBindings is absent', async () => {
+        const repo = new InMemorySettingsRepository();
+        await repo.save('test-game', { audio: { masterVolume: 0.5 } });
+        const { logger, warnSpy } = makeLogger();
+        const mgr = new SettingsManager(repo, undefined, logger);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await mgr.getSettings('test-game');
+
+        expect(warnSpy).not.toHaveBeenCalled();
+        const persisted = await repo.load('test-game');
+        expect(persisted).toEqual({ audio: { masterVolume: 0.5 } });
     });
 });

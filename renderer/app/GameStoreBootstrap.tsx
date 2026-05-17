@@ -11,7 +11,7 @@
  * `confirmPrediction` + `applySnapshot`.
  *
  * Also handles automatic navigation: when a snapshot arrives (match started)
- * and the current path is /lobby, navigates to /match. This drives the CLIENT
+ * and the current path is /lobby, navigates to /game. This drives the CLIENT
  * window's navigation without requiring a snapshot subscription in lobby/page.
  *
  * Architecture reference: §4.4 — Renderer State Stores;
@@ -35,12 +35,12 @@ export function GameStoreBootstrap(): null {
     const pathname = usePathname();
     const snapshot = useGameStore((state) => state.snapshot);
 
-    // Navigate to /match when a snapshot arrives on the lobby page.
+    // Navigate to /game when a snapshot arrives on the lobby page.
     // This handles the CLIENT window — the host navigates via router.push in
-    // handleStartMatch(). Both end up at /match automatically.
+    // handleStartMatch(). Both end up at /game automatically.
     useEffect(() => {
         if (snapshot !== null && isLobbyPath(pathname)) {
-            router.push('/match');
+            router.push('/game');
         }
     }, [snapshot, router, pathname]);
 
@@ -68,8 +68,8 @@ export function GameStoreBootstrap(): null {
         };
     }, []);
 
-    // Populate localPlayerId without the lobby page when direct-match E2E
-    // boots the renderer directly on /match (or any route that bypasses the
+    // Populate localPlayerId without the lobby page when direct-game E2E
+    // boots the renderer directly on /game (or any route that bypasses the
     // lobby flow). Safe to call unconditionally — it skips if the store is
     // already populated, and returns null outside of a live session.
     useEffect(() => {

@@ -19,6 +19,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { KeyBinding, EngineBindings, GameBindingSchema } from './InputBindingSchema.js';
+import type { EngineSettings } from '@chimera/simulation/settings/index.js';
 
 // ─── KeyBinding ───────────────────────────────────────────────────────────────
 
@@ -123,5 +124,38 @@ describe('GameBindingSchema', () => {
         // The value is assignable back to SimpleBindings directly
         const retyped: SimpleBindings = schema;
         expect(retyped['engine:undo'].primary).toBe('KeyZ');
+    });
+});
+
+// ─── Structural compatibility guard (WARN-2 fix) ──────────────────────────────
+//
+// `simulation/settings/SettingsSchema.ts` cannot import KeyBinding (module boundary
+// Invariant #65), so it re-declares the binding shape inline.  These type-level
+// assertions catch any future drift between the two definitions at compile time.
+//
+// If either assertion produces a TS2322 error, the inline type in SettingsSchema.ts
+// must be updated to match KeyBinding (or vice versa).
+
+describe('EngineSettings.controls.bindings ↔ KeyBinding structural compatibility', () => {
+    it('EngineSettings inline binding shape extends KeyBinding (no extra required fields)', () => {
+        // `_BindingEntry` is the value type of the bindings record in EngineSettings.
+        // With noUncheckedIndexedAccess, indexing a Record returns T | undefined;
+        // NonNullable strips the undefined so we compare the bare struct.
+        type _BindingEntry = NonNullable<EngineSettings['controls']['bindings'][string]>;
+
+        // EngineSettings inline type must be assignable to KeyBinding.
+        // A compile error here means the inline struct added a field not present in KeyBinding.
+        type _InlineExtendsKeyBinding = _BindingEntry extends KeyBinding ? true : never;
+        const _assertForward: _InlineExtendsKeyBinding = true;
+        void _assertForward;
+
+        // KeyBinding must be assignable to the EngineSettings inline type.
+        // A compile error here means KeyBinding added a required field the inline struct lacks.
+        type _KeyBindingExtendsInline = KeyBinding extends _BindingEntry ? true : never;
+        const _assertReverse: _KeyBindingExtendsInline = true;
+        void _assertReverse;
+
+        // Runtime no-op: this describe block exists for the compile-time assertions above.
+        expect(true).toBe(true);
     });
 });

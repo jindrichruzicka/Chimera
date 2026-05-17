@@ -163,7 +163,7 @@ export default function LobbyPage() {
             setPendingAction('starting');
             setError(null);
             await lobbyApi.startMatch();
-            router.push('/match');
+            router.push('/game');
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to start match');

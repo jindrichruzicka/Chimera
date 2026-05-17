@@ -24,14 +24,14 @@ Filename case encodes the primary export type:
 
 These boundaries are **hard constraints**. Any violation is a BLOCK finding at review.
 
-| Package                      | May import from                                                     | Must NOT import from                                              |
-| ---------------------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `simulation/`                | `shared/`                                                           | `renderer/`, `electron/`, `games/*`, any DOM API                  |
-| `ai/`                        | `simulation/`, `shared/`                                            | `renderer/`, `electron/`, `games/*`, any DOM API                  |
-| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data` |
-| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own files                          | Other `games/` directories                                        |
-| `electron/main/`             | All packages                                                        | DOM APIs                                                          |
-| `networking/provider/local/` | Only within `local/`                                                | Engine or renderer internals                                      |
+| Package                      | May import from                                                                                                                                                                                 | Must NOT import from                                              |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
+| `simulation/`                | `shared/`                                                                                                                                                                                       | `renderer/`, `electron/`, `games/*`, any DOM API                  |
+| `ai/`                        | `simulation/`, `shared/`                                                                                                                                                                        | `renderer/`, `electron/`, `games/*`, any DOM API                  |
+| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals; test files may also `import type` from `simulation/settings` for cross-boundary compatibility guards (no runtime coupling) | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data` |
+| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own files                                                                                                                                                      | Other `games/` directories                                        |
+| `electron/main/`             | All packages                                                                                                                                                                                    | DOM APIs                                                          |
+| `networking/provider/local/` | Only within `local/`                                                                                                                                                                            | Engine or renderer internals                                      |
 
 ---
 

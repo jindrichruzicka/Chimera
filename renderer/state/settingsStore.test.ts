@@ -23,7 +23,13 @@ const makeSettings = (masterVolume = 1.0): ResolvedSettings => ({
         showHints: true,
         showPerfHud: false,
     },
-    controls: { keyBindings: { undo: 'Ctrl+Z', redo: 'Ctrl+Y', endTurn: 'Enter' } },
+    controls: {
+        bindings: {
+            'engine:undo': { primary: 'KeyZ', modifiers: ['Ctrl'] },
+            'engine:redo': { primary: 'KeyZ', modifiers: ['Ctrl', 'Shift'] },
+            'engine:toggle-menu': { primary: 'Escape' },
+        },
+    },
 });
 
 // ── createSettingsStore (standalone instance for isolation) ───────────────────

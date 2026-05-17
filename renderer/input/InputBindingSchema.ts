@@ -23,9 +23,9 @@ export interface KeyBinding {
     /** Primary key or gamepad button. Required. */
     readonly primary: string;
     /** Optional alternate key that also triggers the action. */
-    readonly secondary?: string;
+    readonly secondary?: string | undefined;
     /** Modifier keys that must be held alongside `primary`. */
-    readonly modifiers?: readonly ('Ctrl' | 'Shift' | 'Alt' | 'Meta')[];
+    readonly modifiers?: readonly ('Ctrl' | 'Shift' | 'Alt' | 'Meta')[] | undefined;
 }
 
 /**
