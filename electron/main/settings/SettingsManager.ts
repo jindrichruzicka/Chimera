@@ -40,10 +40,24 @@ const ENGINE_NAMESPACE_KEYS = new Set(['audio', 'display', 'gameplay', 'controls
 function mergeUserOverrides(
     current: Record<string, unknown>,
     incoming: Record<string, unknown>,
+    path: readonly string[] = [],
 ): Record<string, unknown> {
     const result: Record<string, unknown> = { ...current };
     for (const [key, inVal] of Object.entries(incoming)) {
         const curVal = current[key];
+
+        // Treat controls.bindings as a replace-map so removed keys are not retained.
+        if (
+            path[path.length - 1] === 'controls' &&
+            key === 'bindings' &&
+            inVal !== null &&
+            typeof inVal === 'object' &&
+            !Array.isArray(inVal)
+        ) {
+            result[key] = { ...(inVal as Record<string, unknown>) };
+            continue;
+        }
+
         if (
             curVal !== null &&
             typeof curVal === 'object' &&
@@ -55,6 +69,7 @@ function mergeUserOverrides(
             result[key] = mergeUserOverrides(
                 curVal as Record<string, unknown>,
                 inVal as Record<string, unknown>,
+                [...path, key],
             );
         } else {
             result[key] = inVal;

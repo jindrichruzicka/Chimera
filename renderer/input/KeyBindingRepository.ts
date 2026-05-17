@@ -40,6 +40,11 @@ export interface KeyBindingRepository {
      * Preserves all existing sibling bindings.
      */
     save(id: InputActionId, binding: KeyBinding): Promise<void>;
+    /**
+     * Resets the binding for the given action to the engine default.
+     * If the action has no user override in current settings, this is a no-op.
+     */
+    reset(id: InputActionId): Promise<void>;
 }
 
 // ── Factory ───────────────────────────────────────────────────────────────────
@@ -101,6 +106,25 @@ export function createKeyBindingRepository(
             await state.updateSettings(gameId, {
                 controls: {
                     bindings: { ...current, [id]: binding },
+                },
+            });
+        },
+
+        async reset(id: InputActionId): Promise<void> {
+            const state = store.getState();
+            const gameId = resolveGameId(state);
+            const current = resolveBindings(state);
+
+            if (!(id in current)) {
+                return;
+            }
+
+            const next = { ...current };
+            delete next[id];
+
+            await state.updateSettings(gameId, {
+                controls: {
+                    bindings: next,
                 },
             });
         },

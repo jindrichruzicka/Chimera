@@ -28,6 +28,9 @@ function makeRepo(bindings: EngineBindings): KeyBindingRepository {
         save: vi.fn(async (id: InputActionId, binding: KeyBinding) => {
             store[id] = binding;
         }),
+        reset: vi.fn(async (_id: InputActionId) => {
+            // no-op default — individual tests override as needed
+        }),
     };
 }
 
@@ -455,6 +458,7 @@ describe('InputManager — rebind', () => {
             save: vi.fn(async () => {
                 throw new Error('disk unavailable');
             }),
+            reset: vi.fn(async () => {}),
         };
 
         const managerWithFailingSave = createInputManager(registry, failingRepo);
@@ -887,5 +891,78 @@ describe('InputManager — subscriber exception isolation', () => {
         expect(errorSpy.mock.calls[0]![1]).toBe(err);
 
         errorSpy.mockRestore();
+    });
+});
+
+// ─── getActions / getBinding / resetBinding ───────────────────────────────────
+
+describe('InputManager — getActions()', () => {
+    it('returns all registered actions from the registry', () => {
+        const registry = createInputActionRegistry([UNDO_ACTION, REDO_ACTION, TOGGLE_MENU_ACTION]);
+        const repo = makeRepo(DEFAULT_BINDINGS);
+        const manager = createInputManager(registry, repo);
+        const actions = manager.getActions();
+        expect(actions.map((a) => a.id)).toContain('engine:undo');
+        expect(actions.map((a) => a.id)).toContain('engine:redo');
+        expect(actions.map((a) => a.id)).toContain('engine:toggle-menu');
+    });
+
+    it('returns an empty array when no actions are registered', () => {
+        const registry = createInputActionRegistry([]);
+        const repo = makeRepo({});
+        const manager = createInputManager(registry, repo);
+        expect(manager.getActions()).toEqual([]);
+    });
+});
+
+describe('InputManager — getBinding()', () => {
+    it('returns the current binding for a registered action', () => {
+        const registry = createInputActionRegistry([UNDO_ACTION]);
+        const repo = makeRepo(DEFAULT_BINDINGS);
+        const manager = createInputManager(registry, repo);
+        expect(manager.getBinding('engine:undo')).toEqual({ primary: 'KeyZ', modifiers: ['Ctrl'] });
+    });
+
+    it('returns undefined for an action with no binding', () => {
+        const registry = createInputActionRegistry([UNDO_ACTION]);
+        const repo = makeRepo({});
+        const manager = createInputManager(registry, repo);
+        expect(manager.getBinding('engine:undo')).toBeUndefined();
+    });
+});
+
+describe('InputManager — resetBinding()', () => {
+    it('calls repo.reset() for the given action id', async () => {
+        const registry = createInputActionRegistry([UNDO_ACTION]);
+        const repo: KeyBindingRepository & { reset: ReturnType<typeof vi.fn> } = {
+            ...makeRepo(DEFAULT_BINDINGS),
+            reset: vi.fn().mockResolvedValue(undefined),
+        };
+        const manager = createInputManager(registry, repo);
+        await manager.resetBinding('engine:undo');
+        expect(repo.reset).toHaveBeenCalledWith('engine:undo');
+    });
+
+    it('clears the runtime binding override so next getBindings reads from repo', async () => {
+        const registry = createInputActionRegistry([UNDO_ACTION, TOGGLE_MENU_ACTION]);
+        const storeBindings: EngineBindings = { ...DEFAULT_BINDINGS };
+        const repo: KeyBindingRepository & { reset: ReturnType<typeof vi.fn> } = {
+            getAll: () => ({ ...storeBindings }),
+            get: (id) => storeBindings[id],
+            save: vi.fn(async (id: InputActionId, b: KeyBinding) => {
+                storeBindings[id] = b;
+            }),
+            reset: vi.fn(async (id: InputActionId) => {
+                // Simulate repo.reset restoring default by reverting to original DEFAULT_BINDINGS
+                storeBindings[id] = DEFAULT_BINDINGS[id]!;
+            }),
+        };
+        const manager = createInputManager(registry, repo);
+        // Rebind to override runtime
+        await manager.rebind('engine:undo', { primary: 'KeyX' });
+        // Now reset
+        await manager.resetBinding('engine:undo');
+        // After reset, getBinding should show what repo has (the original KeyZ+Ctrl)
+        expect(manager.getBinding('engine:undo')).toEqual({ primary: 'KeyZ', modifiers: ['Ctrl'] });
     });
 });

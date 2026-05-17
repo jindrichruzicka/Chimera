@@ -14,6 +14,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createKeyBindingRepository } from './KeyBindingRepository.js';
 import { createSettingsStore } from '../state/settingsStore.js';
+import type { InputActionId } from './InputAction.js';
 import type { KeyBinding } from './InputBindingSchema.js';
 import type { ResolvedSettings } from '../../electron/preload/api-types';
 
@@ -236,5 +237,111 @@ describe('KeyBindingRepository.save()', () => {
             controls: { bindings: Record<string, KeyBinding> };
         };
         expect(stored.controls.bindings['engine:undo']).toEqual(newBinding);
+    });
+});
+
+// ── reset() ────────────────────────────────────────────────────────────────────
+
+describe('KeyBindingRepository.reset()', () => {
+    it('restores the engine default binding after a save', async () => {
+        const customBinding: KeyBinding = { primary: 'KeyA' };
+        const defaultBinding: KeyBinding = { primary: 'KeyZ', modifiers: ['Ctrl'] };
+        // Save returns the custom binding, reset returns engine default.
+        const updateFn = vi
+            .fn()
+            .mockResolvedValueOnce(makeSettings({ 'engine:undo': customBinding }))
+            .mockResolvedValueOnce(makeSettings({ 'engine:undo': defaultBinding }));
+        const bridge = {
+            settings: { update: updateFn, get: vi.fn(), reset: vi.fn(), onChange: vi.fn() },
+        };
+        const store = createSettingsStore(bridge);
+        store.getState()._applySettings('tactics', makeSettings({ 'engine:undo': customBinding }));
+        store.setState({ activeGameId: 'tactics' });
+        const repo = createKeyBindingRepository(store);
+
+        // First save a custom binding
+        await repo.save('engine:undo', customBinding);
+        // Then reset it — should call updateSettings to restore the engine default
+        await repo.reset('engine:undo');
+
+        const stored = store.getState().settings['tactics'] as {
+            controls: { bindings: Record<string, KeyBinding> };
+        };
+        expect(stored.controls.bindings['engine:undo']).toEqual(defaultBinding);
+    });
+
+    it('reset() removes the action override by calling updateSettings without that binding key', async () => {
+        const customBinding: KeyBinding = { primary: 'KeyA' };
+        const afterReset = makeSettings({
+            'engine:undo': { primary: 'KeyZ', modifiers: ['Ctrl'] },
+        });
+        const updateFn = vi.fn().mockResolvedValue(afterReset);
+        const bridge = {
+            settings: { update: updateFn, get: vi.fn(), reset: vi.fn(), onChange: vi.fn() },
+        };
+        const store = createSettingsStore(bridge);
+        store.getState()._applySettings('tactics', makeSettings({ 'engine:undo': customBinding }));
+        store.setState({ activeGameId: 'tactics' });
+        const repo = createKeyBindingRepository(store);
+
+        await repo.reset('engine:undo');
+
+        // Must remove the override key so layered merge can restore the default.
+        expect(updateFn).toHaveBeenCalledWith(
+            'tactics',
+            expect.objectContaining({
+                controls: {
+                    bindings: {},
+                },
+            }),
+        );
+    });
+
+    it('reset() removes a game-action override so it falls back to defaults from layered merge', async () => {
+        const dashBinding: KeyBinding = { primary: 'KeyQ' };
+        const updateFn = vi.fn().mockResolvedValue(makeSettings({ 'engine:undo': UNDO_BINDING }));
+        const bridge = {
+            settings: { update: updateFn, get: vi.fn(), reset: vi.fn(), onChange: vi.fn() },
+        };
+        const store = createSettingsStore(bridge);
+        store.getState()._applySettings(
+            'tactics',
+            makeSettings({
+                'engine:undo': UNDO_BINDING,
+                'game:dash': dashBinding,
+            }),
+        );
+        store.setState({ activeGameId: 'tactics' });
+        const repo = createKeyBindingRepository(store);
+
+        await repo.reset('game:dash');
+
+        expect(updateFn).toHaveBeenCalledWith(
+            'tactics',
+            expect.objectContaining({
+                controls: {
+                    bindings: {
+                        'engine:undo': UNDO_BINDING,
+                    },
+                },
+            }),
+        );
+    });
+
+    it('reset() for an unknown id that is not currently overridden is a no-op (does not call update)', async () => {
+        const updateFn = vi.fn().mockResolvedValue(makeSettings());
+        const bridge = {
+            settings: { update: updateFn, get: vi.fn(), reset: vi.fn(), onChange: vi.fn() },
+        };
+        const store = createSettingsStore(bridge);
+        store.getState()._applySettings('tactics', makeSettings());
+        store.setState({ activeGameId: 'tactics' });
+        const repo = createKeyBindingRepository(store);
+
+        // 'game:custom-action' has no engine default — should be a no-op
+        const unknownAction: InputActionId = 'game:custom-action';
+        await repo.reset(unknownAction);
+
+        expect(updateFn).not.toHaveBeenCalled();
     });
 });

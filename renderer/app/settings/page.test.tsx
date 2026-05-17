@@ -22,7 +22,17 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPage from './page';
 import { useSettingsStore } from '../../state/settingsStore';
+import { useInputManager } from '../../input/InputManagerContext.js';
+import type { InputManager } from '../../input/InputManager.js';
+import type { InputAction, InputActionId } from '../../input/InputAction.js';
+import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type { ResolvedSettings } from '@chimera/electron/preload/api-types.js';
+
+// Mock the InputManagerContext so tests control what useInputManager() returns
+vi.mock('../../input/InputManagerContext.js', () => ({
+    InputManagerContext: { Provider: ({ children }: { children: React.ReactNode }) => children },
+    useInputManager: vi.fn(),
+}));
 
 // ── Mock window.__chimera.settings ────────────────────────────────────────────
 
@@ -86,6 +96,8 @@ beforeEach(() => {
         settings: { [GAME_ID]: makeSettings() },
         activeGameId: GAME_ID,
     });
+    // Default stub — existing tests don't exercise input manager behaviour
+    vi.mocked(useInputManager).mockReturnValue(makeInputManagerDouble());
 });
 
 afterEach(() => {
@@ -233,5 +245,299 @@ describe('SettingsPage — engine-wide settings when activeGameId is null (AC #5
         fireEvent.click(btn);
 
         expect(mockReset).toHaveBeenCalledWith('__engine__');
+    });
+});
+
+// ── Helpers: InputManager double for rebind UI tests ─────────────────────────
+
+const UNDO_ACTION: InputAction = {
+    id: 'engine:undo',
+    description: 'Undo last action',
+    category: 'Engine',
+    oneShot: true,
+};
+const TOGGLE_MENU_ACTION: InputAction = {
+    id: 'engine:toggle-menu',
+    description: 'Toggle game menu',
+    category: 'Engine',
+    oneShot: true,
+};
+const END_TURN_ACTION: InputAction = {
+    id: 'game:end-turn',
+    description: 'End current turn',
+    category: 'Game',
+    oneShot: true,
+};
+
+function makeInputManagerDouble(overrides: Partial<InputManager> = {}): InputManager {
+    const bindings: Record<InputActionId, KeyBinding> = {
+        'engine:undo': { primary: 'KeyZ', modifiers: ['Ctrl'] },
+        'engine:toggle-menu': { primary: 'Escape' },
+        'game:end-turn': { primary: 'Enter' },
+    };
+    return {
+        start: vi.fn(),
+        stop: vi.fn(),
+        isPressed: vi.fn().mockReturnValue(false),
+        onAction: vi.fn(() => vi.fn()),
+        setActiveCategory: vi.fn(),
+        rebind: vi.fn().mockResolvedValue({ ok: true }),
+        pollGamepad: vi.fn(),
+        getActions: vi.fn().mockReturnValue([UNDO_ACTION, TOGGLE_MENU_ACTION, END_TURN_ACTION]),
+        getBinding: vi.fn((id: InputActionId) => bindings[id]),
+        resetBinding: vi.fn().mockResolvedValue(undefined),
+        ...overrides,
+    };
+}
+
+function renderWithInputManager(inputManager: InputManager): void {
+    vi.mocked(useInputManager).mockReturnValue(inputManager);
+    render(<SettingsPage />);
+}
+
+// ── AC #6 — Controls rebind panel renders all registered actions ──────────────
+
+describe('SettingsPage — controls rebind panel (AC #6)', () => {
+    it('renders action descriptions for all registered actions', () => {
+        renderWithInputManager(makeInputManagerDouble());
+        expect(screen.getByText('Undo last action')).toBeTruthy();
+        expect(screen.getByText('Toggle game menu')).toBeTruthy();
+        expect(screen.getByText('End current turn')).toBeTruthy();
+    });
+
+    it('renders current binding key for each action', () => {
+        renderWithInputManager(makeInputManagerDouble());
+        // engine:undo → Ctrl+KeyZ
+        expect(screen.getByText(/Ctrl\+KeyZ/i)).toBeTruthy();
+        // engine:toggle-menu → Escape
+        expect(screen.getByText(/Escape/i)).toBeTruthy();
+    });
+
+    it('renders an "Edit" button for each action', () => {
+        renderWithInputManager(makeInputManagerDouble());
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        expect(editButtons.length).toBe(3);
+    });
+
+    it('renders a "Reset" button for each action', () => {
+        renderWithInputManager(makeInputManagerDouble());
+        const resetButtons = screen.getAllByRole('button', { name: /^reset$/i });
+        expect(resetButtons.length).toBe(3);
+    });
+
+    it('groups actions by category', () => {
+        renderWithInputManager(makeInputManagerDouble());
+        expect(screen.getByText('Engine')).toBeTruthy();
+        expect(screen.getByText('Game')).toBeTruthy();
+    });
+});
+
+// ── AC #7 — Capture mode: listening for a new key ────────────────────────────
+
+describe('SettingsPage — rebind capture mode (AC #7)', () => {
+    it('pressing Edit enters capture mode — shows "Press a key…" status', () => {
+        renderWithInputManager(makeInputManagerDouble());
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[0]!);
+        expect(screen.getByText(/press a key/i)).toBeTruthy();
+    });
+
+    it('pressing Escape while in capture mode cancels and restores normal view', () => {
+        renderWithInputManager(makeInputManagerDouble());
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[0]!);
+        expect(screen.getByText(/press a key/i)).toBeTruthy();
+
+        fireEvent.keyDown(document, { code: 'Escape', key: 'Escape' });
+        expect(screen.queryByText(/press a key/i)).toBeNull();
+    });
+
+    it('pressing a non-Escape key while in capture mode calls rebind', async () => {
+        const mockRebind = vi.fn().mockResolvedValue({ ok: true });
+        renderWithInputManager(makeInputManagerDouble({ rebind: mockRebind }));
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[0]!); // Edit engine:undo
+
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyA', key: 'a', ctrlKey: false });
+        });
+
+        expect(mockRebind).toHaveBeenCalledWith('engine:undo', { primary: 'KeyA', modifiers: [] });
+    });
+
+    it('capture mode with Ctrl held includes Ctrl in the binding modifiers', async () => {
+        const mockRebind = vi.fn().mockResolvedValue({ ok: true });
+        renderWithInputManager(makeInputManagerDouble({ rebind: mockRebind }));
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[0]!);
+
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyB', key: 'b', ctrlKey: true });
+        });
+
+        expect(mockRebind).toHaveBeenCalledWith('engine:undo', {
+            primary: 'KeyB',
+            modifiers: ['Ctrl'],
+        });
+    });
+
+    it('uses the latest input manager instance while capture mode is active', async () => {
+        const firstRebind = vi.fn().mockResolvedValue({ ok: true });
+        const secondRebind = vi.fn().mockResolvedValue({ ok: true });
+        const firstManager = makeInputManagerDouble({ rebind: firstRebind });
+        const secondManager = makeInputManagerDouble({ rebind: secondRebind });
+
+        vi.mocked(useInputManager).mockReturnValue(firstManager);
+        const { rerender } = render(<SettingsPage />);
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[0]!);
+
+        vi.mocked(useInputManager).mockReturnValue(secondManager);
+        rerender(<SettingsPage />);
+
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyC', key: 'c' });
+        });
+
+        expect(secondRebind).toHaveBeenCalledWith('engine:undo', {
+            primary: 'KeyC',
+            modifiers: [],
+        });
+        expect(firstRebind).not.toHaveBeenCalled();
+    });
+});
+
+// ── AC #8 — Conflict message and resolution ───────────────────────────────────
+
+describe('SettingsPage — conflict handling (AC #8)', () => {
+    it('shows conflict message when rebind returns a conflict result', async () => {
+        const conflictRebind = vi.fn().mockResolvedValue({
+            ok: false,
+            reason: 'conflict',
+            conflictingAction: 'engine:undo',
+        });
+        renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[1]!); // Edit engine:toggle-menu
+
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyZ', key: 'z', ctrlKey: true });
+        });
+
+        expect(screen.getByText(/conflict/i)).toBeTruthy();
+    });
+
+    it('shows "Unbind existing & rebind" button when there is a conflict', async () => {
+        const conflictRebind = vi.fn().mockResolvedValue({
+            ok: false,
+            reason: 'conflict',
+            conflictingAction: 'engine:undo',
+        });
+        renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[1]!);
+
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyZ', key: 'z', ctrlKey: true });
+        });
+
+        expect(screen.getByRole('button', { name: /unbind existing/i })).toBeTruthy();
+    });
+
+    it('"Unbind existing & rebind" first unbinds conflicting action then calls rebind', async () => {
+        const conflictRebind = vi
+            .fn()
+            .mockResolvedValueOnce({
+                ok: false,
+                reason: 'conflict',
+                conflictingAction: 'engine:undo',
+            })
+            .mockResolvedValue({ ok: true });
+        const mockResetBinding = vi.fn().mockResolvedValue(undefined);
+        renderWithInputManager(
+            makeInputManagerDouble({ rebind: conflictRebind, resetBinding: mockResetBinding }),
+        );
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[1]!);
+
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyZ', key: 'z', ctrlKey: true });
+        });
+
+        await act(async () => {
+            fireEvent.click(screen.getByRole('button', { name: /unbind existing/i }));
+        });
+
+        expect(mockResetBinding).toHaveBeenCalledWith('engine:undo');
+        // rebind must be called twice: once producing conflict, once after unbing
+        expect(conflictRebind).toHaveBeenCalledTimes(2);
+    });
+
+    it("force-rebinding one conflicted action uses that action's captured key even after another conflict is captured later", async () => {
+        const conflictRebind = vi
+            .fn()
+            .mockResolvedValueOnce({
+                ok: false,
+                reason: 'conflict',
+                conflictingAction: 'engine:toggle-menu',
+            })
+            .mockResolvedValueOnce({
+                ok: false,
+                reason: 'conflict',
+                conflictingAction: 'engine:undo',
+            })
+            .mockResolvedValue({ ok: true });
+        const mockResetBinding = vi.fn().mockResolvedValue(undefined);
+
+        renderWithInputManager(
+            makeInputManagerDouble({ rebind: conflictRebind, resetBinding: mockResetBinding }),
+        );
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+
+        // Capture conflict for engine:undo with Ctrl+X.
+        fireEvent.click(editButtons[0]!);
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyX', key: 'x', ctrlKey: true });
+        });
+
+        // Capture conflict for engine:toggle-menu with Ctrl+Y.
+        fireEvent.click(editButtons[1]!);
+        await act(async () => {
+            fireEvent.keyDown(document, { code: 'KeyY', key: 'y', ctrlKey: true });
+        });
+
+        const forceButtons = screen.getAllByRole('button', { name: /unbind existing/i });
+        await act(async () => {
+            // Resolve first conflict (engine:undo) and assert it keeps its own captured key.
+            fireEvent.click(forceButtons[0]!);
+        });
+
+        expect(conflictRebind).toHaveBeenLastCalledWith('engine:undo', {
+            primary: 'KeyX',
+            modifiers: ['Ctrl'],
+        });
+    });
+});
+
+// ── AC #9 — Per-action reset ──────────────────────────────────────────────────
+
+describe('SettingsPage — per-action reset (AC #9)', () => {
+    it('clicking Reset for an action calls inputManager.resetBinding() with the correct id', async () => {
+        const mockResetBinding = vi.fn().mockResolvedValue(undefined);
+        renderWithInputManager(makeInputManagerDouble({ resetBinding: mockResetBinding }));
+
+        const resetButtons = screen.getAllByRole('button', { name: /^reset$/i });
+        await act(async () => {
+            fireEvent.click(resetButtons[0]!); // reset engine:undo
+        });
+
+        expect(mockResetBinding).toHaveBeenCalledWith('engine:undo');
     });
 });

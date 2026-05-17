@@ -23,6 +23,9 @@ import { useShallow } from 'zustand/shallow';
 import { Button } from '../../components/ui/Button';
 import { useSettingsStore } from '../../state/settingsStore';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
+import { useInputManager } from '../../input/InputManagerContext.js';
+import type { InputAction, InputActionId } from '../../input/InputAction.js';
+import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type {
     ResolvedSettings,
     AudioSettings,
@@ -110,6 +113,124 @@ export default function SettingsPage(): React.ReactElement {
     const gameplay = useSettingsStore(selectGameplaySettings);
     // useShallow: only re-renders when game-specific values actually change
     const gameSpecificSettings = useSettingsStore(useShallow(selectGameSpecificSettings));
+
+    const inputManager = useInputManager();
+
+    // id of the action currently in capture mode, or null
+    const [capturingId, setCapturingId] = React.useState<InputActionId | null>(null);
+    // Captured bindings keyed per action so force-rebind resolves the correct pending conflict.
+    const capturedBindingsRef = React.useRef<Partial<Record<InputActionId, KeyBinding>>>({});
+    // Per-action rebind status (conflict or success)
+    const [rebindStatus, setRebindStatus] = React.useState<
+        Partial<Record<InputActionId, { ok: boolean; conflict?: InputActionId }>>
+    >({});
+
+    // Group actions by category for display
+    const actionsByCategory = React.useMemo(() => {
+        const actions = inputManager.getActions();
+        const grouped = new Map<string, InputAction[]>();
+        for (const action of actions) {
+            const categoryActions = grouped.get(action.category);
+            if (categoryActions !== undefined) {
+                categoryActions.push(action);
+            } else {
+                grouped.set(action.category, [action]);
+            }
+        }
+        return grouped;
+    }, [inputManager]);
+
+    // Capture mode: listen for the next key press when an action is being rebound
+    React.useEffect(() => {
+        if (capturingId === null) return;
+        const actionId = capturingId;
+
+        function handleKeyDown(e: KeyboardEvent): void {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Escape cancels capture
+            if (e.code === 'Escape') {
+                setCapturingId(null);
+                return;
+            }
+
+            const modifiers: ('Ctrl' | 'Shift' | 'Alt' | 'Meta')[] = [];
+            if (e.ctrlKey) modifiers.push('Ctrl');
+            if (e.shiftKey) modifiers.push('Shift');
+            if (e.altKey) modifiers.push('Alt');
+            if (e.metaKey) modifiers.push('Meta');
+
+            const binding: KeyBinding = { primary: e.code, modifiers };
+            capturedBindingsRef.current[actionId] = binding;
+            setCapturingId(null);
+            handleRebind(actionId, binding);
+        }
+
+        document.addEventListener('keydown', handleKeyDown);
+        return () => {
+            document.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [capturingId, handleRebind]);
+
+    function handleRebind(id: InputActionId, binding: KeyBinding): void {
+        inputManager
+            .rebind(id, binding)
+            .then((result) => {
+                if (result.ok) {
+                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: true } }));
+                } else if (result.reason === 'conflict') {
+                    setRebindStatus((prev) => ({
+                        ...prev,
+                        [id]: { ok: false, conflict: result.conflictingAction },
+                    }));
+                } else {
+                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: false } }));
+                }
+            })
+            .catch((error) => {
+                console.error('[SettingsPage] rebind failed:', error);
+            });
+    }
+
+    function handleForceRebind(id: InputActionId, conflictingId: InputActionId): void {
+        const binding = capturedBindingsRef.current[id];
+        if (!binding) return;
+        inputManager
+            .resetBinding(conflictingId)
+            .then(() => inputManager.rebind(id, binding))
+            .then((result) => {
+                if (result.ok) {
+                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: true } }));
+                } else {
+                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: false } }));
+                }
+            })
+            .catch((error) => {
+                console.error('[SettingsPage] force-rebind failed:', error);
+            });
+    }
+
+    function handleResetBinding(id: InputActionId): void {
+        inputManager
+            .resetBinding(id)
+            .then(() => {
+                setRebindStatus((prev) => {
+                    const next = { ...prev };
+                    delete next[id];
+                    return next;
+                });
+            })
+            .catch((error) => {
+                console.error('[SettingsPage] resetBinding failed:', error);
+            });
+    }
+
+    function formatBinding(binding: KeyBinding | undefined): string {
+        if (!binding) return '—';
+        const mods = binding.modifiers?.length ? binding.modifiers.join('+') + '+' : '';
+        return `${mods}${binding.primary}`;
+    }
 
     /**
      * Memoize game-specific entries. Selector already filters engine-namespace keys;
@@ -432,15 +553,98 @@ export default function SettingsPage(): React.ReactElement {
                 </div>
             </section>
 
-            {/* ── Controls (placeholder) ── */}
+            {/* ── Controls ── */}
             <section
                 aria-labelledby="controls-heading"
                 style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
             >
                 <h2 id="controls-heading">Controls</h2>
-                <p style={{ color: 'var(--ch-color-text-secondary)' }}>
-                    Key bindings editor coming soon.
-                </p>
+                {Array.from(actionsByCategory.entries()).map(([category, actions]) => (
+                    <section
+                        key={category}
+                        aria-labelledby={`category-${category}`}
+                        style={{ marginBottom: 'var(--ch-space-md)' }}
+                    >
+                        <h3
+                            id={`category-${category}`}
+                            style={{ fontWeight: 'bold', marginBottom: 'var(--ch-space-sm)' }}
+                        >
+                            {category}
+                        </h3>
+                        {actions.map((action) => {
+                            const binding = inputManager.getBinding(action.id);
+                            const status = rebindStatus[action.id];
+                            const isCapturing = capturingId === action.id;
+                            return (
+                                <div
+                                    key={action.id}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: 'var(--ch-space-md)',
+                                        marginBottom: 'var(--ch-space-sm)',
+                                    }}
+                                >
+                                    <span style={{ flex: 1 }}>{action.description}</span>
+                                    <span
+                                        data-testid={`binding-${action.id}`}
+                                        style={{
+                                            minWidth: 'calc(var(--ch-space-md) * 8)',
+                                            color: 'var(--ch-color-text-secondary)',
+                                        }}
+                                    >
+                                        {isCapturing ? 'Press a key…' : formatBinding(binding)}
+                                    </span>
+                                    {status !== undefined && !status.ok && status.conflict && (
+                                        <span
+                                            style={{
+                                                color: 'var(--ch-color-error)',
+                                                fontSize: 'var(--ch-font-size-sm)',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                gap: 'var(--ch-space-sm)',
+                                            }}
+                                        >
+                                            Conflict with{' '}
+                                            {inputManager
+                                                .getActions()
+                                                .find((a) => a.id === status.conflict)
+                                                ?.description ?? status.conflict}
+                                            <Button
+                                                size="sm"
+                                                variant="ghost"
+                                                onClick={() =>
+                                                    handleForceRebind(action.id, status.conflict!)
+                                                }
+                                            >
+                                                Unbind existing &amp; rebind
+                                            </Button>
+                                        </span>
+                                    )}
+                                    {status?.ok === true && (
+                                        <span style={{ color: 'var(--ch-color-success)' }}>✓</span>
+                                    )}
+                                    {!isCapturing && (
+                                        <Button
+                                            size="sm"
+                                            variant="secondary"
+                                            onClick={() => setCapturingId(action.id)}
+                                        >
+                                            Edit
+                                        </Button>
+                                    )}
+                                    <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => handleResetBinding(action.id)}
+                                    >
+                                        Reset
+                                    </Button>
+                                </div>
+                            );
+                        })}
+                    </section>
+                ))}
             </section>
 
             {/* ── Game-specific settings ── */}

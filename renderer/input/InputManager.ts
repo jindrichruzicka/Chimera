@@ -10,7 +10,7 @@
  *                settings.controls.bindings as EngineBindings.
  */
 
-import type { InputActionId, InputEvent, RebindResult } from './InputAction.js';
+import type { InputActionId, InputAction, InputEvent, RebindResult } from './InputAction.js';
 import type { KeyBinding } from './InputBindingSchema.js';
 import type { InputActionRegistry } from './InputActionRegistry.js';
 import type { KeyBindingRepository } from './KeyBindingRepository.js';
@@ -48,6 +48,15 @@ export interface InputManager {
      * for deterministic testing.
      */
     pollGamepad(): void;
+    /** Returns all registered input actions in registration order. */
+    getActions(): readonly InputAction[];
+    /** Returns the current effective binding for the given action id, or undefined if unbound. */
+    getBinding(id: InputActionId): KeyBinding | undefined;
+    /**
+     * Resets the binding for the given action to the engine default via the repository.
+     * Clears any runtime override so the next read reflects the persisted default.
+     */
+    resetBinding(id: InputActionId): Promise<void>;
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -435,5 +444,19 @@ export function createInputManager(
         },
 
         pollGamepad,
+
+        getActions(): readonly InputAction[] {
+            return registry.getAll();
+        },
+
+        getBinding(id: InputActionId): KeyBinding | undefined {
+            return getBindings()[id];
+        },
+
+        async resetBinding(id: InputActionId): Promise<void> {
+            await bindings.reset(id);
+            // Clear the runtime override so next getBinding() reads from the store
+            runtimeBindings = null;
+        },
     };
 }

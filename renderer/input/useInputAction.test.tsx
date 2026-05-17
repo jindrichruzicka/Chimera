@@ -59,6 +59,9 @@ function createManagerStub(): Mocked<InputManager> & {
         setActiveCategory: vi.fn(),
         rebind: vi.fn().mockResolvedValue({ ok: true }),
         pollGamepad: vi.fn(),
+        getActions: vi.fn().mockReturnValue([]),
+        getBinding: vi.fn().mockReturnValue(undefined),
+        resetBinding: vi.fn().mockResolvedValue(undefined),
         triggerAction(id: InputActionId, event: InputEvent): void {
             const cbs = subscribers.get(id) ?? [];
             for (const cb of cbs) cb(event);

@@ -47,6 +47,9 @@ const providerMocks = vi.hoisted(() => {
         setActiveCategory: vi.fn(),
         rebind: vi.fn().mockResolvedValue({ ok: true }),
         pollGamepad: vi.fn(),
+        getActions: vi.fn(() => []),
+        getBinding: vi.fn(() => undefined),
+        resetBinding: vi.fn().mockResolvedValue(undefined),
     };
 
     return {
@@ -66,6 +69,7 @@ const providerMocks = vi.hoisted(() => {
             getAll: vi.fn(() => ({})),
             get: vi.fn(),
             save: vi.fn(),
+            reset: vi.fn().mockResolvedValue(undefined),
         })),
     };
 });

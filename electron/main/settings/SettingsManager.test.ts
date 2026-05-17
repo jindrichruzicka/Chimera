@@ -328,6 +328,38 @@ describe('SettingsManager.updateSettings() — overrides-only persistence (BLOCK
         expect(persisted).toEqual({ audio: { masterVolume: 0.3, sfxVolume: 0.5 } });
     });
 
+    it('treats controls.bindings as a replace map so removed bindings are not retained in overrides', async () => {
+        const repo = new InMemorySettingsRepository();
+        const mgr = new SettingsManager(repo);
+        mgr.registerSchema(engineSettingsSchema);
+
+        await mgr.updateSettings('test-game', {
+            controls: {
+                bindings: {
+                    'engine:undo': { primary: 'KeyA' },
+                    'game:end-turn': { primary: 'KeyE' },
+                },
+            },
+        });
+
+        await mgr.updateSettings('test-game', {
+            controls: {
+                bindings: {
+                    'engine:undo': { primary: 'KeyA' },
+                },
+            },
+        });
+
+        const persisted = await repo.load('test-game');
+        expect(persisted).toEqual({
+            controls: {
+                bindings: {
+                    'engine:undo': { primary: 'KeyA' },
+                },
+            },
+        });
+    });
+
     it('validatePatch return value is used — invalid patch is rejected before reaching repo', async () => {
         const repo = new InMemorySettingsRepository();
         const mgr = new SettingsManager(repo);
