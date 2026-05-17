@@ -3,6 +3,6 @@ export type {
     GameScreenComponent,
     GameScreenProps,
     GameScreenRegistry,
-    MatchResultBannerProps,
+    GameResultBannerProps,
     SendAction,
 } from '@chimera/shared/game-screen-contract.js';

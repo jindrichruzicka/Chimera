@@ -15,7 +15,7 @@ tags: [scenes, transitions, fade, scene-manager, synchronization, renderer]
 
 ### Overview
 
-Scenes are the coarse-grained context units of a match: `lobby → loading → match`, `match → intermission → next level`, `match → post-match → lobby`. Scene transitions are **host-authoritative and synchronized** — every client preloads required assets before play resumes.
+Scenes are the coarse-grained context units of a match: `lobby → loading → match`, `match → intermission → next level`, `match → post-game → lobby`. Scene transitions are **host-authoritative and synchronized** — every client preloads required assets before play resumes.
 
 Transitions are expressed as normal engine actions — deterministic, logged in `ActionHistory`, replayable, and undoable.
 
@@ -24,7 +24,7 @@ Transitions are expressed as normal engine actions — deterministic, logged in 
 | Layer                      | Scope                                                          | Owner                   | Example                                 |
 | -------------------------- | -------------------------------------------------------------- | ----------------------- | --------------------------------------- |
 | `phase`                    | Intra-match state machine (`deployment → combat → resolution`) | Game reducer            | Tactics combat round phase              |
-| `sceneId`                  | Cross-match / level structure                                  | Engine + scene registry | `'lobby'`, `'level-1'`, `'post-match'`  |
+| `sceneId`                  | Cross-match / level structure                                  | Engine + scene registry | `'lobby'`, `'level-1'`, `'post-game'`   |
 | `GameScreenRegistry` entry | Active UI panel within the current scene                       | Renderer (local)        | `'tech-tree'` vs `'board'` during match |
 
 A scene change is a simulation event broadcast to all clients. A screen change is a purely local UI navigation.

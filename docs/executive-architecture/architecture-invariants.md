@@ -182,7 +182,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **70.** `ReplayPlayer` uses the same `ActionPipeline` instance wiring as live play. Any "replay-only" shortcut code path is forbidden — a replay divergence is a determinism bug, not an acceptable replay-layer simplification.
 
-**71.** Replay files contain full `EngineAction` payloads — never projected `PlayerSnapshot`s. Playback starts from seed + matchConfig and reconstructs state through the pipeline. A replay file without `seed` or `actions` is malformed and rejected at load.
+**71.** Replay files contain full `EngineAction` payloads — never projected `PlayerSnapshot`s. Playback starts from seed + gameConfig and reconstructs state through the pipeline. A replay file without `seed` or `actions` is malformed and rejected at load.
 
 **72.** `CHAT` messages are not `EngineAction`s. They must not advance `tick`, invoke `ActionPipeline`, or be recorded in `ActionHistory` / replays / saves. Chat is a cosmetic communication channel, parallel to `PROFILE_UPDATE`.
 

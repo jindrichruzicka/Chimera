@@ -57,7 +57,7 @@ export interface LobbyManagerOptions {
         metadata: HostedSessionMetadata,
     ) => (() => void) | void;
     readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void;
-    readonly onMatchStartRequested?: (state: LobbyState) => void | Promise<void>;
+    readonly onGameStartRequested?: (state: LobbyState) => void | Promise<void>;
     readonly onLobbyStateChanged?: (state: LobbyState) => void;
     readonly onLocalSeatAdded?: (player: LobbyPlayerEntry) => void;
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
@@ -102,7 +102,7 @@ export class LobbyManager {
 
     private readonly onSessionHosted: LobbyManagerOptions['onSessionHosted'];
     private readonly onSessionJoined: LobbyManagerOptions['onSessionJoined'];
-    private readonly onMatchStartRequested: LobbyManagerOptions['onMatchStartRequested'];
+    private readonly onGameStartRequested: LobbyManagerOptions['onGameStartRequested'];
     private readonly onLobbyStateChanged: LobbyManagerOptions['onLobbyStateChanged'];
     private readonly onLocalSeatAdded: LobbyManagerOptions['onLocalSeatAdded'];
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
@@ -119,7 +119,7 @@ export class LobbyManager {
         this.log = logger.child({ module: 'lobby-manager' });
         this.onSessionHosted = options.onSessionHosted;
         this.onSessionJoined = options.onSessionJoined;
-        this.onMatchStartRequested = options.onMatchStartRequested;
+        this.onGameStartRequested = options.onGameStartRequested;
         this.onLobbyStateChanged = options.onLobbyStateChanged;
         this.onLocalSeatAdded = options.onLocalSeatAdded;
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
@@ -532,10 +532,10 @@ export class LobbyManager {
         return Promise.resolve();
     }
 
-    async startMatch(): Promise<void> {
+    async startGame(): Promise<void> {
         const session = this.session;
         if (session === null) {
-            throw new Error('LobbyManager: start-match requires an active session');
+            throw new Error('LobbyManager: start-game requires an active session');
         }
 
         if (!('close' in session)) {
@@ -554,7 +554,7 @@ export class LobbyManager {
             throw new Error('LobbyManager: all players must be ready before starting the match');
         }
 
-        await this.onMatchStartRequested?.(this.lobbyState);
+        await this.onGameStartRequested?.(this.lobbyState);
     }
 
     /**

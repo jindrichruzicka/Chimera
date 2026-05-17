@@ -82,12 +82,12 @@ export function Button(props: ButtonProps): JSX.Element;
 
 ### Variant Assignment Guide for Shell Pages
 
-| Action                          | Variant     | Example usage              |
-| ------------------------------- | ----------- | -------------------------- |
-| Primary navigation / game start | `primary`   | Play, Start Match, Confirm |
-| Secondary navigation / neutral  | `secondary` | Settings, Back             |
-| Inline / low-prominence action  | `ghost`     | Cancel, Skip               |
-| Destructive / irreversible      | `danger`    | Quit, Leave Lobby, Delete  |
+| Action                          | Variant     | Example usage             |
+| ------------------------------- | ----------- | ------------------------- |
+| Primary navigation / game start | `primary`   | Play, Start Game, Confirm |
+| Secondary navigation / neutral  | `secondary` | Settings, Back            |
+| Inline / low-prominence action  | `ghost`     | Cancel, Skip              |
+| Destructive / irreversible      | `danger`    | Quit, Leave Lobby, Delete |
 
 No custom `variant` values are permitted on shell pages. Games extend the visual language via
 token overrides (§4.37.4), not by inventing new variant names.
@@ -134,7 +134,7 @@ override is a side-effect import loaded at game registry initialisation time (§
 ```typescript
 // games/tactics/screens/index.ts
 import './styles/tokens-override.css'; // Re-declares --ch-* tokens for Tactics visual language
-export const MatchScreenRegistry: GameScreenRegistry = { ... };
+export const TacticsGameScreenRegistry: GameScreenRegistry = { ... };
 ```
 
 Because token overrides are global CSS custom properties, they cascade into _all_ descendant
@@ -160,7 +160,7 @@ renderer/
 ├── styles/
 │   └── tokens.css              # Engine default --ch-* tokens (§4.35)
 ├── theme/
-│   ├── ThemeProvider.tsx       # Provides active shell/match theme to UI components
+│   ├── ThemeProvider.tsx       # Provides active shell/game theme to UI components
 │   ├── default-theme.ts        # Token-referenced button palette + size map
 │   ├── theme-context.ts        # React context object exported for consumers
 │   ├── types.ts                # Theme and button palette contract types

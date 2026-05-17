@@ -27,7 +27,7 @@ function makeBody(): SaveBody {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         },
         deltaActions: [],
         pendingCommitments: {},

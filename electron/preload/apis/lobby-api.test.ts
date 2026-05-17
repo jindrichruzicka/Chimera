@@ -5,7 +5,7 @@ import {
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
-    LOBBY_START_MATCH_CHANNEL,
+    LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     createLobbyApi,
@@ -142,15 +142,15 @@ describe('createLobbyApi', () => {
         });
     });
 
-    describe('startMatch()', () => {
-        it('invokes chimera:lobby:start-match and resolves to void', async () => {
+    describe('startGame()', () => {
+        it('invokes chimera:lobby:start-game and resolves to void', async () => {
             const stub = makeIpcStub();
             const api = createLobbyApi(stub.port);
 
-            const result = await api.startMatch();
+            const result = await api.startGame();
 
             expect(stub.invocations).toEqual([
-                { channel: LOBBY_START_MATCH_CHANNEL, arg: undefined },
+                { channel: LOBBY_START_GAME_CHANNEL, arg: undefined },
             ]);
             expect(result).toBeUndefined();
         });
@@ -160,7 +160,7 @@ describe('createLobbyApi', () => {
             const port: LobbyApiIpcPort = {
                 ...stub.port,
                 invoke: (channel) => {
-                    if (channel === LOBBY_START_MATCH_CHANNEL) {
+                    if (channel === LOBBY_START_GAME_CHANNEL) {
                         return Promise.reject(new Error('start failed'));
                     }
                     return stub.port.invoke(channel);
@@ -168,7 +168,7 @@ describe('createLobbyApi', () => {
             };
             const api = createLobbyApi(port);
 
-            await expect(api.startMatch()).rejects.toThrow('start failed');
+            await expect(api.startGame()).rejects.toThrow('start failed');
         });
     });
 

@@ -1,6 +1,6 @@
 ---
 title: 'M6 — End-to-End Testing Layer (v0.6.0)'
-description: 'F30–F34: Playwright Infrastructure, Page Object Model, IPC/WebSocket Test Helpers, Core E2E Specs (lobby/match-flow/undo-redo/obfuscation/reconnect/multiplayer-soak), and Save/Settings E2E Specs. Full Playwright suite green in CI.'
+description: 'F30–F34: Playwright Infrastructure, Page Object Model, IPC/WebSocket Test Helpers, Core E2E Specs (lobby/game-flow/undo-redo/obfuscation/reconnect/multiplayer-soak), and Save/Settings E2E Specs. Full Playwright suite green in CI.'
 tags: [milestone, m6, e2e, playwright, testing, lobby, multiplayer, save-load, settings]
 ---
 
@@ -33,7 +33,7 @@ Implement `ipc-spy.ts` (`getHostSnapshot`, `getSimulationTick`, `getLastBroadcas
 
 ## F33 — Core E2E Specs `§13.8`
 
-Write and green all mandatory specs: `lobby.spec.ts`, `match-flow.spec.ts`, `undo-redo.spec.ts`, `obfuscation.spec.ts`, `reconnect.spec.ts`, and `multiplayer-soak.spec.ts` (1 000-tick checksum convergence).
+Write and green all mandatory specs: `lobby.spec.ts`, `game-flow.spec.ts`, `undo-redo.spec.ts`, `obfuscation.spec.ts`, `reconnect.spec.ts`, and `multiplayer-soak.spec.ts` (1 000-tick checksum convergence).
 
 ---
 

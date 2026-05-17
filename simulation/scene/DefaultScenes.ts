@@ -10,13 +10,13 @@ export function registerDefaultScenes(registry: SceneRegistry<BaseGameSnapshot>)
         initialize: (state) => state,
     });
     registry.register({
-        sceneId: sceneId('engine:match'),
+        sceneId: sceneId('engine:game'),
         defaultScreen: 'board',
         requiredAssets: [],
         initialize: (state) => state,
     });
     registry.register({
-        sceneId: sceneId('engine:post-match'),
+        sceneId: sceneId('engine:post-game'),
         defaultScreen: 'summary',
         requiredAssets: [],
         initialize: (state) => state,

@@ -3,15 +3,15 @@
 // renderer/components/shell/GameShell.tsx
 
 import React, { type ReactNode } from 'react';
-import type { MatchResult, PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type { GameResult, PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import {
-    resolveMatchResultOutcome,
+    resolveGameResultOutcome,
     type GameHudProps,
     type GameScreenComponent,
     type GameScreenRegistry,
-    type MatchResultBannerProps,
+    type GameResultBannerProps,
     type SendAction,
 } from '@chimera/shared/game-screen-contract.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
@@ -33,8 +33,8 @@ interface GameShellBaseProps {
     readonly canEndTurn?: boolean;
     readonly isGameOver?: boolean;
     readonly gameOverMessage?: string;
-    readonly matchResult?: MatchResult | null;
-    readonly matchResultBanner?: GameScreenComponent<MatchResultBannerProps>;
+    readonly gameResult?: GameResult | null;
+    readonly gameResultBanner?: GameScreenComponent<GameResultBannerProps>;
     readonly localPlayerId?: PlayerId;
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
@@ -102,9 +102,9 @@ function RegistryGameShell({
     const resolvedAssetManager = useGameAssetManager(assetManager, assetManifest);
     const eventAudioBinding = registry.eventAudioBinding;
     const audioManager = useAudioManager();
-    const isMatchEnded = snapshot.phase === 'ended';
+    const isGameEnded = snapshot.phase === 'ended';
 
-    useStopAudioOnMatchEnd(audioManager, isMatchEnded);
+    useStopAudioOnGameEnd(audioManager, isGameEnded);
 
     const gameShell = (
         <AssetManagerContext.Provider value={resolvedAssetManager}>
@@ -117,12 +117,12 @@ function RegistryGameShell({
                         canEndTurn={canEndTurn ?? snapshot.isMyTurn}
                         snapshot={snapshot}
                         sendAction={sendAction}
-                        matchResult={snapshot.matchResult}
+                        gameResult={snapshot.gameResult}
                         isGameOver={snapshot.phase === 'ended'}
                         {...(registry.hud === undefined ? {} : { hud: registry.hud })}
-                        {...(registry.matchResultBanner === undefined
+                        {...(registry.gameResultBanner === undefined
                             ? {}
-                            : { matchResultBanner: registry.matchResultBanner })}
+                            : { gameResultBanner: registry.gameResultBanner })}
                         {...(localPlayerId === undefined ? {} : { localPlayerId })}
                         {...(onUndo === undefined ? {} : { onUndo })}
                         {...(onRedo === undefined ? {} : { onRedo })}
@@ -192,21 +192,21 @@ function useGameAssetManager(
     return assetManager;
 }
 
-function useStopAudioOnMatchEnd(audioManager: AudioManager, isMatchEnded: boolean): void {
+function useStopAudioOnGameEnd(audioManager: AudioManager, isGameEnded: boolean): void {
     React.useEffect(() => {
-        if (!isMatchEnded) {
+        if (!isGameEnded) {
             return;
         }
 
         audioManager.stopAll();
-    }, [audioManager, isMatchEnded]);
+    }, [audioManager, isGameEnded]);
 }
 
 function createUnconfiguredAssetResolver(): AssetResolver {
     return {
         resolve(): string {
             throw new Error(
-                'AssetResolver is not configured for this match; inject an AssetManager into GameShell.',
+                'AssetResolver is not configured for this game; inject an AssetManager into GameShell.',
             );
         },
     };
@@ -223,8 +223,8 @@ function GameShellFrame(
         canEndTurn = true,
         isGameOver = false,
         gameOverMessage = 'Game Over',
-        matchResult,
-        matchResultBanner: MatchResultBanner = DefaultMatchResultBanner,
+        gameResult,
+        gameResultBanner: GameResultBanner = DefaultGameResultBanner,
         localPlayerId,
         onUndo,
         onRedo,
@@ -233,7 +233,7 @@ function GameShellFrame(
     const undoDisabled = !canUndo || onUndo === undefined;
     const redoDisabled = !canRedo || onRedo === undefined;
     const endTurnDisabled = !canEndTurn || onEndTurn === undefined;
-    const shouldShowResolvedResult = matchResult !== undefined && matchResult !== null;
+    const shouldShowResolvedResult = gameResult !== undefined && gameResult !== null;
     const shouldShowFallbackResult = !shouldShowResolvedResult && isGameOver;
 
     function handleUndo(): void {
@@ -256,7 +256,7 @@ function GameShellFrame(
 
     const hud =
         props.hud === undefined ? (
-            <DefaultMatchHud
+            <DefaultGameHud
                 tick={tick}
                 undoDisabled={undoDisabled}
                 redoDisabled={redoDisabled}
@@ -291,8 +291,8 @@ function GameShellFrame(
                 <React.Suspense fallback={null}>{children}</React.Suspense>
                 {shouldShowResolvedResult && (
                     <React.Suspense fallback={null}>
-                        <MatchResultBanner
-                            matchResult={matchResult}
+                        <GameResultBanner
+                            gameResult={gameResult}
                             {...(localPlayerId === undefined ? {} : { localPlayerId })}
                         />
                     </React.Suspense>
@@ -304,7 +304,7 @@ function GameShellFrame(
     );
 }
 
-interface MatchHudControlsProps {
+interface GameHudControlsProps {
     readonly tick: number;
     readonly undoDisabled: boolean;
     readonly redoDisabled: boolean;
@@ -326,7 +326,7 @@ function GameHudSlot({ Hud, ...hudProps }: GameHudSlotProps): React.ReactElement
     );
 }
 
-function DefaultMatchHud({
+function DefaultGameHud({
     tick,
     undoDisabled,
     redoDisabled,
@@ -334,7 +334,7 @@ function DefaultMatchHud({
     handleUndo,
     handleRedo,
     handleEndTurn,
-}: MatchHudControlsProps): React.ReactElement {
+}: GameHudControlsProps): React.ReactElement {
     return (
         <footer aria-label="Game HUD" style={gameShellHudStyle}>
             <div>
@@ -391,7 +391,7 @@ const gameShellActionsStyle: React.CSSProperties = {
     gap: 'var(--ch-space-xs)',
 };
 
-const matchResultBannerStyle: React.CSSProperties = {
+const gameResultBannerStyle: React.CSSProperties = {
     position: 'absolute',
     inset: 'var(--ch-space-md)',
     display: 'grid',
@@ -401,21 +401,21 @@ const matchResultBannerStyle: React.CSSProperties = {
     pointerEvents: 'none',
 };
 
-function DefaultMatchResultBanner({
-    matchResult,
+function DefaultGameResultBanner({
+    gameResult,
     localPlayerId,
-}: MatchResultBannerProps): React.ReactElement {
-    const outcome = resolveMatchResultOutcome(matchResult, localPlayerId);
+}: GameResultBannerProps): React.ReactElement {
+    const outcome = resolveGameResultOutcome(gameResult, localPlayerId);
 
     return (
         <div
             data-testid="game-result-banner"
             data-game-result-outcome={outcome}
             role="status"
-            style={matchResultBannerStyle}
+            style={gameResultBannerStyle}
         >
             <span data-testid="game-result-text">
-                {resolveMatchResultMessage(matchResult, localPlayerId)}
+                {resolveGameResultMessage(gameResult, localPlayerId)}
             </span>
         </div>
     );
@@ -427,29 +427,29 @@ function DefaultGameOverBanner({ message }: { readonly message: string }): React
             data-testid="game-result-banner"
             data-game-result-outcome="unknown"
             role="status"
-            style={matchResultBannerStyle}
+            style={gameResultBannerStyle}
         >
             <span data-testid="game-result-text">{message}</span>
         </div>
     );
 }
 
-function resolveMatchResultMessage(
-    matchResult: MatchResult,
+function resolveGameResultMessage(
+    gameResult: GameResult,
     localPlayerId: PlayerId | undefined,
 ): string {
-    if (matchResult.winnerIds.length === 0) {
+    if (gameResult.winnerIds.length === 0) {
         return 'Draw';
     }
     if (localPlayerId === undefined) {
-        return 'Match ended';
+        return 'Game ended';
     }
-    return matchResult.winnerIds.includes(localPlayerId) ? 'You won' : 'You lose';
+    return gameResult.winnerIds.includes(localPlayerId) ? 'You won' : 'You lose';
 }
 
 export type {
     GameHudProps,
     GameScreenProps,
     GameScreenRegistry,
-    MatchResultBannerProps,
+    GameResultBannerProps,
 } from '@chimera/shared/game-screen-contract.js';

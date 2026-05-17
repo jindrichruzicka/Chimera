@@ -78,7 +78,7 @@ function makeSnapshot(): PlayerSnapshot {
         entities: {},
         phase: gamePhase('setup'),
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,

@@ -15,16 +15,13 @@ const GAME_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/game/`
 gameTest(
     'lobby start navigates host and client into the registry GameShell',
     async ({ hostWindow, clientWindow }) => {
-        const hostMatch = new GamePage(hostWindow);
-        const clientMatch = new GamePage(clientWindow);
+        const hostGame = new GamePage(hostWindow);
+        const clientGame = new GamePage(clientWindow);
 
-        await expect(hostMatch.canvas).toBeVisible();
-        await expect(clientMatch.canvas).toBeVisible();
-        await expect(hostMatch.sceneRouter).toHaveAttribute('data-active-scene-id', 'engine:match');
-        await expect(clientMatch.sceneRouter).toHaveAttribute(
-            'data-active-scene-id',
-            'engine:match',
-        );
+        await expect(hostGame.canvas).toBeVisible();
+        await expect(clientGame.canvas).toBeVisible();
+        await expect(hostGame.sceneRouter).toHaveAttribute('data-active-scene-id', 'engine:game');
+        await expect(clientGame.sceneRouter).toHaveAttribute('data-active-scene-id', 'engine:game');
     },
 );
 

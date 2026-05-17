@@ -22,9 +22,9 @@ describe('uiStore', () => {
         const store = createUiStore();
         store.getState().navigateToScreen('tech-tree');
 
-        store.getState().setActiveSceneId('engine:post-match');
+        store.getState().setActiveSceneId('engine:post-game');
 
-        expect(store.getState().activeSceneId).toBe('engine:post-match');
+        expect(store.getState().activeSceneId).toBe('engine:post-game');
         expect(store.getState().activeScreenKey).toBe('board');
     });
 
@@ -32,9 +32,9 @@ describe('uiStore', () => {
         const store = createUiStore();
 
         store.getState().navigateToScreen('tech-tree');
-        store.getState().setActiveSceneId('engine:post-match', 'summary');
+        store.getState().setActiveSceneId('engine:post-game', 'summary');
 
-        expect(store.getState().activeSceneId).toBe('engine:post-match');
+        expect(store.getState().activeSceneId).toBe('engine:post-game');
         expect(store.getState().activeScreenKey).toBe('summary');
     });
 });

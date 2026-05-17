@@ -107,8 +107,8 @@ export function buildInitialHostedSessionSnapshot(
               }
             : {}),
         timers: {},
-        matchResult: null,
-        sceneId: options.phase === 'playing' ? sceneId('engine:match') : sceneId('engine:lobby'),
+        gameResult: null,
+        sceneId: options.phase === 'playing' ? sceneId('engine:game') : sceneId('engine:lobby'),
         sceneTransition: null,
     };
 }

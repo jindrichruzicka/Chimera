@@ -35,7 +35,7 @@ import {
     LOBBY_HOST_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
-    LOBBY_START_MATCH_CHANNEL,
+    LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../../preload/apis/lobby-api.js';
@@ -116,7 +116,7 @@ export {
     LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
-    LOBBY_START_MATCH_CHANNEL,
+    LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
@@ -483,7 +483,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL,
             LOBBY_JOIN_CHANNEL,
             LOBBY_LEAVE_CHANNEL,
-            LOBBY_START_MATCH_CHANNEL,
+            LOBBY_START_GAME_CHANNEL,
             LOBBY_UPDATE_READY_STATE_CHANNEL,
         ],
     });
@@ -508,8 +508,8 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
         return lobbyManager.closeLobby();
     });
 
-    ipcMain.handle(LOBBY_START_MATCH_CHANNEL, () => {
-        return lobbyManager.startMatch();
+    ipcMain.handle(LOBBY_START_GAME_CHANNEL, () => {
+        return lobbyManager.startGame();
     });
 
     ipcMain.handle(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, () => {

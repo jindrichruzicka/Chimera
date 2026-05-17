@@ -193,7 +193,7 @@ describe('window.__chimera.game — contract', () => {
             entities: {},
             phase: gamePhase('main'),
             events: [],
-            matchResult: null,
+            gameResult: null,
             commitments: {},
             undoMeta: { canUndo: false, canRedo: false },
             isMyTurn: true,
@@ -259,9 +259,9 @@ describe('window.__chimera.lobby — contract', () => {
         expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:leave', args: [] }]);
     });
 
-    it('startMatch() invokes chimera:lobby:start-match with no payload', async () => {
-        await api.lobby.startMatch();
-        expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:start-match', args: [] }]);
+    it('startGame() invokes chimera:lobby:start-game with no payload', async () => {
+        await api.lobby.startGame();
+        expect(invokeCalls).toEqual([{ channel: 'chimera:lobby:start-game', args: [] }]);
     });
 
     it('getLocalPlayerId() invokes chimera:lobby:get-local-player-id with no payload', async () => {

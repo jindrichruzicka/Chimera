@@ -15,7 +15,7 @@ import {
     GameShell,
     type GameHudProps,
     type GameScreenProps,
-    type MatchResultBannerProps,
+    type GameResultBannerProps,
 } from './GameShell';
 
 const eventAudioPlayerSpy = vi.fn(
@@ -39,7 +39,7 @@ afterEach(() => {
 
 describe('GameShell page object locators', () => {
     it('mounts EventAudioPlayer when registry mode provides an event audio binding', () => {
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
 
         renderWithAudio(
             <GameShell
@@ -63,7 +63,7 @@ describe('GameShell page object locators', () => {
     });
 
     it('provides the app AudioManagerContext to registry screens', async () => {
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
         const audioManager = createAudioManagerSpy();
 
         function Board(_props: GameScreenProps): React.ReactElement {
@@ -104,11 +104,11 @@ describe('GameShell page object locators', () => {
         const sendAction = vi.fn();
         const localPlayerId = playerId('p1');
         const playingSnapshot = makePlayerSnapshot({
-            sceneId: makeSceneId('engine:match'),
+            sceneId: makeSceneId('engine:game'),
             phase: gamePhase('playing'),
         });
         const endedSnapshot = makePlayerSnapshot({
-            sceneId: makeSceneId('engine:match'),
+            sceneId: makeSceneId('engine:game'),
             phase: gamePhase('ended'),
         });
 
@@ -142,7 +142,7 @@ describe('GameShell page object locators', () => {
 
     it('does not dispose the context AudioManager on registry shell unmount — lifecycle owned by Providers', () => {
         const audioManager = createAudioManagerSpy();
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
 
         const { unmount } = renderWithAudio(
             <GameShell
@@ -161,7 +161,7 @@ describe('GameShell page object locators', () => {
 
     it('does not dispose the context AudioManager when GameShell remounts under the same Providers instance', () => {
         const audioManager = createAudioManagerSpy();
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
         const registry = { board: () => <div data-testid="registry-board">Registry board</div> };
 
         const { unmount } = renderWithAudio(
@@ -191,7 +191,7 @@ describe('GameShell page object locators', () => {
     });
 
     it('provides AssetManagerContext in registry mode and disposes it on unmount', async () => {
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
         const assetManager = createAssetManagerStub();
 
         function Board(_props: GameScreenProps): React.ReactElement {
@@ -225,7 +225,7 @@ describe('GameShell page object locators', () => {
     });
 
     it('renders a GameScreenRegistry board through registry mode', async () => {
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
         const Board = React.lazy(() =>
             Promise.resolve({
                 default: () => <div data-testid="registry-board">Registry board</div>,
@@ -245,7 +245,7 @@ describe('GameShell page object locators', () => {
         expect(screen.getByTestId('game-canvas').textContent).toContain('Registry board');
     });
 
-    it('renders the §13.6 match HUD locator surface', () => {
+    it('renders the §13.6 game HUD locator surface', () => {
         render(
             <GameShell tick={42} canUndo={true} canRedo={false} isGameOver={true}>
                 <div>Board slot</div>
@@ -422,7 +422,7 @@ describe('GameShell page object locators', () => {
                 canRedo={false}
                 isGameOver={true}
                 localPlayerId={localPlayerId}
-                matchResult={{ winnerIds: [localPlayerId] }}
+                gameResult={{ winnerIds: [localPlayerId] }}
             />,
         );
 
@@ -435,10 +435,10 @@ describe('GameShell page object locators', () => {
 
     it('delegates resolved match result rendering to a game-provided banner', () => {
         const localPlayerId = playerId('p1');
-        const matchResult = { winnerIds: [localPlayerId] };
-        let receivedProps: MatchResultBannerProps | null = null;
+        const gameResult = { winnerIds: [localPlayerId] };
+        let receivedProps: GameResultBannerProps | null = null;
 
-        function GameResultBanner(props: MatchResultBannerProps): React.ReactElement {
+        function GameResultBanner(props: GameResultBannerProps): React.ReactElement {
             receivedProps = props;
             return (
                 <div data-testid="game-result-banner" role="status">
@@ -454,12 +454,12 @@ describe('GameShell page object locators', () => {
                 canRedo={false}
                 isGameOver={true}
                 localPlayerId={localPlayerId}
-                matchResult={matchResult}
-                matchResultBanner={GameResultBanner}
+                gameResult={gameResult}
+                gameResultBanner={GameResultBanner}
             />,
         );
 
-        expect(receivedProps).toEqual({ matchResult, localPlayerId });
+        expect(receivedProps).toEqual({ gameResult, localPlayerId });
         expect(screen.getByTestId('game-result-text').textContent).toBe('Custom tactics victory');
     });
 
@@ -471,7 +471,7 @@ describe('GameShell page object locators', () => {
                 canRedo={false}
                 isGameOver={true}
                 localPlayerId={playerId('p1')}
-                matchResult={{ winnerIds: [playerId('p2')] }}
+                gameResult={{ winnerIds: [playerId('p2')] }}
             />,
         );
 
@@ -481,7 +481,7 @@ describe('GameShell page object locators', () => {
         ).toBe('loss');
     });
 
-    it('shows Draw when matchResult has no winners', () => {
+    it('shows Draw when gameResult has no winners', () => {
         render(
             <GameShell
                 tick={7}
@@ -489,7 +489,7 @@ describe('GameShell page object locators', () => {
                 canRedo={false}
                 isGameOver={true}
                 localPlayerId={playerId('p1')}
-                matchResult={{ winnerIds: [] }}
+                gameResult={{ winnerIds: [] }}
             />,
         );
 
@@ -506,11 +506,11 @@ describe('GameShell page object locators', () => {
                 canUndo={false}
                 canRedo={false}
                 isGameOver={true}
-                matchResult={{ winnerIds: [playerId('p2')] }}
+                gameResult={{ winnerIds: [playerId('p2')] }}
             />,
         );
 
-        expect(screen.getByTestId('game-result-text').textContent).toBe('Match ended');
+        expect(screen.getByTestId('game-result-text').textContent).toBe('Game ended');
     });
 
     it('engine fallback banner uses design tokens for spacing and font size', () => {
@@ -520,7 +520,7 @@ describe('GameShell page object locators', () => {
                 canUndo={false}
                 canRedo={false}
                 isGameOver={true}
-                matchResult={{ winnerIds: [] }}
+                gameResult={{ winnerIds: [] }}
             />,
         );
 
@@ -557,7 +557,7 @@ function makePlayerSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnap
         entities: {},
         phase: gamePhase('playing'),
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,
@@ -589,7 +589,7 @@ describe('SetGameAssetManagerContext delegation wiring', () => {
     it('registers the game AssetManager with the app-level delegate on mount and clears it on unmount', () => {
         const assetManager = createAssetManagerStub();
         const setGameAssetManager = vi.fn();
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
 
         const { unmount } = render(
             <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
@@ -613,7 +613,7 @@ describe('SetGameAssetManagerContext delegation wiring', () => {
     });
 
     it('silently skips delegation wiring when SetGameAssetManagerContext is not provided', () => {
-        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:match') });
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
 
         // Should not throw even when the context is absent (tests / non-Providers trees)
         expect(() =>

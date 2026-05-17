@@ -168,7 +168,7 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
         entities: {},
         phase: gamePhase('playing'),
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,

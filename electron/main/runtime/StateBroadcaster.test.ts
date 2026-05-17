@@ -58,7 +58,7 @@ function makeSnapshot(viewerId: PlayerId): BaseGameSnapshot {
         events: [],
         turnNumber: 0,
         timers: {},
-        matchResult: null,
+        gameResult: null,
     };
 }
 
@@ -70,7 +70,7 @@ function makeProjectedSnapshot(viewerId: PlayerId): PlayerSnapshot {
         entities: {},
         phase: gamePhase('playing'),
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: true, canRedo: false },
         isMyTurn: true,
@@ -120,7 +120,7 @@ function makeE2eHooks(): E2eHooks {
             state.lastSavedTick = value;
         },
         firstPlayerRole: 'host',
-        directMatchLobbyCode: null,
+        directGameLobbyCode: null,
         onBroadcastChecksum(tick, viewerId, checksum): void {
             state.currentTick = tick;
             state.lastChecksum = checksum;

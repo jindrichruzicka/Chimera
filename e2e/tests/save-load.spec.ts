@@ -89,7 +89,7 @@ const test = electronTest.extend<SaveLoadFixtures>({
     saveLoadApp: async ({}, use) => {
         const app = await launchE2eElectronApplication({
             port: SAVE_LOAD_PORT,
-            directMatchRole: 'host',
+            directGameRole: 'host',
             passAndPlay: true,
         });
         try {
@@ -118,7 +118,7 @@ test.describe('Save / load', () => {
     }) => {
         const match = new GamePage(saveLoadWindow);
 
-        // Wait for the match canvas — direct-match boot may need a moment.
+        // Wait for the match canvas — direct-game boot may need a moment.
         await expect(match.canvas).toBeVisible({ timeout: 30_000 });
 
         // Play exactly 3 turns via pass-and-play auto-handoff.

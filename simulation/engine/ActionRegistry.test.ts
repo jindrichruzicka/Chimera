@@ -272,15 +272,15 @@ describe('ActionRegistry game definitions', () => {
         expect(registry.resolveGame('tactics')).toBe(definition);
     });
 
-    it('registers a GameDefinition with a match-result resolver hook', () => {
+    it('registers a GameDefinition with a game-result resolver hook', () => {
         const definition: GameDefinition<BaseGameSnapshot> = {
-            resolveMatchResult: () => ({ winnerIds: [toPlayerId('p1')] }),
+            resolveGameResult: () => ({ winnerIds: [toPlayerId('p1')] }),
         };
 
         registry.registerGame('tactics', definition);
 
         expect(
-            registry.resolveGame('tactics')?.resolveMatchResult?.({} as BaseGameSnapshot),
+            registry.resolveGame('tactics')?.resolveGameResult?.({} as BaseGameSnapshot),
         ).toEqual({ winnerIds: [toPlayerId('p1')] });
     });
 

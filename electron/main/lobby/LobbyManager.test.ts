@@ -110,7 +110,7 @@ function makeTestSnapshot(): PlayerSnapshot {
         entities: {},
         phase: 'setup',
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,
@@ -594,31 +594,31 @@ describe('LobbyManager connection-status lifecycle', () => {
     });
 });
 
-// ── startMatch ───────────────────────────────────────────────────────────────
+// ── startGame ───────────────────────────────────────────────────────────────
 
-describe('LobbyManager.startMatch', () => {
-    it('calls onMatchStartRequested when the hosted lobby has all players ready', async () => {
-        const onMatchStartRequested = vi.fn();
+describe('LobbyManager.startGame', () => {
+    it('calls onGameStartRequested when the hosted lobby has all players ready', async () => {
+        const onGameStartRequested = vi.fn();
         const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
-            onMatchStartRequested,
+            onGameStartRequested,
         });
         await manager.hostLobby(HOST_PARAMS);
         await manager.updatePlayerReadyState(true);
 
-        await expect(manager.startMatch()).resolves.toBeUndefined();
+        await expect(manager.startGame()).resolves.toBeUndefined();
 
-        expect(onMatchStartRequested).toHaveBeenCalledOnce();
+        expect(onGameStartRequested).toHaveBeenCalledOnce();
     });
 
     it('rejects when any current player is not ready', async () => {
-        const onMatchStartRequested = vi.fn();
+        const onGameStartRequested = vi.fn();
         const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
-            onMatchStartRequested,
+            onGameStartRequested,
         });
         await manager.hostLobby(HOST_PARAMS);
 
-        await expect(manager.startMatch()).rejects.toThrow(/all players.*ready/i);
-        expect(onMatchStartRequested).not.toHaveBeenCalled();
+        await expect(manager.startGame()).rejects.toThrow(/all players.*ready/i);
+        expect(onGameStartRequested).not.toHaveBeenCalled();
     });
 
     it('rejects from a joined client session', async () => {
@@ -628,7 +628,7 @@ describe('LobbyManager.startMatch', () => {
         const joinManager = makeManager(provider);
         await joinManager.joinLobby({ address: info.sessionId });
 
-        await expect(joinManager.startMatch()).rejects.toThrow(/host/i);
+        await expect(joinManager.startGame()).rejects.toThrow(/host/i);
     });
 });
 

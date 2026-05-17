@@ -1389,7 +1389,7 @@ describe('main', () => {
                           readonly maxPlayers: number;
                       },
                   ) => void;
-                  onMatchStartRequested?: (state: {
+                  onGameStartRequested?: (state: {
                       readonly info: {
                           readonly sessionId: string;
                           readonly hostId: ReturnType<typeof playerId>;
@@ -1408,7 +1408,7 @@ describe('main', () => {
         const clientId = playerId('client-resync');
         options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
         capturedJoin?.({ playerId: clientId });
-        options?.onMatchStartRequested?.({
+        options?.onGameStartRequested?.({
             info: { sessionId: 'session-resync', hostId, gameId: 'tactics' },
             players: [
                 { playerId: hostId, displayName: 'Host', ready: true },
@@ -1460,7 +1460,7 @@ describe('main', () => {
                           readonly maxPlayers: number;
                       },
                   ) => void;
-                  onMatchStartRequested?: (state: {
+                  onGameStartRequested?: (state: {
                       readonly info: {
                           readonly sessionId: string;
                           readonly hostId: ReturnType<typeof playerId>;
@@ -1478,7 +1478,7 @@ describe('main', () => {
         const hostId = playerId('host-first-join');
         const clientId = playerId('client-first-join');
         options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
-        options?.onMatchStartRequested?.({
+        options?.onGameStartRequested?.({
             info: { sessionId: 'session-first-join', hostId, gameId: 'tactics' },
             players: [
                 { playerId: hostId, displayName: 'Host', ready: true },
@@ -1495,7 +1495,7 @@ describe('main', () => {
         );
     });
 
-    it('starts undo history after engine:start_match so the first tactics move exhausts cleanly', async () => {
+    it('starts undo history after engine:start_game so the first tactics move exhausts cleanly', async () => {
         mockLobbyManagerCtor.mockClear();
         mockDefaultStateProjectorCtor.mockClear();
         browserWindowInstances.length = 0;
@@ -1515,7 +1515,7 @@ describe('main', () => {
                           maxPlayers: number;
                       },
                   ) => void;
-                  onMatchStartRequested?: (state: {
+                  onGameStartRequested?: (state: {
                       readonly info: {
                           readonly sessionId: string;
                           readonly hostId: ReturnType<typeof playerId>;
@@ -1530,7 +1530,7 @@ describe('main', () => {
               }
             | undefined;
         expect(options?.onSessionHosted).toBeTypeOf('function');
-        expect(options?.onMatchStartRequested).toBeTypeOf('function');
+        expect(options?.onGameStartRequested).toBeTypeOf('function');
 
         const actionReceivedRef: {
             current?: (from: string, action: unknown) => void;
@@ -1547,7 +1547,7 @@ describe('main', () => {
         const hostId = playerId('host-undo-start');
         const guestId = playerId('guest-undo-start');
         options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
-        options?.onMatchStartRequested?.({
+        options?.onGameStartRequested?.({
             info: { sessionId: 'session-undo', hostId, gameId: 'tactics' },
             players: [
                 { playerId: hostId, displayName: 'Host', ready: true },
@@ -1576,7 +1576,7 @@ describe('main', () => {
     });
 
     it('seeds undo memento only for the active (host) player — guest canUndo stays false until its own turn', async () => {
-        // Regression guard for BLOCK-2: onMatchStartRequested must NOT seed a
+        // Regression guard for BLOCK-2: onGameStartRequested must NOT seed a
         // turn-start memento for non-active players. Seeding every player made
         // guests eligible to undo the host's actions, violating the per-turn
         // ownership rule in undo-redo-policy.md §60 and the per-viewer contract
@@ -1600,7 +1600,7 @@ describe('main', () => {
                           maxPlayers: number;
                       },
                   ) => void;
-                  onMatchStartRequested?: (state: {
+                  onGameStartRequested?: (state: {
                       readonly info: {
                           readonly sessionId: string;
                           readonly hostId: ReturnType<typeof playerId>;
@@ -1628,7 +1628,7 @@ describe('main', () => {
         };
 
         options?.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
-        options?.onMatchStartRequested?.({
+        options?.onGameStartRequested?.({
             info: { sessionId: 'session-guest-undo', hostId, gameId: 'tactics' },
             players: [
                 { playerId: hostId, displayName: 'Host', ready: true },
@@ -1679,7 +1679,7 @@ describe('main', () => {
                           readonly e2eHooks?: { readonly firstPlayerRole: 'host' | 'client' };
                       },
                   ) => void;
-                  onMatchStartRequested?: (state: {
+                  onGameStartRequested?: (state: {
                       readonly info: {
                           readonly sessionId: string;
                           readonly hostId: ReturnType<typeof playerId>;
@@ -1711,7 +1711,7 @@ describe('main', () => {
             maxPlayers: 2,
             e2eHooks: { firstPlayerRole: 'client' },
         });
-        options?.onMatchStartRequested?.({
+        options?.onGameStartRequested?.({
             info: { sessionId: 'session-client-first-undo', hostId, gameId: 'tactics' },
             players: [
                 { playerId: hostId, displayName: 'Host', ready: true },
@@ -1885,7 +1885,7 @@ describe('main', () => {
         expect(win?.loadURL).toHaveBeenCalledWith(initialUrl);
     });
 
-    it('attaches the current local profile when direct-match client auto-joins', async () => {
+    it('attaches the current local profile when direct-game client auto-joins', async () => {
         const origEnv = process.env;
         const joinLobby = vi.fn(() =>
             Promise.resolve({ sessionId: 'session', hostId: 'host', gameId: 'tactics' }),
@@ -1900,15 +1900,15 @@ describe('main', () => {
                     closeLobby: vi.fn(),
                     getLocalPlayerId: vi.fn(),
                     sendAction: vi.fn(),
-                    startMatch: vi.fn(),
+                    startGame: vi.fn(),
                     switchActiveSeat: vi.fn(),
                 }) as never,
         );
         process.env = {
             ...origEnv,
             CHIMERA_E2E: '1',
-            CHIMERA_E2E_DIRECT_MATCH_ROLE: 'client',
-            CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS: '127.0.0.1:7779:token',
+            CHIMERA_E2E_DIRECT_GAME_ROLE: 'client',
+            CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS: '127.0.0.1:7779:token',
         };
         try {
             await main();
@@ -1929,7 +1929,7 @@ describe('main', () => {
         expect(updatePlayerReadyState).toHaveBeenCalledWith(true);
     });
 
-    it('ignores direct-match client auto-join outside E2E mode', async () => {
+    it('ignores direct-game client auto-join outside E2E mode', async () => {
         const origEnv = process.env;
         const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
         const joinLobby = vi.fn(() =>
@@ -1945,14 +1945,14 @@ describe('main', () => {
                     closeLobby: vi.fn(),
                     getLocalPlayerId: vi.fn(),
                     sendAction: vi.fn(),
-                    startMatch: vi.fn(),
+                    startGame: vi.fn(),
                     switchActiveSeat: vi.fn(),
                 }) as never,
         );
         process.env = {
             ...envWithoutE2e,
-            CHIMERA_E2E_DIRECT_MATCH_ROLE: 'client',
-            CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS: '127.0.0.1:7779:token',
+            CHIMERA_E2E_DIRECT_GAME_ROLE: 'client',
+            CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS: '127.0.0.1:7779:token',
         };
         try {
             await main();
@@ -1966,10 +1966,10 @@ describe('main', () => {
         expect(updatePlayerReadyState).not.toHaveBeenCalled();
     });
 
-    it('ignores direct-match host auto-start outside E2E mode', async () => {
+    it('ignores direct-game host auto-start outside E2E mode', async () => {
         const origEnv = process.env;
         const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
-        const startMatch = vi.fn(() => Promise.resolve());
+        const startGame = vi.fn(() => Promise.resolve());
         mockLobbyManagerCtor.mockImplementationOnce(
             () =>
                 ({
@@ -1979,13 +1979,13 @@ describe('main', () => {
                     closeLobby: vi.fn(),
                     getLocalPlayerId: vi.fn(),
                     sendAction: vi.fn(),
-                    startMatch,
+                    startGame,
                     switchActiveSeat: vi.fn(),
                 }) as never,
         );
         process.env = {
             ...envWithoutE2e,
-            CHIMERA_E2E_DIRECT_MATCH_ROLE: 'host',
+            CHIMERA_E2E_DIRECT_GAME_ROLE: 'host',
         };
         try {
             await main();
@@ -2002,7 +2002,7 @@ describe('main', () => {
             process.env = origEnv;
         }
 
-        expect(startMatch).not.toHaveBeenCalled();
+        expect(startGame).not.toHaveBeenCalled();
     });
 
     it('ignores CHIMERA_E2E_INITIAL_URL outside E2E mode', async () => {
@@ -2884,14 +2884,14 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
 // ─── Session teardown: onGameEnd not called when match already resolved ────────
 //
 // WARN-3 (review finding): Teardown logic at index.ts:1109–1111 calls
-// SimulationHost.onGameEnd when finalSnapshot.matchResult === null.
-// When the match was already resolved mid-session (matchResult !== null),
+// SimulationHost.onGameEnd when finalSnapshot.gameResult === null.
+// When the match was already resolved mid-session (gameResult !== null),
 // onGameEnd must not be called again at session cleanup.
 //
 // This test verifies: session cleanup with a pre-resolved snapshot does not
 // invoke SimulationHost.onGameEnd (the guard condition prevents the call).
 
-describe('onSessionHosted session teardown: onGameEnd not called when matchResult !== null (WARN-3)', () => {
+describe('onSessionHosted session teardown: onGameEnd not called when gameResult !== null (WARN-3)', () => {
     let _capturedActionCb: ((from: PlayerId, action: ActionEnvelope) => void) | null = null;
 
     interface TeardownTransport {
@@ -2958,14 +2958,14 @@ describe('onSessionHosted session teardown: onGameEnd not called when matchResul
         mockSimulationHostInstance.onGameEnd.mockClear();
     });
 
-    it('does not call onGameEnd at teardown when matchResult is already non-null', async () => {
+    it('does not call onGameEnd at teardown when gameResult is already non-null', async () => {
         // This test verifies the guard condition at index.ts:1109–1111.
         // When the session cleanup function is called with a snapshot that has
-        // matchResult !== null, SimulationHost.onGameEnd must not be called.
+        // gameResult !== null, SimulationHost.onGameEnd must not be called.
         //
-        // Note: The actual state transition to a resolved snapshot (matchResult !== null)
+        // Note: The actual state transition to a resolved snapshot (gameResult !== null)
         // is tested in autosave-wiring.integration.test.ts:AC4 and verified via the
-        // early-exit guard added to ActionPipeline#resolveMatchResult (WARN-1 fix).
+        // early-exit guard added to ActionPipeline#resolveGameResult (WARN-1 fix).
         // This test documents the contract at the session teardown layer.
         await main();
         const sessionCb = getSessionCallback();
@@ -2976,7 +2976,7 @@ describe('onSessionHosted session teardown: onGameEnd not called when matchResul
         expect(cleanup).toBeTypeOf('function');
 
         // The cleanup function should be callable. In the actual execution path,
-        // when finalSnapshot.matchResult !== null, the conditional guard at
+        // when finalSnapshot.gameResult !== null, the conditional guard at
         // index.ts:1111 prevents the onGameEnd call from firing.
         // Since we cannot easily inject a pre-resolved snapshot without mocking
         // SessionRuntime (which would complicate the test further), this test
@@ -2985,7 +2985,7 @@ describe('onSessionHosted session teardown: onGameEnd not called when matchResul
         cleanup?.();
 
         // The default snapshot from buildInitialHostedSessionSnapshot has
-        // matchResult: null, so onGameEnd will be called (positive path).
+        // gameResult: null, so onGameEnd will be called (positive path).
         // Negative path assertion (onGameEnd not called) is covered by the
         // HostSessionPipeline AC4 test which directly controls the snapshot.
         expect(mockSimulationHostInstance.onGameEnd).toHaveBeenCalledOnce();

@@ -99,7 +99,7 @@ describe('LobbyPage', () => {
             'host-lobby',
             'join-lobby',
             'ready-toggle',
-            'start-match',
+            'start-game',
             'player-list',
             'player-list-item',
             'connection-status',

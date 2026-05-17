@@ -93,13 +93,13 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         // Invariant #94: lobby page importing from games/* screen module directly
         {
             filename: 'renderer/app/lobby/page.tsx',
-            code: `import { MatchScreenRegistry } from 'games/tactics/screens/index';`,
+            code: `import { TacticsGameScreenRegistry } from 'games/tactics/screens/index';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
         // Invariant #94: game page importing from games/* directly
         {
             filename: 'renderer/app/game/page.tsx',
-            code: `import { MatchScreenRegistry } from 'games/tactics/screens/index';`,
+            code: `import { TacticsGameScreenRegistry } from 'games/tactics/screens/index';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
         // Invariant #93: lobby page importing tokens-override.css

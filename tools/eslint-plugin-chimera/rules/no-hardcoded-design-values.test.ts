@@ -50,7 +50,7 @@ export function Page() {
 }`,
         },
         {
-            filename: 'games/tactics/screens/TacticsMatchHud.tsx',
+            filename: 'games/tactics/screens/TacticsGameHud.tsx',
             code: `const hudStyle = { minWidth: 'calc(var(--ch-space-xl) * 4)' };
 export function Hud() {
     return <section style={hudStyle} />;
@@ -88,7 +88,7 @@ export function Badge() {
             errors: [{ messageId: 'hardcodedDesignValue' }],
         },
         {
-            filename: 'games/tactics/screens/TacticsMatchHud.tsx',
+            filename: 'games/tactics/screens/TacticsGameHud.tsx',
             code: `export function Hud() {
     return <section style={{ borderTop: '1px solid var(--ch-color-border)' }} />;
 }`,

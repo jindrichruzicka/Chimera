@@ -166,7 +166,7 @@ describe('SideChannelMessage', () => {
 // ─── PlayerSnapshot ─────────────────────────────────────────────────────────
 
 describe('PlayerSnapshot', () => {
-    it('carries matchResult over the provider boundary', () => {
+    it('carries gameResult over the provider boundary', () => {
         const viewerId = playerId('p1');
         const snapshot: PlayerSnapshot = {
             tick: 4,
@@ -175,15 +175,15 @@ describe('PlayerSnapshot', () => {
             entities: {},
             phase: 'ended',
             events: [],
-            matchResult: { winnerIds: [viewerId] },
+            gameResult: { winnerIds: [viewerId] },
             undoMeta: { canUndo: false, canRedo: false },
             isMyTurn: true,
         };
 
-        expect(snapshot.matchResult?.winnerIds).toEqual([viewerId]);
+        expect(snapshot.gameResult?.winnerIds).toEqual([viewerId]);
     });
 
-    it('allows null matchResult while the match is in progress', () => {
+    it('allows null gameResult while the match is in progress', () => {
         const viewerId = playerId('p1');
         const snapshot: PlayerSnapshot = {
             tick: 4,
@@ -192,12 +192,12 @@ describe('PlayerSnapshot', () => {
             entities: {},
             phase: 'playing',
             events: [],
-            matchResult: null,
+            gameResult: null,
             undoMeta: { canUndo: false, canRedo: false },
             isMyTurn: true,
         };
 
-        expect(snapshot.matchResult).toBeNull();
+        expect(snapshot.gameResult).toBeNull();
     });
 });
 

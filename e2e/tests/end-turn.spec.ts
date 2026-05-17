@@ -21,88 +21,88 @@ import { GamePage } from '../pages/GamePage';
 
 test.describe('End turn', () => {
     test('end turn clears undo and redo history', async ({ hostWindow }) => {
-        const hostMatch = new GamePage(hostWindow);
+        const hostGame = new GamePage(hostWindow);
 
         // Make a move
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
 
-        await expect(hostMatch.undoButton).toBeEnabled();
+        await expect(hostGame.undoButton).toBeEnabled();
 
         // End the turn
-        await hostMatch.endTurnButton.click();
+        await hostGame.endTurnButton.click();
 
         // After ending turn, undo should be disabled (history cleared)
-        await expect(hostMatch.undoButton).toBeDisabled();
-        await expect(hostMatch.redoButton).toBeDisabled();
+        await expect(hostGame.undoButton).toBeDisabled();
+        await expect(hostGame.redoButton).toBeDisabled();
     });
 
     test('end turn after partial undo also clears redo', async ({ hostWindow }) => {
-        const hostMatch = new GamePage(hostWindow);
+        const hostGame = new GamePage(hostWindow);
 
         // Make a move
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
 
-        await expect(hostMatch.undoButton).toBeEnabled();
+        await expect(hostGame.undoButton).toBeEnabled();
 
         // Partially undo
-        await hostMatch.undoButton.click();
-        await expect(hostMatch.redoButton).toBeEnabled();
+        await hostGame.undoButton.click();
+        await expect(hostGame.redoButton).toBeEnabled();
 
         // End the turn
-        await hostMatch.endTurnButton.click();
+        await hostGame.endTurnButton.click();
 
         // After ending turn, both undo and redo should be disabled
-        await expect(hostMatch.undoButton).toBeDisabled();
-        await expect(hostMatch.redoButton).toBeDisabled();
+        await expect(hostGame.undoButton).toBeDisabled();
+        await expect(hostGame.redoButton).toBeDisabled();
     });
 
     test('end turn button is disabled for non-active player', async ({
         hostWindow,
         clientWindow,
     }) => {
-        const hostMatch = new GamePage(hostWindow);
-        const clientMatch = new GamePage(clientWindow);
+        const hostGame = new GamePage(hostWindow);
+        const clientGame = new GamePage(clientWindow);
 
         // Host makes a move (host is active first)
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
 
         // Verify host can end turn and client cannot
-        await expect(hostMatch.endTurnButton).toBeEnabled();
-        await expect(clientMatch.endTurnButton).toBeDisabled();
+        await expect(hostGame.endTurnButton).toBeEnabled();
+        await expect(clientGame.endTurnButton).toBeDisabled();
 
         // Host ends turn
-        await hostMatch.endTurnButton.click();
+        await hostGame.endTurnButton.click();
 
         // After host ends turn, client should be able to end turn
         // (button should be enabled after turn transfer)
-        await expect(clientMatch.endTurnButton).toBeEnabled();
+        await expect(clientGame.endTurnButton).toBeEnabled();
     });
 
     test('turn transfer: client move succeeds after host ends turn', async ({
         hostWindow,
         clientWindow,
     }) => {
-        const hostMatch = new GamePage(hostWindow);
-        const clientMatch = new GamePage(clientWindow);
+        const hostGame = new GamePage(hostWindow);
+        const clientGame = new GamePage(clientWindow);
 
         // Host makes a move
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
-        const hostTickAfterMove = await hostMatch.currentTick();
+        const hostTickAfterMove = await hostGame.currentTick();
 
         // Host ends turn
-        await hostMatch.endTurnButton.click();
-        await hostMatch.waitForTick(hostTickAfterMove + 1);
+        await hostGame.endTurnButton.click();
+        await hostGame.waitForTick(hostTickAfterMove + 1);
 
         // Client should now be able to move
         await clientWindow.getByTestId('selectable-unit').first().click();
         await clientWindow.getByTestId('move-target').first().click();
 
         // Verify move was processed
-        const clientTickAfterMove = await clientMatch.currentTick();
+        const clientTickAfterMove = await clientGame.currentTick();
         expect(clientTickAfterMove).toBeGreaterThan(hostTickAfterMove);
     });
 
@@ -113,24 +113,24 @@ test.describe('End turn', () => {
             hostWindow,
             clientWindow,
         }) => {
-            const hostMatch = new GamePage(hostWindow);
-            const clientMatch = new GamePage(clientWindow);
+            const hostGame = new GamePage(hostWindow);
+            const clientGame = new GamePage(clientWindow);
 
             // Client makes a move (client is active first in this context)
             await clientWindow.getByTestId('selectable-unit').first().click();
             await clientWindow.getByTestId('move-target').first().click();
-            const clientTickAfterMove = await clientMatch.currentTick();
+            const clientTickAfterMove = await clientGame.currentTick();
 
             // Client ends turn
-            await clientMatch.endTurnButton.click();
-            await clientMatch.waitForTick(clientTickAfterMove + 1);
+            await clientGame.endTurnButton.click();
+            await clientGame.waitForTick(clientTickAfterMove + 1);
 
             // Host should now be able to move
             await hostWindow.getByTestId('selectable-unit').first().click();
             await hostWindow.getByTestId('move-target').first().click();
 
             // Verify move was processed
-            const hostTickAfterMove = await hostMatch.currentTick();
+            const hostTickAfterMove = await hostGame.currentTick();
             expect(hostTickAfterMove).toBeGreaterThan(clientTickAfterMove);
         });
     });

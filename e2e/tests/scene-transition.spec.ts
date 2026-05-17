@@ -2,7 +2,7 @@
  * F38 — scene-transition.spec.ts
  *
  * Drives engine:scene_prepare through the real renderer IPC path and verifies
- * the host-side scene manager reaches engine:post-match on both windows.
+ * the host-side scene manager reaches engine:post-game on both windows.
  *
  * Note: scene_ready acknowledgements are sent automatically by useFadeTransition
  * in SceneRouter after the fade-out animation completes (~300 ms per renderer).
@@ -39,13 +39,10 @@ async function readHostSnapshot(hostApp: ElectronApplication): Promise<HostSnaps
     return snapshot;
 }
 
-async function requestPostMatchScene(
-    hostApp: ElectronApplication,
-    hostWindow: Page,
-): Promise<void> {
+async function requestPostGameScene(hostApp: ElectronApplication, hostWindow: Page): Promise<void> {
     await expect
         .poll(async () => (await readHostSnapshot(hostApp)).sceneId ?? null, { timeout: 15_000 })
-        .toBe('engine:match');
+        .toBe('engine:game');
 
     await hostWindow.evaluate(async (toSceneId) => {
         const gameApi = (
@@ -84,32 +81,30 @@ async function requestPostMatchScene(
                 params: {},
             },
         });
-    }, 'engine:post-match');
+    }, 'engine:post-game');
 }
 
-test('host scene_prepare transitions host and client into post-match', async ({
+test('host scene_prepare transitions host and client into post-game', async ({
     hostApp,
     hostWindow,
     clientWindow,
 }) => {
-    const hostMatch = new GamePage(hostWindow);
-    const clientMatch = new GamePage(clientWindow);
+    const hostGame = new GamePage(hostWindow);
+    const clientGame = new GamePage(clientWindow);
 
-    await requestPostMatchScene(hostApp, hostWindow);
+    await requestPostGameScene(hostApp, hostWindow);
     // useFadeTransition in each SceneRouter automatically sends engine:scene_ready
     // after the fade-out animation (~300 ms).  SessionRuntime then auto-dispatches
     // engine:scene_commit once both players are ready.  No explicit acknowledgement
     // is required from the test.
     await Promise.all([
-        expect.poll(() => hostMatch.activeSceneId(), { timeout: 15_000 }).toBe('engine:post-match'),
-        expect
-            .poll(() => clientMatch.activeSceneId(), { timeout: 15_000 })
-            .toBe('engine:post-match'),
-        expect.poll(() => hostMatch.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
-        expect.poll(() => clientMatch.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
+        expect.poll(() => hostGame.activeSceneId(), { timeout: 15_000 }).toBe('engine:post-game'),
+        expect.poll(() => clientGame.activeSceneId(), { timeout: 15_000 }).toBe('engine:post-game'),
+        expect.poll(() => hostGame.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
+        expect.poll(() => clientGame.activeScreenKey(), { timeout: 15_000 }).toBe('summary'),
     ]);
-    await expect(hostMatch.postMatchSummary).toBeVisible();
-    await expect(clientMatch.postMatchSummary).toBeVisible();
-    await expect(hostMatch.transitionOverlay).toHaveCount(0);
-    await expect(clientMatch.transitionOverlay).toHaveCount(0);
+    await expect(hostGame.postGameSummary).toBeVisible();
+    await expect(clientGame.postGameSummary).toBeVisible();
+    await expect(hostGame.transitionOverlay).toHaveCount(0);
+    await expect(clientGame.transitionOverlay).toHaveCount(0);
 });

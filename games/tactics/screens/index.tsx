@@ -11,10 +11,10 @@ import { tacticsAudioRefs } from '../asset-manifest.js';
 import '../styles/tokens-override.css';
 
 const TacticsDemoBoard = React.lazy(() => import('./TacticsDemoBoard.js'));
-const TacticsMatchHud = React.lazy(() => import('./TacticsMatchHud.js'));
-const TacticsMatchResultBanner = React.lazy(() => import('./TacticsMatchResultBanner.js'));
+const TacticsGameHud = React.lazy(() => import('./TacticsGameHud.js'));
+const TacticsGameResultBanner = React.lazy(() => import('./TacticsGameResultBanner.js'));
 // Invariant #87: every screen registered here must be wrapped in React.lazy.
-const TacticsPostMatchSummary = React.lazy(() => import('./TacticsPostMatchSummary.js'));
+const TacticsPostGameSummary = React.lazy(() => import('./TacticsPostGameSummary.js'));
 
 const TACTICS_EVENT_AUDIO_BINDING = {
     [TACTICS_MOVE_UNIT_ACTION]: {
@@ -34,16 +34,16 @@ const TACTICS_EVENT_AUDIO_BINDING = {
     },
 } as const;
 
-export const MatchScreenRegistry: GameScreenRegistry = {
+export const TacticsGameScreenRegistry: GameScreenRegistry = {
     board: TacticsDemoBoard,
-    hud: TacticsMatchHud,
+    hud: TacticsGameHud,
     eventAudioBinding: TACTICS_EVENT_AUDIO_BINDING,
     screens: {
-        summary: TacticsPostMatchSummary,
+        summary: TacticsPostGameSummary,
     },
     sceneDefaultScreens: {
-        'engine:match': 'board',
-        'engine:post-match': 'summary',
+        'engine:game': 'board',
+        'engine:post-game': 'summary',
     },
-    matchResultBanner: TacticsMatchResultBanner,
+    gameResultBanner: TacticsGameResultBanner,
 };

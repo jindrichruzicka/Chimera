@@ -32,7 +32,7 @@ describe('useFadeTransition', () => {
         const sendAction = vi.fn();
         const snapshot = makeSnapshot({
             sceneTransition: {
-                toSceneId: makeSceneId('engine:post-match'),
+                toSceneId: makeSceneId('engine:post-game'),
                 phase: 'preparing',
                 startedAtTick: 2,
                 params: {},
@@ -75,7 +75,7 @@ describe('useFadeTransition', () => {
         const sendAction = vi.fn();
         const snapshot = makeSnapshot({
             sceneTransition: {
-                toSceneId: makeSceneId('engine:post-match'),
+                toSceneId: makeSceneId('engine:post-game'),
                 phase: 'preparing',
                 startedAtTick: 2,
                 params: {},
@@ -126,7 +126,7 @@ describe('useFadeTransition', () => {
                     snap={makeSnapshot({
                         tick: 3,
                         sceneTransition: {
-                            toSceneId: makeSceneId('engine:post-match'),
+                            toSceneId: makeSceneId('engine:post-game'),
                             phase: 'preparing',
                             startedAtTick: 2,
                             params: {},
@@ -149,7 +149,7 @@ describe('useFadeTransition', () => {
                     snap={makeSnapshot({
                         tick: 4,
                         sceneTransition: {
-                            toSceneId: makeSceneId('engine:post-match'),
+                            toSceneId: makeSceneId('engine:post-game'),
                             phase: 'preparing',
                             startedAtTick: 2,
                             params: {},
@@ -191,7 +191,7 @@ describe('useFadeTransition', () => {
                     snap={makeSnapshot({
                         tick: 3,
                         sceneTransition: {
-                            toSceneId: makeSceneId('engine:post-match'),
+                            toSceneId: makeSceneId('engine:post-game'),
                             phase: 'preparing',
                             startedAtTick: 2,
                             params: {},
@@ -218,7 +218,7 @@ describe('useFadeTransition', () => {
                     snap={makeSnapshot({
                         tick: 4,
                         sceneTransition: {
-                            toSceneId: makeSceneId('engine:post-match'),
+                            toSceneId: makeSceneId('engine:post-game'),
                             phase: 'preparing',
                             startedAtTick: 2,
                             params: {},
@@ -292,10 +292,10 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
         players: { [LOCAL_PLAYER]: { id: LOCAL_PLAYER } },
         entities: {},
         phase: gamePhase('playing'),
-        sceneId: makeSceneId('engine:match'),
+        sceneId: makeSceneId('engine:game'),
         sceneTransition: null,
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,

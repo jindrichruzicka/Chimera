@@ -51,8 +51,8 @@ async function primeRelaunchReconnectEnv(
     ticket: ReconnectTicket,
 ): Promise<void> {
     await app.evaluate((_electron, reconnect) => {
-        process.env['CHIMERA_E2E_DIRECT_MATCH_ROLE'] = 'client';
-        process.env['CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS'] = reconnect.address;
+        process.env['CHIMERA_E2E_DIRECT_GAME_ROLE'] = 'client';
+        process.env['CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS'] = reconnect.address;
         process.env['CHIMERA_E2E_RECONNECT_PLAYER_ID'] = reconnect.playerId;
     }, ticket);
 }
@@ -75,8 +75,8 @@ test.describe('Client reconnect', () => {
         await primeRelaunchReconnectEnv(clientApp, ticket);
         const relaunchConfig = await captureRelaunchConfig(clientApp);
         const originalClientPlayerId = ticket.playerId;
-        const originalClientMatch = new GamePage(clientWindow);
-        await expect(originalClientMatch.canvas).toBeVisible();
+        const originalClientGame = new GamePage(clientWindow);
+        await expect(originalClientGame.canvas).toBeVisible();
 
         await clientApp.close();
         await expect
@@ -108,14 +108,14 @@ test.describe('Client reconnect', () => {
                 { timeout: 30_000 },
             );
 
-            const relaunchedClientMatch = new GamePage(relaunchedClientWindow);
-            await expect(relaunchedClientMatch.canvas).toBeVisible({ timeout: 30_000 });
+            const relaunchedClientGame = new GamePage(relaunchedClientWindow);
+            await expect(relaunchedClientGame.canvas).toBeVisible({ timeout: 30_000 });
 
             await expect
                 .poll(async () => {
                     const [hostTick, clientTick] = await Promise.all([
                         getSimulationTick(hostApp),
-                        relaunchedClientMatch.currentTick(),
+                        relaunchedClientGame.currentTick(),
                     ]);
                     return Math.abs(hostTick - clientTick);
                 })

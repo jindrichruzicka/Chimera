@@ -2,9 +2,9 @@
 
 import React from 'react';
 import {
-    resolveMatchResultOutcome,
+    resolveGameResultOutcome,
     type GameScreenProps,
-    type MatchResultOutcome,
+    type GameResultOutcome,
 } from '@chimera/shared/game-screen-contract.js';
 
 const summaryContainerStyle: React.CSSProperties = {
@@ -31,7 +31,7 @@ const detailsStyle: React.CSSProperties = {
     fontSize: 'var(--ch-font-size-md)',
 };
 
-function resolveSummaryMessage(outcome: MatchResultOutcome): string {
+function resolveSummaryMessage(outcome: GameResultOutcome): string {
     switch (outcome) {
         case 'win':
             return 'Mission accomplished. Your formation controls the field.';
@@ -40,21 +40,21 @@ function resolveSummaryMessage(outcome: MatchResultOutcome): string {
         case 'draw':
             return 'No decisive winner. Tactical parity achieved.';
         default:
-            return 'Match completed. Final battlefield report is available.';
+            return 'Game completed. Final battlefield report is available.';
     }
 }
 
 function resolveOutcome(
     snapshot: GameScreenProps['snapshot'],
     localPlayerId?: GameScreenProps['localPlayerId'],
-): MatchResultOutcome {
-    if (snapshot.matchResult === null) {
+): GameResultOutcome {
+    if (snapshot.gameResult === null) {
         return 'unknown';
     }
-    return resolveMatchResultOutcome(snapshot.matchResult, localPlayerId);
+    return resolveGameResultOutcome(snapshot.gameResult, localPlayerId);
 }
 
-export function TacticsPostMatchSummary({
+export function TacticsPostGameSummary({
     snapshot,
     localPlayerId,
 }: GameScreenProps): React.ReactElement {
@@ -62,14 +62,14 @@ export function TacticsPostMatchSummary({
 
     return (
         <section
-            data-testid="post-match-summary"
+            data-testid="post-game-summary"
             data-outcome={outcome}
             style={summaryContainerStyle}
         >
-            <h2 style={headingStyle}>Post-Match Summary</h2>
+            <h2 style={headingStyle}>Post-Game Summary</h2>
             <p style={detailsStyle}>{resolveSummaryMessage(outcome)}</p>
         </section>
     );
 }
 
-export default TacticsPostMatchSummary;
+export default TacticsPostGameSummary;

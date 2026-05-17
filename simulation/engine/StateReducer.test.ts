@@ -32,7 +32,7 @@ const makeSnapshot = (tick = 0, turnNumber = 0): BaseGameSnapshot => ({
     events: [],
     turnNumber,
     timers: {},
-    matchResult: null,
+    gameResult: null,
 });
 
 const makeEnvelope = (

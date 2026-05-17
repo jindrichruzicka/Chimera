@@ -22,7 +22,7 @@
 import type {
     PlayerId,
     EngineAction,
-    MatchResult,
+    GameResult,
     SceneId,
     SceneTransitionState,
 } from '@chimera/simulation/engine/types.js';
@@ -34,7 +34,7 @@ import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 
 export type { PlayerId };
 
-export type { MatchResult };
+export type { GameResult };
 
 /**
  * Constructs a branded `PlayerId` from a raw string.
@@ -81,7 +81,7 @@ export interface PlayerSnapshot {
     readonly sceneId?: SceneId;
     readonly sceneTransition?: SceneTransitionState | null;
     readonly events: readonly Readonly<{ type: string }>[];
-    readonly matchResult: MatchResult | null;
+    readonly gameResult: GameResult | null;
     /**
      * Per-player commitment state (proposals and envelopes).
      * Optional for backward-compat: older clients may not include this field

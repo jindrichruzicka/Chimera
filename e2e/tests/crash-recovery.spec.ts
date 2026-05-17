@@ -88,7 +88,7 @@ async function exitWithoutCleanQuit(app: ElectronApplication): Promise<void> {
 
 // ─── Fixture ─────────────────────────────────────────────────────────────────
 
-/** Dedicated port — does not collide with base (7778), lobby/direct-match (7779), or save-load (7785). */
+/** Dedicated port — does not collide with base (7778), lobby/direct-game (7779), or save-load (7785). */
 const CRASH_RECOVERY_PORT = '7786';
 
 interface CrashRecoveryFixtures {
@@ -101,7 +101,7 @@ const test = electronTest.extend<CrashRecoveryFixtures>({
     crashApp: async ({}, use) => {
         const app = await launchE2eElectronApplication({
             port: CRASH_RECOVERY_PORT,
-            directMatchRole: 'host',
+            directGameRole: 'host',
             passAndPlay: true,
         });
         try {
@@ -129,7 +129,7 @@ test.describe('Crash recovery', () => {
     }) => {
         const match = new GamePage(crashWindow);
 
-        // Wait for the match canvas — direct-match boot may need a moment.
+        // Wait for the match canvas — direct-game boot may need a moment.
         await expect(match.canvas).toBeVisible({ timeout: 30_000 });
 
         // Play 3 turns in pass-and-play mode so the crash save captures a
@@ -183,7 +183,7 @@ test.describe('Crash recovery', () => {
             expect(recoveryStatus.needsRecovery).toBe(true);
             expect(recoveryStatus.slotId).not.toBeNull();
 
-            // Wait for the direct-match canvas before clicking Resume so
+            // Wait for the direct-game canvas before clicking Resume so
             // SessionRuntime.applyRestoredFile() has an active session.
             // Without this, the load IPC call is silently skipped
             // (see electron/main/index.ts: "snapshot will not be applied").

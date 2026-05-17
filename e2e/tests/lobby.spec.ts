@@ -126,8 +126,8 @@ test.describe('Lobby lifecycle', () => {
     });
 });
 
-test.describe('Start Match button enable/disable', () => {
-    test('start-match is disabled for client regardless of all-ready state', async ({
+test.describe('Start Game button enable/disable', () => {
+    test('start-game is disabled for client regardless of all-ready state', async ({
         hostWindow,
         clientWindow,
     }) => {
@@ -158,11 +158,11 @@ test.describe('Start Match button enable/disable', () => {
             )
             .toEqual(['true', 'true']);
 
-        // Client window must keep start-match disabled
+        // Client window must keep start-game disabled
         await expect(clientLobby.startButton).toBeDisabled();
     });
 
-    test('start-match enables for host when all ready; disables when any player unreadies', async ({
+    test('start-game enables for host when all ready; disables when any player unreadies', async ({
         hostWindow,
         clientWindow,
     }) => {
@@ -176,7 +176,7 @@ test.describe('Start Match button enable/disable', () => {
         await hostLobby.waitForPlayerCount(2);
         await clientLobby.waitForPlayerCount(2);
 
-        // Before any ready: start-match disabled for host
+        // Before any ready: start-game disabled for host
         await expect(hostLobby.startButton).toBeDisabled();
 
         await hostLobby.toggleReady();
@@ -196,14 +196,14 @@ test.describe('Start Match button enable/disable', () => {
             )
             .toEqual(['true', 'true']);
 
-        // start-match must be enabled for the host
+        // start-game must be enabled for the host
         await expect(hostLobby.startButton).toBeEnabled();
 
         // Host toggles back to unready
         await hostLobby.toggleReady();
         await expect.poll(() => hostLobby.playerReadyStatusById(hostPlayerId)).toBe('false');
 
-        // start-match must be disabled again
+        // start-game must be disabled again
         await expect(hostLobby.startButton).toBeDisabled();
     });
 });

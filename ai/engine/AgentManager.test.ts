@@ -35,7 +35,7 @@ const makeSnapshot = (tick = 0, viewerId = p1): PlayerSnapshot => ({
     players: {},
     entities: {},
     events: [],
-    matchResult: null,
+    gameResult: null,
     commitments: Object.create(null),
     undoMeta: { canUndo: false, canRedo: false },
     isMyTurn: true,
@@ -50,7 +50,7 @@ const makeFullState = (): BaseGameSnapshot => ({
     events: [],
     turnNumber: 0,
     timers: {},
-    matchResult: null,
+    gameResult: null,
 });
 
 const makeResult = (): GameResult => ({ winnerIds: [] });

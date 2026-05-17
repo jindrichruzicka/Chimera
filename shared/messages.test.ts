@@ -95,7 +95,7 @@ describe('shared/messages — ServerMessage', () => {
                 entities: {},
                 phase: 'playing',
                 events: [],
-                matchResult: null,
+                gameResult: null,
                 commitments: {},
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,

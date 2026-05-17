@@ -3,7 +3,7 @@
 import React from 'react';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 
-export function TacticsMatchHud({
+export function TacticsGameHud({
     tick,
     undoDisabled,
     redoDisabled,
@@ -13,7 +13,7 @@ export function TacticsMatchHud({
     handleEndTurn,
 }: GameHudProps): React.ReactElement {
     return (
-        <footer aria-label="Match HUD" style={tacticsHudStyle}>
+        <footer aria-label="Game HUD" style={tacticsHudStyle}>
             <div style={tacticsHudStatusStyle}>
                 <span style={tacticsHudLabelStyle}>Tactics Tick</span>
                 <output data-testid="hud-tick" style={tacticsHudTickStyle}>
@@ -82,4 +82,4 @@ const tacticsHudActionsStyle: React.CSSProperties = {
     gap: 'var(--ch-space-xs)',
 };
 
-export default TacticsMatchHud;
+export default TacticsGameHud;

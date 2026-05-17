@@ -13,7 +13,7 @@ tags: [replay, determinism, action-history, export, ipc]
 
 ## Overview
 
-Given `seed + ActionHistory`, a Chimera simulation replays bit-identically (invariants #42–44). Replays are a thin packaging + playback layer on top of existing determinism guarantees — marginal cost is low, value (bug reports, post-match review, highlights) is high.
+Given `seed + ActionHistory`, a Chimera simulation replays bit-identically (invariants #42–44). Replays are a thin packaging + playback layer on top of existing determinism guarantees — marginal cost is low, value (bug reports, post-game review, highlights) is high.
 
 ---
 
@@ -27,7 +27,7 @@ export interface ReplayFile {
     readonly engineVersion: string; // app.getVersion()
     readonly gameId: string;
     readonly gameVersion: string; // from games/<name>/package.json
-    readonly matchConfig: Readonly<Record<string, unknown>>;
+    readonly gameConfig: Readonly<Record<string, unknown>>;
     readonly seed: number;
     readonly actions: ReadonlyArray<RecordedAction>;
     readonly metadata: {
@@ -60,7 +60,7 @@ export class ReplayPlayer {
         private readonly registry: ActionRegistry,
     ) {}
 
-    initialize(): GameSnapshot; // seed + matchConfig → initial state
+    initialize(): GameSnapshot; // seed + gameConfig → initial state
     step(): GameSnapshot; // apply next recorded action
     seek(tick: number): GameSnapshot; // fast-forward or jump
     play(speedMultiplier: number, onFrame: (s: GameSnapshot) => void): StopFn;
@@ -86,7 +86,7 @@ export class ReplayManager {
     startRecording(
         gameId: string,
         seed: number,
-        matchConfig: Readonly<Record<string, unknown>>,
+        gameConfig: Readonly<Record<string, unknown>>,
     ): void;
     recordAction(playerId: PlayerId, action: EngineAction, tick: number): void;
     finaliseRecording(): Promise<string>; // atomic write; returns file path
@@ -118,10 +118,10 @@ Replays are tied to the `(engineVersion, gameId, gameVersion)` triple at record 
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                                                         |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #70 | `ReplayPlayer` uses the same `ActionPipeline` instance as live play. Any "replay-only" shortcut codepath is forbidden — a replay divergence is a determinism bug.                                            |
-| #71 | Replay files contain full `EngineAction` payloads — never projected `PlayerSnapshot`s. Playback starts from seed + matchConfig. A replay file without `seed` or `actions` is malformed and rejected at load. |
+| #   | Rule                                                                                                                                                                                                        |
+| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #70 | `ReplayPlayer` uses the same `ActionPipeline` instance as live play. Any "replay-only" shortcut codepath is forbidden — a replay divergence is a determinism bug.                                           |
+| #71 | Replay files contain full `EngineAction` payloads — never projected `PlayerSnapshot`s. Playback starts from seed + gameConfig. A replay file without `seed` or `actions` is malformed and rejected at load. |
 
 ---
 

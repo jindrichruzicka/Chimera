@@ -302,7 +302,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 action.type === 'engine:undo'
                     ? undoManager.undo(action.playerId, steps)
                     : undoManager.redo(action.playerId, steps);
-            const resolvedReconstructed = this.#resolveMatchResult(reconstructed as TState);
+            const resolvedReconstructed = this.#resolveGameResult(reconstructed as TState);
 
             // Stage 6 equivalent — record undo/redo in history so it appears in replay.
             this.#context.history?.append({
@@ -354,7 +354,7 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
 
         // ── Stage 5 — reduce ──────────────────────────────────────────────
         const reducedState = def.reduce(snapshot, parsedPayload, action.playerId, ctx);
-        const nextState = this.#resolveMatchResult(reducedState);
+        const nextState = this.#resolveGameResult(reducedState);
 
         this.#logger.debug('action reduced', {
             type: action.type,
@@ -488,29 +488,27 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         return previousKeyCount === nextKeyCount;
     }
 
-    #resolveMatchResult(snapshot: TState): TState {
+    #resolveGameResult(snapshot: TState): TState {
         if (this.#gameId === undefined) {
             return snapshot;
         }
 
-        // Guard early-exit: if match is already resolved, skip resolver invocation.
-        // Ensures resolveGame().resolveMatchResult() is never called redundantly
+        // Guard early-exit: if game is already resolved, skip resolver invocation.
+        // Ensures resolveGame().resolveGameResult() is never called redundantly
         // on undo, redo, or subsequent actions after game-over (Invariant #38).
-        if (snapshot.matchResult !== null) {
+        if (snapshot.gameResult !== null) {
             return snapshot;
         }
 
-        const matchResult = this.#registry
-            .resolveGame(this.#gameId)
-            ?.resolveMatchResult?.(snapshot);
-        if (matchResult === undefined || matchResult === null) {
+        const gameResult = this.#registry.resolveGame(this.#gameId)?.resolveGameResult?.(snapshot);
+        if (gameResult === undefined || gameResult === null) {
             return snapshot;
         }
 
         return {
             ...snapshot,
             phase: gamePhase('ended'),
-            matchResult,
+            gameResult,
         };
     }
 }

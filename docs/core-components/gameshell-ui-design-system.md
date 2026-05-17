@@ -24,10 +24,10 @@ tags: [renderer, react, game-screen-registry, contexts, design-tokens, code-spli
 
 export interface GameScreenRegistry {
     readonly board: React.ComponentType; // Required — primary gameplay view
-    readonly hud?: React.ComponentType<GameHudProps>; // Optional game-defined match HUD
+    readonly hud?: React.ComponentType<GameHudProps>; // Optional game-defined game HUD
     readonly screens?: Readonly<Record<string, React.ComponentType>>; // Named full-screen panels
     readonly transitionOverlay?: React.ComponentType; // Optional; engine default used when absent
-    readonly matchResultBanner?: React.ComponentType<MatchResultBannerProps>; // Optional winner display
+    readonly gameResultBanner?: React.ComponentType<GameResultBannerProps>; // Optional winner display
 }
 
 export interface GameHudProps extends GameScreenProps {
@@ -40,8 +40,8 @@ export interface GameHudProps extends GameScreenProps {
     readonly handleEndTurn: () => void;
 }
 
-export interface MatchResultBannerProps {
-    readonly matchResult: MatchResult;
+export interface GameResultBannerProps {
+    readonly gameResult: GameResult;
     readonly localPlayerId?: PlayerId;
 }
 ```
@@ -51,16 +51,16 @@ export interface MatchResultBannerProps {
 ```typescript
 // games/tactics/screens/index.ts
 const BoardScreen = React.lazy(() => import('./BoardScreen'));
-const TacticsMatchHud = React.lazy(() => import('./TacticsMatchHud'));
+const TacticsGameHud = React.lazy(() => import('./TacticsGameHud'));
 const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
 const DiplomacyScreen = React.lazy(() => import('./DiplomacyScreen'));
 const UnitDetailScreen = React.lazy(() => import('./UnitDetailScreen'));
-const MatchResultBanner = React.lazy(() => import('./MatchResultBanner'));
+const GameResultBanner = React.lazy(() => import('./GameResultBanner'));
 
-export const MatchScreenRegistry: GameScreenRegistry = {
+export const TacticsGameScreenRegistry: GameScreenRegistry = {
     board: BoardScreen,
-    hud: TacticsMatchHud,
-    matchResultBanner: MatchResultBanner,
+    hud: TacticsGameHud,
+    gameResultBanner: GameResultBanner,
     screens: {
         'tech-tree': TechTreeScreen,
         diplomacy: DiplomacyScreen,
@@ -76,7 +76,7 @@ export const MatchScreenRegistry: GameScreenRegistry = {
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
         case 'tactics':
-            return (await import('../../games/tactics/screens/index')).MatchScreenRegistry;
+            return (await import('../../games/tactics/screens/index')).TacticsGameScreenRegistry;
         default:
             throw new Error(`No screen registry for game '${gameId}'`);
     }
@@ -112,7 +112,7 @@ interface GameShellProps {
  *   4. Pass all engine contexts down the tree (§4.34)
  *   5. Gate screen components behind React.Suspense
  *   6. Delegate scene transitions to SceneRouter (§4.18)
- *   7. Delegate resolved game-result presentation to registry.matchResultBanner when present
+ *   7. Delegate resolved game-result presentation to registry.gameResultBanner when present
  */
 export function GameShell({ registry }: GameShellProps): JSX.Element;
 ```
@@ -127,8 +127,8 @@ the engine fallback HUD with the stable `hud-tick`, `undo`, `redo`, and `end-tur
 Game-provided HUDs that replace the fallback should preserve those test IDs for the equivalent
 controls when the E2E page object needs to drive the match generically.
 
-When `PlayerSnapshot.matchResult` is non-null, `GameShell` renders `registry.matchResultBanner`
-with `{ matchResult, localPlayerId }`. If the game omits the slot, `GameShell` uses the engine
+When `PlayerSnapshot.gameResult` is non-null, `GameShell` renders `registry.gameResultBanner`
+with `{ gameResult, localPlayerId }`. If the game omits the slot, `GameShell` uses the engine
 fallback text (`You won`, `You lose`, or `Draw`). Game-provided result banners should expose
 `data-testid="game-result-banner"` on the banner root, `data-testid="game-result-text"` on the
 primary message, and `data-game-result-outcome` on the banner root to keep Playwright page objects
@@ -150,9 +150,9 @@ stable across games.
 
 | Context                  | Value type        | Hook                   | Source                              | Cleared on  |
 | ------------------------ | ----------------- | ---------------------- | ----------------------------------- | ----------- |
-| `AssetManagerContext`    | `AssetManager`    | `useAssetManager()`    | Created at match start; see §4.10   | session end |
+| `AssetManagerContext`    | `AssetManager`    | `useAssetManager()`    | Created at game start; see §4.10    | session end |
 | `ContentDatabaseContext` | `ContentDatabase` | `useContentDatabase()` | Loaded at game init; see §4.8       | session end |
-| `AudioManagerContext`    | `AudioManager`    | `useAudioManager()`    | Created at match start; see §4.25   | session end |
+| `AudioManagerContext`    | `AudioManager`    | `useAudioManager()`    | Created at game start; see §4.25    | session end |
 | `DeviceInfoContext`      | `DeviceInfo`      | `useDeviceInfo()`      | Polled from main process; see §4.17 | —           |
 | `FadeContext`            | `FadeControl`     | `useFade()`            | `TransitionOverlay`; see §4.19      | —           |
 
@@ -355,7 +355,7 @@ renderer/
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
         case 'tactics':
-            return (await import('../../games/tactics/screens/index')).MatchScreenRegistry;
+            return (await import('../../games/tactics/screens/index')).TacticsGameScreenRegistry;
         default:
             throw new Error(`No screen registry for game '${gameId}'`);
     }

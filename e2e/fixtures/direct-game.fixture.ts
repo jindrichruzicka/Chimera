@@ -4,11 +4,11 @@
  * Direct-game fixture — launches a host + client pair that bootstrap directly
  * into a running game without going through the lobby UI.
  *
- * Both processes use `CHIMERA_E2E_DIRECT_MATCH_ROLE` (host | client) to
+ * Both processes use `CHIMERA_E2E_DIRECT_GAME_ROLE` (host | client) to
  * trigger auto-host / auto-join in the main process.  The host stores its
- * lobby code in `__e2eHooks.directMatchLobbyCode`; the fixture polls until
+ * lobby code in `__e2eHooks.directGameLobbyCode`; the fixture polls until
  * it is non-null, then passes it to the client via
- * `CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS`.
+ * `CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS`.
  *
  * Use this fixture for specs that test in-game behaviour and do NOT need to
  * exercise the lobby → game transition.  The only test that SHOULD keep
@@ -30,26 +30,26 @@ import { GamePage } from '../pages/GamePage';
 
 export type E2eFirstPlayer = 'host' | 'client';
 
-export interface DirectMatchFixtureOptions {
+export interface DirectGameFixtureOptions {
     readonly firstPlayer: E2eFirstPlayer;
     readonly passAndPlay: boolean;
 }
 
-export interface DirectMatchFixtures {
+export interface DirectGameFixtures {
     readonly hostApp: ElectronApplication;
     readonly clientApp: ElectronApplication;
     readonly hostWindow: Page;
     readonly clientWindow: Page;
 }
 
-const DIRECT_MATCH_PORT = '7779';
+const DIRECT_GAME_PORT = '7779';
 /** Polling interval while waiting for the lobby code from the host process. */
 const LOBBY_CODE_POLL_MS = 100;
 /** Total time to wait for the lobby code before failing (ms). */
 const LOBBY_CODE_TIMEOUT_MS = 10_000;
 
 /**
- * Poll `__e2eHooks.directMatchLobbyCode` in the host process until it is
+ * Poll `__e2eHooks.directGameLobbyCode` in the host process until it is
  * non-null or the timeout expires.
  */
 async function waitForLobbyCode(hostApp: ElectronApplication): Promise<string> {
@@ -57,9 +57,9 @@ async function waitForLobbyCode(hostApp: ElectronApplication): Promise<string> {
     while (Date.now() < deadline) {
         const code: string | null = await hostApp.evaluate(() => {
             type E2eHookGlobal = typeof globalThis & {
-                __e2eHooks?: { directMatchLobbyCode: string | null };
+                __e2eHooks?: { directGameLobbyCode: string | null };
             };
-            return (globalThis as E2eHookGlobal).__e2eHooks?.directMatchLobbyCode ?? null;
+            return (globalThis as E2eHookGlobal).__e2eHooks?.directGameLobbyCode ?? null;
         });
         if (code !== null) {
             return code;
@@ -67,7 +67,7 @@ async function waitForLobbyCode(hostApp: ElectronApplication): Promise<string> {
         await new Promise<void>((resolve) => setTimeout(resolve, LOBBY_CODE_POLL_MS));
     }
     throw new Error(
-        `direct-match fixture: timed out waiting for host to expose directMatchLobbyCode ` +
+        `direct-game fixture: timed out waiting for host to expose directGameLobbyCode ` +
             `after ${LOBBY_CODE_TIMEOUT_MS}ms`,
     );
 }
@@ -94,7 +94,7 @@ async function configureFirstPlayer(
         }
         await new Promise<void>((resolve) => setTimeout(resolve, LOBBY_CODE_POLL_MS));
     }
-    throw new Error('direct-match fixture: timed out waiting for host E2E hooks');
+    throw new Error('direct-game fixture: timed out waiting for host E2E hooks');
 }
 
 /**
@@ -105,16 +105,16 @@ async function configureFirstPlayer(
  * the game canvas.
  */
 export const test = electronTest.extend<
-    DirectMatchFixtureOptions & { readonly _gameStarted: void } & DirectMatchFixtures
+    DirectGameFixtureOptions & { readonly _gameStarted: void } & DirectGameFixtures
 >({
     firstPlayer: ['host', { option: true }],
     passAndPlay: [false, { option: true }],
 
     hostApp: async ({ firstPlayer, passAndPlay }, use) => {
         const app = await launchE2eElectronApplication({
-            port: DIRECT_MATCH_PORT,
+            port: DIRECT_GAME_PORT,
             role: 'host',
-            directMatchRole: 'host',
+            directGameRole: 'host',
             initialRoute: '/game',
             passAndPlay,
         });
@@ -135,10 +135,10 @@ export const test = electronTest.extend<
         const lobbyCode = await waitForLobbyCode(hostApp);
 
         const app = await launchE2eElectronApplication({
-            port: DIRECT_MATCH_PORT,
+            port: DIRECT_GAME_PORT,
             role: 'client',
-            directMatchRole: 'client',
-            directMatchJoinAddress: lobbyCode,
+            directGameRole: 'client',
+            directGameJoinAddress: lobbyCode,
             initialRoute: '/game',
         });
         try {
@@ -164,13 +164,13 @@ export const test = electronTest.extend<
     // trigger dependency resolution.
     _gameStarted: [
         async ({ hostWindow, clientWindow }, use) => {
-            const hostMatch = new GamePage(hostWindow);
-            const clientMatch = new GamePage(clientWindow);
+            const hostGame = new GamePage(hostWindow);
+            const clientGame = new GamePage(clientWindow);
 
             // Both windows load /game directly; GamePage waits for the
             // first snapshot while the hidden direct-game lobby auto-starts.
-            await expect(hostMatch.canvas).toBeVisible({ timeout: 15_000 });
-            await expect(clientMatch.canvas).toBeVisible({ timeout: 15_000 });
+            await expect(hostGame.canvas).toBeVisible({ timeout: 15_000 });
+            await expect(clientGame.canvas).toBeVisible({ timeout: 15_000 });
 
             await use();
         },

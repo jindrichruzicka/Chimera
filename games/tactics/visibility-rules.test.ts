@@ -53,7 +53,7 @@ const snapshot: BaseGameSnapshot = {
     events: [event],
     turnNumber: 0,
     timers: {},
-    matchResult: null,
+    gameResult: null,
 };
 
 describe('tacticsVisibilityRules', () => {

@@ -48,7 +48,7 @@ function makeBaseSnapshot(tick = 0, playerIds: readonly PlayerId[] = [P1]): Base
         events: [],
         turnNumber: 0,
         timers: {},
-        matchResult: null,
+        gameResult: null,
     };
 }
 
@@ -71,7 +71,7 @@ function makeSnapshotWithTurnClock(
         events: [],
         turnNumber: 0,
         timers: {},
-        matchResult: null,
+        gameResult: null,
         turnClock: { activePlayerId, deadlineMs: 60_000 },
     };
 }
@@ -140,7 +140,7 @@ function makeResolvingRegistry(): ActionRegistry {
     const registry = makeRegistry();
     registry.register(winCheckDef);
     registry.registerGame('tactics', {
-        resolveMatchResult: (snapshot) => (snapshot.tick >= 1 ? { winnerIds: [P1] } : null),
+        resolveGameResult: (snapshot) => (snapshot.tick >= 1 ? { winnerIds: [P1] } : null),
     });
     return registry;
 }
@@ -321,7 +321,7 @@ describe('buildHostSessionPipeline — AC3: autosave errors are caught and do no
 // ── AC4: match result triggers SimulationHost.onGameEnd wiring ───────────────
 
 describe('buildHostSessionPipeline — AC4: match result game-end notification', () => {
-    it('calls the game-end port once when matchResult first becomes non-null', () => {
+    it('calls the game-end port once when gameResult first becomes non-null', () => {
         const onGameEnd = vi.fn();
         const { processAction } = buildHostSessionPipeline(makeResolvingRegistry(), vi.fn(), {
             gameId: 'tactics',
@@ -332,7 +332,7 @@ describe('buildHostSessionPipeline — AC4: match result game-end notification',
         const s0 = makeBaseSnapshot(0, [P1, P2]);
         const next = processAction(s0, winCheckEnvelope(0));
 
-        expect(next.matchResult).toEqual({ winnerIds: [P1] });
+        expect(next.gameResult).toEqual({ winnerIds: [P1] });
         expect(onGameEnd).toHaveBeenCalledOnce();
         expect(onGameEnd).toHaveBeenCalledWith(next, { winnerIds: [P1] });
     });
@@ -347,7 +347,7 @@ describe('buildHostSessionPipeline — AC4: match result game-end notification',
 
         const resolved = {
             ...makeBaseSnapshot(1, [P1, P2]),
-            matchResult: { winnerIds: [P1] },
+            gameResult: { winnerIds: [P1] },
         };
         processAction(resolved, winCheckEnvelope(1));
 

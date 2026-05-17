@@ -13,7 +13,7 @@
  *          AI state and command implementations must not mutate them.
  */
 
-import type { MatchResult } from '@chimera/simulation/engine/types.js';
+import type { GameResult as EngineGameResult } from '@chimera/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 
 // ─── AIParams ─────────────────────────────────────────────────────────────────
@@ -44,4 +44,4 @@ export type { PlayerSnapshot };
  * Outcome of a completed game session.
  * `winnerIds` is empty for draws or abandoned games.
  */
-export type GameResult = MatchResult;
+export type GameResult = EngineGameResult;

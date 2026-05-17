@@ -84,11 +84,11 @@ export interface EngineUndoRedoPayload {
 export type EngineSyncRequestPayload = Record<string, never>;
 
 /**
- * Payload for `engine:start_match`.
+ * Payload for `engine:start_game`.
  * Carries the authoritative lobby player list into the simulation snapshot at
- * match start so every current participant receives the first projected view.
+ * game start so every current participant receives the first projected view.
  */
-export interface EngineStartMatchPayload {
+export interface EngineStartGamePayload {
     readonly playerIds: readonly PlayerId[];
     readonly firstPlayerId?: PlayerId;
     readonly initialEntities?: BaseGameSnapshot['entities'];
@@ -120,7 +120,7 @@ function parseInitialEntities(raw: unknown): BaseGameSnapshot['entities'] | unde
     }
     if (!isRecord(raw)) {
         throw new TypeError(
-            'engine:start_match payload "initialEntities" must be an entity map when present; ' +
+            'engine:start_game payload "initialEntities" must be an entity map when present; ' +
                 `received ${JSON.stringify(raw)}.`,
         );
     }
@@ -129,7 +129,7 @@ function parseInitialEntities(raw: unknown): BaseGameSnapshot['entities'] | unde
     for (const [rawEntityId, rawEntity] of Object.entries(raw)) {
         if (rawEntityId.length === 0 || isUnsafeObjectKey(rawEntityId) || !isRecord(rawEntity)) {
             throw new TypeError(
-                'engine:start_match payload "initialEntities" must map non-empty entity ids to objects; ' +
+                'engine:start_game payload "initialEntities" must map non-empty entity ids to objects; ' +
                     `received ${JSON.stringify(raw)}.`,
             );
         }
@@ -137,7 +137,7 @@ function parseInitialEntities(raw: unknown): BaseGameSnapshot['entities'] | unde
         const rawId = rawEntity['id'];
         if (typeof rawId !== 'string' || rawId.length === 0) {
             throw new TypeError(
-                'engine:start_match payload "initialEntities" entries must include a non-empty id; ' +
+                'engine:start_game payload "initialEntities" entries must include a non-empty id; ' +
                     `received ${JSON.stringify(raw)}.`,
             );
         }
@@ -309,23 +309,23 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
     },
 } satisfies ActionDefinition<EngineEndTurnPayload>;
 
-// ─── engine:start_match ──────────────────────────────────────────────────────
+// ─── engine:start_game ──────────────────────────────────────────────────────
 
 /**
- * `ActionDefinition` for starting a hosted match from the lobby.
+ * `ActionDefinition` for starting a hosted game from the lobby.
  *
  * The main-process lobby manager validates host/all-ready policy before
  * dispatching this action. The simulation-level guard still enforces host-only
  * authority and the reducer transitions via the normal ActionPipeline path.
  */
-export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayload> = {
-    type: 'engine:start_match',
+export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload> = {
+    type: 'engine:start_game',
 
-    parsePayload(raw: Readonly<Record<string, unknown>>): EngineStartMatchPayload {
+    parsePayload(raw: Readonly<Record<string, unknown>>): EngineStartGamePayload {
         const rawPlayerIds = raw['playerIds'];
         if (!Array.isArray(rawPlayerIds) || rawPlayerIds.length === 0) {
             throw new TypeError(
-                'engine:start_match payload must have a non-empty "playerIds" array; ' +
+                'engine:start_game payload must have a non-empty "playerIds" array; ' +
                     `received ${JSON.stringify(raw)}.`,
             );
         }
@@ -334,7 +334,7 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
         for (const rawPlayerId of rawPlayerIds) {
             if (typeof rawPlayerId !== 'string' || rawPlayerId.length === 0) {
                 throw new TypeError(
-                    'engine:start_match payload playerIds must contain only non-empty strings; ' +
+                    'engine:start_game payload playerIds must contain only non-empty strings; ' +
                         `received ${JSON.stringify(raw)}.`,
                 );
             }
@@ -344,13 +344,13 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
         const rawFirstPlayerId = raw['firstPlayerId'];
         if (rawFirstPlayerId !== undefined && typeof rawFirstPlayerId !== 'string') {
             throw new TypeError(
-                'engine:start_match payload "firstPlayerId" must be a non-empty string when present; ' +
+                'engine:start_game payload "firstPlayerId" must be a non-empty string when present; ' +
                     `received ${JSON.stringify(raw)}.`,
             );
         }
         if (rawFirstPlayerId === '') {
             throw new TypeError(
-                'engine:start_match payload "firstPlayerId" must be a non-empty string when present; ' +
+                'engine:start_game payload "firstPlayerId" must be a non-empty string when present; ' +
                     `received ${JSON.stringify(raw)}.`,
             );
         }
@@ -374,12 +374,12 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
             payload.firstPlayerId !== undefined &&
             !payload.playerIds.includes(payload.firstPlayerId)
         ) {
-            return { ok: false, reason: 'first_player_not_in_match' };
+            return { ok: false, reason: 'first_player_not_in_game' };
         }
         return { ok: true };
     },
 
-    reduce(state: Readonly<BaseGameSnapshot>, payload: EngineStartMatchPayload): BaseGameSnapshot {
+    reduce(state: Readonly<BaseGameSnapshot>, payload: EngineStartGamePayload): BaseGameSnapshot {
         const nextPlayers: BaseGameSnapshot['players'] = { ...state.players };
         for (const pid of payload.playerIds) {
             nextPlayers[pid] = nextPlayers[pid] ?? { id: pid };
@@ -400,13 +400,13 @@ export const engineStartMatchDefinition: ActionDefinition<EngineStartMatchPayloa
             players: nextPlayers,
             entities: payload.initialEntities ?? state.entities,
             phase: gamePhase('playing'),
-            sceneId: sceneId('engine:match'),
+            sceneId: sceneId('engine:game'),
             sceneTransition: null,
         };
 
         return nextTurnClock === undefined ? nextState : { ...nextState, turnClock: nextTurnClock };
     },
-} satisfies ActionDefinition<EngineStartMatchPayload>;
+} satisfies ActionDefinition<EngineStartGamePayload>;
 
 // ─── engine:save ─────────────────────────────────────────────────────────────
 
@@ -628,7 +628,7 @@ export const engineSyncRequestDefinition: ActionDefinition<EngineSyncRequestPayl
 export const EngineActions: readonly ActionDefinition<object>[] = [
     engineTickDefinition,
     engineEndTurnDefinition,
-    engineStartMatchDefinition,
+    engineStartGameDefinition,
     engineSaveDefinition,
     engineLoadDefinition,
     engineUndoDefinition,

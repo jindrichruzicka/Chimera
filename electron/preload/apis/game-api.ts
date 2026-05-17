@@ -68,7 +68,7 @@ export const GAME_REVEAL_CHANNEL = 'chimera:game:reveal';
  * Returns the last {@link PlayerSnapshot} pushed to this window, or `null`
  * when no snapshot has been sent yet. Used by the renderer to replay a
  * snapshot that arrived before the `onSnapshot` listener was registered
- * (direct-match E2E path, renderer reload mid-session).
+ * (direct-game E2E path, renderer reload mid-session).
  */
 export const GAME_GET_CURRENT_SNAPSHOT_CHANNEL = 'chimera:game:get-current-snapshot';
 

@@ -94,7 +94,7 @@ const makeSnapshot = (overrides?: Partial<TestSnapshot>): TestSnapshot => ({
         [E2]: { id: E2, ownerId: P2, x: 5, y: 5, secretHp: 50 },
     },
     ...overrides,
-    matchResult: overrides?.matchResult !== undefined ? overrides.matchResult : null,
+    gameResult: overrides?.gameResult !== undefined ? overrides.gameResult : null,
 });
 
 /**
@@ -413,24 +413,24 @@ describe('DefaultStateProjector.project()', () => {
             expect(view.phase).toBe(PHASE);
         });
 
-        it('matchResult is copied from the full state for every viewer', () => {
+        it('gameResult is copied from the full state for every viewer', () => {
             const projector = new DefaultStateProjector(fogRules);
-            const snapshot = makeSnapshot({ matchResult: { winnerIds: [P1] } });
+            const snapshot = makeSnapshot({ gameResult: { winnerIds: [P1] } });
 
             const viewP1 = projector.project(snapshot, P1);
             const viewP2 = projector.project(snapshot, P2);
 
-            expect(viewP1.matchResult).toEqual({ winnerIds: [P1] });
-            expect(viewP2.matchResult).toEqual({ winnerIds: [P1] });
+            expect(viewP1.gameResult).toEqual({ winnerIds: [P1] });
+            expect(viewP2.gameResult).toEqual({ winnerIds: [P1] });
         });
 
-        it('matchResult remains null while the match is in progress', () => {
+        it('gameResult remains null while the match is in progress', () => {
             const projector = new DefaultStateProjector(fogRules);
-            const snapshot = makeSnapshot({ matchResult: null });
+            const snapshot = makeSnapshot({ gameResult: null });
 
             const view = projector.project(snapshot, P1);
 
-            expect(view.matchResult).toBeNull();
+            expect(view.gameResult).toBeNull();
         });
 
         it('undoMeta defaults to false when no provider is configured', () => {

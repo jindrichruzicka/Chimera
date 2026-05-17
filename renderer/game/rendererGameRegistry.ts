@@ -35,7 +35,7 @@ async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     ]);
 
     return {
-        registry: screenModule.MatchScreenRegistry,
+        registry: screenModule.TacticsGameScreenRegistry,
         assetManifest: assetManifestModule.tacticsAssetManifest,
     };
 }

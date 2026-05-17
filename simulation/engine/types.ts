@@ -75,7 +75,7 @@ export const gamePhase = (raw: string): GamePhase => raw as GamePhase;
 
 /**
  * Opaque scene identifier. Scene ids are namespaced strings such as
- * `engine:match` or `tactics:level-1`.
+ * `engine:game` or `tactics:level-1`.
  */
 export type SceneId = string & { readonly __brand: 'SceneId' };
 
@@ -121,35 +121,35 @@ export interface GameEvent {
     readonly type: string;
 }
 
-// ─── Match result ───────────────────────────────────────────────────────────
+// ─── Game result ────────────────────────────────────────────────────────────
 
 /**
- * The canonical outcome of a completed match.
+ * The canonical outcome of a completed game.
  *
  * `winnerIds` contains the IDs of every winning player. An empty array
  * represents a draw. The type intentionally exposes only `winnerIds` —
  * no internal resolver state may be included (Invariant #1).
  *
- * Architecture reference: §4.38 — Match Resolution & Winner Detection
+ * Architecture reference: §4.38 — Game Resolution & Winner Detection
  */
-export interface MatchResult {
+export interface GameResult {
     readonly winnerIds: readonly PlayerId[];
 }
 
 /**
- * Discriminated union that represents the resolution state of a match.
+ * Discriminated union that represents the resolution state of a game.
  *
  * - `in_progress` — no winner has been determined yet.
- * - `resolved`    — the match has ended; `result` carries the winner list.
+ * - `resolved`    — the game has ended; `result` carries the winner list.
  *
  * Downstream consumers (PlayerSnapshot, GameShell) use this union to
  * distinguish an ongoing game from a decided one without a nullable sentinel.
  *
  * Architecture reference: §4.38
  */
-export type MatchResolution =
+export type GameResolution =
     | { readonly status: 'in_progress' }
-    | { readonly status: 'resolved'; readonly result: MatchResult };
+    | { readonly status: 'resolved'; readonly result: GameResult };
 
 // ─── Authoritative game state ─────────────────────────────────────────────────
 
@@ -204,19 +204,19 @@ export interface BaseGameSnapshot {
      */
     readonly timers: TimerRegistry;
     /**
-     * The outcome of the match, or `null` when the game is still in progress.
+     * The outcome of the game, or `null` when the game is still in progress.
      *
-     * Set by the `resolveMatchResult` hook in `ActionPipeline` after each
+     * Set by the `resolveGameResult` hook in `ActionPipeline` after each
      * `reduce()` step (§4.38). The initial snapshot must always set this to
      * `null`. Downstream tasks (#509–#511) propagate this through
      * `PlayerSnapshot`, `HostSessionPipeline`, and `GameShell`.
      *
      * `winnerIds: []` encodes a draw. `null` means no decision yet.
      *
-     * Architecture reference: §4.38 — Match Resolution & Winner Detection
+     * Architecture reference: §4.38 — Game Resolution & Winner Detection
      */
-    readonly matchResult: MatchResult | null;
-    /** Current coarse-grained match scene (§4.18). Optional for pre-F38 fixtures/saves. */
+    readonly gameResult: GameResult | null;
+    /** Current coarse-grained game scene (§4.18). Optional for pre-F38 fixtures/saves. */
     readonly sceneId?: SceneId;
     /** Default renderer screen key for the current scene, projected from SceneDescriptor (§4.18). Optional for pre-F38 fixtures/saves. */
     readonly sceneDefaultScreen?: string;

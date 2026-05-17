@@ -23,7 +23,7 @@ function makeSnapshot(viewerId: typeof HOST_VIEWER_ID): PlayerSnapshot {
         players: {},
         entities: {},
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: {
             canUndo: false,
@@ -192,30 +192,30 @@ describe('checksum tracking', () => {
 });
 
 // ---------------------------------------------------------------------------
-// directMatchLobbyCode
+// directGameLobbyCode
 // ---------------------------------------------------------------------------
 
-describe('directMatchLobbyCode', () => {
+describe('directGameLobbyCode', () => {
     it('defaults to null', () => {
         const hooks = createE2eHooks();
 
-        expect(hooks.directMatchLobbyCode).toBeNull();
+        expect(hooks.directGameLobbyCode).toBeNull();
     });
 
     it('can be set and read back by the fixture', () => {
         const hooks = createE2eHooks();
 
-        hooks.directMatchLobbyCode = 'lobby-abc-123';
+        hooks.directGameLobbyCode = 'lobby-abc-123';
 
-        expect(hooks.directMatchLobbyCode).toBe('lobby-abc-123');
+        expect(hooks.directGameLobbyCode).toBe('lobby-abc-123');
     });
 
     it('can be reset to null', () => {
         const hooks = createE2eHooks();
-        hooks.directMatchLobbyCode = 'some-code';
+        hooks.directGameLobbyCode = 'some-code';
 
-        hooks.directMatchLobbyCode = null;
+        hooks.directGameLobbyCode = null;
 
-        expect(hooks.directMatchLobbyCode).toBeNull();
+        expect(hooks.directGameLobbyCode).toBeNull();
     });
 });

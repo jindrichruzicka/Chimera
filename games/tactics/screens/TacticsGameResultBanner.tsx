@@ -2,8 +2,8 @@
 
 import React from 'react';
 import {
-    resolveMatchResultOutcome,
-    type MatchResultBannerProps,
+    resolveGameResultOutcome,
+    type GameResultBannerProps,
 } from '@chimera/shared/game-screen-contract.js';
 
 const bannerStyle: React.CSSProperties = {
@@ -24,21 +24,18 @@ const messageStyle: React.CSSProperties = {
     fontWeight: 700,
 };
 
-function resolveTacticsResultMessage({
-    matchResult,
-    localPlayerId,
-}: MatchResultBannerProps): string {
-    if (matchResult.winnerIds.length === 0) {
+function resolveTacticsResultMessage({ gameResult, localPlayerId }: GameResultBannerProps): string {
+    if (gameResult.winnerIds.length === 0) {
         return 'Stalemate';
     }
     if (localPlayerId === undefined) {
         return 'Battle Concluded';
     }
-    return matchResult.winnerIds.includes(localPlayerId) ? 'Tactical Victory' : 'Tactical Defeat';
+    return gameResult.winnerIds.includes(localPlayerId) ? 'Tactical Victory' : 'Tactical Defeat';
 }
 
-export function TacticsMatchResultBanner(props: MatchResultBannerProps): React.ReactElement {
-    const outcome = resolveMatchResultOutcome(props.matchResult, props.localPlayerId);
+export function TacticsGameResultBanner(props: GameResultBannerProps): React.ReactElement {
+    const outcome = resolveGameResultOutcome(props.gameResult, props.localPlayerId);
 
     return (
         <div
@@ -54,4 +51,4 @@ export function TacticsMatchResultBanner(props: MatchResultBannerProps): React.R
     );
 }
 
-export default TacticsMatchResultBanner;
+export default TacticsGameResultBanner;

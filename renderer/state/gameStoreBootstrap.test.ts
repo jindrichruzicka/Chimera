@@ -40,7 +40,7 @@ function makeSnapshot(tick: number): PlayerSnapshot {
         entities: {},
         phase: gamePhase('playing'),
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,

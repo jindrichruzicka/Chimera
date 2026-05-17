@@ -29,8 +29,8 @@ import type {
     ContentDatabase,
     ReduceContext,
     GameReduceContext,
-    MatchResult,
-    MatchResolution,
+    GameResult,
+    GameResolution,
     SimulationHostRole,
     SimulationClientRole,
     UndoContext,
@@ -110,7 +110,7 @@ describe('BaseGameSnapshot', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         expect(snapshot.tick).toBe(0);
         expect(snapshot.seed).toBe(12345);
@@ -127,7 +127,7 @@ describe('BaseGameSnapshot', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
             turnClock: { activePlayerId: pid, deadlineMs: 30_000 },
         };
         expect(snapshot.turnClock?.activePlayerId).toBe('p1');
@@ -143,7 +143,7 @@ describe('BaseGameSnapshot', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         expect(snapshot.turnClock).toBeUndefined();
     });
@@ -298,7 +298,7 @@ describe('ActionDefinition', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         const result = def.validate({ value: 42 }, snap, toPlayerId('p1'), ctx);
         expect(result.ok).toBe(true);
@@ -328,7 +328,7 @@ describe('ActionDefinition', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
 
         const ctx: ReduceContext = { rng: makeStubRng(0), dispatchDepth: 0 };
@@ -367,7 +367,7 @@ describe('UndoContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         const ctx: UndoContext = {
             undoManager: {
@@ -399,7 +399,7 @@ describe('UndoContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         const ctx: UndoContext = {
             undoManager: {
@@ -488,7 +488,7 @@ describe('BroadcastContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         ctx.broadcast?.(snap, toPlayerId('p1'));
         expect(calls).toHaveLength(1);
@@ -518,7 +518,7 @@ describe('BroadcastContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         ctx.broadcast?.(snap, toPlayerId('p2'));
         expect(capturedSnapshot).toBe(snap);
@@ -545,7 +545,7 @@ describe('DebugContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         ctx.debugObserver?.(3, snap);
         expect(observations).toHaveLength(1);
@@ -573,7 +573,7 @@ describe('DebugContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         ctx.debugObserver?.(7, snap);
         expect(capturedTick).toBe(7);
@@ -600,7 +600,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         const ctx: PipelineContext = {
             db,
@@ -642,7 +642,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         const pipelineCtx: PipelineContext = {
             undoManager: {
@@ -685,7 +685,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         const pipelineCtx: PipelineContext = {
             broadcast: () => {
@@ -708,7 +708,7 @@ describe('PipelineContext', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
         const pipelineCtx: PipelineContext = {
             debugObserver: () => {
@@ -833,36 +833,36 @@ describe('isReduceContext', () => {
     });
 });
 
-// ─── MatchResult ─────────────────────────────────────────────────────────────
+// ─── GameResult ──────────────────────────────────────────────────────────────
 
-describe('MatchResult', () => {
+describe('GameResult', () => {
     it('has a required winnerIds field typed as readonly PlayerId[]', () => {
-        const result: MatchResult = { winnerIds: [toPlayerId('p1')] };
+        const result: GameResult = { winnerIds: [toPlayerId('p1')] };
         expect(result.winnerIds).toHaveLength(1);
         expect(result.winnerIds[0]).toBe('p1');
     });
 
     it('accepts an empty winnerIds array (draw)', () => {
-        const result: MatchResult = { winnerIds: [] };
+        const result: GameResult = { winnerIds: [] };
         expect(result.winnerIds).toHaveLength(0);
     });
 
     it('accepts multiple winners (co-winners)', () => {
-        const result: MatchResult = { winnerIds: [toPlayerId('p1'), toPlayerId('p2')] };
+        const result: GameResult = { winnerIds: [toPlayerId('p1'), toPlayerId('p2')] };
         expect(result.winnerIds).toHaveLength(2);
     });
 });
 
-// ─── MatchResolution ─────────────────────────────────────────────────────────
+// ─── GameResolution ──────────────────────────────────────────────────────────
 
-describe('MatchResolution', () => {
+describe('GameResolution', () => {
     it('in_progress variant has status: "in_progress"', () => {
-        const res: MatchResolution = { status: 'in_progress' };
+        const res: GameResolution = { status: 'in_progress' };
         expect(res.status).toBe('in_progress');
     });
 
     it('resolved variant has status: "resolved" and a result field', () => {
-        const res: MatchResolution = {
+        const res: GameResolution = {
             status: 'resolved',
             result: { winnerIds: [toPlayerId('p1')] },
         };
@@ -873,7 +873,7 @@ describe('MatchResolution', () => {
     });
 
     it('resolved variant result can contain empty winnerIds (draw)', () => {
-        const res: MatchResolution = {
+        const res: GameResolution = {
             status: 'resolved',
             result: { winnerIds: [] },
         };
@@ -883,7 +883,7 @@ describe('MatchResolution', () => {
     });
 
     it('discriminant narrows the union correctly', () => {
-        function check(res: MatchResolution): void {
+        function check(res: GameResolution): void {
             if (res.status === 'resolved') {
                 // TypeScript narrows — in this branch result is accessible
                 expect(res.result).toBeDefined();
@@ -896,9 +896,9 @@ describe('MatchResolution', () => {
     });
 });
 
-// ─── BaseGameSnapshot.matchResult ────────────────────────────────────────────
+// ─── BaseGameSnapshot.gameResult ─────────────────────────────────────────────
 
-describe('BaseGameSnapshot.matchResult', () => {
+describe('BaseGameSnapshot.gameResult', () => {
     it('can be null (game in progress)', () => {
         const snapshot: BaseGameSnapshot = {
             tick: 0,
@@ -909,13 +909,13 @@ describe('BaseGameSnapshot.matchResult', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
-        expect(snapshot.matchResult).toBeNull();
+        expect(snapshot.gameResult).toBeNull();
     });
 
-    it('can hold a resolved MatchResult with one winner', () => {
-        const result: MatchResult = { winnerIds: [toPlayerId('p1')] };
+    it('can hold a resolved GameResult with one winner', () => {
+        const result: GameResult = { winnerIds: [toPlayerId('p1')] };
         const snapshot: BaseGameSnapshot = {
             tick: 10,
             seed: 1,
@@ -925,13 +925,13 @@ describe('BaseGameSnapshot.matchResult', () => {
             events: [],
             turnNumber: 2,
             timers: {},
-            matchResult: result,
+            gameResult: result,
         };
-        expect(snapshot.matchResult).not.toBeNull();
-        expect(snapshot.matchResult?.winnerIds[0]).toBe('p1');
+        expect(snapshot.gameResult).not.toBeNull();
+        expect(snapshot.gameResult?.winnerIds[0]).toBe('p1');
     });
 
-    it('can hold a resolved MatchResult with empty winnerIds (draw)', () => {
+    it('can hold a resolved GameResult with empty winnerIds (draw)', () => {
         const snapshot: BaseGameSnapshot = {
             tick: 8,
             seed: 1,
@@ -941,9 +941,9 @@ describe('BaseGameSnapshot.matchResult', () => {
             events: [],
             turnNumber: 2,
             timers: {},
-            matchResult: { winnerIds: [] },
+            gameResult: { winnerIds: [] },
         };
-        expect(snapshot.matchResult?.winnerIds).toHaveLength(0);
+        expect(snapshot.gameResult?.winnerIds).toHaveLength(0);
     });
 
     it('defaults to null in a freshly-built snapshot (in-progress invariant)', () => {
@@ -956,8 +956,8 @@ describe('BaseGameSnapshot.matchResult', () => {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         };
-        expect(snapshot.matchResult).toBeNull();
+        expect(snapshot.gameResult).toBeNull();
     });
 });

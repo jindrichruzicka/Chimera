@@ -10,7 +10,7 @@ import type {
     BaseEntityState,
     BaseGameSnapshot,
     EntityId,
-    MatchResult,
+    GameResult,
     PlayerId,
     ValidationResult,
 } from '@chimera/simulation/engine/types.js';
@@ -326,7 +326,7 @@ export const tacticsRevealTileDefinition: ActionDefinition<
     },
 };
 
-function resolveTacticsMatchResult(snapshot: Readonly<BaseGameSnapshot>): MatchResult | null {
+function resolveTacticsGameResult(snapshot: Readonly<BaseGameSnapshot>): GameResult | null {
     const units = Object.values(snapshot.entities).filter(isTacticsUnitEntity);
     const allOwnerIds = uniquePlayerIds(units.map((unit) => unit.ownerId));
     if (allOwnerIds.length <= 1) {
@@ -363,6 +363,6 @@ export function registerTacticsActions(registry: ActionRegistry<BaseGameSnapshot
     registry.register(tacticsRevealTileDefinition);
     registry.registerGame('tactics', {
         buildInitialEntities: buildInitialTacticsEntities,
-        resolveMatchResult: resolveTacticsMatchResult,
+        resolveGameResult: resolveTacticsGameResult,
     });
 }

@@ -71,7 +71,7 @@ function makeSnapshot(options: { readonly enemyVisibleToP1?: boolean } = {}): Ba
         hostPlayerId: P1,
         turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
         timers: {},
-        matchResult: null,
+        gameResult: null,
     };
 }
 
@@ -94,7 +94,7 @@ describe('tactics move unit action', () => {
         expect(registry.resolve(TACTICS_MOVE_UNIT_ACTION).predictable).toBe(true);
     });
 
-    it('exports and registers the attack action for deterministic match resolution', () => {
+    it('exports and registers the attack action for deterministic game resolution', () => {
         const registry = new ActionRegistry();
 
         registerTacticsActions(registry);
@@ -353,6 +353,6 @@ describe('tactics move unit action', () => {
             },
         };
 
-        expect(definition?.resolveMatchResult?.(defeated)).toEqual({ winnerIds: [P1] });
+        expect(definition?.resolveGameResult?.(defeated)).toEqual({ winnerIds: [P1] });
     });
 });

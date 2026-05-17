@@ -42,7 +42,7 @@ function makeSnapshot(viewerId: PlayerId): PlayerSnapshot {
         entities: {},
         phase: 'active',
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,

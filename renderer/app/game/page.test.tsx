@@ -150,7 +150,7 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
         entities: {},
         phase: gamePhase('playing'),
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,
@@ -200,7 +200,7 @@ afterEach(() => {
     vi.restoreAllMocks();
 });
 
-describe('MatchPage — redirect', () => {
+describe('GamePage — redirect', () => {
     it('calls router.replace("/lobby") when snapshot is null', () => {
         mockSnapshot = null;
         mockLobbyState = null;
@@ -242,7 +242,7 @@ describe('MatchPage — redirect', () => {
     });
 });
 
-describe('MatchPage — rendering', () => {
+describe('GamePage — rendering', () => {
     it('loads the active game renderer bundle from the lobby game id', async () => {
         mockLobbyState = makeLobbyState('space-arena');
         mockSnapshot = makeSnapshot();
@@ -292,7 +292,7 @@ describe('MatchPage — rendering', () => {
     });
 });
 
-describe('MatchPage — action dispatch', () => {
+describe('GamePage — action dispatch', () => {
     it('dispatches engine:undo with localPlayerId and tick when undo is clicked', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: true, canRedo: false } });
@@ -388,7 +388,7 @@ describe('MatchPage — action dispatch', () => {
     });
 });
 
-describe('MatchPage — button states', () => {
+describe('GamePage — button states', () => {
     it('disables undo button when canUndo is false', async () => {
         mockLocalPlayerId = 'p1';
         mockSnapshot = makeSnapshot({ undoMeta: { canUndo: false, canRedo: false } });

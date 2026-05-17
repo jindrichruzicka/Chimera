@@ -10,7 +10,7 @@
  * pushes from the main process are routed into gameStore via
  * `confirmPrediction` + `applySnapshot`.
  *
- * Also handles automatic navigation: when a snapshot arrives (match started)
+ * Also handles automatic navigation: when a snapshot arrives (game started)
  * and the current path is /lobby, navigates to /game. This drives the CLIENT
  * window's navigation without requiring a snapshot subscription in lobby/page.
  *
@@ -37,7 +37,7 @@ export function GameStoreBootstrap(): null {
 
     // Navigate to /game when a snapshot arrives on the lobby page.
     // This handles the CLIENT window — the host navigates via router.push in
-    // handleStartMatch(). Both end up at /game automatically.
+    // handleStartGame(). Both end up at /game automatically.
     useEffect(() => {
         if (snapshot !== null && isLobbyPath(pathname)) {
             router.push('/game');

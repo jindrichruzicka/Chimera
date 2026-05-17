@@ -17,7 +17,7 @@ export class LobbyPage {
         this.hostButton = page.getByTestId('host-lobby');
         this.joinButton = page.getByTestId('join-lobby');
         this.readyButton = page.getByTestId('ready-toggle');
-        this.startButton = page.getByTestId('start-match');
+        this.startButton = page.getByTestId('start-game');
         this.playerList = page.getByTestId('player-list');
         this.playerListItems = page.getByTestId('player-list-item');
         this.connectionStatus = page.getByTestId('connection-status');

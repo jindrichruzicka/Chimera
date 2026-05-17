@@ -34,7 +34,7 @@ describe('toSlotId', () => {
 });
 
 describe('PlayerSnapshot', () => {
-    it('carries matchResult across the preload boundary', () => {
+    it('carries gameResult across the preload boundary', () => {
         const viewerId = playerId('p1');
         const snapshot: PlayerSnapshot = {
             tick: 3,
@@ -44,11 +44,11 @@ describe('PlayerSnapshot', () => {
             phase: gamePhase('ended'),
             events: [],
             commitments: {},
-            matchResult: { winnerIds: [viewerId] },
+            gameResult: { winnerIds: [viewerId] },
             undoMeta: { canUndo: false, canRedo: false },
             isMyTurn: true,
         };
 
-        expect(snapshot.matchResult?.winnerIds).toEqual([viewerId]);
+        expect(snapshot.gameResult?.winnerIds).toEqual([viewerId]);
     });
 });

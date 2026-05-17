@@ -37,7 +37,7 @@ export function makeStubPlayerSnapshot(tick = 0): PlayerSnapshot {
         players: {},
         entities: {},
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,

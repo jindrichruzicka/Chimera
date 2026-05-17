@@ -4,7 +4,7 @@
 //
 // Game route — thin shell that mounts GameShell with the active snapshot.
 // Redirects to /lobby when snapshot is null after lobby-state hydration shows
-// that no session is active. Direct-match boot can load this route before the
+// that no session is active. Direct-game boot can load this route before the
 // first snapshot arrives and wait here while the hidden lobby auto-starts.
 //
 // Architecture reference: §4.33–§4.34 — GameScreenRegistry, GameShell
@@ -66,7 +66,7 @@ export default function GamePage(): React.ReactElement | null {
         }
     }, [hasLoadedInitialLobbyState, lobbyState, snapshot, router]);
 
-    const dispatchMatchAction = (
+    const dispatchGameAction = (
         snapshotForAction: PlayerSnapshot,
         playerId: NonNullable<PlayerSnapshot['viewerId']>,
         type: GameActionType,
@@ -108,12 +108,12 @@ export default function GamePage(): React.ReactElement | null {
                 ? { fadeOutMs: 0, fadeInMs: 0 }
                 : {})}
             onUndo={() =>
-                dispatchMatchAction(snapshot, resolvedPlayerId, 'engine:undo', { steps: 1 })
+                dispatchGameAction(snapshot, resolvedPlayerId, 'engine:undo', { steps: 1 })
             }
             onRedo={() =>
-                dispatchMatchAction(snapshot, resolvedPlayerId, 'engine:redo', { steps: 1 })
+                dispatchGameAction(snapshot, resolvedPlayerId, 'engine:redo', { steps: 1 })
             }
-            onEndTurn={() => dispatchMatchAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})}
+            onEndTurn={() => dispatchGameAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})}
         />
     );
 }

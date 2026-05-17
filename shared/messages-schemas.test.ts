@@ -311,7 +311,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 entities: {},
                 phase: 'game',
                 events: [],
-                matchResult: null,
+                gameResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,
             },
@@ -337,7 +337,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                         commitment: 'a'.repeat(64),
                     },
                 },
-                matchResult: null,
+                gameResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,
             },
@@ -362,7 +362,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 entities: {},
                 phase: 'game',
                 events: [],
-                matchResult: null,
+                gameResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: false,
             },
@@ -386,9 +386,9 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 players: {},
                 entities: {},
                 phase: 'game',
-                sceneId: 'engine:match',
+                sceneId: 'engine:game',
                 sceneTransition: {
-                    toSceneId: 'engine:post-match',
+                    toSceneId: 'engine:post-game',
                     phase: 'preparing',
                     startedAtTick: 1,
                     params: {},
@@ -397,7 +397,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                     onClientTimeout: 'drop',
                 },
                 events: [],
-                matchResult: null,
+                gameResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,
             },
@@ -412,7 +412,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         }
     });
 
-    it('SNAPSHOT preserves null matchResult while the match is in progress', () => {
+    it('SNAPSHOT preserves null gameResult while the match is in progress', () => {
         const msg = {
             type: 'SNAPSHOT' as const,
             snapshot: {
@@ -422,7 +422,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 entities: {},
                 phase: 'game',
                 events: [],
-                matchResult: null,
+                gameResult: null,
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,
             },
@@ -433,11 +433,11 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
 
         expect(round.success).toBe(true);
         if (round.success && round.data.type === 'SNAPSHOT') {
-            expect(round.data.snapshot.matchResult).toBeNull();
+            expect(round.data.snapshot.gameResult).toBeNull();
         }
     });
 
-    it('SNAPSHOT preserves resolved matchResult winnerIds including draw', () => {
+    it('SNAPSHOT preserves resolved gameResult winnerIds including draw', () => {
         const msg = {
             type: 'SNAPSHOT' as const,
             snapshot: {
@@ -447,7 +447,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
                 entities: {},
                 phase: 'ended',
                 events: [],
-                matchResult: { winnerIds: [] },
+                gameResult: { winnerIds: [] },
                 undoMeta: { canUndo: false, canRedo: false },
                 isMyTurn: true,
             },
@@ -458,7 +458,7 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
 
         expect(round.success).toBe(true);
         if (round.success && round.data.type === 'SNAPSHOT') {
-            expect(round.data.snapshot.matchResult).toEqual({ winnerIds: [] });
+            expect(round.data.snapshot.gameResult).toEqual({ winnerIds: [] });
         }
     });
 });

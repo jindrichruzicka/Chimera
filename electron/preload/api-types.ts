@@ -20,7 +20,7 @@ import type {
     PlayerId,
     EntityId,
     GamePhase,
-    MatchResult,
+    GameResult,
     SceneId,
     SceneTransitionState,
 } from '@chimera/simulation/engine/types.js';
@@ -44,8 +44,8 @@ export type { GamePhase };
 /** Current coarse-grained scene identifier. Canonical: simulation/scene (§4.18). */
 export type { SceneId, SceneTransitionState };
 
-/** Resolved match outcome. Canonical: simulation/ (§4.38). */
-export type { MatchResult };
+/** Resolved game outcome. Canonical: simulation/ (§4.38). */
+export type { GameResult };
 
 /**
  * Constructs a branded {@link PlayerId} from a raw string.
@@ -142,7 +142,7 @@ export interface PlayerSnapshot {
     readonly sceneDefaultScreen?: string;
     readonly sceneTransition?: SceneTransitionState | null;
     readonly events: readonly GameEvent[];
-    readonly matchResult: MatchResult | null;
+    readonly gameResult: GameResult | null;
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;
@@ -529,7 +529,7 @@ export interface GameAPI {
      * or `null` when no snapshot has been pushed yet.
      *
      * Used by the renderer to replay a snapshot that arrived before the
-     * `onSnapshot` listener was registered (e.g. direct-match E2E start,
+     * `onSnapshot` listener was registered (e.g. direct-game E2E start,
      * renderer reload mid-session). Safe to call at any time — returns `null`
      * during the lobby phase.
      */
@@ -543,8 +543,8 @@ export interface LobbyAPI {
     host(params: HostLobbyParams): Promise<LobbyInfo>;
     join(params: JoinLobbyParams): Promise<LobbyInfo>;
     leave(): Promise<void>;
-    /** Requests that the current host start the match for the active lobby. */
-    startMatch(): Promise<void>;
+    /** Requests that the current host start the game for the active lobby. */
+    startGame(): Promise<void>;
     /** Returns the current lobby state, or null when no lobby session is active. */
     getCurrentState(): Promise<LobbyState | null>;
     getLocalPlayerId(): Promise<PlayerId | null>;

@@ -28,20 +28,20 @@ function makeDescriptor(rawSceneId: string): SceneDescriptor<BaseGameSnapshot> {
 
 describe('SceneRegistry', () => {
     it('resolves a registered scene descriptor by scene id', () => {
-        const descriptor = makeDescriptor('engine:match');
+        const descriptor = makeDescriptor('engine:game');
         const registry = new SceneRegistry<BaseGameSnapshot>();
 
         registry.register(descriptor);
 
-        expect(registry.resolve(sceneId('engine:match'))).toBe(descriptor);
-        expect(registry.has(sceneId('engine:match'))).toBe(true);
+        expect(registry.resolve(sceneId('engine:game'))).toBe(descriptor);
+        expect(registry.has(sceneId('engine:game'))).toBe(true);
     });
 
     it('throws on duplicate scene registration', () => {
         const registry = new SceneRegistry<BaseGameSnapshot>();
-        registry.register(makeDescriptor('engine:match'));
+        registry.register(makeDescriptor('engine:game'));
 
-        expect(() => registry.register(makeDescriptor('engine:match'))).toThrow(
+        expect(() => registry.register(makeDescriptor('engine:game'))).toThrow(
             DuplicateSceneRegistrationError,
         );
     });
@@ -71,7 +71,7 @@ describe('SceneRegistry', () => {
 
     it('accepts descriptors that operate on normal BaseGameSnapshot state', () => {
         const host = playerId('host');
-        const descriptor = makeDescriptor('engine:match');
+        const descriptor = makeDescriptor('engine:game');
         const snapshot: BaseGameSnapshot = {
             tick: 0,
             seed: 1,
@@ -82,8 +82,8 @@ describe('SceneRegistry', () => {
             turnNumber: 0,
             hostPlayerId: host,
             timers: {},
-            matchResult: null,
-            sceneId: sceneId('engine:match'),
+            gameResult: null,
+            sceneId: sceneId('engine:game'),
             sceneTransition: null,
         };
 

@@ -19,61 +19,61 @@ import { GamePage } from '../pages/GamePage';
 
 test.describe('Undo/redo', () => {
     test('undo reflects canUndo=false after exhausting turn history', async ({ hostWindow }) => {
-        const hostMatch = new GamePage(hostWindow);
+        const hostGame = new GamePage(hostWindow);
 
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
-        await expect(hostMatch.undoButton).toBeEnabled();
+        await expect(hostGame.undoButton).toBeEnabled();
 
-        await hostMatch.undoButton.click();
+        await hostGame.undoButton.click();
 
-        await expect(hostMatch.undoButton).toBeDisabled();
-        await expect(hostMatch.redoButton).toBeEnabled();
+        await expect(hostGame.undoButton).toBeDisabled();
+        await expect(hostGame.redoButton).toBeEnabled();
     });
 
     test('redo reflects canRedo=false after exhausting redo history', async ({ hostWindow }) => {
-        const hostMatch = new GamePage(hostWindow);
+        const hostGame = new GamePage(hostWindow);
 
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
-        await expect(hostMatch.undoButton).toBeEnabled();
+        await expect(hostGame.undoButton).toBeEnabled();
 
-        await hostMatch.undoButton.click();
-        await expect(hostMatch.redoButton).toBeEnabled();
+        await hostGame.undoButton.click();
+        await expect(hostGame.redoButton).toBeEnabled();
 
-        await hostMatch.redoButton.click();
+        await hostGame.redoButton.click();
 
-        await expect(hostMatch.redoButton).toBeDisabled();
-        await expect(hostMatch.undoButton).toBeEnabled();
+        await expect(hostGame.redoButton).toBeDisabled();
+        await expect(hostGame.undoButton).toBeEnabled();
     });
 
     test("guest cannot undo the host's actions (per-turn ownership)", async ({
         hostWindow,
         clientWindow,
     }) => {
-        const hostMatch = new GamePage(hostWindow);
-        const clientMatch = new GamePage(clientWindow);
+        const hostGame = new GamePage(hostWindow);
+        const clientGame = new GamePage(clientWindow);
 
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
 
-        await expect(hostMatch.undoButton).toBeEnabled();
+        await expect(hostGame.undoButton).toBeEnabled();
 
-        await expect(clientMatch.undoButton).toBeDisabled();
+        await expect(clientGame.undoButton).toBeDisabled();
     });
 
     test.describe('client first player', () => {
         test.use({ firstPlayer: 'client' });
 
         test('host cannot undo when client goes first', async ({ hostWindow, clientWindow }) => {
-            const hostMatch = new GamePage(hostWindow);
-            const clientMatch = new GamePage(clientWindow);
+            const hostGame = new GamePage(hostWindow);
+            const clientGame = new GamePage(clientWindow);
 
             await clientWindow.getByTestId('selectable-unit').first().click();
             await clientWindow.getByTestId('move-target').first().click();
 
-            await expect(clientMatch.undoButton).toBeEnabled();
-            await expect(hostMatch.undoButton).toBeDisabled();
+            await expect(clientGame.undoButton).toBeEnabled();
+            await expect(hostGame.undoButton).toBeDisabled();
         });
     });
 });

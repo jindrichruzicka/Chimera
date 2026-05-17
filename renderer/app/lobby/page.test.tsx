@@ -103,7 +103,7 @@ describe('LobbyPage pending actions', () => {
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
                     getLocalPlayerId: vi.fn(async () => 'p2'),
                     leave: vi.fn(async () => undefined),
-                    startMatch: vi.fn(async () => undefined),
+                    startGame: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
@@ -182,7 +182,7 @@ describe('LobbyPage pending actions', () => {
         renderLobbyPage();
 
         expect(screen.getByTestId('player-list')).toBeTruthy();
-        expect(screen.getByTestId('start-match')).toBeTruthy();
+        expect(screen.getByTestId('start-game')).toBeTruthy();
     });
 
     it('still renders lobby heading when a snapshot is active (no GameShell in lobby)', () => {
@@ -199,7 +199,7 @@ describe('LobbyPage pending actions', () => {
         expect(screen.queryByTestId('game-canvas')).toBeNull();
     });
 
-    it('calls router.push("/game") after handleStartMatch succeeds', async () => {
+    it('calls router.push("/game") after handleStartGame succeeds', async () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
             info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
@@ -211,7 +211,7 @@ describe('LobbyPage pending actions', () => {
 
         renderLobbyPage();
 
-        fireEvent.click(screen.getByTestId('start-match'));
+        fireEvent.click(screen.getByTestId('start-game'));
 
         await waitFor(() => {
             expect(mockPush).toHaveBeenCalledWith('/game');
@@ -252,7 +252,7 @@ describe('LobbyPage pending actions', () => {
         expect(playerSection).not.toBeNull();
         expect(infoSection).not.toBe(playerSection);
 
-        const startButton = screen.getByTestId('start-match');
+        const startButton = screen.getByTestId('start-game');
         const leaveButton = screen.getByTestId('lobby-leave-btn');
         const actionBar = startButton.parentElement;
 
@@ -332,7 +332,7 @@ describe('LobbyPage pending actions', () => {
             'data-ch-button-variant',
             'danger',
         );
-        expect(screen.getByTestId('start-match')).toHaveAttribute(
+        expect(screen.getByTestId('start-game')).toHaveAttribute(
             'data-ch-button-variant',
             'primary',
         );
@@ -348,7 +348,7 @@ describe('LobbyPage pending actions', () => {
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
                     getLocalPlayerId: vi.fn(async () => 'p2'),
                     leave: vi.fn(async () => undefined),
-                    startMatch: vi.fn(async () => undefined),
+                    startGame: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
@@ -368,7 +368,7 @@ describe('LobbyPage pending actions', () => {
     });
 });
 
-describe('Start Match button enable/disable', () => {
+describe('Start Game button enable/disable', () => {
     beforeEach(() => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
@@ -387,7 +387,7 @@ describe('Start Match button enable/disable', () => {
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
                     getLocalPlayerId: vi.fn(async () => 'p1'),
                     leave: vi.fn(async () => undefined),
-                    startMatch: vi.fn(async () => undefined),
+                    startGame: vi.fn(async () => undefined),
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
@@ -406,13 +406,13 @@ describe('Start Match button enable/disable', () => {
     it('is disabled when local player is not the host (client window)', () => {
         mockLocalPlayerId = 'p2'; // client, not host
         renderLobbyPage();
-        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
+        expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(true);
     });
 
     it('is disabled when local player is host but not all players are ready', () => {
         mockLocalPlayerId = 'p1'; // host, but players not ready
         renderLobbyPage();
-        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
+        expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(true);
     });
 
     it('is enabled when local player is host and all players are ready', () => {
@@ -424,7 +424,7 @@ describe('Start Match button enable/disable', () => {
             ],
         };
         renderLobbyPage();
-        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(false);
+        expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(false);
     });
 
     it('becomes disabled again when any player toggles back to unready', () => {
@@ -436,7 +436,7 @@ describe('Start Match button enable/disable', () => {
             ],
         };
         const { rerender } = renderLobbyPage();
-        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(false);
+        expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(false);
 
         mockLobbyState = {
             info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
@@ -450,6 +450,6 @@ describe('Start Match button enable/disable', () => {
                 <LobbyPage />
             </ThemeProvider>,
         );
-        expect(screen.getByTestId('start-match').hasAttribute('disabled')).toBe(true);
+        expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(true);
     });
 });

@@ -36,15 +36,15 @@ describe('GamePage POM — testid alignment with renderer', () => {
                 'utf-8',
             ),
             readFileSync(
-                path.join(workspaceRoot, 'games/tactics/screens/TacticsMatchHud.tsx'),
+                path.join(workspaceRoot, 'games/tactics/screens/TacticsGameHud.tsx'),
                 'utf-8',
             ),
             readFileSync(
-                path.join(workspaceRoot, 'games/tactics/screens/TacticsMatchResultBanner.tsx'),
+                path.join(workspaceRoot, 'games/tactics/screens/TacticsGameResultBanner.tsx'),
                 'utf-8',
             ),
             readFileSync(
-                path.join(workspaceRoot, 'games/tactics/screens/TacticsPostMatchSummary.tsx'),
+                path.join(workspaceRoot, 'games/tactics/screens/TacticsPostGameSummary.tsx'),
                 'utf-8',
             ),
         ];

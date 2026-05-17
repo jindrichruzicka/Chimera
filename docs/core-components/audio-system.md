@@ -101,7 +101,7 @@ Default pool: **32 concurrent voices**. When saturated, the lowest-priority curr
 
 `GameShell.tsx` manages the session lifecycle:
 
-- On match start it registers the game-level `AssetManager` with the app-level `DelegatingAssetManager` via `SetGameAssetManagerContext`. This allows `AudioManager.play()` to load game-specific audio assets through the game resolver and manifest.
+- On game start it registers the game-level `AssetManager` with the app-level `DelegatingAssetManager` via `SetGameAssetManagerContext`. This allows `AudioManager.play()` to load game-specific audio assets through the game resolver and manifest.
 - On match end (`phase: ended`) it calls `AudioManager.stopAll()` to stop all active voices.
 - On unmount it clears the delegate (`setGameAssetManager(null)`) and disposes the game-level `AssetManager`.
 

@@ -34,7 +34,7 @@ function makeSnapshot(options?: {
         events: [],
         turnNumber: 0,
         timers: {},
-        matchResult: null,
+        gameResult: null,
         ...(options?.hostPlayerId === undefined ? {} : { hostPlayerId: options.hostPlayerId }),
         ...(options?.turnClock === undefined ? {} : { turnClock: options.turnClock }),
     };

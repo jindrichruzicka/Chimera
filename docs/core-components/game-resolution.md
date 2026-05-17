@@ -1,11 +1,11 @@
-# §4.38 Match Resolution & Winner Display
+# §4.38 Game Resolution & Winner Display
 
 ## Scope
 
 Chimera represents completed matches with a single authoritative result value:
 
 ```ts
-export interface MatchResult {
+export interface GameResult {
     readonly winnerIds: readonly PlayerId[];
 }
 ```
@@ -17,20 +17,20 @@ export interface MatchResult {
 Game definitions may provide an optional pure resolver:
 
 ```ts
-resolveMatchResult?: (snapshot: Readonly<TState>) => MatchResult | null;
+resolveGameResult?: (snapshot: Readonly<TState>) => GameResult | null;
 ```
 
-`ActionPipeline` invokes the resolver after an action reducer produces the next snapshot. If the resolver returns a `MatchResult`, the pipeline writes that result to `snapshot.matchResult` and moves the phase to `ended`. If the resolver returns `null`, the snapshot remains in progress.
+`ActionPipeline` invokes the resolver after an action reducer produces the next snapshot. If the resolver returns a `GameResult`, the pipeline writes that result to `snapshot.gameResult` and moves the phase to `ended`. If the resolver returns `null`, the snapshot remains in progress.
 
 Resolvers must be deterministic, idempotent, and free of host, renderer, network, or clock dependencies. They should inspect only the snapshot they receive and must not mutate it. See §4.2 for simulation purity and §4.6 for action pipeline ownership.
 
 ## Projection And Boundaries
 
-`BaseGameSnapshot.matchResult` is host-authoritative state. Projection carries the value through the existing safe snapshot path:
+`BaseGameSnapshot.gameResult` is host-authoritative state. Projection carries the value through the existing safe snapshot path:
 
-1. `BaseGameSnapshot.matchResult`
+1. `BaseGameSnapshot.gameResult`
 2. `DefaultStateProjector.project(...)`
-3. `PlayerSnapshot.matchResult`
+3. `PlayerSnapshot.gameResult`
 4. shared message schemas and provider/preload boundary types
 5. renderer state and `GameShell`
 
@@ -39,8 +39,8 @@ The renderer must consume the projected `PlayerSnapshot` value. It must not impo
 ## Winner Display
 
 `GameShell` consumes the projected result from the current viewer's perspective. Presentation is
-delegated to `GameScreenRegistry.matchResultBanner` when a game provides that optional slot. The
-game component receives only `{ matchResult, localPlayerId }`, derives game-specific copy locally,
+delegated to `GameScreenRegistry.gameResultBanner` when a game provides that optional slot. The
+game component receives only `{ gameResult, localPlayerId }`, derives game-specific copy locally,
 and remains renderer-only.
 
 If no game banner is registered, `GameShell` displays the default engine fallback:
@@ -57,8 +57,8 @@ rendered by the engine fallback or by a game component.
 
 Undo/redo reconstruction replays committed actions and reruns the resolver for the reconstructed snapshot. This means a result can disappear when undo moves the history before the resolving action, then reappear when redo or a new resolving action reaches an ended state again.
 
-Because the resolver is pure and idempotent, replaying the same history yields the same `matchResult`. Any future action after undo invalidates redo history according to the action history contract in §4.36.
+Because the resolver is pure and idempotent, replaying the same history yields the same `gameResult`. Any future action after undo invalidates redo history according to the action history contract in §4.36.
 
 ## Save Compatibility
 
-Saves written before match resolution did not contain `checkpoint.matchResult`. The v3 to v4 save migration adds `matchResult: null` without overwriting existing non-null results, preserving old saves as in-progress matches.
+Saves written before game resolution did not contain `checkpoint.gameResult`. The v3 to v4 save migration adds `gameResult: null` without overwriting existing non-null results, preserving old saves as in-progress matches.

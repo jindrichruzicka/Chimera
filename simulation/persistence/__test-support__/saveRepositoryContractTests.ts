@@ -50,7 +50,7 @@ export function makeFile(gameId: string, slotId: string, savedAt = 1_700_000_000
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         },
         deltaActions: [],
         pendingCommitments: {},

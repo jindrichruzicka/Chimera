@@ -14,7 +14,7 @@ export class GamePage {
     readonly hudTick: Locator;
     readonly sceneRouter: Locator;
     readonly transitionOverlay: Locator;
-    readonly postMatchSummary: Locator;
+    readonly postGameSummary: Locator;
 
     public constructor(private readonly page: Page) {
         this.canvas = page.getByTestId('game-canvas');
@@ -30,7 +30,7 @@ export class GamePage {
         this.hudTick = page.getByTestId('hud-tick');
         this.sceneRouter = page.getByTestId('scene-router');
         this.transitionOverlay = page.getByTestId('transition-overlay');
-        this.postMatchSummary = page.getByTestId('post-match-summary');
+        this.postGameSummary = page.getByTestId('post-game-summary');
     }
 
     public async attackAdjacentEnemy(): Promise<void> {

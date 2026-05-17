@@ -143,7 +143,7 @@ function makeSnapshot(): TestGameSnapshot {
                 hiddenTrapSeed: 'opponent-trap-seed',
             },
         },
-        matchResult: null,
+        gameResult: null,
     };
 }
 

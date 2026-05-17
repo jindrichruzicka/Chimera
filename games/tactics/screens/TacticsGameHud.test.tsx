@@ -6,7 +6,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
-import { TacticsMatchHud } from './TacticsMatchHud';
+import { TacticsGameHud } from './TacticsGameHud';
 
 afterEach(() => {
     cleanup();
@@ -21,7 +21,7 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
         entities: {},
         phase: gamePhase('playing'),
         events: [],
-        matchResult: null,
+        gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: true,
@@ -45,11 +45,11 @@ function makeHudProps(overrides: Partial<GameHudProps> = {}): GameHudProps {
     };
 }
 
-describe('TacticsMatchHud', () => {
-    it('renders the stable match HUD locator surface', () => {
-        render(<TacticsMatchHud {...makeHudProps({ tick: 12 })} />);
+describe('TacticsGameHud', () => {
+    it('renders the stable game HUD locator surface', () => {
+        render(<TacticsGameHud {...makeHudProps({ tick: 12 })} />);
 
-        expect(screen.getByLabelText('Match HUD')).toBeTruthy();
+        expect(screen.getByLabelText('Game HUD')).toBeTruthy();
         expect(screen.getByTestId('hud-tick').textContent).toBe('12');
         expect(screen.getByTestId('undo')).toBeTruthy();
         expect(screen.getByTestId('redo')).toBeTruthy();
@@ -62,7 +62,7 @@ describe('TacticsMatchHud', () => {
         const handleEndTurn = vi.fn();
 
         render(
-            <TacticsMatchHud
+            <TacticsGameHud
                 {...makeHudProps({
                     undoDisabled: false,
                     redoDisabled: true,

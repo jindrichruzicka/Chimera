@@ -17,7 +17,7 @@ import type { AssetKind, AssetKindId, AssetRef } from './AssetRef.js';
 /**
  * Load priority for a manifest entry.
  *
- * - `critical`  — preloaded before match starts; game will not begin until loaded.
+ * - `critical`  — preloaded before game starts; game will not begin until loaded.
  * - `deferred`  — lazy-loaded on first use; a fallback asset is shown while loading.
  */
 export type AssetPriority = 'critical' | 'deferred';

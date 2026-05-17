@@ -32,7 +32,7 @@ import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-    MatchResult,
+    GameResult,
 } from '@chimera/simulation/engine/types.js';
 import { ActionPipeline } from '@chimera/simulation/engine/ActionPipeline.js';
 import { StateReducer } from '@chimera/simulation/engine/StateReducer.js';
@@ -70,7 +70,7 @@ export interface AutoSavePort {
 
 export interface GameEndPort {
     /** Notify the AI/runtime layer that the match reached a resolved result. */
-    readonly onGameEnd: (snapshot: Readonly<BaseGameSnapshot>, result: MatchResult) => void;
+    readonly onGameEnd: (snapshot: Readonly<BaseGameSnapshot>, result: GameResult) => void;
 }
 
 // ─── HostSessionPipelineOptions ──────────────────────────────────────────────
@@ -243,11 +243,11 @@ export function buildHostSessionPipeline(
         snapshot: Readonly<BaseGameSnapshot>,
         action: ActionEnvelope,
     ): BaseGameSnapshot => {
-        const wasResolved = snapshot.matchResult !== null;
+        const wasResolved = snapshot.gameResult !== null;
         const nextState = pipeline.process(snapshot, action);
 
-        if (!wasResolved && nextState.matchResult !== null) {
-            gameEndPort?.onGameEnd(nextState, nextState.matchResult);
+        if (!wasResolved && nextState.gameResult !== null) {
+            gameEndPort?.onGameEnd(nextState, nextState.gameResult);
         }
 
         if (action.type === 'engine:end_turn' && gameId !== undefined && savePort !== undefined) {

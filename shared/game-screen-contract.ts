@@ -1,6 +1,6 @@
 import type {
     EngineAction,
-    MatchResult,
+    GameResult,
     PlayerId,
     PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
@@ -11,8 +11,8 @@ export type GameScreenComponent<TProps> =
     | React.ComponentType<TProps>
     | React.LazyExoticComponent<React.ComponentType<TProps>>;
 
-export interface MatchResultBannerProps {
-    readonly matchResult: MatchResult;
+export interface GameResultBannerProps {
+    readonly gameResult: GameResult;
     readonly localPlayerId?: PlayerId;
 }
 
@@ -49,23 +49,23 @@ export interface GameScreenRegistry {
     readonly screens?: Readonly<Record<string, GameScreenComponent<GameScreenProps>>>;
     readonly sceneDefaultScreens?: Readonly<Record<string, string>>;
     readonly transitionOverlay?: GameScreenComponent<GameScreenProps>;
-    readonly matchResultBanner?: GameScreenComponent<MatchResultBannerProps>;
+    readonly gameResultBanner?: GameScreenComponent<GameResultBannerProps>;
     readonly eventAudioBinding?: GameEventAudioBinding;
 }
 
 export type SendAction = (action: EngineAction) => void;
 
-export type MatchResultOutcome = 'draw' | 'unknown' | 'win' | 'loss';
+export type GameResultOutcome = 'draw' | 'unknown' | 'win' | 'loss';
 
-export function resolveMatchResultOutcome(
-    matchResult: MatchResult,
+export function resolveGameResultOutcome(
+    gameResult: GameResult,
     localPlayerId: PlayerId | undefined,
-): MatchResultOutcome {
-    if (matchResult.winnerIds.length === 0) {
+): GameResultOutcome {
+    if (gameResult.winnerIds.length === 0) {
         return 'draw';
     }
     if (localPlayerId === undefined) {
         return 'unknown';
     }
-    return matchResult.winnerIds.includes(localPlayerId) ? 'win' : 'loss';
+    return gameResult.winnerIds.includes(localPlayerId) ? 'win' : 'loss';
 }

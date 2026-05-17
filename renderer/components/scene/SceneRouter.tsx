@@ -30,7 +30,7 @@ export function SceneRouter({
     fadeInMs,
 }: SceneRouterProps): React.ReactElement {
     const activeScreenKey = useActiveScreen();
-    const sceneId = snapshot.sceneId ?? 'engine:match';
+    const sceneId = snapshot.sceneId ?? 'engine:game';
     const sceneDefaultScreen = readSceneDefaultScreen(snapshot);
     const defaultScreenKey =
         sceneDefaultScreen ?? registry.sceneDefaultScreens?.[String(sceneId)] ?? 'board';

@@ -44,14 +44,14 @@ export interface E2eHooks {
     lastSavedTick: number | null;
     firstPlayerRole: E2eFirstPlayerRole;
     /**
-     * Lobby code set by the host process in direct-match E2E mode
-     * (`CHIMERA_E2E_DIRECT_MATCH_ROLE=host`) so the client fixture can read
+     * Lobby code set by the host process in direct-game E2E mode
+     * (`CHIMERA_E2E_DIRECT_GAME_ROLE=host`) so the client fixture can read
      * it via `hostApp.evaluate()` and pass it as
-     * `CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS` without going through lobby UI.
+     * `CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS` without going through lobby UI.
      *
      * `null` until `hostLobby()` resolves; the fixture polls until non-null.
      */
-    directMatchLobbyCode: string | null;
+    directGameLobbyCode: string | null;
     /**
      * WebSocket frames recorded by the networking-layer CHIMERA_E2E hook. Initialized lazily by tapWebSocketFrames().
      * @chimera-review: intentionally mutable — field is assigned/reset externally by ws-inspector helpers
@@ -144,7 +144,7 @@ export function createE2eHooks(): E2eHooks {
             state.lastSavedTick = value;
         },
         firstPlayerRole: 'host',
-        directMatchLobbyCode: null,
+        directGameLobbyCode: null,
         get wsFrames(): WsFrame[] | undefined {
             return _ring;
         },

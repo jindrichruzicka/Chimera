@@ -26,7 +26,7 @@ import type {
     EntityId,
     GameEvent,
     GamePhase,
-    MatchResult,
+    GameResult,
     PlayerId,
     SceneId,
     SceneTransitionState,
@@ -62,7 +62,7 @@ export interface PlayerSnapshot {
     readonly players: Readonly<Record<PlayerId, ObservedPlayerState>>;
     readonly entities: Readonly<Record<EntityId, ObservedEntityState>>;
     readonly events: readonly GameEvent[];
-    readonly matchResult: MatchResult | null;
+    readonly gameResult: GameResult | null;
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     readonly undoMeta: UndoMeta;
     readonly isMyTurn: boolean;
@@ -191,7 +191,7 @@ export class DefaultStateProjector<
             players,
             entities,
             events,
-            matchResult: fullState.matchResult,
+            gameResult: fullState.gameResult,
             commitments,
             undoMeta,
             isMyTurn,

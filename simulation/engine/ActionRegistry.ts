@@ -13,18 +13,18 @@
  *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
  */
 
-import type { ActionDefinition, BaseGameSnapshot, MatchResult, PlayerId } from './types.js';
+import type { ActionDefinition, BaseGameSnapshot, GameResult, PlayerId } from './types.js';
 
 export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapshot> {
     /** Called once by the host when a session is being created for this game.
      * Receives an array of player IDs in insertion order. */
     readonly buildInitialEntities?: (playerIds: readonly PlayerId[]) => TState['entities'];
     /**
-     * Pure post-reduce resolver for completed matches (§4.38).
-     * Returns `null` while the match is still active; returns a MatchResult
+     * Pure post-reduce resolver for completed games (§4.38).
+     * Returns `null` while the game is still active; returns a GameResult
      * when the supplied snapshot satisfies the game's win/draw condition.
      */
-    readonly resolveMatchResult?: (snapshot: Readonly<TState>) => MatchResult | null;
+    readonly resolveGameResult?: (snapshot: Readonly<TState>) => GameResult | null;
 }
 
 // ─── Error classes ────────────────────────────────────────────────────────────

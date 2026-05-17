@@ -68,7 +68,7 @@ describe('GamePage', () => {
         expect(gamePage.hudTick).toBeDefined();
         expect(gamePage.sceneRouter).toBeDefined();
         expect(gamePage.transitionOverlay).toBeDefined();
-        expect(gamePage.postMatchSummary).toBeDefined();
+        expect(gamePage.postGameSummary).toBeDefined();
         expect(requestedTestIds).toEqual([
             'game-canvas',
             'undo',
@@ -83,7 +83,7 @@ describe('GamePage', () => {
             'hud-tick',
             'scene-router',
             'transition-overlay',
-            'post-match-summary',
+            'post-game-summary',
         ]);
     });
 

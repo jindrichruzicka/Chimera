@@ -26,7 +26,7 @@ import {
     engineUndoDefinition,
     engineRedoDefinition,
     engineSyncRequestDefinition,
-    engineStartMatchDefinition,
+    engineStartGameDefinition,
 } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
@@ -46,7 +46,7 @@ const makeSnapshot = (hostPlayerId?: PlayerId): BaseGameSnapshot => ({
     events: [],
     turnNumber: 0,
     timers: {},
-    matchResult: null,
+    gameResult: null,
     ...(hostPlayerId !== undefined && { hostPlayerId }),
 });
 
@@ -118,8 +118,8 @@ describe('EngineActions array', () => {
         expect(definition).toBeDefined();
     });
 
-    it('contains an engine:start_match definition', () => {
-        const definition = EngineActions.find((d) => d.type === 'engine:start_match');
+    it('contains an engine:start_game definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:start_game');
         expect(definition).toBeDefined();
     });
 });
@@ -642,17 +642,17 @@ describe('engine:end_turn definition', () => {
     });
 });
 
-// ─── engine:start_match definition ───────────────────────────────────────────
+// ─── engine:start_game definition ───────────────────────────────────────────
 
-describe('engine:start_match definition', () => {
+describe('engine:start_game definition', () => {
     const definition = () => {
-        const d = EngineActions.find((d) => d.type === 'engine:start_match');
-        if (!d) throw new Error('engine:start_match not found');
+        const d = EngineActions.find((d) => d.type === 'engine:start_game');
+        if (!d) throw new Error('engine:start_game not found');
         return d;
     };
 
-    it('has type string "engine:start_match"', () => {
-        expect(definition().type).toBe('engine:start_match');
+    it('has type string "engine:start_game"', () => {
+        expect(definition().type).toBe('engine:start_game');
     });
 
     it('parsePayload accepts a non-empty playerIds array', () => {
@@ -662,7 +662,7 @@ describe('engine:start_match definition', () => {
     });
 
     it('parsePayload accepts firstPlayerId and initialEntities for match initialization', () => {
-        const unit = entityId('unit-start-match');
+        const unit = entityId('unit-start-game');
 
         expect(
             definition().parsePayload({
@@ -706,7 +706,7 @@ describe('engine:start_match definition', () => {
             stubCtx,
         );
 
-        expect(result).toEqual({ ok: false, reason: 'first_player_not_in_match' });
+        expect(result).toEqual({ ok: false, reason: 'first_player_not_in_game' });
     });
 
     it('reduce adds every started player, marks the phase playing, and advances tick exactly once', () => {
@@ -724,12 +724,12 @@ describe('engine:start_match definition', () => {
         expect(Object.keys(next.players).sort()).toEqual([guestId, hostId].sort());
     });
 
-    it('reduce enters the engine match scene and clears any pending scene transition', () => {
+    it('reduce enters the engine game scene and clears any pending scene transition', () => {
         const snapshot = {
             ...makeSnapshot(hostId),
             sceneId: sceneId('engine:lobby'),
             sceneTransition: {
-                toSceneId: sceneId('engine:match'),
+                toSceneId: sceneId('engine:game'),
                 phase: 'preparing' as const,
                 startedAtTick: 0,
                 params: {},
@@ -744,13 +744,13 @@ describe('engine:start_match definition', () => {
             stubCtx,
         );
 
-        expect(next.sceneId).toBe(sceneId('engine:match'));
+        expect(next.sceneId).toBe(sceneId('engine:game'));
         expect(next.sceneTransition).toBeNull();
     });
 
-    it('reduce applies initial entities and explicit first player through the match-start action', () => {
+    it('reduce applies initial entities and explicit first player through the game-start action', () => {
         const snapshot = makeSnapshot(hostId);
-        const unit = entityId('unit-start-match-reduce');
+        const unit = entityId('unit-start-game-reduce');
         const initialEntities: BaseGameSnapshot['entities'] = {
             [unit]: { id: unit },
         };
@@ -805,9 +805,9 @@ describe('registerEngineActions', () => {
         expect(registry.has('engine:end_turn')).toBe(true);
     });
 
-    it('registry.has("engine:start_match") returns true after registration', () => {
+    it('registry.has("engine:start_game") returns true after registration', () => {
         registerEngineActions(registry);
-        expect(registry.has('engine:start_match')).toBe(true);
+        expect(registry.has('engine:start_game')).toBe(true);
     });
 
     it('both engine: types appear in registeredTypes()', () => {
@@ -859,7 +859,7 @@ describe('registerEngineActions', () => {
         expect(types).toContain('engine:undo');
         expect(types).toContain('engine:redo');
         expect(types).toContain('engine:sync_request');
-        expect(types).toContain('engine:start_match');
+        expect(types).toContain('engine:start_game');
     });
 });
 
@@ -1294,8 +1294,8 @@ describe('individual engine action definition named exports', () => {
         expect(engineSyncRequestDefinition.type).toBe('engine:sync_request');
     });
 
-    it('engineStartMatchDefinition is a named export with type engine:start_match', () => {
-        expect(engineStartMatchDefinition.type).toBe('engine:start_match');
+    it('engineStartGameDefinition is a named export with type engine:start_game', () => {
+        expect(engineStartGameDefinition.type).toBe('engine:start_game');
     });
 
     it('all individually exported definitions are in the EngineActions array', () => {
@@ -1307,7 +1307,7 @@ describe('individual engine action definition named exports', () => {
             engineUndoDefinition,
             engineRedoDefinition,
             engineSyncRequestDefinition,
-            engineStartMatchDefinition,
+            engineStartGameDefinition,
         ];
         for (const def of individualDefs) {
             expect(EngineActions.some((d) => d === def)).toBe(true);

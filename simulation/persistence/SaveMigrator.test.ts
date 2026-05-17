@@ -14,7 +14,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     CURRENT_SCHEMA_VERSION,
-    checkpointMatchResultMigration,
+    checkpointGameResultMigration,
     checkpointTurnNumberMigration,
     createDefaultMigrator,
     SaveMigrationError,
@@ -48,7 +48,7 @@ function makeFileAtVersion(schemaVersion: number): SaveFile {
             events: [],
             turnNumber: 0,
             timers: {},
-            matchResult: null,
+            gameResult: null,
         },
         deltaActions: [],
         pendingCommitments: {},
@@ -126,72 +126,72 @@ describe('checkpointTurnNumberMigration (v1 → v2)', () => {
         expect((result.checkpoint as unknown as Record<string, unknown>)['timers']).toStrictEqual(
             {},
         );
-        expect((result.checkpoint as unknown as Record<string, unknown>)['matchResult']).toBeNull();
+        expect((result.checkpoint as unknown as Record<string, unknown>)['gameResult']).toBeNull();
     });
 });
 
-// ─── checkpointMatchResultMigration (v3 → v4) ────────────────────────────────
+// ─── checkpointGameResultMigration (v3 → v4) ────────────────────────────────
 
-describe('checkpointMatchResultMigration (v3 → v4)', () => {
+describe('checkpointGameResultMigration (v3 → v4)', () => {
     it('is a SaveMigration with fromVersion 3', () => {
-        expect(checkpointMatchResultMigration.fromVersion).toBe(3);
+        expect(checkpointGameResultMigration.fromVersion).toBe(3);
     });
 
-    it('sets checkpoint.matchResult to null when the v3 file lacks the field', () => {
+    it('sets checkpoint.gameResult to null when the v3 file lacks the field', () => {
         const v3File = makeFileAtVersion(3);
-        const checkpointWithoutMatchResult = { ...v3File.checkpoint } as Record<string, unknown>;
-        delete checkpointWithoutMatchResult['matchResult'];
+        const checkpointWithoutGameResult = { ...v3File.checkpoint } as Record<string, unknown>;
+        delete checkpointWithoutGameResult['gameResult'];
         const legacyFile = {
             ...v3File,
-            checkpoint: checkpointWithoutMatchResult,
+            checkpoint: checkpointWithoutGameResult,
         } as unknown as SaveFile;
 
-        const upgraded = checkpointMatchResultMigration.apply(legacyFile);
+        const upgraded = checkpointGameResultMigration.apply(legacyFile);
 
         expect(
-            (upgraded.checkpoint as unknown as Record<string, unknown>)['matchResult'],
+            (upgraded.checkpoint as unknown as Record<string, unknown>)['gameResult'],
         ).toBeNull();
     });
 
-    it('preserves an existing non-null checkpoint.matchResult', () => {
+    it('preserves an existing non-null checkpoint.gameResult', () => {
         const v3File = {
             ...makeFileAtVersion(3),
             checkpoint: {
                 ...makeFileAtVersion(3).checkpoint,
-                matchResult: { winnerIds: [] },
+                gameResult: { winnerIds: [] },
             },
         };
 
-        const upgraded = checkpointMatchResultMigration.apply(v3File);
+        const upgraded = checkpointGameResultMigration.apply(v3File);
 
-        expect((upgraded.checkpoint as unknown as Record<string, unknown>)['matchResult']).toEqual({
+        expect((upgraded.checkpoint as unknown as Record<string, unknown>)['gameResult']).toEqual({
             winnerIds: [],
         });
     });
 
-    it('is idempotent once checkpoint.matchResult exists', () => {
+    it('is idempotent once checkpoint.gameResult exists', () => {
         const v3File = makeFileAtVersion(3);
 
-        const once = checkpointMatchResultMigration.apply(v3File);
-        const twice = checkpointMatchResultMigration.apply(once);
+        const once = checkpointGameResultMigration.apply(v3File);
+        const twice = checkpointGameResultMigration.apply(once);
 
         expect(twice).toStrictEqual(once);
     });
 
-    it('SaveMigrator upgrades a v3 file without matchResult to v4 with matchResult null', () => {
+    it('SaveMigrator upgrades a v3 file without gameResult to v4 with gameResult null', () => {
         const migrator = createDefaultMigrator();
         const v3File = makeFileAtVersion(3);
-        const checkpointWithoutMatchResult = { ...v3File.checkpoint } as Record<string, unknown>;
-        delete checkpointWithoutMatchResult['matchResult'];
+        const checkpointWithoutGameResult = { ...v3File.checkpoint } as Record<string, unknown>;
+        delete checkpointWithoutGameResult['gameResult'];
         const legacyFile = {
             ...v3File,
-            checkpoint: checkpointWithoutMatchResult,
+            checkpoint: checkpointWithoutGameResult,
         } as unknown as SaveFile;
 
         const result = migrator.migrate(legacyFile);
 
         expect(result.header.schemaVersion).toBe(4);
-        expect((result.checkpoint as unknown as Record<string, unknown>)['matchResult']).toBeNull();
+        expect((result.checkpoint as unknown as Record<string, unknown>)['gameResult']).toBeNull();
     });
 });
 

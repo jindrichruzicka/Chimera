@@ -905,7 +905,7 @@ export async function main(): Promise<void> {
     // The most recently projected PlayerSnapshot sent to the main window.
     // Exposed via `chimera:game:get-current-snapshot` so the renderer can
     // replay a snapshot that arrived before its IPC listener was registered
-    // (direct-match E2E start, renderer reload mid-session).
+    // (direct-game E2E start, renderer reload mid-session).
     // Typed as `unknown` since the IPC boundary serialises to JSON and the
     // simulation-layer branded types are incompatible with the preload types.
     let lastSentPlayerSnapshot: unknown = null;
@@ -1176,7 +1176,7 @@ export async function main(): Promise<void> {
                 }
             };
 
-            const broadcastCurrentMatchSnapshot = (viewerId: PlayerId): void => {
+            const broadcastCurrentGameSnapshot = (viewerId: PlayerId): void => {
                 const snapshot = sessionRuntime.getSnapshot();
                 if (snapshot.phase === gamePhase('lobby')) {
                     return;
@@ -1211,7 +1211,7 @@ export async function main(): Promise<void> {
                 // Re-sync only reconnecting peers; first-time joins receive
                 // their first snapshot through normal broadcast flow.
                 if (isReconnect) {
-                    broadcastCurrentMatchSnapshot(pid);
+                    broadcastCurrentGameSnapshot(pid);
                 }
             });
             const unsubLeft = transport.onPlayerLeft((pid) => {
@@ -1241,7 +1241,7 @@ export async function main(): Promise<void> {
 
             return () => {
                 const finalSnapshot = sessionRuntime.getSnapshot();
-                if (finalSnapshot.matchResult === null) {
+                if (finalSnapshot.gameResult === null) {
                     simulationHost.onGameEnd(finalSnapshot, { winnerIds: [] });
                 }
                 if (pendingSeatHandoffTimer !== null) {
@@ -1295,7 +1295,7 @@ export async function main(): Promise<void> {
                 unsubReveal();
             };
         },
-        onMatchStartRequested: (state) => {
+        onGameStartRequested: (state) => {
             const sessionRuntime = activeSession;
             if (sessionRuntime === null) {
                 throw new Error('LobbyManager: no hosted session runtime is available');
@@ -1321,7 +1321,7 @@ export async function main(): Promise<void> {
             );
 
             const action: ActionEnvelope = {
-                type: 'engine:start_match',
+                type: 'engine:start_game',
                 playerId: state.info.hostId,
                 tick: sessionRuntime.getSnapshot().tick,
                 payload: {
@@ -1346,17 +1346,17 @@ export async function main(): Promise<void> {
                 }
             });
 
-            // Direct-match E2E auto-start: when the host process has bootstrapped
+            // Direct-game E2E auto-start: when the host process has bootstrapped
             // both players (host + client) and all players are ready, start the
             // match automatically without any lobby UI interaction.
             if (
                 process.env['CHIMERA_E2E'] === '1' &&
-                process.env['CHIMERA_E2E_DIRECT_MATCH_ROLE'] === 'host' &&
+                process.env['CHIMERA_E2E_DIRECT_GAME_ROLE'] === 'host' &&
                 state.players.length === 2 &&
                 state.players.every((p) => p.ready)
             ) {
-                void lobbyManager.startMatch().catch((err) => {
-                    logger.warn('direct-match E2E: auto startMatch failed', {
+                void lobbyManager.startGame().catch((err) => {
+                    logger.warn('direct-game E2E: auto startGame failed', {
                         error: err instanceof Error ? err.message : String(err),
                     });
                 });
@@ -1547,13 +1547,13 @@ export async function main(): Promise<void> {
         });
     };
 
-    const bootstrapDirectMatchBeforeWindow = async (): Promise<void> => {
-        const directMatchRole =
+    const bootstrapDirectGameBeforeWindow = async (): Promise<void> => {
+        const directGameRole =
             process.env['CHIMERA_E2E'] === '1'
-                ? process.env['CHIMERA_E2E_DIRECT_MATCH_ROLE']
+                ? process.env['CHIMERA_E2E_DIRECT_GAME_ROLE']
                 : undefined;
 
-        if (directMatchRole === 'host') {
+        if (directGameRole === 'host') {
             try {
                 const passAndPlay = process.env['CHIMERA_E2E_PASS_AND_PLAY'] === '1';
                 const info = await lobbyManager.hostLobby({
@@ -1561,7 +1561,7 @@ export async function main(): Promise<void> {
                     maxPlayers: 2,
                 });
                 if (resolvedE2eHooks !== undefined) {
-                    resolvedE2eHooks.directMatchLobbyCode = info.sessionId;
+                    resolvedE2eHooks.directGameLobbyCode = info.sessionId;
                 }
                 await lobbyManager.updatePlayerReadyState(true);
                 if (passAndPlay) {
@@ -1571,15 +1571,15 @@ export async function main(): Promise<void> {
                     });
                 }
             } catch (err) {
-                logger.warn('direct-match E2E: host bootstrap failed', {
+                logger.warn('direct-game E2E: host bootstrap failed', {
                     error: err instanceof Error ? err.message : String(err),
                 });
             }
             return;
         }
 
-        if (directMatchRole === 'client') {
-            const joinAddress = process.env['CHIMERA_E2E_DIRECT_MATCH_JOIN_ADDRESS'];
+        if (directGameRole === 'client') {
+            const joinAddress = process.env['CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS'];
             if (joinAddress === undefined) {
                 return;
             }
@@ -1594,7 +1594,7 @@ export async function main(): Promise<void> {
                 });
                 await lobbyManager.updatePlayerReadyState(true);
             } catch (err) {
-                logger.warn('direct-match E2E: client bootstrap failed', {
+                logger.warn('direct-game E2E: client bootstrap failed', {
                     error: err instanceof Error ? err.message : String(err),
                 });
             }
@@ -1616,12 +1616,12 @@ export async function main(): Promise<void> {
             logger: logger.child({ module: 'renderer-protocol' }),
         });
 
-        const directMatchRole =
+        const directGameRole =
             process.env['CHIMERA_E2E'] === '1'
-                ? process.env['CHIMERA_E2E_DIRECT_MATCH_ROLE']
+                ? process.env['CHIMERA_E2E_DIRECT_GAME_ROLE']
                 : undefined;
-        if (directMatchRole === 'host' || directMatchRole === 'client') {
-            void bootstrapDirectMatchBeforeWindow().finally(createWindow);
+        if (directGameRole === 'host' || directGameRole === 'client') {
+            void bootstrapDirectGameBeforeWindow().finally(createWindow);
             return;
         }
 

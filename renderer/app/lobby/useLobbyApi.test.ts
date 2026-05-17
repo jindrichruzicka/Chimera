@@ -20,7 +20,7 @@ describe('getLobbyBridge', () => {
             join: vi.fn(),
             getLocalPlayerId: vi.fn(),
             leave: vi.fn(),
-            startMatch: vi.fn(),
+            startGame: vi.fn(),
             updatePlayerReadyState: vi.fn(),
             onUpdate: vi.fn(),
         };
@@ -65,7 +65,7 @@ describe('useLobbyApi', () => {
         const join = vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' }));
         const getLocalPlayerId = vi.fn(async () => 'p2');
         const leave = vi.fn(async () => undefined);
-        const startMatch = vi.fn(async () => undefined);
+        const startGame = vi.fn(async () => undefined);
         const updatePlayerReadyState = vi.fn(async () => undefined);
 
         Object.defineProperty(globalThis, '__chimera', {
@@ -76,7 +76,7 @@ describe('useLobbyApi', () => {
                     join,
                     getLocalPlayerId,
                     leave,
-                    startMatch,
+                    startGame,
                     updatePlayerReadyState,
                     onUpdate: vi.fn(),
                 },
@@ -91,14 +91,14 @@ describe('useLobbyApi', () => {
         await result.current.host({ gameId: 'tactics', maxPlayers: 4 });
         await result.current.join({ address: 'abc' });
         await result.current.updatePlayerReadyState(true);
-        await result.current.startMatch();
+        await result.current.startGame();
         await result.current.leave();
 
         expect(host).toHaveBeenCalledWith({ gameId: 'tactics', maxPlayers: 4 });
         expect(join).toHaveBeenCalledWith({ address: 'abc' });
         expect(getLocalPlayerId).toHaveBeenCalledWith();
         expect(updatePlayerReadyState).toHaveBeenCalledWith(true);
-        expect(startMatch).toHaveBeenCalledWith();
+        expect(startGame).toHaveBeenCalledWith();
         expect(leave).toHaveBeenCalledWith();
     });
 
@@ -301,9 +301,9 @@ describe('useLobbyApi', () => {
         );
     });
 
-    it('throws when calling startMatch without preload bridge', async () => {
+    it('throws when calling startGame without preload bridge', async () => {
         const { result } = renderHook(() => useLobbyApi());
 
-        await expect(result.current.startMatch()).rejects.toThrow('Chimera API not available');
+        await expect(result.current.startGame()).rejects.toThrow('Chimera API not available');
     });
 });

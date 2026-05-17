@@ -57,7 +57,7 @@ export default function LobbyPage() {
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
 
-    const canStartMatch =
+    const canStartGame =
         localPlayerId !== null &&
         lobbyState !== null &&
         localPlayerId === lobbyState.info.hostId &&
@@ -158,15 +158,15 @@ export default function LobbyPage() {
         }
     };
 
-    const handleStartMatch = async (): Promise<void> => {
+    const handleStartGame = async (): Promise<void> => {
         try {
             setPendingAction('starting');
             setError(null);
-            await lobbyApi.startMatch();
+            await lobbyApi.startGame();
             router.push('/game');
         } catch (err) {
             if (isMountedRef.current) {
-                setError(err instanceof Error ? err.message : 'Failed to start match');
+                setError(err instanceof Error ? err.message : 'Failed to start game');
             }
         } finally {
             if (isMountedRef.current) {
@@ -363,15 +363,15 @@ export default function LobbyPage() {
                                 This will disconnect you from the current lobby
                             </span>
                             <Button
-                                data-testid="start-match"
+                                data-testid="start-game"
                                 type="button"
                                 onClick={() => {
-                                    void handleStartMatch();
+                                    void handleStartGame();
                                 }}
-                                disabled={!canStartMatch || pendingAction !== null}
+                                disabled={!canStartGame || pendingAction !== null}
                                 variant="primary"
                             >
-                                {pendingAction === 'starting' ? 'Starting...' : 'Start Match'}
+                                {pendingAction === 'starting' ? 'Starting...' : 'Start Game'}
                             </Button>
                         </div>
                     </div>

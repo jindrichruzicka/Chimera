@@ -75,7 +75,7 @@ function makeSnapshot(tick: number, ids: readonly PlayerId[] = [P1]): BaseGameSn
         events: [],
         turnNumber: tick,
         timers: {},
-        matchResult: null,
+        gameResult: null,
     };
 }
 
@@ -163,9 +163,9 @@ describe('SessionRuntime', () => {
             ...initial,
             tick: 1,
             hostPlayerId: P1,
-            sceneId: sceneId('engine:match'),
+            sceneId: sceneId('engine:game'),
             sceneTransition: {
-                toSceneId: sceneId('engine:post-match'),
+                toSceneId: sceneId('engine:post-game'),
                 phase: 'ready' as const,
                 startedAtTick: 0,
                 params: {},
@@ -175,7 +175,7 @@ describe('SessionRuntime', () => {
         const committed = {
             ...ready,
             tick: 2,
-            sceneId: sceneId('engine:post-match'),
+            sceneId: sceneId('engine:post-game'),
             sceneTransition: null,
         } satisfies BaseGameSnapshot;
         const apply: ApplyActionFn = vi
@@ -212,9 +212,9 @@ describe('SessionRuntime', () => {
             ...initial,
             tick: 10,
             hostPlayerId: P1,
-            sceneId: sceneId('engine:match'),
+            sceneId: sceneId('engine:game'),
             sceneTransition: {
-                toSceneId: sceneId('engine:post-match'),
+                toSceneId: sceneId('engine:post-game'),
                 phase: 'preparing' as const,
                 startedAtTick: 5,
                 params: {},
@@ -226,7 +226,7 @@ describe('SessionRuntime', () => {
         const committed = {
             ...timedOutPreparing,
             tick: 11,
-            sceneId: sceneId('engine:post-match'),
+            sceneId: sceneId('engine:post-game'),
             sceneTransition: null,
         } satisfies BaseGameSnapshot;
         const apply: ApplyActionFn = vi
@@ -263,9 +263,9 @@ describe('SessionRuntime', () => {
             ...initial,
             tick: 10,
             hostPlayerId: P1,
-            sceneId: sceneId('engine:match'),
+            sceneId: sceneId('engine:game'),
             sceneTransition: {
-                toSceneId: sceneId('engine:post-match'),
+                toSceneId: sceneId('engine:post-game'),
                 phase: 'preparing' as const,
                 startedAtTick: 5,
                 params: {},

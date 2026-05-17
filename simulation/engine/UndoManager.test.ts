@@ -44,7 +44,7 @@ const makeSnapshot = (tick = 0, turnNumber = 0): BaseGameSnapshot => ({
     events: [],
     turnNumber,
     timers: {},
-    matchResult: null,
+    gameResult: null,
 });
 
 const makeEnvelope = (type: string, tick = 0): ActionEnvelope => ({
@@ -184,7 +184,7 @@ describe('InMemoryUndoManager', () => {
         });
 
         it('does not count setup entries that were appended before saveTurnMemento', () => {
-            history.append(makeHistoryEntry(1, 0, 'engine:start_match'));
+            history.append(makeHistoryEntry(1, 0, 'engine:start_game'));
 
             manager.saveTurnMemento(makeSnapshot(1), P1);
 

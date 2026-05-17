@@ -32,8 +32,8 @@ function makeSnapshot(overrides: Partial<BaseGameSnapshot> = {}): BaseGameSnapsh
         turnNumber: 0,
         hostPlayerId: HOST,
         timers: {},
-        matchResult: null,
-        sceneId: sceneId('engine:match'),
+        gameResult: null,
+        sceneId: sceneId('engine:game'),
         sceneTransition: null,
         ...overrides,
     };
@@ -75,7 +75,7 @@ describe('SceneManager action definitions', () => {
     it('runs the full prepare -> ready -> commit round-trip through ActionPipeline', () => {
         const calls: string[] = [];
         const current: SceneDescriptor<BaseGameSnapshot> = {
-            sceneId: sceneId('engine:match'),
+            sceneId: sceneId('engine:game'),
             defaultScreen: 'board',
             requiredAssets: [],
             initialize(state) {
@@ -87,7 +87,7 @@ describe('SceneManager action definitions', () => {
             },
         };
         const next: SceneDescriptor<BaseGameSnapshot> = {
-            sceneId: sceneId('engine:post-match'),
+            sceneId: sceneId('engine:post-game'),
             defaultScreen: 'board',
             requiredAssets: [],
             initialize(state, params, ctx) {
@@ -100,15 +100,15 @@ describe('SceneManager action definitions', () => {
         const prepared = pipeline.process(
             makeSnapshot(),
             action('engine:scene_prepare', makeSnapshot(), HOST, {
-                toSceneId: 'engine:post-match',
+                toSceneId: 'engine:post-game',
                 params: { reason: 'victory' },
             }),
         );
 
         expect(prepared.tick).toBe(1);
-        expect(prepared.sceneId).toBe(sceneId('engine:match'));
+        expect(prepared.sceneId).toBe(sceneId('engine:game'));
         expect(prepared.sceneTransition).toEqual({
-            toSceneId: sceneId('engine:post-match'),
+            toSceneId: sceneId('engine:post-game'),
             phase: 'preparing',
             startedAtTick: 0,
             params: { reason: 'victory' },
@@ -139,18 +139,18 @@ describe('SceneManager action definitions', () => {
         );
 
         expect(committed.tick).toBe(4);
-        expect(committed.sceneId).toBe(sceneId('engine:post-match'));
+        expect(committed.sceneId).toBe(sceneId('engine:post-game'));
         expect(committed.sceneTransition).toBeNull();
         expect(committed.events.map((event) => event.type)).toEqual([
             'scene:teardown',
             'scene:initialize',
         ]);
-        expect(calls).toEqual(['teardown:engine:match:0', 'initialize:victory:0']);
+        expect(calls).toEqual(['teardown:engine:game:0', 'initialize:victory:0']);
     });
 
     it('rejects scene_prepare from non-host players', () => {
         const pipeline = makePipeline([
-            makeDescriptor('engine:match'),
+            makeDescriptor('engine:game'),
             makeDescriptor('engine:next'),
         ]);
         const snapshot = makeSnapshot();
@@ -165,7 +165,7 @@ describe('SceneManager action definitions', () => {
 
     it('rejects scene_commit before every player acknowledges readiness', () => {
         const pipeline = makePipeline([
-            makeDescriptor('engine:match'),
+            makeDescriptor('engine:game'),
             makeDescriptor('engine:next'),
         ]);
         const prepared = pipeline.process(
@@ -180,7 +180,7 @@ describe('SceneManager action definitions', () => {
 
     it('rejects duplicate scene_ready acknowledgements', () => {
         const pipeline = makePipeline([
-            makeDescriptor('engine:match'),
+            makeDescriptor('engine:game'),
             makeDescriptor('engine:next'),
         ]);
         const prepared = pipeline.process(
@@ -199,7 +199,7 @@ describe('SceneManager action definitions', () => {
 
     it('copies timeout policy from target SceneDescriptor into sceneTransition during prepare', () => {
         const pipeline = makePipeline([
-            makeDescriptor('engine:match'),
+            makeDescriptor('engine:game'),
             {
                 ...makeDescriptor('engine:next'),
                 timeoutTicks: 4_000,
@@ -221,7 +221,7 @@ describe('SceneManager action definitions', () => {
 
     it('applies default timeout policy when SceneDescriptor omits timeout settings', () => {
         const pipeline = makePipeline([
-            makeDescriptor('engine:match'),
+            makeDescriptor('engine:game'),
             makeDescriptor('engine:next'),
         ]);
         const snapshot = makeSnapshot();
@@ -239,7 +239,7 @@ describe('SceneManager action definitions', () => {
 
     it('allows scene_commit after timeout when onClientTimeout is proceed', () => {
         const pipeline = makePipeline([
-            makeDescriptor('engine:match'),
+            makeDescriptor('engine:game'),
             {
                 ...makeDescriptor('engine:next'),
                 timeoutTicks: 2,
@@ -269,7 +269,7 @@ describe('SceneManager action definitions', () => {
 
     it('supports dropping a timed-out scene transition via engine:scene_drop when onClientTimeout is drop', () => {
         const pipeline = makePipeline([
-            makeDescriptor('engine:match'),
+            makeDescriptor('engine:game'),
             {
                 ...makeDescriptor('engine:next'),
                 timeoutTicks: 2,
@@ -285,14 +285,14 @@ describe('SceneManager action definitions', () => {
 
         const dropped = pipeline.process(timedOut, action('engine:scene_drop', timedOut, HOST, {}));
 
-        expect(dropped.sceneId).toBe(sceneId('engine:match'));
+        expect(dropped.sceneId).toBe(sceneId('engine:game'));
         expect(dropped.sceneTransition).toBeNull();
     });
 
     it('passes a frozen context to descriptor teardown and initialize hooks', () => {
         const mutationAttempts = vi.fn();
         const current: SceneDescriptor<BaseGameSnapshot> = {
-            sceneId: sceneId('engine:match'),
+            sceneId: sceneId('engine:game'),
             defaultScreen: 'board',
             requiredAssets: [],
             initialize(state) {

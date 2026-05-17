@@ -101,11 +101,11 @@ export function useSendAction(): (action: EngineAction) => void {
 ## Route-Global Lobby Bootstrap (`renderer/app/LobbyStoreBootstrap.tsx`)
 
 `renderer/app/LobbyStoreBootstrap.tsx` mounts from the root layout so every route,
-including `/match`, receives lobby-state updates. It wires `bootstrapLobbyStore(...)`
+including `/game`, receives lobby-state updates. It wires `bootstrapLobbyStore(...)`
 to `window.__chimera.lobby.onUpdate` and `window.__chimera.system.onConnectionStatus`, then
 calls `lobby.getCurrentState()` once to replay an already-active main-process lobby session.
 
-This replay lets deep-linked or E2E direct-match `/match` boots distinguish "no session exists"
+This replay lets deep-linked or E2E direct-game `/game` boots distinguish "no session exists"
 from "a hidden lobby session exists but the first `PlayerSnapshot` has not arrived yet". The
 match route redirects to `/lobby` only after that initial lobby replay has completed and no lobby
 state is active.

@@ -71,7 +71,7 @@ export async function bootstrapGameStore(
     predictableTypes = new Set(await predictableTypesPromise);
 
     // Replay: if a snapshot was sent before this listener was registered
-    // (direct-match E2E start, renderer reload mid-session), apply it now so
+    // (direct-game E2E start, renderer reload mid-session), apply it now so
     // the match page does not redirect back to /lobby on mount.
     const currentSnapshot = await api.getCurrentSnapshot();
     if (currentSnapshot !== null && isNewerThanLatest(currentSnapshot, latestSnapshot)) {

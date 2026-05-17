@@ -64,7 +64,7 @@ const WireCommitmentEnvelope = z
     })
     .strict();
 
-const MatchResult = z
+const GameResult = z
     .object({
         winnerIds: z.array(PlayerId).readonly(),
     })
@@ -120,7 +120,7 @@ const PlayerSnapshot = z.object({
     sceneDefaultScreen: z.string().optional(),
     sceneTransition: SceneTransition.nullable().optional(),
     events: z.array(z.object({ type: z.string() }).passthrough()),
-    matchResult: MatchResult.nullable(),
+    gameResult: GameResult.nullable(),
     commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
     isMyTurn: z.boolean(),

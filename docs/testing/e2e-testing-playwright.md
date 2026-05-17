@@ -42,13 +42,13 @@ e2e/
 ├── global-setup.ts
 ├── fixtures/
 │   ├── electron.fixture.ts      # Base: launch / close one ElectronApplication
-│   ├── direct-match.fixture.ts  # Host/client direct-match boot helpers
+│   ├── direct-game.fixture.ts  # Host/client direct-game boot helpers
 │   ├── lobby.fixture.ts         # Extends base: two instances + lobby helpers
-│   └── game.fixture.ts          # Extends lobby: match started, tick driver wired
+│   └── game.fixture.ts          # Extends lobby: game started, tick driver wired
 ├── pages/
 │   ├── MainMenuPage.ts
 │   ├── LobbyPage.ts             # POM: host/join/ready/start
-│   ├── MatchPage.ts             # POM: HUD, undo/redo, game-over
+│   ├── GamePage.ts             # POM: HUD, undo/redo, game-over
 │   └── SettingsPage.ts
 ├── helpers/
 │   ├── ipc-spy.ts               # Read main-process state via electronApp.evaluate()
@@ -61,9 +61,9 @@ e2e/
     ├── main-menu.spec.ts
     ├── lobby.spec.ts
     ├── lobby-fixture.spec.ts
-    ├── match-flow.spec.ts
+    ├── game-flow.spec.ts
     ├── match-navigation.spec.ts
-    ├── match-result.spec.ts
+    ├── game-result.spec.ts
     ├── end-turn.spec.ts
     ├── pass-and-play-auto-handoff.spec.ts
     ├── scene-transition.spec.ts
@@ -216,7 +216,7 @@ export class LobbyPage {
         this.hostButton = page.getByTestId('host-lobby');
         this.joinButton = page.getByTestId('join-lobby');
         this.readyButton = page.getByTestId('ready-toggle');
-        this.startButton = page.getByTestId('start-match');
+        this.startButton = page.getByTestId('start-game');
         this.playerList = page.getByTestId('player-list');
         this.sessionId = page.getByTestId('lobby-session-id');
         this.connectionStatus = page.getByTestId('connection-status');
@@ -622,17 +622,17 @@ test.describe('Game flow', () => {
 ```typescript
 // e2e/tests/undo-redo.spec.ts
 import { test, expect } from '../fixtures/game.fixture';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 test.describe('Undo/redo', () => {
     test('undo reflects canUndo=false after exhausting turn history', async ({ hostWindow }) => {
-        const hostMatch = new MatchPage(hostWindow);
+        const hostGame = new GamePage(hostWindow);
         await hostWindow.getByTestId('selectable-unit').first().click();
         await hostWindow.getByTestId('move-target').first().click();
-        await expect(hostMatch.undoButton).toBeEnabled();
-        await hostMatch.undoButton.click();
-        await expect(hostMatch.undoButton).toBeDisabled();
-        await expect(hostMatch.redoButton).toBeEnabled();
+        await expect(hostGame.undoButton).toBeEnabled();
+        await hostGame.undoButton.click();
+        await expect(hostGame.undoButton).toBeDisabled();
+        await expect(hostGame.redoButton).toBeEnabled();
     });
 });
 ```
@@ -690,14 +690,14 @@ This spec exercises the save/restore invariants for atomic persistence and resto
 import { test, expect } from '../fixtures/electron.fixture';
 import { getLastSavedSlotId, getLastSavedTick, getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
-import { MatchPage } from '../pages/MatchPage';
+import { GamePage } from '../pages/GamePage';
 
 test.describe('Save / load', () => {
     test('tick is restored to pre-save value after relaunch + load', async ({
         saveLoadApp,
         saveLoadWindow,
     }) => {
-        const match = new MatchPage(saveLoadWindow);
+        const match = new GamePage(saveLoadWindow);
         await expect(match.canvas).toBeVisible({ timeout: 30_000 });
 
         for (let turn = 0; turn < 3; turn++) {
@@ -727,7 +727,7 @@ test.describe('Save / load', () => {
 
 ### crash-recovery.spec.ts
 
-Single-player crash-recovery spec built on the same pass-and-play direct-match boot path. It advances the match, calls the CHIMERA_E2E-only `triggerCrashSave()` hook to exercise the crash autosave path, exits the Electron process without `before-quit` so `lastCleanExit.flag` is not written, relaunches with the same `--user-data-dir`, asserts the Resume prompt is visible, accepts it through the renderer UI, and asserts the simulation tick matches the crash-save checkpoint.
+Single-player crash-recovery spec built on the same pass-and-play direct-game boot path. It advances the match, calls the CHIMERA_E2E-only `triggerCrashSave()` hook to exercise the crash autosave path, exits the Electron process without `before-quit` so `lastCleanExit.flag` is not written, relaunches with the same `--user-data-dir`, asserts the Resume prompt is visible, accepts it through the renderer UI, and asserts the simulation tick matches the crash-save checkpoint.
 
 The spec validates recovery through the preload bridge and normal save/load IPC path. It does not import `electron/main/`, `simulation/`, or `networking/` helpers directly.
 
@@ -738,7 +738,7 @@ test.describe('Crash recovery', () => {
         crashApp,
         crashWindow,
     }) => {
-        const match = new MatchPage(crashWindow);
+        const match = new GamePage(crashWindow);
         await expect(match.canvas).toBeVisible({ timeout: 30_000 });
         await playThreePassAndPlayTurns(match);
 
@@ -811,7 +811,7 @@ export interface E2eHooks {
     lastSavedSlotId: string | null;
     lastSavedTick: number | null;
     firstPlayerRole: 'host' | 'client';
-    directMatchLobbyCode: string | null;
+    directGameLobbyCode: string | null;
     wsFrames: WsFrame[] | undefined;
     pushWsFrame(frame: WsFrame): void;
     onBroadcastChecksum(tick: number, viewerId: string, checksum: number): void;

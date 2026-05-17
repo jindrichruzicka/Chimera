@@ -24,7 +24,7 @@ export interface GameFixtures {
  *  1. Host creates lobby
  *  2. Client joins via lobby code
  *  3. Both players toggle ready
- *  4. Host clicks start match
+ *  4. Host clicks start game
  *  5. Waits for match canvas to become visible in both windows
  *
  * Invariant #42: The match must reach game-over through normal pipeline
@@ -48,7 +48,7 @@ async function configureFirstPlayer(
     }, firstPlayer);
 }
 
-async function advanceToMatch(
+async function advanceToGame(
     hostApp: ElectronApplication,
     hostWindow: Page,
     clientWindow: Page,
@@ -86,23 +86,23 @@ async function advanceToMatch(
     await hostLobby.startButton.click();
 
     // Under the custom Electron protocol used in E2E, route transitions can
-    // render the Match screen before the URL reflects `/match`. Gate on
+    // render the Match screen before the URL reflects `/game`. Gate on
     // visible match UI instead of URL assertions.
 
-    const hostMatch = new GamePage(hostWindow);
-    const clientMatch = new GamePage(clientWindow);
-    await hostMatch.canvas.waitFor({ state: 'visible' });
-    await clientMatch.canvas.waitFor({ state: 'visible' });
+    const hostGame = new GamePage(hostWindow);
+    const clientGame = new GamePage(clientWindow);
+    await hostGame.canvas.waitFor({ state: 'visible' });
+    await clientGame.canvas.waitFor({ state: 'visible' });
 }
 
 /**
- * Game fixture — extends the lobby fixture with the full match-start sequence.
+ * Game fixture — extends the lobby fixture with the full game-start sequence.
  *
  * The `_matchStarted` auto-fixture runs before every test in this suite,
  * advancing both windows through lobby → match so specs can focus on
  * in-match assertions.
  *
- * §13.8: game.fixture.ts — Extends lobby: match started, tick driver wired.
+ * §13.8: game.fixture.ts — Extends lobby: game started, tick driver wired.
  */
 export const test = lobbyTest.extend<GameFixtureOptions & { readonly _matchStarted: void }>({
     firstPlayer: ['host', { option: true }],
@@ -112,7 +112,7 @@ export const test = lobbyTest.extend<GameFixtureOptions & { readonly _matchStart
     // used in lobby.fixture does not apply here.
     _matchStarted: [
         async ({ hostApp, hostWindow, clientWindow, firstPlayer }, use) => {
-            await advanceToMatch(hostApp, hostWindow, clientWindow, firstPlayer);
+            await advanceToGame(hostApp, hostWindow, clientWindow, firstPlayer);
             await use();
         },
         { auto: true },

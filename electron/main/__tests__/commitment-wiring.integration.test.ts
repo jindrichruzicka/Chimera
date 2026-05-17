@@ -50,7 +50,7 @@ function makeBaseSnapshot(): BaseGameSnapshot {
         events: [],
         turnNumber: 0,
         timers: {},
-        matchResult: null,
+        gameResult: null,
     };
 }
 

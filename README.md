@@ -10,7 +10,7 @@ Architecture reference: [`docs/architecture-overview.md`](docs/architecture-over
 
 ## Status
 
-**v0.6.0** — M1 (Skeleton), M2 (Networked Lobby), M3 (Action Registry + Game Loop + Undo/Redo), M4 (AI Framework), M5 (State Projection + Obfuscation), and M6 (End-to-End Testing Layer) are complete. The full Playwright E2E suite is green in CI, covering lobby, match-flow, undo/redo, obfuscation, reconnect, and 1 000-tick multiplayer soak; page objects, IPC spy helpers, WebSocket frame tap, and snapshot assertions are all in place. M7 (3D Render Integration) is next.
+**v0.6.0** — M1 (Skeleton), M2 (Networked Lobby), M3 (Action Registry + Game Loop + Undo/Redo), M4 (AI Framework), M5 (State Projection + Obfuscation), and M6 (End-to-End Testing Layer) are complete. The full Playwright E2E suite is green in CI, covering lobby, game-flow, undo/redo, obfuscation, reconnect, and 1 000-tick multiplayer soak; page objects, IPC spy helpers, WebSocket frame tap, and snapshot assertions are all in place. M7 (3D Render Integration) is next.
 
 ## Getting started
 
@@ -93,7 +93,7 @@ e2e/
 ├── pages/                        # Page Object Model (MainMenuPage, LobbyPage, GamePage, SettingsPage)
 └── tests/
     ├── lobby.spec.ts
-    ├── match-flow.spec.ts
+    ├── game-flow.spec.ts
     ├── undo-redo.spec.ts
     ├── obfuscation.spec.ts
     ├── reconnect.spec.ts
