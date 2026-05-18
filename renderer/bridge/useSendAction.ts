@@ -2,6 +2,7 @@
 
 import { useCallback } from 'react';
 import type { EngineAction } from '@chimera/electron/preload/api-types.js';
+import { usePerfStore } from '../components/shell/perf/perfStore.js';
 
 export type SendAction = (action: EngineAction) => void;
 
@@ -40,6 +41,7 @@ export function useSendAction(source: unknown = globalThis): SendAction {
                 throw new Error('Chimera game API not available');
             }
             sendAction(action);
+            usePerfStore.getState().recordActionDispatched(performance.now());
         },
         [source],
     );

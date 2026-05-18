@@ -24,7 +24,7 @@
 
 import { useFrame } from '@react-three/fiber';
 import { useRef } from 'react';
-import { usePerfStore } from './perfStore';
+import { usePerfStore } from './perfStore.js';
 
 // Maximum number of frame-time samples retained for avg/p95 calculation.
 const FRAME_SAMPLE_CAP = 120;

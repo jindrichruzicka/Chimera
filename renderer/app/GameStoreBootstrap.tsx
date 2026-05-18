@@ -25,9 +25,12 @@
 
 import { useEffect } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
+import type { StoreApi } from 'zustand';
 import { bootstrapGameStore } from '../state/gameStoreBootstrap';
-import { useGameStore } from '../state/gameStore';
+import { useGameStore, type GameStore } from '../state/gameStore';
 import { useLobbyUiStore } from '../state/lobbyUiStore';
+import { bootstrapPerfStore } from '../components/shell/perf/perfStoreBootstrap.js';
+import { usePerfStore, type PerfStoreState } from '../components/shell/perf/perfStore.js';
 import type { GameAPI, LobbyAPI } from '@chimera/electron/preload/api-types.js';
 
 export function GameStoreBootstrap(): null {
@@ -53,6 +56,10 @@ export function GameStoreBootstrap(): null {
         // accumulates against the already-unmounted store.
         let cancelled = false;
         let cleanup: (() => void) | undefined;
+        const stopPerfBootstrap = bootstrapPerfStore(
+            useGameStore as unknown as StoreApi<GameStore>,
+            usePerfStore as unknown as StoreApi<PerfStoreState>,
+        );
 
         void bootstrapGameStore(chimera.game).then((unsubscribe) => {
             if (cancelled) {
@@ -65,6 +72,7 @@ export function GameStoreBootstrap(): null {
         return () => {
             cancelled = true;
             cleanup?.();
+            stopPerfBootstrap();
         };
     }, []);
 
