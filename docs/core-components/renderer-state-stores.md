@@ -52,18 +52,18 @@ The renderer composes several small Zustand stores rather than one god-store (IS
 
 **Rule of thumb:** If state is owned by the main process (saves, settings, profiles, lobby membership), the renderer store is an IPC-mirror and writes only via an `apply*` method called by `renderer/bridge/ipcClient.ts`. If state is purely visual/local (predictions, toasts, perf samples, chat buffer), the store owns its source of truth and components may write directly.
 
-| Store           | Scope   | Source of truth                             | Writers                                                                  | Clears on      |
-| --------------- | ------- | ------------------------------------------- | ------------------------------------------------------------------------ | -------------- |
-| `gameStore`     | match   | main (snapshot) / renderer (prediction)     | `ipcClient` only — `applySnapshot`, `addPrediction`, `confirmPrediction` | match end      |
-| `lobbyStore`    | session | main (`LobbyManager`)                       | `ipcClient.applyLobbyState`                                              | disconnect     |
-| `saveStore`     | app     | main (`SaveManager`) — slot list UI only    | `ipcClient.applySaveSlots`; components (selection)                       | —              |
-| `settingsStore` | app     | main (`SettingsManager`)                    | `ipcClient.applySettings`; settings UI via `settings.update()` IPC       | —              |
-| `profileStore`  | session | main (`ProfileManager` + `PlayerDirectory`) | `ipcClient.applyProfileDirectory`; `profile.updateLocal()` IPC           | lobby close    |
-| `chatStore`     | session | renderer (rolling 500-entry buffer)         | `ipcClient.onChatMessage` push; components (mute flags)                  | lobby close    |
-| `toastStore`    | app     | renderer                                    | any component via `show()` / `dismiss()`                                 | app close      |
-| `perfStore`     | app     | renderer (`PerfProbe`)                      | `PerfProbe` only                                                         | app close      |
-| `uiStore`       | app     | renderer                                    | components (menu state, modal stack, `activeScreenKey`)                  | app close      |
-| `cameraStore`   | screen  | renderer                                    | game board components                                                    | screen unmount |
+| Store           | Scope   | Source of truth                             | Writers                                                                              | Clears on      |
+| --------------- | ------- | ------------------------------------------- | ------------------------------------------------------------------------------------ | -------------- |
+| `gameStore`     | match   | main (snapshot) / renderer (prediction)     | `ipcClient` only — `applySnapshot`, `addPrediction`, `confirmPrediction`             | match end      |
+| `lobbyStore`    | session | main (`LobbyManager`)                       | `ipcClient.applyLobbyState`                                                          | disconnect     |
+| `saveStore`     | app     | main (`SaveManager`) — slot list UI only    | `ipcClient.applySaveSlots`; components (selection)                                   | —              |
+| `settingsStore` | app     | main (`SettingsManager`)                    | `ipcClient.applySettings`; settings UI via `settings.update()` IPC                   | —              |
+| `profileStore`  | session | main (`ProfileManager` + `PlayerDirectory`) | `ipcClient.applyProfileDirectory`; `profile.updateLocal()` IPC                       | lobby close    |
+| `chatStore`     | session | renderer (rolling 500-entry buffer)         | `ipcClient.onChatMessage` push; components (mute flags)                              | lobby close    |
+| `toastStore`    | app     | renderer                                    | any component via `show()` / `dismiss()`                                             | app close      |
+| `perfStore`     | app     | renderer                                    | `PerfProbe` (GL metrics); `bootstrapPerfStore` (tick/ping/heap); action system (RTT) | app close      |
+| `uiStore`       | app     | renderer                                    | components (menu state, modal stack, `activeScreenKey`)                              | app close      |
+| `cameraStore`   | screen  | renderer                                    | game board components                                                                | screen unmount |
 
 Adding a new store requires an entry in this table. Do not extend an existing store to carry unrelated state — prefer a new, focused store.
 
