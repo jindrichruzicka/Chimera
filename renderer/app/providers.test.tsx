@@ -11,6 +11,7 @@ import type { DelegatingAssetManager } from '../assets/DelegatingAssetManager';
 import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import type { AudioManager } from '../audio/AudioManager';
 import { useAudioManager } from '../audio/AudioManagerContext.js';
+import type { InputAction } from '../input/InputAction.js';
 import type { InputManager } from '../input/InputManager.js';
 import { useInputManager } from '../input/InputManagerContext.js';
 import { Providers } from './providers';
@@ -280,6 +281,25 @@ function InputManagerProbe(): React.ReactElement {
 }
 
 describe('Providers — InputManager lifecycle', () => {
+    it('seeds the InputActionRegistry with engine-owned actions only', () => {
+        render(
+            <Providers>
+                <InputManagerProbe />
+            </Providers>,
+        );
+
+        const createRegistryMock = providerMocks.createInputActionRegistry as unknown as {
+            readonly mock: { readonly calls: readonly [readonly InputAction[]][] };
+        };
+        const seededActions = createRegistryMock.mock.calls[0]?.[0] ?? [];
+        expect(seededActions.map((action) => action.id)).toEqual([
+            'engine:undo',
+            'engine:redo',
+            'engine:toggle-menu',
+            'engine:toggle-perf-hud',
+        ]);
+    });
+
     it('creates one InputManager via createInputManager', () => {
         const { rerender } = render(
             <Providers>

@@ -408,6 +408,32 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
         });
         expect(firstRebind).not.toHaveBeenCalled();
     });
+
+    it('keeps the capture listener attached across same-manager rerenders', () => {
+        const addSpy = vi.spyOn(document, 'addEventListener');
+        const removeSpy = vi.spyOn(document, 'removeEventListener');
+
+        const { rerender } = render(<SettingsPage />);
+
+        const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
+        fireEvent.click(editButtons[0]!);
+
+        const keydownAddsAfterCapture = addSpy.mock.calls.filter(
+            ([eventName]) => eventName === 'keydown',
+        ).length;
+        const keydownRemovesAfterCapture = removeSpy.mock.calls.filter(
+            ([eventName]) => eventName === 'keydown',
+        ).length;
+
+        rerender(<SettingsPage />);
+
+        expect(addSpy.mock.calls.filter(([eventName]) => eventName === 'keydown')).toHaveLength(
+            keydownAddsAfterCapture,
+        );
+        expect(removeSpy.mock.calls.filter(([eventName]) => eventName === 'keydown')).toHaveLength(
+            keydownRemovesAfterCapture,
+        );
+    });
 });
 
 // ── AC #8 — Conflict message and resolution ───────────────────────────────────

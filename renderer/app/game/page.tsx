@@ -147,6 +147,9 @@ export default function GamePage(): React.ReactElement | null {
             {...(loadedGame.assetManifest === undefined
                 ? {}
                 : { assetManifest: loadedGame.assetManifest })}
+            {...(loadedGame.inputActions === undefined
+                ? {}
+                : { inputActions: loadedGame.inputActions })}
             snapshot={snapshot}
             currentTick={currentTick}
             sendAction={sendAction}

@@ -20,6 +20,8 @@ import type { AssetResolver } from '../../assets/AssetResolver';
 import type { AudioManager } from '../../audio/AudioManager.js';
 import { useAudioManager } from '../../audio/AudioManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
+import type { InputAction } from '../../input/InputAction.js';
+import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryContext.js';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
@@ -61,6 +63,7 @@ interface GameShellRegistryProps {
     readonly localPlayerId?: PlayerId;
     readonly assetManager?: AssetManager;
     readonly assetManifest?: AssetManifest;
+    readonly inputActions?: readonly InputAction[];
     readonly contentDatabase?: ContentDatabase | null;
     readonly canEndTurn?: boolean;
     readonly fadeOutMs?: number;
@@ -91,6 +94,7 @@ function RegistryGameShell({
     localPlayerId,
     assetManager,
     assetManifest,
+    inputActions,
     contentDatabase = null,
     canEndTurn,
     fadeOutMs,
@@ -104,6 +108,7 @@ function RegistryGameShell({
     const audioManager = useAudioManager();
     const isGameEnded = snapshot.phase === 'ended';
 
+    useRegisterInputActions(inputActions);
     useStopAudioOnGameEnd(audioManager, isGameEnded);
 
     const gameShell = (
@@ -200,6 +205,35 @@ function useStopAudioOnGameEnd(audioManager: AudioManager, isGameEnded: boolean)
 
         audioManager.stopAll();
     }, [audioManager, isGameEnded]);
+}
+
+function useRegisterInputActions(inputActions: readonly InputAction[] | undefined): void {
+    const inputActionRegistry = useOptionalInputActionRegistry();
+
+    React.useEffect(() => {
+        if (inputActionRegistry === null || inputActions === undefined) {
+            return;
+        }
+
+        for (const action of inputActions) {
+            if (inputActionRegistry.has(action.id)) {
+                assertSameInputAction(inputActionRegistry.get(action.id), action);
+                continue;
+            }
+
+            inputActionRegistry.register(action);
+        }
+    }, [inputActionRegistry, inputActions]);
+}
+
+function assertSameInputAction(existing: InputAction, next: InputAction): void {
+    if (
+        existing.description !== next.description ||
+        existing.category !== next.category ||
+        existing.oneShot !== next.oneShot
+    ) {
+        throw new Error(`Input action '${next.id}' is already registered with different metadata.`);
+    }
 }
 
 function createUnconfiguredAssetResolver(): AssetResolver {

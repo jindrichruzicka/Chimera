@@ -31,6 +31,13 @@ export interface TacticsSettings extends EngineSettings {
 
 export const TACTICS_DEFAULTS: TacticsSettings = {
     ...ENGINE_DEFAULTS,
+    controls: {
+        ...ENGINE_DEFAULTS.controls,
+        bindings: {
+            ...ENGINE_DEFAULTS.controls.bindings,
+            'game:end-turn': { primary: 'Enter' },
+        },
+    },
     showGrid: true,
     animationSpeed: 'normal',
     showDamageNumbers: true,

@@ -7,6 +7,7 @@ describe('rendererGameRegistry', () => {
 
         expect(game.registry.board).toBeDefined();
         expect(game.assetManifest?.gameId).toBe('tactics');
+        expect(game.inputActions?.map((action) => action.id)).toContain('game:end-turn');
     });
 
     it('rejects unknown game ids', async () => {

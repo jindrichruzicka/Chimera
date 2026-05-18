@@ -140,6 +140,29 @@ export default function SettingsPage(): React.ReactElement {
         return grouped;
     }, [inputManager]);
 
+    const handleRebind = React.useCallback(
+        (id: InputActionId, binding: KeyBinding): void => {
+            inputManager
+                .rebind(id, binding)
+                .then((result) => {
+                    if (result.ok) {
+                        setRebindStatus((prev) => ({ ...prev, [id]: { ok: true } }));
+                    } else if (result.reason === 'conflict') {
+                        setRebindStatus((prev) => ({
+                            ...prev,
+                            [id]: { ok: false, conflict: result.conflictingAction },
+                        }));
+                    } else {
+                        setRebindStatus((prev) => ({ ...prev, [id]: { ok: false } }));
+                    }
+                })
+                .catch((error) => {
+                    console.error('[SettingsPage] rebind failed:', error);
+                });
+        },
+        [inputManager],
+    );
+
     // Capture mode: listen for the next key press when an action is being rebound
     React.useEffect(() => {
         if (capturingId === null) return;
@@ -172,26 +195,6 @@ export default function SettingsPage(): React.ReactElement {
             document.removeEventListener('keydown', handleKeyDown);
         };
     }, [capturingId, handleRebind]);
-
-    function handleRebind(id: InputActionId, binding: KeyBinding): void {
-        inputManager
-            .rebind(id, binding)
-            .then((result) => {
-                if (result.ok) {
-                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: true } }));
-                } else if (result.reason === 'conflict') {
-                    setRebindStatus((prev) => ({
-                        ...prev,
-                        [id]: { ok: false, conflict: result.conflictingAction },
-                    }));
-                } else {
-                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: false } }));
-                }
-            })
-            .catch((error) => {
-                console.error('[SettingsPage] rebind failed:', error);
-            });
-    }
 
     function handleForceRebind(id: InputActionId, conflictingId: InputActionId): void {
         const binding = capturedBindingsRef.current[id];

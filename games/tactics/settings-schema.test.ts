@@ -7,7 +7,11 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { SettingsMerger, InMemorySettingsRepository } from '@chimera/simulation/settings/index.js';
+import {
+    ENGINE_DEFAULTS,
+    SettingsMerger,
+    InMemorySettingsRepository,
+} from '@chimera/simulation/settings/index.js';
 import { SettingsManager } from '@chimera/electron/main/settings/SettingsManager.js';
 import { tacticsSettingsSchema, TACTICS_DEFAULTS } from './settings-schema.js';
 
@@ -23,6 +27,13 @@ describe('tacticsSettingsSchema', () => {
         expect(d.audio.masterVolume).toBe(1.0);
         expect(d.display.fullscreen).toBe(false);
         expect(d.gameplay.autoSave).toBe(true);
+    });
+
+    it('keeps game:end-turn out of engine defaults and owns it as a tactics binding', () => {
+        expect(ENGINE_DEFAULTS.controls.bindings['game:end-turn']).toBeUndefined();
+        expect(tacticsSettingsSchema.defaults.controls.bindings['game:end-turn']).toEqual({
+            primary: 'Enter',
+        });
     });
 
     it('has tactics-specific defaults', () => {

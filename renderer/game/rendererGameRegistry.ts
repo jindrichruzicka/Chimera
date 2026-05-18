@@ -1,9 +1,11 @@
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
+import type { InputAction } from '../input/InputAction.js';
 
 export interface LoadedRendererGame {
     readonly registry: GameScreenRegistry;
     readonly assetManifest?: AssetManifest;
+    readonly inputActions?: readonly InputAction[];
 }
 
 export class UnknownRendererGameError extends Error {
@@ -37,5 +39,6 @@ async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     return {
         registry: screenModule.TacticsGameScreenRegistry,
         assetManifest: assetManifestModule.tacticsAssetManifest,
+        inputActions: screenModule.TACTICS_INPUT_ACTIONS,
     };
 }

@@ -12,6 +12,7 @@ import { AudioManagerContext } from '../audio/AudioManagerContext.js';
 import type { InputAction } from '../input/InputAction.js';
 import { createInputManager } from '../input/InputManager.js';
 import { createInputActionRegistry } from '../input/InputActionRegistry.js';
+import { InputActionRegistryContext } from '../input/InputActionRegistryContext.js';
 import { createKeyBindingRepository } from '../input/KeyBindingRepository.js';
 import { InputManagerContext } from '../input/InputManagerContext.js';
 
@@ -23,7 +24,6 @@ const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
         category: 'Engine',
         oneShot: true,
     },
-    { id: 'game:end-turn', description: 'End current turn', category: 'Game', oneShot: true },
     {
         id: 'engine:toggle-menu',
         description: 'Toggle game menu',
@@ -72,7 +72,8 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         return () => {
             inputManager.stop();
         };
-    }, [inputManager]);
+        // §4.26: the Providers-owned InputManager is an app-lifetime singleton.
+    }, []);
 
     const setGameAssetManager = React.useCallback(
         (manager: AssetManager | null) => {
@@ -85,9 +86,11 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
             <AssetManagerContext.Provider value={delegatingAssetManager}>
                 <AudioManagerContext.Provider value={audioManager}>
-                    <InputManagerContext.Provider value={inputManager}>
-                        {children}
-                    </InputManagerContext.Provider>
+                    <InputActionRegistryContext.Provider value={inputRegistry}>
+                        <InputManagerContext.Provider value={inputManager}>
+                            {children}
+                        </InputManagerContext.Provider>
+                    </InputActionRegistryContext.Provider>
                 </AudioManagerContext.Provider>
             </AssetManagerContext.Provider>
         </SetGameAssetManagerContext.Provider>

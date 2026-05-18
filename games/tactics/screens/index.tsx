@@ -34,6 +34,10 @@ const TACTICS_EVENT_AUDIO_BINDING = {
     },
 } as const;
 
+export const TACTICS_INPUT_ACTIONS = [
+    { id: 'game:end-turn', description: 'End current turn', category: 'Game', oneShot: true },
+] as const;
+
 export const TacticsGameScreenRegistry: GameScreenRegistry = {
     board: TacticsDemoBoard,
     hud: TacticsGameHud,

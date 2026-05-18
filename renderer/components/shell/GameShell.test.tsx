@@ -11,6 +11,8 @@ import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerContext.js';
 import { createAudioManagerSpy } from '../../audio/__test-support__/AudioManagerStubs.js';
+import { createInputActionRegistry } from '../../input/InputActionRegistry.js';
+import { InputActionRegistryContext } from '../../input/InputActionRegistryContext.js';
 import {
     GameShell,
     type GameHudProps,
@@ -138,6 +140,41 @@ describe('GameShell page object locators', () => {
 
         expect(audioManager.stopAll).toHaveBeenCalledOnce();
         expect(audioManager.stopAll).toHaveBeenCalledWith();
+    });
+
+    it('registers game-owned input actions through the app input registry', () => {
+        const inputRegistry = createInputActionRegistry();
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+
+        render(
+            <InputActionRegistryContext.Provider value={inputRegistry}>
+                {wrapWithAudio(
+                    <GameShell
+                        registry={{
+                            board: () => <div data-testid="registry-board">Registry board</div>,
+                        }}
+                        inputActions={[
+                            {
+                                id: 'game:end-turn',
+                                description: 'End current turn',
+                                category: 'Game',
+                                oneShot: true,
+                            },
+                        ]}
+                        snapshot={snapshot}
+                        sendAction={vi.fn()}
+                        localPlayerId={playerId('p1')}
+                    />,
+                )}
+            </InputActionRegistryContext.Provider>,
+        );
+
+        expect(inputRegistry.get('game:end-turn')).toEqual({
+            id: 'game:end-turn',
+            description: 'End current turn',
+            category: 'Game',
+            oneShot: true,
+        });
     });
 
     it('does not dispose the context AudioManager on registry shell unmount — lifecycle owned by Providers', () => {
