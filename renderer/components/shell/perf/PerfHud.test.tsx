@@ -91,14 +91,14 @@ async function importPerfHud(): Promise<{ PerfHud: React.FC }> {
     return mod;
 }
 
-function fireToggle(): void {
+function fireToggle(pressed = true): void {
     const cb = inputActionCallbacks.get('engine:toggle-perf-hud');
     cb?.({
         actionId: 'engine:toggle-perf-hud',
         code: 'F3',
         modifiers: [],
         repeat: false,
-        pressed: true,
+        pressed,
         timestamp: performance.now(),
     });
 }
@@ -199,6 +199,19 @@ describe('PerfHud — visibility', () => {
         fireToggle();
         rerender(<PerfHud />);
         expect(screen.queryByTestId('perf-hud')).toBeNull();
+    });
+
+    it('ignores release events so one key press toggles once', async () => {
+        const { PerfHud } = await importPerfHud();
+        const { rerender } = render(<PerfHud />);
+
+        fireToggle(true);
+        rerender(<PerfHud />);
+        expect(screen.getByTestId('perf-hud')).toBeTruthy();
+
+        fireToggle(false);
+        rerender(<PerfHud />);
+        expect(screen.getByTestId('perf-hud')).toBeTruthy();
     });
 });
 

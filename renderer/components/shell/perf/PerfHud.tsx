@@ -72,7 +72,11 @@ export function PerfHud(): React.ReactElement | null {
     });
 
     // ── F3 toggle — must be called unconditionally (React hooks rules) ────────
-    const handleToggle = useCallback((_event: InputEvent) => {
+    const handleToggle = useCallback((event: InputEvent) => {
+        if (!event.pressed) {
+            return;
+        }
+
         usePerfStore.getState().toggle();
     }, []);
 
