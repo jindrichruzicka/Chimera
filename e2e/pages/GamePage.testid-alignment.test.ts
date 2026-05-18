@@ -47,6 +47,10 @@ describe('GamePage POM — testid alignment with renderer', () => {
                 path.join(workspaceRoot, 'games/tactics/screens/TacticsPostGameSummary.tsx'),
                 'utf-8',
             ),
+            readFileSync(
+                path.join(workspaceRoot, 'renderer/components/shell/perf/PerfHud.tsx'),
+                'utf-8',
+            ),
         ];
         const rendererSource = rendererSources.join('\n');
 

@@ -69,6 +69,7 @@ describe('GamePage', () => {
         expect(gamePage.sceneRouter).toBeDefined();
         expect(gamePage.transitionOverlay).toBeDefined();
         expect(gamePage.postGameSummary).toBeDefined();
+        expect(gamePage.perfHud).toBeDefined();
         expect(requestedTestIds).toEqual([
             'game-canvas',
             'undo',
@@ -84,6 +85,7 @@ describe('GamePage', () => {
             'scene-router',
             'transition-overlay',
             'post-game-summary',
+            'perf-hud',
         ]);
     });
 
