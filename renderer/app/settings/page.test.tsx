@@ -330,6 +330,29 @@ describe('SettingsPage — controls rebind panel (AC #6)', () => {
         expect(screen.getByText('Engine')).toBeTruthy();
         expect(screen.getByText('Game')).toBeTruthy();
     });
+
+    it('refreshes controls when the active game context changes after initial render', () => {
+        useSettingsStore.setState({
+            settings: { __engine__: makeSettings(), [GAME_ID]: makeSettings() },
+            activeGameId: null,
+        });
+        let registeredActions: readonly InputAction[] = [UNDO_ACTION];
+        renderWithInputManager(
+            makeInputManagerDouble({
+                getActions: vi.fn(() => registeredActions),
+            }),
+        );
+
+        expect(screen.getByText('Undo last action')).toBeTruthy();
+        expect(screen.queryByText('End current turn')).toBeNull();
+
+        registeredActions = [UNDO_ACTION, END_TURN_ACTION];
+        act(() => {
+            useSettingsStore.getState().setActiveGameId(GAME_ID);
+        });
+
+        expect(screen.getByText('End current turn')).toBeTruthy();
+    });
 });
 
 // ── AC #7 — Capture mode: listening for a new key ────────────────────────────

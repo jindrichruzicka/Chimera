@@ -25,7 +25,11 @@
 
 import type { ElectronApplication, Page } from '@playwright/test';
 import { expect } from '@playwright/test';
-import { launchE2eElectronApplication, test as electronTest } from './electron.fixture';
+import {
+    launchE2eElectronApplication,
+    test as electronTest,
+    type E2eInitialRoute,
+} from './electron.fixture';
 import { GamePage } from '../pages/GamePage';
 
 export type E2eFirstPlayer = 'host' | 'client';
@@ -33,6 +37,10 @@ export type E2eFirstPlayer = 'host' | 'client';
 export interface DirectGameFixtureOptions {
     readonly firstPlayer: E2eFirstPlayer;
     readonly passAndPlay: boolean;
+    readonly launchClient: boolean;
+    readonly hostInitialRoute: E2eInitialRoute;
+    readonly clientInitialRoute: E2eInitialRoute;
+    readonly waitForGameStarted: boolean;
 }
 
 export interface DirectGameFixtures {
@@ -101,21 +109,26 @@ async function configureFirstPlayer(
  * Direct-game fixture — extends the base Electron fixture with a host+client
  * pair that starts directly in game state, bypassing lobby UI.
  *
- * The `_gameStarted` auto-fixture blocks every test until both windows show
- * the game canvas.
+ * By default, the `_gameStarted` auto-fixture blocks every test until both
+ * windows show the game canvas. Specs that need to configure the host before
+ * the client joins can set `launchClient: false` and launch the client manually.
  */
 export const test = electronTest.extend<
     DirectGameFixtureOptions & { readonly _gameStarted: void } & DirectGameFixtures
 >({
     firstPlayer: ['host', { option: true }],
     passAndPlay: [false, { option: true }],
+    launchClient: [true, { option: true }],
+    hostInitialRoute: ['/game', { option: true }],
+    clientInitialRoute: ['/game', { option: true }],
+    waitForGameStarted: [true, { option: true }],
 
-    hostApp: async ({ firstPlayer, passAndPlay }, use) => {
+    hostApp: async ({ firstPlayer, passAndPlay, hostInitialRoute }, use) => {
         const app = await launchE2eElectronApplication({
             port: DIRECT_GAME_PORT,
             role: 'host',
             directGameRole: 'host',
-            initialRoute: '/game',
+            initialRoute: hostInitialRoute,
             passAndPlay,
         });
         try {
@@ -126,8 +139,8 @@ export const test = electronTest.extend<
         }
     },
 
-    clientApp: async ({ hostApp, passAndPlay }, use) => {
-        if (passAndPlay) {
+    clientApp: async ({ hostApp, passAndPlay, launchClient, clientInitialRoute }, use) => {
+        if (passAndPlay || !launchClient) {
             await use(hostApp);
             return;
         }
@@ -139,7 +152,7 @@ export const test = electronTest.extend<
             role: 'client',
             directGameRole: 'client',
             directGameJoinAddress: lobbyCode,
-            initialRoute: '/game',
+            initialRoute: clientInitialRoute,
         });
         try {
             await use(app);
@@ -163,14 +176,16 @@ export const test = electronTest.extend<
     // @chimera-review: auto fixture must reference hostWindow/clientWindow to
     // trigger dependency resolution.
     _gameStarted: [
-        async ({ hostWindow, clientWindow }, use) => {
-            const hostGame = new GamePage(hostWindow);
-            const clientGame = new GamePage(clientWindow);
+        async ({ hostWindow, clientWindow, waitForGameStarted }, use) => {
+            if (waitForGameStarted) {
+                const hostGame = new GamePage(hostWindow);
+                const clientGame = new GamePage(clientWindow);
 
-            // Both windows load /game directly; GamePage waits for the
-            // first snapshot while the hidden direct-game lobby auto-starts.
-            await expect(hostGame.canvas).toBeVisible({ timeout: 15_000 });
-            await expect(clientGame.canvas).toBeVisible({ timeout: 15_000 });
+                // Both windows load /game directly by default; GamePage waits for the
+                // first snapshot while the hidden direct-game lobby auto-starts.
+                await expect(hostGame.canvas).toBeVisible({ timeout: 15_000 });
+                await expect(clientGame.canvas).toBeVisible({ timeout: 15_000 });
+            }
 
             await use();
         },

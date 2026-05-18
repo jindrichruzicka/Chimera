@@ -23,6 +23,9 @@ export interface SettingsStoreState {
     readonly settings: Record<string, ResolvedSettings>;
     readonly activeGameId: string | null;
 
+    /** Set the game whose resolved settings are currently active in renderer UI. */
+    setActiveGameId(gameId: string | null): void;
+
     /**
      * Apply incoming settings from IPC (chimera:settings:changed push or initial fetch).
      * Do NOT call from components directly.
@@ -50,6 +53,10 @@ export function createSettingsStore(bridge?: {
     return createStore<SettingsStoreState>()((set) => ({
         settings: {},
         activeGameId: null,
+
+        setActiveGameId(gameId: string | null): void {
+            set(() => ({ activeGameId: gameId }));
+        },
 
         _applySettings(gameId: string, incoming: ResolvedSettings): void {
             set((state) => ({

@@ -69,6 +69,18 @@ describe('settingsStore._applySettings()', () => {
     });
 });
 
+describe('settingsStore.setActiveGameId()', () => {
+    it('updates the active game id and can clear it again', () => {
+        const store = createSettingsStore();
+
+        store.getState().setActiveGameId('tactics');
+        expect(store.getState().activeGameId).toBe('tactics');
+
+        store.getState().setActiveGameId(null);
+        expect(store.getState().activeGameId).toBeNull();
+    });
+});
+
 describe('settingsStore.updateSettings()', () => {
     it('calls bridge.settings.update and applies returned settings', async () => {
         const updated = makeSettings(0.4);

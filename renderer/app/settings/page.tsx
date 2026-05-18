@@ -125,20 +125,7 @@ export default function SettingsPage(): React.ReactElement {
         Partial<Record<InputActionId, { ok: boolean; conflict?: InputActionId }>>
     >({});
 
-    // Group actions by category for display
-    const actionsByCategory = React.useMemo(() => {
-        const actions = inputManager.getActions();
-        const grouped = new Map<string, InputAction[]>();
-        for (const action of actions) {
-            const categoryActions = grouped.get(action.category);
-            if (categoryActions !== undefined) {
-                categoryActions.push(action);
-            } else {
-                grouped.set(action.category, [action]);
-            }
-        }
-        return grouped;
-    }, [inputManager]);
+    const actionsByCategory = groupActionsByCategory(inputManager.getActions());
 
     const handleRebind = React.useCallback(
         (id: InputActionId, binding: KeyBinding): void => {
@@ -581,6 +568,8 @@ export default function SettingsPage(): React.ReactElement {
                             return (
                                 <div
                                     key={action.id}
+                                    data-testid="binding-action-row"
+                                    data-action-id={action.id}
                                     style={{
                                         display: 'flex',
                                         alignItems: 'center',
@@ -590,7 +579,7 @@ export default function SettingsPage(): React.ReactElement {
                                 >
                                     <span style={{ flex: 1 }}>{action.description}</span>
                                     <span
-                                        data-testid={`binding-${action.id}`}
+                                        data-testid="binding-value"
                                         style={{
                                             minWidth: 'calc(var(--ch-space-md) * 8)',
                                             color: 'var(--ch-color-text-secondary)',
@@ -629,6 +618,7 @@ export default function SettingsPage(): React.ReactElement {
                                     )}
                                     {!isCapturing && (
                                         <Button
+                                            data-testid="binding-edit"
                                             size="sm"
                                             variant="secondary"
                                             onClick={() => setCapturingId(action.id)}
@@ -637,6 +627,7 @@ export default function SettingsPage(): React.ReactElement {
                                         </Button>
                                     )}
                                     <Button
+                                        data-testid="binding-reset"
                                         size="sm"
                                         variant="ghost"
                                         onClick={() => handleResetBinding(action.id)}
@@ -686,4 +677,17 @@ export default function SettingsPage(): React.ReactElement {
             </Button>
         </main>
     );
+}
+
+function groupActionsByCategory(actions: readonly InputAction[]): Map<string, InputAction[]> {
+    const grouped = new Map<string, InputAction[]>();
+    for (const action of actions) {
+        const categoryActions = grouped.get(action.category);
+        if (categoryActions !== undefined) {
+            categoryActions.push(action);
+        } else {
+            grouped.set(action.category, [action]);
+        }
+    }
+    return grouped;
 }

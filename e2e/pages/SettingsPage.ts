@@ -1,5 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 
+type InputActionId = `engine:${string}` | `game:${string}`;
+
 export class SettingsPage {
     readonly masterVolumeInput: Locator;
     readonly resetDefaultsButton: Locator;
@@ -16,4 +18,35 @@ export class SettingsPage {
     public async resetToDefaults(): Promise<void> {
         await this.resetDefaultsButton.click();
     }
+
+    public bindingValue(actionId: InputActionId): Locator {
+        return this.bindingRow(actionId).getByTestId('binding-value');
+    }
+
+    public async readBinding(actionId: InputActionId): Promise<string> {
+        return (await this.bindingValue(actionId).innerText()).trim();
+    }
+
+    public async startRebinding(actionId: InputActionId): Promise<void> {
+        await this.bindingRow(actionId).getByTestId('binding-edit').click();
+    }
+
+    public async rebindAction(actionId: InputActionId, key: string): Promise<void> {
+        await this.startRebinding(actionId);
+        await this.page.keyboard.press(key);
+    }
+
+    public async resetBinding(actionId: InputActionId): Promise<void> {
+        await this.bindingRow(actionId).getByTestId('binding-reset').click();
+    }
+
+    private bindingRow(actionId: InputActionId): Locator {
+        return this.page.locator(
+            `[data-testid="binding-action-row"][data-action-id="${escapeAttributeValue(actionId)}"]`,
+        );
+    }
+}
+
+function escapeAttributeValue(value: string): string {
+    return value.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
 }

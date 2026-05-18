@@ -269,6 +269,7 @@ export function createInputManager(
     // ─── Gamepad polling ──────────────────────────────────────────────────────
 
     function pollGamepad(): void {
+        if (typeof navigator.getGamepads !== 'function') return;
         const gamepads = navigator.getGamepads();
         if (!gamepads) return;
 

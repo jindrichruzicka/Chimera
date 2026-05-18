@@ -650,6 +650,25 @@ describe('InputManager — gamepad', () => {
         vi.unstubAllGlobals();
     });
 
+    it('pollGamepad is a no-op when navigator.getGamepads is unavailable', () => {
+        vi.unstubAllGlobals();
+        const descriptor = Object.getOwnPropertyDescriptor(navigator, 'getGamepads');
+        Object.defineProperty(navigator, 'getGamepads', {
+            configurable: true,
+            value: undefined,
+        });
+
+        try {
+            expect(() => manager.pollGamepad()).not.toThrow();
+        } finally {
+            if (descriptor !== undefined) {
+                Object.defineProperty(navigator, 'getGamepads', descriptor);
+            } else {
+                Reflect.deleteProperty(navigator, 'getGamepads');
+            }
+        }
+    });
+
     it('fires the action callback when a gamepad button matching button:<index> is pressed', () => {
         const cb = vi.fn();
         manager.onAction('engine:toggle-menu', cb);
