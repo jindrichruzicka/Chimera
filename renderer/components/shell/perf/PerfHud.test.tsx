@@ -404,4 +404,15 @@ describe('PerfHud — design token discipline', () => {
         expect(style).toContain('var(--ch-');
         expect(style).not.toMatch(/#[0-9a-fA-F]{3,6}/);
     });
+
+    it('line-height uses a CSS variable token, not a bare number', async () => {
+        const { PerfHud } = await importPerfHud();
+        perfStore.getState().setVisible(true);
+        render(<PerfHud />);
+
+        const hud = screen.getByTestId('perf-hud');
+        const style = hud.getAttribute('style') ?? '';
+        // lineHeight must reference a var(--ch-*) token, not a bare numeric literal
+        expect(style).not.toMatch(/line-height: [0-9]/);
+    });
 });

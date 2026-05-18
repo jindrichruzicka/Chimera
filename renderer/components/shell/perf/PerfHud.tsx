@@ -67,9 +67,8 @@ export function PerfHud(): React.ReactElement | null {
     // ── Settings: force-visible flag ──────────────────────────────────────────
     const settingsShowPerfHud = useSettingsStore((state) => {
         const gameId = state.activeGameId ?? '__engine__';
-        const s = state.settings[gameId] as Record<string, unknown> | undefined;
-        const gameplay = s?.['gameplay'] as Record<string, unknown> | undefined;
-        return (gameplay?.['showPerfHud'] as boolean | undefined) ?? false;
+        const s = state.settings[gameId] as { gameplay?: { showPerfHud?: boolean } } | undefined;
+        return s?.gameplay?.showPerfHud ?? false;
     });
 
     // ── F3 toggle — must be called unconditionally (React hooks rules) ────────
@@ -102,7 +101,7 @@ export function PerfHud(): React.ReactElement | null {
         fontSize: 'var(--ch-font-size-sm)',
         color: 'var(--ch-color-text-primary)',
         boxShadow: 'var(--ch-shadow-md)',
-        lineHeight: '1.6',
+        lineHeight: 'var(--ch-line-height-relaxed)',
         pointerEvents: 'none',
         userSelect: 'none',
     };

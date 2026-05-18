@@ -60,6 +60,7 @@
     --ch-font-size-xl: 24px;
     --ch-font-weight-semibold: 600;
     --ch-line-height-tight: 1.1;
+    --ch-line-height-relaxed: 1.6;
 
     --ch-button-border-width: var(--ch-border-width-sm);
     --ch-button-radius: var(--ch-radius-pill);

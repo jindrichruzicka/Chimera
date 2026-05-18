@@ -129,6 +129,7 @@ const expectedTokens = [
     '--ch-font-size-lg',
     '--ch-font-size-xl',
     '--ch-font-weight-semibold',
+    '--ch-line-height-relaxed',
     '--ch-line-height-tight',
     '--ch-button-border-width',
     '--ch-button-radius',
