@@ -35,7 +35,7 @@ afterEach(() => {
 });
 
 describe('ConnectionStatusIndicator', () => {
-    it('renders connected by default with data-testid and data-status', () => {
+    it('renders connected by default as a small unlabeled circle', () => {
         installSystemBridge(
             () => undefined,
             () => undefined,
@@ -43,12 +43,21 @@ describe('ConnectionStatusIndicator', () => {
 
         render(<ConnectionStatusIndicator />);
 
-        const node = screen.getByTestId('connection-status');
-        expect(node.getAttribute('data-status')).toBe('connected');
-        expect(node.textContent).toContain('connected');
+        const indicator = screen.getByTestId('connection-status');
+        const style = indicator.getAttribute('style') ?? '';
+
+        expect(indicator.getAttribute('data-status')).toBe('connected');
+        expect(indicator.getAttribute('aria-label')).toBe('Connection status: connected');
+        expect(indicator.textContent).toBe('');
+        expect(indicator.className).toContain('connection-status-indicator--connected');
+        expect(style).toContain('width: calc(var(--ch-space-sm) + var(--ch-space-xs))');
+        expect(style).toContain('height: calc(var(--ch-space-sm) + var(--ch-space-xs))');
+        expect(style).toContain('border-radius: var(--ch-radius-pill)');
+        expect(style).toContain('background-color: var(--ch-color-success)');
+        expect(style).toContain('opacity: var(--ch-opacity-disabled)');
     });
 
-    it('updates data-status when onConnectionStatus emits', () => {
+    it('updates status metadata and color when onConnectionStatus emits', () => {
         let listener: StatusListener | null = null;
         installSystemBridge(
             (cb) => {
@@ -61,16 +70,33 @@ describe('ConnectionStatusIndicator', () => {
         act(() => {
             listener?.('disconnected');
         });
-        expect(screen.getByTestId('connection-status').getAttribute('data-status')).toBe(
-            'disconnected',
+        const indicator = screen.getByTestId('connection-status');
+        expect(indicator.getAttribute('data-status')).toBe('disconnected');
+        expect(indicator.getAttribute('aria-label')).toBe('Connection status: disconnected');
+        expect(indicator.getAttribute('style')).toContain(
+            'background-color: var(--ch-color-transparent)',
         );
+        expect(indicator.getAttribute('style')).toContain('opacity: 0');
 
         act(() => {
             listener?.('connecting');
         });
-        expect(screen.getByTestId('connection-status').getAttribute('data-status')).toBe(
-            'connecting',
+        expect(indicator.getAttribute('data-status')).toBe('connecting');
+        expect(indicator.getAttribute('aria-label')).toBe('Connection status: connecting');
+        expect(indicator.getAttribute('style')).toContain(
+            'background-color: var(--ch-color-warning-border)',
         );
+        expect(indicator.getAttribute('style')).toContain('opacity: var(--ch-opacity-disabled)');
+
+        act(() => {
+            listener?.('error');
+        });
+        expect(indicator.getAttribute('data-status')).toBe('error');
+        expect(indicator.getAttribute('aria-label')).toBe('Connection status: error');
+        expect(indicator.getAttribute('style')).toContain(
+            'background-color: var(--ch-color-error)',
+        );
+        expect(indicator.getAttribute('style')).toContain('opacity: var(--ch-opacity-disabled)');
     });
 
     it('applies a status-specific class for styling hooks', () => {
@@ -84,13 +110,13 @@ describe('ConnectionStatusIndicator', () => {
 
         render(<ConnectionStatusIndicator />);
 
-        const node = screen.getByTestId('connection-status');
-        expect(node.className).toContain('connection-status-pill--connected');
+        const indicator = screen.getByTestId('connection-status');
+        expect(indicator.className).toContain('connection-status-indicator--connected');
 
         act(() => {
             listener?.('disconnected');
         });
-        expect(node.className).toContain('connection-status-pill--disconnected');
+        expect(indicator.className).toContain('connection-status-indicator--disconnected');
     });
 
     it('unsubscribes from onConnectionStatus on unmount', () => {

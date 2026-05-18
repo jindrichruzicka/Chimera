@@ -11,36 +11,32 @@ const DEFAULT_STATUS: ConnectionStatus = 'connected';
 const STATUS_STYLES: Record<
     ConnectionStatus,
     {
-        readonly borderColor: string;
         readonly backgroundColor: string;
-        readonly color: string;
+        readonly opacity: string;
     }
 > = {
     connected: {
-        borderColor: 'var(--ch-color-success-border)',
-        backgroundColor: 'var(--ch-color-success-surface)',
-        color: 'var(--ch-color-success-text)',
+        backgroundColor: 'var(--ch-color-success)',
+        opacity: 'var(--ch-opacity-disabled)',
     },
     connecting: {
-        borderColor: 'var(--ch-color-warning-border)',
-        backgroundColor: 'var(--ch-color-warning-surface)',
-        color: 'var(--ch-color-warning-text)',
+        backgroundColor: 'var(--ch-color-warning-border)',
+        opacity: 'var(--ch-opacity-disabled)',
     },
     disconnected: {
-        borderColor: 'var(--ch-color-error-border)',
-        backgroundColor: 'var(--ch-color-error-surface)',
-        color: 'var(--ch-color-error-text)',
+        backgroundColor: 'var(--ch-color-transparent)',
+        opacity: '0',
     },
     error: {
-        borderColor: 'var(--ch-color-error-border-strong)',
-        backgroundColor: 'var(--ch-color-error-surface-strong)',
-        color: 'var(--ch-color-error-text-strong)',
+        backgroundColor: 'var(--ch-color-error)',
+        opacity: 'var(--ch-opacity-disabled)',
     },
 };
 
 export function ConnectionStatusIndicator(): React.ReactElement {
     const [status, setStatus] = useState<ConnectionStatus>(DEFAULT_STATUS);
     const statusStyle = STATUS_STYLES[status];
+    const statusLabel = `Connection status: ${status}`;
 
     useEffect(() => {
         if (!window.__chimera?.system) {
@@ -60,24 +56,24 @@ export function ConnectionStatusIndicator(): React.ReactElement {
         <div
             data-testid="connection-status"
             data-status={status}
-            className={`connection-status-pill connection-status-pill--${status}`}
+            className={`connection-status-indicator connection-status-indicator--${status}`}
+            role="status"
             aria-live="polite"
+            aria-label={statusLabel}
             style={{
                 position: 'fixed',
                 right: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
                 top: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
+                width: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
+                height: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
                 borderRadius: 'var(--ch-radius-pill)',
-                border: `var(--ch-border-width-sm) solid ${statusStyle.borderColor}`,
                 backgroundColor: statusStyle.backgroundColor,
-                color: statusStyle.color,
-                fontSize: 'var(--ch-font-size-sm)',
-                fontWeight: 600,
-                padding: 'var(--ch-space-status-padding-y) var(--ch-space-status-padding-x)',
-                textTransform: 'capitalize',
+                opacity: statusStyle.opacity,
+                transition:
+                    'background-color var(--ch-duration-fast) var(--ch-easing-standard), opacity var(--ch-duration-fast) var(--ch-easing-standard)',
+                pointerEvents: 'none',
                 zIndex: 1000,
             }}
-        >
-            {status}
-        </div>
+        />
     );
 }
