@@ -26,6 +26,7 @@ import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
 import { FadeProvider } from './FadeContext.js';
+import { PerfHud } from './perf/PerfHud.js';
 
 interface GameShellBaseProps {
     readonly children?: ReactNode;
@@ -334,6 +335,7 @@ function GameShellFrame(
                 {shouldShowFallbackResult && <DefaultGameOverBanner message={gameOverMessage} />}
             </section>
             {hud}
+            <PerfHud />
         </main>
     );
 }

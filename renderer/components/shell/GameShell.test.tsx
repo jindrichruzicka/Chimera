@@ -31,6 +31,12 @@ vi.mock('../audio/EventAudioPlayer.js', () => ({
     },
 }));
 
+// Mock PerfHud to avoid requiring InputManagerContext in GameShell unit tests.
+// Verifies the component is mounted while keeping tests hermetic.
+vi.mock('./perf/PerfHud.js', () => ({
+    PerfHud: () => <div data-testid="perf-hud-mock" />,
+}));
+
 const TEST_AUDIO_REF = 'tactics/audio/sfx/test-hit.ogg' as AssetRef<AudioClipAsset>;
 
 afterEach(() => {
@@ -582,6 +588,11 @@ describe('GameShell page object locators', () => {
         const style = banner.getAttribute('style') ?? '';
         expect(style).toContain('var(--ch-space-md)');
         expect(style).toContain('var(--ch-font-size-lg)');
+    });
+
+    it('mounts PerfHud inside the game shell frame', () => {
+        render(<GameShell tick={1} canUndo={false} canRedo={false} />);
+        expect(screen.getByTestId('perf-hud-mock')).toBeTruthy();
     });
 });
 
