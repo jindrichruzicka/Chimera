@@ -16,6 +16,15 @@ import type {
     OrthographicCameraOptions,
 } from './GameCanvas';
 
+const perfProbeSpy = vi.hoisted(() => vi.fn());
+
+vi.mock('../shell/perf/PerfProbe', () => ({
+    PerfProbe: () => {
+        perfProbeSpy();
+        return null;
+    },
+}));
+
 vi.mock('@react-three/fiber', () => ({
     Canvas: vi.fn(({ children }: { readonly children?: ReactNode }) => (
         <div data-testid="r3f-canvas">{children}</div>
@@ -79,6 +88,16 @@ describe('GameCanvas', () => {
         );
 
         expect(latestCanvasCamera()).toBeInstanceOf(OrthographicCamera);
+    });
+
+    it('mounts one PerfProbe inside the R3F canvas root', () => {
+        render(
+            <GameCanvas cameraMode="perspective" cameraPreset="free">
+                <mesh />
+            </GameCanvas>,
+        );
+
+        expect(perfProbeSpy).toHaveBeenCalledTimes(1);
     });
 
     it('uses a custom preset object to set camera position and lookAt', () => {

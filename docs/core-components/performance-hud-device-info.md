@@ -22,7 +22,7 @@ A lightweight floating overlay showing key performance numbers at a glance. Togg
 | Metric             | Source                                                                | Updated every  |
 | ------------------ | --------------------------------------------------------------------- | -------------- |
 | FPS                | `useFrame` frame count in rolling 1 s window                          | 500 ms         |
-| Frame time avg/p95 | `performance.now()` delta; last 120 frames                            | 500 ms         |
+| Frame time avg/p95 | R3F `useFrame` `deltaSeconds`; last 120 frames                        | 500 ms         |
 | Sim tick           | `PlayerSnapshot.tick` from `gameStore`                                | On snapshot    |
 | Actions/sec        | Rolling count of snapshots received in last 1 s                       | 500 ms         |
 | Action round-trip  | `sendAction()` stamp → matching `onSnapshot()` tick advance           | Per own-action |
@@ -51,10 +51,14 @@ interface PerfSample {
     triangles: number;
 }
 
-// Mounted once in GameShell. Self-contained: subscribes to store + R3F hooks.
+// Mounted once in GameShell. Reads perfStore samples produced by renderer probes.
 // Visible if F3-toggled OR engine.gameplay.showPerfHud === true
 export function PerfHud(): JSX.Element | null;
 ```
+
+`PerfProbe` is mounted by `GameCanvas` inside each R3F `<Canvas>` root. It writes
+FPS, frame-time, draw-call, and triangle samples into `perfStore`; `PerfHud` reads
+those samples from shell chrome without calling R3F hooks outside a canvas.
 
 ### Module Tree
 

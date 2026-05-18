@@ -3,6 +3,7 @@
 import { Canvas } from '@react-three/fiber';
 import React from 'react';
 import type { ReactNode } from 'react';
+import { PerfProbe } from '../shell/perf/PerfProbe';
 import { OrthographicCamera, PerspectiveCamera, Vector3 } from 'three';
 import type { Vector3Tuple } from '../../types/r3f-types.js';
 
@@ -69,7 +70,12 @@ export function GameCanvas({
         [cameraMode, cameraPreset, perspectiveCameraOptions, orthographicCameraOptions],
     );
 
-    return <Canvas camera={camera}>{children}</Canvas>;
+    return (
+        <Canvas camera={camera}>
+            <PerfProbe />
+            {children}
+        </Canvas>
+    );
 }
 
 function resolveCameraPreset(
