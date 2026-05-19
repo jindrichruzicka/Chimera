@@ -287,7 +287,7 @@ export const DeviceInfoSchema: z.ZodType<DeviceInfo> = z.object({
     battery: z
         .object({
             charging: z.boolean(),
-            level: z.number(),
+            level: z.number().min(0).max(1),
         })
         .nullable(),
 });

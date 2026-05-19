@@ -77,6 +77,8 @@ function DeviceInfoProbe(): React.ReactElement {
         <div
             data-testid="device-info-probe"
             data-os={info.os}
+            data-form-factor={info.formFactor}
+            data-battery-level={info.battery?.level ?? 'none'}
             data-primary-input={info.primaryInput}
             data-window-size-class={info.windowSizeClass}
             data-inputs={info.inputs.join(',')}
@@ -84,10 +86,37 @@ function DeviceInfoProbe(): React.ReactElement {
     );
 }
 
+interface MockBatteryManager {
+    readonly charging: boolean;
+    readonly level: number;
+    addEventListener(type: 'chargingchange' | 'levelchange', listener: EventListener): void;
+    removeEventListener(type: 'chargingchange' | 'levelchange', listener: EventListener): void;
+}
+
+function installBatteryManager(battery: MockBatteryManager): void {
+    Object.defineProperty(window.navigator, 'getBattery', {
+        configurable: true,
+        value: vi.fn(async () => battery),
+    });
+}
+
+function makeBatteryManager(
+    overrides: Partial<Pick<MockBatteryManager, 'charging' | 'level'>> = {},
+): MockBatteryManager {
+    return {
+        charging: false,
+        level: 0.42,
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        ...overrides,
+    };
+}
+
 // ─── Tests ────────────────────────────────────────────────────────────────────
 
 afterEach(() => {
     cleanup();
+    Reflect.deleteProperty(window.navigator, 'getBattery');
     vi.restoreAllMocks();
 });
 
@@ -331,6 +360,72 @@ describe('DeviceInfoProvider — renderer input merging', () => {
             'data-inputs',
             'mouse,keyboard,touch',
         );
+    });
+});
+
+describe('DeviceInfoProvider — renderer battery and form factor', () => {
+    it('merges navigator.getBattery() state and derives laptop form factor', async () => {
+        installBatteryManager(makeBatteryManager({ charging: true, level: 0.68 }));
+        const bridge = makeSystemBridge(makeDeviceInfo({ battery: null, formFactor: 'unknown' }));
+
+        render(
+            <DeviceInfoProvider systemApi={bridge}>
+                <DeviceInfoProbe />
+            </DeviceInfoProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('device-info-probe')).toHaveAttribute(
+                'data-battery-level',
+                '0.68',
+            );
+        });
+        expect(screen.getByTestId('device-info-probe')).toHaveAttribute(
+            'data-form-factor',
+            'laptop',
+        );
+    });
+
+    it('derives desktop form factor when no battery or touch input is present', async () => {
+        const bridge = makeSystemBridge(makeDeviceInfo({ battery: null, formFactor: 'unknown' }));
+
+        render(
+            <DeviceInfoProvider systemApi={bridge}>
+                <DeviceInfoProbe />
+            </DeviceInfoProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('device-info-probe')).toHaveAttribute(
+                'data-form-factor',
+                'desktop',
+            );
+        });
+    });
+
+    it('derives tablet-convertible form factor for compact touch-only devices', async () => {
+        const bridge = makeSystemBridge(
+            makeDeviceInfo({
+                battery: null,
+                formFactor: 'unknown',
+                inputs: ['touch'],
+                primaryInput: 'touch',
+                windowSizeClass: 'compact',
+            }),
+        );
+
+        render(
+            <DeviceInfoProvider systemApi={bridge}>
+                <DeviceInfoProbe />
+            </DeviceInfoProvider>,
+        );
+
+        await waitFor(() => {
+            expect(screen.getByTestId('device-info-probe')).toHaveAttribute(
+                'data-form-factor',
+                'tablet-convertible',
+            );
+        });
     });
 });
 

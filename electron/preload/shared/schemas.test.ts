@@ -257,6 +257,15 @@ describe('DeviceInfoSchema', () => {
         ).not.toThrow();
     });
 
+    it('rejects battery levels outside the Battery API range', () => {
+        expect(() =>
+            DeviceInfoSchema.parse({ ...validInfo, battery: { charging: true, level: -0.01 } }),
+        ).toThrow();
+        expect(() =>
+            DeviceInfoSchema.parse({ ...validInfo, battery: { charging: true, level: 1.01 } }),
+        ).toThrow();
+    });
+
     it('accepts multiple screens', () => {
         const twoScreens = [
             { id: 1, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },

@@ -28,8 +28,21 @@
  */
 
 import React, { createContext, useEffect, useRef, useState } from 'react';
-import type { DeviceInfo, InputModality } from './DeviceInfo.js';
+import type { DeviceFormFactor, DeviceInfo, InputModality } from './DeviceInfo.js';
 import { createInputTracker } from './inputTracker.js';
+
+type BatteryInfo = NonNullable<DeviceInfo['battery']>;
+
+interface BatteryManagerLike {
+    readonly charging: boolean;
+    readonly level: number;
+    addEventListener?(type: 'chargingchange' | 'levelchange', listener: EventListener): void;
+    removeEventListener?(type: 'chargingchange' | 'levelchange', listener: EventListener): void;
+}
+
+interface NavigatorWithBattery extends Navigator {
+    getBattery?: () => Promise<BatteryManagerLike>;
+}
 
 // ─── Narrow SystemAPI slice ───────────────────────────────────────────────────
 
@@ -77,16 +90,47 @@ const FALLBACK_DEVICE_INFO: DeviceInfo = {
 };
 
 function mergeSystemDeviceInfo(previous: DeviceInfo, systemInfo: DeviceInfo): DeviceInfo {
+    const isFallback = previous === FALLBACK_DEVICE_INFO;
     const inputs = new Set<InputModality>(systemInfo.inputs);
-    for (const input of previous.inputs) {
+    const previousInputs = isFallback ? [] : previous.inputs;
+    for (const input of previousInputs) {
         inputs.add(input);
     }
 
-    return {
+    return withDerivedFormFactor({
         ...systemInfo,
         inputs: Array.from(inputs),
-        primaryInput: previous.primaryInput,
-    };
+        primaryInput: isFallback ? systemInfo.primaryInput : previous.primaryInput,
+    });
+}
+
+function deriveFormFactor(info: DeviceInfo): DeviceFormFactor {
+    if (info.battery !== null) return 'laptop';
+
+    const inputs = new Set<InputModality>(info.inputs);
+    if (inputs.size === 1 && inputs.has('touch') && info.windowSizeClass === 'compact') {
+        return 'tablet-convertible';
+    }
+
+    if (!inputs.has('touch')) return 'desktop';
+
+    return info.formFactor;
+}
+
+function withDerivedFormFactor(info: DeviceInfo): DeviceInfo {
+    return { ...info, formFactor: deriveFormFactor(info) };
+}
+
+function getNavigatorBattery(
+    navigatorObject: Navigator,
+): (() => Promise<BatteryManagerLike>) | null {
+    const withBattery = navigatorObject as NavigatorWithBattery;
+    if (typeof withBattery.getBattery !== 'function') return null;
+    return withBattery.getBattery.bind(navigatorObject);
+}
+
+function readBatteryInfo(battery: BatteryManagerLike): BatteryInfo {
+    return { charging: battery.charging, level: battery.level };
 }
 
 // ─── Props ────────────────────────────────────────────────────────────────────
@@ -148,7 +192,7 @@ export function DeviceInfoProvider({
                 (inputs: readonly InputModality[], primary: InputModality) => {
                     if (!mountedRef.current) return;
                     setDeviceInfo((prev) => {
-                        return { ...prev, inputs, primaryInput: primary };
+                        return withDerivedFormFactor({ ...prev, inputs, primaryInput: primary });
                     });
                 },
             );
@@ -156,6 +200,33 @@ export function DeviceInfoProvider({
                 unsubscribeTracker();
                 tracker.stop();
             });
+
+            const getBattery = getNavigatorBattery(window.navigator);
+            if (getBattery !== null) {
+                void getBattery()
+                    .then((battery) => {
+                        if (!mountedRef.current) return;
+
+                        const applyBattery = (): void => {
+                            if (!mountedRef.current) return;
+                            setDeviceInfo((prev) =>
+                                withDerivedFormFactor({
+                                    ...prev,
+                                    battery: readBatteryInfo(battery),
+                                }),
+                            );
+                        };
+
+                        applyBattery();
+                        battery.addEventListener?.('chargingchange', applyBattery);
+                        battery.addEventListener?.('levelchange', applyBattery);
+                        cleanupCallbacks.push(() => {
+                            battery.removeEventListener?.('chargingchange', applyBattery);
+                            battery.removeEventListener?.('levelchange', applyBattery);
+                        });
+                    })
+                    .catch(() => undefined);
+            }
         }
 
         return () => {
