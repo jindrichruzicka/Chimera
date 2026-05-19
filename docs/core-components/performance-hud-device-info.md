@@ -127,7 +127,7 @@ interface DeviceInfo {
     readonly primaryInput: InputModality;
 
     // Battery (laptops only; null on desktops)
-    readonly battery: { charging: boolean; level: number } | null;
+    readonly battery: { readonly charging: boolean; readonly level: number } | null;
 }
 ```
 
