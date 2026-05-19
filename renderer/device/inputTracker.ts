@@ -7,7 +7,7 @@
  * Architecture reference: §4.17 — Device Info
  * Issue: #590 (F42 — Implement DeviceInfoProvider and inputTracker)
  *
- * Invariant #65: renderer-only. Must NOT import from electron/main,
+ * §4.17: renderer-only. Must NOT import from electron/main,
  *                simulation/, or ai/.
  *
  * Design notes:

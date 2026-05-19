@@ -8,7 +8,7 @@
  * Architecture reference: §4.17 — Device Info
  * Issue: #588 (F42 — Define DeviceInfo interface and types)
  *
- * Invariant #65: These types are renderer-only. This module must never be
+ * §4.17: These types are renderer-only. This module must never be
  * imported by simulation/ or ai/.
  * Must NOT import from: electron/main/, simulation/, ai/
  */
