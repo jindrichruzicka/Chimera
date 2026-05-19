@@ -17,13 +17,9 @@ export const defaultTheme = {
                 display: 'inline-flex',
                 fontFamily: 'var(--ch-font-ui)',
                 fontSize: 'var(--ch-font-size-lg)',
-                // fontWeight: 600 — intentional bare literal; not in canonical token set per §4.35.
-                // Games may not override button font-weight; contact engine team if override is needed.
-                fontWeight: 600,
+                fontWeight: 'var(--ch-button-font-weight)',
                 justifyContent: 'center',
-                // lineHeight: 1.1 — intentional bare literal; not in canonical token set per §4.35.
-                // Games may not override button line-height; contact engine team if override is needed.
-                lineHeight: 1.1,
+                lineHeight: 'var(--ch-button-line-height)',
                 textAlign: 'center',
                 transform: 'var(--ch-button-transform)',
                 transition: 'var(--ch-button-transition)',
