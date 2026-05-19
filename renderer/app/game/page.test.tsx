@@ -29,6 +29,7 @@ import type {
     GameScreenProps,
     GameScreenRegistry,
 } from '@chimera/shared/game-screen-contract.js';
+import type { DeviceInfo } from '../../device/DeviceInfo.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Providers } from '../providers';
 import GamePage from './page';
@@ -188,6 +189,32 @@ function makeLobbyState(gameId = 'test-game'): LobbyState {
     };
 }
 
+function makeDeviceInfo(): DeviceInfo {
+    return {
+        os: 'macos',
+        osVersion: '14.5.0',
+        arch: 'arm64',
+        electronVer: '33.2.0',
+        chromiumVer: '130.0.0.0',
+        locale: 'en-US',
+        formFactor: 'laptop',
+        screens: [
+            {
+                id: 1,
+                width: 1440,
+                height: 900,
+                pixelRatio: 2,
+                refreshHz: 60,
+                primary: true,
+            },
+        ],
+        windowSizeClass: 'regular',
+        inputs: ['mouse', 'keyboard'],
+        primaryInput: 'mouse',
+        battery: null,
+    };
+}
+
 // ── Tests ──────────────────────────────────────────────────────────────────────
 
 beforeEach(() => {
@@ -203,7 +230,13 @@ beforeEach(() => {
     inputActionCallbacks.clear();
 
     Object.defineProperty(window, '__chimera', {
-        value: { game: { sendAction: vi.fn() } },
+        value: {
+            game: { sendAction: vi.fn() },
+            system: {
+                getDeviceInfo: vi.fn().mockResolvedValue(makeDeviceInfo()),
+                onDeviceInfoChange: vi.fn().mockReturnValue(vi.fn()),
+            },
+        },
         configurable: true,
     });
 });

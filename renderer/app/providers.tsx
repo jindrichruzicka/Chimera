@@ -15,6 +15,7 @@ import { createInputActionRegistry } from '../input/InputActionRegistry.js';
 import { InputActionRegistryContext } from '../input/InputActionRegistryContext.js';
 import { createKeyBindingRepository } from '../input/KeyBindingRepository.js';
 import { InputManagerContext } from '../input/InputManagerContext.js';
+import { DeviceInfoProvider, type DeviceInfoSystemApi } from '../device/DeviceInfoProvider.js';
 
 const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
     { id: 'engine:undo', description: 'Undo last action', category: 'Engine', oneShot: true },
@@ -82,18 +83,22 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
         [delegatingAssetManager],
     );
 
+    const systemApi = resolveDeviceInfoSystemApi();
+
     return (
-        <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
-            <AssetManagerContext.Provider value={delegatingAssetManager}>
-                <AudioManagerContext.Provider value={audioManager}>
-                    <InputActionRegistryContext.Provider value={inputRegistry}>
-                        <InputManagerContext.Provider value={inputManager}>
-                            {children}
-                        </InputManagerContext.Provider>
-                    </InputActionRegistryContext.Provider>
-                </AudioManagerContext.Provider>
-            </AssetManagerContext.Provider>
-        </SetGameAssetManagerContext.Provider>
+        <DeviceInfoProvider systemApi={systemApi}>
+            <SetGameAssetManagerContext.Provider value={setGameAssetManager}>
+                <AssetManagerContext.Provider value={delegatingAssetManager}>
+                    <AudioManagerContext.Provider value={audioManager}>
+                        <InputActionRegistryContext.Provider value={inputRegistry}>
+                            <InputManagerContext.Provider value={inputManager}>
+                                {children}
+                            </InputManagerContext.Provider>
+                        </InputActionRegistryContext.Provider>
+                    </AudioManagerContext.Provider>
+                </AssetManagerContext.Provider>
+            </SetGameAssetManagerContext.Provider>
+        </DeviceInfoProvider>
     );
 }
 
@@ -133,4 +138,10 @@ function createNoopAudioManager(): AudioManager {
             return;
         },
     };
+}
+
+function resolveDeviceInfoSystemApi(): DeviceInfoSystemApi | null {
+    if (typeof window === 'undefined') return null;
+    const chimera = window.__chimera as Window['__chimera'] | undefined;
+    return chimera?.system ?? null;
 }

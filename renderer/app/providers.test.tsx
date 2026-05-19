@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AssetManager } from '../assets/AssetManager';
 import { useAssetManager } from '../assets/AssetManagerContext.js';
 import type { DelegatingAssetManager } from '../assets/DelegatingAssetManager';
+import { DeviceInfoProvider } from '../device/DeviceInfoProvider.js';
 import { SetGameAssetManagerContext } from '../assets/SetGameAssetManagerContext';
 import type { AudioManager } from '../audio/AudioManager';
 import { useAudioManager } from '../audio/AudioManagerContext.js';
@@ -95,6 +96,18 @@ vi.mock('../input/KeyBindingRepository.js', () => ({
     createKeyBindingRepository: providerMocks.createKeyBindingRepository,
 }));
 
+// Mock DeviceInfoProvider so tests don't need window.__chimera.system.
+// Detailed DeviceInfoProvider behaviour is covered by renderer/device/DeviceInfoProvider.test.tsx.
+vi.mock('../device/DeviceInfoProvider.js', async () => {
+    const { createElement, Fragment, createContext } = await import('react');
+    return {
+        DeviceInfoProvider: vi.fn(({ children }: { children: React.ReactNode }) =>
+            createElement(Fragment, null, children),
+        ),
+        DeviceInfoContext: createContext(null),
+    };
+});
+
 beforeEach(() => {
     providerMocks.createDelegatingAssetManager.mockClear();
     providerMocks.createAudioManager.mockClear();
@@ -106,11 +119,22 @@ beforeEach(() => {
     providerMocks.audioManager.dispose.mockClear();
     providerMocks.inputManager.start.mockClear();
     providerMocks.inputManager.stop.mockClear();
+    vi.mocked(DeviceInfoProvider).mockClear();
+
+    // Provide a minimal window.__chimera stub so <Providers> can evaluate
+    // systemApi={window.__chimera.system} during rendering.
+    (window as any).__chimera = {
+        system: {
+            getDeviceInfo: vi.fn().mockResolvedValue(null),
+            onDeviceInfoChange: vi.fn().mockReturnValue(vi.fn()),
+        },
+    };
 });
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
+    delete (window as any).__chimera;
 });
 
 describe('Providers', () => {
@@ -352,6 +376,57 @@ describe('Providers — InputManager lifecycle', () => {
         expect(screen.getByTestId('input-manager-probe')).toHaveAttribute(
             'data-input-manager',
             'provided',
+        );
+    });
+});
+
+// ─── DeviceInfoProvider integration ──────────────────────────────────────────
+
+describe('Providers — DeviceInfoProvider', () => {
+    it('renders DeviceInfoProvider wrapping the provider tree', () => {
+        render(
+            <Providers>
+                <div data-testid="child" />
+            </Providers>,
+        );
+
+        expect(vi.mocked(DeviceInfoProvider)).toHaveBeenCalledOnce();
+        // Children are accessible, confirming DeviceInfoProvider wraps the tree
+        expect(screen.getByTestId('child')).toBeInTheDocument();
+    });
+
+    it('passes window.__chimera.system as systemApi to DeviceInfoProvider', () => {
+        const systemStub = { getDeviceInfo: vi.fn(), onDeviceInfoChange: vi.fn() };
+        (window as any).__chimera = { system: systemStub };
+
+        render(
+            <Providers>
+                <div />
+            </Providers>,
+        );
+
+        delete (window as any).__chimera;
+
+        expect(vi.mocked(DeviceInfoProvider)).toHaveBeenCalledWith(
+            expect.objectContaining({ systemApi: systemStub }),
+            undefined,
+        );
+    });
+
+    it('passes null systemApi when the preload bridge is unavailable during prerender', () => {
+        Reflect.deleteProperty(window, '__chimera');
+
+        expect(() =>
+            render(
+                <Providers>
+                    <div data-testid="child" />
+                </Providers>,
+            ),
+        ).not.toThrow();
+
+        expect(vi.mocked(DeviceInfoProvider)).toHaveBeenCalledWith(
+            expect.objectContaining({ systemApi: null }),
+            undefined,
         );
     });
 });
