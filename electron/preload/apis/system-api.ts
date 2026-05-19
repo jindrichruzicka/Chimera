@@ -9,10 +9,10 @@
 // main-process handler module imports these same constants to guarantee the
 // channel strings match on both sides.
 
-import type { ConnectionStatus, SystemAPI, Unsubscribe } from '../api-types.js';
+import type { ConnectionStatus, DeviceInfo, SystemAPI, Unsubscribe } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
-import { subscribePush } from '../shared/listener.js';
-import { PlatformInfoSchema, parseInvokeResponse } from '../shared/schemas.js';
+import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
+import { DeviceInfoSchema, PlatformInfoSchema, parseInvokeResponse } from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SystemAPI.platform}. */
 export const SYSTEM_PLATFORM_CHANNEL = 'chimera:system:platform';
@@ -28,6 +28,15 @@ export const SYSTEM_RELAUNCH_CHANNEL = 'chimera:system:relaunch';
  * process pushes status updates via `webContents.send` on this channel.
  */
 export const SYSTEM_CONNECTION_STATUS_CHANNEL = 'chimera:system:connection-status';
+
+/** `ipcRenderer.invoke` target for {@link SystemAPI.getDeviceInfo}. */
+export const SYSTEM_DEVICE_INFO_CHANNEL = 'chimera:system:device-info';
+
+/**
+ * `ipcRenderer.on` target for {@link SystemAPI.onDeviceInfoChange}. The main
+ * process pushes device-info updates via `webContents.send` on this channel.
+ */
+export const SYSTEM_DEVICE_INFO_CHANGE_CHANNEL = 'chimera:system:device-info-change';
 
 /**
  * Full response shape for the {@link SYSTEM_PLATFORM_CHANNEL} channel.
@@ -95,5 +104,13 @@ export function createSystemApi(ipc: SystemApiIpcPort, notifyQuit?: QuitNotifier
         },
         onConnectionStatus: (cb: (status: ConnectionStatus) => void): Unsubscribe =>
             subscribePush<ConnectionStatus>(ipc, SYSTEM_CONNECTION_STATUS_CHANNEL, cb),
+        getDeviceInfo: () =>
+            ipc
+                .invoke(SYSTEM_DEVICE_INFO_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(DeviceInfoSchema, SYSTEM_DEVICE_INFO_CHANNEL, value),
+                ),
+        onDeviceInfoChange: (cb: (info: DeviceInfo) => void): Unsubscribe =>
+            subscribeValidatedPush(ipc, SYSTEM_DEVICE_INFO_CHANGE_CHANNEL, DeviceInfoSchema, cb),
     };
 }

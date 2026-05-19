@@ -105,6 +105,22 @@ async function loadApi(): Promise<ChimeraAPI> {
     // that care about a specific return value override these before calling;
     // tests that only assert on channel names + arguments can ignore them.
     invokeResults.set('chimera:system:platform', { os: 'linux', version: '33.0.0' });
+    invokeResults.set('chimera:system:device-info', {
+        os: 'linux',
+        osVersion: '6.1.0',
+        arch: 'x64',
+        electronVer: '33.2.0',
+        chromiumVer: '130.0.0.0',
+        locale: 'en-US',
+        formFactor: 'unknown',
+        screens: [
+            { id: 1, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },
+        ],
+        windowSizeClass: 'large',
+        inputs: ['mouse', 'keyboard'],
+        primaryInput: 'mouse',
+        battery: null,
+    });
     invokeResults.set('chimera:lobby:host', { sessionId: '', hostId: '', gameId: '' });
     invokeResults.set('chimera:lobby:join', { sessionId: '', hostId: '', gameId: '' });
     invokeResults.set('chimera:lobby:leave', undefined);
@@ -417,5 +433,59 @@ describe('window.__chimera.system — contract', () => {
 
         unsubscribe();
         expect(listeners.get('chimera:system:connection-status')?.size).toBe(0);
+    });
+
+    it('getDeviceInfo() invokes chimera:system:device-info with no arguments', async () => {
+        const deviceInfo = {
+            os: 'linux',
+            osVersion: '6.1.0',
+            arch: 'x64',
+            electronVer: '33.2.0',
+            chromiumVer: '130.0.0.0',
+            locale: 'en-US',
+            formFactor: 'unknown',
+            screens: [
+                { id: 1, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },
+            ],
+            windowSizeClass: 'large',
+            inputs: ['mouse', 'keyboard'],
+            primaryInput: 'mouse',
+            battery: null,
+        };
+        invokeResults.set('chimera:system:device-info', deviceInfo);
+
+        await api.system.getDeviceInfo();
+
+        expect(invokeCalls).toEqual([{ channel: 'chimera:system:device-info', args: [] }]);
+    });
+
+    it('onDeviceInfoChange() registers on chimera:system:device-info-change; Unsubscribe removes it', () => {
+        const calls: unknown[] = [];
+        const unsubscribe = api.system.onDeviceInfoChange((info) => {
+            calls.push(info);
+        });
+        expect(listeners.get('chimera:system:device-info-change')?.size).toBe(1);
+
+        const deviceInfo = {
+            os: 'linux',
+            osVersion: '6.1.0',
+            arch: 'x64',
+            electronVer: '33.2.0',
+            chromiumVer: '130.0.0.0',
+            locale: 'en-US',
+            formFactor: 'unknown',
+            screens: [
+                { id: 1, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },
+            ],
+            windowSizeClass: 'large',
+            inputs: ['mouse', 'keyboard'],
+            primaryInput: 'mouse',
+            battery: null,
+        };
+        emit('chimera:system:device-info-change', deviceInfo);
+        expect(calls).toEqual([deviceInfo]);
+
+        unsubscribe();
+        expect(listeners.get('chimera:system:device-info-change')?.size).toBe(0);
     });
 });

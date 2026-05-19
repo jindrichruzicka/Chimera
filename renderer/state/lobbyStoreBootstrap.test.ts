@@ -62,6 +62,8 @@ function makeSystemApi(
         platform: vi.fn(),
         quit: vi.fn(),
         relaunch: vi.fn(),
+        getDeviceInfo: vi.fn(),
+        onDeviceInfoChange: vi.fn(),
     };
 }
 

@@ -23,6 +23,8 @@ describe('getSystemBridge', () => {
             platform: vi.fn(),
             quit: vi.fn(),
             relaunch: vi.fn(),
+            getDeviceInfo: vi.fn(),
+            onDeviceInfoChange: vi.fn(),
         } satisfies SystemAPI;
 
         expect(getSystemBridge({ __chimera: { system } })).toBe(system);

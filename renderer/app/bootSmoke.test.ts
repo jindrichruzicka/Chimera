@@ -14,6 +14,8 @@ function makeBridge(
             onConnectionStatus: () => () => undefined,
             quit: () => undefined,
             relaunch: () => undefined,
+            getDeviceInfo: () => Promise.reject(new Error('not implemented')),
+            onDeviceInfoChange: () => () => undefined,
         },
     };
 }

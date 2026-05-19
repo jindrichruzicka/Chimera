@@ -1,3 +1,5 @@
+import type * as os from 'node:os';
+
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type {
@@ -54,6 +56,18 @@ vi.mock('./saves/SaveManager.js', () => ({
         };
     }),
 }));
+
+const { mockOsRelease } = vi.hoisted(() => ({
+    mockOsRelease: vi.fn<() => string>(() => '23.6.0-test'),
+}));
+
+vi.mock('node:os', async (importOriginal) => {
+    const actual = await importOriginal<typeof os>();
+    return {
+        ...actual,
+        release: mockOsRelease,
+    };
+});
 
 // ── crash-reporter mock — spy on registerCrashReporter options ────────────────
 const { mockRegisterCrashReporter } = vi.hoisted(() => ({
@@ -238,6 +252,9 @@ class FakeBrowserWindow {
     public readonly loadURL = vi.fn();
     public readonly webContents = new FakeWebContents();
     public readonly isDestroyed = vi.fn<() => boolean>(() => false);
+    public readonly getContentSize = vi.fn<() => [number, number]>(() => [1280, 720]);
+    public readonly on =
+        vi.fn<(event: string, handler: (...args: readonly unknown[]) => void) => void>();
     constructor(options: FakeBrowserWindowOptions) {
         this.options = options;
         browserWindowInstances.push(this);
@@ -251,6 +268,7 @@ const appRelaunch = vi.fn<() => void>();
 const appExit = vi.fn<(code: number) => void>();
 const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
+const appGetLocale = vi.fn<() => string>(() => 'en-US');
 const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
 const ipcMainOn = vi.fn<(channel: string, handler: () => void) => void>();
 const protocolRegisterSchemesAsPrivileged = vi.fn<
@@ -275,6 +293,26 @@ const mockSetPermissionRequestHandler =
         ) => void
     >();
 
+type DisplayMetricsListener = () => void;
+
+const screenDisplay = {
+    id: 1,
+    bounds: { width: 1920, height: 1080 },
+    scaleFactor: 1,
+    displayFrequency: 60,
+};
+const screenListeners = new Map<string, Set<DisplayMetricsListener>>();
+const screenGetAllDisplays = vi.fn(() => [screenDisplay]);
+const screenGetPrimaryDisplay = vi.fn(() => screenDisplay);
+const screenOn = vi.fn((event: string, listener: DisplayMetricsListener) => {
+    const listeners = screenListeners.get(event) ?? new Set<DisplayMetricsListener>();
+    listeners.add(listener);
+    screenListeners.set(event, listeners);
+});
+const screenOff = vi.fn((event: string, listener: DisplayMetricsListener) => {
+    screenListeners.get(event)?.delete(listener);
+});
+
 vi.mock('electron', () => ({
     app: {
         on: appOn,
@@ -283,6 +321,7 @@ vi.mock('electron', () => ({
         exit: appExit,
         whenReady: appWhenReady,
         getPath: appGetPath,
+        getLocale: appGetLocale,
     },
     BrowserWindow: FakeBrowserWindow,
     ipcMain: {
@@ -297,6 +336,12 @@ vi.mock('electron', () => ({
         defaultSession: {
             setPermissionRequestHandler: mockSetPermissionRequestHandler,
         },
+    },
+    screen: {
+        getAllDisplays: screenGetAllDisplays,
+        getPrimaryDisplay: screenGetPrimaryDisplay,
+        on: screenOn,
+        off: screenOff,
     },
 }));
 
@@ -334,7 +379,11 @@ const {
     resolveInitialEntitiesForGame,
     main,
 } = await import('./index.js');
-const { SYSTEM_CONNECTION_STATUS_CHANNEL } = await import('../preload/apis/system-api.js');
+const {
+    SYSTEM_CONNECTION_STATUS_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
+} = await import('../preload/apis/system-api.js');
 const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
 const { ActionRegistry } = await import('@chimera/simulation/engine/ActionRegistry.js');
@@ -1043,7 +1092,16 @@ describe('main', () => {
         appWhenReady.mockImplementation(() => Promise.resolve());
         appGetPath.mockClear();
         appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
+        appGetLocale.mockClear();
+        appGetLocale.mockImplementation(() => 'en-US');
         ipcMainHandle.mockClear();
+        screenGetAllDisplays.mockClear();
+        screenGetPrimaryDisplay.mockClear();
+        screenOn.mockClear();
+        screenOff.mockClear();
+        screenListeners.clear();
+        mockOsRelease.mockClear();
+        mockOsRelease.mockImplementation(() => '23.6.0-test');
         fsExistsSync.mockClear();
         fsWriteFileSync.mockClear();
         fsUnlinkSync.mockClear();
@@ -1090,6 +1148,55 @@ describe('main', () => {
         await main();
 
         expect(appOn).toHaveBeenCalledWith('before-quit', expect.any(Function));
+    });
+
+    it('uses os.release() for the system device-info osVersion', async () => {
+        mockOsRelease.mockReturnValue('24.1.0-test');
+
+        await main();
+        await Promise.resolve();
+
+        const handler = ipcMainHandle.mock.calls.find(
+            ([channel]) => channel === SYSTEM_DEVICE_INFO_CHANNEL,
+        )?.[1];
+        expect(handler).toBeDefined();
+
+        expect(handler?.()).toMatchObject({ osVersion: '24.1.0-test' });
+    });
+
+    it('disposes the previous device-probe watcher before recreating a main window', async () => {
+        await main();
+        await Promise.resolve();
+
+        const activateHandler = appOn.mock.calls.find(([event]) => event === 'activate')?.[1];
+        expect(activateHandler).toBeTypeOf('function');
+        expect(screenOn).toHaveBeenCalledWith('display-metrics-changed', expect.any(Function));
+
+        browserWindowInstances.length = 0;
+        activateHandler?.();
+
+        expect(screenOff).toHaveBeenCalledWith('display-metrics-changed', expect.any(Function));
+        expect(screenOn).toHaveBeenCalledTimes(2);
+    });
+
+    it('pushes updated DeviceInfo via SYSTEM_DEVICE_INFO_CHANGE_CHANNEL when the window is resized', async () => {
+        await main();
+        await Promise.resolve();
+
+        const win = browserWindowInstances[browserWindowInstances.length - 1]!;
+
+        // Change to a compact-range width and trigger resize
+        win.getContentSize.mockReturnValue([800, 600]);
+
+        const resizeCall = win.on.mock.calls.find(([event]) => event === 'resize');
+        expect(resizeCall).toBeDefined();
+        const resizeHandler = resizeCall?.[1] as (() => void) | undefined;
+        resizeHandler?.();
+
+        expect(win.webContents.send).toHaveBeenCalledWith(
+            SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
+            expect.objectContaining({ windowSizeClass: 'compact' }),
+        );
     });
 
     it('constructs LobbyManager with a LocalWebSocketProvider (Invariant #2 wiring point)', async () => {

@@ -309,6 +309,100 @@ export type UserSettings = Record<string, unknown>;
 /** Current IPC / WebSocket connection health status as seen by the renderer. */
 export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'error';
 
+// ─── Device info domain types (§4.17) ────────────────────────────────────────
+//
+// Defined here (not in renderer/device/DeviceInfo.ts) so that the preload
+// contract and the Electron main process can reference the shape without
+// importing from renderer/ (which would violate the compilation boundary —
+// the root tsconfig excludes renderer/). renderer/device/DeviceInfo.ts
+// re-exports these types to keep renderer code unchanged.
+
+/**
+ * Conservative form-factor heuristic for Electron desktop targets (§4.17).
+ * Determined by the main process on start; the renderer re-reads via `getDeviceInfo()`.
+ */
+export type DeviceFormFactor = 'desktop' | 'laptop' | 'tablet-convertible' | 'unknown';
+
+/**
+ * An input device class that the application has detected as active (§4.17).
+ *
+ * `inputs` on `DeviceInfo` is a set of all currently available modalities.
+ * `primaryInput` is the most-recently-used one (last `pointerdown`, `keydown`,
+ * or `gamepadconnected` event).
+ */
+export type InputModality = 'mouse' | 'keyboard' | 'touch' | 'pen' | 'gamepad';
+
+/**
+ * Window content-width bucket used for layout decisions (§4.17).
+ * Derived from `BrowserWindow` content size; re-derived on every resize.
+ */
+export type SizeClass = 'compact' | 'regular' | 'large' | 'ultrawide';
+
+/**
+ * Snapshot of device facts available to game screens and `GameShell` for
+ * layout and affordance decisions (§4.17).
+ *
+ * Fields produced by the main process (`device-probe.ts`) are available
+ * immediately. Renderer-owned fields (`inputs`, `primaryInput`, `battery`)
+ * carry conservative defaults until `DeviceInfoProvider` merges live DOM
+ * signals into the snapshot.
+ *
+ * Invariant: this interface must NOT be used to cross any IPC boundary
+ * directly — the renderer receives it via `SystemAPI.getDeviceInfo()` and
+ * `SystemAPI.onDeviceInfoChange()`.
+ */
+export interface DeviceInfo {
+    // ── Platform (from Electron main process via device-probe.ts) ────────────
+    /** Operating system identifier. */
+    readonly os: 'macos' | 'windows' | 'linux';
+    /** OS version string, e.g. `'14.5.0'` (macOS) or `'10.0.22631'` (Windows). */
+    readonly osVersion: string;
+    /** CPU architecture. */
+    readonly arch: 'x64' | 'arm64';
+    /** Electron version string, e.g. `'33.2.0'`. */
+    readonly electronVer: string;
+    /** Chromium version string embedded in Electron, e.g. `'130.0.0.0'`. */
+    readonly chromiumVer: string;
+    /** BCP 47 locale tag, e.g. `'en-US'` or `'de-DE'`. */
+    readonly locale: string;
+
+    // ── Form factor ───────────────────────────────────────────────────────────
+    /** Conservative form-factor heuristic — see `DeviceFormFactor`. */
+    readonly formFactor: DeviceFormFactor;
+
+    // ── Display (from Electron main process via screen.getAllDisplays()) ──────
+    /** All connected screens. At least one entry is always present. */
+    readonly screens: readonly {
+        readonly id: number;
+        readonly width: number;
+        readonly height: number;
+        readonly pixelRatio: number;
+        readonly refreshHz: number;
+        readonly primary: boolean;
+    }[];
+    /**
+     * Size class of the current `BrowserWindow` content area.
+     * Re-derived on every resize event.
+     */
+    readonly windowSizeClass: SizeClass;
+
+    // ── Input (detected in renderer; main-side defaults until provider merges)
+    /** All input modalities currently detected as available. */
+    readonly inputs: readonly InputModality[];
+    /**
+     * Most recently active input modality.
+     * Updated on `pointerdown`, `keydown`, and `gamepadconnected` events.
+     */
+    readonly primaryInput: InputModality;
+
+    // ── Battery (detected in renderer; null until provider merges) ────────────
+    /**
+     * Battery state from `navigator.getBattery()` where supported.
+     * `null` on desktop systems without a battery sensor.
+     */
+    readonly battery: { readonly charging: boolean; readonly level: number } | null;
+}
+
 // ─── Unsubscribe ──────────────────────────────────────────────────────────────
 
 /** Returned by every subscription method; call to remove the listener. */
@@ -605,4 +699,11 @@ export interface SystemAPI {
     quit(): void;
     /** Relaunches the Electron application (app.relaunch() + app.exit(0)). */
     relaunch(): void;
+    /** Returns current device facts (§4.17). */
+    getDeviceInfo(): Promise<DeviceInfo>;
+    /**
+     * Fires whenever device facts change — primarily on window resize.
+     * Returns an unsubscribe function (§4.17).
+     */
+    onDeviceInfoChange(cb: (info: DeviceInfo) => void): Unsubscribe;
 }

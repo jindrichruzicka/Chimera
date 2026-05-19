@@ -29,6 +29,7 @@ import type {
     ActionRejection,
     CommitmentReveal,
     CrashRecoveryStatus,
+    DeviceInfo,
     LocalProfileSlot,
     LobbyInfo,
     LobbyState,
@@ -252,3 +253,41 @@ export const LocalProfileSlotListSchema: z.ZodType<readonly LocalProfileSlot[]> 
  * `ActionDefinition.type` string of a predictable action.
  */
 export const PredictableActionTypesSchema: z.ZodType<readonly string[]> = z.array(z.string());
+
+// ─── System device-info schema (§4.17) ───────────────────────────────────────
+
+const ScreenEntrySchema = z.object({
+    id: z.number(),
+    width: z.number(),
+    height: z.number(),
+    pixelRatio: z.number(),
+    refreshHz: z.number(),
+    primary: z.boolean(),
+});
+
+/**
+ * Schema for {@link DeviceInfo} returned by `chimera:system:device-info`.
+ *
+ * Uses `z.ZodType<DeviceInfo>` annotation (rather than `satisfies`) because
+ * `inputs` is a `readonly InputModality[]` whose Zod inferred type is
+ * `string[]` — not assignable under `exactOptionalPropertyTypes` rules.
+ */
+export const DeviceInfoSchema: z.ZodType<DeviceInfo> = z.object({
+    os: z.enum(['macos', 'windows', 'linux']),
+    osVersion: z.string(),
+    arch: z.enum(['x64', 'arm64']),
+    electronVer: z.string(),
+    chromiumVer: z.string(),
+    locale: z.string(),
+    formFactor: z.enum(['desktop', 'laptop', 'tablet-convertible', 'unknown']),
+    screens: z.array(ScreenEntrySchema).min(1),
+    windowSizeClass: z.enum(['compact', 'regular', 'large', 'ultrawide']),
+    inputs: z.array(z.enum(['mouse', 'keyboard', 'touch', 'pen', 'gamepad'])),
+    primaryInput: z.enum(['mouse', 'keyboard', 'touch', 'pen', 'gamepad']),
+    battery: z
+        .object({
+            charging: z.boolean(),
+            level: z.number(),
+        })
+        .nullable(),
+});

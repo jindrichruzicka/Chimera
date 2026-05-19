@@ -28,6 +28,7 @@ import {
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANNEL,
     mapPlatform,
     registerGameHandlers,
     registerLobbyHandlers,
@@ -66,6 +67,7 @@ import { playerId as toPlayerId } from '@chimera/networking/provider/Multiplayer
 import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     ActionRejection,
+    DeviceInfo,
     EngineAction,
     HostLobbyParams,
     JoinLobbyParams,
@@ -195,7 +197,7 @@ describe('registerSystemHandlers', () => {
         expect(exit).toHaveBeenCalledWith(0);
     });
 
-    it('registers exactly the three system channels (no cross-namespace leakage)', () => {
+    it('registers exactly the four system channels (no cross-namespace leakage)', () => {
         const stub = makeIpcMainStub();
         registerSystemHandlers({
             ipcMain: stub.ipcMain,
@@ -204,8 +206,58 @@ describe('registerSystemHandlers', () => {
             electronVersion: '33.4.11',
         });
 
-        expect([...stub.handled.keys()]).toEqual([SYSTEM_PLATFORM_CHANNEL]);
+        expect([...stub.handled.keys()]).toEqual([
+            SYSTEM_PLATFORM_CHANNEL,
+            SYSTEM_DEVICE_INFO_CHANNEL,
+        ]);
         expect([...stub.listeners.keys()]).toEqual([SYSTEM_QUIT_CHANNEL, SYSTEM_RELAUNCH_CHANNEL]);
+    });
+
+    it('chimera:system:device-info handler returns result from injected getDeviceInfo()', async () => {
+        const stub = makeIpcMainStub();
+        const deviceInfo: DeviceInfo = {
+            os: 'linux' as const,
+            osVersion: '6.1.0',
+            arch: 'x64' as const,
+            electronVer: '33.4.11',
+            chromiumVer: '130.0.0.0',
+            locale: 'en-US',
+            formFactor: 'unknown' as const,
+            screens: [
+                { id: 1, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },
+            ],
+            windowSizeClass: 'large' as const,
+            inputs: ['mouse', 'keyboard'] as const,
+            primaryInput: 'mouse' as const,
+            battery: null,
+        };
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
+            platform: 'linux',
+            electronVersion: '33.4.11',
+            getDeviceInfo: () => deviceInfo,
+        });
+
+        const handler = stub.handled.get(SYSTEM_DEVICE_INFO_CHANNEL);
+        expect(handler).toBeDefined();
+        expect(await handler?.()).toBe(deviceInfo);
+    });
+
+    it('chimera:system:device-info handler returns a default DeviceInfo when getDeviceInfo is not injected', async () => {
+        const stub = makeIpcMainStub();
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
+            platform: 'linux',
+            electronVersion: '33.4.11',
+        });
+
+        const handler = stub.handled.get(SYSTEM_DEVICE_INFO_CHANNEL);
+        expect(handler).toBeDefined();
+        const result = await handler?.();
+        // Should return a minimally valid DeviceInfo with at least an os field
+        expect(result).toMatchObject({ os: 'linux' });
     });
 });
 

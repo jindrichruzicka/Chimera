@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
@@ -8,7 +10,7 @@ import {
     type SystemApiIpcPort,
     type SystemApiListener,
 } from './system-api.js';
-import type { ConnectionStatus } from '../api-types.js';
+import type { ConnectionStatus, DeviceInfo } from '../api-types.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
 
 /**
@@ -176,6 +178,120 @@ describe('createSystemApi', () => {
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
             expect(cbB).toHaveBeenCalledWith('connecting');
+        });
+    });
+
+    describe('getDeviceInfo()', () => {
+        const validDeviceInfo: DeviceInfo = {
+            os: 'macos',
+            osVersion: '14.5.0',
+            arch: 'arm64',
+            electronVer: '33.2.0',
+            chromiumVer: '130.0.0.0',
+            locale: 'en-US',
+            formFactor: 'unknown',
+            screens: [
+                { id: 1, width: 1920, height: 1080, pixelRatio: 2, refreshHz: 60, primary: true },
+            ],
+            windowSizeClass: 'large',
+            inputs: ['mouse', 'keyboard'],
+            primaryInput: 'mouse',
+            battery: null,
+        };
+
+        it('invokes chimera:system:device-info channel', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(SYSTEM_DEVICE_INFO_CHANNEL, validDeviceInfo);
+            const api = createSystemApi(stub.port);
+
+            await api.getDeviceInfo();
+
+            expect(stub.invocations).toEqual([SYSTEM_DEVICE_INFO_CHANNEL]);
+        });
+
+        it('returns the validated DeviceInfo payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(SYSTEM_DEVICE_INFO_CHANNEL, validDeviceInfo);
+            const api = createSystemApi(stub.port);
+
+            const result = await api.getDeviceInfo();
+
+            expect(result).toEqual(validDeviceInfo);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            // Missing required fields — violates DeviceInfoSchema.
+            stub.invokeResults.set(SYSTEM_DEVICE_INFO_CHANNEL, { os: 'macos' });
+            const api = createSystemApi(stub.port);
+
+            await expect(api.getDeviceInfo()).rejects.toBeInstanceOf(PreloadIpcValidationError);
+        });
+    });
+
+    describe('onDeviceInfoChange()', () => {
+        const deviceInfo: DeviceInfo = {
+            os: 'linux',
+            osVersion: '6.1.0',
+            arch: 'x64',
+            electronVer: '33.2.0',
+            chromiumVer: '130.0.0.0',
+            locale: 'en-US',
+            formFactor: 'unknown',
+            screens: [
+                { id: 1, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },
+            ],
+            windowSizeClass: 'large',
+            inputs: ['mouse', 'keyboard'],
+            primaryInput: 'mouse',
+            battery: null,
+        };
+
+        it('registers a listener on chimera:system:device-info-change and forwards DeviceInfo', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const callback = vi.fn<(info: DeviceInfo) => void>();
+
+            api.onDeviceInfoChange(callback);
+
+            const registered = stub.listeners.get(SYSTEM_DEVICE_INFO_CHANGE_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, deviceInfo);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(deviceInfo);
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const callback = vi.fn<(info: DeviceInfo) => void>();
+
+            const unsubscribe = api.onDeviceInfoChange(callback);
+            const beforeUnsub = stub.listeners.get(SYSTEM_DEVICE_INFO_CHANGE_CHANNEL)?.size;
+            unsubscribe();
+
+            expect(beforeUnsub).toBe(1);
+            expect(stub.listeners.get(SYSTEM_DEVICE_INFO_CHANGE_CHANNEL)?.size).toBe(0);
+        });
+
+        it('throws PreloadIpcValidationError when main pushes a malformed DeviceInfo payload', () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+            const callback = vi.fn<(info: DeviceInfo) => void>();
+
+            api.onDeviceInfoChange(callback);
+
+            const registered = stub.listeners.get(SYSTEM_DEVICE_INFO_CHANGE_CHANNEL);
+            const listener = [...(registered ?? [])][0];
+
+            // Push a payload missing required fields — should throw before reaching callback.
+            expect(() => listener?.({ sender: 'fake-webcontents' }, { os: 'macos' })).toThrow(
+                PreloadIpcValidationError,
+            );
+            expect(callback).not.toHaveBeenCalled();
         });
     });
 });

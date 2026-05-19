@@ -1,6 +1,14 @@
 import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { app, BrowserWindow, ipcMain, protocol as electronProtocol, session } from 'electron';
+import { release as getOsRelease } from 'node:os';
+import {
+    app,
+    BrowserWindow,
+    ipcMain,
+    protocol as electronProtocol,
+    screen as electronScreen,
+    session,
+} from 'electron';
 import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera/shared/constants.js';
 import {
     registerGameHandlers,
@@ -69,7 +77,15 @@ import {
     GAME_TICK_CHANNEL,
 } from '../preload/apis/game-api.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
-import { SYSTEM_CONNECTION_STATUS_CHANNEL } from '../preload/apis/system-api.js';
+import {
+    SYSTEM_CONNECTION_STATUS_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
+} from '../preload/apis/system-api.js';
+import {
+    createDeviceProbeWatcher,
+    type DeviceProbeWatcher,
+    type ScreenPort,
+} from './device-probe.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
 import type {
@@ -845,8 +861,10 @@ export async function main(): Promise<void> {
 
     // Flush the async Pino sink on graceful shutdown so buffered log entries
     // reach disk before the process exits (§4.27).
+    let deviceProbeWatcher: DeviceProbeWatcher | null = null;
     app.on('before-quit', () => {
         pinoSink.flushSync();
+        deviceProbeWatcher?.dispose();
     });
 
     // Expose the crash-status to the renderer via a dedicated IPC channel.
@@ -863,6 +881,7 @@ export async function main(): Promise<void> {
         electronVersion: process.versions.electron ?? '',
         logger: logger.child({ module: 'system' }),
         isE2e: process.env['CHIMERA_E2E'] === '1',
+        getDeviceInfo: () => deviceProbeWatcher?.getCurrentInfo(),
     });
 
     // Build the LobbyManager once so both lobby IPC and game seat-switch IPC
@@ -1535,6 +1554,7 @@ export async function main(): Promise<void> {
     });
 
     const createWindow = (): void => {
+        deviceProbeWatcher?.dispose();
         mainWindow = createMainWindow({
             preloadPath,
             rendererEntry,
@@ -1544,6 +1564,48 @@ export async function main(): Promise<void> {
                     : CHIMERA_RENDERER_URL,
             env,
             logger,
+        });
+
+        // Create the device-probe watcher now that we have a window.
+        // The watcher subscribes to display-metrics-changed and pushes updates
+        // to all open windows via the SYSTEM_DEVICE_INFO_CHANGE_CHANNEL.
+        // screenPort is built here (inside createWindow / app.whenReady) so
+        // it is never constructed before Electron's screen module is ready.
+        const screenPort: ScreenPort = {
+            getAllDisplays: () => electronScreen.getAllDisplays(),
+            getPrimaryDisplayId: () => electronScreen.getPrimaryDisplay().id,
+            on: (event, listener) => {
+                electronScreen.on(event, listener);
+            },
+            off: (event, listener) => {
+                electronScreen.off(event, listener);
+            },
+        };
+        const win = mainWindow;
+        deviceProbeWatcher = createDeviceProbeWatcher({
+            platform: process.platform,
+            arch: process.arch,
+            osRelease: getOsRelease(),
+            electronVer: process.versions.electron ?? '',
+            chromiumVer: process.versions.chrome ?? '',
+            locale: app.getLocale(),
+            screen: screenPort,
+            getWindowContentSize: () => {
+                if (win === null || win.isDestroyed()) return [1920, 1080];
+                const [w, h] = win.getContentSize();
+                return [w ?? 1920, h ?? 1080];
+            },
+        });
+        deviceProbeWatcher.onChange((info) => {
+            BrowserWindow.getAllWindows().forEach((openWin) => {
+                if (!openWin.isDestroyed() && !openWin.webContents.isDestroyed()) {
+                    openWin.webContents.send(SYSTEM_DEVICE_INFO_CHANGE_CHANNEL, info);
+                }
+            });
+        });
+        const createdWatcher = deviceProbeWatcher;
+        win.on('resize', () => {
+            createdWatcher.recompute();
         });
     };
 

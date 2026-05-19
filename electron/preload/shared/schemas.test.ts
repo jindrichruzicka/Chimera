@@ -10,6 +10,7 @@
 import { describe, expect, it } from 'vitest';
 import {
     ActionRejectionSchema,
+    DeviceInfoSchema,
     LobbyInfoSchema,
     PlatformInfoSchema,
     PreloadIpcValidationError,
@@ -191,5 +192,90 @@ describe('ActionRejectionSchema', () => {
 
     it('rejects a null payload', () => {
         expect(() => ActionRejectionSchema.parse(null)).toThrow();
+    });
+});
+
+describe('DeviceInfoSchema', () => {
+    const validInfo = {
+        os: 'macos' as const,
+        osVersion: '14.5.0',
+        arch: 'arm64' as const,
+        electronVer: '33.2.0',
+        chromiumVer: '130.0.0.0',
+        locale: 'en-US',
+        formFactor: 'unknown' as const,
+        screens: [
+            { id: 1, width: 1920, height: 1080, pixelRatio: 2, refreshHz: 60, primary: true },
+        ],
+        windowSizeClass: 'large' as const,
+        inputs: ['mouse', 'keyboard'] as const,
+        primaryInput: 'mouse' as const,
+        battery: null,
+    };
+
+    it('accepts a fully conforming DeviceInfo', () => {
+        expect(DeviceInfoSchema.parse(validInfo)).toMatchObject({
+            os: 'macos',
+            arch: 'arm64',
+            windowSizeClass: 'large',
+        });
+    });
+
+    it('accepts all valid os values', () => {
+        for (const os of ['macos', 'windows', 'linux'] as const) {
+            expect(() => DeviceInfoSchema.parse({ ...validInfo, os })).not.toThrow();
+        }
+    });
+
+    it('rejects unknown os value', () => {
+        expect(() => DeviceInfoSchema.parse({ ...validInfo, os: 'plan9' })).toThrow();
+    });
+
+    it('accepts all valid arch values', () => {
+        for (const arch of ['x64', 'arm64'] as const) {
+            expect(() => DeviceInfoSchema.parse({ ...validInfo, arch })).not.toThrow();
+        }
+    });
+
+    it('rejects unknown arch value', () => {
+        expect(() => DeviceInfoSchema.parse({ ...validInfo, arch: 'ia32' })).toThrow();
+    });
+
+    it('accepts all valid windowSizeClass values', () => {
+        for (const windowSizeClass of ['compact', 'regular', 'large', 'ultrawide'] as const) {
+            expect(() => DeviceInfoSchema.parse({ ...validInfo, windowSizeClass })).not.toThrow();
+        }
+    });
+
+    it('accepts battery: null', () => {
+        expect(() => DeviceInfoSchema.parse({ ...validInfo, battery: null })).not.toThrow();
+    });
+
+    it('accepts a battery object', () => {
+        expect(() =>
+            DeviceInfoSchema.parse({ ...validInfo, battery: { charging: true, level: 0.75 } }),
+        ).not.toThrow();
+    });
+
+    it('accepts multiple screens', () => {
+        const twoScreens = [
+            { id: 1, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },
+            { id: 2, width: 2560, height: 1440, pixelRatio: 2, refreshHz: 144, primary: false },
+        ];
+        expect(() => DeviceInfoSchema.parse({ ...validInfo, screens: twoScreens })).not.toThrow();
+    });
+
+    it('rejects when a required field is missing', () => {
+        const { os: _os, ...withoutOs } = validInfo;
+        expect(() => DeviceInfoSchema.parse(withoutOs)).toThrow();
+    });
+
+    it('rejects when screens is empty array', () => {
+        expect(() => DeviceInfoSchema.parse({ ...validInfo, screens: [] })).toThrow();
+    });
+
+    it('rejects a non-object payload', () => {
+        expect(() => DeviceInfoSchema.parse(null)).toThrow();
+        expect(() => DeviceInfoSchema.parse('device')).toThrow();
     });
 });

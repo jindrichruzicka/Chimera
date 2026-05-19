@@ -19,6 +19,7 @@ import {
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANNEL,
     type PlatformInfo,
 } from '../../preload/apis/system-api.js';
 import {
@@ -64,6 +65,7 @@ import {
 import type {
     ActionRejection,
     CrashRecoveryStatus,
+    DeviceInfo,
     EngineAction,
     PlayerProfile,
     PlayerId,
@@ -105,6 +107,7 @@ export {
     SYSTEM_PLATFORM_CHANNEL,
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
+    SYSTEM_DEVICE_INFO_CHANNEL,
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
@@ -181,6 +184,13 @@ export interface RegisterSystemHandlersOptions {
      * without killing the test process.
      */
     readonly isE2e?: boolean;
+    /**
+     * Injected device-info probe (§4.17). When provided, the
+     * `chimera:system:device-info` handler delegates to this function.
+     * When omitted, the handler returns a minimal fallback snapshot built
+     * from the platform and electronVersion fields available here.
+     */
+    readonly getDeviceInfo?: () => DeviceInfo | undefined;
 }
 
 /**
@@ -215,7 +225,12 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
     const isE2e = options.isE2e === true;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:system:* handlers', {
-        channels: [SYSTEM_PLATFORM_CHANNEL, SYSTEM_QUIT_CHANNEL, SYSTEM_RELAUNCH_CHANNEL],
+        channels: [
+            SYSTEM_PLATFORM_CHANNEL,
+            SYSTEM_QUIT_CHANNEL,
+            SYSTEM_RELAUNCH_CHANNEL,
+            SYSTEM_DEVICE_INFO_CHANNEL,
+        ],
     });
 
     ipcMain.handle(SYSTEM_PLATFORM_CHANNEL, () => {
@@ -224,6 +239,27 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
             version: electronVersion,
         };
         return info;
+    });
+
+    const fallbackDeviceInfo: DeviceInfo = {
+        os: mapPlatform(platform),
+        osVersion: '',
+        arch: 'x64',
+        electronVer: electronVersion,
+        chromiumVer: '',
+        locale: 'en-US',
+        formFactor: 'unknown',
+        screens: [
+            { id: 0, width: 1920, height: 1080, pixelRatio: 1, refreshHz: 60, primary: true },
+        ],
+        windowSizeClass: 'large',
+        inputs: ['mouse', 'keyboard'],
+        primaryInput: 'mouse',
+        battery: null,
+    };
+
+    ipcMain.handle(SYSTEM_DEVICE_INFO_CHANNEL, () => {
+        return options.getDeviceInfo?.() ?? fallbackDeviceInfo;
     });
 
     ipcMain.on(SYSTEM_QUIT_CHANNEL, () => {
