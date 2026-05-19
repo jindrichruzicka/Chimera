@@ -218,14 +218,14 @@ renderer/audio/
 
 ### Component Categories
 
-| Category       | Examples                                    |
-| -------------- | ------------------------------------------- |
-| **Actions**    | `Button`, `IconButton`, `ToggleButton`      |
-| **Overlays**   | `Modal`, `Drawer`, `Tooltip`, `Popover`     |
-| **Containers** | `Panel`, `Card`, `Divider`, `ScrollArea`    |
-| **Forms**      | `Slider`, `Toggle`, `Select`, `NumberInput` |
-| **Feedback**   | `ProgressBar`, `Spinner`, `Badge`           |
-| **Typography** | `Heading`, `Label`, `Caption`               |
+| Category       | Examples                                         |
+| -------------- | ------------------------------------------------ |
+| **Actions**    | `Button`, `IconButton`, `ToggleButton`           |
+| **Overlays**   | `Modal`, `Drawer`, `Tooltip`, `Popover`          |
+| **Containers** | `Panel`, `Card`, `Divider`, `ScrollArea`, `Tabs` |
+| **Forms**      | `Slider`, `Toggle`, `Select`, `NumberInput`      |
+| **Feedback**   | `ProgressBar`, `Spinner`, `Badge`                |
+| **Typography** | `Heading`, `Label`, `Caption`                    |
 
 All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 
