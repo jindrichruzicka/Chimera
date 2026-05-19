@@ -6,7 +6,7 @@
  * Unit tests for useDeviceInfo, usePrimaryInput, and useWindowSizeClass hooks.
  *
  * Architecture reference: §4.17 — Device Info
- * Issue: #590 (F42 — Implement DeviceInfoProvider and inputTracker)
+ * Issue: #591 (F42 — Implement DeviceInfo hooks)
  *
  * Invariants upheld:
  *   #83 — Consumer hooks throw descriptive errors when context is null.
@@ -118,7 +118,7 @@ describe('usePrimaryInput', () => {
         }
 
         expect(() => render(<BareConsumer />)).toThrow(
-            'useDeviceInfo() must be used within DeviceInfoProvider',
+            'usePrimaryInput() must be used within DeviceInfoProvider',
         );
     });
 });
@@ -159,7 +159,7 @@ describe('useWindowSizeClass', () => {
         }
 
         expect(() => render(<BareConsumer />)).toThrow(
-            'useDeviceInfo() must be used within DeviceInfoProvider',
+            'useWindowSizeClass() must be used within DeviceInfoProvider',
         );
     });
 });

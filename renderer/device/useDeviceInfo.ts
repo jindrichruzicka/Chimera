@@ -6,7 +6,7 @@
  * Consumer hooks for the DeviceInfo context tree (§4.17).
  *
  * Architecture reference: §4.17 — Device Info
- * Issue: #590 (F42 — Implement DeviceInfoProvider and inputTracker)
+ * Issue: #591 (F42 — Implement DeviceInfo hooks)
  *
  * Invariants upheld:
  *   #83 — Each hook throws a descriptive error when context is null.
@@ -25,12 +25,16 @@ import { DeviceInfoContext } from './DeviceInfoProvider.js';
  *
  * @throws {Error} When used outside `<DeviceInfoProvider>`.
  */
-export function useDeviceInfo(): DeviceInfo {
+function useDeviceInfoContext(hookName: string): DeviceInfo {
     const info = useContext(DeviceInfoContext);
     if (info === null) {
-        throw new Error('useDeviceInfo() must be used within DeviceInfoProvider');
+        throw new Error(`${hookName}() must be used within DeviceInfoProvider`);
     }
     return info;
+}
+
+export function useDeviceInfo(): DeviceInfo {
+    return useDeviceInfoContext('useDeviceInfo');
 }
 
 // ─── Derived hooks ────────────────────────────────────────────────────────────
@@ -41,7 +45,7 @@ export function useDeviceInfo(): DeviceInfo {
  * @throws {Error} When used outside `<DeviceInfoProvider>`.
  */
 export function usePrimaryInput(): InputModality {
-    return useDeviceInfo().primaryInput;
+    return useDeviceInfoContext('usePrimaryInput').primaryInput;
 }
 
 /**
@@ -50,5 +54,5 @@ export function usePrimaryInput(): InputModality {
  * @throws {Error} When used outside `<DeviceInfoProvider>`.
  */
 export function useWindowSizeClass(): SizeClass {
-    return useDeviceInfo().windowSizeClass;
+    return useDeviceInfoContext('useWindowSizeClass').windowSizeClass;
 }
