@@ -20,9 +20,11 @@ import type { DeviceInfo, SizeClass } from '../preload/api-types.js';
 
 // ─── SizeClass breakpoints ────────────────────────────────────────────────────
 // KEEP IN SYNC with renderer/device/DeviceInfo.ts
-const SIZE_CLASS_COMPACT_MAX_EXCLUSIVE = 960;
-const SIZE_CLASS_REGULAR_MAX_INCLUSIVE = 1440;
-const SIZE_CLASS_LARGE_MAX_INCLUSIVE = 2560;
+// Exported so tests can assert exact values and catch drift between this
+// module and renderer/device/DeviceInfo.ts at test time.
+export const SIZE_CLASS_COMPACT_MAX_EXCLUSIVE = 960;
+export const SIZE_CLASS_REGULAR_MAX_INCLUSIVE = 1440;
+export const SIZE_CLASS_LARGE_MAX_INCLUSIVE = 2560;
 
 /**
  * Derives the content-width {@link SizeClass} bucket.

@@ -142,6 +142,15 @@ function createNoopAudioManager(): AudioManager {
 
 function resolveDeviceInfoSystemApi(): DeviceInfoSystemApi | null {
     if (typeof window === 'undefined') return null;
-    const chimera = window.__chimera as Window['__chimera'] | undefined;
-    return chimera?.system ?? null;
+    const chimera = (window as { __chimera?: unknown }).__chimera;
+    const system = (chimera as { system?: unknown } | null | undefined)?.system;
+    if (
+        typeof (system as { getDeviceInfo?: unknown } | null | undefined)?.getDeviceInfo ===
+            'function' &&
+        typeof (system as { onDeviceInfoChange?: unknown } | null | undefined)
+            ?.onDeviceInfoChange === 'function'
+    ) {
+        return system as DeviceInfoSystemApi;
+    }
+    return null;
 }

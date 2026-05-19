@@ -315,7 +315,8 @@ export type ConnectionStatus = 'connected' | 'disconnected' | 'connecting' | 'er
 // contract and the Electron main process can reference the shape without
 // importing from renderer/ (which would violate the compilation boundary —
 // the root tsconfig excludes renderer/). renderer/device/DeviceInfo.ts
-// re-exports these types to keep renderer code unchanged.
+// independently redefines these types (no re-export chain) — any change here
+// must be mirrored there, and vice-versa.
 
 /**
  * Conservative form-factor heuristic for Electron desktop targets (§4.17).

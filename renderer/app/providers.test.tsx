@@ -429,4 +429,42 @@ describe('Providers — DeviceInfoProvider', () => {
             undefined,
         );
     });
+
+    it('passes null systemApi when window.__chimera.system is missing getDeviceInfo', () => {
+        (window as { __chimera?: unknown }).__chimera = {
+            system: { onDeviceInfoChange: vi.fn() }, // getDeviceInfo absent
+        };
+
+        render(
+            <Providers>
+                <div />
+            </Providers>,
+        );
+
+        delete (window as { __chimera?: unknown }).__chimera;
+
+        expect(vi.mocked(DeviceInfoProvider)).toHaveBeenCalledWith(
+            expect.objectContaining({ systemApi: null }),
+            undefined,
+        );
+    });
+
+    it('passes null systemApi when window.__chimera.system is missing onDeviceInfoChange', () => {
+        (window as { __chimera?: unknown }).__chimera = {
+            system: { getDeviceInfo: vi.fn() }, // onDeviceInfoChange absent
+        };
+
+        render(
+            <Providers>
+                <div />
+            </Providers>,
+        );
+
+        delete (window as { __chimera?: unknown }).__chimera;
+
+        expect(vi.mocked(DeviceInfoProvider)).toHaveBeenCalledWith(
+            expect.objectContaining({ systemApi: null }),
+            undefined,
+        );
+    });
 });

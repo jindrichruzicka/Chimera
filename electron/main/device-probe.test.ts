@@ -15,6 +15,9 @@ import {
     buildDeviceInfo,
     createDeviceProbeWatcher,
     deriveWindowSizeClass,
+    SIZE_CLASS_COMPACT_MAX_EXCLUSIVE,
+    SIZE_CLASS_REGULAR_MAX_INCLUSIVE,
+    SIZE_CLASS_LARGE_MAX_INCLUSIVE,
     type DeviceProbeOptions,
     type ScreenPort,
 } from './device-probe.js';
@@ -94,6 +97,27 @@ describe('deriveWindowSizeClass', () => {
     it('returns ultrawide above 2560', () => {
         expect(deriveWindowSizeClass(2561)).toBe('ultrawide');
         expect(deriveWindowSizeClass(5120)).toBe('ultrawide');
+    });
+});
+
+// ─── SizeClass constant contract (sync with renderer/device/DeviceInfo.ts) ───
+//
+// These tests pin the exported constant values so that any divergence between
+// device-probe.ts and renderer/device/DeviceInfo.ts is caught at test time.
+// If a breakpoint changes here, the mirror tests in renderer/device/DeviceInfo.test.ts
+// will fail, and vice-versa.
+
+describe('SizeClass breakpoint constant contract', () => {
+    it('SIZE_CLASS_COMPACT_MAX_EXCLUSIVE is 960 (mirrors renderer/device/DeviceInfo.ts)', () => {
+        expect(SIZE_CLASS_COMPACT_MAX_EXCLUSIVE).toBe(960);
+    });
+
+    it('SIZE_CLASS_REGULAR_MAX_INCLUSIVE is 1440 (mirrors renderer/device/DeviceInfo.ts)', () => {
+        expect(SIZE_CLASS_REGULAR_MAX_INCLUSIVE).toBe(1440);
+    });
+
+    it('SIZE_CLASS_LARGE_MAX_INCLUSIVE is 2560 (mirrors renderer/device/DeviceInfo.ts)', () => {
+        expect(SIZE_CLASS_LARGE_MAX_INCLUSIVE).toBe(2560);
     });
 });
 
