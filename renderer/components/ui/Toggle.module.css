@@ -1,0 +1,90 @@
+.root {
+    color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-xs);
+}
+
+.row {
+    align-items: center;
+    cursor: pointer;
+    display: flex;
+    gap: var(--ch-space-md);
+    justify-content: space-between;
+}
+
+.label {
+    color: var(--ch-color-text-primary);
+    font-size: var(--ch-font-size-md);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+}
+
+.helper {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-relaxed);
+}
+
+.input {
+    block-size: var(--ch-space-screen-reader);
+    clip-path: inset(50%);
+    inline-size: var(--ch-space-screen-reader);
+    margin: calc(var(--ch-space-screen-reader) * -1);
+    overflow: hidden;
+    position: absolute;
+    white-space: nowrap;
+}
+
+.track {
+    align-items: center;
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-pill);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    display: inline-flex;
+    flex: none;
+    inline-size: calc(var(--ch-space-xl) + var(--ch-space-sm));
+    padding: var(--ch-space-xs);
+    transition: var(--ch-toggle-button-transition);
+}
+
+.thumb {
+    background-color: var(--ch-color-text-secondary);
+    border-radius: var(--ch-radius-pill);
+    block-size: calc(var(--ch-space-lg) - var(--ch-space-xs));
+    box-shadow: var(--ch-shadow-sm);
+    display: block;
+    inline-size: calc(var(--ch-space-lg) - var(--ch-space-xs));
+    transition: var(--ch-button-transition);
+}
+
+.root[data-checked='true'] .track {
+    background-color: var(--ch-color-accent);
+    border-color: var(--ch-color-accent-hover);
+}
+
+.root[data-checked='true'] .thumb {
+    background-color: var(--ch-color-text-primary);
+    transform: translateX(var(--ch-space-lg));
+}
+
+.input:focus-visible + .row .track {
+    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
+    outline-offset: var(--ch-focus-ring-offset);
+}
+
+.root[data-disabled='true'] .row {
+    cursor: var(--ch-cursor-disabled);
+}
+
+.root[data-disabled='true'] .label,
+.root[data-disabled='true'] .helper {
+    color: var(--ch-color-text-disabled);
+}
+
+.root[data-disabled='true'] .track {
+    opacity: var(--ch-opacity-disabled);
+}
