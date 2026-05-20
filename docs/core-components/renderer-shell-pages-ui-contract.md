@@ -17,13 +17,14 @@ tags: [renderer, ui, design-tokens, shell-pages, button, theming, lobby, main-me
 content that renders _inside_ `GameShell`. This section documents the same contract for
 **engine shell pages** — top-level Next.js pages that exist outside of any game match:
 
-| Page path                 | Purpose                               | Game-owned? |
-| ------------------------- | ------------------------------------- | ----------- |
-| `renderer/app/main-menu/` | Title screen, entry point             | No          |
-| `renderer/app/lobby/`     | Host/join/leave multiplayer lobby     | Partly\*    |
-| `renderer/app/settings/`  | Engine + game settings UI             | No          |
-| `renderer/app/saves/`     | Save-slot browser                     | No          |
-| `renderer/app/(loading)/` | Transition placeholder between scenes | No          |
+| Page path                         | Purpose                                                             | Game-owned? |
+| --------------------------------- | ------------------------------------------------------------------- | ----------- |
+| `renderer/app/main-menu/`         | Title screen, entry point                                           | No          |
+| `renderer/app/lobby/`             | Host/join/leave multiplayer lobby                                   | Partly\*    |
+| `renderer/app/settings/`          | Engine + game settings UI                                           | No          |
+| `renderer/app/saves/`             | Save-slot browser                                                   | No          |
+| `renderer/app/(loading)/`         | Transition placeholder between scenes                               | No          |
+| `renderer/app/component-gallery/` | Design-system gallery (dev/E2E only); gated by `isGalleryEnabled()` | No          |
 
 \* The lobby page loads game-specific configuration from `LobbyConfig` but its chrome (buttons,
 layout, player list) is engine-owned. Game token overrides **are** applied to the lobby page once
@@ -184,12 +185,12 @@ renderer/
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                          |
-| --- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #91 | Shell page components must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                 |
-| #92 | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.              |
-| #93 | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).      |
-| #94 | Shell pages (`main-menu`, `settings`, `saves`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules. |
+| #   | Rule                                                                                                                                                                                                           |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #91 | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`. |
+| #92 | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                               |
+| #93 | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                       |
+| #94 | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.             |
 
 ---
 

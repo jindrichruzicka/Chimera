@@ -230,13 +230,13 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Invariants 91–95
 
-**91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
+**91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
 **92.** Shell pages must use `<Button>` from `renderer/components/ui/` for all interactive actions. Raw `<button>` or `<input type="button">` elements with inline styles are prohibited in shell pages. (See [Renderer Shell Pages UI Contract](../core-components/renderer-shell-pages-ui-contract.md).)
 
 **93.** Game token override CSS must not be imported directly by any shell page component. Token overrides enter the cascade exclusively as side-effects of game registry initialisation — importing `games/<name>/styles/tokens-override.css` from a shell page file is a module-boundary violation.
 
-**94.** Engine shell pages (`main-menu`, `settings`, `saves`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` parsing helpers but must not import game-specific screen modules, registries, or override stylesheets directly.
+**94.** Engine shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` parsing helpers but must not import game-specific screen modules, registries, or override stylesheets directly.
 
 **95.** `chimera:game:get-current-snapshot` is a read-only renderer-to-main IPC replay channel. It may return only the most recent projected `PlayerSnapshot` already stored for renderer delivery, or `null` when no snapshot has been sent. It must never expose `GameSnapshot`, accept renderer payload that changes gameplay state, trigger `ActionPipeline`, or mutate simulation state.
 

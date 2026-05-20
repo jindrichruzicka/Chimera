@@ -321,6 +321,7 @@ export default tseslint.config(
             'renderer/app/game/**/*.{ts,tsx,js,jsx,mjs}',
             'renderer/app/settings/**/*.{ts,tsx,js,jsx,mjs}',
             'renderer/app/saves/**/*.{ts,tsx,js,jsx,mjs}',
+            'renderer/app/component-gallery/**/*.{ts,tsx,js,jsx,mjs}',
         ],
         plugins: { chimera: chimeraPlugin },
         rules: {

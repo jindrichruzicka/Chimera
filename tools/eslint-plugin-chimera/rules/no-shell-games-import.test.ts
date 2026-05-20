@@ -62,6 +62,15 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
             filename: 'renderer/app/lobby/page.tsx',
             code: `import { Button } from '../../components/ui/Button';`,
         },
+        // component-gallery: importing from renderer components is allowed
+        {
+            filename: 'renderer/app/component-gallery/page.tsx',
+            code: `import { Button } from '../../components/ui/Button';`,
+        },
+        {
+            filename: 'renderer/app/component-gallery/ComponentGalleryClient.tsx',
+            code: `import { Tabs } from '../../components/ui/Tabs';`,
+        },
     ],
 
     // ── Invalid — rule must fire ─────────────────────────────────────────────
@@ -113,6 +122,18 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
             filename: 'renderer/app/main-menu/page.tsx',
             code: `import '../../../games/tactics/styles/tokens-override.css';`,
             errors: [{ messageId: 'shellGamesTokenOverrideImport' }],
+        },
+        // Invariant #93: component-gallery importing tokens-override.css
+        {
+            filename: 'renderer/app/component-gallery/page.tsx',
+            code: `import 'games/tactics/styles/tokens-override.css';`,
+            errors: [{ messageId: 'shellGamesTokenOverrideImport' }],
+        },
+        // Invariant #94: component-gallery importing from games/*
+        {
+            filename: 'renderer/app/component-gallery/page.tsx',
+            code: `import { TacticsBoard } from 'games/tactics/screens/TacticsBoard';`,
+            errors: [{ messageId: 'shellGamesImport' }],
         },
     ],
 });

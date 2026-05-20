@@ -32,7 +32,7 @@ function normalizeFilename(filename: string): string {
  */
 function isShellPage(filename: string): boolean {
     const n = normalizeFilename(filename);
-    const SHELL_DIRS = ['main-menu', 'lobby', 'game', 'settings', 'saves'];
+    const SHELL_DIRS = ['main-menu', 'lobby', 'game', 'settings', 'saves', 'component-gallery'];
     return SHELL_DIRS.some(
         (dir) => n.includes(`/app/${dir}/`) || n.includes(`renderer/app/${dir}/`),
     );
