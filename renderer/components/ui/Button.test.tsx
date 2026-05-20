@@ -1,18 +1,11 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Button } from './Button';
-
-const buttonCssPath = path.resolve(import.meta.dirname, 'Button.module.css');
-
-function readButtonCss(): string {
-    return readFileSync(buttonCssPath, 'utf8');
-}
+import buttonCss from './Button.module.css?raw';
 
 function renderButton(button: React.ReactElement): void {
     render(button);
@@ -134,7 +127,7 @@ describe('Button', () => {
     });
 
     it('uses tokenized pill shape, elevation, and hover motion styles', () => {
-        const css = readButtonCss();
+        const css = buttonCss;
 
         expect(css).toContain('border-radius: var(--ch-button-radius);');
         expect(css).toContain('box-shadow: var(--ch-button-shadow);');

@@ -24,6 +24,8 @@ export { Slider } from './Slider';
 export type { SliderProps } from './Slider';
 export { Spinner } from './Spinner';
 export type { SpinnerProps } from './Spinner';
+export { Tabs } from './Tabs';
+export type { TabItem, TabsProps } from './Tabs';
 export { ToggleButton } from './ToggleButton';
 export type { ToggleButtonProps } from './ToggleButton';
 export { Tooltip } from './Tooltip';

@@ -1,18 +1,11 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Drawer } from './Drawer';
-
-const drawerCssPath = path.resolve(import.meta.dirname, 'Drawer.module.css');
-
-function readDrawerCss(): string {
-    return readFileSync(drawerCssPath, 'utf8');
-}
+import drawerCss from './Drawer.module.css?raw';
 
 afterEach(() => {
     cleanup();
@@ -129,7 +122,7 @@ describe('Drawer', () => {
     });
 
     it('uses token-backed placement styles without hardcoded visual literals', () => {
-        const source = readDrawerCss();
+        const source = drawerCss;
 
         expect(source).toContain('.left');
         expect(source).toContain('.right');

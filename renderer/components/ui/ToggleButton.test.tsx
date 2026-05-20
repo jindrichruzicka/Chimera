@@ -1,24 +1,13 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ToggleButton } from './ToggleButton';
-
-const cssFP = path.resolve(import.meta.dirname, 'ToggleButton.module.css');
-const tokensCssPath = path.resolve(import.meta.dirname, '../../styles/tokens.css');
-
-function readCss(): string {
-    return readFileSync(cssFP, 'utf8');
-}
-
-function readTokensCss(): string {
-    return readFileSync(tokensCssPath, 'utf8');
-}
+import css from './ToggleButton.module.css?raw';
+import tokensCss from '../../styles/tokens.css?raw';
 
 afterEach(() => {
     cleanup();
@@ -161,8 +150,6 @@ describe('ToggleButton', () => {
     });
 
     it('CSS does not contain hardcoded colour, spacing, or radius values (invariant #86)', () => {
-        const css = readCss();
-
         // No hex values
         expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
         // No bare pixel values outside var() tokens
@@ -171,16 +158,11 @@ describe('ToggleButton', () => {
     });
 
     it('has a :active press rule using the active transform token', () => {
-        const css = readCss();
-
         expect(css).toContain(':active');
         expect(css).toContain('transform: var(--ch-button-transform-active);');
     });
 
     it('has a :focus-visible outline using design-token references', () => {
-        const css = readCss();
-        const tokensCss = readTokensCss();
-
         expect(tokensCss).toContain('--ch-focus-ring-width:');
         expect(tokensCss).toContain('--ch-focus-ring-color:');
         expect(css).toContain(':focus-visible');

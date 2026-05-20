@@ -1,18 +1,11 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import { Card } from './Card';
-
-const cardCssPath = path.resolve(import.meta.dirname, 'Card.module.css');
-
-function readCardCss(): string {
-    return readFileSync(cardCssPath, 'utf8');
-}
+import cardCss from './Card.module.css?raw';
 
 afterEach(() => {
     cleanup();
@@ -70,7 +63,7 @@ describe('Card', () => {
     });
 
     it('styles variants with design-token references only', () => {
-        const source = readCardCss();
+        const source = cardCss;
 
         expect(source).toContain('background-color: var(--ch-color-surface);');
         expect(source).toContain('background-color: var(--ch-color-surface-raised);');

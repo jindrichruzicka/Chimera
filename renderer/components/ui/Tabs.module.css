@@ -1,0 +1,84 @@
+.tabs {
+    color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-md);
+}
+
+.tablist {
+    align-items: center;
+    border-bottom-color: var(--ch-color-border);
+    border-bottom-style: solid;
+    border-bottom-width: var(--ch-border-width-sm);
+    display: flex;
+    gap: var(--ch-space-xs);
+    overflow-x: auto;
+}
+
+.tab {
+    appearance: none;
+    background-color: var(--ch-color-transparent);
+    border-color: var(--ch-color-transparent);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    color: var(--ch-color-text-secondary);
+    cursor: pointer;
+    font-family: var(--ch-font-ui);
+    font-size: var(--ch-font-size-md);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+    padding: var(--ch-space-sm) var(--ch-space-md);
+    transition:
+        background-color var(--ch-duration-fast) var(--ch-easing-standard),
+        border-color var(--ch-duration-fast) var(--ch-easing-standard),
+        box-shadow var(--ch-duration-fast) var(--ch-easing-standard),
+        color var(--ch-duration-fast) var(--ch-easing-standard);
+    white-space: nowrap;
+}
+
+.tab:not(:disabled):hover {
+    background-color: var(--ch-color-surface-overlay);
+    border-color: var(--ch-color-border-subtle);
+    color: var(--ch-color-text-primary);
+}
+
+.tab:focus-visible {
+    outline-color: var(--ch-focus-ring-color);
+    outline-offset: var(--ch-focus-ring-offset);
+    outline-style: solid;
+    outline-width: var(--ch-focus-ring-width);
+}
+
+.tab:disabled {
+    color: var(--ch-color-text-disabled);
+    cursor: var(--ch-cursor-disabled);
+    opacity: var(--ch-opacity-disabled);
+}
+
+.tab-active {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border-subtle);
+    box-shadow: var(--ch-shadow-sm);
+    color: var(--ch-color-text-primary);
+}
+
+.tabpanel {
+    background-color: var(--ch-color-surface);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-md);
+    line-height: var(--ch-line-height-relaxed);
+    padding: var(--ch-space-md);
+}
+
+.tabpanel:focus-visible {
+    outline-color: var(--ch-focus-ring-color);
+    outline-offset: var(--ch-focus-ring-offset);
+    outline-style: solid;
+    outline-width: var(--ch-focus-ring-width);
+}

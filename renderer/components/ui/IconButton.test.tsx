@@ -1,24 +1,13 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { IconButton } from './IconButton';
-
-const cssFP = path.resolve(import.meta.dirname, 'IconButton.module.css');
-const tokensCssPath = path.resolve(import.meta.dirname, '../../styles/tokens.css');
-
-function readCss(): string {
-    return readFileSync(cssFP, 'utf8');
-}
-
-function readTokensCss(): string {
-    return readFileSync(tokensCssPath, 'utf8');
-}
+import css from './IconButton.module.css?raw';
+import tokensCss from '../../styles/tokens.css?raw';
 
 afterEach(() => {
     cleanup();
@@ -102,8 +91,6 @@ describe('IconButton', () => {
     });
 
     it('CSS does not contain hardcoded colour, spacing, or radius values (invariant #86)', () => {
-        const css = readCss();
-
         // No hex values
         expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
         // No bare pixel values for colour/spacing/radius (allowed only inside var() fallbacks)
@@ -112,33 +99,23 @@ describe('IconButton', () => {
     });
 
     it('uses a dedicated active transform token for pressed feedback', () => {
-        const css = readCss();
-        const tokensCss = readTokensCss();
-
         expect(tokensCss).toContain('--ch-button-transform-active:');
         expect(css).toContain('transform: var(--ch-button-transform-active);');
     });
 
     it('uses a discrete icon button size token without fractional calc', () => {
-        const tokensCss = readTokensCss();
-
         expect(tokensCss).toContain('--ch-size-icon-button:');
         expect(tokensCss).toContain('--ch-icon-button-size: var(--ch-size-icon-button);');
         expect(tokensCss).not.toContain('--ch-icon-button-size: calc(var(--ch-space-xl) * 0.9);');
     });
 
     it('active transform token is a scale-down (not aliased to hover) for press affordance', () => {
-        const tokensCss = readTokensCss();
-
         expect(tokensCss).not.toContain(
             '--ch-button-transform-active: var(--ch-button-transform-hover)',
         );
     });
 
     it('has a :focus-visible outline using design-token references', () => {
-        const css = readCss();
-        const tokensCss = readTokensCss();
-
         expect(tokensCss).toContain('--ch-focus-ring-width:');
         expect(tokensCss).toContain('--ch-focus-ring-color:');
         expect(css).toContain(':focus-visible');

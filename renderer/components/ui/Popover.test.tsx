@@ -1,18 +1,11 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { readFileSync } from 'node:fs';
-import path from 'node:path';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Popover } from './Popover';
-
-const popoverCssPath = path.resolve(import.meta.dirname, 'Popover.module.css');
-
-function readPopoverCss(): string {
-    return readFileSync(popoverCssPath, 'utf8');
-}
+import popoverCss from './Popover.module.css?raw';
 
 afterEach(() => {
     cleanup();
@@ -186,7 +179,7 @@ describe('Popover', () => {
     });
 
     it('uses design tokens for placement, alignment, and visual styles', () => {
-        const source = readPopoverCss();
+        const source = popoverCss;
 
         expect(source).toContain('background-color: var(--ch-color-surface-overlay);');
         expect(source).toContain('padding: var(--ch-space-md);');
