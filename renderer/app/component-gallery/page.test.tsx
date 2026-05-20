@@ -226,3 +226,120 @@ describe('ComponentGalleryPage server wrapper — gate (AC #7)', () => {
         vi.unstubAllEnvs();
     });
 });
+
+// ── AC #8 (issue #608) — Actions panel stable test IDs and data-ch-* attributes ───────────────
+
+describe('ComponentGalleryClient — Actions section test IDs (issue #608)', () => {
+    it('renders the actions section with data-testid="component-gallery-actions"', () => {
+        renderGallery();
+        expect(screen.getByTestId('component-gallery-actions')).toBeTruthy();
+    });
+
+    it('renders a primary Button with data-testid="gallery-button-primary"', () => {
+        renderGallery();
+        const btn = screen.getByTestId('gallery-button-primary');
+        expect(btn).toBeTruthy();
+        expect(btn).toHaveAttribute('data-ch-button-variant', 'primary');
+    });
+
+    it('renders a danger Button with data-testid="gallery-button-danger"', () => {
+        renderGallery();
+        const btn = screen.getByTestId('gallery-button-danger');
+        expect(btn).toBeTruthy();
+        expect(btn).toHaveAttribute('data-ch-button-variant', 'danger');
+    });
+
+    it('renders all four Button variants visible in the Actions section', () => {
+        renderGallery();
+        const section = screen.getByTestId('component-gallery-actions');
+        expect(section.querySelector('[data-ch-button-variant="primary"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-button-variant="secondary"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-button-variant="ghost"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-button-variant="danger"]')).toBeTruthy();
+    });
+
+    it('renders Button size variants in the Actions section', () => {
+        renderGallery();
+        const section = screen.getByTestId('component-gallery-actions');
+        expect(section.querySelector('[data-ch-button-size="sm"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-button-size="md"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-button-size="lg"]')).toBeTruthy();
+    });
+
+    it('renders a disabled Button in the Actions section', () => {
+        renderGallery();
+        const section = screen.getByTestId('component-gallery-actions');
+        const disabledBtn = section.querySelector('button[disabled]');
+        expect(disabledBtn).toBeTruthy();
+    });
+
+    it('renders an IconButton with data-testid="gallery-icon-button"', () => {
+        renderGallery();
+        expect(screen.getByTestId('gallery-icon-button')).toBeTruthy();
+    });
+
+    it('renders a ToggleButton with data-testid="gallery-toggle-button"', () => {
+        renderGallery();
+        expect(screen.getByTestId('gallery-toggle-button')).toBeTruthy();
+    });
+
+    it('ToggleButton switches pressed state locally without touching global stores', () => {
+        renderGallery();
+        const btn = screen.getByTestId('gallery-toggle-button');
+        expect(btn).toHaveAttribute('aria-pressed', 'false');
+        fireEvent.click(btn);
+        expect(btn).toHaveAttribute('aria-pressed', 'true');
+        fireEvent.click(btn);
+        expect(btn).toHaveAttribute('aria-pressed', 'false');
+    });
+});
+
+// ── AC #8b (issue #608) — Overlays section stable test IDs ──────────────────
+
+describe('ComponentGalleryClient — Overlays section test IDs (issue #608)', () => {
+    beforeEach(() => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /overlays/i }));
+    });
+
+    it('renders the overlays section with data-testid="component-gallery-overlays"', () => {
+        expect(screen.getByTestId('component-gallery-overlays')).toBeTruthy();
+    });
+
+    it('opens the Drawer when gallery-open-drawer button is clicked', () => {
+        fireEvent.click(screen.getByTestId('gallery-open-drawer'));
+        expect(screen.getByTestId('gallery-drawer')).toBeTruthy();
+    });
+
+    it('closes the Drawer when its close affordance is clicked', () => {
+        fireEvent.click(screen.getByTestId('gallery-open-drawer'));
+        expect(screen.getByTestId('gallery-drawer')).toBeTruthy();
+        const closeBtn = screen.getByRole('button', { name: /close/i });
+        fireEvent.click(closeBtn);
+        expect(screen.queryByTestId('gallery-drawer')).toBeNull();
+    });
+
+    it('only one of Modal or Drawer is open at a time (no overlap)', () => {
+        // Open the modal first
+        fireEvent.click(screen.getByTestId('gallery-open-modal'));
+        expect(screen.getByRole('dialog', { name: /example modal/i })).toBeTruthy();
+        // Opening the drawer should close the modal
+        fireEvent.click(screen.getByTestId('gallery-open-drawer'));
+        expect(screen.queryByRole('dialog', { name: /example modal/i })).toBeNull();
+        expect(screen.getByTestId('gallery-drawer')).toBeTruthy();
+    });
+
+    it('opens the Popover from gallery-popover-trigger', () => {
+        fireEvent.click(screen.getByTestId('gallery-popover-trigger'));
+        expect(screen.getByRole('dialog', { name: /example popover/i })).toBeTruthy();
+    });
+
+    it('Tooltip trigger has an aria-describedby pointing to a role="tooltip" element', () => {
+        const tooltipTrigger = screen.getByTestId('gallery-tooltip-trigger');
+        const describedById = tooltipTrigger.getAttribute('aria-describedby');
+        expect(describedById).toBeTruthy();
+        const tooltipEl = document.getElementById(describedById!);
+        expect(tooltipEl).toBeTruthy();
+        expect(tooltipEl?.getAttribute('role')).toBe('tooltip');
+    });
+});

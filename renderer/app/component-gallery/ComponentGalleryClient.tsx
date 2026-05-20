@@ -5,12 +5,14 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';
 import { Card } from '../../components/ui/Card';
+import { Drawer } from '../../components/ui/Drawer';
 import { Heading } from '../../components/ui/Heading';
 import { IconButton } from '../../components/ui/IconButton';
 import { Label } from '../../components/ui/Label';
 import { Modal } from '../../components/ui/Modal';
 import { NumberInput } from '../../components/ui/NumberInput';
 import { Panel } from '../../components/ui/Panel';
+import { Popover } from '../../components/ui/Popover';
 import { ProgressBar } from '../../components/ui/ProgressBar';
 import { Select } from '../../components/ui/Select';
 import type { SelectOption } from '../../components/ui/Select';
@@ -20,6 +22,7 @@ import { Tabs } from '../../components/ui/Tabs';
 import type { TabItem } from '../../components/ui/Tabs';
 import { Toggle } from '../../components/ui/Toggle';
 import { ToggleButton } from '../../components/ui/ToggleButton';
+import { Tooltip } from '../../components/ui/Tooltip';
 import styles from './ComponentGallery.module.css';
 
 // ── Panel definitions ─────────────────────────────────────────────────────────
@@ -27,15 +30,19 @@ import styles from './ComponentGallery.module.css';
 function ActionsPanel(): React.ReactElement {
     const [togglePressed, setTogglePressed] = React.useState(false);
     return (
-        <div className={styles['section']}>
+        <div className={styles['section']} data-testid="component-gallery-actions">
             <Heading className={styles['sectionTitle']} level={3} tone="muted">
                 Actions
             </Heading>
             <div className={styles['row']}>
-                <Button variant="primary">Primary</Button>
+                <Button data-testid="gallery-button-primary" variant="primary">
+                    Primary
+                </Button>
                 <Button variant="secondary">Secondary</Button>
                 <Button variant="ghost">Ghost</Button>
-                <Button variant="danger">Danger</Button>
+                <Button data-testid="gallery-button-danger" variant="danger">
+                    Danger
+                </Button>
             </div>
             <div className={styles['row']}>
                 <Button size="sm">Small</Button>
@@ -44,8 +51,14 @@ function ActionsPanel(): React.ReactElement {
             </div>
             <div className={styles['row']}>
                 <Button disabled>Disabled</Button>
-                <IconButton aria-label="Add item">+</IconButton>
-                <ToggleButton pressed={togglePressed} onPressedChange={setTogglePressed}>
+                <IconButton aria-label="Add item" data-testid="gallery-icon-button">
+                    +
+                </IconButton>
+                <ToggleButton
+                    data-testid="gallery-toggle-button"
+                    onPressedChange={setTogglePressed}
+                    pressed={togglePressed}
+                >
                     Toggle me
                 </ToggleButton>
             </div>
@@ -57,13 +70,19 @@ function OverlaysPanel({
     modalOpen,
     onOpenModal,
     onCloseModal,
+    drawerOpen,
+    onOpenDrawer,
+    onCloseDrawer,
 }: {
     readonly modalOpen: boolean;
     readonly onOpenModal: () => void;
     readonly onCloseModal: () => void;
+    readonly drawerOpen: boolean;
+    readonly onOpenDrawer: () => void;
+    readonly onCloseDrawer: () => void;
 }): React.ReactElement {
     return (
-        <div className={styles['section']}>
+        <div className={styles['section']} data-testid="component-gallery-overlays">
             <Heading className={styles['sectionTitle']} level={3} tone="muted">
                 Overlays
             </Heading>
@@ -71,10 +90,50 @@ function OverlaysPanel({
                 <Button data-testid="gallery-open-modal" onClick={onOpenModal} variant="primary">
                     Open Modal
                 </Button>
+                <Button
+                    data-testid="gallery-open-drawer"
+                    onClick={onOpenDrawer}
+                    variant="secondary"
+                >
+                    Open Drawer
+                </Button>
+                <Tooltip content="This is a tooltip example">
+                    {(triggerProps) => (
+                        <Button
+                            {...triggerProps}
+                            data-testid="gallery-tooltip-trigger"
+                            variant="ghost"
+                        >
+                            Hover for Tooltip
+                        </Button>
+                    )}
+                </Tooltip>
+                <Popover
+                    content={<p className={styles['popoverContent']}>This is a popover example.</p>}
+                    label="Example Popover"
+                >
+                    {(triggerProps) => (
+                        <Button
+                            {...triggerProps}
+                            data-testid="gallery-popover-trigger"
+                            variant="ghost"
+                        >
+                            Open Popover
+                        </Button>
+                    )}
+                </Popover>
             </div>
             <Modal onClose={onCloseModal} open={modalOpen} title="Example Modal">
                 <p>This is an example modal from the component gallery.</p>
             </Modal>
+            <Drawer
+                data-testid="gallery-drawer"
+                onClose={onCloseDrawer}
+                open={drawerOpen}
+                title="Example Drawer"
+            >
+                <p>This is an example drawer from the component gallery.</p>
+            </Drawer>
         </div>
     );
 }
@@ -184,6 +243,7 @@ function TypographyPanel(): React.ReactElement {
 
 export default function ComponentGalleryClient(): React.ReactElement {
     const [modalOpen, setModalOpen] = React.useState(false);
+    const [drawerOpen, setDrawerOpen] = React.useState(false);
     const [toggleChecked, setToggleChecked] = React.useState(false);
     const [sliderValue, setSliderValue] = React.useState(50);
     const [numberValue, setNumberValue] = React.useState(1);
@@ -200,9 +260,18 @@ export default function ComponentGalleryClient(): React.ReactElement {
             label: 'Overlays',
             panel: (
                 <OverlaysPanel
+                    drawerOpen={drawerOpen}
                     modalOpen={modalOpen}
+                    onCloseDrawer={() => setDrawerOpen(false)}
                     onCloseModal={() => setModalOpen(false)}
-                    onOpenModal={() => setModalOpen(true)}
+                    onOpenDrawer={() => {
+                        setModalOpen(false);
+                        setDrawerOpen(true);
+                    }}
+                    onOpenModal={() => {
+                        setDrawerOpen(false);
+                        setModalOpen(true);
+                    }}
                 />
             ),
         },
