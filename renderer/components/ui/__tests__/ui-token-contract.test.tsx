@@ -6,9 +6,12 @@ import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
     Badge,
+    Card,
     Divider,
+    Drawer,
     Modal,
     Panel,
+    Popover,
     ProgressBar,
     ScrollArea,
     Slider,
@@ -25,8 +28,18 @@ describe('ui primitive runtime contract', () => {
         const { rerender } = render(<Badge>Ready</Badge>);
         expect(screen.getByText('Ready')).toBeInTheDocument();
 
+        rerender(<Card>Mission summary</Card>);
+        expect(screen.getByText('Mission summary')).toBeInTheDocument();
+
         rerender(<Divider orientation="vertical" />);
         expect(screen.getByRole('separator')).toHaveAttribute('aria-orientation', 'vertical');
+
+        rerender(
+            <Drawer open title="Inventory" onClose={() => undefined}>
+                Drawer content
+            </Drawer>,
+        );
+        expect(screen.getByRole('dialog', { name: 'Inventory' })).toBeInTheDocument();
 
         rerender(
             <Modal open title="Settings" onClose={() => undefined}>
@@ -37,6 +50,17 @@ describe('ui primitive runtime contract', () => {
 
         rerender(<Panel title="Loadout">Panel body</Panel>);
         expect(screen.getByRole('region', { name: 'Loadout' })).toBeInTheDocument();
+
+        rerender(
+            <Popover defaultOpen content="Popover content" label="Quick actions">
+                {(triggerProps) => (
+                    <button type="button" {...triggerProps}>
+                        Actions
+                    </button>
+                )}
+            </Popover>,
+        );
+        expect(screen.getByRole('dialog', { name: 'Quick actions' })).toBeInTheDocument();
 
         rerender(<ProgressBar label="Loading" value={25} max={100} />);
         expect(screen.getByRole('progressbar', { name: 'Loading' })).toHaveAttribute(
@@ -69,6 +93,7 @@ describe('ui primitive runtime contract', () => {
         render(
             <>
                 <Badge>Ready</Badge>
+                <Card>Mission summary</Card>
                 <Panel title="Loadout">Panel body</Panel>
                 <ProgressBar label="Loading" value={25} max={100} />
                 <ScrollArea aria-label="Combat log">Log entry</ScrollArea>
@@ -77,6 +102,7 @@ describe('ui primitive runtime contract', () => {
         );
 
         expect(screen.getByText('Ready')).not.toHaveAttribute('style');
+        expect(screen.getByText('Mission summary')).not.toHaveAttribute('style');
         expect(screen.getByRole('region', { name: 'Loadout' })).not.toHaveAttribute('style');
         expect(screen.getByRole('progressbar', { name: 'Loading' })).not.toHaveAttribute('style');
         expect(screen.getByRole('region', { name: 'Combat log' })).not.toHaveAttribute('style');
