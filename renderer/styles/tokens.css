@@ -71,6 +71,7 @@
     --ch-button-shadow-hover-danger: 0 25px 50px -12px rgba(220, 38, 38, 0.5);
     --ch-button-transform: scale(1);
     --ch-button-transform-hover: scale(1.05);
+    --ch-button-transform-active: scale(0.97);
     --ch-button-transition:
         background-color var(--ch-duration-fast) var(--ch-easing-standard),
         border-color var(--ch-duration-fast) var(--ch-easing-standard),
@@ -87,6 +88,46 @@
     --ch-button-padding-lg: var(--ch-space-lg) 0;
     --ch-opacity-disabled: 0.6;
     --ch-opacity-full: 1;
+
+    --ch-size-icon-button: 36px;
+    --ch-icon-button-size: var(--ch-size-icon-button);
+    --ch-icon-button-radius: var(--ch-radius-md);
+    --ch-icon-button-font-size: var(--ch-font-size-md);
+    --ch-icon-button-bg: var(--ch-color-surface-raised);
+    --ch-icon-button-bg-hover: var(--ch-color-surface-overlay);
+    --ch-icon-button-color: var(--ch-color-text-secondary);
+    --ch-icon-button-border-color: var(--ch-color-border);
+    --ch-icon-button-border-color-hover: var(--ch-color-border-subtle);
+    --ch-icon-button-shadow: var(--ch-shadow-sm);
+    --ch-icon-button-shadow-hover: var(--ch-shadow-md);
+    --ch-icon-button-transition:
+        background-color var(--ch-duration-fast) var(--ch-easing-standard),
+        border-color var(--ch-duration-fast) var(--ch-easing-standard),
+        box-shadow var(--ch-duration-fast) var(--ch-easing-standard),
+        color var(--ch-duration-fast) var(--ch-easing-standard);
+
+    --ch-toggle-button-radius: var(--ch-radius-md);
+    --ch-toggle-button-font-size: var(--ch-font-size-sm);
+    --ch-toggle-button-bg: var(--ch-color-surface-raised);
+    --ch-toggle-button-bg-hover: var(--ch-color-surface-overlay);
+    --ch-toggle-button-bg-pressed: var(--ch-color-accent);
+    --ch-toggle-button-bg-pressed-hover: var(--ch-color-accent-hover);
+    --ch-toggle-button-color: var(--ch-color-text-secondary);
+    --ch-toggle-button-color-pressed: var(--ch-color-text-primary);
+    --ch-toggle-button-border-color: var(--ch-color-border);
+    --ch-toggle-button-border-color-hover: var(--ch-color-border-subtle);
+    --ch-toggle-button-border-color-pressed: var(--ch-color-accent-hover);
+    --ch-toggle-button-shadow: var(--ch-shadow-sm);
+    --ch-toggle-button-shadow-hover: var(--ch-shadow-md);
+    --ch-toggle-button-padding: var(--ch-space-sm) var(--ch-space-md);
+    --ch-toggle-button-transition:
+        background-color var(--ch-duration-fast) var(--ch-easing-standard),
+        border-color var(--ch-duration-fast) var(--ch-easing-standard),
+        box-shadow var(--ch-duration-fast) var(--ch-easing-standard),
+        color var(--ch-duration-fast) var(--ch-easing-standard);
+    --ch-focus-ring-width: 2px;
+    --ch-focus-ring-color: var(--ch-color-accent-hover);
+    --ch-focus-ring-offset: 2px;
     --ch-spinner-opacity-min: 0.3;
     --ch-cursor-disabled: not-allowed;
 

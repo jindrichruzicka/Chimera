@@ -1,0 +1,52 @@
+.toggle-button {
+    align-items: center;
+    appearance: none;
+    background-color: var(--ch-toggle-button-bg);
+    border-color: var(--ch-toggle-button-border-color);
+    border-radius: var(--ch-toggle-button-radius);
+    border-style: solid;
+    border-width: var(--ch-button-border-width);
+    box-shadow: var(--ch-toggle-button-shadow);
+    color: var(--ch-toggle-button-color);
+    cursor: pointer;
+    display: inline-flex;
+    font-family: var(--ch-font-ui);
+    font-size: var(--ch-toggle-button-font-size);
+    font-weight: var(--ch-button-font-weight);
+    justify-content: center;
+    line-height: var(--ch-line-height-tight);
+    padding: var(--ch-toggle-button-padding);
+    transition: var(--ch-toggle-button-transition);
+    user-select: none;
+}
+
+.toggle-button:not(:disabled):hover {
+    background-color: var(--ch-toggle-button-bg-hover);
+    border-color: var(--ch-toggle-button-border-color-hover);
+    box-shadow: var(--ch-toggle-button-shadow-hover);
+}
+
+.toggle-button[data-pressed='true'] {
+    background-color: var(--ch-toggle-button-bg-pressed);
+    border-color: var(--ch-toggle-button-border-color-pressed);
+    color: var(--ch-toggle-button-color-pressed);
+}
+
+.toggle-button[data-pressed='true']:not(:disabled):hover {
+    background-color: var(--ch-toggle-button-bg-pressed-hover);
+}
+
+.toggle-button:not(:disabled):active {
+    transform: var(--ch-button-transform-active);
+}
+
+.toggle-button:focus-visible {
+    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
+    outline-offset: var(--ch-focus-ring-offset);
+}
+
+.toggle-button:disabled {
+    color: var(--ch-color-text-disabled);
+    cursor: var(--ch-cursor-disabled);
+    opacity: var(--ch-opacity-disabled);
+}
