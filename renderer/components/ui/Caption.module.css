@@ -1,0 +1,22 @@
+.caption {
+    font-family: var(--ch-font-ui);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-relaxed);
+    margin: var(--ch-space-none);
+}
+
+.neutral {
+    color: var(--ch-color-text-primary);
+}
+
+.muted {
+    color: var(--ch-color-text-secondary);
+}
+
+.error {
+    color: var(--ch-color-error);
+}
+
+.success {
+    color: var(--ch-color-success);
+}

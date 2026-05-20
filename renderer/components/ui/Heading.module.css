@@ -1,0 +1,30 @@
+.heading {
+    font-family: var(--ch-font-ui);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+    margin: var(--ch-space-none);
+}
+
+.sm {
+    font-size: var(--ch-font-size-sm);
+}
+
+.md {
+    font-size: var(--ch-font-size-md);
+}
+
+.lg {
+    font-size: var(--ch-font-size-lg);
+}
+
+.xl {
+    font-size: var(--ch-font-size-xl);
+}
+
+.primary {
+    color: var(--ch-color-text-primary);
+}
+
+.muted {
+    color: var(--ch-color-text-secondary);
+}
