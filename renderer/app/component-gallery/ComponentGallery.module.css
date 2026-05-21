@@ -39,3 +39,44 @@
     margin: 0;
     padding: var(--ch-space-sm);
 }
+
+.scrollSample {
+    height: calc(var(--ch-space-xl) * 3);
+    overflow-y: auto;
+}
+
+.fontSample {
+    padding: var(--ch-space-xs) var(--ch-space-sm);
+    border: var(--ch-border-width-sm) solid var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    color: var(--ch-color-text-primary);
+    font-size: var(--ch-font-size-md);
+}
+
+.fontSampleUi {
+    font-family: var(--ch-font-ui);
+}
+
+.fontSampleGame {
+    font-family: var(--ch-font-game);
+}
+
+.fontSampleMono {
+    font-family: var(--ch-font-mono);
+}
+
+.formGroup {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-md);
+}
+
+.formRow {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--ch-space-md);
+}
+
+.scrollRow {
+    margin: var(--ch-space-xs) var(--ch-space-none);
+}

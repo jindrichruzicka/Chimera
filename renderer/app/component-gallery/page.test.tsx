@@ -14,7 +14,7 @@
 // Gate: `notFound()` called in production outside E2E mode.
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../theme/ThemeProvider';
@@ -171,7 +171,8 @@ describe('ComponentGalleryClient — Select present in Forms panel (AC #6b)', ()
     it('renders a Select combobox in the Forms tab', () => {
         renderGallery();
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
-        expect(screen.getByRole('combobox', { name: /colour scheme/i })).toBeTruthy();
+        const comboboxes = screen.getAllByRole('combobox', { name: /colour scheme/i });
+        expect(comboboxes.length).toBeGreaterThanOrEqual(1);
     });
 });
 
@@ -341,5 +342,177 @@ describe('ComponentGalleryClient — Overlays section test IDs (issue #608)', ()
         const tooltipEl = document.getElementById(describedById!);
         expect(tooltipEl).toBeTruthy();
         expect(tooltipEl?.getAttribute('role')).toBe('tooltip');
+    });
+});
+
+// ── Issue #609 — Containers / Forms / Feedback / Typography panels ─────────────
+
+describe('ComponentGalleryClient — Containers section (issue #609)', () => {
+    it('renders the containers section with data-testid="component-gallery-containers"', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
+        expect(screen.getByTestId('component-gallery-containers')).toBeTruthy();
+    });
+
+    it('renders a Panel inside the Containers section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
+        const section = screen.getByTestId('component-gallery-containers');
+        expect(section.querySelector('[data-ch-panel-variant]')).toBeTruthy();
+    });
+
+    it('renders a Card inside the Containers section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
+        const section = screen.getByTestId('component-gallery-containers');
+        expect(section.querySelector('[data-ch-card-elevation]')).toBeTruthy();
+    });
+
+    it('renders a Divider inside the Containers section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
+        const section = screen.getByTestId('component-gallery-containers');
+        expect(within(section).getAllByRole('separator').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('renders a ScrollArea inside the Containers section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
+        const section = screen.getByTestId('component-gallery-containers');
+        expect(section.querySelector('[data-ch-scroll-area="true"]')).toBeTruthy();
+    });
+
+    it('does not nest a Card inside another Card in the Containers section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
+        const section = screen.getByTestId('component-gallery-containers');
+        // No nested card-inside-card
+        const cards = section.querySelectorAll('[data-ch-card-elevation]');
+        cards.forEach((card) => {
+            expect(card.querySelector('[data-ch-card-elevation]')).toBeNull();
+        });
+    });
+});
+
+describe('ComponentGalleryClient — Forms section (issue #609)', () => {
+    beforeEach(() => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
+    });
+
+    it('renders the forms section with data-testid="component-gallery-forms"', () => {
+        expect(screen.getByTestId('component-gallery-forms')).toBeTruthy();
+    });
+
+    it('renders the Toggle with controlled state', () => {
+        const toggle = screen.getByRole('switch', { name: /enable feature/i });
+        expect(toggle).toBeTruthy();
+        fireEvent.click(toggle);
+        expect((toggle as HTMLInputElement).checked).toBe(true);
+    });
+
+    it('renders the Slider with controlled state', () => {
+        expect(screen.getByRole('slider', { name: /volume/i })).toBeTruthy();
+    });
+
+    it('renders the NumberInput with controlled state', () => {
+        const section = screen.getByTestId('component-gallery-forms');
+        const inputs = section.querySelectorAll('input[type="number"]');
+        expect(inputs.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('renders a Select combobox', () => {
+        const comboboxes = screen.getAllByRole('combobox', { name: /colour scheme/i });
+        expect(comboboxes.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('renders a Select in an invalid/error state', () => {
+        const section = screen.getByTestId('component-gallery-forms');
+        const invalidSelects = section.querySelectorAll('select[data-invalid="true"]');
+        expect(invalidSelects.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('renders a NumberInput in an invalid/error state', () => {
+        const section = screen.getByTestId('component-gallery-forms');
+        const invalidInputs = section.querySelectorAll('input[data-invalid="true"]');
+        expect(invalidInputs.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('renders a disabled Toggle example', () => {
+        const section = screen.getByTestId('component-gallery-forms');
+        const allSwitches = within(section).getAllByRole('switch');
+        const disabledSwitches = allSwitches.filter((s) => (s as HTMLInputElement).disabled);
+        expect(disabledSwitches.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+describe('ComponentGalleryClient — Feedback section (issue #609)', () => {
+    it('renders the feedback section with data-testid="component-gallery-feedback"', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /feedback/i }));
+        expect(screen.getByTestId('component-gallery-feedback')).toBeTruthy();
+    });
+
+    it('renders a ProgressBar in the Feedback section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /feedback/i }));
+        expect(screen.getByRole('progressbar')).toBeTruthy();
+    });
+
+    it('renders a Spinner in the Feedback section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /feedback/i }));
+        expect(screen.getByRole('status', { name: /loading/i })).toBeTruthy();
+    });
+
+    it('renders all four Badge variants in the Feedback section', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /feedback/i }));
+        const section = screen.getByTestId('component-gallery-feedback');
+        expect(section.querySelector('[data-ch-badge-variant="neutral"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-badge-variant="success"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-badge-variant="warning"]')).toBeTruthy();
+        expect(section.querySelector('[data-ch-badge-variant="error"]')).toBeTruthy();
+    });
+});
+
+describe('ComponentGalleryClient — Typography section (issue #609)', () => {
+    beforeEach(() => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /typography/i }));
+    });
+
+    it('renders the typography section with data-testid="component-gallery-typography"', () => {
+        expect(screen.getByTestId('component-gallery-typography')).toBeTruthy();
+    });
+
+    it('renders Heading components in the Typography section', () => {
+        const section = screen.getByTestId('component-gallery-typography');
+        expect(section.querySelector('[data-ch-heading-level]')).toBeTruthy();
+    });
+
+    it('renders a Label component in the Typography section', () => {
+        const section = screen.getByTestId('component-gallery-typography');
+        expect(section.querySelector('[data-ch-label-state]')).toBeTruthy();
+    });
+
+    it('renders a Caption component in the Typography section', () => {
+        const section = screen.getByTestId('component-gallery-typography');
+        expect(section.querySelector('[data-ch-caption-tone]')).toBeTruthy();
+    });
+
+    it('renders a --ch-font-ui font sample in the Typography section', () => {
+        const section = screen.getByTestId('component-gallery-typography');
+        expect(section.querySelector('[data-font-token="--ch-font-ui"]')).toBeTruthy();
+    });
+
+    it('renders a --ch-font-game font sample in the Typography section', () => {
+        const section = screen.getByTestId('component-gallery-typography');
+        expect(section.querySelector('[data-font-token="--ch-font-game"]')).toBeTruthy();
+    });
+
+    it('renders a --ch-font-mono font sample in the Typography section', () => {
+        const section = screen.getByTestId('component-gallery-typography');
+        expect(section.querySelector('[data-font-token="--ch-font-mono"]')).toBeTruthy();
     });
 });

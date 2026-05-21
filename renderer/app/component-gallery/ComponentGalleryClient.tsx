@@ -5,7 +5,9 @@ import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';
 import { Card } from '../../components/ui/Card';
+import { Divider } from '../../components/ui/Divider';
 import { Drawer } from '../../components/ui/Drawer';
+import { ScrollArea } from '../../components/ui/ScrollArea';
 import { Heading } from '../../components/ui/Heading';
 import { IconButton } from '../../components/ui/IconButton';
 import { Label } from '../../components/ui/Label';
@@ -140,16 +142,31 @@ function OverlaysPanel({
 
 function ContainersPanel(): React.ReactElement {
     return (
-        <div className={styles['section']}>
+        <div className={styles['section']} data-testid="component-gallery-containers">
             <Heading className={styles['sectionTitle']} level={3} tone="muted">
                 Containers
             </Heading>
-            <Panel>
-                <p>This is a Panel component.</p>
+            <Panel title="Surface panel">
+                <p>Panel with a surface variant — full-width content area.</p>
+            </Panel>
+            <Panel title="Raised panel" variant="raised">
+                <p>Panel with a raised variant for elevated grouping.</p>
             </Panel>
             <Card>
-                <p>This is a Card component.</p>
+                <p>Card — default surface, sm elevation, md padding.</p>
             </Card>
+            <Card elevation="md" surface="raised">
+                <p>Card — raised surface, md elevation.</p>
+            </Card>
+            <Divider />
+            <Divider orientation="vertical" />
+            <ScrollArea aria-label="Scroll area sample" className={styles['scrollSample']}>
+                {Array.from({ length: 20 }, (_, i) => (
+                    <p key={i} className={styles['scrollRow']}>
+                        Scroll row {i + 1}
+                    </p>
+                ))}
+            </ScrollArea>
         </div>
     );
 }
@@ -179,15 +196,23 @@ function FormsPanel({
         { label: 'System', value: 'system' },
     ];
     return (
-        <div className={styles['section']}>
+        <div className={styles['section']} data-testid="component-gallery-forms">
             <Heading className={styles['sectionTitle']} level={3} tone="muted">
                 Forms
             </Heading>
-            <Toggle
-                checked={toggleChecked}
-                label="Enable feature"
-                onCheckedChange={onToggleChange}
-            />
+            <div className={styles['formGroup']}>
+                <Toggle
+                    checked={toggleChecked}
+                    label="Enable feature"
+                    onCheckedChange={onToggleChange}
+                />
+                <Toggle
+                    checked={false}
+                    disabled
+                    label="Disabled toggle"
+                    onCheckedChange={() => undefined}
+                />
+            </div>
             <Slider
                 label="Volume"
                 max={100}
@@ -195,20 +220,40 @@ function FormsPanel({
                 onChange={onSliderChange}
                 value={sliderValue}
             />
-            <NumberInput label="Quantity" onValueChange={onNumberChange} value={numberValue} />
-            <Select
-                label="Colour scheme"
-                onValueChange={onSelectChange}
-                options={selectOptions}
-                value={selectValue}
-            />
+            <div className={styles['formRow']}>
+                <NumberInput label="Quantity" onValueChange={onNumberChange} value={numberValue} />
+                <NumberInput
+                    error="Value must be positive"
+                    invalid
+                    label="Quantity (invalid)"
+                    onValueChange={() => undefined}
+                    value={-1}
+                />
+            </div>
+            <div className={styles['formRow']}>
+                <Select
+                    label="Colour scheme"
+                    onValueChange={onSelectChange}
+                    options={selectOptions}
+                    value={selectValue}
+                />
+                <Select
+                    error="Required"
+                    helperText="Pick a theme to continue"
+                    invalid
+                    label="Colour scheme (invalid)"
+                    onValueChange={() => undefined}
+                    options={selectOptions}
+                    value=""
+                />
+            </div>
         </div>
     );
 }
 
 function FeedbackPanel(): React.ReactElement {
     return (
-        <div className={styles['section']}>
+        <div className={styles['section']} data-testid="component-gallery-feedback">
             <Heading className={styles['sectionTitle']} level={3} tone="muted">
                 Feedback
             </Heading>
@@ -226,15 +271,44 @@ function FeedbackPanel(): React.ReactElement {
 
 function TypographyPanel(): React.ReactElement {
     return (
-        <div className={styles['section']}>
+        <div className={styles['section']} data-testid="component-gallery-typography">
             <Heading className={styles['sectionTitle']} level={3} tone="muted">
                 Typography
             </Heading>
             <Heading level={1}>Heading 1</Heading>
             <Heading level={2}>Heading 2</Heading>
             <Heading level={3}>Heading 3</Heading>
+            <Heading level={4} size="md">
+                Heading 4 (md)
+            </Heading>
             <Label>Label text</Label>
-            <Caption>Caption text — small supplementary copy</Caption>
+            <Label required>Required label</Label>
+            <Label optional>Optional label</Label>
+            <Caption>Caption — neutral</Caption>
+            <Caption tone="muted">Caption — muted</Caption>
+            <Caption tone="error">Caption — error</Caption>
+            <Caption tone="success">Caption — success</Caption>
+            <Heading className={styles['sectionTitle']} level={3} size="sm" tone="muted">
+                Font tokens
+            </Heading>
+            <p
+                className={`${styles['fontSample']} ${styles['fontSampleUi']}`}
+                data-font-token="--ch-font-ui"
+            >
+                --ch-font-ui — Inter, system-ui, sans-serif
+            </p>
+            <p
+                className={`${styles['fontSample']} ${styles['fontSampleGame']}`}
+                data-font-token="--ch-font-game"
+            >
+                --ch-font-game — Cinzel, serif
+            </p>
+            <p
+                className={`${styles['fontSample']} ${styles['fontSampleMono']}`}
+                data-font-token="--ch-font-mono"
+            >
+                --ch-font-mono — JetBrains Mono, monospace
+            </p>
         </div>
     );
 }
