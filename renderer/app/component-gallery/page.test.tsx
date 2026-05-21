@@ -516,3 +516,96 @@ describe('ComponentGalleryClient — Typography section (issue #609)', () => {
         expect(section.querySelector('[data-font-token="--ch-font-mono"]')).toBeTruthy();
     });
 });
+
+// ── Issue #610 — Tab panels revealed on switch ────────────────────────────────
+
+describe('ComponentGalleryClient — tab panels revealed on switch (AC #610)', () => {
+    it('Actions tab reveals the actions panel', () => {
+        renderGallery();
+        // Switch away first to make the reveal explicit
+        fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
+        fireEvent.click(screen.getByRole('tab', { name: /actions/i }));
+        const panel = screen.getByRole('tabpanel');
+        expect(within(panel).getByTestId('component-gallery-actions')).toBeTruthy();
+    });
+
+    it('Overlays tab reveals the overlays panel', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /overlays/i }));
+        const panel = screen.getByRole('tabpanel');
+        expect(within(panel).getByTestId('component-gallery-overlays')).toBeTruthy();
+    });
+
+    it('Containers tab reveals the containers panel', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /containers/i }));
+        const panel = screen.getByRole('tabpanel');
+        expect(within(panel).getByTestId('component-gallery-containers')).toBeTruthy();
+    });
+
+    it('Forms tab reveals the forms panel', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
+        const panel = screen.getByRole('tabpanel');
+        expect(within(panel).getByTestId('component-gallery-forms')).toBeTruthy();
+    });
+
+    it('Feedback tab reveals the feedback panel', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /feedback/i }));
+        const panel = screen.getByRole('tabpanel');
+        expect(within(panel).getByTestId('component-gallery-feedback')).toBeTruthy();
+    });
+
+    it('Typography tab reveals the typography panel', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /typography/i }));
+        const panel = screen.getByRole('tabpanel');
+        expect(within(panel).getByTestId('component-gallery-typography')).toBeTruthy();
+    });
+});
+
+// ── Issue #610 — Form-control state updates ───────────────────────────────────
+
+describe('ComponentGalleryClient — Slider state update (AC #610)', () => {
+    beforeEach(() => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
+    });
+
+    it('Volume slider reflects the updated value after a change event', () => {
+        const slider = screen.getByRole('slider', { name: /volume/i });
+        fireEvent.change(slider, { target: { valueAsNumber: 75 } });
+        expect(slider).toHaveValue('75');
+    });
+});
+
+describe('ComponentGalleryClient — NumberInput state update (AC #610)', () => {
+    beforeEach(() => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
+    });
+
+    it('Quantity number input reflects the updated value after a change event', () => {
+        const section = screen.getByTestId('component-gallery-forms');
+        const spinbutton = within(section).getByRole('spinbutton', { name: /^quantity$/i });
+        fireEvent.change(spinbutton, { target: { valueAsNumber: 5 } });
+        expect(spinbutton).toHaveValue(5);
+    });
+});
+
+describe('ComponentGalleryClient — Select state update (AC #610)', () => {
+    beforeEach(() => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
+    });
+
+    it('Colour scheme select reflects the updated value after a change event', () => {
+        const validSelect = within(screen.getByTestId('component-gallery-forms')).getByRole(
+            'combobox',
+            { name: /^colour scheme$/i },
+        );
+        fireEvent.change(validSelect, { target: { value: 'light' } });
+        expect(validSelect).toHaveValue('light');
+    });
+});
