@@ -1,0 +1,183 @@
+/**
+ * F611 — component-gallery.spec.ts
+ * §13.x Core E2E Test Specifications
+ *
+ * Playwright smoke coverage for the dev/test-only component gallery route.
+ *
+ * Acceptance criteria:
+ *   1. Navigate to /component-gallery/ in the Electron fixture.
+ *   2. Switch through all six category tabs.
+ *   3. Open and close the Modal overlay.
+ *   4. Open and close the Drawer overlay.
+ *   5. Interact with representative form controls (Slider, Toggle, Select, NumberInput).
+ *   6. Assert at least one themed Button resolves its background from --ch-color-accent.
+ *
+ * Invariants honoured:
+ *   #86 — UI components must reference --ch-* tokens for all visual attributes.
+ *   #93 — No game token override CSS imported.
+ *   #94 — No games/* imports.
+ */
+
+import { test, expect } from '../fixtures/electron.fixture';
+import type { Locator } from '@playwright/test';
+import { ComponentGalleryPage } from '../pages/ComponentGalleryPage';
+
+// ── Shared token-match helper (mirrors theme.spec.ts pattern) ─────────────────
+
+interface BrowserStyleDeclaration {
+    readonly backgroundColor: string;
+    getPropertyValue(propertyName: string): string;
+}
+
+interface BrowserWindowAccess {
+    getComputedStyle(element: unknown): BrowserStyleDeclaration;
+}
+
+interface BrowserProbeElement {
+    readonly style: { backgroundColor: string };
+    remove(): void;
+}
+
+interface BrowserDocumentAccess {
+    readonly defaultView: BrowserWindowAccess | null;
+    readonly documentElement: unknown;
+    readonly body: {
+        appendChild(element: BrowserProbeElement): void;
+    };
+    createElement(tagName: 'div'): BrowserProbeElement;
+}
+
+interface BrowserElementWithDocument {
+    readonly ownerDocument: BrowserDocumentAccess;
+}
+
+async function expectButtonBackgroundToMatchToken(
+    button: Locator,
+    tokenName: `--ch-${string}`,
+): Promise<void> {
+    const colors = await button.evaluate((element, expectedTokenName) => {
+        const browserElement = element as unknown as BrowserElementWithDocument;
+        const ownerDocument = browserElement.ownerDocument;
+        const view = ownerDocument.defaultView;
+        if (!view) throw new Error('Button document does not have a defaultView');
+
+        const tokenValue = view
+            .getComputedStyle(ownerDocument.documentElement)
+            .getPropertyValue(expectedTokenName)
+            .trim();
+        const probe = ownerDocument.createElement('div');
+        probe.style.backgroundColor = tokenValue;
+        ownerDocument.body.appendChild(probe);
+
+        const expectedBackgroundColor = view.getComputedStyle(probe).backgroundColor;
+        const actualBackgroundColor = view.getComputedStyle(element).backgroundColor;
+        probe.remove();
+
+        return { actualBackgroundColor, expectedBackgroundColor };
+    }, tokenName);
+
+    expect(colors.actualBackgroundColor).toBe(colors.expectedBackgroundColor);
+}
+
+// ── Specs ─────────────────────────────────────────────────────────────────────
+
+test.describe('Component Gallery', () => {
+    test('navigates to /component-gallery/ successfully', async ({ mainWindow }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+
+        await expect(gallery.root).toBeVisible();
+    });
+
+    test('all six category tabs are present and can be switched', async ({ mainWindow }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        // Each click selects the corresponding tab and makes its panel visible.
+        const tabs = [
+            { click: () => gallery.clickTabActions(), name: /actions/i },
+            { click: () => gallery.clickTabOverlays(), name: /overlays/i },
+            { click: () => gallery.clickTabContainers(), name: /containers/i },
+            { click: () => gallery.clickTabForms(), name: /forms/i },
+            { click: () => gallery.clickTabFeedback(), name: /feedback/i },
+            { click: () => gallery.clickTabTypography(), name: /typography/i },
+        ];
+
+        for (const { click, name } of tabs) {
+            await click();
+            const tab = mainWindow.getByRole('tab', { name });
+            await expect(tab).toHaveAttribute('aria-selected', 'true');
+        }
+    });
+
+    test('Modal opens and closes', async ({ mainWindow }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        await gallery.openModal();
+        await expect(gallery.modalDialog).toBeVisible();
+
+        // Close via the accessible close button inside the dialog
+        const closeBtn = gallery.modalDialog.getByRole('button', { name: /close/i });
+        await closeBtn.click();
+        await expect(gallery.modalDialog).not.toBeVisible();
+    });
+
+    test('Drawer opens and closes', async ({ mainWindow }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        await gallery.openDrawer();
+        await expect(gallery.drawerDialog).toBeVisible();
+
+        const closeBtn = gallery.drawerDialog.getByRole('button', { name: /close/i });
+        await closeBtn.click();
+        await expect(gallery.drawerDialog).not.toBeVisible();
+    });
+
+    test('Slider, Toggle, Select, and NumberInput can be updated in the Forms tab', async ({
+        mainWindow,
+    }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+        await gallery.clickTabForms();
+
+        // Slider
+        await gallery.slider.fill('80');
+        await gallery.slider.dispatchEvent('input');
+        await gallery.slider.dispatchEvent('change');
+        await expect(gallery.slider).toHaveValue('80');
+
+        // Toggle
+        const toggleCheckedBefore = await gallery.toggle.isChecked();
+        await gallery.toggle.click();
+        const toggleCheckedAfter = await gallery.toggle.isChecked();
+        expect(toggleCheckedAfter).toBe(!toggleCheckedBefore);
+
+        // Select
+        await gallery.select.selectOption('light');
+        await expect(gallery.select).toHaveValue('light');
+
+        // NumberInput
+        await gallery.numberInput.fill('7');
+        await gallery.numberInput.dispatchEvent('change');
+        await expect(gallery.numberInput).toHaveValue('7');
+    });
+
+    test('primary Button background matches --ch-color-accent token', async ({ mainWindow }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        // Ensure Actions tab is active (default)
+        await gallery.clickTabActions();
+        await expect(gallery.primaryButton).toBeVisible();
+        await expect(gallery.primaryButton).toHaveAttribute('data-ch-button-variant', 'primary');
+
+        await expectButtonBackgroundToMatchToken(gallery.primaryButton, '--ch-color-accent');
+    });
+});
