@@ -95,6 +95,7 @@ export type BroadcastFn = (gameId: string, settings: ResolvedSettings) => void;
  */
 export class SettingsManager {
     private readonly schemas = new Map<string, GameSettingsSchema<EngineSettings>>();
+    private readonly mutationQueue = new Map<string, Promise<void>>();
 
     constructor(
         private readonly repo: SettingsRepository,
@@ -234,21 +235,40 @@ export class SettingsManager {
         return SettingsMerger.validatePatch(schema.schema, patch);
     }
 
+    private runSerializedMutation<T>(gameId: string, work: () => Promise<T>): Promise<T> {
+        const previous = this.mutationQueue.get(gameId) ?? Promise.resolve();
+        const result = previous.catch(() => undefined).then(work);
+        const queueTail = result.then(
+            () => undefined,
+            () => undefined,
+        );
+
+        this.mutationQueue.set(gameId, queueTail);
+
+        return result.finally(() => {
+            if (this.mutationQueue.get(gameId) === queueTail) {
+                this.mutationQueue.delete(gameId);
+            }
+        });
+    }
+
     async updateSettings(gameId: string, patch: Partial<UserSettings>): Promise<ResolvedSettings> {
-        const schema = this.schemas.get(gameId);
-        // WARN-2 fix: use the return value (validated, stripped patch)
-        const validatedPatch =
-            schema !== undefined ? SettingsMerger.validatePatch(schema.schema, patch) : patch;
+        return this.runSerializedMutation(gameId, async () => {
+            const schema = this.schemas.get(gameId);
+            // WARN-2 fix: use the return value (validated, stripped patch)
+            const validatedPatch =
+                schema !== undefined ? SettingsMerger.validatePatch(schema.schema, patch) : patch;
 
-        const currentOverrides = await this.repo.load(gameId);
-        // BLOCK-1 fix: merge the validated patch into existing OVERRIDES only,
-        // not into the full resolved defaults tree.
-        const newOverrides = mergeUserOverrides(currentOverrides, validatedPatch) as UserSettings;
-        await this.repo.save(gameId, newOverrides);
+            const currentOverrides = await this.repo.load(gameId);
+            // BLOCK-1 fix: merge the validated patch into existing OVERRIDES only,
+            // not into the full resolved defaults tree.
+            const newOverrides = mergeUserOverrides(currentOverrides, validatedPatch) as UserSettings;
+            await this.repo.save(gameId, newOverrides);
 
-        const result = await this.getSettings(gameId);
-        this.broadcastFn?.(gameId, result);
-        return result;
+            const result = await this.getSettings(gameId);
+            this.broadcastFn?.(gameId, result);
+            return result;
+        });
     }
 
     /**
@@ -256,9 +276,11 @@ export class SettingsManager {
      * Broadcasts the reset settings to all renderer windows.
      */
     async resetSettings(gameId: string): Promise<ResolvedSettings> {
-        await this.repo.reset(gameId);
-        const result = await this.getSettings(gameId);
-        this.broadcastFn?.(gameId, result);
-        return result;
+        return this.runSerializedMutation(gameId, async () => {
+            await this.repo.reset(gameId);
+            const result = await this.getSettings(gameId);
+            this.broadcastFn?.(gameId, result);
+            return result;
+        });
     }
 }
