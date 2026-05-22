@@ -10,6 +10,7 @@ import { z } from 'zod';
 import type {
     EngineSettings,
     GameSettingsSchema,
+    SettingsRepository,
     UserSettings,
 } from '@chimera/simulation/settings/index.js';
 import {
@@ -80,6 +81,58 @@ const extSettingsSchema: GameSettingsSchema<ExtSettings> = {
 function makeManager(): SettingsManager {
     const repo = new InMemorySettingsRepository();
     return new SettingsManager(repo);
+}
+
+function cloneSettings<T>(value: T): T {
+    return structuredClone(value);
+}
+
+function createDeferred(): { promise: Promise<void>; resolve: () => void } {
+    let resolve!: () => void;
+    const promise = new Promise<void>((resolver) => {
+        resolve = resolver;
+    });
+    return { promise, resolve };
+}
+
+async function flushPromiseJobs(): Promise<void> {
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+    await Promise.resolve();
+}
+
+class BlockingFirstSaveRepository implements SettingsRepository {
+    private readonly storage = new Map<string, UserSettings>();
+    private firstSaveBlocked = true;
+    private readonly firstSaveEntered = createDeferred();
+    private readonly releaseFirstSave = createDeferred();
+
+    async load(gameId: string): Promise<UserSettings> {
+        return cloneSettings(this.storage.get(gameId) ?? {});
+    }
+
+    async save(gameId: string, settings: UserSettings): Promise<void> {
+        if (this.firstSaveBlocked) {
+            this.firstSaveBlocked = false;
+            this.firstSaveEntered.resolve();
+            await this.releaseFirstSave.promise;
+        }
+
+        this.storage.set(gameId, cloneSettings(settings));
+    }
+
+    async reset(gameId: string): Promise<void> {
+        this.storage.delete(gameId);
+    }
+
+    waitForFirstSave(): Promise<void> {
+        return this.firstSaveEntered.promise;
+    }
+
+    unblockFirstSave(): void {
+        this.releaseFirstSave.resolve();
+    }
 }
 
 // ── registerSchema ────────────────────────────────────────────────────────────
@@ -177,6 +230,28 @@ describe('SettingsManager.updateSettings()', () => {
                 audio: { masterVolume: 'not-a-number' as unknown as number },
             }),
         ).rejects.toThrow();
+    });
+
+    it('serializes concurrent updates for one game so the latest patch stays persisted', async () => {
+        const repo = new BlockingFirstSaveRepository();
+        const concurrentMgr = new SettingsManager(repo);
+        concurrentMgr.registerSchema(engineSettingsSchema);
+
+        const firstUpdate = concurrentMgr.updateSettings('test-game', {
+            audio: { masterVolume: 0.3 },
+        });
+        await repo.waitForFirstSave();
+
+        const secondUpdate = concurrentMgr.updateSettings('test-game', {
+            audio: { masterVolume: 0.42 },
+        });
+
+        await flushPromiseJobs();
+        repo.unblockFirstSave();
+
+        await Promise.all([firstUpdate, secondUpdate]);
+
+        expect(await repo.load('test-game')).toEqual({ audio: { masterVolume: 0.42 } });
     });
 });
 
