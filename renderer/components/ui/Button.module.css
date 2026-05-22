@@ -65,19 +65,22 @@
 }
 
 .sm {
-    --ch-button-font-size: var(--ch-font-size-sm);
+    --ch-button-font-size: var(--ch-button-font-size-sm);
+    --ch-button-line-height: var(--ch-button-line-height-sm);
     --ch-button-min-width: var(--ch-button-min-width-sm);
     --ch-button-padding: var(--ch-button-padding-sm);
 }
 
 .md {
-    --ch-button-font-size: var(--ch-font-size-md);
+    --ch-button-font-size: var(--ch-button-font-size-md);
+    --ch-button-line-height: var(--ch-button-line-height-md);
     --ch-button-min-width: var(--ch-button-min-width-md);
     --ch-button-padding: var(--ch-button-padding-md);
 }
 
 .lg {
-    --ch-button-font-size: var(--ch-font-size-lg);
+    --ch-button-font-size: var(--ch-button-font-size-lg);
+    --ch-button-line-height: var(--ch-button-line-height-lg);
     --ch-button-min-width: var(--ch-button-min-width-lg);
     --ch-button-padding: var(--ch-button-padding-lg);
 }

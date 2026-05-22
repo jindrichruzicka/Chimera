@@ -137,4 +137,18 @@ describe('Button', () => {
         expect(css).toContain('box-shadow: var(--ch-button-shadow-hover);');
         expect(css).toContain('transform: var(--ch-button-transform-hover);');
     });
+
+    it('maps each size class to tokenized typography and spacing', () => {
+        const css = buttonCss;
+
+        expect(css).toMatch(
+            /\.sm\s*{[^}]*--ch-button-font-size:\s*var\(--ch-button-font-size-sm\);[^}]*--ch-button-line-height:\s*var\(--ch-button-line-height-sm\);[^}]*--ch-button-padding:\s*var\(--ch-button-padding-sm\);/s,
+        );
+        expect(css).toMatch(
+            /\.md\s*{[^}]*--ch-button-font-size:\s*var\(--ch-button-font-size-md\);[^}]*--ch-button-line-height:\s*var\(--ch-button-line-height-md\);[^}]*--ch-button-padding:\s*var\(--ch-button-padding-md\);/s,
+        );
+        expect(css).toMatch(
+            /\.lg\s*{[^}]*--ch-button-font-size:\s*var\(--ch-button-font-size-lg\);[^}]*--ch-button-line-height:\s*var\(--ch-button-line-height-lg\);[^}]*--ch-button-padding:\s*var\(--ch-button-padding-lg\);/s,
+        );
+    });
 });

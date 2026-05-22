@@ -284,11 +284,21 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 
 /* ── Button Shape & Elevation ────────────────────────────── */
 --ch-button-radius: var(--ch-radius-pill);
+--ch-button-font-weight: 700;
+--ch-button-font-size-sm: 1rem;
+--ch-button-font-size-md: 1.125rem;
+--ch-button-font-size-lg: 1.25rem;
+--ch-button-line-height-sm: 1.5rem;
+--ch-button-line-height-md: 1.75rem;
+--ch-button-line-height-lg: 2rem;
 --ch-button-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
 --ch-button-shadow-hover: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
 --ch-button-shadow-hover-danger: 0 25px 50px -12px rgba(220, 38, 38, 0.5);
 --ch-button-transform: scale(1);
 --ch-button-transform-hover: scale(1.05);
+--ch-button-padding-sm: 0.375rem 1.5rem;
+--ch-button-padding-md: 0.5rem 2rem;
+--ch-button-padding-lg: 0.75rem 2.5rem;
 
 /* ── Motion ──────────────────────────────────────────────── */
 --ch-duration-fast: 120ms;

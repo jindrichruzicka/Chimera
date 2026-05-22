@@ -64,10 +64,15 @@
 
     --ch-button-border-width: var(--ch-border-width-sm);
     --ch-button-radius: var(--ch-radius-pill);
-    --ch-button-font-weight: var(--ch-font-weight-semibold);
-    --ch-button-line-height: var(--ch-line-height-tight);
+    --ch-button-font-weight: 700;
+    --ch-button-font-size-sm: 1rem;
+    --ch-button-font-size-md: 1.125rem;
+    --ch-button-font-size-lg: 1.25rem;
+    --ch-button-line-height-sm: 1.5rem;
+    --ch-button-line-height-md: 1.75rem;
+    --ch-button-line-height-lg: 2rem;
     --ch-button-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
-    --ch-button-shadow-hover: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    --ch-button-shadow-hover: 0 25px 50px -12px rgba(128, 128, 128, 0.5);
     --ch-button-shadow-hover-danger: 0 25px 50px -12px rgba(220, 38, 38, 0.5);
     --ch-button-transform: scale(1);
     --ch-button-transform-hover: scale(1.05);
@@ -83,9 +88,9 @@
     --ch-button-min-width-lg: calc(var(--ch-space-xl) * 6);
     --ch-divider-length-sm: var(--ch-button-min-width-sm);
     --ch-divider-length-lg: var(--ch-button-min-width-lg);
-    --ch-button-padding-sm: var(--ch-space-sm) 0;
-    --ch-button-padding-md: var(--ch-space-md) 0;
-    --ch-button-padding-lg: var(--ch-space-lg) 0;
+    --ch-button-padding-sm: 0.375rem 1.5rem;
+    --ch-button-padding-md: 0.5rem 2rem;
+    --ch-button-padding-lg: 0.75rem 2.5rem;
     --ch-opacity-disabled: 0.6;
     --ch-opacity-full: 1;
 

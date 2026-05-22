@@ -142,6 +142,14 @@ describe('Tabs', () => {
         expect(css).toContain('var(--ch-focus-ring-color)');
     });
 
+    it('keeps tab bottom corners square so active tabs connect to the panel edge', () => {
+        const css = tabsCss;
+
+        expect(css).toMatch(
+            /border-radius:\s*var\(--ch-radius-md\)\s+var\(--ch-radius-md\)\s+var\(--ch-space-none\)\s+var\(--ch-space-none\);/,
+        );
+    });
+
     it('follows the controlled activeTabId prop across re-renders', () => {
         const controlledTabs: ComponentProps<typeof Tabs>['tabs'] = [
             { id: 'overview', label: 'Overview', panel: <p>Overview panel</p> },

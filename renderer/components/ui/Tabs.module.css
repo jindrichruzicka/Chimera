@@ -20,7 +20,7 @@
     appearance: none;
     background-color: var(--ch-color-transparent);
     border-color: var(--ch-color-transparent);
-    border-radius: var(--ch-radius-md);
+    border-radius: var(--ch-radius-md) var(--ch-radius-md) var(--ch-space-none) var(--ch-space-none);
     border-style: solid;
     border-width: var(--ch-border-width-sm);
     color: var(--ch-color-text-secondary);

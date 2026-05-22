@@ -134,7 +134,12 @@ const expectedTokens = [
     '--ch-button-border-width',
     '--ch-button-radius',
     '--ch-button-font-weight',
-    '--ch-button-line-height',
+    '--ch-button-font-size-sm',
+    '--ch-button-font-size-md',
+    '--ch-button-font-size-lg',
+    '--ch-button-line-height-sm',
+    '--ch-button-line-height-md',
+    '--ch-button-line-height-lg',
     '--ch-button-shadow',
     '--ch-button-shadow-hover',
     '--ch-button-shadow-hover-danger',
@@ -241,7 +246,7 @@ describe('renderer design tokens', () => {
 
         expect(extractTokenValue(css, '--ch-button-radius')).toBe('var(--ch-radius-pill)');
         expect(extractTokenValue(css, '--ch-button-shadow')).toContain('rgba(0, 0, 0');
-        expect(extractTokenValue(css, '--ch-button-shadow-hover')).toContain('rgba(0, 0, 0');
+        expect(extractTokenValue(css, '--ch-button-shadow-hover')).toContain('rgba(128, 128, 128');
         expect(extractTokenValue(css, '--ch-button-shadow-hover-danger')).toContain(
             'rgba(220, 38, 38',
         );
@@ -249,5 +254,20 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-button-transform-hover')).toBe('scale(1.05)');
         expect(extractTokenValue(css, '--ch-color-accent')).toBe('#3f3f46');
         expect(extractTokenValue(css, '--ch-color-error')).toBe('#dc2626');
+    });
+
+    it('declares the requested button size scale tokens', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-button-font-weight')).toBe('700');
+        expect(extractTokenValue(css, '--ch-button-font-size-sm')).toBe('1rem');
+        expect(extractTokenValue(css, '--ch-button-font-size-md')).toBe('1.125rem');
+        expect(extractTokenValue(css, '--ch-button-font-size-lg')).toBe('1.25rem');
+        expect(extractTokenValue(css, '--ch-button-line-height-sm')).toBe('1.5rem');
+        expect(extractTokenValue(css, '--ch-button-line-height-md')).toBe('1.75rem');
+        expect(extractTokenValue(css, '--ch-button-line-height-lg')).toBe('2rem');
+        expect(extractTokenValue(css, '--ch-button-padding-sm')).toBe('0.375rem 1.5rem');
+        expect(extractTokenValue(css, '--ch-button-padding-md')).toBe('0.5rem 2rem');
+        expect(extractTokenValue(css, '--ch-button-padding-lg')).toBe('0.75rem 2.5rem');
     });
 });

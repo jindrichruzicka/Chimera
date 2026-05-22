@@ -13,9 +13,9 @@ describe('defaultTheme', () => {
         expect(palette.button.base).toMatchObject({
             borderRadius: 'var(--ch-button-radius)',
             boxShadow: 'var(--ch-button-shadow)',
-            fontSize: 'var(--ch-font-size-lg)',
+            fontSize: 'var(--ch-button-font-size-md)',
             fontWeight: 'var(--ch-button-font-weight)',
-            lineHeight: 'var(--ch-button-line-height)',
+            lineHeight: 'var(--ch-button-line-height-md)',
             transform: 'var(--ch-button-transform)',
         });
         expect(palette.button.variants[variant]).toEqual({
@@ -25,16 +25,22 @@ describe('defaultTheme', () => {
         });
         expect(palette.button.sizes).toMatchObject({
             sm: {
+                fontSize: 'var(--ch-button-font-size-sm)',
+                lineHeight: 'var(--ch-button-line-height-sm)',
                 minWidth: 'calc(var(--ch-space-xl) * 4)',
-                padding: 'var(--ch-space-sm) 0',
+                padding: 'var(--ch-button-padding-sm)',
             },
             md: {
+                fontSize: 'var(--ch-button-font-size-md)',
+                lineHeight: 'var(--ch-button-line-height-md)',
                 minWidth: 'calc(var(--ch-space-xl) * 5)',
-                padding: 'var(--ch-space-md) 0',
+                padding: 'var(--ch-button-padding-md)',
             },
             lg: {
+                fontSize: 'var(--ch-button-font-size-lg)',
+                lineHeight: 'var(--ch-button-line-height-lg)',
                 minWidth: 'calc(var(--ch-space-xl) * 6)',
-                padding: 'var(--ch-space-lg) 0',
+                padding: 'var(--ch-button-padding-lg)',
             },
         });
     });
