@@ -128,4 +128,9 @@ describe('NumberInput', () => {
         expect(css).toContain('var(--ch-color-error)');
         expect(css).toContain('var(--ch-color-text-disabled)');
     });
+
+    it('uses border-box sizing so full-width controls stay inside form columns', () => {
+        expect(css).toContain('box-sizing: border-box');
+        expect(css).toContain('min-inline-size: 0');
+    });
 });

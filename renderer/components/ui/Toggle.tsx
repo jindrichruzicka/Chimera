@@ -48,19 +48,19 @@ export function Toggle({
             data-disabled={String(Boolean(disabled))}
             style={style}
         >
-            <input
-                {...inputProps}
-                aria-describedby={describedBy || undefined}
-                checked={checked}
-                className={styles['input']}
-                data-checked={String(checked)}
-                disabled={disabled}
-                id={inputId}
-                onChange={handleChange}
-                role="switch"
-                type="checkbox"
-            />
-            <label className={styles['row']} htmlFor={inputId}>
+            <label className={styles['row']}>
+                <input
+                    {...inputProps}
+                    aria-describedby={describedBy || undefined}
+                    checked={checked}
+                    className={styles['input']}
+                    data-checked={String(checked)}
+                    disabled={disabled}
+                    id={inputId}
+                    onChange={handleChange}
+                    role="switch"
+                    type="checkbox"
+                />
                 <span className={styles['label']}>{label}</span>
                 <span aria-hidden="true" className={styles['track']}>
                     <span className={styles['thumb']} />

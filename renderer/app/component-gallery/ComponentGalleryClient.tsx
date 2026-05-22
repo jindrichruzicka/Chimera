@@ -22,6 +22,7 @@ import { Slider } from '../../components/ui/Slider';
 import { Spinner } from '../../components/ui/Spinner';
 import { Tabs } from '../../components/ui/Tabs';
 import type { TabItem } from '../../components/ui/Tabs';
+import { TextInput } from '../../components/ui/TextInput';
 import { Toggle } from '../../components/ui/Toggle';
 import { ToggleButton } from '../../components/ui/ToggleButton';
 import { Tooltip } from '../../components/ui/Tooltip';
@@ -178,6 +179,8 @@ function FormsPanel({
     onSliderChange,
     numberValue,
     onNumberChange,
+    textValue,
+    onTextChange,
     selectValue,
     onSelectChange,
 }: {
@@ -187,6 +190,8 @@ function FormsPanel({
     readonly onSliderChange: (value: number) => void;
     readonly numberValue: number;
     readonly onNumberChange: (value: number) => void;
+    readonly textValue: string;
+    readonly onTextChange: (value: string) => void;
     readonly selectValue: string;
     readonly onSelectChange: (value: string) => void;
 }): React.ReactElement {
@@ -220,6 +225,17 @@ function FormsPanel({
                 onChange={onSliderChange}
                 value={sliderValue}
             />
+            <div className={styles['formRow']}>
+                <TextInput label="Commander name" onValueChange={onTextChange} value={textValue} />
+                <TextInput
+                    error="Name is required"
+                    helperText="Shown in lobby and match setup"
+                    invalid
+                    label="Commander name (invalid)"
+                    onValueChange={() => undefined}
+                    value=""
+                />
+            </div>
             <div className={styles['formRow']}>
                 <NumberInput label="Quantity" onValueChange={onNumberChange} value={numberValue} />
                 <NumberInput
@@ -321,6 +337,7 @@ export default function ComponentGalleryClient(): React.ReactElement {
     const [toggleChecked, setToggleChecked] = React.useState(false);
     const [sliderValue, setSliderValue] = React.useState(50);
     const [numberValue, setNumberValue] = React.useState(1);
+    const [textValue, setTextValue] = React.useState('Ada Lovelace');
     const [selectValue, setSelectValue] = React.useState('dark');
 
     const tabs: readonly TabItem[] = [
@@ -363,9 +380,11 @@ export default function ComponentGalleryClient(): React.ReactElement {
                     onNumberChange={setNumberValue}
                     onSelectChange={setSelectValue}
                     onSliderChange={setSliderValue}
+                    onTextChange={setTextValue}
                     onToggleChange={setToggleChecked}
                     selectValue={selectValue}
                     sliderValue={sliderValue}
+                    textValue={textValue}
                     toggleChecked={toggleChecked}
                 />
             ),

@@ -21,6 +21,9 @@
 import React from 'react';
 import { useShallow } from 'zustand/shallow';
 import { Button } from '../../components/ui/Button';
+import { Caption } from '../../components/ui/Caption';
+import { Heading } from '../../components/ui/Heading';
+import { Label } from '../../components/ui/Label';
 import { useSettingsStore } from '../../state/settingsStore';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import { useInputManager } from '../../input/InputManagerContext.js';
@@ -257,14 +260,18 @@ export default function SettingsPage(): React.ReactElement {
                 maxWidth: 'calc(var(--ch-space-xl) * 16)',
             }}
         >
-            <h1>Settings</h1>
+            <Heading level={1} size="xl">
+                Settings
+            </Heading>
 
             {/* ── Audio ── */}
             <section
                 aria-labelledby="audio-heading"
                 style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
             >
-                <h2 id="audio-heading">Audio</h2>
+                <Heading id="audio-heading" level={2}>
+                    Audio
+                </Heading>
 
                 <div
                     style={{
@@ -272,15 +279,16 @@ export default function SettingsPage(): React.ReactElement {
                         gap: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
                     }}
                 >
-                    <label
+                    <div
                         style={{
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 'var(--ch-space-xs)',
                         }}
                     >
-                        <span>Master Volume</span>
+                        <Label htmlFor="master-volume">Master Volume</Label>
                         <input
+                            id="master-volume"
                             data-testid="master-volume"
                             aria-label="Master Volume"
                             type="range"
@@ -294,18 +302,19 @@ export default function SettingsPage(): React.ReactElement {
                                 });
                             }}
                         />
-                        <span>{((audio?.masterVolume ?? 1.0) * 100).toFixed(0)}%</span>
-                    </label>
+                        <Caption>{((audio?.masterVolume ?? 1.0) * 100).toFixed(0)}%</Caption>
+                    </div>
 
-                    <label
+                    <div
                         style={{
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 'var(--ch-space-xs)',
                         }}
                     >
-                        <span>SFX Volume</span>
+                        <Label htmlFor="sfx-volume">SFX Volume</Label>
                         <input
+                            id="sfx-volume"
                             aria-label="SFX Volume"
                             type="range"
                             min={0}
@@ -316,18 +325,19 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ audio: { sfxVolume: parseFloat(e.target.value) } });
                             }}
                         />
-                        <span>{((audio?.sfxVolume ?? 1.0) * 100).toFixed(0)}%</span>
-                    </label>
+                        <Caption>{((audio?.sfxVolume ?? 1.0) * 100).toFixed(0)}%</Caption>
+                    </div>
 
-                    <label
+                    <div
                         style={{
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 'var(--ch-space-xs)',
                         }}
                     >
-                        <span>Music Volume</span>
+                        <Label htmlFor="music-volume">Music Volume</Label>
                         <input
+                            id="music-volume"
                             aria-label="Music Volume"
                             type="range"
                             min={0}
@@ -340,13 +350,14 @@ export default function SettingsPage(): React.ReactElement {
                                 });
                             }}
                         />
-                        <span>{((audio?.musicVolume ?? 0.8) * 100).toFixed(0)}%</span>
-                    </label>
+                        <Caption>{((audio?.musicVolume ?? 0.8) * 100).toFixed(0)}%</Caption>
+                    </div>
 
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
                         <input
+                            id="muted"
                             aria-label="Muted"
                             type="checkbox"
                             checked={audio?.muted ?? false}
@@ -354,8 +365,8 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ audio: { muted: e.target.checked } });
                             }}
                         />
-                        <span>Muted</span>
-                    </label>
+                        <Label htmlFor="muted">Muted</Label>
+                    </div>
                 </div>
             </section>
 
@@ -364,7 +375,9 @@ export default function SettingsPage(): React.ReactElement {
                 aria-labelledby="display-heading"
                 style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
             >
-                <h2 id="display-heading">Display</h2>
+                <Heading id="display-heading" level={2}>
+                    Display
+                </Heading>
 
                 <div
                     style={{
@@ -372,10 +385,11 @@ export default function SettingsPage(): React.ReactElement {
                         gap: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
                     }}
                 >
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
                         <input
+                            id="fullscreen"
                             aria-label="Fullscreen"
                             type="checkbox"
                             checked={display?.fullscreen ?? false}
@@ -383,13 +397,14 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ display: { fullscreen: e.target.checked } });
                             }}
                         />
-                        <span>Fullscreen</span>
-                    </label>
+                        <Label htmlFor="fullscreen">Fullscreen</Label>
+                    </div>
 
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
                         <input
+                            id="vsync"
                             aria-label="VSync"
                             type="checkbox"
                             checked={display?.vsync ?? true}
@@ -397,14 +412,15 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ display: { vsync: e.target.checked } });
                             }}
                         />
-                        <span>VSync</span>
-                    </label>
+                        <Label htmlFor="vsync">VSync</Label>
+                    </div>
 
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
-                        <span>Target FPS</span>
+                        <Label htmlFor="target-fps">Target FPS</Label>
                         <select
+                            id="target-fps"
                             aria-label="Target FPS"
                             value={display?.targetFps ?? 60}
                             onChange={(e) => {
@@ -426,17 +442,18 @@ export default function SettingsPage(): React.ReactElement {
                                 </option>
                             ))}
                         </select>
-                    </label>
+                    </div>
 
-                    <label
+                    <div
                         style={{
                             display: 'flex',
                             flexDirection: 'column',
                             gap: 'var(--ch-space-xs)',
                         }}
                     >
-                        <span>UI Scale</span>
+                        <Label htmlFor="ui-scale">UI Scale</Label>
                         <input
+                            id="ui-scale"
                             aria-label="UI Scale"
                             type="range"
                             min={0.5}
@@ -447,8 +464,8 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ display: { uiScale: parseFloat(e.target.value) } });
                             }}
                         />
-                        <span>{(display?.uiScale ?? 1.0).toFixed(2)}×</span>
-                    </label>
+                        <Caption>{(display?.uiScale ?? 1.0).toFixed(2)}×</Caption>
+                    </div>
                 </div>
             </section>
 
@@ -457,7 +474,9 @@ export default function SettingsPage(): React.ReactElement {
                 aria-labelledby="gameplay-heading"
                 style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
             >
-                <h2 id="gameplay-heading">Gameplay</h2>
+                <Heading id="gameplay-heading" level={2}>
+                    Gameplay
+                </Heading>
 
                 <div
                     style={{
@@ -465,11 +484,12 @@ export default function SettingsPage(): React.ReactElement {
                         gap: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
                     }}
                 >
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
-                        <span>Language</span>
+                        <Label htmlFor="language">Language</Label>
                         <input
+                            id="language"
                             aria-label="Language"
                             type="text"
                             value={gameplay?.language ?? 'en-US'}
@@ -477,12 +497,13 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ gameplay: { language: e.target.value } });
                             }}
                         />
-                    </label>
+                    </div>
 
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
                         <input
+                            id="auto-save"
                             aria-label="Auto Save"
                             type="checkbox"
                             checked={gameplay?.autoSave ?? true}
@@ -490,14 +511,15 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ gameplay: { autoSave: e.target.checked } });
                             }}
                         />
-                        <span>Auto Save</span>
-                    </label>
+                        <Label htmlFor="auto-save">Auto Save</Label>
+                    </div>
 
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
-                        <span>Auto Save Interval (turns)</span>
+                        <Label htmlFor="auto-save-interval">Auto Save Interval (turns)</Label>
                         <input
+                            id="auto-save-interval"
                             aria-label="Auto Save Interval"
                             type="number"
                             min={1}
@@ -511,12 +533,13 @@ export default function SettingsPage(): React.ReactElement {
                                 });
                             }}
                         />
-                    </label>
+                    </div>
 
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
                         <input
+                            id="show-hints"
                             aria-label="Show Hints"
                             type="checkbox"
                             checked={gameplay?.showHints ?? true}
@@ -524,13 +547,14 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ gameplay: { showHints: e.target.checked } });
                             }}
                         />
-                        <span>Show Hints</span>
-                    </label>
+                        <Label htmlFor="show-hints">Show Hints</Label>
+                    </div>
 
-                    <label
+                    <div
                         style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
                     >
                         <input
+                            id="show-performance-hud"
                             aria-label="Show Performance HUD"
                             type="checkbox"
                             checked={gameplay?.showPerfHud ?? false}
@@ -538,8 +562,8 @@ export default function SettingsPage(): React.ReactElement {
                                 handleUpdate({ gameplay: { showPerfHud: e.target.checked } });
                             }}
                         />
-                        <span>Show Performance HUD</span>
-                    </label>
+                        <Label htmlFor="show-performance-hud">Show Performance HUD</Label>
+                    </div>
                 </div>
             </section>
 
@@ -548,19 +572,23 @@ export default function SettingsPage(): React.ReactElement {
                 aria-labelledby="controls-heading"
                 style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
             >
-                <h2 id="controls-heading">Controls</h2>
+                <Heading id="controls-heading" level={2}>
+                    Controls
+                </Heading>
                 {Array.from(actionsByCategory.entries()).map(([category, actions]) => (
                     <section
                         key={category}
                         aria-labelledby={`category-${category}`}
                         style={{ marginBottom: 'var(--ch-space-md)' }}
                     >
-                        <h3
+                        <Heading
                             id={`category-${category}`}
+                            level={3}
+                            size="md"
                             style={{ fontWeight: 'bold', marginBottom: 'var(--ch-space-sm)' }}
                         >
                             {category}
-                        </h3>
+                        </Heading>
                         {actions.map((action) => {
                             const binding = inputManager.getBinding(action.id);
                             const status = rebindStatus[action.id];
@@ -647,7 +675,9 @@ export default function SettingsPage(): React.ReactElement {
                     aria-labelledby="game-specific-heading"
                     style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
                 >
-                    <h2 id="game-specific-heading">Game Settings</h2>
+                    <Heading id="game-specific-heading" level={2}>
+                        Game Settings
+                    </Heading>
                     <dl style={{ display: 'grid', gap: 'var(--ch-space-sm)' }}>
                         {gameSpecificEntries.map(([key, value]) => (
                             <div key={key} style={{ display: 'flex', gap: 'var(--ch-space-md)' }}>

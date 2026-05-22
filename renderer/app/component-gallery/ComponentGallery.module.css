@@ -73,8 +73,8 @@
 
 .formRow {
     display: grid;
-    grid-template-columns: 1fr 1fr;
     gap: var(--ch-space-md);
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, var(--ch-button-min-width-md)), 1fr));
 }
 
 .scrollRow {

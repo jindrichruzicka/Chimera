@@ -19,6 +19,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import ComponentGalleryClient from './ComponentGalleryClient';
+import galleryCss from './ComponentGallery.module.css?raw';
 import ComponentGalleryPage from './page';
 
 vi.mock('next/navigation', () => ({
@@ -421,6 +422,12 @@ describe('ComponentGalleryClient — Forms section (issue #609)', () => {
         expect(inputs.length).toBeGreaterThanOrEqual(1);
     });
 
+    it('renders the TextInput with controlled state', () => {
+        const section = screen.getByTestId('component-gallery-forms');
+        const textbox = within(section).getByRole('textbox', { name: /^commander name$/i });
+        expect(textbox).toHaveValue('Ada Lovelace');
+    });
+
     it('renders a Select combobox', () => {
         const comboboxes = screen.getAllByRole('combobox', { name: /colour scheme/i });
         expect(comboboxes.length).toBeGreaterThanOrEqual(1);
@@ -443,6 +450,11 @@ describe('ComponentGalleryClient — Forms section (issue #609)', () => {
         const allSwitches = within(section).getAllByRole('switch');
         const disabledSwitches = allSwitches.filter((s) => (s as HTMLInputElement).disabled);
         expect(disabledSwitches.length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('uses responsive form rows that can collapse instead of overflowing narrow viewports', () => {
+        expect(galleryCss).toContain('repeat(auto-fit');
+        expect(galleryCss).toContain('min(100%, var(--ch-button-min-width-md))');
     });
 });
 
@@ -607,5 +619,21 @@ describe('ComponentGalleryClient — Select state update (AC #610)', () => {
         );
         fireEvent.change(validSelect, { target: { value: 'light' } });
         expect(validSelect).toHaveValue('light');
+    });
+});
+
+describe('ComponentGalleryClient — TextInput state update', () => {
+    beforeEach(() => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
+    });
+
+    it('Commander name text input reflects the updated value after a change event', () => {
+        const validTextInput = within(screen.getByTestId('component-gallery-forms')).getByRole(
+            'textbox',
+            { name: /^commander name$/i },
+        );
+        fireEvent.change(validTextInput, { target: { value: 'Grace Hopper' } });
+        expect(validTextInput).toHaveValue('Grace Hopper');
     });
 });

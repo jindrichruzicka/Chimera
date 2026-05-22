@@ -12,6 +12,7 @@
     display: flex;
     gap: var(--ch-space-md);
     justify-content: space-between;
+    position: relative;
 }
 
 .label {
@@ -28,13 +29,14 @@
 }
 
 .input {
-    block-size: var(--ch-space-screen-reader);
-    clip-path: inset(50%);
-    inline-size: var(--ch-space-screen-reader);
-    margin: calc(var(--ch-space-screen-reader) * -1);
-    overflow: hidden;
+    block-size: 100%;
+    cursor: pointer;
+    inline-size: 100%;
+    inset: var(--ch-space-none);
+    margin: var(--ch-space-none);
+    opacity: var(--ch-space-none);
     position: absolute;
-    white-space: nowrap;
+    z-index: 1;
 }
 
 .track {
@@ -71,9 +73,13 @@
     transform: translateX(var(--ch-space-lg));
 }
 
-.input:focus-visible + .row .track {
+.input:focus-visible ~ .track {
     outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
     outline-offset: var(--ch-focus-ring-offset);
+}
+
+.input:disabled {
+    cursor: var(--ch-cursor-disabled);
 }
 
 .root[data-disabled='true'] .row {

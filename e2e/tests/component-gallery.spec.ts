@@ -9,7 +9,7 @@
  *   2. Switch through all six category tabs.
  *   3. Open and close the Modal overlay.
  *   4. Open and close the Drawer overlay.
- *   5. Interact with representative form controls (Slider, Toggle, Select, NumberInput).
+ *   5. Interact with representative form controls (Slider, Toggle, TextInput, Select, NumberInput).
  *   6. Assert at least one themed Button resolves its background from --ch-color-accent.
  *
  * Invariants honoured:
@@ -138,7 +138,7 @@ test.describe('Component Gallery', () => {
         await expect(gallery.drawerDialog).not.toBeVisible();
     });
 
-    test('Slider, Toggle, Select, and NumberInput can be updated in the Forms tab', async ({
+    test('Slider, Toggle, TextInput, Select, and NumberInput can be updated in the Forms tab', async ({
         mainWindow,
     }) => {
         const gallery = new ComponentGalleryPage(mainWindow);
@@ -157,6 +157,11 @@ test.describe('Component Gallery', () => {
         await gallery.toggle.click();
         const toggleCheckedAfter = await gallery.toggle.isChecked();
         expect(toggleCheckedAfter).toBe(!toggleCheckedBefore);
+
+        // TextInput
+        await gallery.textInput.fill('Grace Hopper');
+        await gallery.textInput.dispatchEvent('input');
+        await expect(gallery.textInput).toHaveValue('Grace Hopper');
 
         // Select
         await gallery.select.selectOption('light');

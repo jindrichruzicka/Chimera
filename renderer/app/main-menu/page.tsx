@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import React from 'react';
 import { Button } from '../../components/ui/Button';
+import { Heading } from '../../components/ui/Heading';
 import { useQuit } from './useQuit';
 
 const styles = {
@@ -22,6 +23,9 @@ export default function MainMenuPage() {
 
     return (
         <main data-testid="main-menu" style={styles.container}>
+            <Heading level={1} size="xl">
+                Chimera
+            </Heading>
             <Button
                 data-testid="main-menu-play"
                 onClick={() => router.push('/lobby')}

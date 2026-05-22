@@ -36,6 +36,8 @@ export { Spinner } from './Spinner';
 export type { SpinnerProps } from './Spinner';
 export { Tabs } from './Tabs';
 export type { TabItem, TabsProps } from './Tabs';
+export { TextInput } from './TextInput';
+export type { TextInputProps } from './TextInput';
 export { Toggle } from './Toggle';
 export type { ToggleProps } from './Toggle';
 export { ToggleButton } from './ToggleButton';

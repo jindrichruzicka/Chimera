@@ -338,6 +338,19 @@ describe('LobbyPage pending actions', () => {
         );
     });
 
+    it('uses shared Typography primitives for shell copy', () => {
+        renderLobbyPage();
+
+        expect(
+            screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' }),
+        ).toHaveAttribute('data-ch-heading-level', '1');
+        expect(screen.getByText('Lobby Code:')).toHaveAttribute('data-ch-label-state', 'default');
+        expect(screen.getByText(/enter the code provided by the lobby host/i)).toHaveAttribute(
+            'data-ch-caption-tone',
+            'muted',
+        );
+    });
+
     it('sets stubbed local seat ids after successful host', async () => {
         const host = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 

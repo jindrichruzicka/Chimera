@@ -77,6 +77,15 @@ describe('MainMenuPage', () => {
         );
     });
 
+    it('uses the shared Heading primitive for the page title', () => {
+        renderMainMenuPage();
+
+        const heading = screen.getByRole('heading', { level: 1, name: 'Chimera' });
+
+        expect(heading).toHaveAttribute('data-ch-heading-level', '1');
+        expect(heading).toHaveAttribute('data-ch-heading-size', 'xl');
+    });
+
     it('navigates to /lobby when the play button is clicked', () => {
         renderMainMenuPage();
         fireEvent.click(screen.getByTestId('main-menu-play'));

@@ -18,6 +18,7 @@
  */
 
 import React from 'react';
+import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SettingsPage from './page';
@@ -108,6 +109,17 @@ afterEach(() => {
 // ── AC #1 — All five sections rendered ───────────────────────────────────────
 
 describe('SettingsPage — section rendering (AC #1)', () => {
+    it('uses shared Typography primitives for headings, labels, and captions', () => {
+        render(<SettingsPage />);
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toHaveAttribute(
+            'data-ch-heading-level',
+            '1',
+        );
+        expect(screen.getByText('Master Volume')).toHaveAttribute('data-ch-label-state', 'default');
+        expect(screen.getByText('80%')).toHaveAttribute('data-ch-caption-tone', 'neutral');
+    });
+
     it('renders the Audio section heading', () => {
         render(<SettingsPage />);
         expect(screen.getByRole('heading', { name: /audio/i })).toBeTruthy();

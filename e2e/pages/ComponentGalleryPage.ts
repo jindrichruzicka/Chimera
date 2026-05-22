@@ -59,6 +59,12 @@ export class ComponentGalleryPage {
      */
     readonly numberInput: Locator;
 
+    /**
+     * Commander-name `<input type="text">` (role="textbox") inside the Forms panel.
+     * Targets the *valid* input (excludes the invalid example).
+     */
+    readonly textInput: Locator;
+
     // ── Tab buttons ────────────────────────────────────────────────────────────
 
     private readonly tabActions: Locator;
@@ -90,6 +96,7 @@ export class ComponentGalleryPage {
         this.toggle = tabPanel.getByRole('switch', { name: /enable feature/i });
         this.select = tabPanel.getByRole('combobox', { name: /^colour scheme$/i });
         this.numberInput = tabPanel.getByRole('spinbutton', { name: /^quantity$/i });
+        this.textInput = tabPanel.getByRole('textbox', { name: /^commander name$/i });
     }
 
     /** Navigate to the component gallery route. */

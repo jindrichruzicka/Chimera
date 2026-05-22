@@ -13,6 +13,7 @@
  */
 
 import React from 'react';
+import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SavesPage from './page';
@@ -96,6 +97,23 @@ describe('SavesPage — loading state', () => {
 });
 
 describe('SavesPage — empty state', () => {
+    it('uses shared Typography primitives for the page heading, form label, and empty message', () => {
+        mockIsLoading = false;
+        mockSlots = [];
+
+        render(<SavesPage />);
+
+        expect(screen.getByRole('heading', { level: 1, name: 'Saves' })).toHaveAttribute(
+            'data-ch-heading-level',
+            '1',
+        );
+        expect(screen.getByText('Slot ID')).toHaveAttribute('data-ch-label-state', 'default');
+        expect(screen.getByText(/no save slots found/i)).toHaveAttribute(
+            'data-ch-caption-tone',
+            'muted',
+        );
+    });
+
     it('shows an empty state message when slots is empty and not loading', () => {
         mockIsLoading = false;
         mockSlots = [];

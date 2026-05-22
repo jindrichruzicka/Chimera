@@ -24,6 +24,9 @@ import React, { useCallback, useState } from 'react';
 import { toSlotId } from '@chimera/electron/preload/api-types.js';
 import type { SaveSlotMeta, SlotId } from '@chimera/electron/preload/api-types.js';
 import { Button } from '../../components/ui/Button';
+import { Caption } from '../../components/ui/Caption';
+import { Heading } from '../../components/ui/Heading';
+import { Label } from '../../components/ui/Label';
 import { useSaveStore } from '../../state/saveStore.js';
 import { useSavesApi } from './useSavesApi.js';
 
@@ -133,9 +136,9 @@ function NewSaveForm({ gameId, onNewSave }: NewSaveFormProps): React.ReactElemen
                 marginBottom: 'var(--ch-space-md)',
             }}
         >
-            <label htmlFor="new-save-slot-id" style={{ whiteSpace: 'nowrap' }}>
+            <Label htmlFor="new-save-slot-id" style={{ whiteSpace: 'nowrap' }}>
                 Slot ID
-            </label>
+            </Label>
             <input
                 id="new-save-slot-id"
                 type="text"
@@ -214,7 +217,9 @@ export default function SavesPage(): React.ReactElement {
             <main
                 style={{ fontFamily: 'var(--ch-font-ui)', padding: 'calc(var(--ch-space-md) * 2)' }}
             >
-                <h1>Saves</h1>
+                <Heading level={1} size="xl">
+                    Saves
+                </Heading>
                 <div role="status" aria-label="Loading save slots">
                     Loading…
                 </div>
@@ -224,7 +229,9 @@ export default function SavesPage(): React.ReactElement {
 
     return (
         <main style={{ fontFamily: 'var(--ch-font-ui)', padding: 'calc(var(--ch-space-md) * 2)' }}>
-            <h1>Saves</h1>
+            <Heading level={1} size="xl">
+                Saves
+            </Heading>
             {error !== null && (
                 <div
                     role="alert"
@@ -243,7 +250,7 @@ export default function SavesPage(): React.ReactElement {
             {slots.length === 0 ? (
                 <>
                     <NewSaveForm gameId={activeGameId} onNewSave={handleNewSave} />
-                    <p>No save slots found.</p>
+                    <Caption tone="muted">No save slots found.</Caption>
                 </>
             ) : (
                 <>

@@ -9,6 +9,9 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { PlayerList } from '../../components/shell/PlayerList';
 import { Button } from '../../components/ui/Button';
+import { Caption } from '../../components/ui/Caption';
+import { Heading } from '../../components/ui/Heading';
+import { Label } from '../../components/ui/Label';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { defaultTheme } from '../../theme/default-theme';
@@ -220,7 +223,9 @@ export default function LobbyPage() {
                 role="main"
                 aria-labelledby="lobby-heading"
             >
-                <h1 id="lobby-heading">Multiplayer Lobby</h1>
+                <Heading id="lobby-heading" level={1} size="xl">
+                    Multiplayer Lobby
+                </Heading>
                 {/* Display current configuration */}
                 <div
                     data-testid="lobby-config-summary"
@@ -236,7 +241,9 @@ export default function LobbyPage() {
                 >
                     <strong>Configuration:</strong> Game ID: {gameId}, Max Players: {maxPlayers}
                     <br />
-                    <small>To change: Add ?gameId=yourgame&maxPlayers=6 to URL</small>
+                    <Caption tone="muted">
+                        To change: Add ?gameId=yourgame&amp;maxPlayers=6 to URL
+                    </Caption>
                 </div>
 
                 {error && (
@@ -254,7 +261,7 @@ export default function LobbyPage() {
                 {!lobbyState ? (
                     <div>
                         <div style={{ marginBottom: 'var(--ch-space-lg)' }}>
-                            <h2>Host a Lobby</h2>
+                            <Heading level={2}>Host a Lobby</Heading>
                             <p>
                                 Hosting game "{gameId}" with up to {maxPlayers} players
                             </p>
@@ -269,27 +276,26 @@ export default function LobbyPage() {
                             >
                                 {pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby'}
                             </Button>
-                            <div
+                            <Caption
                                 id="host-config-info"
+                                tone="muted"
                                 style={{
-                                    fontSize: 'var(--ch-font-size-sm)',
-                                    color: 'var(--ch-color-text-secondary)',
                                     marginTop: 'var(--ch-space-xs)',
                                 }}
                             >
                                 Will host game "{gameId}" with up to {maxPlayers} players
-                            </div>
+                            </Caption>
                         </div>
 
                         <div data-testid="join-lobby">
-                            <h2>Join a Lobby</h2>
+                            <Heading level={2}>Join a Lobby</Heading>
                             <div style={{ marginBottom: 'var(--ch-space-md)' }}>
-                                <label
+                                <Label
                                     htmlFor="lobby-code-input"
                                     style={{ display: 'block', marginBottom: 'var(--ch-space-xs)' }}
                                 >
                                     Lobby Code:
-                                </label>
+                                </Label>
                                 <input
                                     id="lobby-code-input"
                                     data-testid="address-input"
@@ -307,16 +313,15 @@ export default function LobbyPage() {
                                     }}
                                     aria-describedby="lobby-code-help"
                                 />
-                                <div
+                                <Caption
                                     id="lobby-code-help"
+                                    tone="muted"
                                     style={{
-                                        fontSize: 'var(--ch-font-size-sm)',
-                                        color: 'var(--ch-color-text-secondary)',
                                         marginTop: 'var(--ch-space-xs)',
                                     }}
                                 >
                                     Enter the code provided by the lobby host
-                                </div>
+                                </Caption>
                                 <Button
                                     data-testid="confirm-join"
                                     onClick={() => {
