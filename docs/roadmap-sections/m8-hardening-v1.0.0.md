@@ -1,6 +1,6 @@
 ---
 title: 'M8 — Hardening (v1.0.0)'
-description: 'F43–F49: Crash Reporter/Error Boundaries, Replay System, Chat System, Toast Notification System, Debug Inspector, Multiplayer/Obfuscation Soak Tests, and Performance Baseline/NAT Diagnostics. Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.'
+description: 'F43–F49, F51–F52: Crash Reporter/Error Boundaries, Replay System, Chat System, Toast Notification System, Debug Inspector, Multiplayer/Obfuscation Soak Tests, Performance Baseline/NAT Diagnostics, Game-Customizable Main Menu, and Game-Customizable Settings Page (Tabbed Redesign). Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.'
 tags:
     [
         milestone,
@@ -14,13 +14,16 @@ tags:
         soak-tests,
         performance,
         nat,
+        main-menu,
+        settings,
+        ui-redesign,
     ]
 ---
 
 # M8 — Hardening (v1.0.0)
 
-> **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.
-> Architecture sections: §4.12, §4.27, §4.28, §4.29, §4.30, §10, §11
+> **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified. Shell pages are fully customizable per game.
+> Architecture sections: §4.12, §4.13, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §10, §11
 
 ---
 
@@ -68,6 +71,26 @@ Establish and gate: main process tick ≤ 16 ms at 20 Hz, renderer heap ≤ 32 M
 
 ---
 
+## F51 — Game-Customizable Main Menu `§4.37`
+
+Implement a declarative `GameMainMenuDefinition` contract in `shared/game-shell-contract.ts` covering layout (`orientation`, `align`, `anchor`, `offsetX`, `offsetY`, `gap`), button array (`GameMainMenuButton`), and a discriminated `GameMainMenuAction` union (`navigate | quit | open-lobby | command`). Introduce a `GameMenuCommand` registry contributed through `LoadedRendererGame.shell.menuCommands`. Create `renderer/shell/renderMainMenuDefinition.tsx` which maps any definition (or `undefined`) to engine-rendered `<Button>` components with token-based layout. Refactor `renderer/app/main-menu/page.tsx` to load the active game's definition via `rendererGameRegistry` and fall back to the engine default (also expressed as a `GameMainMenuDefinition`). Add a Tactics sample definition in `games/tactics/shell/main-menu.ts`. Invariants #80, #85, #91–#94 apply.
+
+**GitHub**: [F51 — #615](https://github.com/jindrichruzicka/Chimera/issues/615)
+
+---
+
+## F52 — Game-Customizable Settings Page + Tabbed UI Redesign `§4.13, §4.37`
+
+Two improvements delivered together:
+
+1. **Tabbed Settings Redesign** — Rebuild `renderer/app/settings/page.tsx` with a `<Tabs>` layout (Audio, Display, Gameplay, Controls) so settings sections are independently navigable without scrolling a single long page.
+
+2. **Declarative Settings Definition** — Introduce `GameSettingsPageDefinition` (with `SettingsTabDefinition`, `SettingsSectionDefinition`, `SettingsItemDefinition`, `SettingsControlDefinition`, `EngineSettingsFieldId`) in `shared/game-shell-contract.ts`. Games declare which engine fields and game-specific fields to show per tab; the engine renders all controls from design system primitives. Unknown `EngineSettingsFieldId` values are rejected at load time (fail-fast). The current generic `JSON.stringify` game-specific section is fully replaced. Add a Tactics sample in `games/tactics/shell/settings-page.ts` exercising all 4 control types and 5 tabs including a dedicated AI tab. Invariants #34–#36, #91–#94 apply.
+
+**GitHub**: [F52 — #624](https://github.com/jindrichruzicka/Chimera/issues/624)
+
+---
+
 ## Cross-References
 
 - [Logging & Crash Reporting](../core-components/logging-crash-reporting.md)
@@ -75,5 +98,6 @@ Establish and gate: main process tick ≤ 16 ms at 20 Hz, renderer heap ≤ 32 M
 - [Chat System](../core-components/chat-system.md)
 - [Toast Notification System](../core-components/toast-notification-system.md)
 - [Runtime Debug Layer](../core-components/runtime-debug-layer.md)
+- [Renderer Shell Pages UI Contract](../core-components/renderer-shell-pages-ui-contract.md)
 - [Testing Strategy](../testing/property-tests-soak.md) — soak test scenarios
 - [E2E Testing (Playwright)](../testing/e2e-testing-playwright.md) — multiplayer-soak.spec.ts, obfuscation.spec.ts
