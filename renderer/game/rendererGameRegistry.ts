@@ -26,13 +26,27 @@ export class UnknownRendererGameError extends Error {
 }
 
 type RendererGameLoader = () => Promise<LoadedRendererGame>;
+type RendererGameShellLoader = () => Promise<LoadedRendererGameShell>;
 
 const rendererGameLoaders: Readonly<Record<string, RendererGameLoader>> = {
     tactics: loadTacticsRendererGame,
 };
 
+const rendererGameShellLoaders: Readonly<Record<string, RendererGameShellLoader>> = {
+    tactics: loadTacticsRendererGameShell,
+};
+
 export async function loadRendererGame(gameId: string): Promise<LoadedRendererGame> {
     const loader = rendererGameLoaders[gameId];
+    if (loader === undefined) {
+        throw new UnknownRendererGameError(gameId);
+    }
+
+    return loader();
+}
+
+export async function loadRendererGameShell(gameId: string): Promise<LoadedRendererGameShell> {
+    const loader = rendererGameShellLoaders[gameId];
     if (loader === undefined) {
         throw new UnknownRendererGameError(gameId);
     }
@@ -48,19 +62,25 @@ export function getRendererGameMenuCommand(
 }
 
 async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
-    const [screenModule, assetManifestModule, shellModule] = await Promise.all([
+    const [screenModule, assetManifestModule, shell] = await Promise.all([
         import('@chimera/games/tactics/screens/index.js'),
         import('@chimera/games/tactics/asset-manifest.js'),
-        import('@chimera/games/tactics/shell/main-menu.js'),
+        loadTacticsRendererGameShell(),
     ]);
 
     return {
         registry: screenModule.TacticsGameScreenRegistry,
         assetManifest: assetManifestModule.tacticsAssetManifest,
         inputActions: screenModule.TACTICS_INPUT_ACTIONS,
-        shell: {
-            mainMenu: shellModule.tacticsMainMenuDefinition,
-            menuCommands: shellModule.tacticsMenuCommands,
-        },
+        shell,
+    };
+}
+
+async function loadTacticsRendererGameShell(): Promise<LoadedRendererGameShell> {
+    const shellModule = await import('@chimera/games/tactics/shell/main-menu.js');
+
+    return {
+        mainMenu: shellModule.tacticsMainMenuDefinition,
+        menuCommands: shellModule.tacticsMenuCommands,
     };
 }

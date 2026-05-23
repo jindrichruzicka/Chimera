@@ -128,9 +128,12 @@ Shell page containers should also use tokens rather than hardcoded layout values
 
 ## 4.37.4 Game Token Overrides on Shell Pages
 
-When a game is in context (i.e., `LobbyConfig.gameId` is resolved), the lobby page and any
-subsequent shell-level UI automatically inherit the game's token override CSS, because the
-override is a side-effect import loaded at game registry initialisation time (§4.35):
+When a game is in context, shell-level UI may load the game's renderer shell contribution through
+the renderer game registry. For the main menu, this context is explicit URL state such as
+`/main-menu/?gameId=tactics`; it does not require a lobby to exist. For the lobby page, context is
+resolved from `LobbyConfig.gameId`. Once a game registry module is imported, the lobby page and any
+subsequent shell-level UI automatically inherit the game's token override CSS, because the override
+is a side-effect import loaded at game registry initialisation time (§4.35):
 
 ```typescript
 // games/tactics/screens/index.ts
@@ -146,7 +149,7 @@ has been imported. Shell pages therefore receive game theming without any explic
 
 | Page              | Receives game override?                                   |
 | ----------------- | --------------------------------------------------------- |
-| `main-menu`       | Never (no game loaded yet)                                |
+| `main-menu`       | Yes — when explicit URL game context is present           |
 | `settings`        | Never (engine-owned, game-agnostic)                       |
 | `saves`           | Never (engine-owned, game-agnostic)                       |
 | `lobby`           | Yes — after `gameId` is resolved and registry is imported |

@@ -2,10 +2,12 @@
 
 import React from 'react';
 import type { GameMainMenuButton } from '@chimera/shared/game-shell-contract.js';
-import { Heading } from '../../components/ui/Heading';
-import { loadRendererGame, type LoadedRendererGameShell } from '../../game/rendererGameRegistry';
+import {
+    loadRendererGameShell,
+    type LoadedRendererGameShell,
+} from '../../game/rendererGameRegistry';
 import { RenderMainMenuDefinition } from '../../shell/renderMainMenuDefinition';
-import { getDefaultLobbyConfig } from '../lobby/lobbyConfig';
+import { resolveMainMenuGameId } from '../../shell/resolveMainMenuGameId';
 
 const styles = {
     container: {
@@ -41,22 +43,48 @@ function getMainMenuButtonTestId(button: GameMainMenuButton): string | undefined
     }
 }
 
+// ── Menu resolution state ─────────────────────────────────────────────────────
+//
+// Distinguishes "URL context not yet read" and "game shell loading" from "no
+// game context at all". This prevents the engine-default buttons (Play /
+// Settings / Quit) from flashing before a URL-selected game shell resolves.
+//
+// • 'unresolved'    — initial SSR-safe state; URL not yet inspected
+// • 'engine-default' — no gameId in URL; show engine default menu
+// • 'loading'       — gameId present, shell fetch in flight; show nothing
+// • 'loaded'        — shell fetched; show game-provided menu (or engine
+//                     default when the game provides no mainMenu)
+// • 'load-failed'   — shell fetch rejected; fall back to engine default
+type MenuLoadState =
+    | { status: 'unresolved' }
+    | { status: 'engine-default' }
+    | { status: 'loading' }
+    | { status: 'loaded'; shell: LoadedRendererGameShell }
+    | { status: 'load-failed' };
+
 export default function MainMenuPage() {
-    const [shell, setShell] = React.useState<LoadedRendererGameShell | undefined>(undefined);
+    const [menuState, setMenuState] = React.useState<MenuLoadState>({ status: 'unresolved' });
 
     React.useEffect(() => {
-        const { gameId } = getDefaultLobbyConfig();
+        const gameId = resolveMainMenuGameId(new URLSearchParams(window.location.search));
+
+        if (gameId === null) {
+            setMenuState({ status: 'engine-default' });
+            return;
+        }
+
+        setMenuState({ status: 'loading' });
         let isActive = true;
 
-        loadRendererGame(gameId)
-            .then((game) => {
+        loadRendererGameShell(gameId)
+            .then((loadedShell) => {
                 if (isActive) {
-                    setShell(game.shell);
+                    setMenuState({ status: 'loaded', shell: loadedShell });
                 }
             })
             .catch(() => {
                 if (isActive) {
-                    setShell(undefined);
+                    setMenuState({ status: 'load-failed' });
                 }
             });
 
@@ -65,15 +93,22 @@ export default function MainMenuPage() {
         };
     }, []);
 
+    // Derive the props to pass to the renderer. While 'unresolved' or
+    // 'loading', render nothing inside the container so the engine-default
+    // buttons never flash before the game shell settles.
+    if (menuState.status === 'unresolved' || menuState.status === 'loading') {
+        return <main data-testid="main-menu" style={styles.container} />;
+    }
+
+    const definition = menuState.status === 'loaded' ? menuState.shell.mainMenu : undefined;
+    const menuCommands = menuState.status === 'loaded' ? menuState.shell.menuCommands : undefined;
+
     return (
         <main data-testid="main-menu" style={styles.container}>
             {/* POM alignment guard literals: data-testid="main-menu-play" data-testid="main-menu-settings" data-testid="main-menu-quit" */}
-            <Heading level={1} size="xl">
-                Chimera
-            </Heading>
             <RenderMainMenuDefinition
-                definition={shell?.mainMenu}
-                menuCommands={shell?.menuCommands}
+                definition={definition}
+                menuCommands={menuCommands}
                 getButtonTestId={getMainMenuButtonTestId}
             />
         </main>

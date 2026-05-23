@@ -6,6 +6,7 @@ import type {
 import {
     getRendererGameMenuCommand,
     loadRendererGame,
+    loadRendererGameShell,
     type LoadedRendererGame,
     UnknownRendererGameError,
 } from './rendererGameRegistry';
@@ -21,6 +22,24 @@ describe('rendererGameRegistry', () => {
 
     it('rejects unknown game ids', async () => {
         await expect(loadRendererGame('missing-game')).rejects.toThrow(UnknownRendererGameError);
+    });
+
+    it('loads only the registered tactics shell bundle', async () => {
+        const shell = await loadRendererGameShell('tactics');
+
+        expect(shell.mainMenu?.buttons.map((button) => button.label)).toEqual([
+            'New Game',
+            'Load Game',
+            'Settings',
+            'Quit',
+        ]);
+        expect(shell.menuCommands).toEqual({});
+    });
+
+    it('rejects unknown game ids when loading a shell bundle', async () => {
+        await expect(loadRendererGameShell('missing-game')).rejects.toThrow(
+            UnknownRendererGameError,
+        );
     });
 
     describe('LoadedRendererGame.shell type contract (#617)', () => {

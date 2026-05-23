@@ -3,19 +3,30 @@ import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron
 
 const MAIN_MENU_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/main-menu/`;
 
+export interface MainMenuGotoOptions {
+    readonly gameId?: string;
+}
+
 export class MainMenuPage {
     readonly playButton: Locator;
     readonly settingsButton: Locator;
     readonly quitButton: Locator;
+    readonly menu: Locator;
 
     public constructor(private readonly page: Page) {
         this.playButton = page.getByTestId('main-menu-play');
         this.settingsButton = page.getByTestId('main-menu-settings');
         this.quitButton = page.getByTestId('main-menu-quit');
+        this.menu = page.getByTestId('main-menu');
     }
 
-    public async goto(): Promise<void> {
-        await this.page.goto(MAIN_MENU_URL);
+    public async goto(options: MainMenuGotoOptions = {}): Promise<void> {
+        const url = new URL(MAIN_MENU_URL);
+        if (options.gameId !== undefined) {
+            url.searchParams.set('gameId', options.gameId);
+        }
+
+        await this.page.goto(url.toString());
     }
 
     public async navigateToLobby(): Promise<void> {
@@ -28,5 +39,25 @@ export class MainMenuPage {
 
     public async quit(): Promise<void> {
         await this.quitButton.click();
+    }
+
+    /** True when the main-menu container is attached and visible in the DOM. */
+    public async isVisible(): Promise<boolean> {
+        return this.menu.isVisible();
+    }
+
+    /**
+     * Returns the text labels of all buttons rendered inside the main-menu
+     * container. Uses accessible role so the result is order-stable.
+     */
+    public async getButtonLabels(): Promise<string[]> {
+        await this.menu.waitFor({ state: 'visible' });
+        return this.menu.getByRole('button').allTextContents();
+    }
+
+    /** Clicks the button whose accessible name matches `label`. */
+    public async clickButtonByLabel(label: string): Promise<void> {
+        await this.menu.waitFor({ state: 'visible' });
+        await this.menu.getByRole('button', { name: label, exact: true }).click();
     }
 }

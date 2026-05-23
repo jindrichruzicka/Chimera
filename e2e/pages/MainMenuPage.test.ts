@@ -4,11 +4,20 @@ import { MainMenuPage } from './MainMenuPage';
 
 interface ClickableLocator {
     click: () => Promise<void>;
+    allTextContents: () => Promise<string[]>;
+}
+
+interface LocatorWithChildren {
+    click: () => Promise<void>;
+    isVisible: () => Promise<boolean>;
+    waitFor: (options: { state: string }) => Promise<void>;
+    getByRole: (role: string, options?: { name?: string; exact?: boolean }) => ClickableLocator;
+    allTextContents: () => Promise<string[]>;
 }
 
 interface TestPage {
     goto: (url: string) => Promise<null>;
-    getByTestId: (testId: string) => ClickableLocator;
+    getByTestId: (testId: string) => LocatorWithChildren;
 }
 
 const buildPageDouble = (): {
@@ -21,18 +30,31 @@ const buildPageDouble = (): {
     const requestedTestIds: string[] = [];
     const visitedUrls: string[] = [];
 
+    const makeLocator = (id: string): LocatorWithChildren => ({
+        click: async (): Promise<void> => {
+            clickedTestIds.push(id);
+        },
+        isVisible: async (): Promise<boolean> => true,
+        waitFor: async (): Promise<void> => {},
+        getByRole: (_role: string, options?: { name?: string }): ClickableLocator => ({
+            click: async (): Promise<void> => {
+                if (options?.name !== undefined) {
+                    clickedTestIds.push(`${id}[role=${options.name}]`);
+                }
+            },
+            allTextContents: async (): Promise<string[]> => [],
+        }),
+        allTextContents: async (): Promise<string[]> => [],
+    });
+
     const page: TestPage = {
         goto: async (url: string): Promise<null> => {
             visitedUrls.push(url);
             return null;
         },
-        getByTestId: (testId: string): ClickableLocator => {
+        getByTestId: (testId: string): LocatorWithChildren => {
             requestedTestIds.push(testId);
-            return {
-                click: async (): Promise<void> => {
-                    clickedTestIds.push(testId);
-                },
-            };
+            return makeLocator(testId);
         },
     };
 
@@ -40,7 +62,7 @@ const buildPageDouble = (): {
 };
 
 describe('MainMenuPage', () => {
-    it('binds play, settings, and quit locators using test ids', () => {
+    it('binds play, settings, quit, and menu locators using test ids', () => {
         const { page, requestedTestIds } = buildPageDouble();
 
         const mainMenu = new MainMenuPage(page);
@@ -48,11 +70,11 @@ describe('MainMenuPage', () => {
         expect(mainMenu.playButton).toBeDefined();
         expect(mainMenu.settingsButton).toBeDefined();
         expect(mainMenu.quitButton).toBeDefined();
-        expect(requestedTestIds).toEqual([
-            'main-menu-play',
-            'main-menu-settings',
-            'main-menu-quit',
-        ]);
+        expect(mainMenu.menu).toBeDefined();
+        expect(requestedTestIds).toContain('main-menu-play');
+        expect(requestedTestIds).toContain('main-menu-settings');
+        expect(requestedTestIds).toContain('main-menu-quit');
+        expect(requestedTestIds).toContain('main-menu');
     });
 
     it('navigates to lobby via play button', async () => {
@@ -89,5 +111,32 @@ describe('MainMenuPage', () => {
         await mainMenu.goto();
 
         expect(visitedUrls).toEqual(['chimera://renderer/main-menu/']);
+    });
+
+    it('isVisible() delegates to the menu locator', async () => {
+        const { page } = buildPageDouble();
+        const mainMenu = new MainMenuPage(page);
+
+        const result = await mainMenu.isVisible();
+
+        expect(result).toBe(true);
+    });
+
+    it('getButtonLabels() waits for menu visibility and returns button texts', async () => {
+        const { page } = buildPageDouble();
+        const mainMenu = new MainMenuPage(page);
+
+        const labels = await mainMenu.getButtonLabels();
+
+        expect(Array.isArray(labels)).toBe(true);
+    });
+
+    it('clickButtonByLabel() clicks the button with the matching accessible name', async () => {
+        const { page, clickedTestIds } = buildPageDouble();
+        const mainMenu = new MainMenuPage(page);
+
+        await mainMenu.clickButtonByLabel('Settings');
+
+        expect(clickedTestIds).toContain('main-menu[role=Settings]');
     });
 });

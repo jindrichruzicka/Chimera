@@ -31,6 +31,7 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
         orientation: 'vertical',
         align: 'center',
         anchor: 'bottom',
+        offsetY: -48,
         gap: 16,
     },
     buttons: [

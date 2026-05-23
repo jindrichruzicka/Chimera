@@ -29,7 +29,7 @@ export class LobbyPage {
 
     public async hostLobby(): Promise<void> {
         await this.hostButton.click();
-        await this.connectionStatus.waitFor({ state: 'visible' });
+        await this.sessionId.waitFor({ state: 'visible' });
     }
 
     public async joinLobby(address: string): Promise<void> {

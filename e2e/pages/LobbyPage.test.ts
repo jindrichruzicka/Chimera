@@ -120,14 +120,14 @@ describe('LobbyPage', () => {
         expect(waitedTestIds).toEqual(['lobby-session-id']);
     });
 
-    it('hosts a lobby and waits for visible connection status', async () => {
+    it('hosts a lobby and waits for the hosted session id', async () => {
         const { page, clickedTestIds, waitedTestIds } = buildPageDouble();
         const lobbyPage = new LobbyPage(page);
 
         await lobbyPage.hostLobby();
 
         expect(clickedTestIds).toEqual(['host-lobby']);
-        expect(waitedTestIds).toEqual(['connection-status']);
+        expect(waitedTestIds).toEqual(['lobby-session-id']);
     });
 
     it('joins a lobby and waits for visible connection status', async () => {
