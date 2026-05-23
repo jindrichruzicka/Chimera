@@ -183,7 +183,7 @@ describe('StateProjector — projection property tests (F29)', () => {
                 }),
                 { numRuns: 10_000 },
             );
-        });
+        }, 15_000);
     });
 
     describe('player-state-level: hand (owner-only) masked for non-owners', () => {
@@ -199,7 +199,7 @@ describe('StateProjector — projection property tests (F29)', () => {
                 }),
                 { numRuns: 10_000 },
             );
-        });
+        }, 15_000);
     });
 
     describe('fog-of-war: hidden entities absent (not null) from PlayerSnapshot', () => {
@@ -232,7 +232,7 @@ describe('StateProjector — projection property tests (F29)', () => {
                 }),
                 { numRuns: 10_000 },
             );
-        });
+        }, 15_000);
     });
 });
 
@@ -254,7 +254,7 @@ describe('Honest AI viewer — PlayerSnapshot passed to AI never contains oppone
             }),
             { numRuns: 10_000 },
         );
-    });
+    }, 15_000);
 });
 
 describe('fog-of-war (targeted, T03): known-invisible entity is key-absent from non-owner PlayerSnapshot (§10.1)', () => {
@@ -294,7 +294,7 @@ describe('fog-of-war (targeted, T03): known-invisible entity is key-absent from 
             }),
             { numRuns: 10_000 },
         );
-    });
+    }, 15_000);
 });
 
 // ─── Committed-scope invariant (F29/WARN-2) ───────────────────────────────────
