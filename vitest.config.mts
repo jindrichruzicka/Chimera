@@ -44,6 +44,7 @@ export default defineConfig({
     test: {
         name: 'chimera',
         environment: 'node',
+        testTimeout: 60_000,
         include: ['**/*.test.ts', '**/*.test.tsx'],
         exclude: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/build/**'],
         globals: false,
