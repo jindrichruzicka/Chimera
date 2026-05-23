@@ -13,6 +13,7 @@
 import React, { type CSSProperties } from 'react';
 import { useRouter } from 'next/navigation';
 import type {
+    GameMainMenuButton,
     GameMainMenuDefinition,
     GameMainMenuLayout,
     GameMenuCommandId,
@@ -141,11 +142,15 @@ function defaultVariant(
 interface RenderMainMenuDefinitionProps {
     definition?: GameMainMenuDefinition | undefined;
     menuCommands?: Partial<Record<GameMenuCommandId, () => void>> | undefined;
+    getButtonTestId?:
+        | ((button: GameMainMenuButton, index: number) => string | undefined)
+        | undefined;
 }
 
 export function RenderMainMenuDefinition({
     definition,
     menuCommands,
+    getButtonTestId,
 }: RenderMainMenuDefinitionProps): React.ReactElement {
     const router = useRouter();
 
@@ -213,6 +218,7 @@ export function RenderMainMenuDefinition({
                 {buttons.map((button, index) => (
                     <Button
                         key={index}
+                        data-testid={getButtonTestId?.(button, index)}
                         variant={button.variant ?? defaultVariant(button.action, index)}
                         onClick={handlers[index]}
                     >

@@ -48,15 +48,19 @@ export function getRendererGameMenuCommand(
 }
 
 async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
-    const [screenModule, assetManifestModule] = await Promise.all([
+    const [screenModule, assetManifestModule, shellModule] = await Promise.all([
         import('@chimera/games/tactics/screens/index.js'),
         import('@chimera/games/tactics/asset-manifest.js'),
+        import('@chimera/games/tactics/shell/main-menu.js'),
     ]);
 
     return {
         registry: screenModule.TacticsGameScreenRegistry,
         assetManifest: assetManifestModule.tacticsAssetManifest,
         inputActions: screenModule.TACTICS_INPUT_ACTIONS,
-        // shell: contributed once T51.5 lands (games/tactics/shell/main-menu.ts)
+        shell: {
+            mainMenu: shellModule.tacticsMainMenuDefinition,
+            menuCommands: shellModule.tacticsMenuCommands,
+        },
     };
 }

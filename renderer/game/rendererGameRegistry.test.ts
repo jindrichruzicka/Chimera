@@ -43,9 +43,26 @@ describe('rendererGameRegistry', () => {
             expectTypeOf<Commands[GameMenuCommandId]>().toEqualTypeOf<(() => void) | undefined>();
         });
 
-        it('tactics loader leaves shell absent until T51.5', async () => {
+        it('tactics loader exposes shell.mainMenu (GameMainMenuDefinition)', async () => {
             const game = await loadRendererGame('tactics');
-            expect(game.shell).toBeUndefined();
+            expect(game.shell?.mainMenu).toBeDefined();
+            expect(Array.isArray(game.shell?.mainMenu?.buttons)).toBe(true);
+        });
+
+        it('tactics shell.mainMenu contains a Load Game button that routes to /saves', async () => {
+            const game = await loadRendererGame('tactics');
+            const buttons = game.shell?.mainMenu?.buttons ?? [];
+            const loadGameBtn = buttons.find((b) => b.label === 'Load Game');
+            expect(loadGameBtn).toBeDefined();
+            expect(loadGameBtn?.action.type).toBe('navigate');
+            if (loadGameBtn?.action.type === 'navigate') {
+                expect(loadGameBtn.action.target).toBe('/saves');
+            }
+        });
+
+        it('tactics loader exposes an empty shell.menuCommands registry when no commands are needed', async () => {
+            const game = await loadRendererGame('tactics');
+            expect(game.shell?.menuCommands).toEqual({});
         });
     });
 
