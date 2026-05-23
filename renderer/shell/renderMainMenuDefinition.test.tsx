@@ -221,6 +221,8 @@ describe('layout gap (token-only CSS — Invariant #91)', () => {
         // jsdom represents inline custom properties via getPropertyValue.
         const inlineStyle = container.getAttribute('style') ?? '';
         expect(inlineStyle).not.toMatch(/gap:\s*8px/);
+        // Positive assertion: gap=8 maps to the --ch-space-sm design token (Invariant #91).
+        expect(inlineStyle).toContain('var(--ch-space-sm)');
     });
 
     it('undefined gap falls back to var(--ch-space-sm)', () => {
@@ -233,6 +235,20 @@ describe('layout gap (token-only CSS — Invariant #91)', () => {
         const container = screen.getByTestId('menu-container');
         const inlineStyle = container.getAttribute('style') ?? '';
         expect(inlineStyle).toContain('--ch-space-sm');
+    });
+
+    it('gap value outside the token map throws at render time', () => {
+        // gap=7 is not in GAP_TOKEN_MAP — the renderer must reject it before producing any JSX.
+        // Suppress React's console.error output for this expected throw so CI output stays clean.
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+        const def: GameMainMenuDefinition = {
+            layout: { gap: 7 },
+            buttons: [{ label: 'Go', action: { type: 'quit' } }],
+        };
+        expect(() => renderMenu(def)).toThrow(
+            '[RenderMainMenuDefinition] gap=7 does not map to a --ch-space-* token',
+        );
+        consoleError.mockRestore();
     });
 });
 
