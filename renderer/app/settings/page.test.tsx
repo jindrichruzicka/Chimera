@@ -21,6 +21,7 @@ import React from 'react';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GameSettingsPageDefinition } from '@chimera/shared/game-shell-contract.js';
 import SettingsPage from './page';
 import { useSettingsStore } from '../../state/settingsStore';
 import { useInputManager } from '../../input/InputManagerContext.js';
@@ -28,11 +29,20 @@ import type { InputManager } from '../../input/InputManager.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type { ResolvedSettings } from '@chimera/electron/preload/api-types.js';
+import type { LoadedRendererGame } from '../../game/rendererGameRegistry';
+
+const { mockLoadRendererGame } = vi.hoisted(() => ({
+    mockLoadRendererGame: vi.fn(),
+}));
 
 // Mock the InputManagerContext so tests control what useInputManager() returns
 vi.mock('../../input/InputManagerContext.js', () => ({
     InputManagerContext: { Provider: ({ children }: { children: React.ReactNode }) => children },
     useInputManager: vi.fn(),
+}));
+
+vi.mock('../../game/rendererGameRegistry', () => ({
+    loadRendererGame: mockLoadRendererGame,
 }));
 
 // ── Mock window.__chimera.settings ────────────────────────────────────────────
@@ -57,6 +67,13 @@ function setChimera(): void {
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const GAME_ID = 'tactics';
+
+function makeRendererGame(settings?: GameSettingsPageDefinition): LoadedRendererGame {
+    return {
+        registry: { board: () => null },
+        shell: settings === undefined ? {} : { settings },
+    };
+}
 
 function makeSettings(
     audioOverrides: Partial<{
@@ -86,10 +103,21 @@ function makeSettings(
     };
 }
 
+async function renderSettingsPage(): Promise<void> {
+    render(<SettingsPage />);
+    await screen.findByRole('tab', { name: 'Audio' });
+}
+
+async function renderSettingsPageAndOpenTab(tabName: string): Promise<void> {
+    await renderSettingsPage();
+    fireEvent.click(screen.getByRole('tab', { name: tabName }));
+}
+
 // ── Setup / Teardown ──────────────────────────────────────────────────────────
 
 beforeEach(() => {
     vi.resetAllMocks();
+    mockLoadRendererGame.mockResolvedValue(makeRendererGame());
     mockUpdate.mockResolvedValue(undefined);
     mockReset.mockResolvedValue(undefined);
     setChimera();
@@ -106,72 +134,197 @@ afterEach(() => {
     useSettingsStore.setState({ settings: {}, activeGameId: null });
 });
 
-// ── AC #1 — All five sections rendered ───────────────────────────────────────
+// ── AC #1 — Declarative tab layout rendered ──────────────────────────────────
 
-describe('SettingsPage — section rendering (AC #1)', () => {
-    it('uses shared Typography primitives for headings, labels, and captions', () => {
-        render(<SettingsPage />);
+describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
+    it('uses shared Typography primitives for headings and captions', async () => {
+        await renderSettingsPage();
 
         expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toHaveAttribute(
             'data-ch-heading-level',
             '1',
         );
-        expect(screen.getByText('Master Volume')).toHaveAttribute('data-ch-label-state', 'default');
         expect(screen.getByText('80%')).toHaveAttribute('data-ch-caption-tone', 'neutral');
     });
 
-    it('renders the Audio section heading', () => {
-        render(<SettingsPage />);
-        expect(screen.getByRole('heading', { name: /audio/i })).toBeTruthy();
+    it('renders the engine default Audio, Display, Gameplay, and Controls tabs', async () => {
+        await renderSettingsPage();
+
+        expect(screen.getByRole('tab', { name: 'Audio' })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Display' })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Gameplay' })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Controls' })).toBeTruthy();
     });
 
-    it('renders the Display section heading', () => {
-        render(<SettingsPage />);
+    it('renders Display fields after selecting the Display tab', async () => {
+        await renderSettingsPageAndOpenTab('Display');
+
         expect(screen.getByRole('heading', { name: /display/i })).toBeTruthy();
+        expect(screen.getByLabelText(/fullscreen/i)).toBeTruthy();
+        expect(screen.getByLabelText(/target fps/i)).toBeTruthy();
     });
 
-    it('renders the Gameplay section heading', () => {
-        render(<SettingsPage />);
+    it('hydrates numeric select settings from the store', async () => {
+        const settings = makeSettings();
+        const displaySettings = (settings['display'] ?? {}) as Record<string, unknown>;
+        useSettingsStore.setState({
+            settings: {
+                [GAME_ID]: {
+                    ...settings,
+                    display: { ...displaySettings, targetFps: 120 },
+                },
+            },
+            activeGameId: GAME_ID,
+        });
+
+        await renderSettingsPageAndOpenTab('Display');
+
+        expect(screen.getByLabelText<HTMLSelectElement>(/target fps/i).value).toBe('120');
+    });
+
+    it('renders Gameplay fields after selecting the Gameplay tab', async () => {
+        await renderSettingsPageAndOpenTab('Gameplay');
+
         expect(screen.getByRole('heading', { name: /gameplay/i })).toBeTruthy();
+        expect(screen.getByLabelText(/language/i)).toBeTruthy();
+        expect(screen.getByRole('switch', { name: 'Auto Save' })).toBeTruthy();
     });
 
-    it('renders the Controls section heading as a placeholder', () => {
-        render(<SettingsPage />);
+    it('renders the Controls tab with registered input actions', async () => {
+        await renderSettingsPageAndOpenTab('Controls');
+
         expect(screen.getByRole('heading', { name: /controls/i })).toBeTruthy();
+        expect(screen.getByText('Undo last action')).toBeTruthy();
     });
 
-    it('renders the Game Settings section when game-specific keys are present', () => {
+    it('shows a Spinner while active game settings are loading', async () => {
+        const loadingGameId = 'settings-loading-game';
+        let resolveGame!: (game: LoadedRendererGame) => void;
+        mockLoadRendererGame.mockReturnValue(
+            new Promise<LoadedRendererGame>((resolve) => {
+                resolveGame = resolve;
+            }),
+        );
+        useSettingsStore.setState({
+            settings: { [loadingGameId]: makeSettings() },
+            activeGameId: loadingGameId,
+        });
+
+        render(<SettingsPage />);
+
+        expect(screen.getByRole('status', { name: /loading settings/i })).toBeTruthy();
+        expect(screen.queryByRole('tab', { name: 'Audio' })).toBeNull();
+
+        resolveGame(makeRendererGame());
+        expect(await screen.findByRole('tab', { name: 'Audio' })).toBeTruthy();
+    });
+
+    it('renders custom tabs from the loaded game shell settings definition', async () => {
+        const customGameId = 'custom-settings-game';
+        const customDefinition: GameSettingsPageDefinition = {
+            tabs: [
+                {
+                    id: 'combat',
+                    label: 'Combat',
+                    sections: [
+                        {
+                            id: 'rules',
+                            label: 'Rules',
+                            items: [
+                                { kind: 'engine-field', fieldId: 'audio.masterVolume' },
+                                {
+                                    kind: 'game-field',
+                                    path: 'tactics.difficulty',
+                                    label: 'Difficulty',
+                                    control: {
+                                        type: 'select',
+                                        options: [
+                                            { value: 'normal', label: 'Normal' },
+                                            { value: 'hard', label: 'Hard' },
+                                        ],
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+                {
+                    id: 'ai',
+                    label: 'AI',
+                    sections: [
+                        {
+                            id: 'assist',
+                            items: [
+                                {
+                                    kind: 'game-field',
+                                    path: 'tactics.aiAssist',
+                                    label: 'AI Assist',
+                                    control: { type: 'toggle' },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        mockLoadRendererGame.mockResolvedValue(makeRendererGame(customDefinition));
+        useSettingsStore.setState({
+            settings: {
+                [customGameId]: {
+                    ...makeSettings(),
+                    tactics: { difficulty: 'normal', aiAssist: true },
+                },
+            },
+            activeGameId: customGameId,
+        });
+
+        render(<SettingsPage />);
+
+        expect(await screen.findByRole('tab', { name: 'Combat' })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'AI' })).toBeTruthy();
+        expect(screen.queryByRole('tab', { name: 'Display' })).toBeNull();
+        expect(screen.getByRole('heading', { name: 'Rules' })).toBeTruthy();
+
+        fireEvent.change(screen.getByLabelText(/difficulty/i), { target: { value: 'hard' } });
+
+        expect(mockUpdate).toHaveBeenCalledWith(customGameId, {
+            tactics: { difficulty: 'hard' },
+        });
+
+        fireEvent.click(screen.getByRole('tab', { name: 'AI' }));
+        expect(screen.getByLabelText(/ai assist/i)).toBeTruthy();
+    });
+
+    it('does not render the legacy Game Settings JSON section for extra keys', async () => {
         useSettingsStore.setState({
             settings: { [GAME_ID]: { ...makeSettings(), mapSize: 12 } },
             activeGameId: GAME_ID,
         });
-        render(<SettingsPage />);
-        expect(screen.getByRole('heading', { name: /game settings/i })).toBeTruthy();
-    });
 
-    it('does not render the Game Settings section when no game-specific keys are present', () => {
-        render(<SettingsPage />);
+        await renderSettingsPage();
+
         expect(screen.queryByRole('heading', { name: /game settings/i })).toBeNull();
+        expect(screen.queryByText('12')).toBeNull();
     });
 });
 
 // ── AC #2 — Volume slider dispatches update ───────────────────────────────────
 
 describe('SettingsPage — master volume slider (AC #2)', () => {
-    it('marks the master volume input for settings page objects', () => {
-        render(<SettingsPage />);
+    it('marks the master volume input for settings page objects', async () => {
+        await renderSettingsPage();
         expect(screen.getByTestId('master-volume')).toBeTruthy();
     });
 
-    it('calls window.__chimera.settings.update with audio masterVolume patch when slider changes', () => {
-        render(<SettingsPage />);
+    it('calls window.__chimera.settings.update with audio masterVolume patch when slider changes', async () => {
+        await renderSettingsPage();
         const slider = screen.getByLabelText(/master volume/i);
         fireEvent.change(slider, { target: { value: '0.4' } });
         expect(mockUpdate).toHaveBeenCalledWith(GAME_ID, { audio: { masterVolume: 0.4 } });
     });
 
-    it('slider initial value reflects settings from the store', () => {
-        render(<SettingsPage />);
+    it('slider initial value reflects settings from the store', async () => {
+        await renderSettingsPage();
         const slider = screen.getByLabelText<HTMLInputElement>(/master volume/i);
         expect(slider.value).toBe('0.8');
     });
@@ -180,13 +333,13 @@ describe('SettingsPage — master volume slider (AC #2)', () => {
 // ── AC #3 — Reset to defaults button ─────────────────────────────────────────
 
 describe('SettingsPage — reset to defaults (AC #3)', () => {
-    it('marks the reset button for settings page objects', () => {
-        render(<SettingsPage />);
+    it('marks the reset button for settings page objects', async () => {
+        await renderSettingsPage();
         expect(screen.getByTestId('reset-to-defaults')).toBeTruthy();
     });
 
-    it('calls window.__chimera.settings.reset with the active gameId when reset is clicked', () => {
-        render(<SettingsPage />);
+    it('calls window.__chimera.settings.reset with the active gameId when reset is clicked', async () => {
+        await renderSettingsPage();
         const btn = screen.getByRole('button', { name: /reset to defaults/i });
         fireEvent.click(btn);
         expect(mockReset).toHaveBeenCalledWith(GAME_ID);
@@ -196,8 +349,8 @@ describe('SettingsPage — reset to defaults (AC #3)', () => {
 // ── AC #4 — Live update on onChange push ─────────────────────────────────────
 
 describe('SettingsPage — onChange push updates form without unmounting (AC #4)', () => {
-    it('updates the masterVolume slider when _applySettings is called', () => {
-        render(<SettingsPage />);
+    it('updates the masterVolume slider when _applySettings is called', async () => {
+        await renderSettingsPage();
 
         const slider = screen.getByLabelText<HTMLInputElement>(/master volume/i);
         expect(slider.value).toBe('0.8');
@@ -211,6 +364,24 @@ describe('SettingsPage — onChange push updates form without unmounting (AC #4)
 
         expect(screen.getByLabelText<HTMLInputElement>(/master volume/i).value).toBe('0.3');
     });
+
+    it('updates numeric select values when _applySettings is called', async () => {
+        await renderSettingsPageAndOpenTab('Display');
+
+        const targetFps = screen.getByLabelText<HTMLSelectElement>(/target fps/i);
+        expect(targetFps.value).toBe('60');
+
+        const settings = makeSettings();
+        const displaySettings = (settings['display'] ?? {}) as Record<string, unknown>;
+        act(() => {
+            useSettingsStore.getState()._applySettings(GAME_ID, {
+                ...settings,
+                display: { ...displaySettings, targetFps: 0 },
+            });
+        });
+
+        expect(screen.getByLabelText<HTMLSelectElement>(/target fps/i).value).toBe('0');
+    });
 });
 
 // ── AC #5 — Engine-wide settings (activeGameId === null) ──────────────────────
@@ -222,37 +393,38 @@ describe('SettingsPage — onChange push updates form without unmounting (AC #4)
 // Confirming '__engine__' is an accepted reserved id end-to-end (WARN-3).
 
 describe('SettingsPage — engine-wide settings when activeGameId is null (AC #5)', () => {
-    it('renders form controls even when activeGameId is null', () => {
+    it('renders form controls even when activeGameId is null', async () => {
         useSettingsStore.setState({
             settings: { __engine__: makeSettings() },
             activeGameId: null,
         });
 
-        render(<SettingsPage />);
+        await renderSettingsPage();
         expect(screen.getByRole('heading', { name: /audio/i })).toBeTruthy();
+        fireEvent.click(screen.getByRole('tab', { name: 'Display' }));
         expect(screen.getByRole('heading', { name: /display/i })).toBeTruthy();
     });
 
-    it('dispatches update with __engine__ gameId when activeGameId is null', () => {
+    it('dispatches update with __engine__ gameId when activeGameId is null', async () => {
         useSettingsStore.setState({
             settings: { __engine__: makeSettings() },
             activeGameId: null,
         });
 
-        render(<SettingsPage />);
+        await renderSettingsPage();
         const slider = screen.getByLabelText(/master volume/i);
         fireEvent.change(slider, { target: { value: '0.4' } });
 
         expect(mockUpdate).toHaveBeenCalledWith('__engine__', { audio: { masterVolume: 0.4 } });
     });
 
-    it('dispatches reset with __engine__ gameId when activeGameId is null', () => {
+    it('dispatches reset with __engine__ gameId when activeGameId is null', async () => {
         useSettingsStore.setState({
             settings: { __engine__: makeSettings() },
             activeGameId: null,
         });
 
-        render(<SettingsPage />);
+        await renderSettingsPage();
         const btn = screen.getByRole('button', { name: /reset to defaults/i });
         fireEvent.click(btn);
 
@@ -302,54 +474,54 @@ function makeInputManagerDouble(overrides: Partial<InputManager> = {}): InputMan
     };
 }
 
-function renderWithInputManager(inputManager: InputManager): void {
+async function renderWithInputManager(inputManager: InputManager): Promise<void> {
     vi.mocked(useInputManager).mockReturnValue(inputManager);
-    render(<SettingsPage />);
+    await renderSettingsPageAndOpenTab('Controls');
 }
 
 // ── AC #6 — Controls rebind panel renders all registered actions ──────────────
 
 describe('SettingsPage — controls rebind panel (AC #6)', () => {
-    it('renders action descriptions for all registered actions', () => {
-        renderWithInputManager(makeInputManagerDouble());
+    it('renders action descriptions for all registered actions', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
         expect(screen.getByText('Undo last action')).toBeTruthy();
         expect(screen.getByText('Toggle game menu')).toBeTruthy();
         expect(screen.getByText('End current turn')).toBeTruthy();
     });
 
-    it('renders current binding key for each action', () => {
-        renderWithInputManager(makeInputManagerDouble());
+    it('renders current binding key for each action', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
         // engine:undo → Ctrl+KeyZ
         expect(screen.getByText(/Ctrl\+KeyZ/i)).toBeTruthy();
         // engine:toggle-menu → Escape
         expect(screen.getByText(/Escape/i)).toBeTruthy();
     });
 
-    it('renders an "Edit" button for each action', () => {
-        renderWithInputManager(makeInputManagerDouble());
+    it('renders an "Edit" button for each action', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         expect(editButtons.length).toBe(3);
     });
 
-    it('renders a "Reset" button for each action', () => {
-        renderWithInputManager(makeInputManagerDouble());
+    it('renders a "Reset" button for each action', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
         const resetButtons = screen.getAllByRole('button', { name: /^reset$/i });
         expect(resetButtons.length).toBe(3);
     });
 
-    it('groups actions by category', () => {
-        renderWithInputManager(makeInputManagerDouble());
+    it('groups actions by category', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
         expect(screen.getByText('Engine')).toBeTruthy();
         expect(screen.getByText('Game')).toBeTruthy();
     });
 
-    it('refreshes controls when the active game context changes after initial render', () => {
+    it('refreshes controls when the active game context changes after initial render', async () => {
         useSettingsStore.setState({
             settings: { __engine__: makeSettings(), [GAME_ID]: makeSettings() },
             activeGameId: null,
         });
         let registeredActions: readonly InputAction[] = [UNDO_ACTION];
-        renderWithInputManager(
+        await renderWithInputManager(
             makeInputManagerDouble({
                 getActions: vi.fn(() => registeredActions),
             }),
@@ -363,22 +535,23 @@ describe('SettingsPage — controls rebind panel (AC #6)', () => {
             useSettingsStore.getState().setActiveGameId(GAME_ID);
         });
 
-        expect(screen.getByText('End current turn')).toBeTruthy();
+        fireEvent.click(await screen.findByRole('tab', { name: 'Controls' }));
+        expect(await screen.findByText('End current turn')).toBeTruthy();
     });
 });
 
 // ── AC #7 — Capture mode: listening for a new key ────────────────────────────
 
 describe('SettingsPage — rebind capture mode (AC #7)', () => {
-    it('pressing Edit enters capture mode — shows "Press a key…" status', () => {
-        renderWithInputManager(makeInputManagerDouble());
+    it('pressing Edit enters capture mode — shows "Press a key…" status', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[0]!);
         expect(screen.getByText(/press a key/i)).toBeTruthy();
     });
 
-    it('pressing Escape while in capture mode cancels and restores normal view', () => {
-        renderWithInputManager(makeInputManagerDouble());
+    it('pressing Escape while in capture mode cancels and restores normal view', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[0]!);
         expect(screen.getByText(/press a key/i)).toBeTruthy();
@@ -389,7 +562,7 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
 
     it('pressing a non-Escape key while in capture mode calls rebind', async () => {
         const mockRebind = vi.fn().mockResolvedValue({ ok: true });
-        renderWithInputManager(makeInputManagerDouble({ rebind: mockRebind }));
+        await renderWithInputManager(makeInputManagerDouble({ rebind: mockRebind }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[0]!); // Edit engine:undo
@@ -403,7 +576,7 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
 
     it('capture mode with Ctrl held includes Ctrl in the binding modifiers', async () => {
         const mockRebind = vi.fn().mockResolvedValue({ ok: true });
-        renderWithInputManager(makeInputManagerDouble({ rebind: mockRebind }));
+        await renderWithInputManager(makeInputManagerDouble({ rebind: mockRebind }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[0]!);
@@ -426,6 +599,8 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
 
         vi.mocked(useInputManager).mockReturnValue(firstManager);
         const { rerender } = render(<SettingsPage />);
+        await screen.findByRole('tab', { name: 'Audio' });
+        fireEvent.click(screen.getByRole('tab', { name: 'Controls' }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[0]!);
@@ -444,11 +619,13 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
         expect(firstRebind).not.toHaveBeenCalled();
     });
 
-    it('keeps the capture listener attached across same-manager rerenders', () => {
+    it('keeps the capture listener attached across same-manager rerenders', async () => {
         const addSpy = vi.spyOn(document, 'addEventListener');
         const removeSpy = vi.spyOn(document, 'removeEventListener');
 
         const { rerender } = render(<SettingsPage />);
+        await screen.findByRole('tab', { name: 'Audio' });
+        fireEvent.click(screen.getByRole('tab', { name: 'Controls' }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[0]!);
@@ -480,7 +657,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
             reason: 'conflict',
             conflictingAction: 'engine:undo',
         });
-        renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
+        await renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[1]!); // Edit engine:toggle-menu
@@ -498,7 +675,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
             reason: 'conflict',
             conflictingAction: 'engine:undo',
         });
-        renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
+        await renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
         fireEvent.click(editButtons[1]!);
@@ -520,7 +697,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
             })
             .mockResolvedValue({ ok: true });
         const mockResetBinding = vi.fn().mockResolvedValue(undefined);
-        renderWithInputManager(
+        await renderWithInputManager(
             makeInputManagerDouble({ rebind: conflictRebind, resetBinding: mockResetBinding }),
         );
 
@@ -556,7 +733,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
             .mockResolvedValue({ ok: true });
         const mockResetBinding = vi.fn().mockResolvedValue(undefined);
 
-        renderWithInputManager(
+        await renderWithInputManager(
             makeInputManagerDouble({ rebind: conflictRebind, resetBinding: mockResetBinding }),
         );
 
@@ -592,7 +769,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
 describe('SettingsPage — per-action reset (AC #9)', () => {
     it('clicking Reset for an action calls inputManager.resetBinding() with the correct id', async () => {
         const mockResetBinding = vi.fn().mockResolvedValue(undefined);
-        renderWithInputManager(makeInputManagerDouble({ resetBinding: mockResetBinding }));
+        await renderWithInputManager(makeInputManagerDouble({ resetBinding: mockResetBinding }));
 
         const resetButtons = screen.getAllByRole('button', { name: /^reset$/i });
         await act(async () => {

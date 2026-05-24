@@ -3,127 +3,260 @@
 /**
  * renderer/app/settings/page.tsx
  *
- * Settings page — renders engine-wide settings (audio, display, gameplay,
- * controls) and game-specific settings when a gameId is active.
+ * Settings page — renders engine-owned settings tabs from the shared
+ * GameSettingsPageDefinition contract.
  *
- * Architecture reference: §4.13 — Settings System
- * Task: issue #393
- *
- * Invariant #36: Settings are never read by the simulation core — this page
- *   only reads from `settingsStore`; it never dispatches into `ActionPipeline`.
+ * Architecture reference: §4.13 — Settings System, §4.37.8 — Settings page
+ * definition fallback chain.
  *
  * Rules:
  *   - Reads settings from `useSettingsStore()` via narrow typed selectors only.
  *   - All writes go through `window.__chimera.settings` (update / reset).
- *   - Must NOT import from: electron/main/, simulation/, networking/.
+ *   - Must NOT import from: electron/main/, simulation/, networking/, games/*.
  */
 
 import React from 'react';
-import { useShallow } from 'zustand/shallow';
+import type {
+    EngineSettingsFieldId,
+    GameSettingsPageDefinition,
+    SettingsControlDefinition,
+    SettingsItemDefinition,
+    SettingsTabDefinition,
+} from '@chimera/shared/game-shell-contract.js';
+import type { ResolvedSettings } from '@chimera/electron/preload/api-types.js';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';
 import { Heading } from '../../components/ui/Heading';
-import { Label } from '../../components/ui/Label';
-import { useSettingsStore } from '../../state/settingsStore';
+import { Select } from '../../components/ui/Select';
+import { Slider } from '../../components/ui/Slider';
+import { Spinner } from '../../components/ui/Spinner';
+import { Tabs } from '../../components/ui/Tabs';
+import { Toggle } from '../../components/ui/Toggle';
+import { loadRendererGame } from '../../game/rendererGameRegistry';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import { useInputManager } from '../../input/InputManagerContext.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
-import type {
-    ResolvedSettings,
-    AudioSettings,
-    DisplaySettings,
-    GameplaySettings,
-} from '@chimera/electron/preload/api-types.js';
+import { useSettingsStore } from '../../state/settingsStore';
+import styles from './page.module.css';
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+type SettingPrimitive = boolean | number | string;
 
-const ENGINE_NAMESPACE_KEYS = new Set(['audio', 'display', 'gameplay', 'controls']);
+type EngineFieldDefinition = Readonly<{
+    readonly control: SettingsControlDefinition;
+    readonly defaultValue?: unknown;
+    readonly formatValue?: ((value: unknown) => string) | undefined;
+    readonly label: string;
+    readonly parseValue?: ((value: SettingPrimitive) => unknown) | undefined;
+    readonly testId?: string | undefined;
+}>;
 
-const TARGET_FPS_OPTIONS: readonly (30 | 60 | 120 | 0)[] = [30, 60, 120, 0];
+type SettingsDefinitionResource = Readonly<{
+    read(): GameSettingsPageDefinition;
+}>;
 
-// ── Selectors ─────────────────────────────────────────────────────────────────
+const ENGINE_DEFAULT_SETTINGS_DEFINITION: GameSettingsPageDefinition = {
+    tabs: [
+        {
+            id: 'audio',
+            label: 'Audio',
+            sections: [
+                {
+                    id: 'audio',
+                    label: 'Audio',
+                    items: [
+                        { kind: 'engine-field', fieldId: 'audio.masterVolume' },
+                        { kind: 'engine-field', fieldId: 'audio.sfxVolume' },
+                        { kind: 'engine-field', fieldId: 'audio.musicVolume' },
+                        { kind: 'engine-field', fieldId: 'audio.muted' },
+                    ],
+                },
+            ],
+        },
+        {
+            id: 'display',
+            label: 'Display',
+            sections: [
+                {
+                    id: 'display',
+                    label: 'Display',
+                    items: [
+                        { kind: 'engine-field', fieldId: 'display.fullscreen' },
+                        { kind: 'engine-field', fieldId: 'display.vsync' },
+                        { kind: 'engine-field', fieldId: 'display.targetFps' },
+                        { kind: 'engine-field', fieldId: 'display.uiScale' },
+                    ],
+                },
+            ],
+        },
+        {
+            id: 'gameplay',
+            label: 'Gameplay',
+            sections: [
+                {
+                    id: 'gameplay',
+                    label: 'Gameplay',
+                    items: [
+                        { kind: 'engine-field', fieldId: 'gameplay.language' },
+                        { kind: 'engine-field', fieldId: 'gameplay.autoSave' },
+                        { kind: 'engine-field', fieldId: 'gameplay.autoSaveIntervalTurns' },
+                        { kind: 'engine-field', fieldId: 'gameplay.showHints' },
+                        { kind: 'engine-field', fieldId: 'gameplay.showPerfHud' },
+                    ],
+                },
+            ],
+        },
+        {
+            id: 'controls',
+            label: 'Controls',
+            sections: [
+                {
+                    id: 'controls',
+                    label: 'Controls',
+                    items: [{ kind: 'engine-field', fieldId: 'controls.bindings' }],
+                },
+            ],
+        },
+    ],
+};
+
+const TARGET_FPS_OPTIONS = [
+    { value: '30', label: '30 FPS' },
+    { value: '60', label: '60 FPS' },
+    { value: '120', label: '120 FPS' },
+    { value: '0', label: 'Uncapped' },
+] as const;
+
+const LANGUAGE_OPTIONS = [
+    { value: 'en-US', label: 'English (US)' },
+    { value: 'de-DE', label: 'Deutsch' },
+    { value: 'es-ES', label: 'Espanol' },
+    { value: 'fr-FR', label: 'Francais' },
+] as const;
+
+const ENGINE_FIELD_DEFINITIONS: Record<EngineSettingsFieldId, EngineFieldDefinition> = {
+    'audio.masterVolume': {
+        control: { type: 'slider', min: 0, max: 1, step: 0.01 },
+        defaultValue: 1,
+        formatValue: formatPercent,
+        label: 'Master Volume',
+        testId: 'master-volume',
+    },
+    'audio.sfxVolume': {
+        control: { type: 'slider', min: 0, max: 1, step: 0.01 },
+        defaultValue: 1,
+        formatValue: formatPercent,
+        label: 'SFX Volume',
+    },
+    'audio.musicVolume': {
+        control: { type: 'slider', min: 0, max: 1, step: 0.01 },
+        defaultValue: 0.8,
+        formatValue: formatPercent,
+        label: 'Music Volume',
+    },
+    'audio.muted': {
+        control: { type: 'toggle' },
+        defaultValue: false,
+        label: 'Muted',
+    },
+    'display.fullscreen': {
+        control: { type: 'toggle' },
+        defaultValue: false,
+        label: 'Fullscreen',
+    },
+    'display.vsync': {
+        control: { type: 'toggle' },
+        defaultValue: true,
+        label: 'VSync',
+    },
+    'display.targetFps': {
+        control: { type: 'select', options: TARGET_FPS_OPTIONS },
+        defaultValue: 60,
+        label: 'Target FPS',
+        parseValue: parseIntegerValue,
+    },
+    'display.uiScale': {
+        control: { type: 'slider', min: 0.5, max: 2, step: 0.05 },
+        defaultValue: 1,
+        formatValue: formatScale,
+        label: 'UI Scale',
+    },
+    'gameplay.language': {
+        control: { type: 'select', options: LANGUAGE_OPTIONS },
+        defaultValue: 'en-US',
+        label: 'Language',
+    },
+    'gameplay.autoSave': {
+        control: { type: 'toggle' },
+        defaultValue: true,
+        label: 'Auto Save',
+    },
+    'gameplay.autoSaveIntervalTurns': {
+        control: { type: 'slider', min: 1, max: 100, step: 1 },
+        defaultValue: 5,
+        formatValue: formatTurns,
+        label: 'Auto Save Interval',
+    },
+    'gameplay.showHints': {
+        control: { type: 'toggle' },
+        defaultValue: true,
+        label: 'Show Hints',
+    },
+    'gameplay.showPerfHud': {
+        control: { type: 'toggle' },
+        defaultValue: false,
+        label: 'Show Performance HUD',
+    },
+    'controls.bindings': {
+        control: { type: 'key-binding' },
+        label: 'Controls',
+    },
+};
 
 /**
- * Selects the active gameId, or the reserved '__engine__' id when no game is active.
+ * Cache of per-game settings definition resources. Each resource is created once
+ * and reused across renders for the same gameId. The throw-to-suspend pattern
+ * requires a stable thrown thenable reference and relies on the cached resolved
+ * resource being reused on subsequent renders — clearing this cache between tests
+ * forces React to suspend with a fresh pending resource and the re-render triggered
+ * by promise resolution does not reliably fire after RTL `cleanup()`. Use a unique
+ * gameId per test scenario that requires a distinct definition; do NOT call
+ * `_clearSettingsDefinitionCacheForTest()` in afterEach.
  *
- * Invariant #36: The reserved '__engine__' gameId is used for engine-wide
- * settings that apply regardless of which game is loaded. When activeGameId is null,
- * all settings updates are dispatched against '__engine__' to allow users to
- * configure engine behavior before loading a game.
- *
- * This id is validated end-to-end by the main process SettingsManager.
+ * Note: `React.use(promise)` is the idiomatic React 19 equivalent, but it requires
+ * all promise resolutions to occur inside an awaited `act()` scope. The throw-to-
+ * suspend pattern is kept to avoid restructuring every RTL helper in the test suite.
  */
-function selectGameId(s: { activeGameId: string | null }): string {
-    return s.activeGameId ?? ENGINE_SETTINGS_GAME_ID;
+const settingsDefinitionResources = new Map<string, SettingsDefinitionResource>();
+
+/** @internal Test-only: clears the per-game definition resource cache. */
+export function _clearSettingsDefinitionCacheForTest(): void {
+    settingsDefinitionResources.clear();
 }
 
-/**
- * Selector for game-specific settings — keys outside the engine namespaces
- * (audio / display / gameplay / controls). Using `shallow` as the equality
- * comparator means audio/display/gameplay changes do NOT trigger a re-render
- * of the game-specific section.
- */
-function selectGameSpecificSettings(s: {
+function selectActiveGameId(state: { activeGameId: string | null }): string | null {
+    return state.activeGameId;
+}
+
+function selectGameId(state: { activeGameId: string | null }): string {
+    return state.activeGameId ?? ENGINE_SETTINGS_GAME_ID;
+}
+
+function selectResolvedSettings(state: {
     activeGameId: string | null;
     settings: Record<string, ResolvedSettings>;
-}): Readonly<Record<string, unknown>> | undefined {
-    const resolved = s.settings[s.activeGameId ?? ENGINE_SETTINGS_GAME_ID];
-    if (!resolved) return undefined;
-    const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(resolved)) {
-        if (!ENGINE_NAMESPACE_KEYS.has(k)) result[k] = v;
-    }
-    return result;
+}): ResolvedSettings | undefined {
+    return state.settings[state.activeGameId ?? ENGINE_SETTINGS_GAME_ID];
 }
-
-/** Selector for audio settings sub-shape. */
-function selectAudioSettings(s: {
-    activeGameId: string | null;
-    settings: Record<string, ResolvedSettings>;
-}): AudioSettings | undefined {
-    const settings = s.settings[s.activeGameId ?? '__engine__'];
-    // @chimera-review: ResolvedSettings is Record<string,unknown>; sub-shape cast is safe because the store is only ever populated via SettingsAPI.update which returns EngineSettings
-    return settings?.['audio'] as AudioSettings | undefined;
-}
-
-/** Selector for display settings sub-shape. */
-function selectDisplaySettings(s: {
-    activeGameId: string | null;
-    settings: Record<string, ResolvedSettings>;
-}): DisplaySettings | undefined {
-    const settings = s.settings[s.activeGameId ?? '__engine__'];
-    // @chimera-review: ResolvedSettings is Record<string,unknown>; sub-shape cast is safe because the store is only ever populated via SettingsAPI.update which returns EngineSettings
-    return settings?.['display'] as DisplaySettings | undefined;
-}
-
-/** Selector for gameplay settings sub-shape. */
-function selectGameplaySettings(s: {
-    activeGameId: string | null;
-    settings: Record<string, ResolvedSettings>;
-}): GameplaySettings | undefined {
-    const settings = s.settings[s.activeGameId ?? '__engine__'];
-    // @chimera-review: ResolvedSettings is Record<string,unknown>; sub-shape cast is safe because the store is only ever populated via SettingsAPI.update which returns EngineSettings
-    return settings?.['gameplay'] as GameplaySettings | undefined;
-}
-
-// ── SettingsPage ──────────────────────────────────────────────────────────────
 
 export default function SettingsPage(): React.ReactElement {
+    const activeGameId = useSettingsStore(selectActiveGameId);
     const gameId = useSettingsStore(selectGameId);
-    const audio = useSettingsStore(selectAudioSettings);
-    const display = useSettingsStore(selectDisplaySettings);
-    const gameplay = useSettingsStore(selectGameplaySettings);
-    // useShallow: only re-renders when game-specific values actually change
-    const gameSpecificSettings = useSettingsStore(useShallow(selectGameSpecificSettings));
-
+    const resolvedSettings = useSettingsStore(selectResolvedSettings);
     const inputManager = useInputManager();
 
-    // id of the action currently in capture mode, or null
     const [capturingId, setCapturingId] = React.useState<InputActionId | null>(null);
-    // Captured bindings keyed per action so force-rebind resolves the correct pending conflict.
     const capturedBindingsRef = React.useRef<Partial<Record<InputActionId, KeyBinding>>>({});
-    // Per-action rebind status (conflict or success)
     const [rebindStatus, setRebindStatus] = React.useState<
         Partial<Record<InputActionId, { ok: boolean; conflict?: InputActionId }>>
     >({});
@@ -136,14 +269,14 @@ export default function SettingsPage(): React.ReactElement {
                 .rebind(id, binding)
                 .then((result) => {
                     if (result.ok) {
-                        setRebindStatus((prev) => ({ ...prev, [id]: { ok: true } }));
+                        setRebindStatus((previous) => ({ ...previous, [id]: { ok: true } }));
                     } else if (result.reason === 'conflict') {
-                        setRebindStatus((prev) => ({
-                            ...prev,
+                        setRebindStatus((previous) => ({
+                            ...previous,
                             [id]: { ok: false, conflict: result.conflictingAction },
                         }));
                     } else {
-                        setRebindStatus((prev) => ({ ...prev, [id]: { ok: false } }));
+                        setRebindStatus((previous) => ({ ...previous, [id]: { ok: false } }));
                     }
                 })
                 .catch((error) => {
@@ -153,28 +286,26 @@ export default function SettingsPage(): React.ReactElement {
         [inputManager],
     );
 
-    // Capture mode: listen for the next key press when an action is being rebound
     React.useEffect(() => {
         if (capturingId === null) return;
         const actionId = capturingId;
 
-        function handleKeyDown(e: KeyboardEvent): void {
-            e.preventDefault();
-            e.stopPropagation();
+        function handleKeyDown(event: KeyboardEvent): void {
+            event.preventDefault();
+            event.stopPropagation();
 
-            // Escape cancels capture
-            if (e.code === 'Escape') {
+            if (event.code === 'Escape') {
                 setCapturingId(null);
                 return;
             }
 
             const modifiers: ('Ctrl' | 'Shift' | 'Alt' | 'Meta')[] = [];
-            if (e.ctrlKey) modifiers.push('Ctrl');
-            if (e.shiftKey) modifiers.push('Shift');
-            if (e.altKey) modifiers.push('Alt');
-            if (e.metaKey) modifiers.push('Meta');
+            if (event.ctrlKey) modifiers.push('Ctrl');
+            if (event.shiftKey) modifiers.push('Shift');
+            if (event.altKey) modifiers.push('Alt');
+            if (event.metaKey) modifiers.push('Meta');
 
-            const binding: KeyBinding = { primary: e.code, modifiers };
+            const binding: KeyBinding = { primary: event.code, modifiers };
             capturedBindingsRef.current[actionId] = binding;
             setCapturingId(null);
             handleRebind(actionId, binding);
@@ -194,9 +325,9 @@ export default function SettingsPage(): React.ReactElement {
             .then(() => inputManager.rebind(id, binding))
             .then((result) => {
                 if (result.ok) {
-                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: true } }));
+                    setRebindStatus((previous) => ({ ...previous, [id]: { ok: true } }));
                 } else {
-                    setRebindStatus((prev) => ({ ...prev, [id]: { ok: false } }));
+                    setRebindStatus((previous) => ({ ...previous, [id]: { ok: false } }));
                 }
             })
             .catch((error) => {
@@ -208,8 +339,8 @@ export default function SettingsPage(): React.ReactElement {
         inputManager
             .resetBinding(id)
             .then(() => {
-                setRebindStatus((prev) => {
-                    const next = { ...prev };
+                setRebindStatus((previous) => {
+                    const next = { ...previous };
                     delete next[id];
                     return next;
                 });
@@ -218,21 +349,6 @@ export default function SettingsPage(): React.ReactElement {
                 console.error('[SettingsPage] resetBinding failed:', error);
             });
     }
-
-    function formatBinding(binding: KeyBinding | undefined): string {
-        if (!binding) return '—';
-        const mods = binding.modifiers?.length ? binding.modifiers.join('+') + '+' : '';
-        return `${mods}${binding.primary}`;
-    }
-
-    /**
-     * Memoize game-specific entries. Selector already filters engine-namespace keys;
-     * useMemo provides a stable array reference for downstream renders.
-     */
-    const gameSpecificEntries = React.useMemo(
-        () => (gameSpecificSettings ? Object.entries(gameSpecificSettings) : []),
-        [gameSpecificSettings],
-    );
 
     function handleUpdate(patch: Record<string, unknown>): void {
         useSettingsStore
@@ -252,461 +368,483 @@ export default function SettingsPage(): React.ReactElement {
             });
     }
 
+    function renderControlsPanel(): React.ReactElement {
+        if (actionsByCategory.size === 0) {
+            return <Caption tone="muted">No controls registered.</Caption>;
+        }
+
+        return (
+            <div className={styles['controls-panel']}>
+                {Array.from(actionsByCategory.entries()).map(([category, actions]) => (
+                    <section className={styles['controls-category']} key={category}>
+                        <Heading level={3} size="md">
+                            {category}
+                        </Heading>
+                        <div className={styles['binding-list']}>
+                            {actions.map((action) => {
+                                const binding = inputManager.getBinding(action.id);
+                                const status = rebindStatus[action.id];
+                                const isCapturing = capturingId === action.id;
+                                return (
+                                    <div
+                                        className={styles['binding-row']}
+                                        data-action-id={action.id}
+                                        data-testid="binding-action-row"
+                                        key={action.id}
+                                    >
+                                        <span className={styles['action-description']}>
+                                            {action.description}
+                                        </span>
+                                        <span
+                                            className={styles['binding-value']}
+                                            data-testid="binding-value"
+                                        >
+                                            {isCapturing
+                                                ? 'Press a key...'
+                                                : formatBinding(binding)}
+                                        </span>
+                                        {status !== undefined && !status.ok && status.conflict && (
+                                            <span className={styles['conflict-status']}>
+                                                Conflict with{' '}
+                                                {inputManager
+                                                    .getActions()
+                                                    .find(
+                                                        (candidate) =>
+                                                            candidate.id === status.conflict,
+                                                    )?.description ?? status.conflict}
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() =>
+                                                        handleForceRebind(
+                                                            action.id,
+                                                            status.conflict!,
+                                                        )
+                                                    }
+                                                >
+                                                    Unbind existing &amp; rebind
+                                                </Button>
+                                            </span>
+                                        )}
+                                        {status?.ok === true && (
+                                            <span className={styles['success-status']}>Saved</span>
+                                        )}
+                                        {!isCapturing && (
+                                            <Button
+                                                data-testid="binding-edit"
+                                                size="sm"
+                                                variant="secondary"
+                                                onClick={() => setCapturingId(action.id)}
+                                            >
+                                                Edit
+                                            </Button>
+                                        )}
+                                        <Button
+                                            data-testid="binding-reset"
+                                            size="sm"
+                                            variant="ghost"
+                                            onClick={() => handleResetBinding(action.id)}
+                                        >
+                                            Reset
+                                        </Button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </section>
+                ))}
+            </div>
+        );
+    }
+
     return (
-        <main
-            style={{
-                fontFamily: 'var(--ch-font-ui)',
-                padding: 'calc(var(--ch-space-md) * 2)',
-                maxWidth: 'calc(var(--ch-space-xl) * 16)',
-            }}
-        >
+        <main className={styles['page']}>
             <Heading level={1} size="xl">
                 Settings
             </Heading>
 
-            {/* ── Audio ── */}
-            <section
-                aria-labelledby="audio-heading"
-                style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
+            {/* POM alignment guard literal: data-testid="master-volume" */}
+            <React.Suspense
+                fallback={
+                    <div className={styles['loading']}>
+                        <Spinner label="Loading settings" />
+                    </div>
+                }
             >
-                <Heading id="audio-heading" level={2}>
-                    Audio
-                </Heading>
+                <SettingsDefinitionSurface
+                    activeGameId={activeGameId}
+                    onUpdate={handleUpdate}
+                    renderControlsPanel={renderControlsPanel}
+                    resolvedSettings={resolvedSettings}
+                />
+            </React.Suspense>
 
-                <div
-                    style={{
-                        display: 'grid',
-                        gap: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
-                    }}
-                >
-                    <div
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--ch-space-xs)',
-                        }}
-                    >
-                        <Label htmlFor="master-volume">Master Volume</Label>
-                        <input
-                            id="master-volume"
-                            data-testid="master-volume"
-                            aria-label="Master Volume"
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            value={audio?.masterVolume ?? 1.0}
-                            onChange={(e) => {
-                                handleUpdate({
-                                    audio: { masterVolume: parseFloat(e.target.value) },
-                                });
-                            }}
-                        />
-                        <Caption>{((audio?.masterVolume ?? 1.0) * 100).toFixed(0)}%</Caption>
-                    </div>
-
-                    <div
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--ch-space-xs)',
-                        }}
-                    >
-                        <Label htmlFor="sfx-volume">SFX Volume</Label>
-                        <input
-                            id="sfx-volume"
-                            aria-label="SFX Volume"
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            value={audio?.sfxVolume ?? 1.0}
-                            onChange={(e) => {
-                                handleUpdate({ audio: { sfxVolume: parseFloat(e.target.value) } });
-                            }}
-                        />
-                        <Caption>{((audio?.sfxVolume ?? 1.0) * 100).toFixed(0)}%</Caption>
-                    </div>
-
-                    <div
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--ch-space-xs)',
-                        }}
-                    >
-                        <Label htmlFor="music-volume">Music Volume</Label>
-                        <input
-                            id="music-volume"
-                            aria-label="Music Volume"
-                            type="range"
-                            min={0}
-                            max={1}
-                            step={0.01}
-                            value={audio?.musicVolume ?? 0.8}
-                            onChange={(e) => {
-                                handleUpdate({
-                                    audio: { musicVolume: parseFloat(e.target.value) },
-                                });
-                            }}
-                        />
-                        <Caption>{((audio?.musicVolume ?? 0.8) * 100).toFixed(0)}%</Caption>
-                    </div>
-
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <input
-                            id="muted"
-                            aria-label="Muted"
-                            type="checkbox"
-                            checked={audio?.muted ?? false}
-                            onChange={(e) => {
-                                handleUpdate({ audio: { muted: e.target.checked } });
-                            }}
-                        />
-                        <Label htmlFor="muted">Muted</Label>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Display ── */}
-            <section
-                aria-labelledby="display-heading"
-                style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
-            >
-                <Heading id="display-heading" level={2}>
-                    Display
-                </Heading>
-
-                <div
-                    style={{
-                        display: 'grid',
-                        gap: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
-                    }}
-                >
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <input
-                            id="fullscreen"
-                            aria-label="Fullscreen"
-                            type="checkbox"
-                            checked={display?.fullscreen ?? false}
-                            onChange={(e) => {
-                                handleUpdate({ display: { fullscreen: e.target.checked } });
-                            }}
-                        />
-                        <Label htmlFor="fullscreen">Fullscreen</Label>
-                    </div>
-
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <input
-                            id="vsync"
-                            aria-label="VSync"
-                            type="checkbox"
-                            checked={display?.vsync ?? true}
-                            onChange={(e) => {
-                                handleUpdate({ display: { vsync: e.target.checked } });
-                            }}
-                        />
-                        <Label htmlFor="vsync">VSync</Label>
-                    </div>
-
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <Label htmlFor="target-fps">Target FPS</Label>
-                        <select
-                            id="target-fps"
-                            aria-label="Target FPS"
-                            value={display?.targetFps ?? 60}
-                            onChange={(e) => {
-                                handleUpdate({
-                                    display: {
-                                        // @chimera-review: parseInt(e.target.value, 10) as 30|60|120|0 is safe because the <select> is exclusively populated from TARGET_FPS_OPTIONS
-                                        targetFps: parseInt(e.target.value, 10) as
-                                            | 30
-                                            | 60
-                                            | 120
-                                            | 0,
-                                    },
-                                });
-                            }}
-                        >
-                            {TARGET_FPS_OPTIONS.map((fps) => (
-                                <option key={fps} value={fps}>
-                                    {fps === 0 ? 'Uncapped' : `${fps} FPS`}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div
-                        style={{
-                            display: 'flex',
-                            flexDirection: 'column',
-                            gap: 'var(--ch-space-xs)',
-                        }}
-                    >
-                        <Label htmlFor="ui-scale">UI Scale</Label>
-                        <input
-                            id="ui-scale"
-                            aria-label="UI Scale"
-                            type="range"
-                            min={0.5}
-                            max={2.0}
-                            step={0.05}
-                            value={display?.uiScale ?? 1.0}
-                            onChange={(e) => {
-                                handleUpdate({ display: { uiScale: parseFloat(e.target.value) } });
-                            }}
-                        />
-                        <Caption>{(display?.uiScale ?? 1.0).toFixed(2)}×</Caption>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Gameplay ── */}
-            <section
-                aria-labelledby="gameplay-heading"
-                style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
-            >
-                <Heading id="gameplay-heading" level={2}>
-                    Gameplay
-                </Heading>
-
-                <div
-                    style={{
-                        display: 'grid',
-                        gap: 'calc(var(--ch-space-sm) + var(--ch-space-xs))',
-                    }}
-                >
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <Label htmlFor="language">Language</Label>
-                        <input
-                            id="language"
-                            aria-label="Language"
-                            type="text"
-                            value={gameplay?.language ?? 'en-US'}
-                            onChange={(e) => {
-                                handleUpdate({ gameplay: { language: e.target.value } });
-                            }}
-                        />
-                    </div>
-
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <input
-                            id="auto-save"
-                            aria-label="Auto Save"
-                            type="checkbox"
-                            checked={gameplay?.autoSave ?? true}
-                            onChange={(e) => {
-                                handleUpdate({ gameplay: { autoSave: e.target.checked } });
-                            }}
-                        />
-                        <Label htmlFor="auto-save">Auto Save</Label>
-                    </div>
-
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <Label htmlFor="auto-save-interval">Auto Save Interval (turns)</Label>
-                        <input
-                            id="auto-save-interval"
-                            aria-label="Auto Save Interval"
-                            type="number"
-                            min={1}
-                            max={100}
-                            value={gameplay?.autoSaveIntervalTurns ?? 5}
-                            onChange={(e) => {
-                                handleUpdate({
-                                    gameplay: {
-                                        autoSaveIntervalTurns: parseInt(e.target.value, 10),
-                                    },
-                                });
-                            }}
-                        />
-                    </div>
-
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <input
-                            id="show-hints"
-                            aria-label="Show Hints"
-                            type="checkbox"
-                            checked={gameplay?.showHints ?? true}
-                            onChange={(e) => {
-                                handleUpdate({ gameplay: { showHints: e.target.checked } });
-                            }}
-                        />
-                        <Label htmlFor="show-hints">Show Hints</Label>
-                    </div>
-
-                    <div
-                        style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}
-                    >
-                        <input
-                            id="show-performance-hud"
-                            aria-label="Show Performance HUD"
-                            type="checkbox"
-                            checked={gameplay?.showPerfHud ?? false}
-                            onChange={(e) => {
-                                handleUpdate({ gameplay: { showPerfHud: e.target.checked } });
-                            }}
-                        />
-                        <Label htmlFor="show-performance-hud">Show Performance HUD</Label>
-                    </div>
-                </div>
-            </section>
-
-            {/* ── Controls ── */}
-            <section
-                aria-labelledby="controls-heading"
-                style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
-            >
-                <Heading id="controls-heading" level={2}>
-                    Controls
-                </Heading>
-                {Array.from(actionsByCategory.entries()).map(([category, actions]) => (
-                    <section
-                        key={category}
-                        aria-labelledby={`category-${category}`}
-                        style={{ marginBottom: 'var(--ch-space-md)' }}
-                    >
-                        <Heading
-                            id={`category-${category}`}
-                            level={3}
-                            size="md"
-                            style={{ fontWeight: 'bold', marginBottom: 'var(--ch-space-sm)' }}
-                        >
-                            {category}
-                        </Heading>
-                        {actions.map((action) => {
-                            const binding = inputManager.getBinding(action.id);
-                            const status = rebindStatus[action.id];
-                            const isCapturing = capturingId === action.id;
-                            return (
-                                <div
-                                    key={action.id}
-                                    data-testid="binding-action-row"
-                                    data-action-id={action.id}
-                                    style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: 'var(--ch-space-md)',
-                                        marginBottom: 'var(--ch-space-sm)',
-                                    }}
-                                >
-                                    <span style={{ flex: 1 }}>{action.description}</span>
-                                    <span
-                                        data-testid="binding-value"
-                                        style={{
-                                            minWidth: 'calc(var(--ch-space-md) * 8)',
-                                            color: 'var(--ch-color-text-secondary)',
-                                        }}
-                                    >
-                                        {isCapturing ? 'Press a key…' : formatBinding(binding)}
-                                    </span>
-                                    {status !== undefined && !status.ok && status.conflict && (
-                                        <span
-                                            style={{
-                                                color: 'var(--ch-color-error)',
-                                                fontSize: 'var(--ch-font-size-sm)',
-                                                display: 'flex',
-                                                alignItems: 'center',
-                                                gap: 'var(--ch-space-sm)',
-                                            }}
-                                        >
-                                            Conflict with{' '}
-                                            {inputManager
-                                                .getActions()
-                                                .find((a) => a.id === status.conflict)
-                                                ?.description ?? status.conflict}
-                                            <Button
-                                                size="sm"
-                                                variant="ghost"
-                                                onClick={() =>
-                                                    handleForceRebind(action.id, status.conflict!)
-                                                }
-                                            >
-                                                Unbind existing &amp; rebind
-                                            </Button>
-                                        </span>
-                                    )}
-                                    {status?.ok === true && (
-                                        <span style={{ color: 'var(--ch-color-success)' }}>✓</span>
-                                    )}
-                                    {!isCapturing && (
-                                        <Button
-                                            data-testid="binding-edit"
-                                            size="sm"
-                                            variant="secondary"
-                                            onClick={() => setCapturingId(action.id)}
-                                        >
-                                            Edit
-                                        </Button>
-                                    )}
-                                    <Button
-                                        data-testid="binding-reset"
-                                        size="sm"
-                                        variant="ghost"
-                                        onClick={() => handleResetBinding(action.id)}
-                                    >
-                                        Reset
-                                    </Button>
-                                </div>
-                            );
-                        })}
-                    </section>
-                ))}
-            </section>
-
-            {/* ── Game-specific settings ── */}
-            {gameSpecificEntries.length > 0 && (
-                <section
-                    aria-labelledby="game-specific-heading"
-                    style={{ marginBottom: 'calc(var(--ch-space-md) * 2)' }}
-                >
-                    <Heading id="game-specific-heading" level={2}>
-                        Game Settings
-                    </Heading>
-                    <dl style={{ display: 'grid', gap: 'var(--ch-space-sm)' }}>
-                        {gameSpecificEntries.map(([key, value]) => (
-                            <div key={key} style={{ display: 'flex', gap: 'var(--ch-space-md)' }}>
-                                <dt
-                                    style={{
-                                        fontWeight: 'bold',
-                                        minWidth: 'calc(var(--ch-space-md) * 12)',
-                                    }}
-                                >
-                                    {key}
-                                </dt>
-                                <dd>{JSON.stringify(value)}</dd>
-                            </div>
-                        ))}
-                    </dl>
-                </section>
-            )}
-
-            {/* ── Reset ── */}
             <Button
                 data-testid="reset-to-defaults"
-                variant="danger"
                 size="sm"
+                variant="danger"
                 onClick={handleReset}
             >
                 Reset to defaults
             </Button>
         </main>
     );
+}
+
+function SettingsDefinitionSurface({
+    activeGameId,
+    onUpdate,
+    renderControlsPanel,
+    resolvedSettings,
+}: Readonly<{
+    readonly activeGameId: string | null;
+    readonly onUpdate: (patch: Record<string, unknown>) => void;
+    readonly renderControlsPanel: () => React.ReactElement;
+    readonly resolvedSettings: ResolvedSettings | undefined;
+}>): React.ReactElement {
+    const definition = readSettingsDefinition(activeGameId);
+
+    return (
+        <Tabs
+            ariaLabel="Settings categories"
+            tabs={definition.tabs.map((tab) => ({
+                id: tab.id,
+                label: tab.label,
+                panel: (
+                    <SettingsTabPanel
+                        key={tab.id}
+                        onUpdate={onUpdate}
+                        renderControlsPanel={renderControlsPanel}
+                        resolvedSettings={resolvedSettings}
+                        tab={tab}
+                    />
+                ),
+            }))}
+        />
+    );
+}
+
+function SettingsTabPanel({
+    onUpdate,
+    renderControlsPanel,
+    resolvedSettings,
+    tab,
+}: Readonly<{
+    readonly onUpdate: (patch: Record<string, unknown>) => void;
+    readonly renderControlsPanel: () => React.ReactElement;
+    readonly resolvedSettings: ResolvedSettings | undefined;
+    readonly tab: SettingsTabDefinition;
+}>): React.ReactElement {
+    return (
+        <div className={styles['tab-panel-content']}>
+            {tab.sections.map((section) => {
+                const headingId = getSettingsElementId(tab.id, section.id, 'heading');
+                return (
+                    <section
+                        aria-labelledby={section.label ? headingId : undefined}
+                        className={styles['settings-section']}
+                        key={section.id}
+                    >
+                        {section.label ? (
+                            <Heading id={headingId} level={2} size="lg">
+                                {section.label}
+                            </Heading>
+                        ) : null}
+                        <div className={styles['field-list']}>
+                            {section.items.map((item) =>
+                                renderSettingsItem({
+                                    item,
+                                    onUpdate,
+                                    renderControlsPanel,
+                                    resolvedSettings,
+                                }),
+                            )}
+                        </div>
+                    </section>
+                );
+            })}
+        </div>
+    );
+}
+
+function renderSettingsItem({
+    item,
+    onUpdate,
+    renderControlsPanel,
+    resolvedSettings,
+}: Readonly<{
+    readonly item: SettingsItemDefinition;
+    readonly onUpdate: (patch: Record<string, unknown>) => void;
+    readonly renderControlsPanel: () => React.ReactElement;
+    readonly resolvedSettings: ResolvedSettings | undefined;
+}>): React.ReactElement {
+    switch (item.kind) {
+        case 'engine-field': {
+            const definition = ENGINE_FIELD_DEFINITIONS[item.fieldId];
+            if (definition.control.type === 'key-binding') {
+                return <React.Fragment key={item.fieldId}>{renderControlsPanel()}</React.Fragment>;
+            }
+            return (
+                <SettingsControl
+                    control={definition.control}
+                    defaultValue={definition.defaultValue}
+                    formatValue={definition.formatValue}
+                    key={item.fieldId}
+                    label={definition.label}
+                    onUpdate={onUpdate}
+                    parseValue={definition.parseValue}
+                    path={item.fieldId}
+                    testId={definition.testId}
+                    value={getValueByPath(resolvedSettings, item.fieldId)}
+                />
+            );
+        }
+        case 'game-field':
+            return (
+                <SettingsControl
+                    control={item.control}
+                    key={item.path}
+                    label={item.label}
+                    onUpdate={onUpdate}
+                    path={item.path}
+                    value={getValueByPath(resolvedSettings, item.path)}
+                />
+            );
+    }
+}
+
+function SettingsControl({
+    control,
+    defaultValue,
+    formatValue,
+    label,
+    onUpdate,
+    parseValue,
+    path,
+    testId,
+    value,
+}: Readonly<{
+    readonly control: SettingsControlDefinition;
+    readonly defaultValue?: unknown;
+    readonly formatValue?: ((value: unknown) => string) | undefined;
+    readonly label: string;
+    readonly onUpdate: (patch: Record<string, unknown>) => void;
+    readonly parseValue?: ((value: SettingPrimitive) => unknown) | undefined;
+    readonly path: string;
+    readonly testId?: string | undefined;
+    readonly value: unknown;
+}>): React.ReactElement {
+    const elementId = getSettingsElementId('setting', path);
+
+    switch (control.type) {
+        case 'slider': {
+            const currentValue = coerceNumber(value, coerceNumber(defaultValue, control.min));
+            return (
+                <div className={styles['field']} data-setting-path={path}>
+                    <Slider
+                        aria-label={label}
+                        data-testid={testId}
+                        id={elementId}
+                        label={label}
+                        max={control.max}
+                        min={control.min}
+                        step={control.step}
+                        value={currentValue}
+                        onChange={(nextValue) => {
+                            const parsedValue = parseValue?.(nextValue) ?? nextValue;
+                            onUpdate(buildPatchFromPath(path, parsedValue));
+                        }}
+                    />
+                    {formatValue ? <Caption>{formatValue(currentValue)}</Caption> : null}
+                </div>
+            );
+        }
+        case 'toggle': {
+            const currentValue = coerceBoolean(value, coerceBoolean(defaultValue, false));
+            return (
+                <div className={styles['field']} data-setting-path={path}>
+                    <Toggle
+                        checked={currentValue}
+                        id={elementId}
+                        label={label}
+                        onCheckedChange={(nextValue) => {
+                            const parsedValue = parseValue?.(nextValue) ?? nextValue;
+                            onUpdate(buildPatchFromPath(path, parsedValue));
+                        }}
+                    />
+                </div>
+            );
+        }
+        case 'select': {
+            const currentValue = coerceSelectValue(value, defaultValue, control.options);
+            return (
+                <div className={styles['field']} data-setting-path={path}>
+                    <Select
+                        id={elementId}
+                        label={label}
+                        options={control.options}
+                        value={currentValue}
+                        onValueChange={(nextValue) => {
+                            const parsedValue = parseValue?.(nextValue) ?? nextValue;
+                            onUpdate(buildPatchFromPath(path, parsedValue));
+                        }}
+                    />
+                </div>
+            );
+        }
+        case 'key-binding':
+            return (
+                <div className={styles['field']} data-setting-path={path}>
+                    <Caption tone="muted">
+                        Key bindings are managed by the engine controls panel.
+                    </Caption>
+                </div>
+            );
+    }
+}
+
+class PendingSettingsDefinitionError extends Error implements PromiseLike<void> {
+    readonly #promise: Promise<void>;
+
+    constructor(promise: Promise<void>) {
+        super('Settings definition is still loading.');
+        this.name = 'PendingSettingsDefinitionError';
+        this.#promise = promise;
+    }
+
+    then<TResult1 = void, TResult2 = never>(
+        onfulfilled?: ((value: void) => TResult1 | PromiseLike<TResult1>) | null,
+        onrejected?: ((reason: unknown) => TResult2 | PromiseLike<TResult2>) | null,
+    ): Promise<TResult1 | TResult2> {
+        return this.#promise.then(onfulfilled, onrejected);
+    }
+}
+
+function createSettingsDefinitionResource(gameId: string): SettingsDefinitionResource {
+    let status: 'pending' | 'resolved' = 'pending';
+    let definition = ENGINE_DEFAULT_SETTINGS_DEFINITION;
+    const promise = loadRendererGame(gameId)
+        .then((loadedGame) => {
+            definition = loadedGame.shell?.settings ?? ENGINE_DEFAULT_SETTINGS_DEFINITION;
+            status = 'resolved';
+        })
+        .catch(() => {
+            definition = ENGINE_DEFAULT_SETTINGS_DEFINITION;
+            status = 'resolved';
+        });
+    const pending = new PendingSettingsDefinitionError(promise);
+
+    return {
+        read(): GameSettingsPageDefinition {
+            if (status === 'pending') {
+                throw pending;
+            }
+            return definition;
+        },
+    };
+}
+
+function readSettingsDefinition(activeGameId: string | null): GameSettingsPageDefinition {
+    if (activeGameId === null) {
+        return ENGINE_DEFAULT_SETTINGS_DEFINITION;
+    }
+
+    const existing = settingsDefinitionResources.get(activeGameId);
+    if (existing) {
+        return existing.read();
+    }
+
+    const resource = createSettingsDefinitionResource(activeGameId);
+    settingsDefinitionResources.set(activeGameId, resource);
+    return resource.read();
+}
+
+function formatBinding(binding: KeyBinding | undefined): string {
+    if (!binding) return 'Unbound';
+    const modifiers = binding.modifiers?.length ? `${binding.modifiers.join('+')}+` : '';
+    return `${modifiers}${binding.primary}`;
+}
+
+function formatPercent(value: unknown): string {
+    return `${(coerceNumber(value, 1) * 100).toFixed(0)}%`;
+}
+
+function formatScale(value: unknown): string {
+    return `${coerceNumber(value, 1).toFixed(2)}x`;
+}
+
+function formatTurns(value: unknown): string {
+    return `${coerceNumber(value, 5).toFixed(0)} turns`;
+}
+
+function parseIntegerValue(value: SettingPrimitive): number {
+    return parseInt(String(value), 10);
+}
+
+function coerceNumber(value: unknown, fallback: number): number {
+    return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function coerceBoolean(value: unknown, fallback: boolean): boolean {
+    return typeof value === 'boolean' ? value : fallback;
+}
+
+function coerceSelectValue(
+    value: unknown,
+    defaultValue: unknown,
+    options: readonly { readonly value: string }[],
+): string {
+    const fallbackValue = options[0]?.value ?? '';
+    const optionValues = new Set(options.map((option) => option.value));
+
+    for (const candidate of [value, defaultValue, fallbackValue]) {
+        if (!isSettingPrimitive(candidate)) continue;
+        const normalizedValue = String(candidate);
+        if (optionValues.has(normalizedValue)) {
+            return normalizedValue;
+        }
+    }
+
+    return fallbackValue;
+}
+
+function isSettingPrimitive(value: unknown): value is SettingPrimitive {
+    return ['boolean', 'number', 'string'].includes(typeof value);
+}
+
+function getValueByPath(settings: ResolvedSettings | undefined, path: string): unknown {
+    if (!settings) return undefined;
+    let current: unknown = settings;
+    for (const part of path.split('.')) {
+        if (!isRecord(current) || !(part in current)) {
+            return undefined;
+        }
+        current = current[part];
+    }
+    return current;
+}
+
+function buildPatchFromPath(path: string, value: unknown): Record<string, unknown> {
+    const parts = path.split('.').filter(Boolean);
+    if (parts.length === 0) return {};
+
+    let patch: unknown = value;
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+        patch = { [parts[index]!]: patch };
+    }
+    return patch as Record<string, unknown>;
+}
+
+function getSettingsElementId(...parts: readonly string[]): string {
+    return parts
+        .join('-')
+        .replace(/[^A-Za-z0-9_-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+    return typeof value === 'object' && value !== null;
 }
 
 function groupActionsByCategory(actions: readonly InputAction[]): Map<string, InputAction[]> {

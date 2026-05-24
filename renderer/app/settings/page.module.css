@@ -1,0 +1,95 @@
+.page {
+    box-sizing: border-box;
+    color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-lg);
+    inline-size: 100%;
+    margin-inline: auto;
+    max-inline-size: calc(var(--ch-space-xl) * 16);
+    padding: var(--ch-space-xl);
+}
+
+.loading {
+    align-items: center;
+    display: flex;
+    justify-content: center;
+    min-block-size: calc(var(--ch-space-xl) * 4);
+}
+
+.tab-panel-content {
+    display: grid;
+    gap: var(--ch-space-lg);
+}
+
+.settings-section {
+    display: grid;
+    gap: var(--ch-space-md);
+}
+
+.field-list {
+    display: grid;
+    gap: var(--ch-space-md);
+}
+
+.field {
+    display: grid;
+    gap: var(--ch-space-xs);
+    max-inline-size: calc(var(--ch-space-xl) * 10);
+}
+
+.controls-panel {
+    display: grid;
+    gap: var(--ch-space-lg);
+}
+
+.controls-category {
+    display: grid;
+    gap: var(--ch-space-sm);
+}
+
+.binding-list {
+    display: grid;
+    gap: var(--ch-space-sm);
+}
+
+.binding-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+}
+
+.action-description {
+    color: var(--ch-color-text-primary);
+    flex: 1 1 calc(var(--ch-space-xl) * 4);
+    font-size: var(--ch-font-size-md);
+    line-height: var(--ch-line-height-tight);
+    min-inline-size: 0;
+}
+
+.binding-value {
+    color: var(--ch-color-text-secondary);
+    flex: 0 0 var(--ch-button-min-width-lg);
+    font-family: var(--ch-font-mono);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-tight);
+    min-inline-size: var(--ch-button-min-width-lg);
+}
+
+.conflict-status {
+    align-items: center;
+    color: var(--ch-color-error);
+    display: flex;
+    flex-wrap: wrap;
+    font-size: var(--ch-font-size-sm);
+    gap: var(--ch-space-sm);
+    line-height: var(--ch-line-height-tight);
+}
+
+.success-status {
+    color: var(--ch-color-success);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-tight);
+}
