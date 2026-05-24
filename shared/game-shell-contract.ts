@@ -275,7 +275,7 @@ export interface SettingsTabDefinition {
  *
  * Games export a value satisfying this type from
  * `games/<name>/shell/settings-page.ts` and contribute it via
- * `LoadedRendererGame.shell.settingsPage`.
+ * `LoadedRendererGame.shell.settings`.
  *
  * If a game provides `undefined`, the renderer falls back to the engine default
  * definition (the four engine tabs: Audio, Display, Gameplay, Controls).

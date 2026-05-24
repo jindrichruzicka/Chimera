@@ -304,7 +304,7 @@ The registry is loaded by `renderer/game/rendererGameRegistry.ts` as part of
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
-    readonly settingsPage?: GameSettingsPageDefinition;
+    readonly settings?: GameSettingsPageDefinition;
 }
 ```
 
@@ -389,8 +389,8 @@ top-level namespaces from Invariant #35.
 The settings page stays engine-owned. A game-provided definition controls only the ordering and
 selection of fields that the engine renderer displays:
 
-1. If a resolved renderer shell provides `settingsPage`, render its tabs and sections.
-2. If the loaded shell omits `settingsPage`, use the engine default settings definition.
+1. If a resolved renderer shell provides `settings`, render its tabs and sections.
+2. If the loaded shell omits `settings`, use the engine default settings definition.
 3. If no game context exists, or shell loading fails, use the engine default settings definition.
 
 The engine default definition contains the engine tabs Audio, Display, Gameplay, and Controls.

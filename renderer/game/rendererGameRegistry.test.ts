@@ -58,11 +58,16 @@ describe('rendererGameRegistry', () => {
             >();
         });
 
-        it('shell.settingsPage is typed as GameSettingsPageDefinition | undefined', () => {
+        it('shell.settings is typed as GameSettingsPageDefinition | undefined (#626)', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
-            expectTypeOf<ShellShape['settingsPage']>().toEqualTypeOf<
+            expectTypeOf<ShellShape['settings']>().toEqualTypeOf<
                 GameSettingsPageDefinition | undefined
             >();
+        });
+
+        it('tactics loader stubs shell.settings as undefined (#626)', async () => {
+            const game = await loadRendererGame('tactics');
+            expect(game.shell?.settings).toBeUndefined();
         });
 
         it('shell.menuCommands lookup is typed as (() => void) | undefined', () => {

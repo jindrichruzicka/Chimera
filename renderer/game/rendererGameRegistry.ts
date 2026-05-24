@@ -10,7 +10,7 @@ import type { InputAction } from '../input/InputAction.js';
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
-    readonly settingsPage?: GameSettingsPageDefinition;
+    readonly settings?: GameSettingsPageDefinition;
 }
 
 export interface LoadedRendererGame {
@@ -84,5 +84,6 @@ async function loadTacticsRendererGameShell(): Promise<LoadedRendererGameShell> 
     return {
         mainMenu: shellModule.tacticsMainMenuDefinition,
         menuCommands: shellModule.tacticsMenuCommands,
+        // settings intentionally absent: stubbed until T52.5
     };
 }
