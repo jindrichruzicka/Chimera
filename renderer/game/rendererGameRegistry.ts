@@ -2,6 +2,7 @@ import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js
 import type {
     GameMainMenuDefinition,
     GameMenuCommandId,
+    GameSettingsPageDefinition,
 } from '@chimera/shared/game-shell-contract.js';
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { InputAction } from '../input/InputAction.js';
@@ -9,6 +10,7 @@ import type { InputAction } from '../input/InputAction.js';
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
+    readonly settingsPage?: GameSettingsPageDefinition;
 }
 
 export interface LoadedRendererGame {

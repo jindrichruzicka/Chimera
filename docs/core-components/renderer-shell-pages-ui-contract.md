@@ -304,6 +304,7 @@ The registry is loaded by `renderer/game/rendererGameRegistry.ts` as part of
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
+    readonly settingsPage?: GameSettingsPageDefinition;
 }
 ```
 
@@ -312,11 +313,94 @@ to a `commandId` that is absent from `menuCommands`, or if no registry was provi
 throws a descriptive error. Unknown commands therefore fail fast instead of producing an inert or
 silently missing button.
 
-## 4.37.8 Module Tree
+## 4.37.8 Game-Customizable Settings Page Definition
+
+Games customize which settings appear on the engine-owned settings page by contributing a
+declarative `GameSettingsPageDefinition` through their renderer shell registration. The shared
+contract lives in `shared/game-shell-contract.ts`, so `renderer/` and `games/*` can both depend on
+the type without creating a renderer-to-game static import.
+
+```typescript
+export type EngineSettingsFieldId =
+    | 'audio.masterVolume'
+    | 'audio.sfxVolume'
+    | 'audio.musicVolume'
+    | 'audio.muted'
+    | 'display.fullscreen'
+    | 'display.vsync'
+    | 'display.targetFps'
+    | 'display.uiScale'
+    | 'gameplay.language'
+    | 'gameplay.autoSave'
+    | 'gameplay.autoSaveIntervalTurns'
+    | 'gameplay.showHints'
+    | 'gameplay.showPerfHud'
+    | 'controls.bindings';
+
+export type SettingsControlDefinition =
+    | { readonly type: 'slider'; readonly min: number; readonly max: number; readonly step: number }
+    | { readonly type: 'toggle' }
+    | {
+          readonly type: 'select';
+          readonly options: readonly { readonly value: string; readonly label: string }[];
+      }
+    | { readonly type: 'key-binding' };
+
+export type SettingsItemDefinition =
+    | { readonly kind: 'engine-field'; readonly fieldId: EngineSettingsFieldId }
+    | {
+          readonly kind: 'game-field';
+          readonly path: string;
+          readonly label: string;
+          readonly control: SettingsControlDefinition;
+      };
+
+export interface SettingsSectionDefinition {
+    readonly id: string;
+    readonly label?: string;
+    readonly items: readonly SettingsItemDefinition[];
+}
+
+export interface SettingsTabDefinition {
+    readonly id: string;
+    readonly label: string;
+    readonly sections: readonly SettingsSectionDefinition[];
+}
+
+export interface GameSettingsPageDefinition {
+    readonly tabs: readonly SettingsTabDefinition[];
+}
+```
+
+### Engine Field Semantics
+
+`EngineSettingsFieldId` values are the documented `EngineSettings` paths from §4.13. The controls
+namespace exposes `controls.bindings` because key bindings are persisted as
+`settings.controls.bindings` (Invariant #66); `controls.rebind` is a UI panel concept and is not a
+valid engine settings path.
+
+For `engine-field` entries, the renderer owns the label, default value, and control mapping. For
+`game-field` entries, the game supplies `path`, `label`, and `control` explicitly. Game-defined
+paths are still validated by `SettingsManager.registerSchema()` and must not shadow the engine
+top-level namespaces from Invariant #35.
+
+### Settings Page Fallback Chain
+
+The settings page stays engine-owned. A game-provided definition controls only the ordering and
+selection of fields that the engine renderer displays:
+
+1. If a resolved renderer shell provides `settingsPage`, render its tabs and sections.
+2. If the loaded shell omits `settingsPage`, use the engine default settings definition.
+3. If no game context exists, or shell loading fails, use the engine default settings definition.
+
+The engine default definition contains the engine tabs Audio, Display, Gameplay, and Controls.
+`tabs` may be an empty array; an empty array renders an empty settings surface for that game.
+
+## 4.37.9 Module Tree
 
 ```
 shared/
-└── game-shell-contract.ts     # GameMainMenuDefinition and shell-page contracts
+└── game-shell-contract.ts     # GameMainMenuDefinition, GameSettingsPageDefinition, shell-page contracts
 renderer/
 ├── game/
 │   └── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page games/* import
@@ -347,7 +431,8 @@ renderer/
 games/
 └── tactics/
     └── shell/
-        └── main-menu.ts        # Sample GameMainMenuDefinition + menuCommands registry
+        ├── main-menu.ts        # Sample GameMainMenuDefinition + menuCommands registry
+        └── settings-page.ts    # Optional GameSettingsPageDefinition contribution
 ```
 
 ---

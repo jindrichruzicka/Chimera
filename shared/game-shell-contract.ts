@@ -6,6 +6,7 @@
  *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
  * Task: #616 (F51 — GameMainMenuDefinition contract types)
+ * Task: #625 (F52 — GameSettingsPageDefinition contract types)
  *
  * Module boundary (§3 Module Boundary Table): `shared/` must not import from
  * `renderer/` or `games/*`. This module has zero imports — the constraint is
@@ -162,4 +163,126 @@ export interface GameMainMenuDefinition {
      * An empty array is valid; the renderer will show an empty menu.
      */
     readonly buttons: readonly GameMainMenuButton[];
+}
+
+// ─── Settings page contract (§4.13, §4.37 — F52 #625) ────────────────────────
+
+/**
+ * Exhaustive branded union of every engine setting field that may be referenced
+ * in a `SettingsItemDefinition` with `kind: 'engine-field'`.
+ *
+ * The set is derived from the `EngineSettings` interface (§4.13). Any attempt to
+ * use a stale or game-specific path (e.g. `'display.resolution'`, `'tactics.difficulty'`)
+ * is rejected by TypeScript.
+ *
+ * Game-defined fields must use `kind: 'game-field'` with their game settings
+ * path. Runtime game schema registration enforces the engine namespace collision
+ * guard from invariant #35.
+ */
+export type EngineSettingsFieldId =
+    | 'audio.masterVolume'
+    | 'audio.sfxVolume'
+    | 'audio.musicVolume'
+    | 'audio.muted'
+    | 'display.fullscreen'
+    | 'display.vsync'
+    | 'display.targetFps'
+    | 'display.uiScale'
+    | 'gameplay.language'
+    | 'gameplay.autoSave'
+    | 'gameplay.autoSaveIntervalTurns'
+    | 'gameplay.showHints'
+    | 'gameplay.showPerfHud'
+    | 'controls.bindings';
+
+/**
+ * Discriminated union describing how a settings value is presented in the UI.
+ * Discriminant field: `type`.
+ *
+ * Use an exhaustive `switch (ctrl.type)` with an `assertNever` fallthrough to
+ * catch unhandled variants at compile time.
+ */
+export type SettingsControlDefinition =
+    | {
+          /** A range slider bound to a numeric value. */
+          readonly type: 'slider';
+          readonly min: number;
+          readonly max: number;
+          readonly step: number;
+      }
+    | {
+          /** A boolean checkbox / toggle switch. */
+          readonly type: 'toggle';
+      }
+    | {
+          /** A drop-down list of labelled string values. */
+          readonly type: 'select';
+          readonly options: readonly { readonly value: string; readonly label: string }[];
+      }
+    | {
+          /** An interactive key-capture control for re-binding an action. */
+          readonly type: 'key-binding';
+      };
+
+/**
+ * A single item within a `SettingsSectionDefinition`.
+ * Discriminant field: `kind`.
+ *
+ * - `engine-field` — references a pre-defined engine setting by its `EngineSettingsFieldId`.
+ *   The renderer owns the label, default, and control type for these fields.
+ * - `game-field`   — a game-defined setting at an arbitrary dot-path. The game supplies the
+ *   label and control definition explicitly.
+ */
+export type SettingsItemDefinition =
+    | {
+          readonly kind: 'engine-field';
+          /** Typed reference to an engine setting field (see `EngineSettingsFieldId`). */
+          readonly fieldId: EngineSettingsFieldId;
+      }
+    | {
+          readonly kind: 'game-field';
+          /** Dot-path into the resolved settings object (e.g. `'tactics.campaignDifficulty'`). */
+          readonly path: string;
+          /** Visible label text rendered next to the control. */
+          readonly label: string;
+          /** Describes how the field value is rendered and edited. */
+          readonly control: SettingsControlDefinition;
+      };
+
+/**
+ * A labelled group of `SettingsItemDefinition` entries within a tab.
+ * `label` is optional — a section without a label renders its items without a group heading.
+ */
+export interface SettingsSectionDefinition {
+    readonly id: string;
+    readonly label?: string;
+    readonly items: readonly SettingsItemDefinition[];
+}
+
+/**
+ * A single tab in the settings page, containing one or more sections.
+ * Both `id` and `label` are required — `id` is used for keying and routing;
+ * `label` is displayed in the tab bar.
+ */
+export interface SettingsTabDefinition {
+    readonly id: string;
+    readonly label: string;
+    readonly sections: readonly SettingsSectionDefinition[];
+}
+
+/**
+ * Top-level declarative contract for a game-customised settings page.
+ *
+ * Games export a value satisfying this type from
+ * `games/<name>/shell/settings-page.ts` and contribute it via
+ * `LoadedRendererGame.shell.settingsPage`.
+ *
+ * If a game provides `undefined`, the renderer falls back to the engine default
+ * definition (the four engine tabs: Audio, Display, Gameplay, Controls).
+ */
+export interface GameSettingsPageDefinition {
+    /**
+     * Ordered list of tabs to render. An empty array is valid.
+     */
+    readonly tabs: readonly SettingsTabDefinition[];
 }

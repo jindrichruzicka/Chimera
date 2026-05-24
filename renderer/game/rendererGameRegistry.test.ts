@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import type {
     GameMainMenuDefinition,
     GameMenuCommandId,
+    GameSettingsPageDefinition,
 } from '@chimera/shared/game-shell-contract.js';
 import {
     getRendererGameMenuCommand,
@@ -54,6 +55,13 @@ describe('rendererGameRegistry', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['menuCommands']>().toEqualTypeOf<
                 Partial<Record<GameMenuCommandId, () => void>> | undefined
+            >();
+        });
+
+        it('shell.settingsPage is typed as GameSettingsPageDefinition | undefined', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['settingsPage']>().toEqualTypeOf<
+                GameSettingsPageDefinition | undefined
             >();
         });
 

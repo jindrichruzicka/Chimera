@@ -5,11 +5,17 @@
  * GameMenuCommandId, GameMainMenuLayout, GameMainMenuButton, GameMainMenuAction,
  * GameMainMenuDefinition.
  *
+ * Also tests GameSettingsPageDefinition contract types introduced in #625:
+ * EngineSettingsFieldId, SettingsControlDefinition, SettingsItemDefinition,
+ * SettingsSectionDefinition, SettingsTabDefinition, GameSettingsPageDefinition.
+ *
  * Architecture reference: §4.37 — Renderer Shell Pages UI Contract
  * Task: #616 (F51 — GameMainMenuDefinition contract types)
+ * Task: #625 (F52 — GameSettingsPageDefinition contract types)
  *
  * Invariants upheld:
  *   #80 — shared contract types must not import from games/* or renderer/*
+ *   §4.13 — EngineSettingsFieldId mirrors documented EngineSettings paths
  *
  * Tests written first (TDD — red confirmed: module did not exist before
  * this commit; `pnpm test` reported "cannot find module").
@@ -22,6 +28,12 @@ import type {
     GameMainMenuButton,
     GameMainMenuAction,
     GameMainMenuDefinition,
+    EngineSettingsFieldId,
+    SettingsControlDefinition,
+    SettingsItemDefinition,
+    SettingsSectionDefinition,
+    SettingsTabDefinition,
+    GameSettingsPageDefinition,
 } from './game-shell-contract.js';
 
 // ─── GameMenuCommandId ────────────────────────────────────────────────────────
@@ -309,6 +321,475 @@ describe('GameMainMenuDefinition', () => {
     it('rejects a definition missing buttons at compile time', () => {
         // @ts-expect-error: GameMainMenuDefinition requires a buttons array
         const _: GameMainMenuDefinition = { layout: { orientation: 'vertical' } };
+        expect(_).toBeDefined();
+    });
+});
+
+// ─── EngineSettingsFieldId ────────────────────────────────────────────────────
+
+describe('EngineSettingsFieldId', () => {
+    it('accepts all audio engine field ids', () => {
+        const ids: EngineSettingsFieldId[] = [
+            'audio.masterVolume',
+            'audio.sfxVolume',
+            'audio.musicVolume',
+            'audio.muted',
+        ];
+        expect(ids).toHaveLength(4);
+    });
+
+    it('accepts all display engine field ids', () => {
+        const ids: EngineSettingsFieldId[] = [
+            'display.fullscreen',
+            'display.vsync',
+            'display.targetFps',
+            'display.uiScale',
+        ];
+        expect(ids).toHaveLength(4);
+    });
+
+    it('accepts all gameplay engine field ids', () => {
+        const ids: EngineSettingsFieldId[] = [
+            'gameplay.language',
+            'gameplay.autoSave',
+            'gameplay.autoSaveIntervalTurns',
+            'gameplay.showHints',
+            'gameplay.showPerfHud',
+        ];
+        expect(ids).toHaveLength(5);
+    });
+
+    it('accepts controls bindings engine field id', () => {
+        const id: EngineSettingsFieldId = 'controls.bindings';
+        expect(id).toBe('controls.bindings');
+    });
+
+    it('rejects a stale/invalid id at compile time (display.resolution)', () => {
+        // @ts-expect-error: 'display.resolution' is not a valid EngineSettingsFieldId
+        const _: EngineSettingsFieldId = 'display.resolution';
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a stale/invalid id at compile time (display.fpsLimit)', () => {
+        // @ts-expect-error: 'display.fpsLimit' is not a valid EngineSettingsFieldId
+        const _: EngineSettingsFieldId = 'display.fpsLimit';
+        expect(_).toBeDefined();
+    });
+
+    it('rejects the UI-only controls rebind panel id at compile time', () => {
+        // @ts-expect-error: 'controls.rebind' is not a documented EngineSettings path
+        const _: EngineSettingsFieldId = 'controls.rebind';
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a game-specific path at compile time', () => {
+        // @ts-expect-error: game-defined paths are not valid EngineSettingsFieldIds
+        const _: EngineSettingsFieldId = 'tactics.difficulty';
+        expect(_).toBeDefined();
+    });
+
+    it('rejects an arbitrary string at compile time', () => {
+        // @ts-expect-error: bare arbitrary strings are not assignable to EngineSettingsFieldId
+        const _: EngineSettingsFieldId = 'unknown.field';
+        expect(_).toBeDefined();
+    });
+});
+
+// ─── SettingsControlDefinition ────────────────────────────────────────────────
+
+describe('SettingsControlDefinition', () => {
+    it('accepts a slider control definition', () => {
+        const ctrl: SettingsControlDefinition = { type: 'slider', min: 0, max: 1, step: 0.01 };
+        expect(ctrl.type).toBe('slider');
+        if (ctrl.type === 'slider') {
+            expect(ctrl.min).toBe(0);
+            expect(ctrl.max).toBe(1);
+            expect(ctrl.step).toBe(0.01);
+        }
+    });
+
+    it('accepts a toggle control definition', () => {
+        const ctrl: SettingsControlDefinition = { type: 'toggle' };
+        expect(ctrl.type).toBe('toggle');
+    });
+
+    it('accepts a select control definition with options', () => {
+        const ctrl: SettingsControlDefinition = {
+            type: 'select',
+            options: [
+                { value: '30', label: '30 FPS' },
+                { value: '60', label: '60 FPS' },
+                { value: '0', label: 'Uncapped' },
+            ],
+        };
+        expect(ctrl.type).toBe('select');
+        if (ctrl.type === 'select') {
+            expect(ctrl.options).toHaveLength(3);
+        }
+    });
+
+    it('accepts an empty options array for select', () => {
+        const ctrl: SettingsControlDefinition = { type: 'select', options: [] };
+        expect(ctrl.type).toBe('select');
+    });
+
+    it('accepts a key-binding control definition', () => {
+        const ctrl: SettingsControlDefinition = { type: 'key-binding' };
+        expect(ctrl.type).toBe('key-binding');
+    });
+
+    it('exhaustive switch — TypeScript errors if a variant is unhandled', () => {
+        const assertNever = (x: never): never => {
+            throw new Error(
+                `Unhandled SettingsControlDefinition type: ${String((x as { type: string }).type)}`,
+            );
+        };
+
+        const describeControl = (ctrl: SettingsControlDefinition): string => {
+            switch (ctrl.type) {
+                case 'slider':
+                    return `slider ${ctrl.min}–${ctrl.max} step ${ctrl.step}`;
+                case 'toggle':
+                    return 'toggle';
+                case 'select':
+                    return `select (${ctrl.options.length} options)`;
+                case 'key-binding':
+                    return 'key-binding';
+                default:
+                    return assertNever(ctrl);
+            }
+        };
+
+        expect(describeControl({ type: 'slider', min: 0, max: 1, step: 0.1 })).toBe(
+            'slider 0–1 step 0.1',
+        );
+        expect(describeControl({ type: 'toggle' })).toBe('toggle');
+        expect(describeControl({ type: 'select', options: [] })).toBe('select (0 options)');
+        expect(describeControl({ type: 'key-binding' })).toBe('key-binding');
+    });
+
+    it('rejects an unknown control type at compile time', () => {
+        // @ts-expect-error: 'dropdown' is not a valid SettingsControlDefinition type
+        const _: SettingsControlDefinition = { type: 'dropdown', options: [] };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects slider missing required fields at compile time', () => {
+        // @ts-expect-error: slider variant requires min, max, step
+        const _: SettingsControlDefinition = { type: 'slider' };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects select missing options at compile time', () => {
+        // @ts-expect-error: select variant requires options array
+        const _: SettingsControlDefinition = { type: 'select' };
+        expect(_).toBeDefined();
+    });
+});
+
+// ─── SettingsItemDefinition ───────────────────────────────────────────────────
+
+describe('SettingsItemDefinition', () => {
+    it('accepts an engine-field item', () => {
+        const item: SettingsItemDefinition = {
+            kind: 'engine-field',
+            fieldId: 'audio.masterVolume',
+        };
+        expect(item.kind).toBe('engine-field');
+        if (item.kind === 'engine-field') {
+            expect(item.fieldId).toBe('audio.masterVolume');
+        }
+    });
+
+    it('accepts a game-field item with a slider control', () => {
+        const item: SettingsItemDefinition = {
+            kind: 'game-field',
+            path: 'tactics.campaignDifficulty',
+            label: 'Campaign Difficulty',
+            control: { type: 'select', options: [{ value: 'normal', label: 'Normal' }] },
+        };
+        expect(item.kind).toBe('game-field');
+        if (item.kind === 'game-field') {
+            expect(item.path).toBe('tactics.campaignDifficulty');
+            expect(item.label).toBe('Campaign Difficulty');
+            expect(item.control.type).toBe('select');
+        }
+    });
+
+    it('accepts a game-field item with a toggle control', () => {
+        const item: SettingsItemDefinition = {
+            kind: 'game-field',
+            path: 'tactics.showFogOfWar',
+            label: 'Fog of War',
+            control: { type: 'toggle' },
+        };
+        expect(item.kind).toBe('game-field');
+    });
+
+    it('discriminant narrows each variant correctly', () => {
+        const items: SettingsItemDefinition[] = [
+            { kind: 'engine-field', fieldId: 'display.fullscreen' },
+            {
+                kind: 'game-field',
+                path: 'tactics.animSpeed',
+                label: 'Animation Speed',
+                control: { type: 'slider', min: 0, max: 2, step: 0.5 },
+            },
+        ];
+
+        for (const item of items) {
+            switch (item.kind) {
+                case 'engine-field':
+                    expect(typeof item.fieldId).toBe('string');
+                    break;
+                case 'game-field':
+                    expect(typeof item.path).toBe('string');
+                    expect(typeof item.label).toBe('string');
+                    break;
+            }
+        }
+    });
+
+    it('rejects engine-field missing fieldId at compile time', () => {
+        // @ts-expect-error: engine-field requires fieldId
+        const _: SettingsItemDefinition = { kind: 'engine-field' };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects game-field missing required fields at compile time', () => {
+        // @ts-expect-error: game-field requires path, label, and control
+        const _: SettingsItemDefinition = { kind: 'game-field', path: 'x' };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects an unknown kind at compile time', () => {
+        // @ts-expect-error: 'custom-field' is not a valid SettingsItemDefinition kind
+        const _: SettingsItemDefinition = { kind: 'custom-field' };
+        expect(_).toBeDefined();
+    });
+});
+
+// ─── SettingsSectionDefinition ────────────────────────────────────────────────
+
+describe('SettingsSectionDefinition', () => {
+    it('accepts a fully-specified section', () => {
+        const section: SettingsSectionDefinition = {
+            id: 'volumes',
+            label: 'Volumes',
+            items: [
+                { kind: 'engine-field', fieldId: 'audio.masterVolume' },
+                { kind: 'engine-field', fieldId: 'audio.sfxVolume' },
+            ],
+        };
+        expect(section.id).toBe('volumes');
+        expect(section.label).toBe('Volumes');
+        expect(section.items).toHaveLength(2);
+    });
+
+    it('accepts a section without an optional label', () => {
+        const section: SettingsSectionDefinition = {
+            id: 'volumes',
+            items: [],
+        };
+        expect(section.id).toBe('volumes');
+        expect(section.label).toBeUndefined();
+    });
+
+    it('accepts an empty items array', () => {
+        const section: SettingsSectionDefinition = { id: 'empty', items: [] };
+        expect(section.items).toHaveLength(0);
+    });
+
+    it('rejects a section missing id at compile time', () => {
+        // @ts-expect-error: SettingsSectionDefinition requires id
+        const _: SettingsSectionDefinition = { items: [] };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a section missing items at compile time', () => {
+        // @ts-expect-error: SettingsSectionDefinition requires items
+        const _: SettingsSectionDefinition = { id: 'x' };
+        expect(_).toBeDefined();
+    });
+});
+
+// ─── SettingsTabDefinition ────────────────────────────────────────────────────
+
+describe('SettingsTabDefinition', () => {
+    it('accepts a fully-specified tab', () => {
+        const tab: SettingsTabDefinition = {
+            id: 'audio',
+            label: 'Audio',
+            sections: [
+                {
+                    id: 'volumes',
+                    label: 'Volumes',
+                    items: [{ kind: 'engine-field', fieldId: 'audio.masterVolume' }],
+                },
+            ],
+        };
+        expect(tab.id).toBe('audio');
+        expect(tab.label).toBe('Audio');
+        expect(tab.sections).toHaveLength(1);
+    });
+
+    it('accepts a tab with multiple sections', () => {
+        const tab: SettingsTabDefinition = {
+            id: 'display',
+            label: 'Display',
+            sections: [
+                { id: 'screen', items: [{ kind: 'engine-field', fieldId: 'display.fullscreen' }] },
+                { id: 'perf', items: [{ kind: 'engine-field', fieldId: 'display.targetFps' }] },
+            ],
+        };
+        expect(tab.sections).toHaveLength(2);
+    });
+
+    it('accepts a tab with an empty sections array', () => {
+        const tab: SettingsTabDefinition = { id: 'empty-tab', label: 'Empty', sections: [] };
+        expect(tab.sections).toHaveLength(0);
+    });
+
+    it('rejects a tab missing id at compile time', () => {
+        // @ts-expect-error: SettingsTabDefinition requires id
+        const _: SettingsTabDefinition = { label: 'Audio', sections: [] };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a tab missing label at compile time', () => {
+        // @ts-expect-error: SettingsTabDefinition requires label
+        const _: SettingsTabDefinition = { id: 'audio', sections: [] };
+        expect(_).toBeDefined();
+    });
+
+    it('rejects a tab missing sections at compile time', () => {
+        // @ts-expect-error: SettingsTabDefinition requires sections
+        const _: SettingsTabDefinition = { id: 'audio', label: 'Audio' };
+        expect(_).toBeDefined();
+    });
+});
+
+// ─── GameSettingsPageDefinition ───────────────────────────────────────────────
+
+describe('GameSettingsPageDefinition', () => {
+    it('accepts a full settings page definition with multiple tabs', () => {
+        const def: GameSettingsPageDefinition = {
+            tabs: [
+                {
+                    id: 'audio',
+                    label: 'Audio',
+                    sections: [
+                        {
+                            id: 'volumes',
+                            items: [
+                                { kind: 'engine-field', fieldId: 'audio.masterVolume' },
+                                { kind: 'engine-field', fieldId: 'audio.sfxVolume' },
+                                { kind: 'engine-field', fieldId: 'audio.musicVolume' },
+                                { kind: 'engine-field', fieldId: 'audio.muted' },
+                            ],
+                        },
+                    ],
+                },
+                {
+                    id: 'display',
+                    label: 'Display',
+                    sections: [
+                        {
+                            id: 'screen',
+                            items: [
+                                { kind: 'engine-field', fieldId: 'display.fullscreen' },
+                                { kind: 'engine-field', fieldId: 'display.vsync' },
+                                { kind: 'engine-field', fieldId: 'display.targetFps' },
+                                { kind: 'engine-field', fieldId: 'display.uiScale' },
+                            ],
+                        },
+                    ],
+                },
+                {
+                    id: 'gameplay',
+                    label: 'Gameplay',
+                    sections: [
+                        {
+                            id: 'general',
+                            items: [
+                                { kind: 'engine-field', fieldId: 'gameplay.language' },
+                                { kind: 'engine-field', fieldId: 'gameplay.autoSave' },
+                                {
+                                    kind: 'engine-field',
+                                    fieldId: 'gameplay.autoSaveIntervalTurns',
+                                },
+                                { kind: 'engine-field', fieldId: 'gameplay.showHints' },
+                                { kind: 'engine-field', fieldId: 'gameplay.showPerfHud' },
+                            ],
+                        },
+                    ],
+                },
+                {
+                    id: 'controls',
+                    label: 'Controls',
+                    sections: [
+                        {
+                            id: 'keybindings',
+                            items: [{ kind: 'engine-field', fieldId: 'controls.bindings' }],
+                        },
+                    ],
+                },
+                {
+                    id: 'game',
+                    label: 'Game',
+                    sections: [
+                        {
+                            id: 'tactics',
+                            label: 'Tactics',
+                            items: [
+                                {
+                                    kind: 'game-field',
+                                    path: 'tactics.campaignDifficulty',
+                                    label: 'Campaign Difficulty',
+                                    control: {
+                                        type: 'select',
+                                        options: [
+                                            { value: 'easy', label: 'Easy' },
+                                            { value: 'normal', label: 'Normal' },
+                                            { value: 'hard', label: 'Hard' },
+                                        ],
+                                    },
+                                },
+                                {
+                                    kind: 'game-field',
+                                    path: 'tactics.showFogOfWar',
+                                    label: 'Fog of War',
+                                    control: { type: 'toggle' },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        expect(def.tabs).toHaveLength(5);
+        const audioTab = def.tabs.find((t) => t.id === 'audio');
+        expect(audioTab?.id).toBe('audio');
+        const gameTab = def.tabs.find((t) => t.id === 'game');
+        const firstSection = gameTab?.sections[0];
+        expect(firstSection?.items).toHaveLength(2);
+    });
+
+    it('accepts an empty tabs array', () => {
+        const def: GameSettingsPageDefinition = { tabs: [] };
+        expect(def.tabs).toHaveLength(0);
+    });
+
+    it('accepts a single-tab definition', () => {
+        const def: GameSettingsPageDefinition = {
+            tabs: [{ id: 'all', label: 'All Settings', sections: [] }],
+        };
+        expect(def.tabs).toHaveLength(1);
+    });
+
+    it('rejects a definition missing tabs at compile time', () => {
+        // @ts-expect-error: GameSettingsPageDefinition requires tabs
+        const _: GameSettingsPageDefinition = {};
         expect(_).toBeDefined();
     });
 });
