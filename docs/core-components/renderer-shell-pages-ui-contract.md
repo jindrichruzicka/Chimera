@@ -1,7 +1,18 @@
 ---
 title: 'Renderer Shell Pages UI Contract'
-description: 'Token-based styling contract for engine shell pages (main-menu, lobby, settings, saves). Defines which pages are shell-owned vs. game-owned, how the shared Button component is consumed, when game token overrides apply, and the invariants that prohibit inline styles on shell pages.'
-tags: [renderer, ui, design-tokens, shell-pages, button, theming, lobby, main-menu]
+description: 'Token-based styling contract for engine shell pages (main-menu, lobby, settings, saves). Defines which pages are shell-owned vs. game-owned, how the shared Button component is consumed, how GameMainMenuDefinition customizes the main menu, when game token overrides apply, and the invariants that prohibit inline styles on shell pages.'
+tags:
+    [
+        renderer,
+        ui,
+        design-tokens,
+        shell-pages,
+        button,
+        theming,
+        lobby,
+        main-menu,
+        game-shell-contract,
+    ]
 ---
 
 # Renderer Shell Pages UI Contract
@@ -17,14 +28,14 @@ tags: [renderer, ui, design-tokens, shell-pages, button, theming, lobby, main-me
 content that renders _inside_ `GameShell`. This section documents the same contract for
 **engine shell pages** — top-level Next.js pages that exist outside of any game match:
 
-| Page path                         | Purpose                                                             | Game-owned? |
-| --------------------------------- | ------------------------------------------------------------------- | ----------- |
-| `renderer/app/main-menu/`         | Title screen, entry point                                           | No          |
-| `renderer/app/lobby/`             | Host/join/leave multiplayer lobby                                   | Partly\*    |
-| `renderer/app/settings/`          | Engine + game settings UI                                           | No          |
-| `renderer/app/saves/`             | Save-slot browser                                                   | No          |
-| `renderer/app/(loading)/`         | Transition placeholder between scenes                               | No          |
-| `renderer/app/component-gallery/` | Design-system gallery (dev/E2E only); gated by `isGalleryEnabled()` | No          |
+| Page path                         | Purpose                                                             | Game-owned?                     |
+| --------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
+| `renderer/app/main-menu/`         | Title screen, entry point                                           | Engine-owned; game-customizable |
+| `renderer/app/lobby/`             | Host/join/leave multiplayer lobby                                   | Partly\*                        |
+| `renderer/app/settings/`          | Engine + game settings UI                                           | No                              |
+| `renderer/app/saves/`             | Save-slot browser                                                   | No                              |
+| `renderer/app/(loading)/`         | Transition placeholder between scenes                               | No                              |
+| `renderer/app/component-gallery/` | Design-system gallery (dev/E2E only); gated by `isGalleryEnabled()` | No                              |
 
 \* The lobby page loads game-specific configuration from `LobbyConfig` but its chrome (buttons,
 layout, player list) is engine-owned. Game token overrides **are** applied to the lobby page once
@@ -157,10 +168,161 @@ has been imported. Shell pages therefore receive game theming without any explic
 
 ---
 
-## 4.37.5 Module Tree
+## 4.37.5 Game-Customizable Main Menu Definition
+
+Games customize the top-level main menu by contributing a declarative
+`GameMainMenuDefinition` through their renderer shell registration. The shared contract lives in
+`shared/game-shell-contract.ts`, so `renderer/` and `games/*` can both depend on the type without
+creating a renderer-to-game static import.
+
+```typescript
+export type GameMenuCommandId = string & { readonly __brand: 'GameMenuCommandId' };
+
+export interface GameMainMenuLayout {
+    readonly orientation?: 'vertical' | 'horizontal';
+    readonly align?: 'center' | 'start' | 'end';
+    readonly anchor?:
+        | 'center'
+        | 'top'
+        | 'bottom'
+        | 'top-left'
+        | 'top-right'
+        | 'bottom-left'
+        | 'bottom-right';
+    readonly offsetX?: number;
+    readonly offsetY?: number;
+    readonly gap?: number;
+}
+
+export type GameMainMenuAction =
+    | { readonly type: 'navigate'; readonly target: string }
+    | { readonly type: 'quit' }
+    | { readonly type: 'open-lobby' }
+    | { readonly type: 'command'; readonly commandId: GameMenuCommandId };
+
+export interface GameMainMenuButton {
+    readonly label: string;
+    readonly action: GameMainMenuAction;
+    readonly variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+}
+
+export interface GameMainMenuDefinition {
+    readonly layout?: GameMainMenuLayout;
+    readonly buttons: readonly GameMainMenuButton[];
+}
+```
+
+### Layout Defaults
+
+| Field         | Type                                                                                            | Default         | Renderer behavior                                                                                                                                          |
+| ------------- | ----------------------------------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `orientation` | `'vertical' \| 'horizontal'`                                                                    | `'vertical'`    | Maps to `flex-direction: column` or `row`.                                                                                                                 |
+| `align`       | `'center' \| 'start' \| 'end'`                                                                  | `'center'`      | Maps to `align-items: center`, `flex-start`, or `flex-end`.                                                                                                |
+| `anchor`      | `'center' \| 'top' \| 'bottom' \| 'top-left' \| 'top-right' \| 'bottom-left' \| 'bottom-right'` | `'center'`      | `center` stays in normal flow; edge anchors position the wrapper absolutely using tokenized zero edges.                                                    |
+| `offsetX`     | `number`                                                                                        | `0`             | Horizontal pixel offset applied through CSS custom properties (`--menu-offset-x`) rather than bare inline pixel transforms.                                |
+| `offsetY`     | `number`                                                                                        | `0`             | Vertical pixel offset applied through CSS custom properties (`--menu-offset-y`) rather than bare inline pixel transforms.                                  |
+| `gap`         | `number`                                                                                        | `--ch-space-sm` | Must resolve to a design token. The renderer accepts `0`, `4`, `8`, `16`, `24`, and `40`, mapping to `--ch-space-none/xs/sm/md/lg/xl`; other values throw. |
+
+`layout` itself is optional. When a game provides a partial layout, omitted fields use the
+defaults above. `buttons` is required and may be an empty array; an empty array renders an empty
+menu.
+
+### Button and Action Semantics
+
+| Field / variant     | Required? | Meaning                                                                                                       |
+| ------------------- | --------- | ------------------------------------------------------------------------------------------------------------- |
+| `label`             | Yes       | Visible button text rendered as the children of the shared `<Button>`.                                        |
+| `action.type`       | Yes       | Discriminant for the action union.                                                                            |
+| `navigate.target`   | Yes       | Internal renderer route passed to `router.push(target)`, for example `'/settings'`, `'/saves'`, or `'/game'`. |
+| `quit`              | Yes       | Calls `window.__chimera.system.quit()` through the renderer system bridge.                                    |
+| `open-lobby`        | Yes       | Engine shortcut for `router.push('/lobby')`; this is the engine default Play action.                          |
+| `command.commandId` | Yes       | Branded `GameMenuCommandId` resolved against the game's registered `menuCommands` registry.                   |
+| `variant`           | No        | Passed to the shared `<Button>` as `primary`, `secondary`, `ghost`, or `danger`.                              |
+
+When `variant` is omitted, `RenderMainMenuDefinition` assigns a renderer default: `danger` for
+`quit`, `primary` for the first non-quit button, and `secondary` for all remaining buttons.
+
+## 4.37.6 Main Menu Fallback Chain
+
+`renderer/app/main-menu/page.tsx` resolves the active game shell from explicit URL state only:
+`resolveMainMenuGameId(new URLSearchParams(window.location.search))` reads `?gameId=<id>`. This
+keeps the main menu independent of an active lobby or match.
+
+The fallback chain is intentionally shallow:
+
+1. If `?gameId=<id>` resolves and `loadRendererGameShell(id)` succeeds, use
+   `LoadedRendererGameShell.mainMenu` and `LoadedRendererGameShell.menuCommands`.
+2. If the loaded shell omits `mainMenu`, `RenderMainMenuDefinition` receives `undefined` and uses
+   the engine default definition.
+3. If there is no `gameId`, or the shell load fails, the page also passes `undefined`, which uses
+   the engine default definition.
+
+While the URL-selected shell is unresolved or loading, the page renders only the shell container.
+This prevents the engine default Play / Settings / Quit buttons from flashing before a game menu
+definition resolves.
+
+The engine default is itself a `GameMainMenuDefinition`:
+
+```typescript
+const ENGINE_DEFAULT_DEFINITION: GameMainMenuDefinition = {
+    layout: { orientation: 'vertical', align: 'center', anchor: 'center' },
+    buttons: [
+        { label: 'Play', action: { type: 'open-lobby' }, variant: 'primary' },
+        {
+            label: 'Settings',
+            action: { type: 'navigate', target: '/settings' },
+            variant: 'secondary',
+        },
+        { label: 'Quit', action: { type: 'quit' }, variant: 'danger' },
+    ],
+};
+```
+
+There is no partial merge between a game definition and the engine default. A provided definition
+owns its button list; only omitted field-level defaults from `GameMainMenuLayout` and
+`GameMainMenuButton.variant` are applied.
+
+## 4.37.7 Game Menu Command Registry
+
+Games may route buttons to renderer-local command callbacks by declaring a `command` action and
+contributing a registry through their renderer shell module. The implementation models this
+`GameMenuCommand` registry as a `menuCommands` object keyed by branded `GameMenuCommandId` values:
+
+```typescript
+// games/<name>/shell/main-menu.ts
+export const gameMenuCommands: Partial<Record<GameMenuCommandId, () => void>> = {
+    ['game:start-tutorial' as GameMenuCommandId]: () => {
+        // renderer-local command
+    },
+};
+```
+
+The registry is loaded by `renderer/game/rendererGameRegistry.ts` as part of
+`LoadedRendererGameShell`:
+
+```typescript
+export interface LoadedRendererGameShell {
+    readonly mainMenu?: GameMainMenuDefinition;
+    readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
+}
+```
+
+`RenderMainMenuDefinition` resolves every `command` action before producing JSX. If a button refers
+to a `commandId` that is absent from `menuCommands`, or if no registry was provided, rendering
+throws a descriptive error. Unknown commands therefore fail fast instead of producing an inert or
+silently missing button.
+
+## 4.37.8 Module Tree
 
 ```
+shared/
+└── game-shell-contract.ts     # GameMainMenuDefinition and shell-page contracts
 renderer/
+├── game/
+│   └── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page games/* import
+├── shell/
+│   ├── renderMainMenuDefinition.tsx # Engine renderer for GameMainMenuDefinition
+│   └── resolveMainMenuGameId.ts     # URL game context resolver for main menu
 ├── styles/
 │   └── tokens.css              # Engine default --ch-* tokens (§4.35)
 ├── theme/
@@ -182,18 +344,24 @@ renderer/
     │   └── page.tsx            # Uses <Button variant="secondary|ghost" />
     └── saves/
         └── page.tsx            # Uses <Button variant="primary|ghost|danger" />
+games/
+└── tactics/
+    └── shell/
+        └── main-menu.ts        # Sample GameMainMenuDefinition + menuCommands registry
 ```
 
 ---
 
 ## Invariants
 
-| #   | Rule                                                                                                                                                                                                           |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #91 | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`. |
-| #92 | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                               |
-| #93 | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                       |
-| #94 | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.             |
+| #   | Rule                                                                                                                                                                                                                                                                                             |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #80 | `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders. |
+| #85 | Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation.                                                                                            |
+| #91 | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                                                                   |
+| #92 | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                                                                                                                 |
+| #93 | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                                                                                                         |
+| #94 | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                               |
 
 ---
 
@@ -202,4 +370,5 @@ renderer/
 - [GameShell, GameScreenRegistry & UI Design System](gameshell-ui-design-system.md) — §4.35 token catalogue, §4.36 game screen code splitting
 - [Renderer State Stores](renderer-state-stores.md) — store catalogue, `lobbyConfig`, `useLobbyApi()`
 - [Scene Transitions & Fade](scene-transitions-fade.md) — `TransitionOverlay`, `useFade()`
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #91–94
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #80, #85, #91–#94
+- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v1.0.0.md) — F51 game-customizable main menu scope
