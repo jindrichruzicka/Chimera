@@ -102,7 +102,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **34.** `SettingsManager.registerSchema()` must be called for a game before `getSettings()` or `updateSettings()` is called for that game. Calling `getSettings` for an unregistered `gameId` returns only engine defaults and logs a warning — it does not throw, ensuring graceful degradation.
 
-**35.** Game-defined settings keys must not shadow the five top-level engine namespace keys (`audio`, `display`, `gameplay`, `controls`). `SettingsManager.registerSchema()` enforces this at startup and throws `SettingsNamespaceCollisionError` if violated.
+**35.** Game-defined settings keys must not shadow the four top-level engine namespace keys (`audio`, `display`, `gameplay`, `controls`). `SettingsManager.registerSchema()` enforces this at startup and throws `SettingsNamespaceCollisionError` if violated. `GameSettingsPageDefinition` `game-field.path` entries must be backed by the registered game settings schema; presentation metadata never admits unregistered settings keys.
 
 **36.** Settings are never read by the simulation core (`simulation/`) or the `ActionPipeline`. Any game parameter that must affect simulation outcomes must be declared as a match config value and transmitted as part of lobby setup, not as a user setting.
 

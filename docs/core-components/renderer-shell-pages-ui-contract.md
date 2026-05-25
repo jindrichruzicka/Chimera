@@ -1,6 +1,6 @@
 ---
 title: 'Renderer Shell Pages UI Contract'
-description: 'Token-based styling contract for engine shell pages (main-menu, lobby, settings, saves). Defines which pages are shell-owned vs. game-owned, how the shared Button component is consumed, how GameMainMenuDefinition customizes the main menu, when game token overrides apply, and the invariants that prohibit inline styles on shell pages.'
+description: 'Token-based styling contract for engine shell pages (main-menu, lobby, settings, saves). Defines which pages are shell-owned vs. game-owned, how the shared Button component is consumed, how GameMainMenuDefinition customizes the main menu, how GameSettingsPageDefinition customizes the settings page, when game token overrides apply, and the invariants that prohibit inline styles on shell pages.'
 tags:
     [
         renderer,
@@ -11,6 +11,7 @@ tags:
         theming,
         lobby,
         main-menu,
+        settings,
         game-shell-contract,
     ]
 ---
@@ -18,7 +19,7 @@ tags:
 # Renderer Shell Pages UI Contract
 
 > §4.37 of the Chimera architecture.
-> Related: [GameShell, GameScreenRegistry & UI Design System](gameshell-ui-design-system.md) · [Renderer State Stores](renderer-state-stores.md) · [Multiplayer Provider & WebSocket](multiplayer-provider-websocket.md)
+> Related: [GameShell, GameScreenRegistry & UI Design System](gameshell-ui-design-system.md) · [Settings System](settings-system.md) · [Renderer State Stores](renderer-state-stores.md) · [Multiplayer Provider & WebSocket](multiplayer-provider-websocket.md)
 
 ---
 
@@ -32,7 +33,7 @@ content that renders _inside_ `GameShell`. This section documents the same contr
 | --------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
 | `renderer/app/main-menu/`         | Title screen, entry point                                           | Engine-owned; game-customizable |
 | `renderer/app/lobby/`             | Host/join/leave multiplayer lobby                                   | Partly\*                        |
-| `renderer/app/settings/`          | Engine + game settings UI                                           | No                              |
+| `renderer/app/settings/`          | Engine + game settings UI                                           | Engine-owned; game-customizable |
 | `renderer/app/saves/`             | Save-slot browser                                                   | No                              |
 | `renderer/app/(loading)/`         | Transition placeholder between scenes                               | No                              |
 | `renderer/app/component-gallery/` | Design-system gallery (dev/E2E only); gated by `isGalleryEnabled()` | No                              |
@@ -326,6 +327,10 @@ declarative `GameSettingsPageDefinition` through their renderer shell registrati
 contract lives in `shared/game-shell-contract.ts`, so `renderer/` and `games/*` can both depend on
 the type without creating a renderer-to-game static import.
 
+The settings page remains renderer-owned. Games declare tabs, sections, fields, labels, and control
+metadata; they do not contribute React components, import renderer UI primitives, or bypass the
+settings IPC/store lifecycle from §4.13.
+
 ```typescript
 export type EngineSettingsFieldId =
     | 'audio.masterVolume'
@@ -390,6 +395,44 @@ For `engine-field` entries, the renderer owns the label, default value, and cont
 paths are still validated by `SettingsManager.registerSchema()` and must not shadow the engine
 top-level namespaces from Invariant #35.
 
+The engine field registry is exhaustive for the current `EngineSettings` interface:
+
+| Field id                         | Label                | Control     | Default / notes                         |
+| -------------------------------- | -------------------- | ----------- | --------------------------------------- |
+| `audio.masterVolume`             | Master Volume        | Slider      | `1`, formatted as a percentage          |
+| `audio.sfxVolume`                | SFX Volume           | Slider      | `1`, formatted as a percentage          |
+| `audio.musicVolume`              | Music Volume         | Slider      | `0.8`, formatted as a percentage        |
+| `audio.muted`                    | Muted                | Toggle      | `false`                                 |
+| `display.fullscreen`             | Fullscreen           | Toggle      | `false`                                 |
+| `display.vsync`                  | VSync                | Toggle      | `true`                                  |
+| `display.targetFps`              | Target FPS           | Select      | `60`; options `30`, `60`, `120`, `0`    |
+| `display.uiScale`                | UI Scale             | Slider      | `1`, range `0.5`-`2`, formatted as `x`  |
+| `gameplay.language`              | Language             | Select      | `en-US`; localized language options     |
+| `gameplay.autoSave`              | Auto Save            | Toggle      | `true`                                  |
+| `gameplay.autoSaveIntervalTurns` | Auto Save Interval   | Slider      | `5`, range `1`-`100`, integer turns     |
+| `gameplay.showHints`             | Show Hints           | Toggle      | `true`                                  |
+| `gameplay.showPerfHud`           | Show Performance HUD | Toggle      | `false`                                 |
+| `controls.bindings`              | Controls             | Key-binding | Renders the engine input rebinding pane |
+
+Typed game definitions cannot reference unknown engine field ids. Defensive renderer paths that
+receive an untyped or stale `engine-field` fail fast instead of silently rendering an inert control.
+
+### Engine Default Tab Set
+
+When no game settings definition is available, the renderer uses the engine default four-tab layout:
+
+| Tab      | Sections | Engine fields                                                                                                            |
+| -------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Audio    | Audio    | `audio.masterVolume`, `audio.sfxVolume`, `audio.musicVolume`, `audio.muted`                                              |
+| Display  | Display  | `display.fullscreen`, `display.vsync`, `display.targetFps`, `display.uiScale`                                            |
+| Gameplay | Gameplay | `gameplay.language`, `gameplay.autoSave`, `gameplay.autoSaveIntervalTurns`, `gameplay.showHints`, `gameplay.showPerfHud` |
+| Controls | Controls | `controls.bindings`                                                                                                      |
+
+There is no partial merge between a game settings definition and the engine default tab set. A
+provided `GameSettingsPageDefinition` owns its tab list. It can include any subset of engine fields,
+combine engine and game fields in the same section, add game-only tabs, or provide an empty `tabs`
+array to render an empty settings surface.
+
 ### Settings Page Fallback Chain
 
 The settings page stays engine-owned. A game-provided definition controls only the ordering and
@@ -404,8 +447,59 @@ the engine default:
 When settings is opened with explicit URL game context, the Close action returns to
 `/main-menu/?gameId=<id>` so the corresponding game-customized main menu remains active.
 
-The engine default definition contains the engine tabs Audio, Display, Gameplay, and Controls.
-`tabs` may be an empty array; an empty array renders an empty settings surface for that game.
+### Declaring a Game Settings Page
+
+A game declares its settings page in `games/<name>/shell/settings-page.ts` and exposes it through
+the renderer game registry as `LoadedRendererGame.shell.settings`. The canonical example is
+`games/tactics/shell/settings-page.ts`, which contributes five tabs: Audio, Display, Gameplay, AI,
+and Controls.
+
+```typescript
+import type { GameSettingsPageDefinition } from '@chimera/shared/game-shell-contract.js';
+
+export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
+    tabs: [
+        {
+            id: 'gameplay',
+            label: 'Gameplay',
+            sections: [
+                {
+                    id: 'engine-gameplay',
+                    label: 'Engine',
+                    items: [{ kind: 'engine-field', fieldId: 'gameplay.showPerfHud' }],
+                },
+                {
+                    id: 'tactics-gameplay',
+                    label: 'Tactics',
+                    items: [
+                        {
+                            kind: 'game-field',
+                            path: 'showGrid',
+                            label: 'Show Grid',
+                            control: { type: 'toggle' },
+                        },
+                    ],
+                },
+            ],
+        },
+    ],
+};
+```
+
+`game-field.path` is a dot-path into the resolved settings object returned by §4.13. Tactics adds
+root-level extension keys (`showGrid`, `animationSpeed`, `showDamageNumbers`,
+`aiThinkingDelayMs`) because its `TacticsSettings` interface extends `EngineSettings` directly.
+Games that nest their own settings may use paths such as `tactics.difficulty` instead.
+
+The registry wiring keeps shell pages free of static game imports:
+
+```typescript
+export interface LoadedRendererGameShell {
+    readonly mainMenu?: GameMainMenuDefinition;
+    readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
+    readonly settings?: GameSettingsPageDefinition;
+}
+```
 
 ## 4.37.9 Module Tree
 
@@ -417,6 +511,7 @@ renderer/
 │   └── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page games/* import
 ├── shell/
 │   ├── renderMainMenuDefinition.tsx # Engine renderer for GameMainMenuDefinition
+│   ├── renderSettingsSectionItems.tsx # Engine renderer for SettingsSectionDefinition
 │   └── resolveMainMenuGameId.ts     # URL game context resolver for main menu
 ├── styles/
 │   └── tokens.css              # Engine default --ch-* tokens (§4.35)
@@ -452,6 +547,9 @@ games/
 
 | #   | Rule                                                                                                                                                                                                                                                                                             |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #34 | `SettingsManager.registerSchema()` must be called for a game before `getSettings()` or `updateSettings()` is called. Calling `getSettings` for an unregistered `gameId` returns only engine defaults and logs a warning; a settings page definition selects presentation fields only.            |
+| #35 | Game-defined settings keys must not shadow the engine top-level namespaces (`audio`, `display`, `gameplay`, `controls`). `game-field.path` entries must be backed by the registered game settings schema; presentation metadata never admits unregistered settings keys.                         |
+| #36 | Settings remain outside simulation state and the `ActionPipeline`. The settings page edits values through the renderer settings store and `window.__chimera.settings`; any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup.               |
 | #80 | `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders. |
 | #85 | Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation.                                                                                            |
 | #91 | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                                                                   |
@@ -464,7 +562,8 @@ games/
 ## Cross-References
 
 - [GameShell, GameScreenRegistry & UI Design System](gameshell-ui-design-system.md) — §4.35 token catalogue, §4.36 game screen code splitting
+- [Settings System](settings-system.md) — §4.13 settings schema, merge, repository, and IPC lifecycle
 - [Renderer State Stores](renderer-state-stores.md) — store catalogue, `lobbyConfig`, `useLobbyApi()`
 - [Scene Transitions & Fade](scene-transitions-fade.md) — `TransitionOverlay`, `useFade()`
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #80, #85, #91–#94
-- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v1.0.0.md) — F51 game-customizable main menu scope
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94
+- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v1.0.0.md) — F51 game-customizable main menu and F52 game-customizable settings page scope

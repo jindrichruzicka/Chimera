@@ -7,7 +7,7 @@ tags: [settings, configuration, layered-merge, repository, electron]
 # Settings System
 
 > §4.13 of the Chimera architecture.
-> Related: [Electron Shell](electron-shell-ipc-bridge.md) · [Renderer State Stores](renderer-state-stores.md) · [Input/Keybindings](input-keybindings.md)
+> Related: [Electron Shell](electron-shell-ipc-bridge.md) · [Renderer State Stores](renderer-state-stores.md) · [Renderer Shell Pages UI Contract](renderer-shell-pages-ui-contract.md) · [Input/Keybindings](input-keybindings.md)
 
 ---
 
@@ -63,7 +63,7 @@ interface EngineSettings {
 }
 ```
 
-> **Invariant #35** — Game-defined settings keys must not shadow the five top-level engine namespace keys (`audio`, `display`, `gameplay`, `controls`). `registerSchema()` throws `SettingsNamespaceCollisionError` if violated.
+> **Invariant #35** — Game-defined settings keys must not shadow the four top-level engine namespace keys (`audio`, `display`, `gameplay`, `controls`). `registerSchema()` throws `SettingsNamespaceCollisionError` if violated. `GameSettingsPageDefinition` `game-field.path` entries must be backed by the registered game settings schema.
 > **Invariant #36** — Settings are never read by the simulation core. Game parameters that affect simulation outcomes must be declared as match config, transmitted during lobby setup.
 
 ---
@@ -78,13 +78,12 @@ interface GameSettingsSchema<TGameSettings> {
     readonly schema: ZodSchema<TGameSettings>; // for parse + runtime validation
 }
 
-// Example: tactics game extends with a campaign difficulty field
-interface TacticsSettings {
-    campaignDifficulty: 'easy' | 'normal' | 'hard' | 'brutal';
-    showFogOfWar: boolean;
-    showGridOverlay: boolean;
-    combatAnimations: boolean;
+// Example: tactics game extends EngineSettings with tactics-specific renderer preferences
+interface TacticsSettings extends EngineSettings {
+    showGrid: boolean;
     animationSpeed: 'slow' | 'normal' | 'fast' | 'instant';
+    showDamageNumbers: boolean;
+    aiThinkingDelayMs: number;
 }
 ```
 
@@ -192,10 +191,15 @@ interface SettingsStore {
 }
 ```
 
+## Presentation Layer
+
+The renderer settings page is documented in [Renderer Shell Pages UI Contract](renderer-shell-pages-ui-contract.md). Games may contribute a declarative `GameSettingsPageDefinition` to choose which engine fields and game fields are displayed, but presentation metadata does not replace `SettingsManager.registerSchema()`, `SettingsMerger`, or the settings repository lifecycle described here.
+
 ---
 
 ## Cross-References
 
+- [Renderer Shell Pages UI Contract](renderer-shell-pages-ui-contract.md) — `GameSettingsPageDefinition`, engine default settings tabs, and renderer field registry (§4.37)
 - [Input/Keybindings](input-keybindings.md) — `controls.bindings` in `EngineSettings` (§4.26)
 - [Audio System](audio-system.md) — `audio.*` settings drive AudioBus volumes (§4.25)
 - [Performance HUD](performance-hud-device-info.md) — `gameplay.showPerfHud` forces PerfHud (§4.16)
