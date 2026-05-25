@@ -167,6 +167,8 @@ export function RenderSettingsSectionItems({
     resolvedSettings,
     section,
 }: RenderSettingsSectionItemsProps): React.ReactElement {
+    const storeResolvedSettings = useSettingsStore((state) => state.settings[gameId]);
+    const effectiveResolvedSettings = resolvedSettings ?? storeResolvedSettings;
     const handleUpdate = useCallback(
         (patch: Record<string, unknown>): void => {
             useSettingsStore
@@ -182,7 +184,12 @@ export function RenderSettingsSectionItems({
     return (
         <>
             {section.items.map((item) =>
-                renderItem({ item, resolvedSettings, onUpdate: handleUpdate, renderControlsPanel }),
+                renderItem({
+                    item,
+                    resolvedSettings: effectiveResolvedSettings,
+                    onUpdate: handleUpdate,
+                    renderControlsPanel,
+                }),
             )}
         </>
     );
@@ -203,7 +210,7 @@ function renderItem({
 }>): React.ReactElement {
     switch (item.kind) {
         case 'engine-field': {
-            const descriptor = ENGINE_FIELD_REGISTRY[item.fieldId];
+            const descriptor = resolveEngineFieldDescriptor(item.fieldId);
             if (descriptor.control.type === 'key-binding') {
                 return (
                     <React.Fragment key={item.fieldId}>
@@ -244,6 +251,16 @@ function renderItem({
                 />
             );
     }
+}
+
+function resolveEngineFieldDescriptor(fieldId: string): EngineFieldDescriptor {
+    const descriptor = (
+        ENGINE_FIELD_REGISTRY as Readonly<Record<string, EngineFieldDescriptor | undefined>>
+    )[fieldId];
+    if (descriptor === undefined) {
+        throw new Error(`[RenderSettingsSectionItems] unknown engine settings field '${fieldId}'`);
+    }
+    return descriptor;
 }
 
 // ── SettingsControlField ──────────────────────────────────────────────────────
