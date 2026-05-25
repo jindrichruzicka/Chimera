@@ -79,11 +79,14 @@ async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
 }
 
 async function loadTacticsRendererGameShell(): Promise<LoadedRendererGameShell> {
-    const shellModule = await import('@chimera/games/tactics/shell/main-menu.js');
+    const [mainMenuModule, settingsPageModule] = await Promise.all([
+        import('@chimera/games/tactics/shell/main-menu.js'),
+        import('@chimera/games/tactics/shell/settings-page.js'),
+    ]);
 
     return {
-        mainMenu: shellModule.tacticsMainMenuDefinition,
-        menuCommands: shellModule.tacticsMenuCommands,
-        // settings intentionally absent: stubbed until T52.5
+        mainMenu: mainMenuModule.tacticsMainMenuDefinition,
+        menuCommands: mainMenuModule.tacticsMenuCommands,
+        settings: settingsPageModule.tacticsSettingsPageDefinition,
     };
 }

@@ -65,9 +65,15 @@ describe('rendererGameRegistry', () => {
             >();
         });
 
-        it('tactics loader stubs shell.settings as undefined (#626)', async () => {
+        it('tactics loader exposes shell.settings (#629)', async () => {
             const game = await loadRendererGame('tactics');
-            expect(game.shell?.settings).toBeUndefined();
+            expect(game.shell?.settings?.tabs.map((tab) => tab.id)).toEqual([
+                'audio',
+                'display',
+                'gameplay',
+                'ai',
+                'controls',
+            ]);
         });
 
         it('shell.menuCommands lookup is typed as (() => void) | undefined', () => {
