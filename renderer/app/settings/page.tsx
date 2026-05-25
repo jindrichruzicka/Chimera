@@ -507,6 +507,7 @@ function SettingsDefinitionSurface({
     return (
         <Tabs
             ariaLabel="Settings categories"
+            data-testid="settings-tabs"
             tabs={definition.tabs.map((tab) => ({
                 id: tab.id,
                 label: tab.label,
@@ -519,6 +520,7 @@ function SettingsDefinitionSurface({
                         tab={tab}
                     />
                 ),
+                testId: getSettingsTabTestId(tab.id),
             }))}
         />
     );
@@ -543,6 +545,7 @@ function SettingsTabPanel({
                     <section
                         aria-labelledby={section.label ? headingId : undefined}
                         className={styles['settings-section']}
+                        data-testid={getSettingsSectionTestId(tab.id, section.id)}
                         key={section.id}
                     >
                         {section.label ? (
@@ -635,6 +638,7 @@ function SettingsControl({
     readonly value: unknown;
 }>): React.ReactElement {
     const elementId = getSettingsElementId('setting', path);
+    const controlTestId = testId ?? getSettingsControlTestId(path);
 
     switch (control.type) {
         case 'slider': {
@@ -643,7 +647,7 @@ function SettingsControl({
                 <div className={styles['field']} data-setting-path={path}>
                     <Slider
                         aria-label={label}
-                        data-testid={testId}
+                        data-testid={controlTestId}
                         id={elementId}
                         label={label}
                         max={control.max}
@@ -665,6 +669,7 @@ function SettingsControl({
                 <div className={styles['field']} data-setting-path={path}>
                     <Toggle
                         checked={currentValue}
+                        data-testid={controlTestId}
                         id={elementId}
                         label={label}
                         onCheckedChange={(nextValue) => {
@@ -680,6 +685,7 @@ function SettingsControl({
             return (
                 <div className={styles['field']} data-setting-path={path}>
                     <Select
+                        data-testid={controlTestId}
                         id={elementId}
                         label={label}
                         options={control.options}
@@ -694,7 +700,11 @@ function SettingsControl({
         }
         case 'key-binding':
             return (
-                <div className={styles['field']} data-setting-path={path}>
+                <div
+                    className={styles['field']}
+                    data-setting-path={path}
+                    data-testid={controlTestId}
+                >
                     <Caption tone="muted">
                         Key bindings are managed by the engine controls panel.
                     </Caption>
@@ -841,6 +851,18 @@ function getSettingsElementId(...parts: readonly string[]): string {
         .replace(/[^A-Za-z0-9_-]+/g, '-')
         .replace(/^-+|-+$/g, '')
         .toLowerCase();
+}
+
+function getSettingsTabTestId(tabId: string): string {
+    return getSettingsElementId('settings-tab', tabId);
+}
+
+function getSettingsSectionTestId(tabId: string, sectionId: string): string {
+    return getSettingsElementId('settings-section', tabId, sectionId);
+}
+
+function getSettingsControlTestId(path: string): string {
+    return getSettingsElementId('settings-control', path);
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

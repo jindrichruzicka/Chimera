@@ -156,6 +156,15 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
         expect(screen.getByRole('tab', { name: 'Controls' })).toBeTruthy();
     });
 
+    it('marks settings tabs and sections with stable E2E test ids', async () => {
+        await renderSettingsPage();
+
+        expect(screen.getByTestId('settings-tabs')).toBeTruthy();
+        expect(screen.getByTestId('settings-tab-audio')).toBeTruthy();
+        expect(screen.getByTestId('settings-tab-display')).toBeTruthy();
+        expect(screen.getByTestId('settings-section-audio-audio')).toBeTruthy();
+    });
+
     it('renders Display fields after selecting the Display tab', async () => {
         await renderSettingsPageAndOpenTab('Display');
 
@@ -314,6 +323,13 @@ describe('SettingsPage — master volume slider (AC #2)', () => {
     it('marks the master volume input for settings page objects', async () => {
         await renderSettingsPage();
         expect(screen.getByTestId('master-volume')).toBeTruthy();
+    });
+
+    it('marks generated engine controls with stable E2E test ids', async () => {
+        await renderSettingsPageAndOpenTab('Display');
+
+        expect(screen.getByTestId('settings-control-display-fullscreen')).toBeTruthy();
+        expect(screen.getByTestId('settings-control-display-targetfps')).toBeTruthy();
     });
 
     it('calls window.__chimera.settings.update with audio masterVolume patch when slider changes', async () => {

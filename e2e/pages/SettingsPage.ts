@@ -7,12 +7,24 @@ export class SettingsPage {
     readonly resetDefaultsButton: Locator;
 
     public constructor(private readonly page: Page) {
-        this.masterVolumeInput = page.getByTestId('master-volume');
+        this.masterVolumeInput = page.getByTestId('master-volume').filter({ visible: true });
         this.resetDefaultsButton = page.getByTestId('reset-to-defaults');
     }
 
     public async setMasterVolume(value: number): Promise<void> {
         await this.masterVolumeInput.fill(String(value));
+    }
+
+    public async clickTab(label: string): Promise<void> {
+        await this.page.getByRole('tab', { name: label, exact: true }).click();
+    }
+
+    public getControlByLabel(label: string): Locator {
+        return this.page.getByLabel(label, { exact: true }).filter({ visible: true });
+    }
+
+    public async setSlider(label: string, value: number): Promise<void> {
+        await this.getControlByLabel(label).fill(String(value));
     }
 
     public async resetToDefaults(): Promise<void> {
@@ -41,9 +53,11 @@ export class SettingsPage {
     }
 
     private bindingRow(actionId: InputActionId): Locator {
-        return this.page.locator(
-            `[data-testid="binding-action-row"][data-action-id="${escapeAttributeValue(actionId)}"]`,
-        );
+        return this.page
+            .locator(
+                `[data-testid="binding-action-row"][data-action-id="${escapeAttributeValue(actionId)}"]`,
+            )
+            .filter({ visible: true });
     }
 }
 

@@ -6,14 +6,29 @@ interface BuildPageDoubleResult {
     readonly page: Page;
     readonly requestedTestIds: string[];
     readonly requestedLocators: string[];
+    readonly requestedLabels: RequestedLabel[];
+    readonly requestedRoles: RequestedRole[];
     readonly clickedTestIds: string[];
     readonly filledValues: { readonly testId: string; readonly value: string }[];
     readonly keyPresses: string[];
 }
 
+interface RequestedLabel {
+    readonly exact?: boolean;
+    readonly text: Parameters<Page['getByLabel']>[0];
+}
+
+interface RequestedRole {
+    readonly exact?: boolean;
+    readonly name?: string | RegExp;
+    readonly role: Parameters<Page['getByRole']>[0];
+}
+
 const buildPageDouble = (): BuildPageDoubleResult => {
     const requestedTestIds: string[] = [];
     const requestedLocators: string[] = [];
+    const requestedLabels: RequestedLabel[] = [];
+    const requestedRoles: RequestedRole[] = [];
     const clickedTestIds: string[] = [];
     const filledValues: { readonly testId: string; readonly value: string }[] = [];
     const keyPresses: string[] = [];
@@ -27,6 +42,7 @@ const buildPageDouble = (): BuildPageDoubleResult => {
                 filledValues.push({ testId, value });
             },
             innerText: async (): Promise<string> => `${testId}:text`,
+            filter: (): Locator => locatorLike as Locator,
             getByTestId: (childTestId: string): Locator => {
                 requestedTestIds.push(childTestId);
                 return createLocator(`${testId} >> ${childTestId}`);
@@ -45,6 +61,27 @@ const buildPageDouble = (): BuildPageDoubleResult => {
             requestedLocators.push(selector);
             return createLocator(selector);
         },
+        getByLabel: (
+            text: Parameters<Page['getByLabel']>[0],
+            options?: Parameters<Page['getByLabel']>[1],
+        ): Locator => {
+            requestedLabels.push({
+                text,
+                ...(options?.exact !== undefined ? { exact: options.exact } : {}),
+            });
+            return createLocator(`label:${String(text)}`);
+        },
+        getByRole: (
+            role: Parameters<Page['getByRole']>[0],
+            options?: Parameters<Page['getByRole']>[1],
+        ): Locator => {
+            requestedRoles.push({
+                role,
+                ...(options?.name !== undefined ? { name: options.name } : {}),
+                ...(options?.exact !== undefined ? { exact: options.exact } : {}),
+            });
+            return createLocator(`${role}:${String(options?.name ?? '')}`);
+        },
         keyboard: {
             press: async (key: string): Promise<void> => {
                 keyPresses.push(key);
@@ -56,6 +93,8 @@ const buildPageDouble = (): BuildPageDoubleResult => {
         page: page as Page,
         requestedTestIds,
         requestedLocators,
+        requestedLabels,
+        requestedRoles,
         clickedTestIds,
         filledValues,
         keyPresses,
@@ -90,6 +129,35 @@ describe('SettingsPage', () => {
         await settingsPage.resetToDefaults();
 
         expect(clickedTestIds).toEqual(['reset-to-defaults']);
+    });
+
+    it('clicks a settings tab by accessible label', async () => {
+        const { page, clickedTestIds, requestedRoles } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        await settingsPage.clickTab('Display');
+
+        expect(requestedRoles).toContainEqual({ role: 'tab', name: 'Display', exact: true });
+        expect(clickedTestIds).toContain('tab:Display');
+    });
+
+    it('returns a control by accessible label', () => {
+        const { page, requestedLabels } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        expect(settingsPage.getControlByLabel('Animation Speed')).toBeDefined();
+
+        expect(requestedLabels).toContainEqual({ text: 'Animation Speed', exact: true });
+    });
+
+    it('sets a slider by accessible label', async () => {
+        const { page, filledValues, requestedLabels } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        await settingsPage.setSlider('AI Thinking Delay', 1200);
+
+        expect(requestedLabels).toContainEqual({ text: 'AI Thinking Delay', exact: true });
+        expect(filledValues).toEqual([{ testId: 'label:AI Thinking Delay', value: '1200' }]);
     });
 
     it('reads a binding value from the action row', async () => {

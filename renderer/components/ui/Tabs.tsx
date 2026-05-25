@@ -9,6 +9,7 @@ export type TabItem = Readonly<{
     readonly label: React.ReactNode;
     readonly panel: React.ReactNode;
     readonly disabled?: boolean;
+    readonly testId?: string;
 }>;
 
 export type TabsProps = Readonly<
@@ -185,6 +186,7 @@ export function Tabs({
                             aria-selected={isSelected}
                             className={tabClassNames}
                             data-active={String(isSelected)}
+                            data-testid={tab.testId}
                             disabled={tab.disabled}
                             id={getTabDomId(baseId, tab.id)}
                             key={tab.id}

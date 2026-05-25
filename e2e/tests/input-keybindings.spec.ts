@@ -127,6 +127,7 @@ test.describe('Input keybindings', () => {
             await hostWindow.waitForLoadState('domcontentloaded');
             const settingsPage = new SettingsPage(hostWindow);
             await expect(settingsPage.masterVolumeInput).toBeVisible({ timeout: 10_000 });
+            await settingsPage.clickTab('Controls');
 
             await expect(settingsPage.bindingValue(END_TURN_ACTION_ID)).toHaveText(
                 formatBinding(defaultBinding),
