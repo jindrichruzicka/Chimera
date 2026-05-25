@@ -3,12 +3,18 @@ import type { Locator, Page } from '@playwright/test';
 type InputActionId = `engine:${string}` | `game:${string}`;
 
 export class SettingsPage {
+    readonly closeButton: Locator;
     readonly masterVolumeInput: Locator;
     readonly resetDefaultsButton: Locator;
 
     public constructor(private readonly page: Page) {
+        this.closeButton = page.getByTestId('settings-close');
         this.masterVolumeInput = page.getByTestId('master-volume').filter({ visible: true });
         this.resetDefaultsButton = page.getByTestId('reset-to-defaults');
+    }
+
+    public async close(): Promise<void> {
+        await this.closeButton.click();
     }
 
     public async setMasterVolume(value: number): Promise<void> {

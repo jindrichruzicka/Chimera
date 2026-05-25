@@ -4,6 +4,7 @@
     flex-direction: column;
     font-family: var(--ch-font-ui);
     gap: var(--ch-space-sm);
+    min-inline-size: 0;
 }
 
 .label {
@@ -14,7 +15,8 @@
 .input {
     accent-color: var(--ch-color-accent);
     cursor: pointer;
-    width: var(--ch-button-min-width-lg);
+    inline-size: 100%;
+    min-inline-size: 0;
 }
 
 .input:disabled {

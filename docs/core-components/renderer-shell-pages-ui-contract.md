@@ -140,11 +140,12 @@ Shell page containers should also use tokens rather than hardcoded layout values
 ## 4.37.4 Game Token Overrides on Shell Pages
 
 When a game is in context, shell-level UI may load the game's renderer shell contribution through
-the renderer game registry. For the main menu, this context is explicit URL state such as
-`/main-menu/?gameId=tactics`; it does not require a lobby to exist. For the lobby page, context is
-resolved from `LobbyConfig.gameId`. Once a game registry module is imported, the lobby page and any
-subsequent shell-level UI automatically inherit the game's token override CSS, because the override
-is a side-effect import loaded at game registry initialisation time (§4.35):
+the renderer game registry. For the main menu and settings page, this context is explicit URL state
+such as `/main-menu/?gameId=tactics` or `/settings/?gameId=tactics`; it does not require a lobby to
+exist. For the lobby page, context is resolved from `LobbyConfig.gameId`. Once a game registry
+module is imported, the lobby page and any subsequent shell-level UI automatically inherit the
+game's token override CSS, because the override is a side-effect import loaded at game registry
+initialisation time (§4.35):
 
 ```typescript
 // games/tactics/screens/index.ts
@@ -158,13 +159,13 @@ has been imported. Shell pages therefore receive game theming without any explic
 
 ### Scope Rules
 
-| Page              | Receives game override?                                   |
-| ----------------- | --------------------------------------------------------- |
-| `main-menu`       | Yes — when explicit URL game context is present           |
-| `settings`        | Never (engine-owned, game-agnostic)                       |
-| `saves`           | Never (engine-owned, game-agnostic)                       |
-| `lobby`           | Yes — after `gameId` is resolved and registry is imported |
-| Match / GameShell | Yes — always (registry imported before scene render)      |
+| Page              | Receives game override?                                     |
+| ----------------- | ----------------------------------------------------------- |
+| `main-menu`       | Yes — when explicit URL game context is present             |
+| `settings`        | Yes — when explicit URL or active lobby game context exists |
+| `saves`           | Never (engine-owned, game-agnostic)                         |
+| `lobby`           | Yes — after `gameId` is resolved and registry is imported   |
+| Match / GameShell | Yes — always (registry imported before scene render)        |
 
 ---
 
@@ -260,6 +261,11 @@ The fallback chain is intentionally shallow:
 While the URL-selected shell is unresolved or loading, the page renders only the shell container.
 This prevents the engine default Play / Settings / Quit buttons from flashing before a game menu
 definition resolves.
+
+When a URL-selected game menu is loaded, `navigate` and `open-lobby` actions preserve the active
+`gameId` query parameter for root-relative shell routes. This lets game-customized shell pages round
+trip between `/main-menu/?gameId=<id>` and `/settings/?gameId=<id>` without requiring each game to
+hardcode query strings in its declarative menu definition.
 
 The engine default is itself a `GameMainMenuDefinition`:
 
@@ -387,11 +393,16 @@ top-level namespaces from Invariant #35.
 ### Settings Page Fallback Chain
 
 The settings page stays engine-owned. A game-provided definition controls only the ordering and
-selection of fields that the engine renderer displays:
+selection of fields that the engine renderer displays. The active settings game context resolves
+from explicit URL state first (`?gameId=<id>`), then from the active lobby/session game, then from
+the engine default:
 
 1. If a resolved renderer shell provides `settings`, render its tabs and sections.
 2. If the loaded shell omits `settings`, use the engine default settings definition.
 3. If no game context exists, or shell loading fails, use the engine default settings definition.
+
+When settings is opened with explicit URL game context, the Close action returns to
+`/main-menu/?gameId=<id>` so the corresponding game-customized main menu remains active.
 
 The engine default definition contains the engine tabs Audio, Display, Gameplay, and Controls.
 `tabs` may be an empty array; an empty array renders an empty settings surface for that game.

@@ -4,6 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import sliderCss from './Slider.module.css?raw';
 import { Slider } from './Slider';
 
 afterEach(() => {
@@ -25,5 +26,10 @@ describe('Slider', () => {
         fireEvent.change(slider, { target: { value: '65' } });
 
         expect(onChange).toHaveBeenCalledWith(65);
+    });
+
+    it('stretches the range input to align with sibling form controls', () => {
+        expect(sliderCss).toContain('inline-size: 100%');
+        expect(sliderCss).not.toContain('width: var(--ch-button-min-width-lg)');
     });
 });

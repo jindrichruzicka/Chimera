@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { resolveMainMenuGameId } from './resolveMainMenuGameId';
+import { resolveMainMenuGameId, withShellGameId } from './resolveMainMenuGameId';
 
 describe('resolveMainMenuGameId', () => {
     it('uses the explicit gameId query parameter', () => {
@@ -24,5 +24,27 @@ describe('resolveMainMenuGameId', () => {
         const params = new URLSearchParams('gameId=');
 
         expect(resolveMainMenuGameId(params)).toBeNull();
+    });
+});
+
+describe('withShellGameId', () => {
+    it('adds gameId to a root-relative route', () => {
+        expect(withShellGameId('/settings', 'tactics')).toBe('/settings?gameId=tactics');
+    });
+
+    it('preserves existing query parameters and hash fragments', () => {
+        expect(withShellGameId('/settings?tab=audio#panel', 'tactics')).toBe(
+            '/settings?tab=audio&gameId=tactics#panel',
+        );
+    });
+
+    it('does not override an explicit target gameId', () => {
+        expect(withShellGameId('/settings?gameId=custom', 'tactics')).toBe(
+            '/settings?gameId=custom',
+        );
+    });
+
+    it('leaves routes unchanged when no gameId is active', () => {
+        expect(withShellGameId('/settings', null)).toBe('/settings');
     });
 });

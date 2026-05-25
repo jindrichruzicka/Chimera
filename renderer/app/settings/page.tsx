@@ -16,6 +16,7 @@
  */
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import type {
     EngineSettingsFieldId,
     GameSettingsPageDefinition,
@@ -35,9 +36,16 @@ import { Toggle } from '../../components/ui/Toggle';
 import { loadRendererGame } from '../../game/rendererGameRegistry';
 import { ENGINE_SETTINGS_GAME_ID } from '../../input/KeyBindingRepository.js';
 import { useInputManager } from '../../input/InputManagerContext.js';
+import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryContext.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
+import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useSettingsStore } from '../../state/settingsStore';
+import {
+    getSettingsApi,
+    hydrateActiveGameSettings,
+    registerActiveGameInputActions,
+} from '../settingsGameContext';
 import styles from './page.module.css';
 
 type SettingPrimitive = boolean | number | string;
@@ -238,22 +246,15 @@ function selectActiveGameId(state: { activeGameId: string | null }): string | nu
     return state.activeGameId;
 }
 
-function selectGameId(state: { activeGameId: string | null }): string {
-    return state.activeGameId ?? ENGINE_SETTINGS_GAME_ID;
-}
-
-function selectResolvedSettings(state: {
-    activeGameId: string | null;
-    settings: Record<string, ResolvedSettings>;
-}): ResolvedSettings | undefined {
-    return state.settings[state.activeGameId ?? ENGINE_SETTINGS_GAME_ID];
-}
-
 export default function SettingsPage(): React.ReactElement {
-    const activeGameId = useSettingsStore(selectActiveGameId);
-    const gameId = useSettingsStore(selectGameId);
-    const resolvedSettings = useSettingsStore(selectResolvedSettings);
+    const router = useRouter();
+    const urlGameId = useUrlGameId();
+    const storedActiveGameId = useSettingsStore(selectActiveGameId);
+    const activeGameId = urlGameId === undefined ? undefined : (urlGameId ?? storedActiveGameId);
+    const gameId = activeGameId ?? ENGINE_SETTINGS_GAME_ID;
+    const resolvedSettings = useSettingsStore((state) => state.settings[gameId]);
     const inputManager = useInputManager();
+    const inputActionRegistry = useOptionalInputActionRegistry();
 
     const [capturingId, setCapturingId] = React.useState<InputActionId | null>(null);
     const capturedBindingsRef = React.useRef<Partial<Record<InputActionId, KeyBinding>>>({});
@@ -262,6 +263,31 @@ export default function SettingsPage(): React.ReactElement {
     >({});
 
     const actionsByCategory = groupActionsByCategory(inputManager.getActions());
+
+    React.useEffect(() => {
+        if (urlGameId === undefined || urlGameId === null) {
+            return;
+        }
+
+        let disposed = false;
+        const settingsApi = getSettingsApi();
+        const settingsPromise = hydrateActiveGameSettings(settingsApi, urlGameId, () => disposed);
+        const inputActionsPromise = registerActiveGameInputActions(
+            inputActionRegistry,
+            urlGameId,
+            () => disposed,
+        );
+
+        void Promise.allSettled([settingsPromise, inputActionsPromise]).then(() => {
+            if (!disposed) {
+                useSettingsStore.getState().setActiveGameId(urlGameId);
+            }
+        });
+
+        return () => {
+            disposed = true;
+        };
+    }, [inputActionRegistry, urlGameId]);
 
     const handleRebind = React.useCallback(
         (id: InputActionId, binding: KeyBinding): void => {
@@ -368,6 +394,10 @@ export default function SettingsPage(): React.ReactElement {
             });
     }
 
+    function handleClose(): void {
+        router.push(withShellGameId('/main-menu', activeGameId ?? null));
+    }
+
     function renderControlsPanel(): React.ReactElement {
         if (actionsByCategory.size === 0) {
             return <Caption tone="muted">No controls registered.</Caption>;
@@ -429,24 +459,28 @@ export default function SettingsPage(): React.ReactElement {
                                         {status?.ok === true && (
                                             <span className={styles['success-status']}>Saved</span>
                                         )}
-                                        {!isCapturing && (
+                                        <div className={styles['binding-actions']}>
+                                            {!isCapturing && (
+                                                <Button
+                                                    className={styles['binding-action-button']}
+                                                    data-testid="binding-edit"
+                                                    size="sm"
+                                                    variant="secondary"
+                                                    onClick={() => setCapturingId(action.id)}
+                                                >
+                                                    Edit
+                                                </Button>
+                                            )}
                                             <Button
-                                                data-testid="binding-edit"
+                                                className={styles['binding-action-button']}
+                                                data-testid="binding-reset"
                                                 size="sm"
-                                                variant="secondary"
-                                                onClick={() => setCapturingId(action.id)}
+                                                variant="ghost"
+                                                onClick={() => handleResetBinding(action.id)}
                                             >
-                                                Edit
+                                                Reset
                                             </Button>
-                                        )}
-                                        <Button
-                                            data-testid="binding-reset"
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => handleResetBinding(action.id)}
-                                        >
-                                            Reset
-                                        </Button>
+                                        </div>
                                     </div>
                                 );
                             })}
@@ -457,12 +491,18 @@ export default function SettingsPage(): React.ReactElement {
         );
     }
 
+    if (activeGameId === undefined) {
+        return (
+            <main className={styles['page']}>
+                <div className={styles['loading']}>
+                    <Spinner label="Loading settings" />
+                </div>
+            </main>
+        );
+    }
+
     return (
         <main className={styles['page']}>
-            <Heading level={1} size="xl">
-                Settings
-            </Heading>
-
             {/* POM alignment guard literal: data-testid="master-volume" */}
             <React.Suspense
                 fallback={
@@ -479,16 +519,36 @@ export default function SettingsPage(): React.ReactElement {
                 />
             </React.Suspense>
 
-            <Button
-                data-testid="reset-to-defaults"
-                size="sm"
-                variant="danger"
-                onClick={handleReset}
-            >
-                Reset to defaults
-            </Button>
+            <div className={styles['dialog-actions']} data-testid="settings-dialog-actions">
+                <Button
+                    data-testid="reset-to-defaults"
+                    size="sm"
+                    variant="danger"
+                    onClick={handleReset}
+                >
+                    Reset
+                </Button>
+                <Button
+                    data-testid="settings-close"
+                    size="sm"
+                    variant="secondary"
+                    onClick={handleClose}
+                >
+                    Close
+                </Button>
+            </div>
         </main>
     );
+}
+
+function useUrlGameId(): string | null | undefined {
+    const [gameId, setGameId] = React.useState<string | null | undefined>(undefined);
+
+    React.useEffect(() => {
+        setGameId(resolveShellGameId(new URLSearchParams(window.location.search)));
+    }, []);
+
+    return gameId;
 }
 
 function SettingsDefinitionSurface({
@@ -541,14 +601,15 @@ function SettingsTabPanel({
         <div className={styles['tab-panel-content']}>
             {tab.sections.map((section) => {
                 const headingId = getSettingsElementId(tab.id, section.id, 'heading');
+                const shouldRenderHeading = shouldRenderSectionHeading(tab.label, section.label);
                 return (
                     <section
-                        aria-labelledby={section.label ? headingId : undefined}
+                        aria-labelledby={shouldRenderHeading ? headingId : undefined}
                         className={styles['settings-section']}
                         data-testid={getSettingsSectionTestId(tab.id, section.id)}
                         key={section.id}
                     >
-                        {section.label ? (
+                        {shouldRenderHeading ? (
                             <Heading id={headingId} level={2} size="lg">
                                 {section.label}
                             </Heading>
@@ -567,6 +628,18 @@ function SettingsTabPanel({
                 );
             })}
         </div>
+    );
+}
+
+function shouldRenderSectionHeading(
+    tabLabel: string,
+    sectionLabel: string | undefined,
+): sectionLabel is string {
+    const normalizedSectionLabel = sectionLabel?.trim();
+    return (
+        normalizedSectionLabel !== undefined &&
+        normalizedSectionLabel.length > 0 &&
+        normalizedSectionLabel.toLowerCase() !== tabLabel.trim().toLowerCase()
     );
 }
 

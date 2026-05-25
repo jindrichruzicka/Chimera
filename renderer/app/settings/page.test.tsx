@@ -19,9 +19,10 @@
 
 import React from 'react';
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameSettingsPageDefinition } from '@chimera/shared/game-shell-contract.js';
+import pageCss from './page.module.css?raw';
 import SettingsPage from './page';
 import { useSettingsStore } from '../../state/settingsStore';
 import { useInputManager } from '../../input/InputManagerContext.js';
@@ -31,8 +32,9 @@ import type { KeyBinding } from '../../input/InputBindingSchema.js';
 import type { ResolvedSettings } from '@chimera/electron/preload/api-types.js';
 import type { LoadedRendererGame } from '../../game/rendererGameRegistry';
 
-const { mockLoadRendererGame } = vi.hoisted(() => ({
+const { mockLoadRendererGame, mockPush } = vi.hoisted(() => ({
     mockLoadRendererGame: vi.fn(),
+    mockPush: vi.fn(),
 }));
 
 // Mock the InputManagerContext so tests control what useInputManager() returns
@@ -45,8 +47,13 @@ vi.mock('../../game/rendererGameRegistry', () => ({
     loadRendererGame: mockLoadRendererGame,
 }));
 
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push: mockPush }),
+}));
+
 // ── Mock window.__chimera.settings ────────────────────────────────────────────
 
+const mockGet = vi.fn().mockResolvedValue(undefined);
 const mockUpdate = vi.fn().mockResolvedValue(undefined);
 const mockReset = vi.fn().mockResolvedValue(undefined);
 
@@ -57,7 +64,7 @@ function setChimera(): void {
             settings: {
                 update: mockUpdate,
                 reset: mockReset,
-                get: vi.fn(),
+                get: mockGet,
                 onChange: vi.fn(),
             },
         },
@@ -113,13 +120,20 @@ async function renderSettingsPageAndOpenTab(tabName: string): Promise<void> {
     fireEvent.click(screen.getByRole('tab', { name: tabName }));
 }
 
+function setSettingsUrl(search = ''): void {
+    window.history.replaceState({}, '', `/settings${search}`);
+}
+
 // ── Setup / Teardown ──────────────────────────────────────────────────────────
 
 beforeEach(() => {
     vi.resetAllMocks();
     mockLoadRendererGame.mockResolvedValue(makeRendererGame());
+    mockPush.mockReset();
+    mockGet.mockResolvedValue(makeSettings());
     mockUpdate.mockResolvedValue(undefined);
     mockReset.mockResolvedValue(undefined);
+    setSettingsUrl();
     setChimera();
     useSettingsStore.setState({
         settings: { [GAME_ID]: makeSettings() },
@@ -131,19 +145,17 @@ beforeEach(() => {
 
 afterEach(() => {
     cleanup();
+    setSettingsUrl();
     useSettingsStore.setState({ settings: {}, activeGameId: null });
 });
 
 // ── AC #1 — Declarative tab layout rendered ──────────────────────────────────
 
 describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
-    it('uses shared Typography primitives for headings and captions', async () => {
+    it('omits the redundant page title and keeps settings value captions', async () => {
         await renderSettingsPage();
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Settings' })).toHaveAttribute(
-            'data-ch-heading-level',
-            '1',
-        );
+        expect(screen.queryByRole('heading', { level: 1, name: 'Settings' })).toBeNull();
         expect(screen.getByText('80%')).toHaveAttribute('data-ch-caption-tone', 'neutral');
     });
 
@@ -165,10 +177,24 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
         expect(screen.getByTestId('settings-section-audio-audio')).toBeTruthy();
     });
 
+    it('omits section headings that repeat the active tab label', async () => {
+        await renderSettingsPage();
+
+        expect(screen.queryByRole('heading', { level: 2, name: 'Audio' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Display' }));
+        expect(screen.queryByRole('heading', { level: 2, name: 'Display' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Gameplay' }));
+        expect(screen.queryByRole('heading', { level: 2, name: 'Gameplay' })).toBeNull();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Controls' }));
+        expect(screen.queryByRole('heading', { level: 2, name: 'Controls' })).toBeNull();
+    });
+
     it('renders Display fields after selecting the Display tab', async () => {
         await renderSettingsPageAndOpenTab('Display');
 
-        expect(screen.getByRole('heading', { name: /display/i })).toBeTruthy();
         expect(screen.getByLabelText(/fullscreen/i)).toBeTruthy();
         expect(screen.getByLabelText(/target fps/i)).toBeTruthy();
     });
@@ -194,7 +220,6 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
     it('renders Gameplay fields after selecting the Gameplay tab', async () => {
         await renderSettingsPageAndOpenTab('Gameplay');
 
-        expect(screen.getByRole('heading', { name: /gameplay/i })).toBeTruthy();
         expect(screen.getByLabelText(/language/i)).toBeTruthy();
         expect(screen.getByRole('switch', { name: 'Auto Save' })).toBeTruthy();
     });
@@ -202,7 +227,6 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
     it('renders the Controls tab with registered input actions', async () => {
         await renderSettingsPageAndOpenTab('Controls');
 
-        expect(screen.getByRole('heading', { name: /controls/i })).toBeTruthy();
         expect(screen.getByText('Undo last action')).toBeTruthy();
     });
 
@@ -304,6 +328,61 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
         expect(screen.getByLabelText(/ai assist/i)).toBeTruthy();
     });
 
+    it('uses URL game context when no active lobby game is stored', async () => {
+        const customGameId = 'custom-url-settings-game';
+        const customDefinition: GameSettingsPageDefinition = {
+            tabs: [
+                {
+                    id: 'combat',
+                    label: 'Combat',
+                    sections: [
+                        {
+                            id: 'rules',
+                            label: 'Rules',
+                            items: [
+                                {
+                                    kind: 'game-field',
+                                    path: 'tactics.difficulty',
+                                    label: 'Difficulty',
+                                    control: {
+                                        type: 'select',
+                                        options: [
+                                            { value: 'normal', label: 'Normal' },
+                                            { value: 'hard', label: 'Hard' },
+                                        ],
+                                    },
+                                },
+                            ],
+                        },
+                    ],
+                },
+            ],
+        };
+        mockLoadRendererGame.mockResolvedValue(makeRendererGame(customDefinition));
+        mockGet.mockResolvedValue({
+            ...makeSettings(),
+            tactics: { difficulty: 'normal' },
+        });
+        useSettingsStore.setState({
+            settings: { __engine__: makeSettings() },
+            activeGameId: null,
+        });
+        setSettingsUrl(`?gameId=${customGameId}`);
+
+        render(<SettingsPage />);
+
+        expect(await screen.findByRole('tab', { name: 'Combat' })).toBeTruthy();
+        expect(screen.queryByRole('tab', { name: 'Display' })).toBeNull();
+        expect(mockLoadRendererGame).toHaveBeenCalledWith(customGameId);
+        expect(mockGet).toHaveBeenCalledWith(customGameId);
+
+        fireEvent.change(screen.getByLabelText(/difficulty/i), { target: { value: 'hard' } });
+
+        expect(mockUpdate).toHaveBeenCalledWith(customGameId, {
+            tactics: { difficulty: 'hard' },
+        });
+    });
+
     it('does not render the legacy Game Settings JSON section for extra keys', async () => {
         useSettingsStore.setState({
             settings: { [GAME_ID]: { ...makeSettings(), mapSize: 12 } },
@@ -332,6 +411,14 @@ describe('SettingsPage — master volume slider (AC #2)', () => {
         expect(screen.getByTestId('settings-control-display-targetfps')).toBeTruthy();
     });
 
+    it('stretches settings controls to the full panel width', async () => {
+        await renderSettingsPage();
+
+        expect(screen.getByTestId('master-volume')).toBeTruthy();
+        expect(pageCss).toMatch(/\.field\s*{[^}]*inline-size: 100%/s);
+        expect(pageCss).not.toContain('max-inline-size: calc(var(--ch-space-xl) * 10)');
+    });
+
     it('calls window.__chimera.settings.update with audio masterVolume patch when slider changes', async () => {
         await renderSettingsPage();
         const slider = screen.getByLabelText(/master volume/i);
@@ -354,11 +441,62 @@ describe('SettingsPage — reset to defaults (AC #3)', () => {
         expect(screen.getByTestId('reset-to-defaults')).toBeTruthy();
     });
 
+    it('labels the reset action compactly', async () => {
+        await renderSettingsPage();
+        expect(screen.getByRole('button', { name: /^reset$/i })).toBeTruthy();
+        expect(screen.queryByRole('button', { name: /reset to defaults/i })).toBeNull();
+    });
+
     it('calls window.__chimera.settings.reset with the active gameId when reset is clicked', async () => {
         await renderSettingsPage();
-        const btn = screen.getByRole('button', { name: /reset to defaults/i });
+        const btn = screen.getByRole('button', { name: /^reset$/i });
         fireEvent.click(btn);
         expect(mockReset).toHaveBeenCalledWith(GAME_ID);
+    });
+
+    it('renders dialog-style reset and close controls aligned to the right', async () => {
+        await renderSettingsPage();
+
+        const actions = screen.getByTestId('settings-dialog-actions');
+        expect(actions).toContainElement(screen.getByRole('button', { name: /^close$/i }));
+        expect(actions).toContainElement(screen.getByRole('button', { name: /^reset$/i }));
+        expect(pageCss).toContain('.dialog-actions');
+        expect(pageCss).toContain('justify-content: flex-end');
+        expect(pageCss).toContain('align-self: stretch');
+    });
+
+    it('places Close as the rightmost dialog action', async () => {
+        await renderSettingsPage();
+
+        const actionLabels = within(screen.getByTestId('settings-dialog-actions'))
+            .getAllByRole('button')
+            .map((button) => button.textContent);
+
+        expect(actionLabels).toEqual(['Reset', 'Close']);
+    });
+
+    it('navigates back to the engine main menu when close is clicked without game context', async () => {
+        useSettingsStore.setState({
+            settings: { __engine__: makeSettings() },
+            activeGameId: null,
+        });
+
+        await renderSettingsPage();
+        fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
+        expect(mockPush).toHaveBeenCalledWith('/main-menu');
+    });
+
+    it('preserves URL game context when close returns to the main menu', async () => {
+        setSettingsUrl('?gameId=tactics');
+        useSettingsStore.setState({
+            settings: { __engine__: makeSettings() },
+            activeGameId: null,
+        });
+
+        await renderSettingsPage();
+        fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
+
+        expect(mockPush).toHaveBeenCalledWith('/main-menu?gameId=tactics');
     });
 });
 
@@ -416,9 +554,9 @@ describe('SettingsPage — engine-wide settings when activeGameId is null (AC #5
         });
 
         await renderSettingsPage();
-        expect(screen.getByRole('heading', { name: /audio/i })).toBeTruthy();
+        expect(screen.getByLabelText(/master volume/i)).toBeTruthy();
         fireEvent.click(screen.getByRole('tab', { name: 'Display' }));
-        expect(screen.getByRole('heading', { name: /display/i })).toBeTruthy();
+        expect(screen.getByLabelText(/target fps/i)).toBeTruthy();
     });
 
     it('dispatches update with __engine__ gameId when activeGameId is null', async () => {
@@ -441,7 +579,7 @@ describe('SettingsPage — engine-wide settings when activeGameId is null (AC #5
         });
 
         await renderSettingsPage();
-        const btn = screen.getByRole('button', { name: /reset to defaults/i });
+        const btn = screen.getByRole('button', { name: /^reset$/i });
         fireEvent.click(btn);
 
         expect(mockReset).toHaveBeenCalledWith('__engine__');
@@ -521,7 +659,7 @@ describe('SettingsPage — controls rebind panel (AC #6)', () => {
 
     it('renders a "Reset" button for each action', async () => {
         await renderWithInputManager(makeInputManagerDouble());
-        const resetButtons = screen.getAllByRole('button', { name: /^reset$/i });
+        const resetButtons = screen.getAllByTestId('binding-reset');
         expect(resetButtons.length).toBe(3);
     });
 
@@ -529,6 +667,21 @@ describe('SettingsPage — controls rebind panel (AC #6)', () => {
         await renderWithInputManager(makeInputManagerDouble());
         expect(screen.getByText('Engine')).toBeTruthy();
         expect(screen.getByText('Game')).toBeTruthy();
+    });
+
+    it('right-aligns current bindings and left-aligns per-action buttons', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
+
+        const bindingValues = screen.getAllByTestId('binding-value');
+        expect(bindingValues[0]).toHaveTextContent('Ctrl+KeyZ');
+        expect(pageCss).toContain('.binding-value');
+        expect(pageCss).toContain('justify-self: end');
+        expect(pageCss).toContain('text-align: right');
+        expect(pageCss).toMatch(/\.binding-actions\s*{[^}]*grid-column: 1/s);
+        expect(pageCss).toMatch(/\.binding-actions\s*{[^}]*justify-content: flex-start/s);
+        expect(pageCss).toMatch(/\.binding-actions\s*{[^}]*justify-self: start/s);
+        expect(pageCss).toContain('.binding-action-button');
+        expect(pageCss).toContain('--ch-button-min-width: calc(var(--ch-space-xl) * 2)');
     });
 
     it('refreshes controls when the active game context changes after initial render', async () => {
@@ -787,7 +940,7 @@ describe('SettingsPage — per-action reset (AC #9)', () => {
         const mockResetBinding = vi.fn().mockResolvedValue(undefined);
         await renderWithInputManager(makeInputManagerDouble({ resetBinding: mockResetBinding }));
 
-        const resetButtons = screen.getAllByRole('button', { name: /^reset$/i });
+        const resetButtons = screen.getAllByTestId('binding-reset');
         await act(async () => {
             fireEvent.click(resetButtons[0]!); // reset engine:undo
         });

@@ -107,10 +107,20 @@ describe('SettingsPage', () => {
 
         const settingsPage = new SettingsPage(page);
 
+        expect(settingsPage.closeButton).toBeDefined();
         expect(settingsPage.masterVolumeInput).toBeDefined();
         expect(settingsPage.resetDefaultsButton).toBeDefined();
 
-        expect(requestedTestIds).toEqual(['master-volume', 'reset-to-defaults']);
+        expect(requestedTestIds).toEqual(['settings-close', 'master-volume', 'reset-to-defaults']);
+    });
+
+    it('clicks close', async () => {
+        const { page, clickedTestIds } = buildPageDouble();
+        const settingsPage = new SettingsPage(page);
+
+        await settingsPage.close();
+
+        expect(clickedTestIds).toEqual(['settings-close']);
     });
 
     it('fills master volume input with the provided value', async () => {

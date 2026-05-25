@@ -58,8 +58,8 @@ function getMainMenuButtonTestId(button: GameMainMenuButton): string | undefined
 type MenuLoadState =
     | { status: 'unresolved' }
     | { status: 'engine-default' }
-    | { status: 'loading' }
-    | { status: 'loaded'; shell: LoadedRendererGameShell }
+    | { status: 'loading'; gameId: string }
+    | { status: 'loaded'; gameId: string; shell: LoadedRendererGameShell }
     | { status: 'load-failed' };
 
 export default function MainMenuPage() {
@@ -73,13 +73,13 @@ export default function MainMenuPage() {
             return;
         }
 
-        setMenuState({ status: 'loading' });
+        setMenuState({ status: 'loading', gameId });
         let isActive = true;
 
         loadRendererGameShell(gameId)
             .then((loadedShell) => {
                 if (isActive) {
-                    setMenuState({ status: 'loaded', shell: loadedShell });
+                    setMenuState({ status: 'loaded', gameId, shell: loadedShell });
                 }
             })
             .catch(() => {
@@ -101,6 +101,7 @@ export default function MainMenuPage() {
     }
 
     const definition = menuState.status === 'loaded' ? menuState.shell.mainMenu : undefined;
+    const gameId = menuState.status === 'loaded' ? menuState.gameId : null;
     const menuCommands = menuState.status === 'loaded' ? menuState.shell.menuCommands : undefined;
 
     return (
@@ -108,6 +109,7 @@ export default function MainMenuPage() {
             {/* POM alignment guard literals: data-testid="main-menu-play" data-testid="main-menu-settings" data-testid="main-menu-quit" */}
             <RenderMainMenuDefinition
                 definition={definition}
+                gameId={gameId}
                 menuCommands={menuCommands}
                 getButtonTestId={getMainMenuButtonTestId}
             />

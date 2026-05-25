@@ -20,6 +20,7 @@ import type {
 } from '@chimera/shared/game-shell-contract.js';
 import { Button } from '../components/ui/Button';
 import { getSystemBridge } from '../bridge/system-bridge';
+import { withShellGameId } from './resolveMainMenuGameId';
 
 // ─── Engine default ───────────────────────────────────────────────────────────
 
@@ -141,6 +142,7 @@ function defaultVariant(
 
 interface RenderMainMenuDefinitionProps {
     definition?: GameMainMenuDefinition | undefined;
+    gameId?: string | null | undefined;
     menuCommands?: Partial<Record<GameMenuCommandId, () => void>> | undefined;
     getButtonTestId?:
         | ((button: GameMainMenuButton, index: number) => string | undefined)
@@ -149,6 +151,7 @@ interface RenderMainMenuDefinitionProps {
 
 export function RenderMainMenuDefinition({
     definition,
+    gameId = null,
     menuCommands,
     getButtonTestId,
 }: RenderMainMenuDefinitionProps): React.ReactElement {
@@ -167,11 +170,11 @@ export function RenderMainMenuDefinition({
         switch (action.type) {
             case 'open-lobby':
                 return (): void => {
-                    router.push('/lobby');
+                    router.push(withShellGameId('/lobby', gameId));
                 };
             case 'navigate':
                 return (): void => {
-                    router.push(action.target);
+                    router.push(withShellGameId(action.target, gameId));
                 };
             case 'quit':
                 return (): void => {

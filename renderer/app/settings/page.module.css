@@ -18,6 +18,14 @@
     min-block-size: calc(var(--ch-space-xl) * 4);
 }
 
+.dialog-actions {
+    align-self: stretch;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+    justify-content: flex-end;
+}
+
 .tab-panel-content {
     display: grid;
     gap: var(--ch-space-lg);
@@ -36,7 +44,7 @@
 .field {
     display: grid;
     gap: var(--ch-space-xs);
-    max-inline-size: calc(var(--ch-space-xl) * 10);
+    inline-size: 100%;
 }
 
 .controls-panel {
@@ -55,27 +63,41 @@
 }
 
 .binding-row {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ch-space-sm);
+    align-items: start;
+    display: grid;
+    gap: var(--ch-space-xs) var(--ch-space-sm);
+    grid-template-columns: minmax(var(--ch-space-none), 1fr) max-content;
 }
 
 .action-description {
     color: var(--ch-color-text-primary);
-    flex: 1 1 calc(var(--ch-space-xl) * 4);
     font-size: var(--ch-font-size-md);
+    grid-column: 1;
     line-height: var(--ch-line-height-tight);
     min-inline-size: 0;
 }
 
 .binding-value {
     color: var(--ch-color-text-secondary);
-    flex: 0 0 var(--ch-button-min-width-lg);
     font-family: var(--ch-font-mono);
     font-size: var(--ch-font-size-sm);
+    grid-column: 2;
+    justify-self: end;
     line-height: var(--ch-line-height-tight);
-    min-inline-size: var(--ch-button-min-width-lg);
+    min-inline-size: var(--ch-button-min-width-sm);
+    text-align: right;
+}
+
+.binding-actions {
+    display: flex;
+    gap: var(--ch-space-xs);
+    grid-column: 1;
+    justify-content: flex-start;
+    justify-self: start;
+}
+
+.binding-row .binding-action-button {
+    --ch-button-min-width: calc(var(--ch-space-xl) * 2);
 }
 
 .conflict-status {
@@ -85,11 +107,24 @@
     flex-wrap: wrap;
     font-size: var(--ch-font-size-sm);
     gap: var(--ch-space-sm);
+    grid-column: 1 / -1;
     line-height: var(--ch-line-height-tight);
 }
 
 .success-status {
     color: var(--ch-color-success);
     font-size: var(--ch-font-size-sm);
+    grid-column: 1 / -1;
     line-height: var(--ch-line-height-tight);
+}
+
+@media (max-width: calc(var(--ch-space-xl) * 12)) {
+    .binding-row {
+        grid-template-columns: 1fr;
+    }
+
+    .binding-value,
+    .binding-actions {
+        grid-column: 1;
+    }
 }

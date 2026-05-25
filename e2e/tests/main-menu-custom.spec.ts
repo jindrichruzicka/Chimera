@@ -11,6 +11,7 @@
 
 import { test, expect } from '../fixtures/electron.fixture';
 import { MainMenuPage } from '../pages/MainMenuPage';
+import { SettingsPage } from '../pages/SettingsPage';
 
 // ── Test suite ────────────────────────────────────────────────────────────────
 
@@ -84,5 +85,35 @@ test.describe('Game-customized main menu (§4.37 / #622)', () => {
         await menu.clickButtonByLabel('Settings');
 
         await window.waitForURL('**/settings/**');
+    });
+
+    test('tactics Settings preserves game context and returns to tactics menu', async ({
+        electronApp,
+    }) => {
+        const window = await electronApp.firstWindow();
+        await window.waitForLoadState('domcontentloaded');
+
+        const menu = new MainMenuPage(window);
+        await menu.goto({ gameId: 'tactics' });
+        await expect.poll(() => menu.getButtonLabels(), { timeout: 15_000 }).toContain('New Game');
+
+        await menu.clickButtonByLabel('Settings');
+        await expect(window).toHaveURL(/\/settings\/?\?gameId=tactics$/);
+
+        const settingsPage = new SettingsPage(window);
+        await expect(window.getByRole('tab', { name: 'AI', exact: true })).toBeVisible({
+            timeout: 10_000,
+        });
+
+        await settingsPage.clickTab('AI');
+        await expect(settingsPage.getControlByLabel('AI Thinking Delay')).toBeVisible();
+
+        await settingsPage.close();
+        await expect(window).toHaveURL(/\/main-menu\/?\?gameId=tactics$/);
+
+        const labels = await menu.getButtonLabels();
+        expect(labels).toContain('New Game');
+        expect(labels).toContain('Settings');
+        expect(labels).not.toContain('Play');
     });
 });

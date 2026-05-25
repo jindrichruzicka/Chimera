@@ -178,7 +178,15 @@ describe('MainMenuPage — URL game context (tactics)', () => {
 
         fireEvent.click(await screen.findByRole('button', { name: 'Load Game' }));
 
-        expect(mockPush).toHaveBeenCalledWith('/saves');
+        expect(mockPush).toHaveBeenCalledWith('/saves?gameId=tactics');
+    });
+
+    it('preserves the URL game context when the loaded game navigates to settings', async () => {
+        renderMainMenuPage();
+
+        fireEvent.click(await screen.findByRole('button', { name: 'Settings' }));
+
+        expect(mockPush).toHaveBeenCalledWith('/settings?gameId=tactics');
     });
 });
 
