@@ -7,8 +7,8 @@ import {
 } from '../actions.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
 // Side-effect import: redefines --ch-* tokens for the Tactics visual language.
-// Must be the only place this file is imported (Invariants #85, #93).
-import '../styles/tokens-override.css';
+// Shared with shell loaders so URL-selected shell UI can wait for tokens before rendering.
+import '../styles/register-token-overrides.js';
 
 const TacticsDemoBoard = React.lazy(() => import('./TacticsDemoBoard.js'));
 const TacticsGameHud = React.lazy(() => import('./TacticsGameHud.js'));

@@ -1,3 +1,4 @@
+import type { ComponentType } from 'react';
 import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
 import type {
     GameMainMenuDefinition,
@@ -11,6 +12,7 @@ export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
     readonly settings?: GameSettingsPageDefinition;
+    readonly shellBackground?: ComponentType;
 }
 
 export interface LoadedRendererGame {
@@ -79,14 +81,18 @@ async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
 }
 
 async function loadTacticsRendererGameShell(): Promise<LoadedRendererGameShell> {
-    const [mainMenuModule, settingsPageModule] = await Promise.all([
+    await import('@chimera/games/tactics/styles/register-token-overrides.js');
+
+    const [mainMenuModule, settingsPageModule, backgroundModule] = await Promise.all([
         import('@chimera/games/tactics/shell/main-menu.js'),
         import('@chimera/games/tactics/shell/settings-page.js'),
+        import('@chimera/games/tactics/shell/TacticsShellBackground.js'),
     ]);
 
     return {
         mainMenu: mainMenuModule.tacticsMainMenuDefinition,
         menuCommands: mainMenuModule.tacticsMenuCommands,
         settings: settingsPageModule.tacticsSettingsPageDefinition,
+        shellBackground: backgroundModule.TacticsShellBackground,
     };
 }

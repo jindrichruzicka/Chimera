@@ -283,7 +283,7 @@ describe('LobbyPage pending actions', () => {
         renderLobbyPage();
 
         expect(screen.getByRole('main')).toHaveStyle({
-            backgroundColor: 'var(--ch-color-surface)',
+            backgroundColor: 'var(--ch-color-transparent)',
             color: 'var(--ch-color-text-primary)',
             minHeight: '100vh',
         });

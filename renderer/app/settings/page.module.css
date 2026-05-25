@@ -1,13 +1,28 @@
 .page {
+    align-items: center;
     box-sizing: border-box;
     color: var(--ch-color-text-primary);
     display: flex;
-    flex-direction: column;
     font-family: var(--ch-font-ui);
-    gap: var(--ch-space-lg);
+    justify-content: center;
     inline-size: 100%;
-    margin-inline: auto;
-    max-inline-size: calc(var(--ch-space-xl) * 16);
+    min-block-size: 100vh;
+    padding: var(--ch-space-xl);
+}
+
+.settings-dialog {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    box-shadow: var(--ch-shadow-lg);
+    box-sizing: border-box;
+    display: grid;
+    gap: var(--ch-space-lg);
+    inline-size: min(100%, calc(var(--ch-space-xl) * 16));
+    max-block-size: calc(100vh - (var(--ch-space-xl) * 2));
+    overflow: auto;
     padding: var(--ch-space-xl);
 }
 

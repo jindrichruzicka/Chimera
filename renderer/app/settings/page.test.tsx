@@ -447,6 +447,26 @@ describe('SettingsPage — reset to defaults (AC #3)', () => {
         expect(screen.queryByRole('button', { name: /reset to defaults/i })).toBeNull();
     });
 
+    it('wraps the settings tabs and footer actions in one accessible modal dialog', async () => {
+        await renderSettingsPage();
+
+        const dialog = screen.getByRole('dialog', { name: 'Settings' });
+        expect(dialog).toHaveAttribute('aria-modal', 'true');
+        expect(dialog).toContainElement(screen.getByTestId('settings-tabs'));
+        expect(dialog).toContainElement(screen.getByTestId('settings-dialog-actions'));
+        expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    });
+
+    it('keeps the route backdrop transparent so the shared shell background stays visible', async () => {
+        await renderSettingsPage();
+
+        expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+        expect(pageCss).not.toMatch(/\.page\s*{[^}]*background-color/s);
+        expect(pageCss).toMatch(
+            /\.settings-dialog\s*{[^}]*background-color: var\(--ch-color-surface-raised\)/s,
+        );
+    });
+
     it('calls window.__chimera.settings.reset with the active gameId when reset is clicked', async () => {
         await renderSettingsPage();
         const btn = screen.getByRole('button', { name: /^reset$/i });

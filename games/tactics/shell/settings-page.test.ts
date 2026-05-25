@@ -3,7 +3,7 @@
 // Unit tests for the Tactics settings page definition.
 // Written first (TDD - red confirmed before implementation).
 //
-// Architecture reference: section 4.13 Settings System, section 4.37.8 Settings page definition.
+// Architecture reference: section 4.13 Settings System, section 4.37.9 Settings page definition.
 // Task: #629
 //
 // Module boundary enforced by import statements below:

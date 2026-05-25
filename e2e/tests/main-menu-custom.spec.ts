@@ -13,6 +13,67 @@ import { test, expect } from '../fixtures/electron.fixture';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { SettingsPage } from '../pages/SettingsPage';
 
+type ChimeraTokenName = `--ch-${string}`;
+
+interface TokenColorProbeResult {
+    readonly actualTokenColor: string;
+    readonly expectedColor: string;
+}
+
+interface BrowserStyleDeclaration {
+    readonly backgroundColor: string;
+    getPropertyValue(propertyName: string): string;
+}
+
+interface BrowserProbeElement {
+    readonly style: { backgroundColor: string };
+    remove(): void;
+}
+
+interface BrowserDocumentAccess {
+    readonly documentElement: unknown;
+    readonly body: {
+        appendChild(element: BrowserProbeElement): void;
+    };
+    createElement(tagName: 'div'): BrowserProbeElement;
+}
+
+interface BrowserGlobalAccess {
+    readonly document: BrowserDocumentAccess;
+    getComputedStyle(element: unknown): BrowserStyleDeclaration;
+}
+
+async function readRootTokenColor(page: {
+    evaluate: <T>(fn: () => T) => Promise<T>;
+}): Promise<TokenColorProbeResult> {
+    return page.evaluate(() => {
+        const browser = globalThis as unknown as BrowserGlobalAccess;
+        const tokenName: ChimeraTokenName = '--ch-color-accent';
+        const tokenValue = browser
+            .getComputedStyle(browser.document.documentElement)
+            .getPropertyValue(tokenName)
+            .trim();
+
+        const actualProbe = browser.document.createElement('div');
+        actualProbe.style.backgroundColor = tokenValue;
+        browser.document.body.appendChild(actualProbe);
+
+        const expectedProbe = browser.document.createElement('div');
+        expectedProbe.style.backgroundColor = '#c9a84c';
+        browser.document.body.appendChild(expectedProbe);
+
+        const result = {
+            actualTokenColor: browser.getComputedStyle(actualProbe).backgroundColor,
+            expectedColor: browser.getComputedStyle(expectedProbe).backgroundColor,
+        };
+
+        actualProbe.remove();
+        expectedProbe.remove();
+
+        return result;
+    });
+}
+
 // ── Test suite ────────────────────────────────────────────────────────────────
 
 test.describe('Game-customized main menu (§4.37 / #622)', () => {
@@ -54,6 +115,9 @@ test.describe('Game-customized main menu (§4.37 / #622)', () => {
 
         // Wait for the URL-selected tactics shell to load and render.
         await expect.poll(() => menu.getButtonLabels(), { timeout: 15_000 }).toContain('New Game');
+
+        const accentColors = await readRootTokenColor(window);
+        expect(accentColors.actualTokenColor).toBe(accentColors.expectedColor);
 
         const labels = await menu.getButtonLabels();
         expect(labels).toContain('New Game');

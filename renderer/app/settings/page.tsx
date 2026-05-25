@@ -6,7 +6,7 @@
  * Settings page — renders engine-owned settings tabs from the shared
  * GameSettingsPageDefinition contract.
  *
- * Architecture reference: §4.13 — Settings System, §4.37.8 — Settings page
+ * Architecture reference: §4.13 — Settings System, §4.37.9 — Settings page
  * definition fallback chain.
  *
  * Rules:
@@ -503,40 +503,48 @@ export default function SettingsPage(): React.ReactElement {
 
     return (
         <main className={styles['page']}>
-            {/* POM alignment guard literal: data-testid="master-volume" */}
-            <React.Suspense
-                fallback={
-                    <div className={styles['loading']}>
-                        <Spinner label="Loading settings" />
-                    </div>
-                }
+            <section
+                aria-label="Settings"
+                aria-modal="true"
+                className={styles['settings-dialog']}
+                data-testid="settings-dialog"
+                role="dialog"
             >
-                <SettingsDefinitionSurface
-                    activeGameId={activeGameId}
-                    onUpdate={handleUpdate}
-                    renderControlsPanel={renderControlsPanel}
-                    resolvedSettings={resolvedSettings}
-                />
-            </React.Suspense>
+                {/* POM alignment guard literal: data-testid="master-volume" */}
+                <React.Suspense
+                    fallback={
+                        <div className={styles['loading']}>
+                            <Spinner label="Loading settings" />
+                        </div>
+                    }
+                >
+                    <SettingsDefinitionSurface
+                        activeGameId={activeGameId}
+                        onUpdate={handleUpdate}
+                        renderControlsPanel={renderControlsPanel}
+                        resolvedSettings={resolvedSettings}
+                    />
+                </React.Suspense>
 
-            <div className={styles['dialog-actions']} data-testid="settings-dialog-actions">
-                <Button
-                    data-testid="reset-to-defaults"
-                    size="sm"
-                    variant="danger"
-                    onClick={handleReset}
-                >
-                    Reset
-                </Button>
-                <Button
-                    data-testid="settings-close"
-                    size="sm"
-                    variant="secondary"
-                    onClick={handleClose}
-                >
-                    Close
-                </Button>
-            </div>
+                <div className={styles['dialog-actions']} data-testid="settings-dialog-actions">
+                    <Button
+                        data-testid="reset-to-defaults"
+                        size="sm"
+                        variant="danger"
+                        onClick={handleReset}
+                    >
+                        Reset
+                    </Button>
+                    <Button
+                        data-testid="settings-close"
+                        size="sm"
+                        variant="secondary"
+                        onClick={handleClose}
+                    >
+                        Close
+                    </Button>
+                </div>
+            </section>
         </main>
     );
 }

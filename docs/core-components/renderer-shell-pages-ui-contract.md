@@ -143,20 +143,23 @@ Shell page containers should also use tokens rather than hardcoded layout values
 When a game is in context, shell-level UI may load the game's renderer shell contribution through
 the renderer game registry. For the main menu and settings page, this context is explicit URL state
 such as `/main-menu/?gameId=tactics` or `/settings/?gameId=tactics`; it does not require a lobby to
-exist. For the lobby page, context is resolved from `LobbyConfig.gameId`. Once a game registry
-module is imported, the lobby page and any subsequent shell-level UI automatically inherit the
-game's token override CSS, because the override is a side-effect import loaded at game registry
-initialisation time (§4.35):
+exist. For the lobby page, context is resolved from `LobbyConfig.gameId`. Once a game registry or
+renderer shell module is imported, the lobby page and any subsequent shell-level UI automatically
+inherit the game's token override CSS, because the override is a side-effect import loaded at game
+registry initialisation time (§4.35):
 
 ```typescript
-// games/tactics/screens/index.ts
-import './styles/tokens-override.css'; // Re-declares --ch-* tokens for Tactics visual language
+// games/tactics/styles/register-token-overrides.tsx
+import './tokens-override.css'; // Re-declares --ch-* tokens for Tactics visual language
+
+// games/tactics/screens/index.tsx and renderer-owned shell loaders import the registration module.
 export const TacticsGameScreenRegistry: GameScreenRegistry = { ... };
 ```
 
 Because token overrides are global CSS custom properties, they cascade into _all_ descendant
-elements — including shell pages mounted in the same document — once the game registry module
-has been imported. Shell pages therefore receive game theming without any explicit wiring.
+elements — including shell pages mounted in the same document — once the game registry or renderer
+shell module has been imported. Shell pages therefore receive game theming without any explicit
+wiring.
 
 ### Scope Rules
 
@@ -167,6 +170,10 @@ has been imported. Shell pages therefore receive game theming without any explic
 | `saves`           | Never (engine-owned, game-agnostic)                         |
 | `lobby`           | Yes — after `gameId` is resolved and registry is imported   |
 | Match / GameShell | Yes — always (registry imported before scene render)        |
+
+Lobby URLs that provide an explicit `themeId` without an explicit `gameId` stay on the engine
+default shell background path. This lets theme-only lobby tests and routes exercise the requested
+theme without implicitly importing the default game's global token overrides.
 
 ---
 
@@ -312,6 +319,7 @@ export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
     readonly settings?: GameSettingsPageDefinition;
+    readonly shellBackground?: React.ComponentType;
 }
 ```
 
@@ -320,7 +328,41 @@ to a `commandId` that is absent from `menuCommands`, or if no registry was provi
 throws a descriptive error. Unknown commands therefore fail fast instead of producing an inert or
 silently missing button.
 
-## 4.37.8 Game-Customizable Settings Page Definition
+## 4.37.8 Game-Customizable Shell Background Component
+
+Games may contribute a renderer-owned React component for the shell background through
+`LoadedRendererGameShell.shellBackground`. This is intentionally **not** part of
+`shared/game-shell-contract.ts`: it is a renderer component slot, comparable to `GameScreenRegistry`
+presentation slots, and is not serializable data.
+
+```typescript
+export interface LoadedRendererGameShell {
+    readonly shellBackground?: React.ComponentType;
+}
+```
+
+`renderer/components/shell/ShellBackgroundHost.tsx` is mounted once from the root renderer layout.
+It renders behind route content on `/main-menu`, `/settings`, and `/lobby`, and returns `null` for
+`/game` and other non-shell routes. This keeps menu/settings/lobby navigation SPA-like while
+preventing menu background components from entering the match scene.
+
+### Background Fallback Chain
+
+1. If the current shell route has a game context and the loaded shell provides `shellBackground`,
+   render that component.
+2. If the loaded shell omits `shellBackground`, shell loading fails, or no game context exists,
+   render the engine default solid surface using `--ch-color-surface`.
+3. If the current route is not `/main-menu`, `/settings`, or `/lobby`, render no shell background.
+
+The host passes no props to the game component. Background components that need animation, canvas,
+or media own those renderer-local details internally. They must not dispatch gameplay actions or
+depend on Electron/main-process APIs directly.
+
+Shell page canvases should not paint an opaque full-viewport surface when the background is meant to
+be visible. Individual panels, cards, and controls should continue to use raised surface tokens for
+readability.
+
+## 4.37.9 Game-Customizable Settings Page Definition
 
 Games customize which settings appear on the engine-owned settings page by contributing a
 declarative `GameSettingsPageDefinition` through their renderer shell registration. The shared
@@ -498,10 +540,11 @@ export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
     readonly settings?: GameSettingsPageDefinition;
+    readonly shellBackground?: React.ComponentType;
 }
 ```
 
-## 4.37.9 Module Tree
+## 4.37.10 Module Tree
 
 ```
 shared/
@@ -522,6 +565,8 @@ renderer/
 │   ├── types.ts                # Theme and button palette contract types
 │   └── useTheme.ts             # Hook: returns active theme from context
 ├── components/
+│   ├── shell/
+│   │   └── ShellBackgroundHost.tsx # Persistent shell-route background host
 │   └── ui/
 │       └── Button.tsx          # Shared across shell pages and match screens
 └── app/
@@ -537,6 +582,7 @@ renderer/
 games/
 └── tactics/
     └── shell/
+    ├── TacticsShellBackground.tsx # Optional shellBackground component contribution
         ├── main-menu.ts        # Sample GameMainMenuDefinition + menuCommands registry
         └── settings-page.ts    # Optional GameSettingsPageDefinition contribution
 ```

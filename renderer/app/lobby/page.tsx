@@ -215,7 +215,7 @@ export default function LobbyPage() {
                 style={{
                     minHeight: '100vh',
                     boxSizing: 'border-box',
-                    backgroundColor: 'var(--ch-color-surface)',
+                    backgroundColor: 'var(--ch-color-transparent)',
                     color: 'var(--ch-color-text-primary)',
                     fontFamily: 'var(--ch-font-ui)',
                     padding: 'var(--ch-space-lg)',

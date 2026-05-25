@@ -8,7 +8,7 @@
  *   - May ONLY redefine custom properties that are already declared in
  *     renderer/styles/tokens.css. Introducing a new --ch-* name here is
  *     a module-boundary violation and is rejected by lint.
- *   - Import only as a side-effect from games/tactics/screens/index.ts.
+ *   - Import only through game-owned renderer registry initialisation modules.
  *     Shell page components must never import this file directly (Invariant #93).
  *
  * Architecture reference: section 4.35 — UI Design System, 4.37 — Shell Pages UI Contract
