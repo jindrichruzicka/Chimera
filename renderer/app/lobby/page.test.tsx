@@ -122,17 +122,16 @@ describe('LobbyPage pending actions', () => {
         vi.restoreAllMocks();
     });
 
-    it('disables join while hosting is in progress', async () => {
+    it('disables the footer action while hosting is in progress', async () => {
         renderLobbyPage();
 
         const hostButton = screen.getByTestId('host-lobby');
-        const joinButton = screen.getByTestId('confirm-join');
 
         fireEvent.click(hostButton);
 
         await waitFor(() => {
             expect(screen.getByText('Hosting...')).toBeTruthy();
-            expect(joinButton.hasAttribute('disabled')).toBe(true);
+            expect(hostButton.hasAttribute('disabled')).toBe(true);
         });
 
         hostDeferred.resolve();
@@ -165,7 +164,54 @@ describe('LobbyPage pending actions', () => {
         expect(screen.getByTestId('host-lobby')).toBeTruthy();
         expect(screen.getByTestId('join-lobby')).toBeTruthy();
         expect(screen.getByTestId('address-input')).toBeTruthy();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+
         expect(screen.getByTestId('confirm-join')).toBeTruthy();
+    });
+
+    it('renders host and join as modal tabs before a lobby is joined', () => {
+        renderLobbyPage();
+
+        expect(screen.getByRole('dialog', { name: 'Multiplayer Lobby' })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Host', selected: true })).toBeTruthy();
+        expect(screen.getByRole('tab', { name: 'Join', selected: false })).toBeTruthy();
+        expect(screen.getByTestId('host-lobby')).toBeTruthy();
+        expect(screen.getByTestId('address-input')).not.toBeVisible();
+        expect(screen.queryByText('tactics / 4 seats')).toBeNull();
+
+        const hostFooter = screen.getByTestId('lobby-action-bar');
+        const closeButton = screen.getByTestId('lobby-close');
+        const hostButton = screen.getByTestId('host-lobby');
+        expect(hostButton.parentElement).toBe(hostFooter);
+        expect(closeButton.parentElement).toBe(hostFooter);
+        expect(Array.from(hostFooter.querySelectorAll('button'))).toEqual([
+            closeButton,
+            hostButton,
+        ]);
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+
+        expect(screen.getByTestId('address-input')).toBeVisible();
+        expect(screen.getByTestId('confirm-join')).toBeVisible();
+
+        const joinFooter = screen.getByTestId('lobby-action-bar');
+        const joinButton = screen.getByTestId('confirm-join');
+        expect(joinButton.parentElement).toBe(joinFooter);
+        expect(Array.from(joinFooter.querySelectorAll('button'))).toEqual([
+            closeButton,
+            joinButton,
+        ]);
+    });
+
+    it('closes the modal back to the main menu with game context preserved', () => {
+        window.history.pushState({}, '', '/lobby?gameId=tactics');
+
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByTestId('lobby-close'));
+
+        expect(mockPush).toHaveBeenCalledWith('/main-menu?gameId=tactics');
     });
 
     it('renders lobby page object locators during an active lobby', () => {
@@ -235,6 +281,9 @@ describe('LobbyPage pending actions', () => {
         renderLobbyPage();
 
         expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
+        expect(screen.getByRole('dialog', { name: 'Multiplayer Lobby' })).toBeTruthy();
+        expect(screen.queryByRole('tab', { name: 'Host' })).toBeNull();
+        expect(screen.queryByRole('tab', { name: 'Join' })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Current Lobby' })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Lobby Information' })).toBeNull();
 
@@ -243,7 +292,7 @@ describe('LobbyPage pending actions', () => {
         const mainText = screen.getByRole('main').textContent ?? '';
         expect(mainText.includes('Session ID:')).toBe(true);
         expect(mainText.includes('Host ID:')).toBe(true);
-        expect(mainText.includes('Game:')).toBe(false);
+        expect(mainText.includes('Game:')).toBe(true);
 
         const infoSection = screen.getByTestId('lobby-session-id').closest('div');
         const playerSection = screen.getByTestId('player-list').closest('div');
@@ -257,7 +306,7 @@ describe('LobbyPage pending actions', () => {
         const actionBar = startButton.parentElement;
 
         expect(actionBar).toBe(leaveButton.parentElement);
-        expect(actionBar).toHaveStyle({ display: 'flex', justifyContent: 'space-between' });
+        expect(actionBar).toBe(screen.getByTestId('lobby-action-bar'));
 
         expect(leaveButton).toHaveAttribute('aria-describedby', 'leave-warning');
         expect(document.getElementById('leave-warning')).toBeTruthy();
@@ -269,7 +318,7 @@ describe('LobbyPage pending actions', () => {
         expect(actionButtons[1]).toBe(startButton);
     });
 
-    it('uses readable token colors for the active lobby shell and information surfaces', () => {
+    it('uses a quiet dialog surface without heading metadata badges', () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
             info: {
@@ -282,24 +331,14 @@ describe('LobbyPage pending actions', () => {
 
         renderLobbyPage();
 
-        expect(screen.getByRole('main')).toHaveStyle({
-            backgroundColor: 'var(--ch-color-transparent)',
-            color: 'var(--ch-color-text-primary)',
-            minHeight: '100vh',
-        });
-
-        const configSummary = screen.getByTestId('lobby-config-summary');
-        expect(configSummary).toHaveStyle({
-            backgroundColor: 'var(--ch-color-surface-raised)',
-            color: 'var(--ch-color-text-primary)',
-        });
-
-        const infoSection = screen.getByTestId('lobby-session-id').closest('div');
-        expect(infoSection).not.toBeNull();
-        expect(infoSection).toHaveStyle({
-            backgroundColor: 'var(--ch-color-surface-raised)',
-            color: 'var(--ch-color-text-primary)',
-        });
+        const dialog = screen.getByRole('dialog', { name: 'Multiplayer Lobby' });
+        expect(dialog).toHaveAttribute('data-testid', 'lobby-dialog');
+        // No aria-modal: focus is not trapped, so claiming virtual-browsing
+        // restriction would be inconsistent with keyboard behavior (WARN-2).
+        expect(dialog).not.toHaveAttribute('aria-modal');
+        expect(screen.queryByText('Game tactics')).toBeNull();
+        expect(screen.queryByText('Max 4')).toBeNull();
+        expect(screen.queryByText('Connected')).toBeNull();
     });
 
     it('uses shared themed variants for lobby shell actions', () => {
@@ -309,6 +348,9 @@ describe('LobbyPage pending actions', () => {
             'data-ch-button-variant',
             'primary',
         );
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+
         expect(screen.getByTestId('confirm-join')).toHaveAttribute(
             'data-ch-button-variant',
             'primary',
@@ -344,10 +386,12 @@ describe('LobbyPage pending actions', () => {
         expect(
             screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' }),
         ).toHaveAttribute('data-ch-heading-level', '1');
-        expect(screen.getByText('Lobby Code:')).toHaveAttribute('data-ch-label-state', 'default');
-        expect(screen.getByText(/enter the code provided by the lobby host/i)).toHaveAttribute(
-            'data-ch-caption-tone',
-            'muted',
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+
+        expect(screen.getByLabelText('Lobby Code:')).toHaveAttribute(
+            'data-testid',
+            'address-input',
         );
     });
 

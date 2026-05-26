@@ -3,6 +3,8 @@
  * has a matching `data-testid="..."` attribute in the renderer lobby source
  * files. Lobby locators span three renderer sources:
  *   - renderer/app/lobby/page.tsx  (host, join, address, confirm, start)
+ *   - renderer/app/lobby/LobbyEntryTabs.tsx  (host, join, address, confirm)
+ *   - renderer/app/lobby/ActiveLobbyPanel.tsx  (session, leave, start)
  *   - renderer/components/shell/PlayerList.tsx  (player-list, player-list-item, ready-toggle)
  *   - renderer/components/shell/ConnectionStatusIndicator.tsx  (connection-status)
  *
@@ -27,6 +29,8 @@ describe('LobbyPage POM — testid alignment with renderer', () => {
         // LobbyPage locators are distributed across three renderer source files.
         const rendererSources = [
             path.join(workspaceRoot, 'renderer/app/lobby/page.tsx'),
+            path.join(workspaceRoot, 'renderer/app/lobby/LobbyEntryTabs.tsx'),
+            path.join(workspaceRoot, 'renderer/app/lobby/ActiveLobbyPanel.tsx'),
             path.join(workspaceRoot, 'renderer/components/shell/PlayerList.tsx'),
             path.join(workspaceRoot, 'renderer/components/shell/ConnectionStatusIndicator.tsx'),
         ]
@@ -44,10 +48,16 @@ describe('LobbyPage POM — testid alignment with renderer', () => {
         expect(pomTestIds.length).toBeGreaterThan(0);
 
         for (const testId of pomTestIds) {
+            const dataAttributeLiteral = `data-testid="${testId}"`;
+            const tabTestIdLiteral = `testId: '${testId}'`;
+            const hasMatchingRendererTestId =
+                rendererSources.includes(dataAttributeLiteral) ||
+                rendererSources.includes(tabTestIdLiteral);
+
             expect(
-                rendererSources,
+                hasMatchingRendererTestId,
                 `LobbyPage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from renderer lobby sources`,
-            ).toContain(`data-testid="${testId}"`);
+            ).toBe(true);
         }
     });
 });

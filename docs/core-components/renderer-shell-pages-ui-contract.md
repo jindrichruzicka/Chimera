@@ -32,15 +32,15 @@ content that renders _inside_ `GameShell`. This section documents the same contr
 | Page path                         | Purpose                                                             | Game-owned?                     |
 | --------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
 | `renderer/app/main-menu/`         | Title screen, entry point                                           | Engine-owned; game-customizable |
-| `renderer/app/lobby/`             | Host/join/leave multiplayer lobby                                   | Partly\*                        |
+| `renderer/app/lobby/`             | Route-backed modal for host/join/leave multiplayer lobby            | Partly\*                        |
 | `renderer/app/settings/`          | Engine + game settings UI                                           | Engine-owned; game-customizable |
 | `renderer/app/saves/`             | Save-slot browser                                                   | No                              |
 | `renderer/app/(loading)/`         | Transition placeholder between scenes                               | No                              |
 | `renderer/app/component-gallery/` | Design-system gallery (dev/E2E only); gated by `isGalleryEnabled()` | No                              |
 
-\* The lobby page loads game-specific configuration from `LobbyConfig` but its chrome (buttons,
-layout, player list) is engine-owned. Game token overrides **are** applied to the lobby page once
-a `gameId` is resolved (see §4.37.4).
+\* The lobby page loads game-specific configuration from `LobbyConfig` but its chrome (dialog,
+tabs, buttons, layout, player list) is engine-owned. Game token overrides **are** applied to the
+lobby page once a `gameId` is resolved (see §4.37.4).
 
 ---
 
@@ -170,6 +170,29 @@ wiring.
 | `saves`           | Never (engine-owned, game-agnostic)                         |
 | `lobby`           | Yes — after `gameId` is resolved and registry is imported   |
 | Match / GameShell | Yes — always (registry imported before scene render)        |
+
+### Lobby Modal Surface
+
+`renderer/app/lobby/page.tsx` is a normal shell route, but it presents its content as a centered
+modal dialog over the shared shell background. The route remains `/lobby` so refresh, deep-link,
+E2E, and IPC bootstrap behavior stay unchanged. Closing the dialog navigates back to `/main-menu`,
+preserving an explicit `?gameId=` URL context when present.
+
+When no session exists, the lobby dialog renders a two-tab entry surface and a footer action row:
+
+| Tab    | Purpose                                           |
+| ------ | ------------------------------------------------- |
+| `Host` | Confirms hosting with the parsed `LobbyConfig`    |
+| `Join` | Accepts a lobby code/address and confirms joining |
+
+The footer keeps `Close` on the left and the active tab's primary action (`Host Lobby` or
+`Join Lobby`) on the right. The heading area stays quiet: it does not render lobby config badges,
+connection badges, or helper captions beneath the title.
+
+When `lobbyStore.lobbyState` is non-null, the entry tabs disappear. The dialog instead renders
+session metadata, the player roster, ready-state controls, leave, and host-only start controls.
+All authoritative writes continue through `useLobbyApi()`; the route component never writes the
+IPC-mirrored `lobbyStore` directly.
 
 Lobby URLs that provide an explicit `themeId` without an explicit `gameId` stay on the engine
 default shell background path. This lets theme-only lobby tests and routes exercise the requested

@@ -4,9 +4,12 @@
 // Displays a list of players with their ready states.
 
 import React from 'react';
+import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
+import { Heading } from '../ui/Heading';
 import { useLobbyStore } from '../../state/lobbyStore';
 import type { LobbyPlayerEntry, PlayerId } from '@chimera/shared/messages-schemas.js';
+import styles from './PlayerList.module.css';
 
 export interface PlayerListProps {
     /** The ID of the local player; used to show (You) label and toggle button. */
@@ -30,9 +33,11 @@ export function PlayerList({
     const players = lobbyState?.players ?? [];
 
     return (
-        <div data-testid="player-list">
-            <h3>Players ({players.length})</h3>
-            <ul style={{ listStyle: 'none', padding: 0 }}>
+        <div className={styles['root']} data-testid="player-list">
+            <Heading level={3} size="md">
+                Players ({players.length})
+            </Heading>
+            <ul className={styles['list']}>
                 {players.map((player) => (
                     <PlayerRow
                         key={player.playerId}
@@ -57,37 +62,21 @@ interface PlayerRowProps {
 function PlayerRow({ player, isLocalPlayer, onToggleReady, isTogglePending }: PlayerRowProps) {
     return (
         <li
+            className={styles['row']}
             data-testid="player-list-item"
             data-player-id={player.playerId}
             data-ready={player.ready ? 'true' : 'false'}
-            style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                padding: 'var(--ch-space-sm)',
-                borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-border-muted)',
-            }}
         >
-            <span>
-                {player.displayName || player.playerId}
-                {isLocalPlayer && ' (You)'}
+            <span className={styles['identity']}>
+                <span className={styles['name']}>{player.displayName || player.playerId}</span>
+                {isLocalPlayer ? <Badge variant="neutral">(You)</Badge> : null}
             </span>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--ch-space-sm)' }}>
-                <span
-                    style={{
-                        padding: 'var(--ch-space-xs) var(--ch-space-sm)',
-                        borderRadius: 'var(--ch-radius-sm)',
-                        backgroundColor: player.ready
-                            ? 'var(--ch-color-success-surface-muted)'
-                            : 'var(--ch-color-error-surface-soft)',
-                        color: player.ready
-                            ? 'var(--ch-color-success-text-strong)'
-                            : 'var(--ch-color-error-text-deep)',
-                        fontSize: 'var(--ch-font-size-sm)',
-                    }}
-                >
+            <div className={styles['controls']}>
+                {/* 'warning' (amber) is intentional over 'error' (red): not-ready is a
+                    pending/neutral state, not a fault condition. */}
+                <Badge variant={player.ready ? 'success' : 'warning'}>
                     {player.ready ? 'Ready' : 'Not Ready'}
-                </span>
+                </Badge>
                 {isLocalPlayer && onToggleReady && (
                     <Button
                         data-testid="ready-toggle"

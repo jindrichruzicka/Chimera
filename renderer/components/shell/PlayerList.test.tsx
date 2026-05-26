@@ -1,6 +1,7 @@
 // renderer/components/shell/PlayerList.test.tsx
 // @vitest-environment jsdom
 
+import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -94,7 +95,7 @@ describe('PlayerList', () => {
         expect(screen.getByText('Charlie')).toBeTruthy();
     });
 
-    it('renders distinct visual indicators for ready and not-ready states', () => {
+    it('renders distinct badge variants for ready and not-ready states', () => {
         mockLobbyState = {
             info: {
                 sessionId: 'session-1',
@@ -117,7 +118,6 @@ describe('PlayerList', () => {
         expect(aliceRow.textContent).toContain('Ready');
         expect(bobRow.textContent).toContain('Not Ready');
 
-        // Verify the status badges have distinct background colors
         const readyBadge = Array.from(aliceRow.querySelectorAll('span')).find(
             (span) => span.textContent === 'Ready',
         )!;
@@ -125,15 +125,8 @@ describe('PlayerList', () => {
             (span) => span.textContent === 'Not Ready',
         )!;
 
-        expect(readyBadge).toBeTruthy();
-        expect(notReadyBadge).toBeTruthy();
-
-        const readyBgColor = readyBadge.style.backgroundColor;
-        const notReadyBgColor = notReadyBadge.style.backgroundColor;
-
-        expect(readyBgColor).not.toBe(notReadyBgColor);
-        expect(readyBgColor).toBe('var(--ch-color-success-surface-muted)');
-        expect(notReadyBgColor).toBe('var(--ch-color-error-surface-soft)');
+        expect(readyBadge).toHaveAttribute('data-ch-badge-variant', 'success');
+        expect(notReadyBadge).toHaveAttribute('data-ch-badge-variant', 'warning');
     });
 
     it('exposes each player ready state on the row data-ready attribute', () => {

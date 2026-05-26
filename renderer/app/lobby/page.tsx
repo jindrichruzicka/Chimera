@@ -1,17 +1,13 @@
 'use client';
 
-// renderer/app/lobby/page.tsx
-//
-// Lobby page with host/join/leave flows.
-// Implements the UI for multiplayer lobby management.
-
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { PlayerList } from '../../components/shell/PlayerList';
+import { ActiveLobbyPanel } from './ActiveLobbyPanel';
+import { LobbyEntryTabs } from './LobbyEntryTabs';
+import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
 import { Button } from '../../components/ui/Button';
-import { Caption } from '../../components/ui/Caption';
 import { Heading } from '../../components/ui/Heading';
-import { Label } from '../../components/ui/Label';
+import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { defaultTheme } from '../../theme/default-theme';
@@ -19,33 +15,12 @@ import { ThemeProvider } from '../../theme/ThemeProvider';
 import { useThemeOverride } from '../../theme/useThemeOverride';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 import { useLobbyApi } from './useLobbyApi';
-
-type PendingAction = 'hosting' | 'joining' | 'leaving' | 'starting' | 'updating-ready' | null;
-
-const sectionCardStyle = {
-    backgroundColor: 'var(--ch-color-surface-raised)',
-    color: 'var(--ch-color-text-primary)',
-    padding: 'var(--ch-space-md)',
-    border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
-    borderRadius: 'var(--ch-radius-sm)',
-    boxShadow: 'var(--ch-shadow-sm)',
-};
-
-const activeLobbyStyle = {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: 'var(--ch-space-md)',
-};
-
-const actionBarStyle = {
-    display: 'flex',
-    justifyContent: 'space-between',
-    gap: 'var(--ch-space-sm)',
-};
+import styles from './page.module.css';
 
 export default function LobbyPage() {
     const router = useRouter();
     const [lobbyCode, setLobbyCode] = useState('');
+    const [activeTabId, setActiveTabId] = useState<LobbyEntryTabId>('host');
     const [pendingAction, setPendingAction] = useState<PendingAction>(null);
     const [error, setError] = useState<string | null>(null);
     const [lobbyConfig, setLobbyConfig] = useState(getDefaultLobbyConfig);
@@ -56,9 +31,16 @@ export default function LobbyPage() {
     const lobbyTheme = useThemeOverride(lobbyConfig.themeId ?? defaultTheme.id);
     const lobbyApi = useLobbyApi();
 
-    // Get lobby state and local player ID from the store
     const lobbyState = useLobbyStore((state) => state.lobbyState);
+    const previousLobbyStateRef = useRef(lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
+
+    useEffect(() => {
+        if (previousLobbyStateRef.current !== null && lobbyState === null) {
+            setActiveTabId('host');
+        }
+        previousLobbyStateRef.current = lobbyState;
+    }, [lobbyState]);
 
     const canStartGame =
         localPlayerId !== null &&
@@ -77,12 +59,10 @@ export default function LobbyPage() {
         };
     }, []);
 
-    // Host a new lobby
     const handleHost = async () => {
         try {
             setPendingAction('hosting');
             setError(null);
-            // Call the host function with configurable parameters
             await lobbyApi.host({
                 gameId,
                 maxPlayers,
@@ -98,9 +78,6 @@ export default function LobbyPage() {
         }
     };
 
-    // No additional focus management needed at this time
-
-    // Join an existing lobby
     const handleJoin = async () => {
         if (!lobbyCode.trim()) {
             setError('Please enter a lobby code');
@@ -110,12 +87,9 @@ export default function LobbyPage() {
         try {
             setPendingAction('joining');
             setError(null);
-            // Call the join function with the entered lobby code
             await lobbyApi.join({
                 address: lobbyCode.trim(),
             });
-            // useLobbyApi.join() populates renderer-local identity context from
-            // the authoritative main-process bridge before returning.
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to join lobby');
@@ -127,12 +101,10 @@ export default function LobbyPage() {
         }
     };
 
-    // Leave the current lobby
     const handleLeave = async () => {
         try {
             setPendingAction('leaving');
             setError(null);
-            // Call the leave function
             await lobbyApi.leave();
         } catch (err) {
             if (isMountedRef.current) {
@@ -143,6 +115,11 @@ export default function LobbyPage() {
                 setPendingAction(null);
             }
         }
+    };
+
+    const handleClose = (): void => {
+        const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+        router.push(withShellGameId('/main-menu', explicitGameId));
     };
 
     const handleToggleReady = async (ready: boolean): Promise<void> => {
@@ -178,210 +155,91 @@ export default function LobbyPage() {
         }
     };
 
-    // Display lobby information when in a lobby
-    const renderLobbyInfo = () => {
-        if (!lobbyState) return null;
-
-        return (
-            <div style={sectionCardStyle}>
-                <p>
-                    <strong>Session ID:</strong>{' '}
-                    <span data-testid="lobby-session-id">{lobbyState.info.sessionId}</span>
-                </p>
-                <p>
-                    <strong>Host ID:</strong> {lobbyState.info.hostId}
-                </p>
-            </div>
-        );
-    };
-
-    const renderPlayerSection = () => {
-        if (!lobbyState) return null;
-
-        return (
-            <div style={sectionCardStyle}>
-                <PlayerList
-                    localPlayerId={localPlayerId}
-                    onToggleReady={handleToggleReady}
-                    isTogglePending={pendingAction === 'updating-ready'}
-                />
-            </div>
-        );
-    };
-
     return (
         <ThemeProvider theme={lobbyTheme}>
-            <main
-                style={{
-                    minHeight: '100vh',
-                    boxSizing: 'border-box',
-                    backgroundColor: 'var(--ch-color-transparent)',
-                    color: 'var(--ch-color-text-primary)',
-                    fontFamily: 'var(--ch-font-ui)',
-                    padding: 'var(--ch-space-lg)',
-                }}
-                role="main"
-                aria-labelledby="lobby-heading"
-            >
-                <Heading id="lobby-heading" level={1} size="xl">
-                    Multiplayer Lobby
-                </Heading>
-                {/* Display current configuration */}
-                <div
-                    data-testid="lobby-config-summary"
-                    style={{
-                        backgroundColor: 'var(--ch-color-surface-raised)',
-                        color: 'var(--ch-color-text-primary)',
-                        padding: 'var(--ch-space-xs)',
-                        border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
-                        borderRadius: 'var(--ch-radius-sm)',
-                        marginBottom: 'var(--ch-space-md)',
-                        fontSize: 'var(--ch-font-size-sm)',
-                    }}
+            <main className={styles['page']} role="main" aria-labelledby="lobby-heading">
+                <section
+                    aria-labelledby="lobby-heading"
+                    // No aria-modal: this is a full-page route — the dialog IS
+                    // the entire viewport content. Setting aria-modal without a
+                    // focus trap would tell AT to restrict virtual browsing to
+                    // the section while keyboard focus can still leave it, which
+                    // is inconsistent. role="dialog" + aria-labelledby is
+                    // sufficient to announce the surface correctly.
+                    className={styles['dialog']}
+                    data-testid="lobby-dialog"
+                    role="dialog"
                 >
-                    <strong>Configuration:</strong> Game ID: {gameId}, Max Players: {maxPlayers}
-                    <br />
-                    <Caption tone="muted">
-                        To change: Add ?gameId=yourgame&amp;maxPlayers=6 to URL
-                    </Caption>
-                </div>
-
-                {error && (
-                    <div
-                        style={{
-                            color: 'var(--ch-color-error)',
-                            marginBottom: 'var(--ch-space-md)',
-                        }}
-                        role="alert"
-                    >
-                        Error: {error}
-                    </div>
-                )}
-
-                {!lobbyState ? (
-                    <div>
-                        <div style={{ marginBottom: 'var(--ch-space-lg)' }}>
-                            <Heading level={2}>Host a Lobby</Heading>
-                            <p>
-                                Hosting game "{gameId}" with up to {maxPlayers} players
-                            </p>
-                            <Button
-                                data-testid="host-lobby"
-                                onClick={() => {
-                                    void handleHost();
-                                }}
-                                disabled={pendingAction !== null}
-                                aria-describedby="host-config-info"
-                                variant="primary"
-                            >
-                                {pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby'}
-                            </Button>
-                            <Caption
-                                id="host-config-info"
-                                tone="muted"
-                                style={{
-                                    marginTop: 'var(--ch-space-xs)',
-                                }}
-                            >
-                                Will host game "{gameId}" with up to {maxPlayers} players
-                            </Caption>
+                    <header className={styles['dialog-header']}>
+                        <div className={styles['title-stack']}>
+                            <Heading id="lobby-heading" level={1} size="xl">
+                                Multiplayer Lobby
+                            </Heading>
                         </div>
+                    </header>
 
-                        <div data-testid="join-lobby">
-                            <Heading level={2}>Join a Lobby</Heading>
-                            <div style={{ marginBottom: 'var(--ch-space-md)' }}>
-                                <Label
-                                    htmlFor="lobby-code-input"
-                                    style={{ display: 'block', marginBottom: 'var(--ch-space-xs)' }}
-                                >
-                                    Lobby Code:
-                                </Label>
-                                <input
-                                    id="lobby-code-input"
-                                    data-testid="address-input"
-                                    type="text"
-                                    value={lobbyCode}
-                                    onChange={(e) => setLobbyCode(e.target.value)}
-                                    placeholder="Enter lobby code"
-                                    style={{
-                                        padding: 'var(--ch-space-xs)',
-                                        marginRight: 'var(--ch-space-md)',
-                                        backgroundColor: 'var(--ch-color-surface-raised)',
-                                        color: 'var(--ch-color-text-primary)',
-                                        border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
-                                        borderRadius: 'var(--ch-radius-sm)',
+                    {error ? (
+                        <div className={styles['error']} role="alert">
+                            Error: {error}
+                        </div>
+                    ) : null}
+
+                    {lobbyState ? (
+                        <ActiveLobbyPanel
+                            canStartGame={canStartGame}
+                            lobbyState={lobbyState}
+                            localPlayerId={localPlayerId}
+                            onLeave={handleLeave}
+                            onStartGame={handleStartGame}
+                            onToggleReady={handleToggleReady}
+                            pendingAction={pendingAction}
+                        />
+                    ) : (
+                        <LobbyEntryTabs
+                            activeTabId={activeTabId}
+                            config={lobbyConfig}
+                            lobbyCode={lobbyCode}
+                            onLobbyCodeChange={setLobbyCode}
+                            onTabChange={setActiveTabId}
+                        />
+                    )}
+
+                    {!lobbyState ? (
+                        <div className={styles['action-bar']} data-testid="lobby-action-bar">
+                            <Button
+                                data-testid="lobby-close"
+                                onClick={handleClose}
+                                size="sm"
+                                variant="secondary"
+                            >
+                                Close
+                            </Button>
+                            {activeTabId === 'host' ? (
+                                <Button
+                                    data-testid="host-lobby"
+                                    disabled={pendingAction !== null}
+                                    onClick={() => {
+                                        void handleHost();
                                     }}
-                                    aria-describedby="lobby-code-help"
-                                />
-                                <Caption
-                                    id="lobby-code-help"
-                                    tone="muted"
-                                    style={{
-                                        marginTop: 'var(--ch-space-xs)',
-                                    }}
+                                    variant="primary"
                                 >
-                                    Enter the code provided by the lobby host
-                                </Caption>
+                                    {pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby'}
+                                </Button>
+                            ) : (
                                 <Button
                                     data-testid="confirm-join"
+                                    disabled={pendingAction !== null}
                                     onClick={() => {
                                         void handleJoin();
                                     }}
-                                    disabled={pendingAction !== null}
                                     variant="primary"
-                                    style={{ marginTop: 'var(--ch-space-sm)' }}
                                 >
                                     {pendingAction === 'joining' ? 'Joining...' : 'Join Lobby'}
                                 </Button>
-                            </div>
+                            )}
                         </div>
-                    </div>
-                ) : (
-                    <div style={activeLobbyStyle}>
-                        {renderLobbyInfo()}
-                        {renderPlayerSection()}
-                        <div style={actionBarStyle}>
-                            <Button
-                                data-testid="lobby-leave-btn"
-                                onClick={() => {
-                                    void handleLeave();
-                                }}
-                                disabled={pendingAction !== null}
-                                aria-describedby="leave-warning"
-                                variant="danger"
-                            >
-                                {pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby'}
-                            </Button>
-                            <span
-                                id="leave-warning"
-                                style={{
-                                    position: 'absolute',
-                                    width: 'var(--ch-space-screen-reader)',
-                                    height: 'var(--ch-space-screen-reader)',
-                                    padding: 0,
-                                    margin: 'calc(var(--ch-space-screen-reader) * -1)',
-                                    overflow: 'hidden',
-                                    clip: 'rect(0, 0, 0, 0)',
-                                    whiteSpace: 'nowrap',
-                                    border: 0,
-                                }}
-                            >
-                                This will disconnect you from the current lobby
-                            </span>
-                            <Button
-                                data-testid="start-game"
-                                type="button"
-                                onClick={() => {
-                                    void handleStartGame();
-                                }}
-                                disabled={!canStartGame || pendingAction !== null}
-                                variant="primary"
-                            >
-                                {pendingAction === 'starting' ? 'Starting...' : 'Start Game'}
-                            </Button>
-                        </div>
-                    </div>
-                )}
+                    ) : null}
+                </section>
             </main>
         </ThemeProvider>
     );
