@@ -48,7 +48,15 @@ export function TacticsDemoBoard({
     sendAction,
 }: GameScreenProps): React.ReactElement | null {
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
+    const [prevIsMyTurn, setPrevIsMyTurn] = useState(snapshot.isMyTurn);
     const camera = React.useMemo(createTacticsCamera, []);
+
+    if (prevIsMyTurn !== snapshot.isMyTurn) {
+        setPrevIsMyTurn(snapshot.isMyTurn);
+        if (!snapshot.isMyTurn) {
+            setSelectedUnitId(null);
+        }
+    }
 
     if (localPlayerId === undefined) {
         return (
@@ -73,6 +81,10 @@ export function TacticsDemoBoard({
     }
 
     const handleIntent = (intent: TacticsSelectionIntent): void => {
+        if (!snapshot.isMyTurn) {
+            return;
+        }
+
         if (intent.type === 'select-own-unit' || intent.type === 'select-opponent-unit') {
             setSelectedUnitId(intent.unitId);
             return;
@@ -168,7 +180,7 @@ export function TacticsDemoBoard({
                         key={unit.id}
                         unit={unit}
                         color={TACTICS_UNIT_COLOR_BY_OWNERSHIP[unit.ownership]}
-                        isSelected={unit.id === selectedUnitId}
+                        isSelected={snapshot.isMyTurn && unit.id === selectedUnitId}
                         onSelect={handleUnitSelect}
                     />
                 ))}

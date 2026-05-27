@@ -116,7 +116,9 @@ afterEach(() => {
     canvasCalls.length = 0;
 });
 
-function makeSnapshot(options: { readonly includeEnemy?: boolean } = {}): PlayerSnapshot {
+function makeSnapshot(
+    options: { readonly includeEnemy?: boolean; readonly isMyTurn?: boolean } = {},
+): PlayerSnapshot {
     const viewerId = playerId('p1');
     const opponentId = playerId('p2');
     const unitId = entityId(TACTICS_DEFAULT_UNIT_ID_VALUE);
@@ -149,7 +151,7 @@ function makeSnapshot(options: { readonly includeEnemy?: boolean } = {}): Player
         gameResult: null,
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
-        isMyTurn: true,
+        isMyTurn: options.isMyTurn ?? true,
     };
 }
 
@@ -215,6 +217,8 @@ describe('TacticsDemoBoard', () => {
                 y: 0,
             },
         });
+        expect(sendAction).toHaveBeenCalledOnce();
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
     });
 
     it('dispatches an attack when a visible opponent primitive is selected after a local primitive', () => {
@@ -229,8 +233,12 @@ describe('TacticsDemoBoard', () => {
             />,
         );
 
-        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
-        fireEvent.click(screen.getByTestId('tactics-unit-unit-2'));
+        const localUnit = screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`);
+        const opponentUnit = screen.getByTestId('tactics-unit-unit-2');
+
+        fireEvent.click(localUnit);
+        expect(localUnit).toHaveAttribute('data-selected', 'true');
+        fireEvent.click(opponentUnit);
 
         expect(sendAction).toHaveBeenCalledWith({
             type: TACTICS_ATTACK_ACTION,
@@ -241,6 +249,98 @@ describe('TacticsDemoBoard', () => {
                 defenderId: 'unit-2',
             },
         });
+        expect(sendAction).toHaveBeenCalledOnce();
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
+        expect(opponentUnit).toHaveAttribute('data-selected', 'false');
+    });
+
+    it('selects an opponent primitive alone without enabling move or attack dispatch', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        const localUnit = screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`);
+        const opponentUnit = screen.getByTestId('tactics-unit-unit-2');
+
+        fireEvent.click(opponentUnit);
+        expect(opponentUnit).toHaveAttribute('data-selected', 'true');
+
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        fireEvent.click(localUnit);
+
+        expect(sendAction).not.toHaveBeenCalled();
+        expect(localUnit).toHaveAttribute('data-selected', 'true');
+        expect(opponentUnit).toHaveAttribute('data-selected', 'false');
+    });
+
+    it('ignores primitive and ground clicks when it is not the local player turn', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ isMyTurn: false })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        const localUnit = screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`);
+        const opponentUnit = screen.getByTestId('tactics-unit-unit-2');
+
+        fireEvent.click(localUnit);
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        fireEvent.click(opponentUnit);
+
+        expect(sendAction).not.toHaveBeenCalled();
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
+        expect(opponentUnit).toHaveAttribute('data-selected', 'false');
+    });
+
+    it('clears renderer-local selection when turn transitions away and back', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ isMyTurn: true })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        const localUnit = screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`);
+        fireEvent.click(localUnit);
+        expect(localUnit).toHaveAttribute('data-selected', 'true');
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ isMyTurn: false })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
+
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ isMyTurn: true })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        expect(sendAction).not.toHaveBeenCalled();
     });
 
     it('dispatches a reveal when the selected local primitive requests reveal on an adjacent tile', () => {
@@ -277,6 +377,7 @@ describe('TacticsDemoBoard', () => {
 
         expect(screen.getByTestId('tactics-board-loading')).toBeInTheDocument();
         expect(screen.queryByTestId('tactics-r3f-canvas')).not.toBeInTheDocument();
+        expect(sendAction).not.toHaveBeenCalled();
     });
 
     it('renders an empty-board fallback when the projected snapshot has no visible units', () => {
