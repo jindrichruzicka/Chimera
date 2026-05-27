@@ -1,7 +1,10 @@
 import type { BaseEntityState, EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
 import { entityId } from '@chimera/simulation/engine/types.js';
 import { tacticsGridCoordinate } from './actions.js';
-import { TACTICS_DEFAULT_UNIT_ID_VALUE } from '@chimera/shared/tactics.js';
+import {
+    TACTICS_DEFAULT_UNIT_ID_VALUE,
+    TACTICS_INITIAL_UNIT_SPACING_TILES,
+} from '@chimera/shared/tactics.js';
 
 export function buildInitialTacticsEntities(
     playerIds: readonly PlayerId[],
@@ -21,7 +24,7 @@ export function buildInitialTacticsEntities(
             id: unitId,
             kind: 'unit',
             ownerId: playerId,
-            x: tacticsGridCoordinate(index),
+            x: tacticsGridCoordinate(index * TACTICS_INITIAL_UNIT_SPACING_TILES),
             y: tacticsGridCoordinate(0),
             hp: 1,
             visibleTo: [playerId],

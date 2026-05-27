@@ -21,7 +21,7 @@ test.describe('Game flow', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostGame.revealAdjacentTile();
+        await hostGame.moveOwnedUnit();
         await hostGame.attackAdjacentEnemy();
 
         await expect(hostGame.gameResultBanner).toBeVisible({ timeout: 60_000 });

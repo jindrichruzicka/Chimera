@@ -16,7 +16,7 @@ test.describe('Game result propagation', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostGame.revealAdjacentTile();
+        await hostGame.moveOwnedUnit();
         await hostGame.attackAdjacentEnemy();
 
         await expect(hostGame.gameResultBanner).toBeVisible({ timeout: 30_000 });
@@ -38,7 +38,7 @@ test.describe('Game result propagation', () => {
             const hostGame = new GamePage(hostWindow);
             const clientGame = new GamePage(clientWindow);
 
-            await clientGame.revealAdjacentTile();
+            await clientGame.moveOwnedUnit();
             await clientGame.attackAdjacentEnemy();
 
             await expect(clientGame.gameResultBanner).toBeVisible({ timeout: 30_000 });

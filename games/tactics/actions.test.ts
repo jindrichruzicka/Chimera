@@ -1,12 +1,19 @@
 import { describe, expect, it } from 'vitest';
+import {
+    TACTICS_INITIAL_UNIT_SPACING_TILES,
+    TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
+    TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
+} from '@chimera/shared/tactics.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { createRng } from '@chimera/simulation/engine/DeterministicRng.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,
+    EntityId,
     GameReduceContext,
 } from '@chimera/simulation/engine/types.js';
 import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+import { DefaultStateProjector } from '@chimera/simulation/projection/StateProjector.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
@@ -18,26 +25,36 @@ import {
     tacticsMoveUnitDefinition,
     tacticsRevealTileDefinition,
 } from './actions.js';
+import { buildInitialTacticsEntities } from './entities.js';
+import { tacticsVisibilityRules } from './visibility-rules.js';
 
 const P1 = playerId('player-1');
 const P2 = playerId('player-2');
 const UNIT = entityId('unit-1');
 const ENEMY_UNIT = entityId('unit-2');
 
-function makeSnapshot(options: { readonly enemyVisibleToP1?: boolean } = {}): BaseGameSnapshot {
+function makeSnapshot(
+    options: {
+        readonly enemyVisibleToP1?: boolean;
+        readonly unitX?: number;
+        readonly unitY?: number;
+        readonly enemyX?: number;
+        readonly enemyY?: number;
+    } = {},
+): BaseGameSnapshot {
     const unit = {
         id: UNIT,
         kind: 'unit',
         ownerId: P1,
-        x: 0,
-        y: 0,
+        x: tacticsGridCoordinate(options.unitX ?? 0),
+        y: tacticsGridCoordinate(options.unitY ?? 0),
         hp: 1,
         visibleTo: [P1],
     } satisfies BaseEntityState & {
         readonly kind: 'unit';
         readonly ownerId: typeof P1;
-        readonly x: number;
-        readonly y: number;
+        readonly x: ReturnType<typeof tacticsGridCoordinate>;
+        readonly y: ReturnType<typeof tacticsGridCoordinate>;
         readonly hp: number;
         readonly visibleTo: readonly (typeof P1)[];
     };
@@ -45,15 +62,15 @@ function makeSnapshot(options: { readonly enemyVisibleToP1?: boolean } = {}): Ba
         id: ENEMY_UNIT,
         kind: 'unit',
         ownerId: P2,
-        x: 1,
-        y: 0,
+        x: tacticsGridCoordinate(options.enemyX ?? 1),
+        y: tacticsGridCoordinate(options.enemyY ?? 0),
         hp: 1,
         visibleTo: options.enemyVisibleToP1 === true ? [P2, P1] : [P2],
     } satisfies BaseEntityState & {
         readonly kind: 'unit';
         readonly ownerId: typeof P2;
-        readonly x: number;
-        readonly y: number;
+        readonly x: ReturnType<typeof tacticsGridCoordinate>;
+        readonly y: ReturnType<typeof tacticsGridCoordinate>;
         readonly hp: number;
         readonly visibleTo: readonly (typeof P2)[];
     };
@@ -73,6 +90,29 @@ function makeSnapshot(options: { readonly enemyVisibleToP1?: boolean } = {}): Ba
         timers: {},
         gameResult: null,
     };
+}
+
+function makeSnapshotFromEntities(entities: Record<EntityId, BaseEntityState>): BaseGameSnapshot {
+    return {
+        tick: 1,
+        seed: 42,
+        players: {
+            [P1]: { id: P1 },
+            [P2]: { id: P2 },
+        },
+        entities,
+        phase: gamePhase('playing'),
+        events: [],
+        turnNumber: 0,
+        hostPlayerId: P1,
+        turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
+        timers: {},
+        gameResult: null,
+    };
+}
+
+function entityVisibleTo(snapshot: BaseGameSnapshot, id: EntityId): unknown {
+    return (snapshot.entities[id] as unknown as Record<string, unknown>)['visibleTo'];
 }
 
 describe('tactics move unit action', () => {
@@ -153,6 +193,29 @@ describe('tactics move unit action', () => {
         expect(units.some((u) => u['ownerId'] === P2)).toBe(true);
     });
 
+    it('keeps the initial opponent hidden and reveals it after a valid proximity move', () => {
+        const projector = new DefaultStateProjector(tacticsVisibilityRules);
+        const snapshot = makeSnapshotFromEntities(buildInitialTacticsEntities([P1, P2]));
+
+        expect(projector.project(snapshot, P1).entities[ENEMY_UNIT]).toBeUndefined();
+
+        const payload = tacticsMoveUnitDefinition.parsePayload({
+            unitId: UNIT,
+            x: TACTICS_INITIAL_UNIT_SPACING_TILES - TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
+            y: 0,
+        });
+        const next = tacticsMoveUnitDefinition.reduce(
+            snapshot,
+            payload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+        const projectedEnemy = projector.project(next, P1).entities[ENEMY_UNIT];
+
+        expect(projectedEnemy).toMatchObject({ id: ENEMY_UNIT, ownerId: P2 });
+        expect(projectedEnemy).not.toHaveProperty('visibleTo');
+    });
+
     it('moves a unit owned by the dispatcher and advances tick once', () => {
         const snapshot = makeSnapshot();
         const payload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 1, y: 0 });
@@ -172,6 +235,7 @@ describe('tactics move unit action', () => {
         expect(next.tick).toBe(2);
         expect(next.entities[UNIT]).toMatchObject({ x: 1, y: 0 });
         expect(snapshot.entities[UNIT]).toMatchObject({ x: 0, y: 0 });
+        expect(entityVisibleTo(snapshot, ENEMY_UNIT)).toEqual([P2]);
     });
 
     it('rejects moving an opponent unit', () => {
@@ -184,6 +248,50 @@ describe('tactics move unit action', () => {
             ok: false,
             reason: 'not_unit_owner',
         });
+    });
+
+    it('does not duplicate an existing proximity reveal viewer', () => {
+        const snapshot = makeSnapshot({
+            enemyVisibleToP1: true,
+            enemyX: TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
+        });
+        const payload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 0, y: 0 });
+
+        const next = tacticsMoveUnitDefinition.reduce(
+            snapshot,
+            payload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(entityVisibleTo(next, ENEMY_UNIT)).toEqual([P2, P1]);
+    });
+
+    it('compares proximity reveal ranges with squared integer tile distances', () => {
+        expect(TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED).toBe(
+            TACTICS_PROXIMITY_REVEAL_RANGE_TILES * TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
+        );
+        expect(Number.isInteger(TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED)).toBe(true);
+
+        const snapshot = makeSnapshot({ enemyX: TACTICS_PROXIMITY_REVEAL_RANGE_TILES + 1 });
+        const outsidePayload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 0, y: 0 });
+        const insidePayload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 1, y: 0 });
+
+        const outside = tacticsMoveUnitDefinition.reduce(
+            snapshot,
+            outsidePayload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+        const inside = tacticsMoveUnitDefinition.reduce(
+            snapshot,
+            insidePayload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(entityVisibleTo(outside, ENEMY_UNIT)).toEqual([P2]);
+        expect(entityVisibleTo(inside, ENEMY_UNIT)).toEqual([P2, P1]);
     });
 
     it('reveals an adjacent enemy on the targeted tile to the dispatcher and advances tick', () => {

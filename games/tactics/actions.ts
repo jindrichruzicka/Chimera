@@ -3,6 +3,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
+    TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
     TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera/shared/tactics.js';
 import type {
@@ -109,6 +110,27 @@ function isAdjacentTile(
     return dx + dy === 1;
 }
 
+function squaredTileDistance(
+    firstX: TacticsGridCoordinate,
+    firstY: TacticsGridCoordinate,
+    secondX: TacticsGridCoordinate,
+    secondY: TacticsGridCoordinate,
+): number {
+    const deltaX = firstX > secondX ? firstX - secondX : secondX - firstX;
+    const deltaY = firstY > secondY ? firstY - secondY : secondY - firstY;
+    return deltaX * deltaX + deltaY * deltaY;
+}
+
+function isWithinProximityRevealRange(
+    scout: TacticsUnitEntity,
+    candidate: TacticsUnitEntity,
+): boolean {
+    return (
+        squaredTileDistance(scout.x, scout.y, candidate.x, candidate.y) <=
+        TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED
+    );
+}
+
 function visibleToWithViewer(unit: TacticsUnitEntity, viewerId: PlayerId): readonly PlayerId[] {
     const seen = new Set<PlayerId>();
     const visibleTo: PlayerId[] = [];
@@ -126,6 +148,32 @@ function visibleToWithViewer(unit: TacticsUnitEntity, viewerId: PlayerId): reado
     add(viewerId);
 
     return visibleTo;
+}
+
+function revealNearbyOpponentUnits(
+    entities: Readonly<Record<EntityId, BaseEntityState>>,
+    scout: TacticsUnitEntity,
+    viewerId: PlayerId,
+): BaseGameSnapshot['entities'] {
+    const nextEntities: BaseGameSnapshot['entities'] = { ...entities };
+
+    for (const entity of Object.values(entities)) {
+        if (
+            !isTacticsUnitEntity(entity) ||
+            entity.ownerId === viewerId ||
+            !isWithinProximityRevealRange(scout, entity)
+        ) {
+            continue;
+        }
+
+        const revealedEntity = {
+            ...entity,
+            visibleTo: visibleToWithViewer(entity, viewerId),
+        } satisfies BaseEntityState & Readonly<Record<string, unknown>>;
+        nextEntities[entity.id] = revealedEntity;
+    }
+
+    return nextEntities;
 }
 
 function isUnitVisibleToViewer(unit: TacticsUnitEntity, viewerId: PlayerId): boolean {
@@ -170,23 +218,25 @@ export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload,
             return { ok: true };
         },
 
-        reduce(state, payload): BaseGameSnapshot {
+        reduce(state, payload, playerId): BaseGameSnapshot {
             const unit = state.entities[payload.unitId];
             if (!isTacticsUnitEntity(unit)) {
                 return state;
             }
+            const movedUnit = {
+                ...unit,
+                x: payload.x,
+                y: payload.y,
+            } satisfies TacticsUnitEntity;
+            const movedEntities: BaseGameSnapshot['entities'] = {
+                ...state.entities,
+                [payload.unitId]: movedUnit,
+            };
 
             return {
                 ...state,
                 tick: state.tick + 1,
-                entities: {
-                    ...state.entities,
-                    [payload.unitId]: {
-                        ...unit,
-                        x: payload.x,
-                        y: payload.y,
-                    },
-                },
+                entities: revealNearbyOpponentUnits(movedEntities, movedUnit, playerId),
                 events: [...state.events, { type: TACTICS_MOVE_UNIT_ACTION }],
             };
         },
