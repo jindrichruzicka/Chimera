@@ -7,72 +7,97 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera/shared/tactics.js';
-
-interface TacticsUnit {
-    readonly id: string;
-    readonly kind: 'unit';
-    readonly ownerId: string;
-    readonly x: number;
-    readonly y: number;
-    readonly hp: number;
-}
-
-/**
- * Type guard to safely narrow an entity to a tactics unit.
- * Checks that the entity is an object with kind='unit' and required fields.
- */
-function isTacticsUnit(entity: unknown): entity is TacticsUnit {
-    if (typeof entity !== 'object' || entity === null) {
-        return false;
-    }
-    const obj = entity as Record<string, unknown>;
-    return (
-        obj['kind'] === 'unit' &&
-        typeof obj['id'] === 'string' &&
-        typeof obj['ownerId'] === 'string' &&
-        typeof obj['x'] === 'number' &&
-        typeof obj['y'] === 'number' &&
-        typeof obj['hp'] === 'number'
-    );
-}
-
-function areAdjacent(first: TacticsUnit, second: TacticsUnit): boolean {
-    const dx = Math.abs(first.x - second.x);
-    const dy = Math.abs(first.y - second.y);
-    return dx + dy === 1;
-}
+import {
+    parseTacticsSceneUnits,
+    resolveTacticsSelectionIntent,
+    type TacticsGridPoint,
+    type TacticsSceneUnit,
+    type TacticsSelectionIntent,
+} from './tacticsSceneModel.js';
 
 export function TacticsDemoBoard({
     snapshot,
     localPlayerId,
     sendAction,
 }: GameScreenProps): React.ReactElement | null {
-    const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
+    const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
 
-    const units = Object.values(snapshot.entities)
-        .map((entity) => entity as unknown as TacticsUnit)
-        .filter(isTacticsUnit);
-
-    // Find the unit owned by the local player
-    const demoUnit = units.find((unit) => unit.ownerId === localPlayerId);
+    const units = parseTacticsSceneUnits(snapshot.entities, localPlayerId);
+    const demoUnit = units.find((unit) => unit.ownership === 'own');
 
     if (demoUnit === undefined) {
         return null;
     }
 
     const canUseControls = localPlayerId !== undefined;
-    const canMove = canUseControls && selectedUnitId === demoUnit.id;
-    const canReveal = canUseControls && selectedUnitId === demoUnit.id;
     const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
+    const canMove = canUseControls && selectedUnit?.ownership === 'own';
+    const canReveal = canMove;
+    const nextGrid = { x: demoUnit.grid.x + 1, y: demoUnit.grid.y } satisfies TacticsGridPoint;
     const attackTarget =
         canUseControls && selectedUnit !== undefined
             ? units.find(
                   (unit) =>
-                      unit.ownerId !== localPlayerId &&
-                      unit.hp > 0 &&
-                      areAdjacent(selectedUnit, unit),
+                      unit.ownership === 'opponent' &&
+                      unit.isAlive &&
+                      resolveTacticsSelectionIntent({
+                          units,
+                          localPlayerId,
+                          selectedUnitId,
+                          target: { type: 'unit', unitId: unit.id },
+                      }).type === 'attack-unit',
               )
             : undefined;
+
+    const handleIntent = (intent: TacticsSelectionIntent): void => {
+        if (intent.type === 'select-own-unit' || intent.type === 'select-opponent-unit') {
+            setSelectedUnitId(intent.unitId);
+            return;
+        }
+        if (localPlayerId === undefined) {
+            return;
+        }
+        if (intent.type === 'move-unit') {
+            sendAction({
+                type: TACTICS_MOVE_UNIT_ACTION,
+                playerId: localPlayerId,
+                tick: snapshot.tick,
+                payload: {
+                    unitId: intent.unitId,
+                    x: intent.grid.x,
+                    y: intent.grid.y,
+                },
+            });
+            setSelectedUnitId(null);
+            return;
+        }
+        if (intent.type === 'attack-unit') {
+            sendAction({
+                type: TACTICS_ATTACK_ACTION,
+                playerId: localPlayerId,
+                tick: snapshot.tick,
+                payload: {
+                    attackerId: intent.attackerId,
+                    defenderId: intent.defenderId,
+                },
+            });
+            setSelectedUnitId(null);
+            return;
+        }
+        if (intent.type === 'reveal-tile') {
+            sendAction({
+                type: TACTICS_REVEAL_TILE_ACTION,
+                playerId: localPlayerId,
+                tick: snapshot.tick,
+                payload: {
+                    scoutId: intent.scoutId,
+                    x: intent.grid.x,
+                    y: intent.grid.y,
+                },
+            });
+            setSelectedUnitId(null);
+        }
+    };
 
     return (
         <div aria-label="Tactics board">
@@ -80,7 +105,16 @@ export function TacticsDemoBoard({
                 data-testid="selectable-unit"
                 type="button"
                 disabled={!canUseControls}
-                onClick={() => setSelectedUnitId(demoUnit.id)}
+                onClick={() =>
+                    handleIntent(
+                        resolveTacticsSelectionIntent({
+                            units,
+                            localPlayerId,
+                            selectedUnitId,
+                            target: { type: 'unit', unitId: demoUnit.id },
+                        }),
+                    )
+                }
             >
                 Unit
             </button>
@@ -88,22 +122,16 @@ export function TacticsDemoBoard({
                 data-testid="move-target"
                 type="button"
                 disabled={!canMove}
-                onClick={() => {
-                    if (localPlayerId === undefined) {
-                        return;
-                    }
-                    sendAction({
-                        type: TACTICS_MOVE_UNIT_ACTION,
-                        playerId: localPlayerId,
-                        tick: snapshot.tick,
-                        payload: {
-                            unitId: demoUnit.id,
-                            x: demoUnit.x + 1,
-                            y: demoUnit.y,
-                        },
-                    });
-                    setSelectedUnitId(null);
-                }}
+                onClick={() =>
+                    handleIntent(
+                        resolveTacticsSelectionIntent({
+                            units,
+                            localPlayerId,
+                            selectedUnitId,
+                            target: { type: 'ground', grid: nextGrid },
+                        }),
+                    )
+                }
             >
                 Move
             </button>
@@ -111,22 +139,13 @@ export function TacticsDemoBoard({
                 data-testid="reveal-target"
                 type="button"
                 disabled={!canReveal}
-                onClick={() => {
-                    if (localPlayerId === undefined) {
-                        return;
-                    }
-                    sendAction({
-                        type: TACTICS_REVEAL_TILE_ACTION,
-                        playerId: localPlayerId,
-                        tick: snapshot.tick,
-                        payload: {
-                            scoutId: demoUnit.id,
-                            x: demoUnit.x + 1,
-                            y: demoUnit.y,
-                        },
-                    });
-                    setSelectedUnitId(null);
-                }}
+                onClick={() =>
+                    handleIntent({
+                        type: 'reveal-tile',
+                        scoutId: demoUnit.id,
+                        grid: nextGrid,
+                    })
+                }
             >
                 Reveal
             </button>
@@ -134,21 +153,16 @@ export function TacticsDemoBoard({
                 <button
                     data-testid="attack-target"
                     type="button"
-                    onClick={() => {
-                        if (localPlayerId === undefined || selectedUnit === undefined) {
-                            return;
-                        }
-                        sendAction({
-                            type: TACTICS_ATTACK_ACTION,
-                            playerId: localPlayerId,
-                            tick: snapshot.tick,
-                            payload: {
-                                attackerId: selectedUnit.id,
-                                defenderId: attackTarget.id,
-                            },
-                        });
-                        setSelectedUnitId(null);
-                    }}
+                    onClick={() =>
+                        handleIntent(
+                            resolveTacticsSelectionIntent({
+                                units,
+                                localPlayerId,
+                                selectedUnitId,
+                                target: { type: 'unit', unitId: attackTarget.id },
+                            }),
+                        )
+                    }
                 >
                     Attack
                 </button>
