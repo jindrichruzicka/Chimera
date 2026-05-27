@@ -21,8 +21,7 @@ test.describe('Undo/redo', () => {
     test('undo reflects canUndo=false after exhausting turn history', async ({ hostWindow }) => {
         const hostGame = new GamePage(hostWindow);
 
-        await hostWindow.getByTestId('selectable-unit').first().click();
-        await hostWindow.getByTestId('move-target').first().click();
+        await hostGame.moveOwnedUnit();
         await expect(hostGame.undoButton).toBeEnabled();
 
         await hostGame.undoButton.click();
@@ -34,8 +33,7 @@ test.describe('Undo/redo', () => {
     test('redo reflects canRedo=false after exhausting redo history', async ({ hostWindow }) => {
         const hostGame = new GamePage(hostWindow);
 
-        await hostWindow.getByTestId('selectable-unit').first().click();
-        await hostWindow.getByTestId('move-target').first().click();
+        await hostGame.moveOwnedUnit();
         await expect(hostGame.undoButton).toBeEnabled();
 
         await hostGame.undoButton.click();
@@ -54,8 +52,7 @@ test.describe('Undo/redo', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostWindow.getByTestId('selectable-unit').first().click();
-        await hostWindow.getByTestId('move-target').first().click();
+        await hostGame.moveOwnedUnit();
 
         await expect(hostGame.undoButton).toBeEnabled();
 
@@ -69,8 +66,11 @@ test.describe('Undo/redo', () => {
             const hostGame = new GamePage(hostWindow);
             const clientGame = new GamePage(clientWindow);
 
-            await clientWindow.getByTestId('selectable-unit').first().click();
-            await clientWindow.getByTestId('move-target').first().click();
+            await expect(clientGame.endTurnButton).toBeEnabled();
+            const tickBeforeMove = await clientGame.currentTick();
+
+            await clientGame.moveOwnedUnit();
+            await clientGame.waitForTick(tickBeforeMove + 1);
 
             await expect(clientGame.undoButton).toBeEnabled();
             await expect(hostGame.undoButton).toBeDisabled();

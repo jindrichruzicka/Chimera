@@ -1,6 +1,8 @@
 'use client';
 
+import { Canvas } from '@react-three/fiber';
 import React, { useState } from 'react';
+import { OrthographicCamera, Vector3 } from 'three';
 import type { GameScreenProps } from '@chimera/shared/game-screen-contract.js';
 import {
     TACTICS_ATTACK_ACTION,
@@ -14,6 +16,31 @@ import {
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
 } from './tacticsSceneModel.js';
+import {
+    TACTICS_CAMERA_BOUNDS,
+    TACTICS_CAMERA_LOOK_AT,
+    TACTICS_CAMERA_POSITION,
+} from './tacticsCamera.js';
+import { TacticsGroundPlane } from './TacticsGroundPlane.js';
+import { TACTICS_UNIT_COLOR_BY_OWNERSHIP, TacticsUnitPrimitive } from './TacticsUnitPrimitive.js';
+
+const boardSceneStyle: React.CSSProperties = {
+    position: 'absolute',
+    inset: 0,
+    width: '100%',
+    height: '100%',
+    minHeight: 'calc(var(--ch-space-md) * 20)',
+};
+
+const boardFallbackStyle: React.CSSProperties = {
+    display: 'grid',
+    placeItems: 'center',
+    width: '100%',
+    minHeight: 'calc(var(--ch-space-md) * 20)',
+    color: 'var(--ch-color-text-secondary)',
+};
+
+type ManualOrthographicCamera = OrthographicCamera & { manual: true };
 
 export function TacticsDemoBoard({
     snapshot,
@@ -21,40 +48,33 @@ export function TacticsDemoBoard({
     sendAction,
 }: GameScreenProps): React.ReactElement | null {
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
+    const camera = React.useMemo(createTacticsCamera, []);
 
-    const units = parseTacticsSceneUnits(snapshot.entities, localPlayerId);
-    const demoUnit = units.find((unit) => unit.ownership === 'own');
-
-    if (demoUnit === undefined) {
-        return null;
+    if (localPlayerId === undefined) {
+        return (
+            <div
+                aria-label="Tactics board loading"
+                data-testid="tactics-board-loading"
+                style={boardFallbackStyle}
+            />
+        );
     }
 
-    const canUseControls = localPlayerId !== undefined;
-    const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
-    const canMove = canUseControls && selectedUnit?.ownership === 'own';
-    const canReveal = canMove;
-    const nextGrid = { x: demoUnit.grid.x + 1, y: demoUnit.grid.y } satisfies TacticsGridPoint;
-    const attackTarget =
-        canUseControls && selectedUnit !== undefined
-            ? units.find(
-                  (unit) =>
-                      unit.ownership === 'opponent' &&
-                      unit.isAlive &&
-                      resolveTacticsSelectionIntent({
-                          units,
-                          localPlayerId,
-                          selectedUnitId,
-                          target: { type: 'unit', unitId: unit.id },
-                      }).type === 'attack-unit',
-              )
-            : undefined;
+    const units = parseTacticsSceneUnits(snapshot.entities, localPlayerId);
+
+    if (units.length === 0) {
+        return (
+            <div
+                aria-label="No visible tactics units"
+                data-testid="tactics-board-empty"
+                style={boardFallbackStyle}
+            />
+        );
+    }
 
     const handleIntent = (intent: TacticsSelectionIntent): void => {
         if (intent.type === 'select-own-unit' || intent.type === 'select-opponent-unit') {
             setSelectedUnitId(intent.unitId);
-            return;
-        }
-        if (localPlayerId === undefined) {
             return;
         }
         if (intent.type === 'move-unit') {
@@ -99,76 +119,82 @@ export function TacticsDemoBoard({
         }
     };
 
+    const handleUnitSelect = (unitId: TacticsSceneUnit['id']): void => {
+        handleIntent(
+            resolveTacticsSelectionIntent({
+                units,
+                localPlayerId,
+                selectedUnitId,
+                target: { type: 'unit', unitId },
+            }),
+        );
+    };
+
+    const handleGroundSelect = (grid: TacticsGridPoint): void => {
+        handleIntent(
+            resolveTacticsSelectionIntent({
+                units,
+                localPlayerId,
+                selectedUnitId,
+                target: { type: 'ground', grid },
+            }),
+        );
+    };
+
+    const handleGroundReveal = (grid: TacticsGridPoint): void => {
+        if (selectedUnitId === null) {
+            return;
+        }
+
+        const selectedUnit = units.find((unit) => unit.id === selectedUnitId);
+        if (selectedUnit?.ownership !== 'own') {
+            return;
+        }
+
+        handleIntent({ type: 'reveal-tile', scoutId: selectedUnit.id, grid });
+    };
+
     return (
-        <div aria-label="Tactics board">
-            <button
-                data-testid="selectable-unit"
-                type="button"
-                disabled={!canUseControls}
-                onClick={() =>
-                    handleIntent(
-                        resolveTacticsSelectionIntent({
-                            units,
-                            localPlayerId,
-                            selectedUnitId,
-                            target: { type: 'unit', unitId: demoUnit.id },
-                        }),
-                    )
-                }
-            >
-                Unit
-            </button>
-            <button
-                data-testid="move-target"
-                type="button"
-                disabled={!canMove}
-                onClick={() =>
-                    handleIntent(
-                        resolveTacticsSelectionIntent({
-                            units,
-                            localPlayerId,
-                            selectedUnitId,
-                            target: { type: 'ground', grid: nextGrid },
-                        }),
-                    )
-                }
-            >
-                Move
-            </button>
-            <button
-                data-testid="reveal-target"
-                type="button"
-                disabled={!canReveal}
-                onClick={() =>
-                    handleIntent({
-                        type: 'reveal-tile',
-                        scoutId: demoUnit.id,
-                        grid: nextGrid,
-                    })
-                }
-            >
-                Reveal
-            </button>
-            {attackTarget !== undefined && (
-                <button
-                    data-testid="attack-target"
-                    type="button"
-                    onClick={() =>
-                        handleIntent(
-                            resolveTacticsSelectionIntent({
-                                units,
-                                localPlayerId,
-                                selectedUnitId,
-                                target: { type: 'unit', unitId: attackTarget.id },
-                            }),
-                        )
-                    }
-                >
-                    Attack
-                </button>
-            )}
+        <div aria-label="Tactics board" style={boardSceneStyle}>
+            <Canvas camera={camera}>
+                <ambientLight intensity={0.65} />
+                <directionalLight intensity={0.9} position={[3, 6, 4]} />
+                <TacticsGroundPlane
+                    onSelectGridPoint={handleGroundSelect}
+                    onRevealGridPoint={handleGroundReveal}
+                />
+                {units.map((unit) => (
+                    <TacticsUnitPrimitive
+                        key={unit.id}
+                        unit={unit}
+                        color={TACTICS_UNIT_COLOR_BY_OWNERSHIP[unit.ownership]}
+                        isSelected={unit.id === selectedUnitId}
+                        onSelect={handleUnitSelect}
+                    />
+                ))}
+            </Canvas>
         </div>
     );
+}
+
+function createTacticsCamera(): ManualOrthographicCamera {
+    const camera = new OrthographicCamera(
+        TACTICS_CAMERA_BOUNDS.left,
+        TACTICS_CAMERA_BOUNDS.right,
+        TACTICS_CAMERA_BOUNDS.top,
+        TACTICS_CAMERA_BOUNDS.bottom,
+        TACTICS_CAMERA_BOUNDS.near,
+        TACTICS_CAMERA_BOUNDS.far,
+    ) as ManualOrthographicCamera;
+
+    camera.manual = true;
+    camera.up.set(0, 0, 1);
+    camera.position.set(...TACTICS_CAMERA_POSITION);
+    camera.lookAt(new Vector3(...TACTICS_CAMERA_LOOK_AT));
+    camera.updateProjectionMatrix();
+    camera.updateMatrixWorld();
+
+    return camera;
 }
 
 export default TacticsDemoBoard;

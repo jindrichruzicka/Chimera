@@ -24,8 +24,7 @@ test.describe('End turn', () => {
         const hostGame = new GamePage(hostWindow);
 
         // Make a move
-        await hostWindow.getByTestId('selectable-unit').first().click();
-        await hostWindow.getByTestId('move-target').first().click();
+        await hostGame.moveOwnedUnit();
 
         await expect(hostGame.undoButton).toBeEnabled();
 
@@ -41,8 +40,7 @@ test.describe('End turn', () => {
         const hostGame = new GamePage(hostWindow);
 
         // Make a move
-        await hostWindow.getByTestId('selectable-unit').first().click();
-        await hostWindow.getByTestId('move-target').first().click();
+        await hostGame.moveOwnedUnit();
 
         await expect(hostGame.undoButton).toBeEnabled();
 
@@ -66,8 +64,7 @@ test.describe('End turn', () => {
         const clientGame = new GamePage(clientWindow);
 
         // Host makes a move (host is active first)
-        await hostWindow.getByTestId('selectable-unit').first().click();
-        await hostWindow.getByTestId('move-target').first().click();
+        await hostGame.moveOwnedUnit();
 
         // Verify host can end turn and client cannot
         await expect(hostGame.endTurnButton).toBeEnabled();
@@ -89,8 +86,7 @@ test.describe('End turn', () => {
         const clientGame = new GamePage(clientWindow);
 
         // Host makes a move
-        await hostWindow.getByTestId('selectable-unit').first().click();
-        await hostWindow.getByTestId('move-target').first().click();
+        await hostGame.moveOwnedUnit();
         const hostTickAfterMove = await hostGame.currentTick();
 
         // Host ends turn
@@ -98,8 +94,7 @@ test.describe('End turn', () => {
         await hostGame.waitForTick(hostTickAfterMove + 1);
 
         // Client should now be able to move
-        await clientWindow.getByTestId('selectable-unit').first().click();
-        await clientWindow.getByTestId('move-target').first().click();
+        await clientGame.moveOwnedUnit();
 
         // Verify move was processed
         const clientTickAfterMove = await clientGame.currentTick();
@@ -117,8 +112,7 @@ test.describe('End turn', () => {
             const clientGame = new GamePage(clientWindow);
 
             // Client makes a move (client is active first in this context)
-            await clientWindow.getByTestId('selectable-unit').first().click();
-            await clientWindow.getByTestId('move-target').first().click();
+            await clientGame.moveOwnedUnit();
             const clientTickAfterMove = await clientGame.currentTick();
 
             // Client ends turn
@@ -126,8 +120,7 @@ test.describe('End turn', () => {
             await clientGame.waitForTick(clientTickAfterMove + 1);
 
             // Host should now be able to move
-            await hostWindow.getByTestId('selectable-unit').first().click();
-            await hostWindow.getByTestId('move-target').first().click();
+            await hostGame.moveOwnedUnit();
 
             // Verify move was processed
             const hostTickAfterMove = await hostGame.currentTick();
