@@ -231,7 +231,7 @@ describe('LobbyPage pending actions', () => {
         expect(screen.getByTestId('start-game')).toBeTruthy();
     });
 
-    it('still renders lobby heading when a snapshot is active (no GameShell in lobby)', () => {
+    it('does not render a visible lobby heading and never renders GameShell in lobby', () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
             info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
@@ -240,8 +240,8 @@ describe('LobbyPage pending actions', () => {
 
         renderLobbyPage();
 
-        // Lobby heading must remain; GameShell must NOT be rendered.
-        expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
+        // Caption removed — heading must NOT be rendered; GameShell must NOT be rendered.
+        expect(screen.queryByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeNull();
         expect(screen.queryByTestId('game-canvas')).toBeNull();
     });
 
@@ -280,14 +280,14 @@ describe('LobbyPage pending actions', () => {
 
         renderLobbyPage();
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeTruthy();
+        expect(screen.queryByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeNull();
         expect(screen.getByRole('dialog', { name: 'Multiplayer Lobby' })).toBeTruthy();
         expect(screen.queryByRole('tab', { name: 'Host' })).toBeNull();
         expect(screen.queryByRole('tab', { name: 'Join' })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Current Lobby' })).toBeNull();
         expect(screen.queryByRole('heading', { name: 'Lobby Information' })).toBeNull();
 
-        expect(screen.getByRole('main')).toHaveAttribute('aria-labelledby', 'lobby-heading');
+        expect(screen.getByRole('main')).toHaveAttribute('aria-label', 'Multiplayer Lobby');
 
         const mainText = screen.getByRole('main').textContent ?? '';
         expect(mainText.includes('Session ID:')).toBe(true);
@@ -383,9 +383,8 @@ describe('LobbyPage pending actions', () => {
     it('uses shared Typography primitives for shell copy', () => {
         renderLobbyPage();
 
-        expect(
-            screen.getByRole('heading', { level: 1, name: 'Multiplayer Lobby' }),
-        ).toHaveAttribute('data-ch-heading-level', '1');
+        // Caption heading removed — no h1 with lobby title should appear.
+        expect(screen.queryByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeNull();
 
         fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
 

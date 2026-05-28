@@ -6,7 +6,6 @@ import { ActiveLobbyPanel } from './ActiveLobbyPanel';
 import { LobbyEntryTabs } from './LobbyEntryTabs';
 import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
 import { Button } from '../../components/ui/Button';
-import { Heading } from '../../components/ui/Heading';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
@@ -157,9 +156,9 @@ export default function LobbyPage() {
 
     return (
         <ThemeProvider theme={lobbyTheme}>
-            <main className={styles['page']} role="main" aria-labelledby="lobby-heading">
+            <main className={styles['page']} role="main" aria-label="Multiplayer Lobby">
                 <section
-                    aria-labelledby="lobby-heading"
+                    aria-label="Multiplayer Lobby"
                     // No aria-modal: this is a full-page route — the dialog IS
                     // the entire viewport content. Setting aria-modal without a
                     // focus trap would tell AT to restrict virtual browsing to
@@ -170,14 +169,6 @@ export default function LobbyPage() {
                     data-testid="lobby-dialog"
                     role="dialog"
                 >
-                    <header className={styles['dialog-header']}>
-                        <div className={styles['title-stack']}>
-                            <Heading id="lobby-heading" level={1} size="xl">
-                                Multiplayer Lobby
-                            </Heading>
-                        </div>
-                    </header>
-
                     {error ? (
                         <div className={styles['error']} role="alert">
                             Error: {error}
