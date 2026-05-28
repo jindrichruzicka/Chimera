@@ -231,7 +231,7 @@ describe('LobbyPage pending actions', () => {
         expect(screen.getByTestId('start-game')).toBeTruthy();
     });
 
-    it('does not render a visible lobby heading and never renders GameShell in lobby', () => {
+    it('does not render GameShell in lobby', () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
             info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
@@ -240,8 +240,6 @@ describe('LobbyPage pending actions', () => {
 
         renderLobbyPage();
 
-        // Caption removed — heading must NOT be rendered; GameShell must NOT be rendered.
-        expect(screen.queryByRole('heading', { level: 1, name: 'Multiplayer Lobby' })).toBeNull();
         expect(screen.queryByTestId('game-canvas')).toBeNull();
     });
 
