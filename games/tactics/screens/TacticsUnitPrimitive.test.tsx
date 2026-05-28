@@ -3,7 +3,7 @@
 import React from 'react';
 import ReactThreeTestRenderer, { type ReactThreeTest } from '@react-three/test-renderer';
 import type { Mesh, MeshStandardMaterial } from 'three';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { entityId } from '@chimera/simulation/engine/types.js';
 import {
     TACTICS_UNIT_COLOR_BY_OWNERSHIP,
@@ -21,6 +21,15 @@ const OWN_UNIT = {
     isAlive: true,
 } satisfies TacticsUnitPrimitiveProps['unit'];
 
+const MOVED_OWN_UNIT = {
+    ...OWN_UNIT,
+    world: { x: 4, y: 0, z: 1 },
+} satisfies TacticsUnitPrimitiveProps['unit'];
+
+afterEach(() => {
+    document.documentElement.style.removeProperty('--ch-duration-normal');
+});
+
 describe('TacticsUnitPrimitive', () => {
     it('renders a live unit at its world position with the provided ownership color', async () => {
         const renderer = await renderUnit({ isSelected: false });
@@ -35,6 +44,71 @@ describe('TacticsUnitPrimitive', () => {
             expect(findThreeObjects(renderer.scene, 'Mesh')).toHaveLength(1);
         } finally {
             await renderer.unmount();
+        }
+    });
+
+    it('tweens visual position from the previous projection to the next without selecting', async () => {
+        document.documentElement.style.setProperty('--ch-duration-normal', '250ms');
+        const onSelect = vi.fn();
+        const renderer = await renderUnit({ isSelected: false, onSelect });
+
+        try {
+            const group = findThreeObject(renderer.scene, 'Group');
+
+            expect(group.instance.position.toArray()).toEqual([2, 0.45, -1]);
+
+            await renderer.update(
+                renderUnitElement({ unit: MOVED_OWN_UNIT, isSelected: false, onSelect }),
+            );
+
+            expect(group.instance.position.toArray()).toEqual([2, 0.45, -1]);
+
+            await renderer.advanceFrames(1, 0.125);
+
+            const inFlightPosition = group.instance.position.toArray();
+            expect(inFlightPosition[0]).toBeGreaterThan(2);
+            expect(inFlightPosition[0]).toBeLessThan(4);
+            expect(inFlightPosition[1]).toBe(0.45);
+            expect(inFlightPosition[2]).toBeGreaterThan(-1);
+            expect(inFlightPosition[2]).toBeLessThan(1);
+
+            await renderer.advanceFrames(1, 0.2);
+
+            expect(group.instance.position.toArray()).toEqual([4, 0.45, 1]);
+            expect(onSelect).not.toHaveBeenCalled();
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('completes visual movement immediately when motion duration tokens are disabled', async () => {
+        document.documentElement.style.setProperty('--ch-duration-normal', '0ms');
+        const renderer = await renderUnit({ isSelected: false });
+
+        try {
+            const group = findThreeObject(renderer.scene, 'Group');
+
+            await renderer.update(renderUnitElement({ unit: MOVED_OWN_UNIT, isSelected: false }));
+
+            expect(group.instance.position.toArray()).toEqual([4, 0.45, 1]);
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
+    it('starts remounted units at the current projected position', async () => {
+        const renderer = await renderUnit({ isSelected: false });
+
+        await renderer.unmount();
+
+        const remountedRenderer = await renderUnit({ unit: MOVED_OWN_UNIT, isSelected: false });
+
+        try {
+            const group = findThreeObject(remountedRenderer.scene, 'Group');
+
+            expect(group.instance.position.toArray()).toEqual([4, 0.45, 1]);
+        } finally {
+            await remountedRenderer.unmount();
         }
     });
 
@@ -107,13 +181,21 @@ async function renderUnit(options: {
     readonly isSelected?: boolean;
     readonly onSelect?: TacticsUnitPrimitiveProps['onSelect'];
 }): ReturnType<typeof ReactThreeTestRenderer.create> {
-    return ReactThreeTestRenderer.create(
+    return ReactThreeTestRenderer.create(renderUnitElement(options));
+}
+
+function renderUnitElement(options: {
+    readonly unit?: TacticsUnitPrimitiveProps['unit'];
+    readonly isSelected?: boolean;
+    readonly onSelect?: TacticsUnitPrimitiveProps['onSelect'];
+}): React.ReactElement {
+    return (
         <TacticsUnitPrimitive
             unit={options.unit ?? OWN_UNIT}
             color={TACTICS_UNIT_COLOR_BY_OWNERSHIP.own}
             isSelected={options.isSelected ?? false}
             onSelect={options.onSelect ?? vi.fn()}
-        />,
+        />
     );
 }
 
