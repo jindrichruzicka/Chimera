@@ -1,0 +1,73 @@
+.overlay {
+    position: absolute;
+    inset: var(--ch-space-md);
+    display: grid;
+    place-items: center;
+    pointer-events: none;
+    animation: fadeIn var(--ch-duration-slow) var(--ch-easing-standard) both;
+}
+
+.card {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    box-shadow: var(--ch-shadow-md);
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-ui);
+    min-width: var(--ch-button-min-width-md);
+    padding: var(--ch-space-lg);
+    pointer-events: auto;
+    text-align: center;
+    animation: scaleIn var(--ch-duration-slow) var(--ch-easing-standard) both;
+}
+
+.icon {
+    display: block;
+    font-size: var(--ch-font-size-xl);
+    margin-block-end: var(--ch-space-sm);
+    line-height: 1;
+}
+
+.text {
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-ui);
+    font-size: var(--ch-font-size-xl);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+    margin: var(--ch-space-none);
+}
+
+/* Outcome-specific accent on the card border */
+.overlay[data-game-result-outcome='win'] .card {
+    border-color: var(--ch-color-success);
+}
+
+.overlay[data-game-result-outcome='loss'] .card {
+    border-color: var(--ch-color-error);
+}
+
+.overlay[data-game-result-outcome='draw'] .card {
+    border-color: var(--ch-color-warning);
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+    }
+    to {
+        opacity: 1;
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.85);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
+}

@@ -28,6 +28,19 @@ describe('TacticsGameResultBanner', () => {
         expect(screen.getByTestId('game-result-text').textContent).toBe('Tactical Victory');
     });
 
+    it('renders the result message as status content rather than a document heading', () => {
+        const localPlayerId = playerId('p1');
+
+        render(
+            <TacticsGameResultBanner
+                localPlayerId={localPlayerId}
+                gameResult={{ winnerIds: [localPlayerId] }}
+            />,
+        );
+
+        expect(screen.queryByRole('heading', { name: 'Tactical Victory' })).toBeNull();
+    });
+
     it('shows a tactics defeat message when another player won', () => {
         render(
             <TacticsGameResultBanner
@@ -63,5 +76,44 @@ describe('TacticsGameResultBanner', () => {
         expect(
             screen.getByTestId('game-result-banner').getAttribute('data-game-result-outcome'),
         ).toBe('unknown');
+    });
+
+    it('renders an accessible win icon when the local player won', () => {
+        render(
+            <TacticsGameResultBanner
+                localPlayerId={playerId('p1')}
+                gameResult={{ winnerIds: [playerId('p1')] }}
+            />,
+        );
+
+        expect(screen.getByRole('img', { name: 'Victory' })).toBeTruthy();
+    });
+
+    it('renders an accessible loss icon when the local player lost', () => {
+        render(
+            <TacticsGameResultBanner
+                localPlayerId={playerId('p1')}
+                gameResult={{ winnerIds: [playerId('p2')] }}
+            />,
+        );
+
+        expect(screen.getByRole('img', { name: 'Defeat' })).toBeTruthy();
+    });
+
+    it('renders an accessible draw icon on stalemate', () => {
+        render(
+            <TacticsGameResultBanner
+                localPlayerId={playerId('p1')}
+                gameResult={{ winnerIds: [] }}
+            />,
+        );
+
+        expect(screen.getByRole('img', { name: 'Draw' })).toBeTruthy();
+    });
+
+    it('renders an accessible neutral icon when the viewer is unknown', () => {
+        render(<TacticsGameResultBanner gameResult={{ winnerIds: [playerId('p2')] }} />);
+
+        expect(screen.getByRole('img', { name: 'Concluded' })).toBeTruthy();
     });
 });

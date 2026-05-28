@@ -1,28 +1,26 @@
 'use client';
 
 import React from 'react';
-import {
-    resolveGameResultOutcome,
-    type GameResultBannerProps,
+import { resolveGameResultOutcome } from '@chimera/shared/game-screen-contract.js';
+import type {
+    GameResultBannerProps,
+    GameResultOutcome,
 } from '@chimera/shared/game-screen-contract.js';
+import styles from './TacticsGameResultBanner.module.css';
 
-const bannerStyle: React.CSSProperties = {
-    position: 'absolute',
-    inset: 'var(--ch-space-md)',
-    display: 'grid',
-    placeItems: 'center',
-    pointerEvents: 'none',
-};
+const OUTCOME_ICONS = {
+    win: '🏆',
+    loss: '⚔️',
+    draw: '⚖️',
+    unknown: '🏁',
+} as const satisfies Readonly<Record<GameResultOutcome, string>>;
 
-const messageStyle: React.CSSProperties = {
-    padding: 'var(--ch-space-sm) var(--ch-space-md)',
-    border: 'var(--ch-border-width-sm) solid var(--ch-color-border)',
-    background: 'var(--ch-color-surface-raised)',
-    color: 'var(--ch-color-text-primary)',
-    boxShadow: 'var(--ch-shadow-md)',
-    fontSize: 'var(--ch-font-size-lg)',
-    fontWeight: 700,
-};
+const OUTCOME_ICON_LABELS = {
+    win: 'Victory',
+    loss: 'Defeat',
+    draw: 'Draw',
+    unknown: 'Concluded',
+} as const satisfies Readonly<Record<GameResultOutcome, string>>;
 
 function resolveTacticsResultMessage({ gameResult, localPlayerId }: GameResultBannerProps): string {
     if (gameResult.winnerIds.length === 0) {
@@ -42,11 +40,21 @@ export function TacticsGameResultBanner(props: GameResultBannerProps): React.Rea
             data-testid="game-result-banner"
             data-game-result-outcome={outcome}
             role="status"
-            style={bannerStyle}
+            className={styles['overlay']}
         >
-            <span data-testid="game-result-text" style={messageStyle}>
-                {resolveTacticsResultMessage(props)}
-            </span>
+            <div className={styles['card']}>
+                <span
+                    data-testid="game-result-icon"
+                    role="img"
+                    aria-label={OUTCOME_ICON_LABELS[outcome]}
+                    className={styles['icon']}
+                >
+                    {OUTCOME_ICONS[outcome]}
+                </span>
+                <p className={styles['text']} data-testid="game-result-text">
+                    {resolveTacticsResultMessage(props)}
+                </p>
+            </div>
         </div>
     );
 }
