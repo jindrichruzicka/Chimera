@@ -5,11 +5,7 @@ import {
     TACTICS_CAMERA_POSITION,
     TACTICS_CAMERA_WORLD_BOUNDS,
 } from '@chimera/games/tactics/screens/tacticsCamera.js';
-import {
-    GamePage,
-    TACTICS_CANVAS_WORLD_BOUNDS,
-    TACTICS_REVEAL_CENTER_X,
-} from './GamePage';
+import { GamePage, TACTICS_CANVAS_WORLD_BOUNDS, TACTICS_REVEAL_CENTER_X } from './GamePage';
 
 interface WaitForFunctionCall {
     readonly tick: number;
