@@ -55,6 +55,7 @@ e2e/
 │   ├── ws-inspector.ts          # Tap raw WebSocket frames
 │   ├── snapshot-assert.ts       # assertNoLeakedFields(), assertTickAdvanced(), assertChecksumMatch()
 │   ├── tick-driver.ts           # Programmatic tick dispatch — used in soak specs
+│   ├── canvas-pixels.ts         # RGBA pixel analysis helpers for 3D canvas assertions
 │   └── relaunch.ts              # Relaunch an Electron process with captured args/env
 └── tests/
     ├── boot-smoke.spec.ts
@@ -74,7 +75,8 @@ e2e/
     ├── multiplayer-soak.spec.ts
     ├── save-load.spec.ts
     ├── crash-recovery.spec.ts
-    └── settings-persistence.spec.ts
+    ├── settings-persistence.spec.ts
+    └── tactics-3d-render.spec.ts
 ```
 
 > **Note — Vitest shape-check files in `e2e/` root:** `playwright.config.test.ts` and

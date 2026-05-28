@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Locator, Page } from '@playwright/test';
+import type { CanvasRgbaFrame } from '../helpers/canvas-pixels';
 import {
     TACTICS_CAMERA_POSITION,
     TACTICS_CAMERA_WORLD_BOUNDS,
@@ -35,10 +36,32 @@ interface KeyboardDownFailure {
 
 interface BuildPageDoubleOptions {
     readonly canvasBox?: LocatorBox | null;
+    readonly canvasRgbaFrames?: readonly CanvasRgbaFrame[];
     readonly canvasScreenshots?: readonly Buffer[];
+    readonly executeCanvasRgbaDecode?: boolean;
     readonly keyboardDownFailure?: KeyboardDownFailure;
     readonly locatorCounts?: readonly LocatorCountBySelector[];
     readonly snapshots?: readonly unknown[];
+}
+
+interface BrowserCanvasDecodeStubOptions {
+    readonly imageWidth: number;
+    readonly imageHeight: number;
+    readonly rgba: readonly number[];
+    readonly useImageFallback?: boolean;
+}
+
+interface BrowserCanvasDecodeStubs {
+    readonly canvas: { width: number; height: number };
+    readonly context: {
+        imageSmoothingEnabled: boolean;
+        imageSmoothingQuality: 'low' | 'medium' | 'high';
+        drawImage: ReturnType<typeof vi.fn>;
+        getImageData: ReturnType<typeof vi.fn>;
+    };
+    readonly createImageBitmap: ReturnType<typeof vi.fn> | null;
+    readonly closeImage: ReturnType<typeof vi.fn>;
+    readonly imageSrcs: string[];
 }
 
 interface BuildPageDoubleResult {
@@ -70,8 +93,10 @@ const buildPageDouble = (
     let screenshotCalls = 0;
     const activeModifiers: string[] = [];
     const snapshots = options.snapshots ?? [snapshot];
+    const canvasRgbaFrames = options.canvasRgbaFrames ?? [];
     const canvasScreenshots = options.canvasScreenshots ?? [Buffer.from('stable-canvas')];
     let evaluateCallCount = 0;
+    let canvasRgbaFrameCallCount = 0;
     const canvasBox =
         options.canvasBox === undefined
             ? {
@@ -161,7 +186,24 @@ const buildPageDouble = (
         return {} as Awaited<ReturnType<Page['waitForFunction']>>;
     }) as Page['waitForFunction'];
 
-    page.evaluate = (async (): Promise<unknown> => {
+    page.evaluate = (async (
+        _pageFunction: Parameters<Page['evaluate']>[0],
+        arg?: Parameters<Page['evaluate']>[1],
+    ): Promise<unknown> => {
+        if (isCanvasRgbaDecodeRequest(arg)) {
+            if (options.executeCanvasRgbaDecode && typeof _pageFunction === 'function') {
+                return (_pageFunction as (value: unknown) => Promise<unknown>)(arg);
+            }
+
+            const fallbackFrame = canvasRgbaFrames[canvasRgbaFrames.length - 1];
+            const nextFrame = canvasRgbaFrames[canvasRgbaFrameCallCount] ?? fallbackFrame;
+            canvasRgbaFrameCallCount += 1;
+            if (nextFrame === undefined) {
+                throw new Error('No canvas RGBA frame was configured for the page double.');
+            }
+            return nextFrame;
+        }
+
         const fallbackSnapshot = snapshots[snapshots.length - 1] ?? snapshot;
         const nextSnapshot = snapshots[evaluateCallCount] ?? fallbackSnapshot;
         evaluateCallCount += 1;
@@ -181,9 +223,18 @@ const buildPageDouble = (
     };
 };
 
+function isCanvasRgbaDecodeRequest(value: unknown): boolean {
+    return (
+        typeof value === 'object' &&
+        value !== null &&
+        typeof (value as Readonly<Record<string, unknown>>)['encodedPng'] === 'string'
+    );
+}
+
 afterEach(() => {
     vi.doUnmock('@playwright/test');
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
 });
 
 function makeProjectedSnapshot(options: {
@@ -212,6 +263,87 @@ function makeProjectedSnapshot(options: {
             ...enemy,
         },
     };
+}
+
+function makeCanvasRgbaFrame(
+    pixels: readonly (readonly [number, number, number, number])[],
+): CanvasRgbaFrame {
+    return {
+        width: pixels.length,
+        height: 1,
+        rgba: pixels.flatMap((pixel) => [...pixel]),
+    };
+}
+
+function installBrowserCanvasDecodeStubs(
+    options: BrowserCanvasDecodeStubOptions,
+): BrowserCanvasDecodeStubs {
+    const imageSrcs: string[] = [];
+    const closeImage = vi.fn();
+    const imageSource = {
+        width: options.imageWidth,
+        height: options.imageHeight,
+        close: closeImage,
+    };
+    const context = {
+        imageSmoothingEnabled: false,
+        imageSmoothingQuality: 'low' as 'low' | 'medium' | 'high',
+        drawImage: vi.fn(),
+        getImageData: vi.fn(() => ({ data: options.rgba })),
+    };
+    const canvas = {
+        width: 0,
+        height: 0,
+        getContext: vi.fn(() => context),
+    };
+
+    vi.stubGlobal(
+        'Blob',
+        vi.fn(function FakeBlob(
+            this: { parts: readonly Uint8Array[]; options: { readonly type: string } },
+            parts: readonly Uint8Array[],
+            blobOptions: { readonly type: string },
+        ): void {
+            this.parts = parts;
+            this.options = blobOptions;
+        }),
+    );
+    vi.stubGlobal(
+        'atob',
+        vi.fn(() => 'png'),
+    );
+    vi.stubGlobal('document', {
+        createElement: vi.fn(() => canvas),
+    });
+
+    if (options.useImageFallback === true) {
+        class FakeImage {
+            public readonly width = options.imageWidth;
+            public readonly height = options.imageHeight;
+            public readonly close = closeImage;
+            public onload: (() => void) | null = null;
+            public onerror: (() => void) | null = null;
+            private currentSrc = '';
+
+            public set src(value: string) {
+                this.currentSrc = value;
+                imageSrcs.push(value);
+                this.onload?.();
+            }
+
+            public get src(): string {
+                return this.currentSrc;
+            }
+        }
+
+        vi.stubGlobal('createImageBitmap', undefined);
+        vi.stubGlobal('Image', FakeImage);
+        return { canvas, context, createImageBitmap: null, closeImage, imageSrcs };
+    }
+
+    const createImageBitmap = vi.fn(async () => imageSource);
+    vi.stubGlobal('createImageBitmap', createImageBitmap);
+    return { canvas, context, createImageBitmap, closeImage, imageSrcs };
 }
 
 describe('GamePage', () => {
@@ -301,6 +433,211 @@ describe('GamePage', () => {
         await expect(gamePage.assertOwnedSelectionFeedbackChangesCanvas()).rejects.toThrow(
             'Selecting the owned tactics primitive did not change the rendered canvas.',
         );
+    });
+
+    it('asserts the tactics canvas is nonblank and has the local blue primitive only', async () => {
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasRgbaFrames: [
+                makeCanvasRgbaFrame([
+                    [63, 63, 70, 255],
+                    [37, 99, 235, 255],
+                    [20, 70, 180, 255],
+                    [245, 245, 245, 255],
+                    [0, 0, 0, 0],
+                ]),
+            ],
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.assertTacticsCanvasIsNonBlank()).resolves.toBeUndefined();
+        await expect(gamePage.assertTacticsCanvasHasBluePrimitive()).resolves.toBeUndefined();
+        await expect(gamePage.assertTacticsCanvasHasNoRedPrimitive()).resolves.toBeUndefined();
+    });
+
+    it('asserts the tactics canvas has the revealed red opponent primitive', async () => {
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasRgbaFrames: [
+                makeCanvasRgbaFrame([
+                    [63, 63, 70, 255],
+                    [37, 99, 235, 255],
+                    [220, 38, 38, 255],
+                    [180, 20, 20, 255],
+                ]),
+            ],
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.assertTacticsCanvasHasRedPrimitive()).resolves.toBeUndefined();
+    });
+
+    it('throws when canvas renders no red opponent primitive pixels after reveal', async () => {
+        vi.useFakeTimers();
+        try {
+            const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+                canvasRgbaFrames: [
+                    makeCanvasRgbaFrame([
+                        [63, 63, 70, 255],
+                        [37, 99, 235, 255],
+                        [20, 70, 180, 255],
+                    ]),
+                ],
+            });
+            const gamePage = new GamePage(page, 1);
+
+            const assertionPromise = gamePage.assertTacticsCanvasHasRedPrimitive();
+            const expectation = expect(assertionPromise).rejects.toThrow(
+                'Tactics canvas did not render the expected red opponent primitive pixels after reveal',
+            );
+            await vi.runAllTimersAsync();
+
+            await expectation;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('decodes canvas screenshots through createImageBitmap before pixel analysis', async () => {
+        const stubs = installBrowserCanvasDecodeStubs({
+            imageWidth: 4,
+            imageHeight: 2,
+            rgba: [
+                37, 99, 235, 255, 20, 70, 180, 255, 63, 63, 70, 255, 245, 245, 245, 255, 0, 0, 0, 0,
+                63, 63, 70, 255, 245, 245, 245, 255, 0, 0, 0, 0,
+            ],
+        });
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            executeCanvasRgbaDecode: true,
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.assertTacticsCanvasHasBluePrimitive()).resolves.toBeUndefined();
+
+        expect(stubs.createImageBitmap).toHaveBeenCalledTimes(1);
+        expect(stubs.canvas).toMatchObject({ width: 4, height: 2 });
+        expect(stubs.context.imageSmoothingEnabled).toBe(true);
+        expect(stubs.context.imageSmoothingQuality).toBe('high');
+        expect(stubs.context.drawImage).toHaveBeenCalledWith(
+            expect.objectContaining({ width: 4, height: 2 }),
+            0,
+            0,
+            4,
+            2,
+        );
+        expect(stubs.closeImage).toHaveBeenCalledTimes(1);
+    });
+
+    it('falls back to Image when createImageBitmap is unavailable during canvas decode', async () => {
+        const screenshot = Buffer.from('fallback-canvas');
+        const stubs = installBrowserCanvasDecodeStubs({
+            imageWidth: 2,
+            imageHeight: 1,
+            rgba: [37, 99, 235, 255, 20, 70, 180, 255],
+            useImageFallback: true,
+        });
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasScreenshots: [screenshot],
+            executeCanvasRgbaDecode: true,
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.assertTacticsCanvasHasBluePrimitive()).resolves.toBeUndefined();
+
+        expect(stubs.imageSrcs).toEqual([`data:image/png;base64,${screenshot.toString('base64')}`]);
+        expect(stubs.closeImage).toHaveBeenCalledTimes(1);
+    });
+
+    it('throws when red pixels are detected before reveal', async () => {
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasRgbaFrames: [
+                makeCanvasRgbaFrame([
+                    [220, 38, 38, 255],
+                    [200, 30, 30, 255],
+                    [180, 20, 20, 255],
+                    [63, 63, 70, 255],
+                    [63, 63, 70, 255],
+                    [63, 63, 70, 255],
+                ]),
+            ],
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.assertTacticsCanvasHasNoRedPrimitive()).rejects.toThrow(
+            'Tactics canvas rendered red opponent primitive pixels before reveal.',
+        );
+    });
+
+    it('does not throw when the first canvas read has transient red pixels but the retry frame is clean', async () => {
+        // Two stray red pixels so that redPixels (2) > maximumAbsentColorPixels (1),
+        // ensuring the retry branch is actually entered on the first read.
+        const transientRedFrame = makeCanvasRgbaFrame([
+            [220, 38, 38, 255],
+            [200, 30, 30, 255],
+            [63, 63, 70, 255],
+            [63, 63, 70, 255],
+        ]);
+        const cleanFrame = makeCanvasRgbaFrame([
+            [63, 63, 70, 255],
+            [37, 99, 235, 255],
+            [245, 245, 245, 255],
+        ]);
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasRgbaFrames: [transientRedFrame, cleanFrame],
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.assertTacticsCanvasHasNoRedPrimitive()).resolves.toBeUndefined();
+    });
+
+    it('throws when canvas renders no nonblank pixels', async () => {
+        vi.useFakeTimers();
+        try {
+            const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+                canvasRgbaFrames: [
+                    makeCanvasRgbaFrame([
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                        [0, 0, 0, 0],
+                    ]),
+                ],
+            });
+            const gamePage = new GamePage(page, 1);
+
+            const assertionPromise = gamePage.assertTacticsCanvasIsNonBlank();
+            const expectation = expect(assertionPromise).rejects.toThrow(
+                'Tactics canvas did not render enough nonblank pixels',
+            );
+            await vi.runAllTimersAsync();
+
+            await expectation;
+        } finally {
+            vi.useRealTimers();
+        }
+    });
+
+    it('throws when canvas renders no blue primitive pixels', async () => {
+        vi.useFakeTimers();
+        try {
+            const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+                canvasRgbaFrames: [
+                    makeCanvasRgbaFrame([
+                        [63, 63, 70, 255],
+                        [245, 245, 245, 255],
+                        [200, 50, 50, 255],
+                    ]),
+                ],
+            });
+            const gamePage = new GamePage(page, 1);
+
+            const assertionPromise = gamePage.assertTacticsCanvasHasBluePrimitive();
+            const expectation = expect(assertionPromise).rejects.toThrow(
+                'Tactics canvas did not render the expected blue local primitive pixels',
+            );
+            await vi.runAllTimersAsync();
+
+            await expectation;
+        } finally {
+            vi.useRealTimers();
+        }
     });
 
     it('moves the selected primitive near the hidden opponent through a canvas point', async () => {

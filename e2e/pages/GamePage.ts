@@ -1,4 +1,10 @@
 import { expect, type Locator, type Page } from '@playwright/test';
+import {
+    analyzeCanvasPixels,
+    formatCanvasPixelStats,
+    type CanvasPixelStats,
+    type CanvasRgbaFrame,
+} from '../helpers/canvas-pixels';
 
 interface TacticsGridPoint {
     readonly x: number;
@@ -42,6 +48,13 @@ export const TACTICS_REVEAL_CENTER_X = 1;
 const TACTICS_MOVE_RETRY_ATTEMPTS = 3;
 const TACTICS_ATTACK_RETRY_ATTEMPTS = 3;
 const PROJECTED_SNAPSHOT_TIMEOUT_MS = 30_000;
+const TACTICS_CANVAS_PIXEL_TIMEOUT_MS = 10_000;
+const TACTICS_CANVAS_PIXEL_SAMPLE_MAX_DIMENSION = 320;
+const TACTICS_MIN_NONBLANK_PIXEL_RATIO = 0.05;
+const TACTICS_MIN_COLOR_PIXEL_RATIO = 0.0001;
+const TACTICS_MIN_COLOR_PIXELS = 2;
+const TACTICS_MAX_ABSENT_COLOR_PIXEL_RATIO = 0.00002;
+const TACTICS_MAX_ABSENT_COLOR_PIXELS = 1;
 export const OLD_TACTICS_BUTTON_SELECTOR =
     '[data-testid="move-target"], [data-testid="reveal-target"], [data-testid="attack-target"]';
 
@@ -59,7 +72,10 @@ export class GamePage {
     readonly postGameSummary: Locator;
     readonly perfHud: Locator;
 
-    public constructor(private readonly page: Page) {
+    public constructor(
+        private readonly page: Page,
+        private readonly pixelPollTimeoutMs = TACTICS_CANVAS_PIXEL_TIMEOUT_MS,
+    ) {
         this.canvas = page.getByTestId('game-canvas');
         this.tacticsCanvas = this.canvas.locator('canvas').first();
         this.undoButton = page.getByTestId('undo');
@@ -112,6 +128,41 @@ export class GamePage {
                 'Selecting the owned tactics primitive did not change the rendered canvas.',
             );
         }
+    }
+
+    public async assertTacticsCanvasIsNonBlank(): Promise<void> {
+        await this.waitForTacticsCanvasPixelExpectation(
+            (stats) => stats.nonBlankPixels >= minimumNonBlankPixels(stats),
+            'Tactics canvas did not render enough nonblank pixels',
+        );
+    }
+
+    public async assertTacticsCanvasHasBluePrimitive(): Promise<void> {
+        await this.waitForTacticsCanvasPixelExpectation(
+            (stats) => stats.bluePixels >= minimumColorPixels(stats),
+            'Tactics canvas did not render the expected blue local primitive pixels',
+        );
+    }
+
+    public async assertTacticsCanvasHasNoRedPrimitive(): Promise<void> {
+        const stats = await this.readTacticsCanvasPixelStats();
+        if (stats.redPixels > maximumAbsentColorPixels(stats)) {
+            // Retry once: a single transitional render frame may contain stray
+            // anti-aliased red pixels even before the opponent is revealed.
+            const retryStats = await this.readTacticsCanvasPixelStats();
+            if (retryStats.redPixels > maximumAbsentColorPixels(retryStats)) {
+                throw new Error(
+                    `Tactics canvas rendered red opponent primitive pixels before reveal. ${formatCanvasPixelStats(retryStats)}.`,
+                );
+            }
+        }
+    }
+
+    public async assertTacticsCanvasHasRedPrimitive(): Promise<void> {
+        await this.waitForTacticsCanvasPixelExpectation(
+            (stats) => stats.redPixels >= minimumColorPixels(stats),
+            'Tactics canvas did not render the expected red opponent primitive pixels after reveal',
+        );
     }
 
     public async moveSelectedPrimitiveNearOpponent(): Promise<void> {
@@ -343,6 +394,166 @@ export class GamePage {
         );
     }
 
+    private async waitForTacticsCanvasPixelExpectation(
+        predicate: (stats: CanvasPixelStats) => boolean,
+        failureMessage: string,
+    ): Promise<void> {
+        let lastStats: CanvasPixelStats | null = null;
+        try {
+            await expect
+                .poll(
+                    async () => {
+                        lastStats = await this.readTacticsCanvasPixelStats();
+                        return predicate(lastStats);
+                    },
+                    { timeout: this.pixelPollTimeoutMs },
+                )
+                .toBe(true);
+        } catch (error) {
+            const stats = lastStats ?? (await this.readTacticsCanvasPixelStats());
+            throw new Error(`${failureMessage}. ${formatCanvasPixelStats(stats)}.`, {
+                cause: error,
+            });
+        }
+    }
+
+    private async readTacticsCanvasPixelStats(): Promise<CanvasPixelStats> {
+        await this.waitForCanvasInteractionFrame();
+        const screenshot = await this.tacticsCanvas.screenshot({ type: 'png' });
+        const frame = await this.decodeCanvasScreenshot(screenshot.toString('base64'));
+        return analyzeCanvasPixels(frame);
+    }
+
+    private async decodeCanvasScreenshot(encodedPng: string): Promise<CanvasRgbaFrame> {
+        return this.page.evaluate(
+            async ({ encodedPng: encodedImage, maxDimension }) => {
+                type BrowserBlob = object;
+
+                interface BrowserImageSource {
+                    readonly width: number;
+                    readonly height: number;
+                    close?: () => void;
+                }
+
+                interface BrowserImageElement extends BrowserImageSource {
+                    onload: (() => void) | null;
+                    onerror: (() => void) | null;
+                    src: string;
+                }
+
+                interface BrowserImageData {
+                    readonly data: ArrayLike<number>;
+                }
+
+                interface BrowserCanvasRenderingContext {
+                    imageSmoothingEnabled: boolean;
+                    imageSmoothingQuality: 'low' | 'medium' | 'high';
+                    drawImage(
+                        image: BrowserImageSource,
+                        x: number,
+                        y: number,
+                        width: number,
+                        height: number,
+                    ): void;
+                    getImageData(
+                        x: number,
+                        y: number,
+                        width: number,
+                        height: number,
+                    ): BrowserImageData;
+                }
+
+                interface BrowserCanvasElement {
+                    width: number;
+                    height: number;
+                    getContext(
+                        type: '2d',
+                        options: { readonly willReadFrequently: true },
+                    ): BrowserCanvasRenderingContext | null;
+                }
+
+                interface BrowserDocument {
+                    createElement(tagName: 'canvas'): BrowserCanvasElement;
+                }
+
+                interface BrowserCanvasGlobal {
+                    readonly Blob: new (
+                        parts: readonly Uint8Array[],
+                        options: { readonly type: string },
+                    ) => BrowserBlob;
+                    readonly Image: new () => BrowserImageElement;
+                    readonly atob: (value: string) => string;
+                    readonly createImageBitmap?: (blob: BrowserBlob) => Promise<BrowserImageSource>;
+                    readonly document: BrowserDocument;
+                }
+
+                // @chimera-review: page.evaluate runs in a real browser context; these DOM APIs exist there.
+                const browser = globalThis as unknown as BrowserCanvasGlobal;
+                const binary = browser.atob(encodedImage);
+                const bytes = new Uint8Array(binary.length);
+                for (let byteIndex = 0; byteIndex < binary.length; byteIndex += 1) {
+                    bytes[byteIndex] = binary.charCodeAt(byteIndex);
+                }
+
+                const blob = new browser.Blob([bytes], { type: 'image/png' });
+                const image = await decodePngBlob(browser, blob, encodedImage);
+                try {
+                    const sourceWidth = image.width;
+                    const sourceHeight = image.height;
+                    if (sourceWidth <= 0 || sourceHeight <= 0) {
+                        throw new Error('Decoded tactics canvas screenshot has no pixel area.');
+                    }
+
+                    const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
+                    const width = Math.max(1, Math.round(sourceWidth * scale));
+                    const height = Math.max(1, Math.round(sourceHeight * scale));
+                    const sampleCanvas = browser.document.createElement('canvas');
+                    sampleCanvas.width = width;
+                    sampleCanvas.height = height;
+
+                    const context = sampleCanvas.getContext('2d', { willReadFrequently: true });
+                    if (context === null) {
+                        throw new Error('Could not create 2D context for tactics canvas sampling.');
+                    }
+
+                    context.imageSmoothingEnabled = true;
+                    context.imageSmoothingQuality = 'high';
+                    context.drawImage(image, 0, 0, width, height);
+                    const imageData = context.getImageData(0, 0, width, height);
+
+                    return {
+                        width,
+                        height,
+                        rgba: Array.from(imageData.data),
+                    };
+                } finally {
+                    if (typeof image.close === 'function') {
+                        image.close();
+                    }
+                }
+
+                async function decodePngBlob(
+                    browser: BrowserCanvasGlobal,
+                    blob: BrowserBlob,
+                    encodedImage: string,
+                ): Promise<BrowserImageSource> {
+                    if (browser.createImageBitmap !== undefined) {
+                        return browser.createImageBitmap(blob);
+                    }
+
+                    return new Promise<BrowserImageElement>((resolve, reject) => {
+                        const loadedImage = new browser.Image();
+                        loadedImage.onload = () => resolve(loadedImage);
+                        loadedImage.onerror = () =>
+                            reject(new Error('Could not decode tactics canvas screenshot.'));
+                        loadedImage.src = `data:image/png;base64,${encodedImage}`;
+                    });
+                }
+            },
+            { encodedPng, maxDimension: TACTICS_CANVAS_PIXEL_SAMPLE_MAX_DIMENSION },
+        );
+    }
+
     private async waitForVisibleAdjacentOpponent(): Promise<void> {
         try {
             await expect
@@ -463,6 +674,24 @@ function summarizeTacticsSnapshot(snapshot: TacticsSnapshotProjection): string {
         .join('; ');
 
     return `Snapshot viewer=${snapshot.viewerId} tick=${String(snapshotRecord.tick)} isMyTurn=${String(snapshotRecord.isMyTurn)} units=[${units}].`;
+}
+
+function minimumNonBlankPixels(stats: CanvasPixelStats): number {
+    return Math.max(1, Math.floor(stats.totalPixels * TACTICS_MIN_NONBLANK_PIXEL_RATIO));
+}
+
+function minimumColorPixels(stats: CanvasPixelStats): number {
+    return Math.max(
+        TACTICS_MIN_COLOR_PIXELS,
+        Math.floor(stats.totalPixels * TACTICS_MIN_COLOR_PIXEL_RATIO),
+    );
+}
+
+function maximumAbsentColorPixels(stats: CanvasPixelStats): number {
+    return Math.max(
+        TACTICS_MAX_ABSENT_COLOR_PIXELS,
+        Math.floor(stats.totalPixels * TACTICS_MAX_ABSENT_COLOR_PIXEL_RATIO),
+    );
 }
 
 function isTacticsSnapshotProjection(value: unknown): value is TacticsSnapshotProjection {
