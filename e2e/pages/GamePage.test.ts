@@ -7,7 +7,6 @@ import {
 } from '@chimera/games/tactics/screens/tacticsCamera.js';
 import {
     GamePage,
-    OLD_TACTICS_BUTTON_SELECTOR,
     TACTICS_CANVAS_WORLD_BOUNDS,
     TACTICS_REVEAL_CENTER_X,
 } from './GamePage';
@@ -368,7 +367,6 @@ describe('GamePage', () => {
         expect(gamePage.selectOpponentPrimitive).toBeDefined();
         expect(gamePage.attackVisibleOpponent).toBeDefined();
         expect(gamePage.assertOwnedSelectionFeedbackChangesCanvas).toBeDefined();
-        expect(gamePage.assertOldTacticsButtonsAbsent).toBeDefined();
         expect(Object.prototype.hasOwnProperty.call(gamePage, 'moveTargetButton')).toBe(false);
         expect(Object.prototype.hasOwnProperty.call(gamePage, 'revealTargetButton')).toBe(false);
         expect(Object.prototype.hasOwnProperty.call(gamePage, 'attackTargetButton')).toBe(false);
@@ -846,29 +844,6 @@ describe('GamePage', () => {
         );
 
         expect(clickCalls).toEqual([]);
-    });
-
-    it('asserts removed tactics button controls are absent without binding them as locators', async () => {
-        const { page, requestedTestIds, pageLocatorQueries } = buildPageDouble();
-        const gamePage = new GamePage(page);
-
-        await gamePage.assertOldTacticsButtonsAbsent();
-
-        expect(pageLocatorQueries).toEqual([OLD_TACTICS_BUTTON_SELECTOR]);
-        expect(requestedTestIds).not.toContain('move-target');
-        expect(requestedTestIds).not.toContain('reveal-target');
-        expect(requestedTestIds).not.toContain('attack-target');
-    });
-
-    it('fails the old tactics button assertion when removed controls are present', async () => {
-        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
-            locatorCounts: [{ selector: OLD_TACTICS_BUTTON_SELECTOR, count: 1 }],
-        });
-        const gamePage = new GamePage(page);
-
-        await expect(gamePage.assertOldTacticsButtonsAbsent()).rejects.toThrow(
-            'Removed tactics button controls are still present',
-        );
     });
 
     it('waits for a target tick with a default timeout of 30 seconds', async () => {

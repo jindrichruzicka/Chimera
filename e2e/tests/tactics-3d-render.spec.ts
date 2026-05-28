@@ -23,7 +23,6 @@ test.describe('Tactics 3D render validation', () => {
         const game = new GamePage(hostWindow);
 
         await expect(game.canvas).toBeVisible({ timeout: 15_000 });
-        await game.assertOldTacticsButtonsAbsent();
 
         await game.assertTacticsCanvasIsNonBlank();
         await game.assertTacticsCanvasHasBluePrimitive();

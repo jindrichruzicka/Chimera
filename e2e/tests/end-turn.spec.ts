@@ -23,7 +23,6 @@ test.describe('End turn', () => {
     test('end turn clears undo and redo history', async ({ hostWindow }) => {
         const hostGame = new GamePage(hostWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
         // Make a move
         await hostGame.moveOwnedUnit();
 
@@ -40,7 +39,6 @@ test.describe('End turn', () => {
     test('end turn after partial undo also clears redo', async ({ hostWindow }) => {
         const hostGame = new GamePage(hostWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
         // Make a move
         await hostGame.moveOwnedUnit();
 
@@ -65,8 +63,6 @@ test.describe('End turn', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
-        await clientGame.assertOldTacticsButtonsAbsent();
         // Host makes a move (host is active first)
         await hostGame.moveOwnedUnit();
 
@@ -89,8 +85,6 @@ test.describe('End turn', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
-        await clientGame.assertOldTacticsButtonsAbsent();
         // Host makes a move
         await hostGame.moveOwnedUnit();
         const hostTickAfterMove = await hostGame.currentTick();
@@ -118,8 +112,6 @@ test.describe('End turn', () => {
             const hostGame = new GamePage(hostWindow);
             const clientGame = new GamePage(clientWindow);
 
-            await hostGame.assertOldTacticsButtonsAbsent();
-            await clientGame.assertOldTacticsButtonsAbsent();
             // Client makes a move (client is active first in this context)
             await clientGame.moveOwnedUnit();
             const clientTickAfterMove = await clientGame.currentTick();

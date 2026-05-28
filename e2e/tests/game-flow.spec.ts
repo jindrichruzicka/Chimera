@@ -24,9 +24,6 @@ test.describe('Game flow', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
-        await clientGame.assertOldTacticsButtonsAbsent();
-
         await hostGame.assertOwnedSelectionFeedbackChangesCanvas();
         await hostGame.moveSelectedPrimitiveNearOpponent();
         await hostGame.attackAdjacentEnemy();

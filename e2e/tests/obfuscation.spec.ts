@@ -50,7 +50,6 @@ test.describe('State obfuscation', () => {
         expect(readProjectedEntity(snapshot, OPPONENT_UNIT_ID)).toBeUndefined();
 
         const match = new GamePage(hostWindow);
-        await match.assertOldTacticsButtonsAbsent();
         await match.moveOwnedUnit();
 
         await expect

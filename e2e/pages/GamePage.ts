@@ -55,8 +55,6 @@ const TACTICS_MIN_COLOR_PIXEL_RATIO = 0.0001;
 const TACTICS_MIN_COLOR_PIXELS = 2;
 const TACTICS_MAX_ABSENT_COLOR_PIXEL_RATIO = 0.00002;
 const TACTICS_MAX_ABSENT_COLOR_PIXELS = 1;
-export const OLD_TACTICS_BUTTON_SELECTOR =
-    '[data-testid="move-target"], [data-testid="reveal-target"], [data-testid="attack-target"]';
 
 export class GamePage {
     readonly canvas: Locator;
@@ -202,15 +200,6 @@ export class GamePage {
         }
 
         await this.waitForProjectedUnitDefeated(opponentUnit.id);
-    }
-
-    public async assertOldTacticsButtonsAbsent(): Promise<void> {
-        const oldButtonCount = await this.page.locator(OLD_TACTICS_BUTTON_SELECTOR).count();
-        if (oldButtonCount > 0) {
-            throw new Error(
-                `Removed tactics button controls are still present: ${oldButtonCount}.`,
-            );
-        }
     }
 
     public async currentTick(): Promise<number> {

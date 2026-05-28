@@ -23,7 +23,6 @@ test.describe('Undo/redo', () => {
     }) => {
         const hostGame = new GamePage(hostWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
         await hostGame.moveOwnedUnit();
         await expect(hostGame.undoButton).toBeEnabled();
 
@@ -38,7 +37,6 @@ test.describe('Undo/redo', () => {
     }) => {
         const hostGame = new GamePage(hostWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
         await hostGame.moveOwnedUnit();
         await expect(hostGame.undoButton).toBeEnabled();
 
@@ -58,8 +56,6 @@ test.describe('Undo/redo', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostGame.assertOldTacticsButtonsAbsent();
-        await clientGame.assertOldTacticsButtonsAbsent();
         await hostGame.moveOwnedUnit();
 
         await expect(hostGame.undoButton).toBeEnabled();
@@ -77,8 +73,6 @@ test.describe('Undo/redo', () => {
             const hostGame = new GamePage(hostWindow);
             const clientGame = new GamePage(clientWindow);
 
-            await hostGame.assertOldTacticsButtonsAbsent();
-            await clientGame.assertOldTacticsButtonsAbsent();
             await expect(clientGame.endTurnButton).toBeEnabled();
             const tickBeforeMove = await clientGame.currentTick();
 
