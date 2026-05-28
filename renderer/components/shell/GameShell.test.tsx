@@ -455,6 +455,43 @@ describe('GameShell page object locators', () => {
         expect(onEndTurn).toHaveBeenCalledOnce();
     });
 
+    it('disables all engine controls after a match result is resolved', () => {
+        const onUndo = vi.fn();
+        const onRedo = vi.fn();
+        const onEndTurn = vi.fn();
+        const localPlayerId = playerId('p1');
+
+        render(
+            <GameShell
+                tick={7}
+                canUndo={true}
+                canRedo={true}
+                canEndTurn={true}
+                localPlayerId={localPlayerId}
+                gameResult={{ winnerIds: [localPlayerId] }}
+                onUndo={onUndo}
+                onRedo={onRedo}
+                onEndTurn={onEndTurn}
+            />,
+        );
+
+        const undoButton = screen.getByTestId('undo');
+        const redoButton = screen.getByTestId('redo');
+        const endTurnButton = screen.getByTestId('end-turn');
+
+        expect(undoButton.hasAttribute('disabled')).toBe(true);
+        expect(redoButton.hasAttribute('disabled')).toBe(true);
+        expect(endTurnButton.hasAttribute('disabled')).toBe(true);
+
+        fireEvent.click(undoButton);
+        fireEvent.click(redoButton);
+        fireEvent.click(endTurnButton);
+
+        expect(onUndo).not.toHaveBeenCalled();
+        expect(onRedo).not.toHaveBeenCalled();
+        expect(onEndTurn).not.toHaveBeenCalled();
+    });
+
     it('shows You won when the local player is a winner', () => {
         const localPlayerId = playerId('p1');
 

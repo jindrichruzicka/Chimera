@@ -282,6 +282,16 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             action.payload,
         );
 
+        // ── Terminal-match gate ───────────────────────────────────────────
+        // Once a game result is recorded the authoritative match is finished.
+        // Reject gameplay, turn, tick, undo, and redo actions before the
+        // undo/redo intercept can reconstruct prior state. Read-only sync
+        // requests remain allowed so reconnecting clients can receive the
+        // terminal snapshot.
+        if (snapshot.gameResult !== null && !isAllowedAfterGameResult(action.type)) {
+            throw new ActionUnauthorizedError(action.type, MATCH_ALREADY_RESOLVED_REASON);
+        }
+
         // ── Stage 3 — undo/redo intercept ────────────────────────────────────
         // When the action is engine:undo or engine:redo and an UndoManager is
         // present, Stage 3 short-circuits Stages 4–5. The reconstructed state is
@@ -530,3 +540,9 @@ const NOOP_LOGGER: Logger = {
         return this;
     },
 };
+
+const MATCH_ALREADY_RESOLVED_REASON = 'match_already_resolved';
+
+function isAllowedAfterGameResult(actionType: string): boolean {
+    return actionType === 'engine:sync_request';
+}

@@ -304,6 +304,36 @@ describe('TacticsDemoBoard', () => {
         expect(opponentUnit).toHaveAttribute('data-selected', 'false');
     });
 
+    it('ignores primitive and ground clicks after a match result is resolved', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+        const snapshot = {
+            ...makeSnapshot({ isMyTurn: true }),
+            phase: gamePhase('ended'),
+            gameResult: { winnerIds: [playerId('p2')] },
+        } satisfies PlayerSnapshot;
+
+        render(
+            <TacticsDemoBoard
+                snapshot={snapshot}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        const localUnit = screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`);
+        const opponentUnit = screen.getByTestId('tactics-unit-unit-2');
+
+        fireEvent.click(localUnit);
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        fireEvent.click(opponentUnit);
+        fireEvent.click(screen.getByTestId('tactics-ground-plane-reveal'));
+
+        expect(sendAction).not.toHaveBeenCalled();
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
+        expect(opponentUnit).toHaveAttribute('data-selected', 'false');
+    });
+
     it('clears renderer-local selection when turn transitions away and back', () => {
         const localPlayerId = playerId('p1');
         const sendAction = vi.fn();

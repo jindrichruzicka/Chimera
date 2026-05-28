@@ -477,6 +477,31 @@ describe('GamePage — button states', () => {
         renderGamePage();
         expect((await screen.findByTestId('end-turn')).hasAttribute('disabled')).toBe(false);
     });
+
+    it('disables undo, redo, and end-turn after a match result is resolved', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({
+            phase: gamePhase('ended'),
+            gameResult: { winnerIds: [playerId('p2')] },
+            undoMeta: { canUndo: true, canRedo: true },
+            isMyTurn: true,
+        });
+        renderGamePage();
+
+        const undoButton = await screen.findByTestId('undo');
+        const redoButton = await screen.findByTestId('redo');
+        const endTurnButton = await screen.findByTestId('end-turn');
+
+        expect(undoButton.hasAttribute('disabled')).toBe(true);
+        expect(redoButton.hasAttribute('disabled')).toBe(true);
+        expect(endTurnButton.hasAttribute('disabled')).toBe(true);
+
+        fireEvent.click(undoButton);
+        fireEvent.click(redoButton);
+        fireEvent.click(endTurnButton);
+
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
 });
 
 describe('GamePage — keyboard-triggered action dispatch', () => {
@@ -576,6 +601,24 @@ describe('GamePage — keyboard-triggered action dispatch', () => {
         inputActionCallbacks.get('engine:undo')?.({ pressed: false });
         inputActionCallbacks.get('engine:redo')?.({ pressed: false });
         inputActionCallbacks.get('game:end-turn')?.({ pressed: false });
+
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+
+    it('does not dispatch keyboard actions after a match result is resolved', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot({
+            phase: gamePhase('ended'),
+            gameResult: { winnerIds: [playerId('p2')] },
+            undoMeta: { canUndo: true, canRedo: true },
+            isMyTurn: true,
+        });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        inputActionCallbacks.get('engine:undo')?.({ pressed: true });
+        inputActionCallbacks.get('engine:redo')?.({ pressed: true });
+        inputActionCallbacks.get('game:end-turn')?.({ pressed: true });
 
         expect(mockSendAction).not.toHaveBeenCalled();
     });

@@ -410,6 +410,82 @@ describe('ActionPipeline — post-reduce game-result resolution', () => {
         expect(next.gameResult).toBeNull();
         expect(next.phase).toBe('playing');
     });
+
+    it('rejects game actions once a game result has been recorded', () => {
+        const validate = vi.fn(() => ({ ok: true }) as const);
+        const reduce = vi.fn((state: Readonly<BaseGameSnapshot>) => ({
+            ...state,
+            tick: state.tick + 1,
+        }));
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register({
+            type: 'game:after-result',
+            parsePayload: () => ({}),
+            validate,
+            reduce,
+        });
+        const p = new ActionPipeline(r, { gameId: 'test-game' });
+        const resolvedSnapshot = {
+            ...makeSnapshot(8),
+            phase: 'ended' as BaseGameSnapshot['phase'],
+            gameResult: { winnerIds: [PID] },
+        };
+
+        let caught: unknown;
+        try {
+            p.process(resolvedSnapshot, makeEnvelope(8, 'game:after-result'));
+        } catch (e) {
+            caught = e;
+        }
+
+        expect(caught).toBeInstanceOf(ActionUnauthorizedError);
+        expect((caught as ActionUnauthorizedError).reason).toBe('match_already_resolved');
+        expect(validate).not.toHaveBeenCalled();
+        expect(reduce).not.toHaveBeenCalled();
+    });
+
+    it('rejects undo before the undo manager intercept can reconstruct a resolved match', () => {
+        const undoManager = {
+            canUndo: vi.fn(() => true),
+            canRedo: vi.fn(() => false),
+            undo: vi.fn(() => makeSnapshot(7)),
+            redo: vi.fn(() => makeSnapshot(7)),
+            clearUndoHistory: vi.fn(),
+            saveTurnMemento: vi.fn(),
+        };
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.registerEngineAction(engineUndoDefinition);
+        const p = new ActionPipeline(r, { context: { undoManager }, gameId: 'test-game' });
+        const resolvedSnapshot = {
+            ...makeSnapshot(8),
+            phase: 'ended' as BaseGameSnapshot['phase'],
+            gameResult: { winnerIds: [PID] },
+        };
+
+        expect(() => p.process(resolvedSnapshot, makeEnvelope(8, 'engine:undo'))).toThrow(
+            ActionUnauthorizedError,
+        );
+        expect(undoManager.undo).not.toHaveBeenCalled();
+    });
+
+    it('allows sync requests after a resolved match so clients can receive the final snapshot', () => {
+        const broadcast = vi.fn();
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.registerEngineAction(engineSyncRequestDefinition);
+        const p = new ActionPipeline(r, { context: { broadcast }, gameId: 'test-game' });
+        const resolvedSnapshot = {
+            ...makeSnapshot(8),
+            players: { [PID]: { id: PID } },
+            phase: 'ended' as BaseGameSnapshot['phase'],
+            gameResult: { winnerIds: [PID] },
+        };
+
+        const next = p.process(resolvedSnapshot, makeEnvelope(8, 'engine:sync_request'));
+
+        expect(next).toBe(resolvedSnapshot);
+        expect(broadcast).toHaveBeenCalledOnce();
+        expect(broadcast).toHaveBeenCalledWith(resolvedSnapshot, PID);
+    });
 });
 
 // ─── Stages 6 & 7 — no-op stubs ───────────────────────────────────────────────

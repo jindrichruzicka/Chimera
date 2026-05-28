@@ -265,11 +265,12 @@ function GameShellFrame(
         onRedo,
         onEndTurn,
     } = props;
-    const undoDisabled = !canUndo || onUndo === undefined;
-    const redoDisabled = !canRedo || onRedo === undefined;
-    const endTurnDisabled = !canEndTurn || onEndTurn === undefined;
     const shouldShowResolvedResult = gameResult !== undefined && gameResult !== null;
     const shouldShowFallbackResult = !shouldShowResolvedResult && isGameOver;
+    const controlsLocked = isGameOver || shouldShowResolvedResult;
+    const undoDisabled = controlsLocked || !canUndo || onUndo === undefined;
+    const redoDisabled = controlsLocked || !canRedo || onRedo === undefined;
+    const endTurnDisabled = controlsLocked || !canEndTurn || onEndTurn === undefined;
 
     function handleUndo(): void {
         if (!undoDisabled && onUndo !== undefined) {

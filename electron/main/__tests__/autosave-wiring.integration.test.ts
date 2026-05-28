@@ -21,6 +21,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AutoSavePort } from '../runtime/HostSessionPipeline.js';
 import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
+import { ActionUnauthorizedError } from '@chimera/simulation/engine/ActionPipeline.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
 import type {
@@ -337,7 +338,7 @@ describe('buildHostSessionPipeline — AC4: match result game-end notification',
         expect(onGameEnd).toHaveBeenCalledWith(next, { winnerIds: [P1] });
     });
 
-    it('does not call the game-end port again for an already resolved snapshot', () => {
+    it('rejects follow-up game actions and does not call the game-end port again for an already resolved snapshot', () => {
         const onGameEnd = vi.fn();
         const { processAction } = buildHostSessionPipeline(makeResolvingRegistry(), vi.fn(), {
             gameId: 'tactics',
@@ -349,7 +350,8 @@ describe('buildHostSessionPipeline — AC4: match result game-end notification',
             ...makeBaseSnapshot(1, [P1, P2]),
             gameResult: { winnerIds: [P1] },
         };
-        processAction(resolved, winCheckEnvelope(1));
+
+        expect(() => processAction(resolved, winCheckEnvelope(1))).toThrow(ActionUnauthorizedError);
 
         expect(onGameEnd).not.toHaveBeenCalled();
     });

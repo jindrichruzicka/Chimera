@@ -56,10 +56,14 @@ export default function GamePage(): React.ReactElement | null {
     const sendActionToHost = useSendAction();
     const sendAction = React.useCallback(
         (action: EngineAction): void => {
+            if (snapshot !== null && isTerminalSnapshot(snapshot)) {
+                return;
+            }
+
             const actionTick = typeof currentTick === 'number' ? currentTick : action.tick;
             sendActionToHost({ ...action, tick: actionTick });
         },
-        [currentTick, sendActionToHost],
+        [currentTick, sendActionToHost, snapshot],
     );
 
     useEffect(() => {
@@ -74,6 +78,10 @@ export default function GamePage(): React.ReactElement | null {
         type: GameActionType,
         payload: Record<string, unknown>,
     ): void => {
+        if (isTerminalSnapshot(snapshotForAction)) {
+            return;
+        }
+
         const actionTick = typeof currentTick === 'number' ? currentTick : snapshotForAction.tick;
         const action: EngineAction = {
             type,
@@ -87,6 +95,7 @@ export default function GamePage(): React.ReactElement | null {
     const onUndoKey = React.useCallback(
         (event: InputEvent) => {
             if (!event.pressed || snapshot === null) return;
+            if (isTerminalSnapshot(snapshot)) return;
             if (!snapshot.undoMeta.canUndo) return;
             const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
             sendAction({
@@ -101,6 +110,7 @@ export default function GamePage(): React.ReactElement | null {
     const onRedoKey = React.useCallback(
         (event: InputEvent) => {
             if (!event.pressed || snapshot === null) return;
+            if (isTerminalSnapshot(snapshot)) return;
             if (!snapshot.undoMeta.canRedo) return;
             const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
             sendAction({
@@ -115,6 +125,7 @@ export default function GamePage(): React.ReactElement | null {
     const onEndTurnKey = React.useCallback(
         (event: InputEvent) => {
             if (!event.pressed || snapshot === null) return;
+            if (isTerminalSnapshot(snapshot)) return;
             if (!snapshot.isMyTurn) return;
             const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
             sendAction({
@@ -153,7 +164,7 @@ export default function GamePage(): React.ReactElement | null {
             snapshot={snapshot}
             currentTick={currentTick}
             sendAction={sendAction}
-            canEndTurn={snapshot.isMyTurn}
+            canEndTurn={!isTerminalSnapshot(snapshot) && snapshot.isMyTurn}
             localPlayerId={resolvedPlayerId}
             {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'
                 ? { fadeOutMs: 0, fadeInMs: 0 }
@@ -167,6 +178,10 @@ export default function GamePage(): React.ReactElement | null {
             onEndTurn={() => dispatchGameAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})}
         />
     );
+}
+
+function isTerminalSnapshot(snapshot: PlayerSnapshot): boolean {
+    return snapshot.gameResult !== null || snapshot.phase === 'ended';
 }
 
 function useLoadedRendererGame(gameId: string | null): LoadedRendererGame | null {

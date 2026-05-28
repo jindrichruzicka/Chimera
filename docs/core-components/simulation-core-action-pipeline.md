@@ -177,6 +177,8 @@ Games cannot reorder or skip steps. They supply `ActionDefinition` strategies fo
 ```
 Stage 1  resolve()    — registry.resolve(action.type)                       → ActionDefinition | UnknownActionTypeError
 Stage 2  parse()      — definition.parsePayload(action.payload)             → TPayload | ActionSchemaError
+Terminal gate         — if snapshot.gameResult !== null, reject all actions
+                         except engine:sync_request with match_already_resolved
 Stage 3  intercept()  — handle engine:undo/redo via UndoManager             → may short-circuit pipeline
 Stage 4  validate()   — definition.validate(payload, state, playerId, ctx)  → ValidationResult
                          └─ if ok:false → broadcast REJECT to sender; halt
