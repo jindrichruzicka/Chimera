@@ -107,6 +107,11 @@ export class GamePage {
         await this.moveSelectedPrimitiveNearOpponent();
     }
 
+    public async moveOwnedUnitToOpenTile(): Promise<void> {
+        await this.selectOwnedPrimitive();
+        await this.moveSelectedPrimitiveToOpenTile();
+    }
+
     public async selectOwnedPrimitive(): Promise<void> {
         const localUnit = await this.findLocalUnit();
         await this.clickTacticsGridPoint(unitGridPoint(localUnit));
@@ -164,8 +169,34 @@ export class GamePage {
     }
 
     public async moveSelectedPrimitiveNearOpponent(): Promise<void> {
-        const localUnit = await this.findLocalUnit();
-        const targetGrid = tacticsRevealMoveTarget(localUnit);
+        const snapshot = await this.readCurrentSnapshot();
+        const localUnit = findLocalUnitInSnapshot(snapshot);
+        if (localUnit === undefined) {
+            throw new Error(`No visible local tactics unit for viewer ${snapshot.viewerId}.`);
+        }
+        const targetGrid = tacticsMoveTarget(snapshot, localUnit);
+
+        for (let attempt = 0; attempt < TACTICS_MOVE_RETRY_ATTEMPTS; attempt += 1) {
+            await this.clickTacticsGridPoint(targetGrid);
+            await this.waitForCanvasInteractionFrame();
+            if (await this.isProjectedOwnedUnitAt(targetGrid)) {
+                return;
+            }
+
+            await this.selectOwnedPrimitive();
+        }
+
+        await this.waitForProjectedOwnedUnitAt(targetGrid);
+    }
+
+    public async moveSelectedPrimitiveToOpenTile(): Promise<void> {
+        const snapshot = await this.readCurrentSnapshot();
+        const localUnit = findLocalUnitInSnapshot(snapshot);
+        if (localUnit === undefined) {
+            throw new Error(`No visible local tactics unit for viewer ${snapshot.viewerId}.`);
+        }
+        const targetGrid =
+            tacticsOpenMoveTarget(snapshot, localUnit) ?? tacticsMoveTarget(snapshot, localUnit);
 
         for (let attempt = 0; attempt < TACTICS_MOVE_RETRY_ATTEMPTS; attempt += 1) {
             await this.clickTacticsGridPoint(targetGrid);
@@ -601,6 +632,95 @@ function unitGridPoint(unit: TacticsUnitProjection): TacticsGridPoint {
 function tacticsRevealMoveTarget(localUnit: TacticsUnitProjection): TacticsGridPoint {
     const direction = localUnit.x < TACTICS_REVEAL_CENTER_X ? 1 : -1;
     return { x: localUnit.x + direction, y: localUnit.y };
+}
+
+function tacticsMoveTarget(
+    snapshot: TacticsSnapshotProjection,
+    localUnit: TacticsUnitProjection,
+): TacticsGridPoint {
+    const revealTarget = tacticsRevealMoveTarget(localUnit);
+    if (!isGridOccupiedByOtherUnit(snapshot, revealTarget, localUnit.id)) {
+        return revealTarget;
+    }
+
+    const opponentUnit = listProjectedUnits(snapshot).find((candidate) => {
+        return candidate.ownerId !== snapshot.viewerId && candidate.hp > 0;
+    });
+    const targetAnchor = opponentUnit ?? findProjectedUnitAt(snapshot, revealTarget);
+    if (targetAnchor === undefined) {
+        return revealTarget;
+    }
+
+    return findUnoccupiedAdjacentTarget(snapshot, localUnit, targetAnchor) ?? revealTarget;
+}
+
+function tacticsOpenMoveTarget(
+    snapshot: TacticsSnapshotProjection,
+    localUnit: TacticsUnitProjection,
+): TacticsGridPoint | undefined {
+    const awayFromCenter = localUnit.x < TACTICS_REVEAL_CENTER_X ? -1 : 1;
+    const candidates: readonly TacticsGridPoint[] = [
+        { x: localUnit.x + awayFromCenter, y: localUnit.y },
+        { x: localUnit.x, y: localUnit.y - 1 },
+        { x: localUnit.x, y: localUnit.y + 1 },
+        { x: localUnit.x - awayFromCenter, y: localUnit.y },
+    ];
+
+    return candidates.find((candidate) => {
+        return (
+            isGridPointInsideTacticsMoveArea(candidate) &&
+            !isGridOccupiedByOtherUnit(snapshot, candidate, localUnit.id)
+        );
+    });
+}
+
+function findUnoccupiedAdjacentTarget(
+    snapshot: TacticsSnapshotProjection,
+    localUnit: TacticsUnitProjection,
+    anchor: TacticsUnitProjection,
+): TacticsGridPoint | undefined {
+    const candidates: readonly TacticsGridPoint[] = [
+        { x: anchor.x - 1, y: anchor.y },
+        { x: anchor.x + 1, y: anchor.y },
+        { x: anchor.x, y: anchor.y - 1 },
+        { x: anchor.x, y: anchor.y + 1 },
+    ];
+
+    return candidates.find((candidate) => {
+        return (
+            !isSameGridPoint(candidate, unitGridPoint(localUnit)) &&
+            isGridPointInsideTacticsMoveArea(candidate) &&
+            !isGridOccupiedByOtherUnit(snapshot, candidate, localUnit.id)
+        );
+    });
+}
+
+function findProjectedUnitAt(
+    snapshot: TacticsSnapshotProjection,
+    grid: TacticsGridPoint,
+): TacticsUnitProjection | undefined {
+    return listProjectedUnits(snapshot).find((unit) => {
+        return unit.x === grid.x && unit.y === grid.y && unit.hp > 0;
+    });
+}
+
+function isGridOccupiedByOtherUnit(
+    snapshot: TacticsSnapshotProjection,
+    grid: TacticsGridPoint,
+    unitId: string,
+): boolean {
+    return listProjectedUnits(snapshot).some((unit) => {
+        return unit.id !== unitId && unit.hp > 0 && unit.x === grid.x && unit.y === grid.y;
+    });
+}
+
+function isGridPointInsideTacticsMoveArea(grid: TacticsGridPoint): boolean {
+    const { left, right, top, bottom } = TACTICS_CANVAS_WORLD_BOUNDS;
+    return grid.x > left && grid.x < right && grid.y > bottom && grid.y < top;
+}
+
+function isSameGridPoint(first: TacticsGridPoint, second: TacticsGridPoint): boolean {
+    return first.x === second.x && first.y === second.y;
 }
 
 function projectGridPointToCanvasPosition(

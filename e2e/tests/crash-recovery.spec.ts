@@ -136,7 +136,7 @@ test.describe('Crash recovery', () => {
         // non-zero checkpoint tick.
         for (let turn = 0; turn < 3; turn++) {
             await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
-            await match.moveOwnedUnit();
+            await match.moveOwnedUnitToOpenTile();
             await match.endTurnButton.click();
             // Wait for the handoff: button goes disabled then re-enables.
             await expect(match.endTurnButton).toBeDisabled();

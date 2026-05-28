@@ -126,7 +126,7 @@ test.describe('Save / load', () => {
         // window then auto-transitions to the next seat (button: disabled → enabled).
         for (let turn = 0; turn < 3; turn++) {
             await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
-            await match.moveOwnedUnit();
+            await match.moveOwnedUnitToOpenTile();
             await match.endTurnButton.click();
             // Wait for the handoff: the button goes disabled then re-enables.
             await expect(match.endTurnButton).toBeDisabled();

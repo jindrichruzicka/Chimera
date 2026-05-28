@@ -359,6 +359,7 @@ describe('GamePage', () => {
         expect(gamePage.postGameSummary).toBeDefined();
         expect(gamePage.perfHud).toBeDefined();
         expect(gamePage.selectOwnedPrimitive).toBeDefined();
+        expect(gamePage.moveOwnedUnitToOpenTile).toBeDefined();
         expect(gamePage.moveSelectedPrimitiveNearOpponent).toBeDefined();
         expect(gamePage.selectOpponentPrimitive).toBeDefined();
         expect(gamePage.attackVisibleOpponent).toBeDefined();
@@ -690,6 +691,86 @@ describe('GamePage', () => {
         expect(clickCalls).toEqual([
             { position: { x: 410, y: 220 } },
             { position: { x: 310, y: 220 } },
+        ]);
+    });
+
+    it('moves to an unoccupied tile when the center reveal target is occupied', async () => {
+        const handoffSnapshot = {
+            viewerId: 'p2',
+            entities: {
+                'unit-1': { id: 'unit-1', kind: 'unit', ownerId: 'p1', x: 1, y: 0, hp: 1 },
+                'unit-2': { id: 'unit-2', kind: 'unit', ownerId: 'p2', x: 2, y: 0, hp: 1 },
+            },
+        };
+        const movedSnapshot = {
+            viewerId: 'p2',
+            entities: {
+                'unit-1': { id: 'unit-1', kind: 'unit', ownerId: 'p1', x: 1, y: 0, hp: 1 },
+                'unit-2': { id: 'unit-2', kind: 'unit', ownerId: 'p2', x: 0, y: 0, hp: 1 },
+            },
+        };
+        const { page, clickCalls } = buildPageDouble('0', handoffSnapshot, {
+            snapshots: [handoffSnapshot, handoffSnapshot, movedSnapshot],
+        });
+        const gamePage = new GamePage(page);
+
+        await gamePage.moveOwnedUnit();
+
+        expect(clickCalls).toEqual([
+            { position: { x: 210, y: 220 } },
+            { position: { x: 410, y: 220 } },
+        ]);
+    });
+
+    it('moves an owned unit to an open tile when no opponent is projected', async () => {
+        const handoffSnapshot = {
+            viewerId: 'p2',
+            entities: {
+                'unit-2': { id: 'unit-2', kind: 'unit', ownerId: 'p2', x: 2, y: 0, hp: 1 },
+            },
+        };
+        const movedSnapshot = {
+            viewerId: 'p2',
+            entities: {
+                'unit-2': { id: 'unit-2', kind: 'unit', ownerId: 'p2', x: 3, y: 0, hp: 1 },
+            },
+        };
+        const { page, clickCalls } = buildPageDouble('0', handoffSnapshot, {
+            snapshots: [handoffSnapshot, handoffSnapshot, movedSnapshot],
+        });
+        const gamePage = new GamePage(page);
+
+        await gamePage.moveOwnedUnitToOpenTile();
+
+        expect(clickCalls).toEqual([
+            { position: { x: 210, y: 220 } },
+            { position: { x: 110, y: 220 } },
+        ]);
+    });
+
+    it('keeps generated open-tile movement targets away from the canvas edge', async () => {
+        const edgeSnapshot = {
+            viewerId: 'p1',
+            entities: {
+                'unit-1': { id: 'unit-1', kind: 'unit', ownerId: 'p1', x: -1, y: 0, hp: 1 },
+            },
+        };
+        const movedSnapshot = {
+            viewerId: 'p1',
+            entities: {
+                'unit-1': { id: 'unit-1', kind: 'unit', ownerId: 'p1', x: -1, y: -1, hp: 1 },
+            },
+        };
+        const { page, clickCalls } = buildPageDouble('0', edgeSnapshot, {
+            snapshots: [edgeSnapshot, edgeSnapshot, movedSnapshot],
+        });
+        const gamePage = new GamePage(page);
+
+        await gamePage.moveOwnedUnitToOpenTile();
+
+        expect(clickCalls).toEqual([
+            { position: { x: 510, y: 220 } },
+            { position: { x: 510, y: 320 } },
         ]);
     });
 
