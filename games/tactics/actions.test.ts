@@ -216,6 +216,34 @@ describe('tactics move unit action', () => {
         expect(projectedEnemy).not.toHaveProperty('visibleTo');
     });
 
+    it('reveals proximity units to each other after a valid move', () => {
+        const projector = new DefaultStateProjector(tacticsVisibilityRules);
+        const snapshot = makeSnapshotFromEntities(buildInitialTacticsEntities([P1, P2]));
+
+        expect(projector.project(snapshot, P1).entities[ENEMY_UNIT]).toBeUndefined();
+        expect(projector.project(snapshot, P2).entities[UNIT]).toBeUndefined();
+
+        const payload = tacticsMoveUnitDefinition.parsePayload({
+            unitId: UNIT,
+            x: TACTICS_INITIAL_UNIT_SPACING_TILES - TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
+            y: 0,
+        });
+        const next = tacticsMoveUnitDefinition.reduce(
+            snapshot,
+            payload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        const projectedEnemyForMover = projector.project(next, P1).entities[ENEMY_UNIT];
+        const projectedMoverForEnemy = projector.project(next, P2).entities[UNIT];
+
+        expect(projectedEnemyForMover).toMatchObject({ id: ENEMY_UNIT, ownerId: P2 });
+        expect(projectedEnemyForMover).not.toHaveProperty('visibleTo');
+        expect(projectedMoverForEnemy).toMatchObject({ id: UNIT, ownerId: P1 });
+        expect(projectedMoverForEnemy).not.toHaveProperty('visibleTo');
+    });
+
     it('moves a unit owned by the dispatcher and advances tick once', () => {
         const snapshot = makeSnapshot();
         const payload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 1, y: 0 });

@@ -156,6 +156,7 @@ function revealNearbyOpponentUnits(
     viewerId: PlayerId,
 ): BaseGameSnapshot['entities'] {
     const nextEntities: BaseGameSnapshot['entities'] = { ...entities };
+    let revealedScout = scout;
 
     for (const entity of Object.values(entities)) {
         if (
@@ -171,6 +172,12 @@ function revealNearbyOpponentUnits(
             visibleTo: visibleToWithViewer(entity, viewerId),
         } satisfies BaseEntityState & Readonly<Record<string, unknown>>;
         nextEntities[entity.id] = revealedEntity;
+
+        revealedScout = {
+            ...revealedScout,
+            visibleTo: visibleToWithViewer(revealedScout, entity.ownerId),
+        } satisfies TacticsUnitEntity;
+        nextEntities[scout.id] = revealedScout;
     }
 
     return nextEntities;
