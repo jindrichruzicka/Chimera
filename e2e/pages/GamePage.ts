@@ -99,6 +99,21 @@ export class GamePage {
         await this.waitForCanvasInteractionFrame();
     }
 
+    public async assertOwnedSelectionFeedbackChangesCanvas(): Promise<void> {
+        await this.waitForCanvasInteractionFrame();
+        const beforeSelection = await this.tacticsCanvas.screenshot();
+
+        await this.selectOwnedPrimitive();
+        await this.waitForCanvasInteractionFrame();
+
+        const afterSelection = await this.tacticsCanvas.screenshot();
+        if (beforeSelection.equals(afterSelection)) {
+            throw new Error(
+                'Selecting the owned tactics primitive did not change the rendered canvas.',
+            );
+        }
+    }
+
     public async moveSelectedPrimitiveNearOpponent(): Promise<void> {
         const localUnit = await this.findLocalUnit();
         const targetGrid = tacticsRevealMoveTarget(localUnit);

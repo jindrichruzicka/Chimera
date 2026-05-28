@@ -16,6 +16,9 @@ test.describe('Game result propagation', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
+        await clientGame.assertOldTacticsButtonsAbsent();
+
         await hostGame.moveOwnedUnit();
         await hostGame.attackAdjacentEnemy();
 
@@ -37,6 +40,9 @@ test.describe('Game result propagation', () => {
         }) => {
             const hostGame = new GamePage(hostWindow);
             const clientGame = new GamePage(clientWindow);
+
+            await hostGame.assertOldTacticsButtonsAbsent();
+            await clientGame.assertOldTacticsButtonsAbsent();
 
             await clientGame.moveOwnedUnit();
             await clientGame.attackAdjacentEnemy();

@@ -18,9 +18,12 @@ import { test, expect } from '../fixtures/direct-game.fixture';
 import { GamePage } from '../pages/GamePage';
 
 test.describe('Undo/redo', () => {
-    test('undo reflects canUndo=false after exhausting turn history', async ({ hostWindow }) => {
+    test('undo reflects canUndo=false after exhausting canvas movement history', async ({
+        hostWindow,
+    }) => {
         const hostGame = new GamePage(hostWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
         await hostGame.moveOwnedUnit();
         await expect(hostGame.undoButton).toBeEnabled();
 
@@ -30,9 +33,12 @@ test.describe('Undo/redo', () => {
         await expect(hostGame.redoButton).toBeEnabled();
     });
 
-    test('redo reflects canRedo=false after exhausting redo history', async ({ hostWindow }) => {
+    test('redo reflects canRedo=false after replaying canvas movement history', async ({
+        hostWindow,
+    }) => {
         const hostGame = new GamePage(hostWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
         await hostGame.moveOwnedUnit();
         await expect(hostGame.undoButton).toBeEnabled();
 
@@ -45,13 +51,15 @@ test.describe('Undo/redo', () => {
         await expect(hostGame.undoButton).toBeEnabled();
     });
 
-    test("guest cannot undo the host's actions (per-turn ownership)", async ({
+    test("guest cannot undo the host's canvas movement (per-turn ownership)", async ({
         hostWindow,
         clientWindow,
     }) => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
+        await clientGame.assertOldTacticsButtonsAbsent();
         await hostGame.moveOwnedUnit();
 
         await expect(hostGame.undoButton).toBeEnabled();
@@ -62,10 +70,15 @@ test.describe('Undo/redo', () => {
     test.describe('client first player', () => {
         test.use({ firstPlayer: 'client' });
 
-        test('host cannot undo when client goes first', async ({ hostWindow, clientWindow }) => {
+        test('host cannot undo when client moves through the canvas first', async ({
+            hostWindow,
+            clientWindow,
+        }) => {
             const hostGame = new GamePage(hostWindow);
             const clientGame = new GamePage(clientWindow);
 
+            await hostGame.assertOldTacticsButtonsAbsent();
+            await clientGame.assertOldTacticsButtonsAbsent();
             await expect(clientGame.endTurnButton).toBeEnabled();
             const tickBeforeMove = await clientGame.currentTick();
 

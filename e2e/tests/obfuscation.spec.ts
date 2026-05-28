@@ -35,7 +35,7 @@ test.describe('State obfuscation', () => {
         assertNoLeakedFields(snapshot, snapshot.viewerId, 'p2');
     });
 
-    test('fog-hidden enemy is absent until the host moves into reveal proximity', async ({
+    test('unit-2 is absent until the host moves into reveal proximity through the canvas', async ({
         hostApp,
         hostWindow,
     }) => {
@@ -50,6 +50,7 @@ test.describe('State obfuscation', () => {
         expect(readProjectedEntity(snapshot, OPPONENT_UNIT_ID)).toBeUndefined();
 
         const match = new GamePage(hostWindow);
+        await match.assertOldTacticsButtonsAbsent();
         await match.moveOwnedUnit();
 
         await expect

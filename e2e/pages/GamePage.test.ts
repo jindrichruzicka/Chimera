@@ -35,6 +35,7 @@ interface KeyboardDownFailure {
 
 interface BuildPageDoubleOptions {
     readonly canvasBox?: LocatorBox | null;
+    readonly canvasScreenshots?: readonly Buffer[];
     readonly keyboardDownFailure?: KeyboardDownFailure;
     readonly locatorCounts?: readonly LocatorCountBySelector[];
     readonly snapshots?: readonly unknown[];
@@ -46,6 +47,7 @@ interface BuildPageDoubleResult {
     readonly locatorQueries: string[];
     readonly pageLocatorQueries: string[];
     readonly waitForFunctionCalls: WaitForFunctionCall[];
+    readonly screenshotCalls: number;
     readonly clickCalls: {
         readonly position: unknown;
         readonly modifiers?: unknown;
@@ -65,8 +67,10 @@ const buildPageDouble = (
         readonly position: unknown;
         readonly modifiers?: unknown;
     }[] = [];
+    let screenshotCalls = 0;
     const activeModifiers: string[] = [];
     const snapshots = options.snapshots ?? [snapshot];
+    const canvasScreenshots = options.canvasScreenshots ?? [Buffer.from('stable-canvas')];
     let evaluateCallCount = 0;
     const canvasBox =
         options.canvasBox === undefined
@@ -97,6 +101,13 @@ const buildPageDouble = (
             },
             count: async (): Promise<number> => 0,
             first: (): Locator => locatorLike as Locator,
+            screenshot: async (): Promise<Buffer> => {
+                const fallbackScreenshot =
+                    canvasScreenshots[canvasScreenshots.length - 1] ?? Buffer.from('stable-canvas');
+                const nextScreenshot = canvasScreenshots[screenshotCalls] ?? fallbackScreenshot;
+                screenshotCalls += 1;
+                return nextScreenshot;
+            },
         };
 
         return locatorLike as Locator;
@@ -163,6 +174,9 @@ const buildPageDouble = (
         locatorQueries,
         pageLocatorQueries,
         waitForFunctionCalls,
+        get screenshotCalls() {
+            return screenshotCalls;
+        },
         clickCalls,
     };
 };
@@ -221,6 +235,7 @@ describe('GamePage', () => {
         expect(gamePage.moveSelectedPrimitiveNearOpponent).toBeDefined();
         expect(gamePage.selectOpponentPrimitive).toBeDefined();
         expect(gamePage.attackVisibleOpponent).toBeDefined();
+        expect(gamePage.assertOwnedSelectionFeedbackChangesCanvas).toBeDefined();
         expect(gamePage.assertOldTacticsButtonsAbsent).toBeDefined();
         expect(Object.prototype.hasOwnProperty.call(gamePage, 'moveTargetButton')).toBe(false);
         expect(Object.prototype.hasOwnProperty.call(gamePage, 'revealTargetButton')).toBe(false);
@@ -260,6 +275,32 @@ describe('GamePage', () => {
         await gamePage.selectOwnedPrimitive();
 
         expect(clickCalls).toEqual([{ position: { x: 410, y: 220 } }]);
+    });
+
+    it('asserts owned selection feedback changes the rendered canvas', async () => {
+        const beforeSelection = Buffer.from('before-selection');
+        const afterSelection = Buffer.from('after-selection');
+        const result = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasScreenshots: [beforeSelection, afterSelection],
+        });
+        const gamePage = new GamePage(result.page);
+
+        await gamePage.assertOwnedSelectionFeedbackChangesCanvas();
+
+        expect(result.screenshotCalls).toBe(2);
+        expect(result.clickCalls).toEqual([{ position: { x: 410, y: 220 } }]);
+    });
+
+    it('rejects when owned selection feedback does not change the rendered canvas', async () => {
+        const unchangedCanvas = Buffer.from('unchanged-canvas');
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasScreenshots: [unchangedCanvas, unchangedCanvas],
+        });
+        const gamePage = new GamePage(page);
+
+        await expect(gamePage.assertOwnedSelectionFeedbackChangesCanvas()).rejects.toThrow(
+            'Selecting the owned tactics primitive did not change the rendered canvas.',
+        );
     });
 
     it('moves the selected primitive near the hidden opponent through a canvas point', async () => {

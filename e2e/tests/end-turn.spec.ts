@@ -23,6 +23,7 @@ test.describe('End turn', () => {
     test('end turn clears undo and redo history', async ({ hostWindow }) => {
         const hostGame = new GamePage(hostWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
         // Make a move
         await hostGame.moveOwnedUnit();
 
@@ -39,6 +40,7 @@ test.describe('End turn', () => {
     test('end turn after partial undo also clears redo', async ({ hostWindow }) => {
         const hostGame = new GamePage(hostWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
         // Make a move
         await hostGame.moveOwnedUnit();
 
@@ -63,6 +65,8 @@ test.describe('End turn', () => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
+        await clientGame.assertOldTacticsButtonsAbsent();
         // Host makes a move (host is active first)
         await hostGame.moveOwnedUnit();
 
@@ -78,13 +82,15 @@ test.describe('End turn', () => {
         await expect(clientGame.endTurnButton).toBeEnabled();
     });
 
-    test('turn transfer: client move succeeds after host ends turn', async ({
+    test('turn transfer: client canvas move succeeds after host ends turn', async ({
         hostWindow,
         clientWindow,
     }) => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
+        await hostGame.assertOldTacticsButtonsAbsent();
+        await clientGame.assertOldTacticsButtonsAbsent();
         // Host makes a move
         await hostGame.moveOwnedUnit();
         const hostTickAfterMove = await hostGame.currentTick();
@@ -99,18 +105,21 @@ test.describe('End turn', () => {
         // Verify move was processed
         const clientTickAfterMove = await clientGame.currentTick();
         expect(clientTickAfterMove).toBeGreaterThan(hostTickAfterMove);
+        await expect(clientGame.undoButton).toBeEnabled();
     });
 
     test.describe('client first player', () => {
         test.use({ firstPlayer: 'client' });
 
-        test('turn transfer: host move succeeds after client ends turn', async ({
+        test('turn transfer: host canvas move succeeds after client ends turn', async ({
             hostWindow,
             clientWindow,
         }) => {
             const hostGame = new GamePage(hostWindow);
             const clientGame = new GamePage(clientWindow);
 
+            await hostGame.assertOldTacticsButtonsAbsent();
+            await clientGame.assertOldTacticsButtonsAbsent();
             // Client makes a move (client is active first in this context)
             await clientGame.moveOwnedUnit();
             const clientTickAfterMove = await clientGame.currentTick();
@@ -125,6 +134,7 @@ test.describe('End turn', () => {
             // Verify move was processed
             const hostTickAfterMove = await hostGame.currentTick();
             expect(hostTickAfterMove).toBeGreaterThan(clientTickAfterMove);
+            await expect(hostGame.undoButton).toBeEnabled();
         });
     });
 });

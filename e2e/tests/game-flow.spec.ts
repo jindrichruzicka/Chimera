@@ -17,11 +17,18 @@ import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
 
 test.describe('Game flow', () => {
-    test('host and client reach game-over state', async ({ hostWindow, clientWindow }) => {
+    test('host and client reach game-over state through canvas movement and attack', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
         const hostGame = new GamePage(hostWindow);
         const clientGame = new GamePage(clientWindow);
 
-        await hostGame.moveOwnedUnit();
+        await hostGame.assertOldTacticsButtonsAbsent();
+        await clientGame.assertOldTacticsButtonsAbsent();
+
+        await hostGame.assertOwnedSelectionFeedbackChangesCanvas();
+        await hostGame.moveSelectedPrimitiveNearOpponent();
         await hostGame.attackAdjacentEnemy();
 
         await expect(hostGame.gameResultBanner).toBeVisible({ timeout: 60_000 });
