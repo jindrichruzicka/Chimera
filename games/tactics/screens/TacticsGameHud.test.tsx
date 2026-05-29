@@ -64,6 +64,37 @@ describe('TacticsGameHud', () => {
         expect(screen.getByTestId('end-turn')).toHaveAttribute('data-ch-button-variant', 'primary');
     });
 
+    it('presents turn status through shared panel and badge primitives', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        expect(screen.getByTestId('tactics-hud-panel')).toHaveAttribute(
+            'data-ch-panel-variant',
+            'raised',
+        );
+        expect(screen.getByTestId('tactics-turn-status')).toHaveAttribute(
+            'data-ch-badge-variant',
+            'success',
+        );
+        expect(screen.getByTestId('tactics-turn-status')).toHaveTextContent('Your turn');
+    });
+
+    it('marks the HUD as waiting when it is not the local turn', () => {
+        render(
+            <TacticsGameHud
+                {...makeHudProps({
+                    snapshot: makeSnapshot({ isMyTurn: false }),
+                    endTurnDisabled: true,
+                })}
+            />,
+        );
+
+        expect(screen.getByTestId('tactics-turn-status')).toHaveAttribute(
+            'data-ch-badge-variant',
+            'warning',
+        );
+        expect(screen.getByTestId('tactics-turn-status')).toHaveTextContent('Waiting');
+    });
+
     it('uses the engine-owned callbacks and disabled states', () => {
         const handleUndo = vi.fn();
         const handleRedo = vi.fn();
