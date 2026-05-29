@@ -244,7 +244,7 @@ describe('renderer design tokens', () => {
     it('declares modern button shape and elevation tokens without changing palette tokens', () => {
         const css = readTokensCss();
 
-        expect(extractTokenValue(css, '--ch-button-radius')).toBe('var(--ch-radius-pill)');
+        expect(extractTokenValue(css, '--ch-button-radius')).toBe('var(--ch-radius-md)');
         expect(extractTokenValue(css, '--ch-button-shadow')).toContain('rgba(0, 0, 0');
         expect(extractTokenValue(css, '--ch-button-shadow-hover')).toContain('rgba(128, 128, 128');
         expect(extractTokenValue(css, '--ch-button-shadow-hover-danger')).toContain(

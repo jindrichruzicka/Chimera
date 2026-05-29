@@ -63,7 +63,7 @@
     --ch-line-height-relaxed: 1.6;
 
     --ch-button-border-width: var(--ch-border-width-sm);
-    --ch-button-radius: var(--ch-radius-pill);
+    --ch-button-radius: var(--ch-radius-md);
     --ch-button-font-weight: 700;
     --ch-button-font-size-sm: 1rem;
     --ch-button-font-size-md: 1.125rem;
