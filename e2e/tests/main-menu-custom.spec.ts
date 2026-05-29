@@ -180,4 +180,27 @@ test.describe('Game-customized main menu (§4.37 / #622)', () => {
         expect(labels).toContain('Settings');
         expect(labels).not.toContain('Play');
     });
+
+    test('tactics New Game fallback lobby close returns to tactics menu', async ({
+        electronApp,
+    }) => {
+        const window = await electronApp.firstWindow();
+        await window.waitForLoadState('domcontentloaded');
+
+        const menu = new MainMenuPage(window);
+        await menu.goto({ gameId: 'tactics' });
+        await expect.poll(() => menu.getButtonLabels(), { timeout: 15_000 }).toContain('New Game');
+
+        await menu.clickButtonByLabel('New Game');
+        await expect(window).toHaveURL(/\/lobby\/?\?gameId=tactics$/);
+        await expect(window.getByTestId('lobby-close')).toBeVisible({ timeout: 10_000 });
+
+        await window.getByTestId('lobby-close').click();
+        await expect(window).toHaveURL(/\/main-menu\/?\?gameId=tactics$/);
+
+        const labels = await menu.getButtonLabels();
+        expect(labels).toContain('New Game');
+        expect(labels).toContain('Settings');
+        expect(labels).not.toContain('Play');
+    });
 });

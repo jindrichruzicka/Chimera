@@ -228,6 +228,7 @@ beforeEach(() => {
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
     inputActionCallbacks.clear();
+    window.history.replaceState({}, '', '/game');
 
     Object.defineProperty(window, '__chimera', {
         value: {
@@ -253,6 +254,16 @@ describe('GamePage — redirect', () => {
         mockLobbyState = null;
         renderGamePage();
         expect(mockReplace).toHaveBeenCalledWith('/lobby');
+    });
+
+    it('preserves URL game context when redirecting a new-game route to lobby', () => {
+        window.history.replaceState({}, '', '/game?gameId=tactics');
+        mockSnapshot = null;
+        mockLobbyState = null;
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/lobby?gameId=tactics');
     });
 
     it('does not redirect before the lobby bootstrap has loaded initial state', () => {

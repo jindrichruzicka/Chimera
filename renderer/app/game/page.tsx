@@ -25,6 +25,7 @@ import { createRendererProtocolAssetResolver } from '../../assets/AssetResolver'
 import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
+import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useInputAction } from '../../input/useInputAction.js';
@@ -68,7 +69,8 @@ export default function GamePage(): React.ReactElement | null {
 
     useEffect(() => {
         if (snapshot === null && hasLoadedInitialLobbyState && lobbyState === null) {
-            router.replace('/lobby');
+            const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+            router.replace(withShellGameId('/lobby', explicitGameId));
         }
     }, [hasLoadedInitialLobbyState, lobbyState, snapshot, router]);
 
