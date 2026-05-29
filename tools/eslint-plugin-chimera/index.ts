@@ -7,6 +7,7 @@
  *   - `chimera/no-fromfloat-in-simulation` (Invariant #76)
  *   - `chimera/no-hardcoded-design-values` (Invariants #86, #91)
  *   - `chimera/no-unknown-token-overrides` (Invariant #85)
+ *   - `chimera/no-game-renderer-internals` (game renderer UI boundary)
  *
  * Usage in eslint.config.mjs:
  *   import chimeraPlugin from './tools/eslint-plugin-chimera/index.js';
@@ -15,6 +16,7 @@
  */
 
 import noFromFloatInSimulation from './rules/no-fromfloat-in-simulation.js';
+import noGameRendererInternals from './rules/no-game-renderer-internals.js';
 import noHardcodedDesignValues from './rules/no-hardcoded-design-values.js';
 import noUnknownTokenOverrides from './rules/no-unknown-token-overrides.js';
 import noShellGamesImport from './rules/no-shell-games-import.js';
@@ -22,6 +24,7 @@ import noShellGamesImport from './rules/no-shell-games-import.js';
 const plugin = {
     rules: {
         'no-fromfloat-in-simulation': noFromFloatInSimulation,
+        'no-game-renderer-internals': noGameRendererInternals,
         'no-hardcoded-design-values': noHardcodedDesignValues,
         'no-unknown-token-overrides': noUnknownTokenOverrides,
         'no-shell-games-import': noShellGamesImport,

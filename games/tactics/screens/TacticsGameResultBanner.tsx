@@ -6,6 +6,7 @@ import type {
     GameResultBannerProps,
     GameResultOutcome,
 } from '@chimera/shared/game-screen-contract.js';
+import { Card } from '@chimera/renderer/components/ui/index.js';
 import styles from './TacticsGameResultBanner.module.css';
 
 const OUTCOME_ICONS = {
@@ -42,7 +43,13 @@ export function TacticsGameResultBanner(props: GameResultBannerProps): React.Rea
             role="status"
             className={styles['overlay']}
         >
-            <div className={styles['card']}>
+            <Card
+                className={styles['card']}
+                data-testid="game-result-card"
+                elevation="md"
+                padding="lg"
+                surface="raised"
+            >
                 <span
                     data-testid="game-result-icon"
                     role="img"
@@ -54,7 +61,7 @@ export function TacticsGameResultBanner(props: GameResultBannerProps): React.Rea
                 <p className={styles['text']} data-testid="game-result-text">
                     {resolveTacticsResultMessage(props)}
                 </p>
-            </div>
+            </Card>
         </div>
     );
 }

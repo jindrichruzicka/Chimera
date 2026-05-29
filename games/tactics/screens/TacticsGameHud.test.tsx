@@ -56,6 +56,14 @@ describe('TacticsGameHud', () => {
         expect(screen.getByTestId('end-turn')).toBeTruthy();
     });
 
+    it('renders engine controls with shared UI button primitives', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        expect(screen.getByTestId('undo')).toHaveAttribute('data-ch-button-variant', 'secondary');
+        expect(screen.getByTestId('redo')).toHaveAttribute('data-ch-button-variant', 'secondary');
+        expect(screen.getByTestId('end-turn')).toHaveAttribute('data-ch-button-variant', 'primary');
+    });
+
     it('uses the engine-owned callbacks and disabled states', () => {
         const handleUndo = vi.fn();
         const handleRedo = vi.fn();

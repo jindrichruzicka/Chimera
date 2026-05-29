@@ -229,6 +229,33 @@ renderer/audio/
 
 All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 
+### Game Surface Consumption
+
+Game-owned renderer surfaces may use the shared primitive library for HUDs,
+in-match menus, result banners, post-game summaries, and similar UI. The public
+import surface is the UI barrel only:
+
+```typescript
+import { Button, Card, Heading } from '@chimera/renderer/components/ui/index.js';
+```
+
+This allowance applies only to React components under `games/<name>/screens/*.tsx`
+and React shell contributions under `games/<name>/shell/*.tsx`. Game actions,
+state, projection, AI, content, and non-React shell definition files must not
+import renderer code. Game renderer surfaces also must not import renderer stores,
+IPC bridges, shell components, R3F components, asset managers, hooks, stylesheets,
+or individual UI component files. Token overrides remain the mechanism for game
+visual customization.
+
+### Primitive State Attributes
+
+UI primitives expose stable `data-ch-*` attributes for public visual state that
+is derived from component props, such as `data-ch-button-variant`,
+`data-ch-card-surface`, `data-ch-card-padding`, and `data-ch-card-elevation`.
+Tests may assert these attributes to verify that renderer surfaces are consuming
+the shared primitive contract. These attributes are not styling escape hatches;
+visual customization still flows through tokens and component props.
+
 ### Component Gallery (`/component-gallery/`)
 
 `renderer/app/component-gallery/` is a **development and E2E-only** visual fixture for the §4.35 primitive library. It is gated by `isGalleryEnabled()` (active in any non-production `NODE_ENV` — i.e. `development`, `test`, or any value other than `production` — and when `NEXT_PUBLIC_CHIMERA_E2E=1` regardless of environment) and is not part of the production navigation tree.
@@ -363,6 +390,7 @@ renderer/
 | --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | #85 | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation. |
 | #86 | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.      |
+| #96 | Game renderer surfaces may import UI primitives only through the public `@chimera/renderer/components/ui` barrel; all other renderer internals stay off-limits.       |
 
 ---
 

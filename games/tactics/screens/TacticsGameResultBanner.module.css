@@ -8,16 +8,7 @@
 }
 
 .card {
-    background-color: var(--ch-color-surface-raised);
-    border-color: var(--ch-color-border);
-    border-radius: var(--ch-radius-md);
-    border-style: solid;
-    border-width: var(--ch-border-width-sm);
-    box-shadow: var(--ch-shadow-md);
-    color: var(--ch-color-text-primary);
-    font-family: var(--ch-font-ui);
     min-width: var(--ch-button-min-width-md);
-    padding: var(--ch-space-lg);
     pointer-events: auto;
     text-align: center;
     animation: scaleIn var(--ch-duration-slow) var(--ch-easing-standard) both;

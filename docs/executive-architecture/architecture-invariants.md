@@ -13,18 +13,18 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Thematic Index
 
-| Theme                                  | Invariants                                                                                             |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                               |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95                  |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                      |
-| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                                             |
-| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                 |
-| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                             |
-| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                         |
-| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94 |
-| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                                    |
-| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                         |
+| Theme                                  | Invariants                                                                                                 |
+| -------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                                   |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95                      |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                          |
+| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46                                                                                 |
+| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                     |
+| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                                 |
+| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                             |
+| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96 |
+| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                                        |
+| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                             |
 
 ---
 
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–95
+## Invariants 91–96
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -239,6 +239,8 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **94.** Engine shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` parsing helpers but must not import game-specific screen modules, registries, or override stylesheets directly.
 
 **95.** `chimera:game:get-current-snapshot` is a read-only renderer-to-main IPC replay channel. It may return only the most recent projected `PlayerSnapshot` already stored for renderer delivery, or `null` when no snapshot has been sent. It must never expose `GameSnapshot`, accept renderer payload that changes gameplay state, trigger `ActionPipeline`, or mutate simulation state.
+
+**96.** Game renderer surfaces may import renderer UI primitives only through the public `@chimera/renderer/components/ui` barrel. This allowance is limited to game screen components under `games/<name>/screens/*.tsx` and React shell contributions under `games/<name>/shell/*.tsx`. Game code must not import renderer stores, IPC bridges, shell components, R3F components, asset managers, hooks, stylesheets, or other renderer internals; non-renderer game modules must not import renderer code.
 
 ---
 

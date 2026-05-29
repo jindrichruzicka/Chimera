@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 
+import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -39,6 +40,28 @@ describe('TacticsGameResultBanner', () => {
         );
 
         expect(screen.queryByRole('heading', { name: 'Tactical Victory' })).toBeNull();
+    });
+
+    it('renders the result panel with the shared card primitive', () => {
+        render(
+            <TacticsGameResultBanner
+                localPlayerId={playerId('p1')}
+                gameResult={{ winnerIds: [playerId('p1')] }}
+            />,
+        );
+
+        expect(screen.getByTestId('game-result-card')).toHaveAttribute(
+            'data-ch-card-surface',
+            'raised',
+        );
+        expect(screen.getByTestId('game-result-card')).toHaveAttribute(
+            'data-ch-card-elevation',
+            'md',
+        );
+        expect(screen.getByTestId('game-result-card')).toHaveAttribute(
+            'data-ch-card-padding',
+            'lg',
+        );
     });
 
     it('shows a tactics defeat message when another player won', () => {

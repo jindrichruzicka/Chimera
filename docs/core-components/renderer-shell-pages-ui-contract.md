@@ -29,6 +29,11 @@ tags:
 content that renders _inside_ `GameShell`. This section documents the same contract for
 **engine shell pages** — top-level Next.js pages that exist outside of any game match:
 
+Game renderer surfaces may also consume the public UI primitive barrel under the narrower §4.35
+game-surface rule. Shell pages remain renderer-owned surfaces: they import UI primitives directly,
+load game customization only through renderer registry helpers, and never import game screen modules
+or token overrides directly.
+
 | Page path                         | Purpose                                                             | Game-owned?                     |
 | --------------------------------- | ------------------------------------------------------------------- | ------------------------------- |
 | `renderer/app/main-menu/`         | Title screen, entry point                                           | Engine-owned; game-customizable |
@@ -625,6 +630,7 @@ games/
 | #92 | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                                                                                                                 |
 | #93 | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                                                                                                         |
 | #94 | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                               |
+| #96 | Game renderer surfaces may import UI primitives only through the public `@chimera/renderer/components/ui` barrel; shell pages continue to receive game customization through renderer registry indirection.                                                                                      |
 
 ---
 

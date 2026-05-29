@@ -2,6 +2,7 @@
 
 import React from 'react';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
+import { Button } from '@chimera/renderer/components/ui/index.js';
 
 export function TacticsGameHud({
     tick,
@@ -21,30 +22,33 @@ export function TacticsGameHud({
                 </output>
             </div>
             <div style={tacticsHudActionsStyle}>
-                <button
+                <Button
                     data-testid="undo"
-                    type="button"
                     disabled={undoDisabled}
                     onClick={handleUndo}
+                    size="sm"
+                    variant="secondary"
                 >
                     Undo
-                </button>
-                <button
+                </Button>
+                <Button
                     data-testid="redo"
-                    type="button"
                     disabled={redoDisabled}
                     onClick={handleRedo}
+                    size="sm"
+                    variant="secondary"
                 >
                     Redo
-                </button>
-                <button
+                </Button>
+                <Button
                     data-testid="end-turn"
-                    type="button"
                     disabled={endTurnDisabled}
                     onClick={handleEndTurn}
+                    size="sm"
+                    variant="primary"
                 >
                     End Turn
-                </button>
+                </Button>
             </div>
         </footer>
     );
