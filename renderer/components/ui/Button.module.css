@@ -9,10 +9,11 @@
     color: var(--ch-button-color);
     cursor: pointer;
     display: inline-flex;
-    font-family: var(--ch-font-ui);
+    font-family: var(--ch-font-ui-button);
     font-size: var(--ch-button-font-size);
     font-weight: var(--ch-button-font-weight);
     justify-content: center;
+    letter-spacing: var(--ch-button-letter-spacing);
     line-height: var(--ch-button-line-height);
     min-width: var(--ch-button-min-width);
     padding: var(--ch-button-padding);
@@ -39,6 +40,7 @@
     background-color: var(--ch-color-accent);
     --ch-button-border-color: var(--ch-color-accent-hover);
     --ch-button-color: var(--ch-color-text-primary);
+    --ch-button-font-weight: var(--ch-button-font-weight-primary);
     --ch-button-hover-border-color: var(--ch-color-accent-hover);
 }
 

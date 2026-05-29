@@ -198,6 +198,92 @@ describe('validateAssetWorkspace', () => {
 
         expect(report.ok).toBe(true);
     });
+
+    it('validates self-hosted game font source files owned by the game package', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                gameFontSourceFiles: ['games/tactics/shell/fonts.ts'],
+                files: {
+                    'games/tactics/shell/fonts.ts': `
+                        export const tacticsFonts = [
+                            { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Regular.woff2', weight: '400', display: 'swap' },
+                        ];
+                    `,
+                    'games/tactics/assets/fonts/Cinzel-Regular.woff2': '',
+                },
+            }),
+        });
+
+        expect(report.ok).toBe(true);
+        expect(report.checkedRefs).toBe(1);
+    });
+
+    it('reports missing game font source files', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                gameFontSourceFiles: ['games/tactics/shell/fonts.ts'],
+                files: {
+                    'games/tactics/shell/fonts.ts': `
+                        export const tacticsFonts = [
+                            { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Regular.woff2', weight: '400', display: 'swap' },
+                        ];
+                    `,
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(output).toContain('Missing font source files:');
+        expect(output).toContain('games/tactics/assets/fonts/Cinzel-Regular.woff2');
+    });
+
+    it('rejects renderer-public game asset files so the renderer cannot own game assets', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                rendererPublicAssetFiles: [
+                    'renderer/public/assets/tactics/fonts/Cinzel-Regular.woff2',
+                ],
+                files: {
+                    'renderer/public/assets/tactics/fonts/Cinzel-Regular.woff2': '',
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(output).toContain('Renderer-public game assets are forbidden:');
+        expect(output).toContain('renderer/public/assets/tactics/fonts/Cinzel-Regular.woff2');
+    });
+
+    it('rejects external Google font URLs in game font declarations', async () => {
+        const report = await validateAssetWorkspace({
+            workspaceRoot,
+            host: createHost({
+                gameFontSourceFiles: ['games/tactics/shell/fonts.ts'],
+                files: {
+                    'games/tactics/shell/fonts.ts': `
+                        export const tacticsFonts = [
+                            { family: 'Cinzel', src: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900' },
+                        ];
+                    `,
+                },
+            }),
+        });
+
+        const output = formatAssetValidationReport(report, workspaceRoot);
+
+        expect(report.ok).toBe(false);
+        expect(report.malformed).toHaveLength(1);
+        expect(output).toContain(
+            'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900',
+        );
+    });
 });
 
 interface HostFixture {
@@ -205,6 +291,8 @@ interface HostFixture {
     readonly sceneSourceFiles?: readonly string[];
     readonly assetManifestFiles?: readonly string[];
     readonly assetLoaderSourceFiles?: readonly string[];
+    readonly gameFontSourceFiles?: readonly string[];
+    readonly rendererPublicAssetFiles?: readonly string[];
     readonly files: Readonly<Record<string, string>>;
 }
 
@@ -225,6 +313,12 @@ function createHost(fixture: HostFixture): WorkspaceFileHost {
             (fixture.assetManifestFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
         findAssetLoaderSourceFiles: async () =>
             (fixture.assetLoaderSourceFiles ?? []).map((relativePath) =>
+                toAbsolutePath(relativePath),
+            ),
+        findGameFontSourceFiles: async () =>
+            (fixture.gameFontSourceFiles ?? []).map((relativePath) => toAbsolutePath(relativePath)),
+        findRendererPublicAssetFiles: async () =>
+            (fixture.rendererPublicAssetFiles ?? []).map((relativePath) =>
                 toAbsolutePath(relativePath),
             ),
         readFile: async (filePath) => {

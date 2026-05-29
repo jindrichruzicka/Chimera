@@ -2,6 +2,7 @@ import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { ComponentType } from 'react';
 import type {
     GameMainMenuDefinition,
+    GameFontFace,
     GameMenuCommandId,
     GameSettingsPageDefinition,
 } from '@chimera/shared/game-shell-contract.js';
@@ -37,6 +38,11 @@ describe('rendererGameRegistry', () => {
         ]);
         expect(shell.shellBackground).toBeDefined();
         expect(shell.menuCommands).toEqual({});
+        expect(shell.fonts?.map((font) => `${font.family}:${font.weight}`)).toEqual([
+            'Cinzel:400',
+            'Cinzel:700',
+            'Cinzel:900',
+        ]);
     });
 
     it('rejects unknown game ids when loading a shell bundle', async () => {
@@ -74,6 +80,13 @@ describe('rendererGameRegistry', () => {
             >();
         });
 
+        it('shell.fonts is typed as readonly GameFontFace[] | undefined', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['fonts']>().toEqualTypeOf<
+                readonly GameFontFace[] | undefined
+            >();
+        });
+
         it('tactics loader exposes shell.settings (#629)', async () => {
             const game = await loadRendererGame('tactics');
             expect(game.shell?.settings?.tabs.map((tab) => tab.id)).toEqual([
@@ -99,6 +112,30 @@ describe('rendererGameRegistry', () => {
         it('tactics loader exposes a shell background component', async () => {
             const game = await loadRendererGame('tactics');
             expect(game.shell?.shellBackground).toBeDefined();
+        });
+
+        it('tactics loader exposes Cinzel shell fonts', async () => {
+            const game = await loadRendererGame('tactics');
+            expect(game.shell?.fonts).toEqual([
+                {
+                    family: 'Cinzel',
+                    src: 'tactics/fonts/Cinzel-Regular.woff2',
+                    weight: '400',
+                    display: 'swap',
+                },
+                {
+                    family: 'Cinzel',
+                    src: 'tactics/fonts/Cinzel-Bold.woff2',
+                    weight: '700',
+                    display: 'swap',
+                },
+                {
+                    family: 'Cinzel',
+                    src: 'tactics/fonts/Cinzel-Black.woff2',
+                    weight: '900',
+                    display: 'swap',
+                },
+            ]);
         });
 
         it('tactics shell.mainMenu contains a Load Game button that routes to /saves', async () => {

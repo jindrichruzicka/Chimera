@@ -34,6 +34,8 @@ export interface WorkspaceFileHost {
     findSceneSourceFiles(workspaceRoot: string): Promise<readonly string[]>;
     findAssetManifestFiles?(workspaceRoot: string): Promise<readonly string[]>;
     findAssetLoaderSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
+    findGameFontSourceFiles?(workspaceRoot: string): Promise<readonly string[]>;
+    findRendererPublicAssetFiles?(workspaceRoot: string): Promise<readonly string[]>;
     readFile(filePath: string): Promise<string>;
     fileExists(filePath: string): Promise<boolean>;
 }
@@ -44,7 +46,11 @@ export interface ValidateAssetWorkspaceOptions {
     readonly assetLoaderKinds?: readonly string[];
 }
 
-export type AssetReferenceSourceKind = 'data-json' | 'scene-required-assets' | 'asset-manifest';
+export type AssetReferenceSourceKind =
+    | 'data-json'
+    | 'scene-required-assets'
+    | 'asset-manifest'
+    | 'game-fonts';
 
 export interface AssetReferenceSource {
     readonly kind: AssetReferenceSourceKind;
@@ -69,6 +75,13 @@ export interface MalformedAssetReference {
     readonly reason: string;
 }
 
+export interface ForbiddenRendererPublicAsset {
+    readonly filePath: string;
+    readonly gameId: string;
+    readonly relativePath: string;
+    readonly expectedSourcePath: string;
+}
+
 export type UnmanifestedAssetReference = AssetReference;
 
 export interface UnknownAssetManifestKind {
@@ -81,6 +94,8 @@ export interface AssetValidationReport {
     readonly ok: boolean;
     readonly checkedRefs: number;
     readonly missing: readonly MissingAssetReference[];
+    readonly missingFontSources: readonly MissingAssetReference[];
+    readonly forbiddenRendererPublicAssets: readonly ForbiddenRendererPublicAsset[];
     readonly malformed: readonly MalformedAssetReference[];
     readonly unmanifested: readonly UnmanifestedAssetReference[];
     readonly unknownKinds: readonly UnknownAssetManifestKind[];
@@ -98,6 +113,7 @@ interface CollectedAssetManifestReferences extends CollectedAssetReferences {
 export type AssetValidationExitCode = 0 | 1;
 
 const assetRefCandidatePattern = /^[^\0/]+\/[^\0]*$/u;
+const externalOrAbsoluteAssetPattern = /^(?:[A-Za-z][A-Za-z0-9+.-]*:|\/)/u;
 const defaultAssetLoaderKinds = new Set([
     'texture',
     'audio-clip',
@@ -119,9 +135,16 @@ export async function validateAssetWorkspace(
     const assetLoaderSourceFiles = [
         ...(await (host.findAssetLoaderSourceFiles?.(workspaceRoot) ?? [])),
     ].sort();
+    const gameFontSourceFiles = [
+        ...(await (host.findGameFontSourceFiles?.(workspaceRoot) ?? [])),
+    ].sort();
+    const rendererPublicAssetFiles = [
+        ...(await (host.findRendererPublicAssetFiles?.(workspaceRoot) ?? [])),
+    ].sort();
 
     const refs: AssetReference[] = [];
     const manifestRefs: AssetReference[] = [];
+    const fontRefs: AssetReference[] = [];
     const manifestKinds: UnknownAssetManifestKind[] = [];
     const malformed: MalformedAssetReference[] = [];
 
@@ -145,6 +168,13 @@ export async function validateAssetWorkspace(
         const collected = collectAssetManifestRefs(sourceText, filePath);
         manifestRefs.push(...collected.refs);
         manifestKinds.push(...collected.kinds);
+        malformed.push(...collected.malformed);
+    }
+
+    for (const filePath of gameFontSourceFiles) {
+        const sourceText = await host.readFile(filePath);
+        const collected = collectGameFontRefs(sourceText, filePath);
+        fontRefs.push(...collected.refs);
         malformed.push(...collected.malformed);
     }
 
@@ -173,11 +203,32 @@ export async function validateAssetWorkspace(
         }
     }
 
+    const missingFontSources: MissingAssetReference[] = [];
+    for (const ref of fontRefs) {
+        const sourceExpectedPath = resolve(
+            workspaceRoot,
+            'games',
+            ref.gameId,
+            'assets',
+            ref.relativePath,
+        );
+        if (!(await host.fileExists(sourceExpectedPath))) {
+            missingFontSources.push({ ...ref, expectedPath: sourceExpectedPath });
+        }
+    }
+
+    const forbiddenRendererPublicAssets = collectForbiddenRendererPublicAssets(
+        rendererPublicAssetFiles,
+        workspaceRoot,
+    );
+
     const manifestRefSet = new Set(manifestRefs.map((ref) => ref.ref));
     const unmanifested = refs.filter((ref) => !manifestRefSet.has(ref.ref));
     const unknownKinds = manifestKinds.filter((entry) => !assetLoaderKinds.has(entry.kind));
 
     missing.sort(compareReferenceFailures);
+    missingFontSources.sort(compareReferenceFailures);
+    forbiddenRendererPublicAssets.sort(compareForbiddenRendererPublicAssets);
     malformed.sort(compareMalformedFailures);
     unmanifested.sort(compareAssetReferenceFailures);
     unknownKinds.sort(compareUnknownKindFailures);
@@ -185,11 +236,15 @@ export async function validateAssetWorkspace(
     return {
         ok:
             missing.length === 0 &&
+            missingFontSources.length === 0 &&
+            forbiddenRendererPublicAssets.length === 0 &&
             malformed.length === 0 &&
             unmanifested.length === 0 &&
             unknownKinds.length === 0,
-        checkedRefs: refs.length,
+        checkedRefs: refs.length + fontRefs.length,
         missing,
+        missingFontSources,
+        forbiddenRendererPublicAssets,
         malformed,
         unmanifested,
         unknownKinds,
@@ -218,6 +273,27 @@ export function formatAssetValidationReport(
                 `- ${missing.ref}`,
                 `  source: ${formatSource(missing.source, root)}`,
                 `  expected: ${relative(root, missing.expectedPath)}`,
+            );
+        }
+    }
+
+    if (report.missingFontSources.length > 0) {
+        lines.push('', 'Missing font source files:');
+        for (const missing of report.missingFontSources) {
+            lines.push(
+                `- ${missing.ref}`,
+                `  source: ${formatSource(missing.source, root)}`,
+                `  expected: ${relative(root, missing.expectedPath)}`,
+            );
+        }
+    }
+
+    if (report.forbiddenRendererPublicAssets.length > 0) {
+        lines.push('', 'Renderer-public game assets are forbidden:');
+        for (const forbidden of report.forbiddenRendererPublicAssets) {
+            lines.push(
+                `- ${relative(root, forbidden.filePath)}`,
+                `  game source: ${relative(root, forbidden.expectedSourcePath)}`,
             );
         }
     }
@@ -261,6 +337,9 @@ export function createNodeWorkspaceFileHost(): WorkspaceFileHost {
         findAssetManifestFiles: async (workspaceRoot) => findAssetManifestFiles(workspaceRoot),
         findAssetLoaderSourceFiles: async (workspaceRoot) =>
             findAssetLoaderSourceFiles(workspaceRoot),
+        findGameFontSourceFiles: async (workspaceRoot) => findGameFontSourceFiles(workspaceRoot),
+        findRendererPublicAssetFiles: async (workspaceRoot) =>
+            findRendererPublicAssetFiles(workspaceRoot),
         readFile: async (filePath) => readFile(filePath, 'utf8'),
         fileExists: async (filePath) => {
             try {
@@ -271,6 +350,86 @@ export function createNodeWorkspaceFileHost(): WorkspaceFileHost {
             }
         },
     };
+}
+
+function collectForbiddenRendererPublicAssets(
+    rendererPublicAssetFiles: readonly string[],
+    workspaceRoot: string,
+): ForbiddenRendererPublicAsset[] {
+    const rendererAssetsRoot = resolve(workspaceRoot, 'renderer', 'public', 'assets');
+    const forbidden: ForbiddenRendererPublicAsset[] = [];
+
+    for (const filePath of rendererPublicAssetFiles) {
+        const relativePathFromRendererAssets = relative(rendererAssetsRoot, filePath);
+        if (
+            relativePathFromRendererAssets === '' ||
+            relativePathFromRendererAssets.startsWith('..') ||
+            relativePathFromRendererAssets.startsWith('/')
+        ) {
+            continue;
+        }
+
+        const [gameId, ...relativeSegments] = relativePathFromRendererAssets.split(/[\\/]/u);
+        if (gameId === undefined || relativeSegments.length === 0) {
+            continue;
+        }
+        const relativePath = relativeSegments.join('/');
+        forbidden.push({
+            filePath,
+            gameId,
+            relativePath,
+            expectedSourcePath: resolve(workspaceRoot, 'games', gameId, 'assets', relativePath),
+        });
+    }
+
+    return forbidden;
+}
+
+function collectGameFontRefs(sourceText: string, filePath: string): CollectedAssetReferences {
+    const sourceFile = createSourceFile(
+        filePath,
+        sourceText,
+        ScriptTarget.Latest,
+        true,
+        getScriptKind(filePath),
+    );
+    const refs: AssetReference[] = [];
+    const malformed: MalformedAssetReference[] = [];
+
+    visit(sourceFile);
+
+    return { refs, malformed };
+
+    function visit(node: Node): void {
+        if (isArrayLiteralExpression(node)) {
+            collectFontArray(node);
+        }
+
+        forEachChild(node, visit);
+    }
+
+    function collectFontArray(arrayLiteral: ArrayLiteralExpression): void {
+        arrayLiteral.elements.forEach((element, index) => {
+            const entry = unwrapObjectLiteral(element);
+            if (entry === undefined) {
+                return;
+            }
+
+            const src = readStringProperty(entry, 'src');
+            if (src !== undefined) {
+                collectRequiredFontRef(
+                    src,
+                    {
+                        kind: 'game-fonts',
+                        filePath,
+                        location: `fonts[${index}].src`,
+                    },
+                    refs,
+                    malformed,
+                );
+            }
+        });
+    }
 }
 
 function collectDataJsonAssetRefs(value: unknown, filePath: string): CollectedAssetReferences {
@@ -475,6 +634,24 @@ function collectCandidate(
     }
 }
 
+function collectRequiredFontRef(
+    value: string,
+    source: AssetReferenceSource,
+    refs: AssetReference[],
+    malformed: MalformedAssetReference[],
+): void {
+    if (externalOrAbsoluteAssetPattern.test(value) || !assetRefCandidatePattern.test(value)) {
+        malformed.push({
+            ref: value,
+            source,
+            reason: 'Game font source must be a local game asset ref.',
+        });
+        return;
+    }
+
+    collectCandidate(value, source, refs, malformed);
+}
+
 function unwrapArrayLiteral(expression: Expression): ArrayLiteralExpression | undefined {
     if (isArrayLiteralExpression(expression)) {
         return expression;
@@ -594,6 +771,19 @@ async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readon
     return files.sort();
 }
 
+async function findGameFontSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
+    const gamesRoot = resolve(workspaceRoot, 'games');
+    return collectFiles(gamesRoot, isGameFontSourceFile);
+}
+
+async function findRendererPublicAssetFiles(workspaceRoot: string): Promise<readonly string[]> {
+    return collectFiles(resolve(workspaceRoot, 'renderer', 'public', 'assets'), () => true);
+}
+
+function isGameFontSourceFile(filePath: string): boolean {
+    return basename(filePath) === 'fonts.ts' && filePath.split(/[\\/]/u).includes('shell');
+}
+
 async function collectFiles(
     directoryPath: string,
     includeFile: (filePath: string) => boolean,
@@ -683,6 +873,13 @@ function compareUnknownKindFailures(
         `${referenceSortKey(left)}\u0000${left.kind}`,
         `${referenceSortKey(right)}\u0000${right.kind}`,
     );
+}
+
+function compareForbiddenRendererPublicAssets(
+    left: ForbiddenRendererPublicAsset,
+    right: ForbiddenRendererPublicAsset,
+): number {
+    return compareStrings(left.filePath, right.filePath);
 }
 
 function referenceSortKey(

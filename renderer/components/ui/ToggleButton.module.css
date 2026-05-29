@@ -10,7 +10,7 @@
     color: var(--ch-toggle-button-color);
     cursor: pointer;
     display: inline-flex;
-    font-family: var(--ch-font-ui);
+    font-family: var(--ch-font-ui-button);
     font-size: var(--ch-toggle-button-font-size);
     font-weight: var(--ch-button-font-weight);
     justify-content: center;

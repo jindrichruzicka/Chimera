@@ -21,7 +21,7 @@ import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { type EngineAction, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
-import { createRendererProtocolAssetResolver } from '../../assets/AssetResolver';
+import { createRendererGameAssetResolver } from '../../assets/AssetResolver';
 import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
@@ -52,7 +52,7 @@ export default function GamePage(): React.ReactElement | null {
             return null;
         }
 
-        return createAssetManager(createRendererProtocolAssetResolver());
+        return createAssetManager(createRendererGameAssetResolver());
     }, [loadedGame]);
     const sendActionToHost = useSendAction();
     const sendAction = React.useCallback(

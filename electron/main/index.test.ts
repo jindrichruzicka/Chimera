@@ -748,6 +748,28 @@ describe('renderer app protocol', () => {
         ).toBe(path.join('/abs/path/renderer/out', '_next', 'static', 'chunks', 'app.js'));
     });
 
+    it('maps game asset requests to the game-owned assets directory', () => {
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                gameAssetsRoot: '/abs/path/games',
+                requestUrl: 'chimera://renderer/game-assets/tactics/audio/sfx/step.wav',
+                headers: new Headers(),
+            }),
+        ).toBe(path.join('/abs/path/games', 'tactics', 'assets', 'audio', 'sfx', 'step.wav'));
+    });
+
+    it('rejects traversal attempts in game asset requests', () => {
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                gameAssetsRoot: '/abs/path/games',
+                requestUrl: 'chimera://renderer/game-assets/tactics/%2e%2e/secret.wav',
+                headers: new Headers(),
+            }),
+        ).toBeNull();
+    });
+
     it('rejects renderer protocol paths outside the static export root', () => {
         expect(
             resolveRendererProtocolFilePath({

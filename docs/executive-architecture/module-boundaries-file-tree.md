@@ -178,8 +178,14 @@ chimera/
 │       │   ├── textures/            # .webp / .png
 │       │   ├── models/              # .glb (Three.js-compatible binary GLTF)
 │       │   ├── audio/               # .ogg (sfx) / .ogg (music)
+│       │   ├── fonts/               # .woff2 game-owned font source files
 │       │   ├── particles/           # .json (particle system configs)
 │       │   └── sprites/             # .webp + .json atlas (sprite sheets)
+│       ├── shell/                   # Declarative shell contributions (menus, settings, fonts, React backgrounds)
+│       │   ├── main-menu.ts
+│       │   ├── settings-page.ts
+│       │   ├── fonts.ts             # GameFontFace[] self-hosted font declarations
+│       │   └── *.tsx                # React shell contributions may use public renderer UI barrel only
 │       ├── asset-manifest.ts        # Declares every AssetRef this game owns + priority (critical|deferred)
 │       ├── settings-schema.ts       # Zod schema extending EngineSettings with game-specific fields
 │       └── index.ts                 # Game entry: creates ActionRegistry, registers actions, loads content
@@ -236,6 +242,9 @@ chimera/
 │   │   ├── AssetResolver.ts
 │   │   ├── AssetPreloader.ts
 │   │   └── useAsset.ts
+│   ├── game/
+│   │   ├── rendererGameRegistry.ts  # Game shell/screen/asset registration bridge
+│   │   └── GameFontLoader.ts        # Loads GameFontFace self-hosted fonts through the renderer protocol
 │   ├── audio/                       # Audio playback layer (§4.25)
 │   │   ├── AudioManager.ts
 │   │   ├── AudioBus.ts
@@ -267,9 +276,10 @@ chimera/
 ├── tools/
 │   ├── dev-server.ts                # Hot-reload dev harness
 │   ├── dev-multiplayer.ts           # Spawns N Electron instances; see §4.32
+│   ├── fetch-google-fonts.ts        # Dev-time Google Fonts downloader; writes committed self-hosted .woff2 files
 │   ├── dev-profiles/                # Seed profiles (dev-p1.json, dev-p2.json, …)
 │   ├── desync-logger.ts             # Snapshot diff log for debugging
-│   ├── validate-assets.ts           # CI: verify every AssetRef string resolves to a file on disk
+│   ├── validate-assets.ts           # CI: verify AssetRef strings and GameFontFace files resolve to disk
 │   └── migrate-save.ts              # CLI: run SaveMigrator against a save file
 │
 └── e2e/                             # Playwright end-to-end test suite
@@ -306,7 +316,7 @@ chimera/
 ## Cross-References
 
 - [System Overview](system-overview-and-context.md) — process boundaries and context diagram
-- [Architecture Invariants](architecture-invariants.md) — complete invariant list (88 entries)
+- [Architecture Invariants](architecture-invariants.md) — complete invariant list
 - [Electron Shell and IPC Bridge](../core-components/electron-shell-ipc-bridge.md) — `electron/` in detail
 - [Simulation Core](../core-components/simulation-core-action-pipeline.md) — `simulation/engine/` in detail
 - [Renderer State Stores](../core-components/renderer-state-stores.md) — `renderer/state/` in detail

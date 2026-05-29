@@ -10,6 +10,7 @@ import {
     session,
 } from 'electron';
 import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera/shared/constants.js';
+import { MalformedAssetRefError, parseAssetRef } from '@chimera/shared/asset-ref-parse.js';
 import {
     registerGameHandlers,
     registerLobbyHandlers,
@@ -281,6 +282,7 @@ export interface ResolveRuntimePathOptions {
 export interface RuntimePaths {
     readonly preloadPath: string;
     readonly rendererEntry: string;
+    readonly gameAssetsRoot: string;
 }
 
 const DEFAULT_WINDOW_WIDTH = 1280;
@@ -292,6 +294,7 @@ export interface RendererProtocolHeaders {
 
 export interface ResolveRendererProtocolFilePathOptions {
     readonly rendererRoot: string;
+    readonly gameAssetsRoot?: string;
     readonly requestUrl: string;
     readonly headers: RendererProtocolHeaders;
 }
@@ -299,6 +302,7 @@ export interface ResolveRendererProtocolFilePathOptions {
 export interface RegisterRendererProtocolOptions {
     readonly protocol: Pick<typeof electronProtocol, 'handle'>;
     readonly rendererRoot: string;
+    readonly gameAssetsRoot: string;
     readonly logger: Logger;
 }
 
@@ -338,6 +342,7 @@ const CONTENT_TYPES_BY_EXTENSION: Readonly<Record<string, string>> = {
     '.txt': RSC_CONTENT_TYPE,
     '.wav': 'audio/wav',
     '.webp': 'image/webp',
+    '.woff2': 'font/woff2',
 };
 
 function isRendererProtocolRscRequest(url: URL, headers: RendererProtocolHeaders): boolean {
@@ -403,6 +408,41 @@ function normaliseRendererProtocolPath(url: URL, headers: RendererProtocolHeader
     return routePath;
 }
 
+function resolveRendererGameAssetFilePath(gameAssetsRoot: string, url: URL): string | null {
+    if (
+        url.protocol !== `${CHIMERA_RENDERER_PROTOCOL}:` ||
+        url.hostname !== CHIMERA_RENDERER_HOST ||
+        !url.pathname.startsWith('/game-assets/')
+    ) {
+        return null;
+    }
+
+    let routePath: string;
+    try {
+        routePath = decodeURIComponent(url.pathname);
+    } catch {
+        return null;
+    }
+
+    if (routePath.includes('\\')) {
+        return null;
+    }
+
+    const assetRef = routePath.slice('/game-assets/'.length);
+    try {
+        const { gameId, relativePath } = parseAssetRef(assetRef);
+        const root = path.resolve(gameAssetsRoot);
+        const gameAssetRoot = path.resolve(root, gameId, 'assets');
+        const candidate = path.resolve(gameAssetRoot, relativePath);
+        return isWithinDirectory(gameAssetRoot, candidate) ? candidate : null;
+    } catch (error: unknown) {
+        if (error instanceof MalformedAssetRefError) {
+            return null;
+        }
+        throw error;
+    }
+}
+
 export function resolveRendererProtocolFilePath(
     options: ResolveRendererProtocolFilePathOptions,
 ): string | null {
@@ -415,6 +455,13 @@ export function resolveRendererProtocolFilePath(
         url = new URL(options.requestUrl);
     } catch {
         return null;
+    }
+
+    if (url.pathname.startsWith('/game-assets/')) {
+        if (options.gameAssetsRoot === undefined) {
+            return null;
+        }
+        return resolveRendererGameAssetFilePath(options.gameAssetsRoot, url);
     }
 
     const protocolPath = normaliseRendererProtocolPath(url, options.headers);
@@ -442,11 +489,13 @@ function codeFromError(error: unknown): string | undefined {
 
 async function handleRendererProtocolRequest(
     rendererRoot: string,
+    gameAssetsRoot: string,
     logger: Logger,
     request: Request,
 ): Promise<Response> {
     const filePath = resolveRendererProtocolFilePath({
         rendererRoot,
+        gameAssetsRoot,
         requestUrl: request.url,
         headers: request.headers,
     });
@@ -479,8 +528,9 @@ async function handleRendererProtocolRequest(
 
 export function registerRendererProtocol(options: RegisterRendererProtocolOptions): void {
     const rendererRoot = path.resolve(options.rendererRoot);
+    const gameAssetsRoot = path.resolve(options.gameAssetsRoot);
     options.protocol.handle(CHIMERA_RENDERER_PROTOCOL, (request) =>
-        handleRendererProtocolRequest(rendererRoot, options.logger, request),
+        handleRendererProtocolRequest(rendererRoot, gameAssetsRoot, options.logger, request),
     );
 }
 
@@ -504,14 +554,16 @@ export function resolveRuntimePaths(options: ResolveRuntimePathOptions): Runtime
         'out',
         'index.html',
     );
+    const gameAssetsRoot = path.join(options.moduleDirname, '..', '..', 'games');
 
     if (options.env['CHIMERA_E2E'] !== '1') {
-        return { preloadPath, rendererEntry };
+        return { preloadPath, rendererEntry, gameAssetsRoot };
     }
 
     return {
         preloadPath: options.env['CHIMERA_E2E_PRELOAD_PATH'] ?? preloadPath,
         rendererEntry: options.env['CHIMERA_E2E_RENDERER_ENTRY'] ?? rendererEntry,
+        gameAssetsRoot: options.env['CHIMERA_E2E_GAME_ASSETS_ROOT'] ?? gameAssetsRoot,
     };
 }
 
@@ -787,7 +839,7 @@ export async function main(): Promise<void> {
         throw new Error('CHIMERA_DEV_HARNESS is enabled in a production build. Refusing to start.');
     }
 
-    const { preloadPath, rendererEntry } = resolveRuntimePaths({
+    const { preloadPath, rendererEntry, gameAssetsRoot } = resolveRuntimePaths({
         moduleDirname: __dirname,
         env: process.env,
     });
@@ -1675,6 +1727,7 @@ export async function main(): Promise<void> {
         registerRendererProtocol({
             protocol: electronProtocol,
             rendererRoot: path.dirname(rendererEntry),
+            gameAssetsRoot,
             logger: logger.child({ module: 'renderer-protocol' }),
         });
 

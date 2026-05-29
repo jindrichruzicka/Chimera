@@ -122,6 +122,7 @@ const expectedTokens = [
     '--ch-radius-pill',
     '--ch-border-width-sm',
     '--ch-font-ui',
+    '--ch-font-ui-button',
     '--ch-font-game',
     '--ch-font-mono',
     '--ch-font-size-sm',
@@ -134,6 +135,8 @@ const expectedTokens = [
     '--ch-button-border-width',
     '--ch-button-radius',
     '--ch-button-font-weight',
+    '--ch-button-font-weight-primary',
+    '--ch-button-letter-spacing',
     '--ch-button-font-size-sm',
     '--ch-button-font-size-md',
     '--ch-button-font-size-lg',
@@ -256,10 +259,20 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-color-error')).toBe('#dc2626');
     });
 
+    it('wires --ch-font-ui-button to the --ch-font-ui base token', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-font-ui-button')).toBe('var(--ch-font-ui)');
+    });
+
     it('declares the requested button size scale tokens', () => {
         const css = readTokensCss();
 
         expect(extractTokenValue(css, '--ch-button-font-weight')).toBe('700');
+        expect(extractTokenValue(css, '--ch-button-font-weight-primary')).toBe(
+            'var(--ch-button-font-weight)',
+        );
+        expect(extractTokenValue(css, '--ch-button-letter-spacing')).toBe('0px');
         expect(extractTokenValue(css, '--ch-button-font-size-sm')).toBe('1rem');
         expect(extractTokenValue(css, '--ch-button-font-size-md')).toBe('1.125rem');
         expect(extractTokenValue(css, '--ch-button-font-size-lg')).toBe('1.25rem');

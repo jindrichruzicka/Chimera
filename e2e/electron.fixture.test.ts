@@ -6,6 +6,7 @@
  * in the fast unit-test loop.
  */
 import { describe, expect, it, vi } from 'vitest';
+import path from 'path';
 
 const { existsSyncMock, mkdirSyncMock, rmSyncMock, globalSetupMock } = vi.hoisted(() => ({
     existsSyncMock: vi.fn<() => boolean>(() => true),
@@ -44,6 +45,14 @@ describe('electron.fixture', () => {
         const config = createE2eElectronLaunchConfig({ port: '7778' });
 
         expect(config.env['CHIMERA_E2E_INITIAL_URL']).toBeUndefined();
+    });
+
+    it('points E2E game assets at the workspace games directory', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7778' });
+
+        expect(config.env['CHIMERA_E2E_GAME_ASSETS_ROOT']).toBe(
+            path.resolve(__dirname, '..', 'games'),
+        );
     });
 
     it('defaults direct-game launches to the game route when initialRoute is omitted', () => {

@@ -28,6 +28,9 @@ import type {
     GameMainMenuButton,
     GameMainMenuAction,
     GameMainMenuDefinition,
+    GameFontDisplay,
+    GameFontFace,
+    GameFontStyle,
     EngineSettingsFieldId,
     SettingsControlDefinition,
     SettingsItemDefinition,
@@ -48,6 +51,69 @@ describe('GameMenuCommandId', () => {
         // @ts-expect-error: GameMenuCommandId requires the branded cast; a plain string is not assignable
         const _: GameMenuCommandId = 'unbranded-id';
         expect(_).toBeDefined();
+    });
+});
+
+// ─── GameFontFace ────────────────────────────────────────────────────────────
+
+describe('GameFontFace', () => {
+    it('accepts a self-hosted game font declaration', () => {
+        const font: GameFontFace = {
+            family: 'Cinzel',
+            src: 'tactics/fonts/Cinzel-Regular.woff2',
+            weight: '400',
+            style: 'normal',
+            display: 'swap',
+        };
+
+        expect(font.family).toBe('Cinzel');
+        expect(font.src).toBe('tactics/fonts/Cinzel-Regular.woff2');
+    });
+
+    it('accepts all documented font display values', () => {
+        const displays: GameFontDisplay[] = ['auto', 'block', 'swap', 'fallback', 'optional'];
+
+        for (const display of displays) {
+            const font: GameFontFace = {
+                family: 'Cinzel',
+                src: 'tactics/fonts/Cinzel-Regular.woff2',
+                display,
+            };
+            expect(font.display).toBe(display);
+        }
+    });
+
+    it('accepts normal and italic font styles', () => {
+        const styles: GameFontStyle[] = ['normal', 'italic'];
+
+        for (const style of styles) {
+            const font: GameFontFace = {
+                family: 'Cinzel',
+                src: 'tactics/fonts/Cinzel-Regular.woff2',
+                style,
+            };
+            expect(font.style).toBe(style);
+        }
+    });
+
+    it('rejects invalid font display values at compile time', () => {
+        const font: GameFontFace = {
+            family: 'Cinzel',
+            src: 'tactics/fonts/Cinzel-Regular.woff2',
+            // @ts-expect-error: 'instant' is not a valid FontFace display mode
+            display: 'instant',
+        };
+        expect(font).toBeDefined();
+    });
+
+    it('rejects invalid font style values at compile time', () => {
+        const font: GameFontFace = {
+            family: 'Cinzel',
+            src: 'tactics/fonts/Cinzel-Regular.woff2',
+            // @ts-expect-error: 'oblique' is not part of the game font contract
+            style: 'oblique',
+        };
+        expect(font).toBeDefined();
     });
 });
 

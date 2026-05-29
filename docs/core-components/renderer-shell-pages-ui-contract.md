@@ -324,7 +324,55 @@ There is no partial merge between a game definition and the engine default. A pr
 owns its button list; only omitted field-level defaults from `GameMainMenuLayout` and
 `GameMainMenuButton.variant` are applied.
 
-## 4.37.7 Game Menu Command Registry
+## 4.37.7 Game Font Contributions
+
+Games may contribute self-hosted font faces through `LoadedRendererGameShell.fonts`. Font
+declarations are pure shared data, so game packages declare them in `games/<name>/shell/fonts.ts`
+using the `GameFontFace` type from `shared/game-shell-contract.ts`; the renderer registry imports
+that data while assembling the game shell bundle.
+
+```typescript
+export interface GameFontFace {
+    readonly family: string;
+    readonly src: string;
+    readonly weight?: string;
+    readonly style?: 'normal' | 'italic';
+    readonly display?: 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
+}
+```
+
+`src` must use the local `game-id/relative/path` asset-ref shape, for example
+`tactics/fonts/Cinzel-Regular.woff2`. Runtime Google Fonts URLs are forbidden. Font files are
+committed only as game-owned assets:
+
+| Purpose                 | Path example                                      |
+| ----------------------- | ------------------------------------------------- |
+| Game-owned source asset | `games/tactics/assets/fonts/Cinzel-Regular.woff2` |
+
+`renderer/game/GameFontLoader.ts` resolves the local `src` through the app protocol as
+`chimera://renderer/game-assets/tactics/fonts/Cinzel-Regular.woff2`, loads it with the browser
+`FontFace` API, and adds the loaded face to `document.fonts`. The loader deduplicates by family,
+source, weight, and style so repeated shell loads do not add duplicate faces.
+
+The Tactics shell provides Cinzel at weights 400, 700, and 900:
+
+```typescript
+export const tacticsFonts: readonly GameFontFace[] = [
+    { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Regular.woff2', weight: '400', display: 'swap' },
+    { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Bold.woff2', weight: '700', display: 'swap' },
+    { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Black.woff2', weight: '900', display: 'swap' },
+];
+```
+
+Use `pnpm fetch:fonts -- --game <gameId> --url "<google-css-url>"` as a development-time helper to
+download `.woff2` files from a Google Fonts CSS URL into the game asset folder. The helper prints a
+`GameFontFace[]` snippet but the runtime never fetches Google-hosted CSS or font files.
+
+`tools/validate-assets.ts` validates every game font declaration before merge: external URLs,
+absolute paths, and traversal are rejected; the game-owned source file must exist; and committed
+game assets under `renderer/public/assets/` are rejected.
+
+## 4.37.8 Game Menu Command Registry
 
 Games may route buttons to renderer-local command callbacks by declaring a `command` action and
 contributing a registry through their renderer shell module. The implementation models this
@@ -356,7 +404,7 @@ to a `commandId` that is absent from `menuCommands`, or if no registry was provi
 throws a descriptive error. Unknown commands therefore fail fast instead of producing an inert or
 silently missing button.
 
-## 4.37.8 Game-Customizable Shell Background Component
+## 4.37.9 Game-Customizable Shell Background Component
 
 Games may contribute a renderer-owned React component for the shell background through
 `LoadedRendererGameShell.shellBackground`. This is intentionally **not** part of
@@ -390,7 +438,7 @@ Shell page canvases should not paint an opaque full-viewport surface when the ba
 be visible. Individual panels, cards, and controls should continue to use raised surface tokens for
 readability.
 
-## 4.37.9 Game-Customizable Settings Page Definition
+## 4.37.10 Game-Customizable Settings Page Definition
 
 Games customize which settings appear on the engine-owned settings page by contributing a
 declarative `GameSettingsPageDefinition` through their renderer shell registration. The shared
@@ -572,7 +620,7 @@ export interface LoadedRendererGameShell {
 }
 ```
 
-## 4.37.10 Module Tree
+## 4.37.11 Module Tree
 
 ```
 shared/

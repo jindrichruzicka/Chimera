@@ -52,6 +52,7 @@
     --ch-border-width-sm: 1px;
 
     --ch-font-ui: 'Inter', system-ui, sans-serif;
+    --ch-font-ui-button: var(--ch-font-ui);
     --ch-font-game: 'Cinzel', serif;
     --ch-font-mono: 'JetBrains Mono', monospace;
     --ch-font-size-sm: 12px;
@@ -65,6 +66,8 @@
     --ch-button-border-width: var(--ch-border-width-sm);
     --ch-button-radius: var(--ch-radius-md);
     --ch-button-font-weight: 700;
+    --ch-button-font-weight-primary: var(--ch-button-font-weight);
+    --ch-button-letter-spacing: 0px;
     --ch-button-font-size-sm: 1rem;
     --ch-button-font-size-md: 1.125rem;
     --ch-button-font-size-lg: 1.25rem;

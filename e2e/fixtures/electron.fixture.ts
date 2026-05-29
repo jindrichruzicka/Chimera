@@ -103,6 +103,7 @@ export function createE2eElectronLaunchConfig(
     const mainEntry = path.join(e2eBuildRoot, 'electron', 'main', 'index.js');
     const preloadPath = path.join(e2eBuildRoot, 'electron', 'preload', 'api.js');
     const rendererEntry = path.join(root, 'renderer', 'out', 'index.html');
+    const gameAssetsRoot = path.join(root, 'games');
 
     ensureE2eBuild(mainEntry, preloadPath, rendererEntry);
     const userDataDir = createFreshE2eUserDataDir(options);
@@ -112,6 +113,7 @@ export function createE2eElectronLaunchConfig(
         CHIMERA_E2E: '1',
         CHIMERA_E2E_PRELOAD_PATH: preloadPath,
         CHIMERA_E2E_RENDERER_ENTRY: rendererEntry,
+        CHIMERA_E2E_GAME_ASSETS_ROOT: gameAssetsRoot,
         NODE_ENV: 'test',
         CHIMERA_PORT: options.port,
     };

@@ -22,6 +22,25 @@
  */
 export type GameMenuCommandId = string & { readonly __brand: 'GameMenuCommandId' };
 
+// ─── Game Fonts ──────────────────────────────────────────────────────────────
+
+export type GameFontStyle = 'normal' | 'italic';
+
+export type GameFontDisplay = 'auto' | 'block' | 'swap' | 'fallback' | 'optional';
+
+/**
+ * A self-hosted font face contributed by a concrete game for shell and game UI.
+ * `src` uses the same `game-id/relative/path` shape as AssetRef strings and
+ * must resolve to a committed file owned by the game under `games/<game>/assets/`.
+ */
+export interface GameFontFace {
+    readonly family: string;
+    readonly src: string;
+    readonly weight?: string;
+    readonly style?: GameFontStyle;
+    readonly display?: GameFontDisplay;
+}
+
 // ─── Layout ───────────────────────────────────────────────────────────────────
 
 /**

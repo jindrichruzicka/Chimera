@@ -13,6 +13,14 @@
     --ch-color-accent: #c9a84c;
     --ch-color-accent-hover: #e0c070;
 
+    --ch-font-ui-button: 'Cinzel', serif;
+    --ch-button-font-weight: 400;
+    --ch-button-font-weight-primary: 700;
+    --ch-button-letter-spacing: 1px;
+    --ch-button-font-size-sm: 0.875rem;
+    --ch-button-font-size-md: 1rem;
+    --ch-button-font-size-lg: 1.125rem;
+
     --ch-radius-md: 2px;
     --ch-radius-lg: 4px;
 }

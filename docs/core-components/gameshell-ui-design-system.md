@@ -352,6 +352,12 @@ import './styles/tokens-override.css'; // side-effect; redefines tokens for this
 
 Games may only override tokens declared in `renderer/styles/tokens.css`. Inventing new `--ch-*` token names is prohibited (invariant #85).
 
+Font-family tokens may reference game-contributed font faces only after the game declares those
+faces through `LoadedRendererGameShell.fonts` (§4.37.7). The font files must be self-hosted local
+assets, not runtime Google Fonts URLs. For example, Tactics declares local Cinzel `.woff2` files and
+then overrides `--ch-font-game` and `--ch-font-ui` to `'Cinzel', serif` in
+`games/tactics/styles/tokens-override.css`.
+
 ### Component API Shape
 
 ```typescript

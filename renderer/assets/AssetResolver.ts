@@ -6,6 +6,7 @@ export interface AssetResolver {
 }
 
 export const DEFAULT_RENDERER_ASSET_BASE_URL = 'chimera://renderer/assets';
+export const DEFAULT_RENDERER_GAME_ASSET_BASE_URL = 'chimera://renderer/game-assets';
 
 export function createDevResolver(projectRoot: string): AssetResolver {
     return {
@@ -28,6 +29,16 @@ export function createProductionResolver(resourcesPath: string): AssetResolver {
 export function createRendererProtocolAssetResolver(
     baseUrl: string = DEFAULT_RENDERER_ASSET_BASE_URL,
 ): AssetResolver {
+    return createRendererProtocolResolver(baseUrl);
+}
+
+export function createRendererGameAssetResolver(
+    baseUrl: string = DEFAULT_RENDERER_GAME_ASSET_BASE_URL,
+): AssetResolver {
+    return createRendererProtocolResolver(baseUrl);
+}
+
+function createRendererProtocolResolver(baseUrl: string): AssetResolver {
     const normalisedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
     return {
         resolve(ref: AssetRef): string {

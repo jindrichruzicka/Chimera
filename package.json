@@ -21,6 +21,7 @@
         "lint:fix": "eslint . --fix",
         "coverage": "vitest run --coverage",
         "build:renderer": "next build renderer",
+        "fetch:fonts": "tsx tools/fetch-google-fonts.ts",
         "dev:mp": "cross-env CHIMERA_DEV_HARNESS=1 tsx tools/dev-multiplayer.ts"
     },
     "devDependencies": {

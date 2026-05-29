@@ -1,18 +1,21 @@
 import type { ComponentType } from 'react';
 import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
 import type {
+    GameFontFace,
     GameMainMenuDefinition,
     GameMenuCommandId,
     GameSettingsPageDefinition,
 } from '@chimera/shared/game-shell-contract.js';
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { InputAction } from '../input/InputAction.js';
+import { loadGameFonts } from './GameFontLoader';
 
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
     readonly settings?: GameSettingsPageDefinition;
     readonly shellBackground?: ComponentType;
+    readonly fonts?: readonly GameFontFace[];
 }
 
 export interface LoadedRendererGame {
@@ -83,16 +86,20 @@ async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
 async function loadTacticsRendererGameShell(): Promise<LoadedRendererGameShell> {
     await import('@chimera/games/tactics/styles/register-token-overrides.js');
 
-    const [mainMenuModule, settingsPageModule, backgroundModule] = await Promise.all([
+    const [mainMenuModule, settingsPageModule, backgroundModule, fontsModule] = await Promise.all([
         import('@chimera/games/tactics/shell/main-menu.js'),
         import('@chimera/games/tactics/shell/settings-page.js'),
         import('@chimera/games/tactics/shell/TacticsShellBackground.js'),
+        import('@chimera/games/tactics/shell/fonts.js'),
     ]);
+
+    await loadGameFonts(fontsModule.tacticsFonts);
 
     return {
         mainMenu: mainMenuModule.tacticsMainMenuDefinition,
         menuCommands: mainMenuModule.tacticsMenuCommands,
         settings: settingsPageModule.tacticsSettingsPageDefinition,
         shellBackground: backgroundModule.TacticsShellBackground,
+        fonts: fontsModule.tacticsFonts,
     };
 }

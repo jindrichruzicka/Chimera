@@ -6,7 +6,9 @@ import { buildAssetRef, type AssetRef } from '@chimera/simulation/content/AssetR
 import {
     createDevResolver,
     createProductionResolver,
+    createRendererGameAssetResolver,
     createRendererProtocolAssetResolver,
+    DEFAULT_RENDERER_GAME_ASSET_BASE_URL,
     type AssetResolver,
 } from './AssetResolver';
 
@@ -104,5 +106,26 @@ describe('createRendererProtocolAssetResolver', () => {
         const malformedRef = 'noslash' as AssetRef;
 
         expect(() => resolver.resolve(malformedRef)).toThrow(MalformedAssetRefError);
+    });
+});
+
+describe('createRendererGameAssetResolver', () => {
+    it('resolves an AssetRef to the renderer game-asset protocol URL', () => {
+        const resolver: AssetResolver = createRendererGameAssetResolver();
+        const ref = buildAssetRef('tactics', 'audio/sfx/step.wav');
+
+        const resolved = resolver.resolve(ref);
+
+        expect(DEFAULT_RENDERER_GAME_ASSET_BASE_URL).toBe('chimera://renderer/game-assets');
+        expect(resolved).toBe('chimera://renderer/game-assets/tactics/audio/sfx/step.wav');
+    });
+
+    it('normalises a custom game asset base URL with a trailing slash', () => {
+        const resolver: AssetResolver = createRendererGameAssetResolver('/game-assets/');
+        const ref = buildAssetRef('tactics', 'fonts/Cinzel Regular.woff2');
+
+        const resolved = resolver.resolve(ref);
+
+        expect(resolved).toBe('/game-assets/tactics/fonts/Cinzel%20Regular.woff2');
     });
 });

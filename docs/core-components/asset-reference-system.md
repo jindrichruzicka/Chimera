@@ -181,9 +181,22 @@ export function createDevResolver(projectRoot: string): AssetResolver {
         },
     };
 }
+
+// Renderer runtime: game assets served by Electron through the app protocol
+export function createRendererGameAssetResolver(): AssetResolver {
+    return {
+        resolve(ref) {
+            const { gameId, relativePath } = parseAssetRef(ref);
+            return `chimera://renderer/game-assets/${gameId}/${relativePath}`;
+        },
+    };
+}
 ```
 
-The correct resolver is constructed in `electron/main/index.ts` and injected into the renderer — the renderer never constructs paths itself.
+The renderer constructs only the safe app-protocol URL. Electron main owns the protocol handler and
+maps `/game-assets/<gameId>/<relativePath>` to the game-owned asset directory after traversal
+checks. In the monorepo this directory is `games/<gameId>/assets/`; in a future package-split build
+the same protocol can resolve to an installed game package asset root.
 
 ## `AssetLoaderRegistry` — Extensible Runtime Loading
 
@@ -290,6 +303,14 @@ function UnitMesh({ portraitRef }: UnitMeshProps) {
 
 > **Invariant #22** — All `AssetRef` strings must pass this validation before merge. A data object referencing a non-existent file is a CI-blocking error.
 
+Game font declarations use the same local `game-id/relative/path` string shape, but they are loaded
+by `renderer/game/GameFontLoader.ts` rather than by `AssetManager`. Validation also crawls
+`games/*/shell/fonts.ts` and requires each font file to exist under `games/<game>/assets/`.
+Renderer runtime loading uses the `chimera://renderer/game-assets/<game>/<path>` protocol path,
+which Electron resolves to the game-owned asset directory. External font URLs are rejected, and
+committed game assets under `renderer/public/assets/` are forbidden so the renderer does not become
+a second owner of game audio, fonts, textures, or models.
+
 ---
 
 ## Key Invariants
@@ -298,6 +319,7 @@ function UnitMesh({ portraitRef }: UnitMeshProps) {
 - **Invariant #21** — `AssetManager.dispose()` is called unconditionally on every game session end.
 - **Invariant #22** — All `AssetRef` strings in content JSON must pass CI validation before merge.
 - **Invariant #47** — `AssetManager` never imports from `games/*`.
+- **Invariant #97** — Game assets are owned by game packages; runtime loading uses the game-asset protocol and must not depend on renderer-public mirrors or Google-hosted font files.
 
 ---
 
