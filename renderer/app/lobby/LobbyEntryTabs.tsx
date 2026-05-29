@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { Heading } from '../../components/ui/Heading';
 import { Tabs } from '../../components/ui/Tabs';
 import { TextInput } from '../../components/ui/TextInput';
 import type { LobbyConfig } from './lobbyConfig';
@@ -39,9 +38,6 @@ export function LobbyEntryTabs({
                     label: 'Host',
                     panel: (
                         <div className={styles['entry-panel']}>
-                            <Heading level={2} size="lg">
-                                Host
-                            </Heading>
                             <dl className={styles['compact-details']}>
                                 <div className={styles['detail-row']}>
                                     <dt>Game</dt>
@@ -60,9 +56,6 @@ export function LobbyEntryTabs({
                     label: 'Join',
                     panel: (
                         <div className={styles['entry-panel']}>
-                            <Heading level={2} size="lg">
-                                Join
-                            </Heading>
                             <TextInput
                                 autoComplete="off"
                                 data-testid="address-input"
