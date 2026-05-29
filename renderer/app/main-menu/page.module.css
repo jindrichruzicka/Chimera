@@ -1,0 +1,15 @@
+.component-gallery-link {
+    inset-block-end: var(--ch-space-md);
+    inset-inline-start: var(--ch-space-md);
+    position: absolute;
+}
+
+.component-gallery-icon {
+    align-items: center;
+    block-size: var(--ch-icon-button-size);
+    display: inline-flex;
+    inline-size: var(--ch-icon-button-size);
+    justify-content: center;
+    line-height: var(--ch-line-height-tight);
+    pointer-events: none;
+}

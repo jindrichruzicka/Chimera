@@ -92,6 +92,19 @@ describe('Drawer', () => {
         expect(closeButton).toHaveFocus();
     });
 
+    it('renders the close affordance as a danger icon button', () => {
+        render(
+            <Drawer open title="Inventory" onClose={vi.fn()}>
+                Drawer content
+            </Drawer>,
+        );
+
+        const closeButton = screen.getByRole('button', { name: /^close$/i });
+        expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'danger');
+        expect(closeButton).toHaveTextContent('X');
+        expect(closeButton).not.toHaveTextContent('Close');
+    });
+
     it('restores focus to the previously focused element after closing', () => {
         function TestDrawer(): React.ReactElement {
             const [open, setOpen] = React.useState(false);

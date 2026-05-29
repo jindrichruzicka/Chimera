@@ -7,12 +7,70 @@
  */
 
 :root {
-    --ch-color-surface: #1b1a17;
-    --ch-color-surface-raised: #252318;
-
+    --ch-color-surface: rgba(16, 16, 29, 0.9);
+    --ch-color-surface-raised: rgba(26, 26, 46, 0.9);
+    --ch-color-text-primary: #e0d6c8;
+    --ch-color-text-secondary: #e0d6c8;
     --ch-color-accent: #c9a84c;
-    --ch-color-accent-hover: #e0c070;
+    --ch-color-accent-hover: #c9a84c;
 
+    --ch-button-color-primary: var(--ch-color-accent-hover);
+    --ch-button-color-primary-hover: var(--ch-color-accent-hover);
+    --ch-button-color-secondary: var(--ch-color-text-secondary);
+    --ch-button-color-secondary-hover: var(--ch-color-accent-hover);
+    --ch-button-color-ghost: var(--ch-color-text-secondary);
+    --ch-button-color-ghost-hover: var(--ch-color-accent-hover);
+    --ch-button-color-danger: var(--ch-color-text-secondary);
+    --ch-button-color-danger-hover: var(--ch-color-accent-hover);
+
+    --ch-button-bg-primary: linear-gradient(
+        135deg,
+        rgba(201, 168, 76, 0.3),
+        rgba(230, 126, 34, 0.3)
+    );
+    --ch-button-bg-primary-hover: linear-gradient(
+        135deg,
+        rgba(201, 168, 76, 0.5),
+        rgba(230, 126, 34, 0.5)
+    );
+    --ch-button-bg-secondary: rgba(26, 26, 46, 0.9);
+    --ch-button-bg-secondary-hover: rgba(201, 168, 76, 0.15);
+    --ch-button-bg-ghost: rgba(26, 26, 46, 0.9);
+    --ch-button-bg-ghost-hover: rgba(201, 168, 76, 0.15);
+    --ch-button-bg-danger: rgba(26, 26, 46, 0.9);
+    --ch-button-bg-danger-hover: rgba(201, 168, 76, 0.15);
+
+    --ch-button-border-primary: #c9a84c;
+    --ch-button-border-primary-hover: #c9a84c;
+    --ch-button-border-secondary: rgba(201, 168, 76, 0.4);
+    --ch-button-border-secondary-hover: #c9a84c;
+    --ch-button-border-ghost: rgba(201, 168, 76, 0.4);
+    --ch-button-border-ghost-hover: #c9a84c;
+    --ch-button-border-danger: rgba(201, 168, 76, 0.4);
+    --ch-button-border-danger-hover: #c9a84c;
+
+    --ch-button-shadow-hover: 0 4px 20px rgba(201, 168, 76, 0.2);
+    --ch-button-shadow-hover-danger: 0 4px 20px rgba(201, 168, 76, 0.2);
+
+    --ch-icon-button-bg: var(--ch-button-bg-secondary);
+    --ch-icon-button-bg-hover: var(--ch-button-bg-secondary-hover);
+    --ch-icon-button-border-color: var(--ch-button-border-secondary);
+    --ch-icon-button-border-color-hover: var(--ch-button-border-secondary-hover);
+
+    --ch-toggle-button-bg: var(--ch-button-bg-secondary);
+    --ch-toggle-button-bg-hover: var(--ch-button-bg-secondary-hover);
+    --ch-toggle-button-border-color: var(--ch-button-border-secondary);
+    --ch-toggle-button-border-color-hover: var(--ch-button-border-secondary-hover);
+    --ch-toggle-button-border-color-pressed: var(--ch-button-border-secondary);
+    --ch-toggle-button-border-color-pressed-hover: var(--ch-button-border-secondary-hover);
+    --ch-toggle-button-color-pressed: var(--ch-button-bg-secondary);
+    --ch-toggle-button-color-pressed-hover: var(--ch-button-bg-secondary);
+
+    --ch-radius-sm: 2px;
+    --ch-radius-md: 6px;
+    --ch-radius-lg: 10px;
+
+    --ch-font-ui: 'Philosopher', serif;
     --ch-font-ui-button: 'Cinzel', serif;
     --ch-button-font-weight: 400;
     --ch-button-font-weight-primary: 700;
@@ -20,7 +78,4 @@
     --ch-button-font-size-sm: 0.875rem;
     --ch-button-font-size-md: 1rem;
     --ch-button-font-size-lg: 1.125rem;
-
-    --ch-radius-md: 2px;
-    --ch-radius-lg: 4px;
 }

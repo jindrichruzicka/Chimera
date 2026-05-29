@@ -24,8 +24,10 @@
 }
 
 .button:not(:disabled):hover {
+    background: var(--ch-button-hover-bg);
     border-color: var(--ch-button-hover-border-color);
     box-shadow: var(--ch-button-shadow-hover);
+    color: var(--ch-button-hover-color);
     transform: var(--ch-button-transform-hover);
 }
 
@@ -37,32 +39,40 @@
 }
 
 .primary {
-    background-color: var(--ch-color-accent);
-    --ch-button-border-color: var(--ch-color-accent-hover);
-    --ch-button-color: var(--ch-color-text-primary);
+    background: var(--ch-button-bg-primary);
+    --ch-button-hover-bg: var(--ch-button-bg-primary-hover);
+    --ch-button-border-color: var(--ch-button-border-primary);
+    --ch-button-hover-border-color: var(--ch-button-border-primary-hover);
+    --ch-button-color: var(--ch-button-color-primary);
+    --ch-button-hover-color: var(--ch-button-color-primary-hover);
     --ch-button-font-weight: var(--ch-button-font-weight-primary);
-    --ch-button-hover-border-color: var(--ch-color-accent-hover);
 }
 
 .secondary {
-    background-color: var(--ch-color-surface-raised);
-    --ch-button-border-color: var(--ch-color-border);
-    --ch-button-color: var(--ch-color-text-primary);
-    --ch-button-hover-border-color: var(--ch-color-border);
+    background: var(--ch-button-bg-secondary);
+    --ch-button-hover-bg: var(--ch-button-bg-secondary-hover);
+    --ch-button-border-color: var(--ch-button-border-secondary);
+    --ch-button-hover-border-color: var(--ch-button-border-secondary-hover);
+    --ch-button-color: var(--ch-button-color-secondary);
+    --ch-button-hover-color: var(--ch-button-color-secondary-hover);
 }
 
 .ghost {
-    background-color: var(--ch-color-transparent);
-    --ch-button-border-color: var(--ch-color-border);
-    --ch-button-color: var(--ch-color-text-secondary);
-    --ch-button-hover-border-color: var(--ch-color-border);
+    background: var(--ch-button-bg-ghost);
+    --ch-button-hover-bg: var(--ch-button-bg-ghost-hover);
+    --ch-button-border-color: var(--ch-button-border-ghost);
+    --ch-button-hover-border-color: var(--ch-button-border-ghost-hover);
+    --ch-button-color: var(--ch-button-color-ghost);
+    --ch-button-hover-color: var(--ch-button-color-ghost-hover);
 }
 
 .danger {
-    background-color: var(--ch-color-error);
-    --ch-button-border-color: var(--ch-color-error);
-    --ch-button-color: var(--ch-color-text-primary);
-    --ch-button-hover-border-color: var(--ch-color-error);
+    background: var(--ch-button-bg-danger);
+    --ch-button-hover-bg: var(--ch-button-bg-danger-hover);
+    --ch-button-border-color: var(--ch-button-border-danger);
+    --ch-button-hover-border-color: var(--ch-button-border-danger-hover);
+    --ch-button-color: var(--ch-button-color-danger);
+    --ch-button-hover-color: var(--ch-button-color-danger-hover);
     --ch-button-shadow-hover: var(--ch-button-shadow-hover-danger);
 }
 

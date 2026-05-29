@@ -126,4 +126,17 @@ describe('Select', () => {
         expect(css).toContain('var(--ch-color-error)');
         expect(css).toContain('var(--ch-color-text-disabled)');
     });
+
+    it('anchors the popup from a custom border-box styled trigger', () => {
+        expect(css).toContain('appearance: none');
+        expect(css).toContain('.controlShell::after');
+        expect(css).toContain('padding-inline-end');
+        expect(css).not.toContain('appearance: auto');
+    });
+
+    it('keeps the native popup anchor flush with the trigger edge', () => {
+        expect(css).toContain('padding-inline-start: 0');
+        expect(css).toContain('text-indent: var(--ch-space-md)');
+        expect(css).not.toContain('padding-inline: var(--ch-space-md)');
+    });
 });

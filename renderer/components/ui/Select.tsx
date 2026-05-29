@@ -60,22 +60,24 @@ export function Select({
             <label className={styles['label']} htmlFor={selectId}>
                 {label}
             </label>
-            <select
-                {...selectProps}
-                aria-describedby={describedBy || undefined}
-                aria-invalid={isInvalid || undefined}
-                className={styles['control']}
-                data-invalid={String(isInvalid)}
-                id={selectId}
-                onChange={handleChange}
-                value={value}
-            >
-                {options.map((option) => (
-                    <option disabled={option.disabled} key={option.value} value={option.value}>
-                        {option.label}
-                    </option>
-                ))}
-            </select>
+            <span className={styles['controlShell']}>
+                <select
+                    {...selectProps}
+                    aria-describedby={describedBy || undefined}
+                    aria-invalid={isInvalid || undefined}
+                    className={styles['control']}
+                    data-invalid={String(isInvalid)}
+                    id={selectId}
+                    onChange={handleChange}
+                    value={value}
+                >
+                    {options.map((option) => (
+                        <option disabled={option.disabled} key={option.value} value={option.value}>
+                            {option.label}
+                        </option>
+                    ))}
+                </select>
+            </span>
             {helperText ? (
                 <span className={styles['helper']} id={helperId}>
                     {helperText}

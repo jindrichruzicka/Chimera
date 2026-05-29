@@ -41,13 +41,7 @@
 }
 
 .closeButton {
-    background: none;
-    border: none;
-    color: var(--ch-color-text-secondary);
-    cursor: pointer;
-    font-size: var(--ch-font-size-lg);
-    line-height: var(--ch-line-height-tight);
-    padding: var(--ch-space-xs);
+    flex: none;
 }
 
 .body {

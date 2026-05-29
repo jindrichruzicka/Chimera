@@ -49,11 +49,6 @@ describe('ComponentGalleryClient — root container (AC #1)', () => {
         renderGallery();
         expect(screen.getByTestId('component-gallery')).toBeTruthy();
     });
-
-    it('renders a visible heading "Component Gallery"', () => {
-        renderGallery();
-        expect(screen.getByRole('heading', { name: /component gallery/i })).toBeTruthy();
-    });
 });
 
 // ── AC #2 — All six category tabs ─────────────────────────────────────────────
@@ -526,6 +521,11 @@ describe('ComponentGalleryClient — Typography section (issue #609)', () => {
     it('renders a --ch-font-mono font sample in the Typography section', () => {
         const section = screen.getByTestId('component-gallery-typography');
         expect(section.querySelector('[data-font-token="--ch-font-mono"]')).toBeTruthy();
+    });
+
+    it('renders a --ch-font-ui-button font sample in the Typography section', () => {
+        const section = screen.getByTestId('component-gallery-typography');
+        expect(section.querySelector('[data-font-token="--ch-font-ui-button"]')).toBeTruthy();
     });
 });
 

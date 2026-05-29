@@ -70,26 +70,7 @@
 }
 
 .closeButton {
-    background-color: var(--ch-color-transparent);
-    border-color: var(--ch-color-transparent);
-    border-radius: var(--ch-radius-sm);
-    border-style: solid;
-    border-width: var(--ch-border-width-sm);
-    color: var(--ch-color-text-secondary);
-    cursor: pointer;
-    font-family: var(--ch-font-ui);
-    font-size: var(--ch-font-size-md);
-    line-height: var(--ch-line-height-tight);
-    padding: var(--ch-space-xs);
-}
-
-.closeButton:hover {
-    color: var(--ch-color-text-primary);
-}
-
-.closeButton:focus-visible {
-    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
+    flex: none;
 }
 
 .body {

@@ -36,6 +36,7 @@ function setMainMenuUrl(search = ''): void {
 }
 
 beforeEach(() => {
+    mockPush.mockReset();
     mockLoadRendererGameShell.mockReset();
     mockLoadRendererGameShell.mockResolvedValue(undefined);
 
@@ -55,6 +56,7 @@ afterEach(() => {
     cleanup();
     setMainMenuUrl();
     Reflect.deleteProperty(window, '__chimera');
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
 });
 
@@ -99,6 +101,42 @@ describe('MainMenuPage — engine fallback (no active lobby game)', () => {
             'data-ch-button-variant',
             'danger',
         );
+    });
+
+    it('renders a dev-only icon button for the component gallery outside production', () => {
+        vi.stubEnv('NODE_ENV', 'development');
+
+        renderMainMenuPage();
+
+        expect(screen.getByTestId('main-menu-component-gallery')).toBeTruthy();
+        expect(screen.getByRole('button', { name: /component gallery/i })).toBeTruthy();
+    });
+
+    it('does not render the component gallery icon button in production', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '');
+
+        renderMainMenuPage();
+
+        expect(screen.queryByTestId('main-menu-component-gallery')).toBeNull();
+    });
+
+    it('renders the component gallery icon button in E2E-enabled production exports', () => {
+        vi.stubEnv('NODE_ENV', 'production');
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+
+        renderMainMenuPage();
+
+        expect(screen.getByTestId('main-menu-component-gallery')).toBeTruthy();
+    });
+
+    it('navigates to /component-gallery when the dev-only gallery icon button is clicked', () => {
+        vi.stubEnv('NODE_ENV', 'development');
+
+        renderMainMenuPage();
+        fireEvent.click(screen.getByTestId('main-menu-component-gallery'));
+
+        expect(mockPush).toHaveBeenCalledWith('/component-gallery');
     });
 
     it('navigates to /lobby when the play button is clicked', () => {

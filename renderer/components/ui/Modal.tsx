@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 import type { CSSProperties, HTMLAttributes } from 'react';
+import { IconButton } from './IconButton';
 import styles from './Modal.module.css';
 
 export type ModalProps = Readonly<
@@ -106,14 +107,14 @@ export function Modal({
                     <h2 className={styles['title']} id={titleId}>
                         {title}
                     </h2>
-                    <button
+                    <IconButton
                         aria-label="Close"
                         className={styles['closeButton']}
                         onClick={onClose}
-                        type="button"
+                        variant="danger"
                     >
-                        Close
-                    </button>
+                        <span aria-hidden="true">X</span>
+                    </IconButton>
                 </div>
                 <div className={styles['body']}>{children}</div>
             </div>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 import type { CSSProperties, HTMLAttributes } from 'react';
+import { IconButton } from './IconButton';
 import styles from './Drawer.module.css';
 
 export type DrawerPlacement = 'bottom' | 'left' | 'right' | 'top';
@@ -139,14 +140,14 @@ export function Drawer({
                     <h2 className={styles['title']} id={titleId}>
                         {title}
                     </h2>
-                    <button
+                    <IconButton
                         aria-label={closeLabel}
                         className={styles['closeButton']}
                         onClick={onClose}
-                        type="button"
+                        variant="danger"
                     >
-                        {closeLabel}
-                    </button>
+                        <span aria-hidden="true">X</span>
+                    </IconButton>
                 </div>
                 <div className={styles['body']}>{children}</div>
             </div>

@@ -49,11 +49,13 @@
     --ch-radius-lg: 12px;
     --ch-radius-pill: 999px;
 
-    --ch-border-width-sm: 1px;
+    --ch-border-width-sm: 2px;
+    --ch-border-width-md: 3px;
+    --ch-border-width-lg: 4px;
 
     --ch-font-ui: 'Inter', system-ui, sans-serif;
     --ch-font-ui-button: var(--ch-font-ui);
-    --ch-font-game: 'Cinzel', serif;
+    --ch-font-game: 'Tahoma', serif;
     --ch-font-mono: 'JetBrains Mono', monospace;
     --ch-font-size-sm: 12px;
     --ch-font-size-md: 14px;
@@ -62,6 +64,33 @@
     --ch-font-weight-semibold: 600;
     --ch-line-height-tight: 1.1;
     --ch-line-height-relaxed: 1.6;
+
+    --ch-button-color-primary: var(--ch-color-text-primary);
+    --ch-button-color-primary-hover: var(--ch-button-color-primary);
+    --ch-button-color-secondary: var(--ch-color-text-primary);
+    --ch-button-color-secondary-hover: var(--ch-button-color-secondary);
+    --ch-button-color-ghost: var(--ch-color-text-secondary);
+    --ch-button-color-ghost-hover: var(--ch-button-color-ghost);
+    --ch-button-color-danger: var(--ch-color-text-primary);
+    --ch-button-color-danger-hover: var(--ch-button-color-danger);
+
+    --ch-button-bg-primary: var(--ch-color-accent);
+    --ch-button-bg-primary-hover: var(--ch-button-bg-primary);
+    --ch-button-bg-secondary: var(--ch-color-surface-raised);
+    --ch-button-bg-secondary-hover: var(--ch-button-bg-secondary);
+    --ch-button-bg-ghost: var(--ch-color-transparent);
+    --ch-button-bg-ghost-hover: var(--ch-button-bg-ghost);
+    --ch-button-bg-danger: var(--ch-color-error);
+    --ch-button-bg-danger-hover: var(--ch-button-bg-danger);
+
+    --ch-button-border-primary: var(--ch-color-accent-hover);
+    --ch-button-border-primary-hover: var(--ch-button-border-primary);
+    --ch-button-border-secondary: var(--ch-color-border);
+    --ch-button-border-secondary-hover: var(--ch-button-border-secondary);
+    --ch-button-border-ghost: var(--ch-color-border);
+    --ch-button-border-ghost-hover: var(--ch-button-border-ghost);
+    --ch-button-border-danger: var(--ch-color-error);
+    --ch-button-border-danger-hover: var(--ch-button-border-danger);
 
     --ch-button-border-width: var(--ch-border-width-sm);
     --ch-button-radius: var(--ch-radius-md);
@@ -122,9 +151,11 @@
     --ch-toggle-button-bg-pressed-hover: var(--ch-color-accent-hover);
     --ch-toggle-button-color: var(--ch-color-text-secondary);
     --ch-toggle-button-color-pressed: var(--ch-color-text-primary);
+    --ch-toggle-button-color-pressed-hover: var(--ch-color-text-primary);
     --ch-toggle-button-border-color: var(--ch-color-border);
     --ch-toggle-button-border-color-hover: var(--ch-color-border-subtle);
     --ch-toggle-button-border-color-pressed: var(--ch-color-accent-hover);
+    --ch-toggle-button-border-color-pressed-hover: var(--ch-toggle-button-border-color-pressed);
     --ch-toggle-button-shadow: var(--ch-shadow-sm);
     --ch-toggle-button-shadow-hover: var(--ch-shadow-md);
     --ch-toggle-button-padding: var(--ch-space-sm) var(--ch-space-md);

@@ -19,4 +19,23 @@ export const tacticsFonts: readonly GameFontFace[] = [
         weight: '900',
         display: 'swap',
     },
+    {
+        family: 'Philosopher',
+        src: 'tactics/fonts/Philosopher-Regular.woff2',
+        weight: '400',
+        display: 'swap',
+    },
+    {
+        family: 'Philosopher',
+        src: 'tactics/fonts/Philosopher-RegularItalic.woff2',
+        weight: '400',
+        style: 'italic',
+        display: 'swap',
+    },
+    {
+        family: 'Philosopher',
+        src: 'tactics/fonts/Philosopher-Bold.woff2',
+        weight: '700',
+        display: 'swap',
+    },
 ];

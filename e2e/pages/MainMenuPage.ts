@@ -11,12 +11,14 @@ export class MainMenuPage {
     readonly playButton: Locator;
     readonly settingsButton: Locator;
     readonly quitButton: Locator;
+    readonly componentGalleryButton: Locator;
     readonly menu: Locator;
 
     public constructor(private readonly page: Page) {
         this.playButton = page.getByTestId('main-menu-play');
         this.settingsButton = page.getByTestId('main-menu-settings');
         this.quitButton = page.getByTestId('main-menu-quit');
+        this.componentGalleryButton = page.getByTestId('main-menu-component-gallery');
         this.menu = page.getByTestId('main-menu');
     }
 
@@ -39,6 +41,10 @@ export class MainMenuPage {
 
     public async quit(): Promise<void> {
         await this.quitButton.click();
+    }
+
+    public async openComponentGallery(): Promise<void> {
+        await this.componentGalleryButton.click();
     }
 
     /** True when the main-menu container is attached and visible in the DOM. */

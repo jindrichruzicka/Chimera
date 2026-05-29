@@ -69,10 +69,23 @@ describe('Modal', () => {
         );
 
         const closeButton = screen.getByRole('button', { name: /close/i });
-        expect(closeButton).toHaveTextContent('Close');
+        expect(closeButton).toHaveTextContent('X');
 
         fireEvent.click(closeButton);
         expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('renders the close affordance as a danger icon button', () => {
+        render(
+            <Modal open title="Settings" onClose={vi.fn()}>
+                Modal content
+            </Modal>,
+        );
+
+        const closeButton = screen.getByRole('button', { name: /^close$/i });
+        expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'danger');
+        expect(closeButton).toHaveTextContent('X');
+        expect(closeButton).not.toHaveTextContent('Close');
     });
 
     it('renders overlay and close affordance while open', () => {
@@ -84,6 +97,6 @@ describe('Modal', () => {
 
         const dialog = screen.getByRole('dialog', { name: 'Settings' });
         expect(dialog.parentElement).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /close/i })).toHaveTextContent('Close');
+        expect(screen.getByRole('button', { name: /close/i })).toHaveTextContent('X');
     });
 });

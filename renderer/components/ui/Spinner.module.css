@@ -8,7 +8,7 @@
 .indicator {
     animation: ch-spinner-rotate var(--ch-duration-slow) var(--ch-easing-standard) infinite;
     border-color: var(--ch-color-border);
-    border-radius: var(--ch-radius-lg);
+    border-radius: var(--ch-radius-pill);
     border-style: solid;
     border-top-color: var(--ch-color-accent);
     border-width: var(--ch-button-border-width);

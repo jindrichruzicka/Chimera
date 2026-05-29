@@ -90,6 +90,27 @@ describe('IconButton', () => {
         expect(screen.getByRole('button', { name: 'Custom' })).toHaveClass('extra-class');
     });
 
+    it('supports semantic variants for icon-only actions', () => {
+        render(
+            <>
+                <IconButton aria-label="Default">D</IconButton>
+                <IconButton aria-label="Danger" variant="danger">
+                    X
+                </IconButton>
+            </>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Default' })).toHaveAttribute(
+            'data-ch-icon-button-variant',
+            'secondary',
+        );
+        expect(screen.getByRole('button', { name: 'Danger' })).toHaveAttribute(
+            'data-ch-icon-button-variant',
+            'danger',
+        );
+        expect(screen.getByRole('button', { name: 'Danger' }).className).toContain('danger');
+    });
+
     it('CSS does not contain hardcoded colour, spacing, or radius values (invariant #86)', () => {
         // No hex values
         expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

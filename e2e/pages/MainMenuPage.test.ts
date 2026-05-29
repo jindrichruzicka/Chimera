@@ -62,7 +62,7 @@ const buildPageDouble = (): {
 };
 
 describe('MainMenuPage', () => {
-    it('binds play, settings, quit, and menu locators using test ids', () => {
+    it('binds play, settings, quit, component gallery, and menu locators using test ids', () => {
         const { page, requestedTestIds } = buildPageDouble();
 
         const mainMenu = new MainMenuPage(page);
@@ -70,10 +70,12 @@ describe('MainMenuPage', () => {
         expect(mainMenu.playButton).toBeDefined();
         expect(mainMenu.settingsButton).toBeDefined();
         expect(mainMenu.quitButton).toBeDefined();
+        expect(mainMenu.componentGalleryButton).toBeDefined();
         expect(mainMenu.menu).toBeDefined();
         expect(requestedTestIds).toContain('main-menu-play');
         expect(requestedTestIds).toContain('main-menu-settings');
         expect(requestedTestIds).toContain('main-menu-quit');
+        expect(requestedTestIds).toContain('main-menu-component-gallery');
         expect(requestedTestIds).toContain('main-menu');
     });
 
@@ -102,6 +104,15 @@ describe('MainMenuPage', () => {
         await mainMenu.quit();
 
         expect(clickedTestIds).toEqual(['main-menu-quit']);
+    });
+
+    it('clicks the component gallery button when openComponentGallery() is called', async () => {
+        const { page, clickedTestIds } = buildPageDouble();
+        const mainMenu = new MainMenuPage(page);
+
+        await mainMenu.openComponentGallery();
+
+        expect(clickedTestIds).toEqual(['main-menu-component-gallery']);
     });
 
     it('navigates to the main menu through the Electron renderer protocol', async () => {

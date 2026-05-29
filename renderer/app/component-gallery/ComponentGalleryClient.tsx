@@ -34,9 +34,6 @@ function ActionsPanel(): React.ReactElement {
     const [togglePressed, setTogglePressed] = React.useState(false);
     return (
         <div className={styles['section']} data-testid="component-gallery-actions">
-            <Heading className={styles['sectionTitle']} level={3} tone="muted">
-                Actions
-            </Heading>
             <div className={styles['row']}>
                 <Button data-testid="gallery-button-primary" variant="primary">
                     Primary
@@ -86,9 +83,6 @@ function OverlaysPanel({
 }): React.ReactElement {
     return (
         <div className={styles['section']} data-testid="component-gallery-overlays">
-            <Heading className={styles['sectionTitle']} level={3} tone="muted">
-                Overlays
-            </Heading>
             <div className={styles['row']}>
                 <Button data-testid="gallery-open-modal" onClick={onOpenModal} variant="primary">
                     Open Modal
@@ -144,9 +138,6 @@ function OverlaysPanel({
 function ContainersPanel(): React.ReactElement {
     return (
         <div className={styles['section']} data-testid="component-gallery-containers">
-            <Heading className={styles['sectionTitle']} level={3} tone="muted">
-                Containers
-            </Heading>
             <Panel title="Surface panel">
                 <p>Panel with a surface variant — full-width content area.</p>
             </Panel>
@@ -202,9 +193,6 @@ function FormsPanel({
     ];
     return (
         <div className={styles['section']} data-testid="component-gallery-forms">
-            <Heading className={styles['sectionTitle']} level={3} tone="muted">
-                Forms
-            </Heading>
             <div className={styles['formGroup']}>
                 <Toggle
                     checked={toggleChecked}
@@ -270,9 +258,6 @@ function FormsPanel({
 function FeedbackPanel(): React.ReactElement {
     return (
         <div className={styles['section']} data-testid="component-gallery-feedback">
-            <Heading className={styles['sectionTitle']} level={3} tone="muted">
-                Feedback
-            </Heading>
             <div className={styles['row']}>
                 <Badge variant="neutral">Neutral</Badge>
                 <Badge variant="success">Success</Badge>
@@ -288,9 +273,6 @@ function FeedbackPanel(): React.ReactElement {
 function TypographyPanel(): React.ReactElement {
     return (
         <div className={styles['section']} data-testid="component-gallery-typography">
-            <Heading className={styles['sectionTitle']} level={3} tone="muted">
-                Typography
-            </Heading>
             <Heading level={1}>Heading 1</Heading>
             <Heading level={2}>Heading 2</Heading>
             <Heading level={3}>Heading 3</Heading>
@@ -304,26 +286,29 @@ function TypographyPanel(): React.ReactElement {
             <Caption tone="muted">Caption — muted</Caption>
             <Caption tone="error">Caption — error</Caption>
             <Caption tone="success">Caption — success</Caption>
-            <Heading className={styles['sectionTitle']} level={3} size="sm" tone="muted">
-                Font tokens
-            </Heading>
             <p
                 className={`${styles['fontSample']} ${styles['fontSampleUi']}`}
                 data-font-token="--ch-font-ui"
             >
-                --ch-font-ui — Inter, system-ui, sans-serif
+                --ch-font-ui
+            </p>
+            <p
+                className={`${styles['fontSample']} ${styles['fontSampleUiButton']}`}
+                data-font-token="--ch-font-ui-button"
+            >
+                --ch-font-ui-button
             </p>
             <p
                 className={`${styles['fontSample']} ${styles['fontSampleGame']}`}
                 data-font-token="--ch-font-game"
             >
-                --ch-font-game — Cinzel, serif
+                --ch-font-game
             </p>
             <p
                 className={`${styles['fontSample']} ${styles['fontSampleMono']}`}
                 data-font-token="--ch-font-mono"
             >
-                --ch-font-mono — JetBrains Mono, monospace
+                --ch-font-mono
             </p>
         </div>
     );
@@ -403,9 +388,6 @@ export default function ComponentGalleryClient(): React.ReactElement {
 
     return (
         <div className={styles['gallery']} data-testid="component-gallery">
-            <header className={styles['header']}>
-                <h1 className={styles['title']}>Component Gallery</h1>
-            </header>
             <Tabs ariaLabel="Component categories" defaultActiveTabId="actions" tabs={tabs} />
         </div>
     );

@@ -42,6 +42,9 @@ describe('rendererGameRegistry', () => {
             'Cinzel:400',
             'Cinzel:700',
             'Cinzel:900',
+            'Philosopher:400',
+            'Philosopher:400',
+            'Philosopher:700',
         ]);
     });
 
@@ -114,7 +117,7 @@ describe('rendererGameRegistry', () => {
             expect(game.shell?.shellBackground).toBeDefined();
         });
 
-        it('tactics loader exposes Cinzel shell fonts', async () => {
+        it('tactics loader exposes shell fonts', async () => {
             const game = await loadRendererGame('tactics');
             expect(game.shell?.fonts).toEqual([
                 {
@@ -133,6 +136,25 @@ describe('rendererGameRegistry', () => {
                     family: 'Cinzel',
                     src: 'tactics/fonts/Cinzel-Black.woff2',
                     weight: '900',
+                    display: 'swap',
+                },
+                {
+                    family: 'Philosopher',
+                    src: 'tactics/fonts/Philosopher-Regular.woff2',
+                    weight: '400',
+                    display: 'swap',
+                },
+                {
+                    family: 'Philosopher',
+                    src: 'tactics/fonts/Philosopher-RegularItalic.woff2',
+                    weight: '400',
+                    style: 'italic',
+                    display: 'swap',
+                },
+                {
+                    family: 'Philosopher',
+                    src: 'tactics/fonts/Philosopher-Bold.woff2',
+                    weight: '700',
                     display: 'swap',
                 },
             ]);

@@ -11,6 +11,7 @@
  *   4. Open and close the Drawer overlay.
  *   5. Interact with representative form controls (Slider, Toggle, TextInput, Select, NumberInput).
  *   6. Assert at least one themed Button resolves its background from --ch-color-accent.
+ *   7. The default Actions tab does not create document-level vertical overflow.
  *
  * Invariants honoured:
  *   #86 — UI components must reference --ch-* tokens for all visual attributes.
@@ -51,6 +52,27 @@ interface BrowserElementWithDocument {
     readonly ownerDocument: BrowserDocumentAccess;
 }
 
+interface BrowserPageOverflowMetrics {
+    readonly documentClientHeight: number;
+    readonly documentScrollHeight: number;
+    readonly bodyClientHeight: number;
+    readonly bodyScrollHeight: number;
+}
+
+interface BrowserPageOverflowElement {
+    readonly clientHeight: number;
+    readonly scrollHeight: number;
+}
+
+interface BrowserPageOverflowDocumentAccess {
+    readonly body: BrowserPageOverflowElement;
+    readonly documentElement: BrowserPageOverflowElement;
+}
+
+interface BrowserPageOverflowGlobalAccess {
+    readonly document: BrowserPageOverflowDocumentAccess;
+}
+
 async function expectButtonBackgroundToMatchToken(
     button: Locator,
     tokenName: `--ch-${string}`,
@@ -87,6 +109,28 @@ test.describe('Component Gallery', () => {
         await gallery.goto();
 
         await expect(gallery.root).toBeVisible();
+    });
+
+    test('default Actions tab does not create document-level vertical overflow', async ({
+        mainWindow,
+    }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        const metrics = await mainWindow.evaluate((): BrowserPageOverflowMetrics => {
+            const browser = globalThis as unknown as BrowserPageOverflowGlobalAccess;
+
+            return {
+                bodyClientHeight: browser.document.body.clientHeight,
+                bodyScrollHeight: browser.document.body.scrollHeight,
+                documentClientHeight: browser.document.documentElement.clientHeight,
+                documentScrollHeight: browser.document.documentElement.scrollHeight,
+            };
+        });
+
+        expect(metrics.documentScrollHeight).toBeLessThanOrEqual(metrics.documentClientHeight);
+        expect(metrics.bodyScrollHeight).toBeLessThanOrEqual(metrics.bodyClientHeight);
     });
 
     test('all six category tabs are present and can be switched', async ({ mainWindow }) => {

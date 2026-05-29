@@ -142,12 +142,25 @@ describe('Tabs', () => {
         expect(css).toContain('var(--ch-focus-ring-color)');
     });
 
-    it('keeps tab bottom corners square so active tabs connect to the panel edge', () => {
+    it('keeps tab bottom corners square and masks the tablist rule under active and hovered tabs', () => {
         const css = tabsCss;
 
         expect(css).toMatch(
             /border-radius:\s*var\(--ch-radius-md\)\s+var\(--ch-radius-md\)\s+var\(--ch-space-none\)\s+var\(--ch-space-none\);/,
         );
+        expect(css).toContain('position: relative;');
+        expect(css).toContain('.tab-active::after,');
+        expect(css).toContain('.tab:not(:disabled):hover::after');
+        expect(css).toMatch(
+            /\.tab-active\s*\{[^}]*background-color:\s*var\(--ch-color-surface-raised\);[^}]*\}/,
+        );
+        expect(css).toMatch(
+            /\.tab-active::after,\s*\.tab:not\(:disabled\):hover::after\s*\{[^}]*background-color:\s*inherit;[^}]*\}/,
+        );
+        expect(css).toContain('bottom: calc(var(--ch-border-width-sm) * -1);');
+        expect(css).toContain("content: '';");
+        expect(css).toContain('height: var(--ch-border-width-sm);');
+        expect(css).toContain('inset-inline: var(--ch-space-none);');
     });
 
     it('follows the controlled activeTabId prop across re-renders', () => {

@@ -30,6 +30,7 @@
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
     padding: var(--ch-space-sm) var(--ch-space-md);
+    position: relative;
     transition:
         background-color var(--ch-duration-fast) var(--ch-easing-standard),
         border-color var(--ch-duration-fast) var(--ch-easing-standard),
@@ -62,6 +63,16 @@
     border-color: var(--ch-color-border-subtle);
     box-shadow: var(--ch-shadow-sm);
     color: var(--ch-color-text-primary);
+}
+
+.tab-active::after,
+.tab:not(:disabled):hover::after {
+    background-color: inherit;
+    bottom: calc(var(--ch-border-width-sm) * -1);
+    content: '';
+    height: var(--ch-border-width-sm);
+    inset-inline: var(--ch-space-none);
+    position: absolute;
 }
 
 .tabpanel {

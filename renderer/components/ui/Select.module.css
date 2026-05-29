@@ -14,8 +14,33 @@
     line-height: var(--ch-line-height-tight);
 }
 
+.controlShell {
+    display: block;
+    inline-size: 100%;
+    min-inline-size: 0;
+    position: relative;
+}
+
+.controlShell::after {
+    background-color: var(--ch-color-text-secondary);
+    block-size: calc(var(--ch-space-sm) / 2);
+    clip-path: polygon(50% 100%, 0 0, 100% 0);
+    content: '';
+    inline-size: var(--ch-space-sm);
+    inset-block-start: 50%;
+    inset-inline-end: var(--ch-space-md);
+    pointer-events: none;
+    position: absolute;
+    transform: translateY(-50%);
+}
+
+.controlShell:has(.control:disabled)::after {
+    background-color: var(--ch-color-text-disabled);
+    opacity: var(--ch-opacity-disabled);
+}
+
 .control {
-    appearance: auto;
+    appearance: none;
     background-color: var(--ch-color-surface-raised);
     border-color: var(--ch-color-border);
     border-radius: var(--ch-radius-md);
@@ -29,7 +54,10 @@
     inline-size: 100%;
     line-height: var(--ch-line-height-tight);
     min-inline-size: 0;
-    padding: var(--ch-space-sm) var(--ch-space-md);
+    padding-block: var(--ch-space-sm);
+    padding-inline-start: 0;
+    padding-inline-end: calc(var(--ch-space-md) + var(--ch-space-lg));
+    text-indent: var(--ch-space-md);
     transition: var(--ch-button-transition);
 }
 

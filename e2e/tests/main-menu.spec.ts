@@ -22,6 +22,17 @@ test.describe('Main Menu', () => {
         await mainMenu.goto();
     });
 
+    test('Component gallery button is visible in E2E mode and navigates to /component-gallery', async ({
+        mainWindow,
+    }) => {
+        const mainMenu = new MainMenuPage(mainWindow);
+
+        await expect(mainMenu.componentGalleryButton).toBeVisible();
+        await mainMenu.openComponentGallery();
+
+        await expect(mainWindow).toHaveURL(/\/component-gallery/);
+    });
+
     test('Play button navigates to /lobby', async ({ mainWindow }) => {
         const mainMenu = new MainMenuPage(mainWindow);
         await mainMenu.navigateToLobby();

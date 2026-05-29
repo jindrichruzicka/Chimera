@@ -1,7 +1,7 @@
 .toggle-button {
     align-items: center;
     appearance: none;
-    background-color: var(--ch-toggle-button-bg);
+    background: var(--ch-toggle-button-bg);
     border-color: var(--ch-toggle-button-border-color);
     border-radius: var(--ch-toggle-button-radius);
     border-style: solid;
@@ -21,19 +21,21 @@
 }
 
 .toggle-button:not(:disabled):hover {
-    background-color: var(--ch-toggle-button-bg-hover);
+    background: var(--ch-toggle-button-bg-hover);
     border-color: var(--ch-toggle-button-border-color-hover);
     box-shadow: var(--ch-toggle-button-shadow-hover);
 }
 
 .toggle-button[data-pressed='true'] {
-    background-color: var(--ch-toggle-button-bg-pressed);
+    background: var(--ch-toggle-button-bg-pressed);
     border-color: var(--ch-toggle-button-border-color-pressed);
     color: var(--ch-toggle-button-color-pressed);
 }
 
 .toggle-button[data-pressed='true']:not(:disabled):hover {
-    background-color: var(--ch-toggle-button-bg-pressed-hover);
+    background: var(--ch-toggle-button-bg-pressed-hover);
+    border-color: var(--ch-toggle-button-border-color-pressed-hover);
+    color: var(--ch-toggle-button-color-pressed-hover);
 }
 
 .toggle-button:not(:disabled):active {

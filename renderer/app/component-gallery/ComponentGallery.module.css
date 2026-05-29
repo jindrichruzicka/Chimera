@@ -1,8 +1,10 @@
 .gallery {
     background-color: var(--ch-color-surface);
+    box-sizing: border-box;
     color: var(--ch-color-text-primary);
     font-family: var(--ch-font-ui);
-    min-height: 100vh;
+    inline-size: 100%;
+    min-block-size: 100vh;
     padding: var(--ch-space-lg);
 }
 
@@ -55,6 +57,10 @@
 
 .fontSampleUi {
     font-family: var(--ch-font-ui);
+}
+
+.fontSampleUiButton {
+    font-family: var(--ch-font-ui-button);
 }
 
 .fontSampleGame {
