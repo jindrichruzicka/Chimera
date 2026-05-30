@@ -1,0 +1,69 @@
+.root {
+    font-family: var(--ch-font-ui);
+    inline-size: 100%;
+    max-inline-size: calc(var(--ch-button-min-width-lg) * 2 + var(--ch-space-lg));
+}
+
+.panel {
+    inline-size: 100%;
+}
+
+.root[data-outcome='win'] .panel {
+    border-color: var(--ch-color-success);
+}
+
+.root[data-outcome='loss'] .panel {
+    border-color: var(--ch-color-error);
+}
+
+.root[data-outcome='draw'] .panel {
+    border-color: var(--ch-color-warning);
+}
+
+.header {
+    align-items: start;
+    display: grid;
+    gap: var(--ch-space-sm);
+}
+
+.badge {
+    justify-self: start;
+}
+
+.heading {
+    margin: var(--ch-space-none);
+}
+
+.message {
+    margin: var(--ch-space-none);
+    max-inline-size: var(--ch-button-min-width-lg);
+}
+
+.divider {
+    inline-size: 100%;
+}
+
+.metrics {
+    display: grid;
+    gap: var(--ch-space-sm);
+    grid-template-columns: repeat(auto-fit, minmax(var(--ch-button-min-width-sm), 1fr));
+}
+
+.metricCard {
+    display: grid;
+    gap: var(--ch-space-xs);
+    min-inline-size: 0;
+}
+
+.metricLabel {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-tight);
+}
+
+.metricValue {
+    color: var(--ch-color-text-primary);
+    font-size: var(--ch-font-size-xl);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+}
