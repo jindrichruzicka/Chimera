@@ -7,6 +7,20 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-05-30
+
+### Added
+
+- R3F GameCanvas and Camera System — `GameCanvas` with `cameraMode`/`cameraPreset` props; built-in camera presets (isometric, top-down, side-scrolling, free); `useCamera` hook (`setPosition`, `lookAt`, `zoom`, `animateTo`); `CameraAnimationCancelled` error; optional `cameraStore` (F35)
+- Asset Manager and Resolver — `AssetResolver` (dev + production variants); open `AssetKindRegistry` typing; `AssetLoaderRegistry` (built-in + game-contributed loaders keyed by manifest `kind`); `AssetManager` (`registerManifest`, `preloadCritical`, `get`, `load`, `dispose`); `AssetPreloader` (progress callback); `useAsset<T>` hook; `AssetManagerContext`; `tools/validate-assets.ts` CI script (F36)
+- Curves, Tweening, and Interaction — `curves.ts` (`lerp`, `linear`, `easeIn`, `easeOut`, `easeInOut`); `useTween` hook (R3F `useFrame`-driven); `useTweenCallback` variant; `useGameInteraction` hook; `InteractionBlocker` context provider (F37)
+- UI Design System — `renderer/components/ui/` primitive library (Button, Modal, Panel, Slider, ProgressBar, Spinner, Tooltip, Badge, Divider, ScrollArea, and more); `renderer/styles/tokens.css` with full `--ch-*` token set (colours, spacing, radius, typography, shadows, motion); `prefers-reduced-motion` wired into `--ch-motion-*`; game override pattern via `games/<name>/styles/tokens-override.css`; Invariants #85/#86 enforced (F50)
+- Scene Transition System + GameShell — `SceneDescriptor`, `SceneRegistry`, `SceneManager` (two-phase prepare/commit); reserved actions (`engine:scene_prepare`, `engine:scene_ready`, `engine:scene_commit`); `SceneRouter`; `TransitionOverlay`; `useFadeTransition`; `GameScreenRegistry`; `GameShell.tsx` (game-agnostic match chrome, full context provider tree, `React.Suspense`-wrapped slots, `useActiveScreen`/`useNavigateToScreen`); `ContentDatabaseContext`; `FadeContext`; Invariants #80–#88 (F38)
+- Audio System — `AudioManager`; `AudioBus` (gain + ducking); `EventAudioBinding`; `useSound` hook; `<EventAudioPlayer>` component; 32-voice pool with priority-based preemption; volume buses wired to `SettingsStore.audio.*`; lifecycle owner `GameShell` (F39)
+- Input and Keybindings — `InputManager` (keyboard + gamepad); `InputAction` registry; `KeyBindingRepository`; `useInputAction` hook; conflict detection; rebind UI in `settings/page.tsx`; engine default bindings (undo, redo, end-turn, toggle-menu, toggle-perf-hud) (F40)
+- Performance HUD — `PerfHud`; `PerfProbe` (R3F `useFrame` GL stats); `perfStore`; FPS, frame time, sim tick, actions/sec, action round-trip, ping, heap, draw calls, and triangles; toggle with F3 or `settings.gameplay.showPerfHud` (F41)
+- Device Info — `DeviceInfo`; `device-probe.ts` (main process); `DeviceInfoProvider`; `useDeviceInfo`; `usePrimaryInput`; `useWindowSizeClass` hooks; `inputTracker`; `getDeviceInfo()` and `onDeviceInfoChange()` added to `SystemAPI` (F42)
+
 ## [0.6.0] — 2026-05-12
 
 ### Removed
@@ -80,10 +94,11 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover
 - Crash dump write guarded against circular refs and oversized payloads; `process.exit(1)` after fatal crash dump
 
+[0.7.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.7.0
 [0.6.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.6.0
 [0.5.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.5.0
 [0.4.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.4.0
 [0.3.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.1.0
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.6.0...HEAD
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.7.0...HEAD

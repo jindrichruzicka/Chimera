@@ -10,7 +10,7 @@ Architecture reference: [`docs/architecture-overview.md`](docs/architecture-over
 
 ## Status
 
-**v0.6.0** — M1 (Skeleton), M2 (Networked Lobby), M3 (Action Registry + Game Loop + Undo/Redo), M4 (AI Framework), M5 (State Projection + Obfuscation), and M6 (End-to-End Testing Layer) are complete. The full Playwright E2E suite is green in CI, covering lobby, game-flow, undo/redo, obfuscation, reconnect, and 1 000-tick multiplayer soak; page objects, IPC spy helpers, WebSocket frame tap, and snapshot assertions are all in place. M7 (3D Render Integration) is next.
+**v0.7.0** — M1 through M7 are complete. M7 (3D Render Integration) ships: R3F `GameCanvas` + camera presets, `AssetManager` with manifest-based lifecycle cache, `AudioManager` (master/music/sfx/voice buses, ducking, spatial audio), `InputManager` (keyboard + gamepad, rebindable bindings), scene transition system (`SceneManager`, `TransitionOverlay`, `useFadeTransition`), `GameShell` game-agnostic match chrome, UI Design System (`--ch-*` token set, 20+ primitives), `PerfHud` (F3), and `DeviceInfoProvider`. M8 (Hardening, v1.0.0) is next.
 
 ## Getting started
 
@@ -31,12 +31,23 @@ pnpm build:renderer  # next build renderer → renderer/out/index.html
 Project layout (landed so far):
 
 ```
+games/
+└── tactics/                      # Tactics reference game
+    ├── actions.ts                # Tactics action registry
+    ├── entities.ts               # Entity types and schemas
+    ├── asset-manifest.ts         # AssetRef manifest (validated by tools/validate-assets)
+    ├── visibility-rules.ts       # Fog-of-war VisibilityRules implementation
+    ├── settings-schema.ts        # Game-specific settings schema
+    ├── screens/                  # Lazy-loaded game screens (board, HUD, menus)
+    ├── shell/                    # GameShell wiring for tactics
+    └── styles/                   # tokens-override.css (game design token overrides)
 electron/
 ├── main/
 │   ├── index.ts              # App entry: BrowserWindow creation + lifecycle (§3)
 │   ├── ipc-handlers.ts       # chimera:system|game|lobby|saves|settings|profile:* IPC handlers
 │   ├── lobby-manager.ts      # LobbyManager — host/join/leave with injected MultiplayerProvider
 │   ├── state-broadcaster.ts  # StateBroadcaster — snapshot fanout over HostTransport
+│   ├── device-probe.ts       # getDeviceInfo() / onDeviceInfoChange() — wired to SystemAPI
 │   └── *.test.ts
 └── preload/
     ├── api.ts                # contextBridge.exposeInMainWorld('__chimera', …)
@@ -50,18 +61,51 @@ renderer/
 ├── app/
 │   ├── layout.tsx            # Root layout with ConnectionStatusIndicator
 │   ├── page.tsx              # Main-menu shell
-│   ├── lobby/
-│   │   └── page.tsx          # Lobby UI — host/join/leave, PlayerList
-│   ├── saves/
-│   │   └── page.tsx          # Save/Load screen — slot list, save, load, delete, crash-recovery banner
-│   └── settings/
-│       └── page.tsx          # Settings UI — engine-wide + game-specific fields
+│   ├── lobby/page.tsx        # Lobby UI — host/join/leave, PlayerList
+│   ├── saves/page.tsx        # Save/Load screen — slot list, save, load, delete, crash-recovery banner
+│   └── settings/page.tsx     # Settings UI — engine-wide + game-specific fields (rebind UI)
+├── assets/
+│   ├── AssetManager.ts       # registerManifest, preloadCritical, get, load, dispose
+│   ├── AssetResolver.ts      # Dev + production variants; AssetManagerContext
+│   ├── AssetLoaderRegistry.ts# Built-in + game-contributed loaders keyed by manifest kind
+│   ├── AssetPreloader.ts     # Progress-callback preloader
+│   └── useAsset.ts           # useAsset<T> hook
+├── audio/
+│   ├── AudioManager.ts       # 32-voice pool, priority-based preemption; lifecycle owner: GameShell
+│   ├── AudioBus.ts           # Gain + ducking; wired to SettingsStore.audio.*
+│   ├── EventAudioBinding.ts  # Game-event → sound-asset binding map
+│   └── useSound.ts           # useSound hook
+├── components/
+│   └── ui/                   # Design-system primitives (all values via var(--ch-*) tokens)
+│       ├── Button.tsx         Badge.tsx    Modal.tsx    Panel.tsx
+│       ├── Slider.tsx         Spinner.tsx  Tooltip.tsx  ProgressBar.tsx
+│       ├── ScrollArea.tsx     Divider.tsx  Tabs.tsx     Drawer.tsx
+│       ├── Card.tsx           Heading.tsx  Label.tsx    Caption.tsx
+│       ├── Select.tsx         Toggle.tsx   Popover.tsx  IconButton.tsx
+│       ├── NumberInput.tsx    TextInput.tsx ToggleButton.tsx
+│       └── index.ts           # Barrel export
+├── device/
+│   ├── DeviceInfo.ts         # DeviceInfo type; usePrimaryInput, useWindowSizeClass
+│   ├── DeviceInfoProvider.tsx# DeviceInfoContext provider; bridges SystemAPI.getDeviceInfo
+│   └── inputTracker.ts       # Pointer-event input-mode tracker (mouse / touch / gamepad)
+├── input/
+│   ├── InputManager.ts       # Keyboard + gamepad; conflict detection
+│   ├── InputAction.ts        # InputAction value-object; engine default bindings
+│   ├── InputActionRegistry.ts# Game-contributed action registration; InputActionRegistryContext
+│   ├── KeyBindingRepository.ts# Persist rebindings under SettingsStore
+│   └── useInputAction.ts     # useInputAction hook
+├── shell/
+│   ├── renderMainMenuDefinition.tsx   # Main-menu item DSL → React nodes
+│   └── renderSettingsSectionItems.tsx # Settings-section DSL → React nodes
 ├── state/
 │   ├── gameStore.ts          # Zustand game store (snapshot, optimistic patch)
 │   ├── lobbyStore.ts         # Zustand lobby store (players, ready states, connection)
 │   ├── profileStore.ts       # Zustand profile store (local and remote profiles)
 │   ├── saveStore.ts          # Zustand save store (slot list, active slot)
 │   └── settingsStore.ts      # Zustand settings store (engine + game settings)
+├── styles/
+│   └── tokens.css            # --ch-* custom property token set (colours, spacing, radius,
+│                             #   typography, shadows, motion); prefers-reduced-motion wired
 ├── next.config.ts            # Static export (renderer/out)
 └── tsconfig.json             # Extends root; jsx: preserve + DOM lib
 shared/
