@@ -64,13 +64,11 @@ Record `VERSION` (no `v` prefix).
 
 Read `README.md` in full. Update only sections that need it:
 
-| Section                  | Update if                                                 |
-| ------------------------ | --------------------------------------------------------- |
-| Status                   | Described milestone no longer current; landmark completed |
-| Getting started          | Node/pnpm version changed; new env vars/setup             |
-| Project layout           | New top-level packages/dirs landed and unlisted           |
-| Features                 | New user-facing capabilities shipped this milestone       |
-| Configuration / env vars | New `CHIMERA_*` env vars / config keys                    |
+| Section                  | Update if                                           |
+| ------------------------ | --------------------------------------------------- |
+| Getting started          | Node/pnpm version changed; new env vars/setup       |
+| Features                 | New user-facing capabilities shipped this milestone |
+| Configuration / env vars | New `CHIMERA_*` env vars / config keys              |
 
 Apply targeted edits only. Record "no changes needed" if applicable.
 
