@@ -20,6 +20,9 @@ import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { Providers } from './providers';
 
+const bootstrapBackgroundColor = '#111113';
+const surfaceBackgroundColor = `var(--ch-color-surface, ${bootstrapBackgroundColor})`;
+
 export const metadata: Metadata = {
     title: 'Chimera',
     description: 'Chimera engine shell',
@@ -27,7 +30,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
     return (
-        <html lang="en">
+        <html lang="en" style={{ backgroundColor: surfaceBackgroundColor }}>
             <head>
                 <meta
                     httpEquiv="Content-Security-Policy"
@@ -37,7 +40,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <body
                 style={{
                     margin: 0,
-                    backgroundColor: 'var(--ch-color-surface)',
+                    backgroundColor: surfaceBackgroundColor,
                     color: 'var(--ch-color-text-primary)',
                     fontFamily: 'var(--ch-font-ui)',
                 }}

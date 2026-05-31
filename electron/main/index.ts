@@ -131,6 +131,7 @@ export { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL, CHIMERA_RENDERER_URL 
 export type { ChimeraRendererUrl };
 
 export const DEFAULT_LOCAL_PROFILE_ID = 'local-default';
+const BOOTSTRAP_BACKGROUND_COLOR = '#111113';
 const LOCAL_SEAT_HANDOFF_DELAY_MS = 150;
 
 export function createDefaultPlayerProfile(
@@ -732,6 +733,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     const window = new BrowserWindow({
         width: DEFAULT_WINDOW_WIDTH,
         height: DEFAULT_WINDOW_HEIGHT,
+        backgroundColor: BOOTSTRAP_BACKGROUND_COLOR,
         show: true,
         webPreferences: {
             nodeIntegration: false,

@@ -231,6 +231,7 @@ interface FakeWebPreferences {
 }
 
 interface FakeBrowserWindowOptions {
+    readonly backgroundColor?: string;
     readonly webPreferences?: FakeWebPreferences;
 }
 
@@ -433,6 +434,18 @@ describe('createMainWindow', () => {
 
         const [win] = browserWindowInstances;
         expect(win?.options.webPreferences?.nodeIntegration).toBe(false);
+    });
+
+    it('constructs a BrowserWindow with a dark first-paint background', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.backgroundColor).toBe('#111113');
     });
 
     it('wires the supplied preload path into webPreferences', () => {

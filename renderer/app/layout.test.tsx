@@ -1,7 +1,7 @@
+// @vitest-environment jsdom
 // renderer/app/layout.test.tsx
 //
 // Tests for the root layout CSP meta tag (WARN-1 / #193).
-// @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
 import React from 'react';
@@ -61,11 +61,13 @@ describe('RootLayout', () => {
         expect(node).toBeTruthy();
     });
 
-    it('seeds shell pages with readable token background and text colors', () => {
+    it('seeds shell pages with first-paint-safe token background and text colors', () => {
         const renderedDocument = renderLayoutDocument();
+        const htmlStyle = renderedDocument.documentElement.getAttribute('style') ?? '';
         const bodyStyle = renderedDocument.body.getAttribute('style') ?? '';
 
-        expect(bodyStyle).toContain('background-color:var(--ch-color-surface)');
+        expect(htmlStyle).toContain('background-color:var(--ch-color-surface, #111113)');
+        expect(bodyStyle).toContain('background-color:var(--ch-color-surface, #111113)');
         expect(bodyStyle).toContain('color:var(--ch-color-text-primary)');
         expect(bodyStyle).toContain('font-family:var(--ch-font-ui)');
     });
