@@ -3,12 +3,10 @@
 import React from 'react';
 import type { ComponentType } from 'react';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { getDefaultLobbyConfig } from '../../app/lobby/lobbyConfig';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
 import { resolveShellGameId } from '../../shell/resolveMainMenuGameId';
 
 const SHELL_BACKGROUND_ROUTES = new Set(['/main-menu', '/settings', '/lobby']);
-const DEFAULT_LOBBY_GAME_ID = getDefaultLobbyConfig().gameId;
 
 let nextShellBackgroundInstanceId = 1;
 
@@ -104,21 +102,7 @@ function resolveShellBackgroundGameId(
     routePath: string,
     searchParams: URLSearchParams,
 ): string | null {
-    if (routePath === '/lobby') {
-        const explicitGameId = resolveShellGameId(searchParams);
-        if (explicitGameId !== null) {
-            return explicitGameId;
-        }
-
-        const explicitThemeId = searchParams.get('themeId')?.trim();
-        if (explicitThemeId !== undefined && explicitThemeId.length > 0) {
-            return null;
-        }
-
-        return DEFAULT_LOBBY_GAME_ID;
-    }
-
-    if (routePath === '/main-menu' || routePath === '/settings') {
+    if (SHELL_BACKGROUND_ROUTES.has(routePath)) {
         return resolveShellGameId(searchParams);
     }
 

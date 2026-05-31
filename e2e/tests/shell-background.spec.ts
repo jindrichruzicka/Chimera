@@ -66,6 +66,24 @@ electronTest.describe('Shell background host', () => {
     );
 
     electronTest(
+        'tactics background persists from main-menu to lobby when launch game context is explicit',
+        async ({ mainWindow }) => {
+            const menu = new MainMenuPage(mainWindow);
+            await menu.goto({ gameId: 'tactics' });
+
+            await expect(mainWindow.getByTestId('tactics-shell-background')).toBeVisible({
+                timeout: 15_000,
+            });
+            const firstInstanceId = await shellBackgroundInstanceId(mainWindow);
+
+            await menu.clickButtonByLabel('New Game');
+            await expect(mainWindow).toHaveURL(/\/lobby\/?\?gameId=tactics$/);
+            await expect(mainWindow.getByTestId('tactics-shell-background')).toBeVisible();
+            expect(await shellBackgroundInstanceId(mainWindow)).toBe(firstInstanceId);
+        },
+    );
+
+    electronTest(
         'lobby route renders the tactics shell background for its game context',
         async ({ mainWindow }) => {
             await mainWindow.goto(`${LOBBY_URL}?gameId=tactics`);

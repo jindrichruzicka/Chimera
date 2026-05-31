@@ -64,12 +64,9 @@ describe('button actions', () => {
         return btn;
     }
 
-    it('"New Game" navigates to /game', () => {
+    it('"New Game" opens the lobby through the shell context', () => {
         const btn = findButton('New Game');
-        expect(btn.action.type).toBe('navigate');
-        if (btn.action.type === 'navigate') {
-            expect(btn.action.target).toBe('/game');
-        }
+        expect(btn.action.type).toBe('open-lobby');
     });
 
     it('"Load Game" navigates to /saves', () => {
@@ -134,7 +131,7 @@ describe('layout', () => {
 // ─── tacticsMenuCommands ──────────────────────────────────────────────────────
 
 describe('tacticsMenuCommands shape', () => {
-    it('is empty because the current menu uses route navigation only', () => {
+    it('is empty because the current menu uses built-in shell actions only', () => {
         expect(tacticsMenuCommands).toEqual({});
     });
 });

@@ -374,6 +374,7 @@ const {
     resolveRendererProtocolFilePath,
     registerRendererProtocolScheme,
     sanitiseE2eInitialUrl,
+    CHIMERA_RENDERER_LAUNCH_URL,
     CHIMERA_RENDERER_URL,
     createDefaultPlayerProfile,
     ensureActiveProfile,
@@ -499,7 +500,7 @@ describe('createMainWindow', () => {
         );
     });
 
-    it('loads the renderer through the app protocol URL', () => {
+    it('loads the explicit game main-menu launch URL by default', () => {
         const win = createMainWindow({
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
@@ -508,7 +509,7 @@ describe('createMainWindow', () => {
         });
 
         expect(win.loadURL).toHaveBeenCalledTimes(1);
-        expect(win.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_URL);
+        expect(win.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_LAUNCH_URL);
         expect(win.loadFile).not.toHaveBeenCalled();
     });
 
@@ -2161,7 +2162,7 @@ describe('main', () => {
         }
 
         const [win] = browserWindowInstances;
-        expect(win?.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_URL);
+        expect(win?.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_LAUNCH_URL);
     });
 
     it('propagates wasCleanExit=true when SaveManager.clearCleanExitFlag returns true', async () => {

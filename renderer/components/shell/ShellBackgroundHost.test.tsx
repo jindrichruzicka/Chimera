@@ -80,8 +80,20 @@ describe('ShellBackgroundHost', () => {
         expect(screen.queryByTestId('shell-background')).toBeNull();
     });
 
-    it('uses the lobby game context when the lobby route omits gameId', async () => {
+    it('keeps the engine default background when the lobby route omits gameId', () => {
         setRoute('/lobby');
+
+        render(<ShellBackgroundHost />);
+
+        expect(screen.getByTestId('shell-background')).toHaveAttribute(
+            'data-shell-background-kind',
+            'engine-default',
+        );
+        expect(mockLoadRendererGameShell).not.toHaveBeenCalled();
+    });
+
+    it('uses explicit URL game context on the lobby route', async () => {
+        setRoute('/lobby', 'gameId=tactics');
         mockLoadRendererGameShell.mockResolvedValue({
             shellBackground: TacticsBackground,
         } satisfies LoadedRendererGameShell);
@@ -125,6 +137,28 @@ describe('ShellBackgroundHost', () => {
         const firstInstanceId = firstHost.getAttribute('data-shell-background-instance-id');
 
         setRoute('/settings', 'gameId=tactics');
+        rendered.rerender(<ShellBackgroundHost />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('shell-background')).toHaveAttribute(
+                'data-shell-background-instance-id',
+                firstInstanceId,
+            );
+        });
+    });
+
+    it('keeps the same mounted host instance from main menu to lobby when game context is explicit', async () => {
+        setRoute('/main-menu', 'gameId=tactics');
+        mockLoadRendererGameShell.mockResolvedValue({
+            shellBackground: TacticsBackground,
+        } satisfies LoadedRendererGameShell);
+
+        const rendered = render(<ShellBackgroundHost />);
+
+        const firstHost = await screen.findByTestId('shell-background');
+        const firstInstanceId = firstHost.getAttribute('data-shell-background-instance-id');
+
+        setRoute('/lobby', 'gameId=tactics');
         rendered.rerender(<ShellBackgroundHost />);
 
         await waitFor(() => {

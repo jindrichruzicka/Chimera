@@ -43,9 +43,10 @@ or token overrides directly.
 | `renderer/app/(loading)/`         | Transition placeholder between scenes                               | No                              |
 | `renderer/app/component-gallery/` | Design-system gallery (dev/E2E only); gated by `isGalleryEnabled()` | No                              |
 
-\* The lobby page loads game-specific configuration from `LobbyConfig` but its chrome (dialog,
-tabs, buttons, layout, player list) is engine-owned. Game token overrides **are** applied to the
-lobby page once a `gameId` is resolved (see §4.37.4).
+\* The lobby page loads game-specific configuration from `LobbyConfig` for host/join requests, but
+its chrome (dialog, tabs, buttons, layout, player list) is engine-owned. Game token overrides are
+applied to the lobby page only when an explicit shell game context is present in the launch or route
+URL (see §4.37.4); the lobby's runtime/default config does not invent shell theming context.
 
 ---
 
@@ -146,12 +147,14 @@ Shell page containers should also use tokens rather than hardcoded layout values
 ## 4.37.4 Game Token Overrides on Shell Pages
 
 When a game is in context, shell-level UI may load the game's renderer shell contribution through
-the renderer game registry. For the main menu and settings page, this context is explicit URL state
-such as `/main-menu/?gameId=tactics` or `/settings/?gameId=tactics`; it does not require a lobby to
-exist. For the lobby page, context is resolved from `LobbyConfig.gameId`. Once a game registry or
-renderer shell module is imported, the lobby page and any subsequent shell-level UI automatically
-inherit the game's token override CSS, because the override is a side-effect import loaded at game
-registry initialisation time (§4.35):
+the renderer game registry. This context is explicit launch or URL state such as
+`/main-menu/?gameId=tactics`, `/settings/?gameId=tactics`, or `/lobby/?gameId=tactics`; it does not
+require a running lobby to exist. The default production launch route carries the built-in game's
+`gameId`, so normal shell navigation preserves a stable game context from first paint. Lobby runtime
+state and `LobbyConfig` defaults are not used as shell background/theme context. Once a game registry
+or renderer shell module is imported, shell-level UI automatically inherits the game's token override
+CSS, because the override is a side-effect import loaded at game registry initialisation time
+(§4.35):
 
 ```typescript
 // games/tactics/styles/register-token-overrides.tsx
@@ -173,7 +176,7 @@ wiring.
 | `main-menu`       | Yes — when explicit URL game context is present             |
 | `settings`        | Yes — when explicit URL or active lobby game context exists |
 | `saves`           | Never (engine-owned, game-agnostic)                         |
-| `lobby`           | Yes — after `gameId` is resolved and registry is imported   |
+| `lobby`           | Yes — when explicit launch or URL game context is present   |
 | Match / GameShell | Yes — always (registry imported before scene render)        |
 
 ### Lobby Modal Surface
@@ -199,9 +202,11 @@ session metadata, the player roster, ready-state controls, leave, and host-only 
 All authoritative writes continue through `useLobbyApi()`; the route component never writes the
 IPC-mirrored `lobbyStore` directly.
 
-Lobby URLs that provide an explicit `themeId` without an explicit `gameId` stay on the engine
-default shell background path. This lets theme-only lobby tests and routes exercise the requested
-theme without implicitly importing the default game's global token overrides.
+Lobby URLs that omit an explicit `gameId` stay on the engine-default shell background path, even
+when `LobbyConfig` defaults to a known game for host/join requests. This prevents the lobby route
+from importing the default game's global token overrides or remounting the shell background during
+plain `/main-menu` → `/lobby` navigation. Lobby URLs that provide an explicit `themeId` without an
+explicit `gameId` follow the same engine-default shell background path.
 
 ---
 

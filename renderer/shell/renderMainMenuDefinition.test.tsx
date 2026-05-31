@@ -56,8 +56,15 @@ afterEach(() => {
 function renderMenu(
     definition?: GameMainMenuDefinition,
     menuCommands?: Partial<Record<GameMenuCommandId, () => void>>,
+    gameId?: string,
 ): void {
-    render(<RenderMainMenuDefinition definition={definition} menuCommands={menuCommands} />);
+    render(
+        <RenderMainMenuDefinition
+            definition={definition}
+            menuCommands={menuCommands}
+            gameId={gameId}
+        />,
+    );
 }
 
 // ─── Engine default (undefined input) ────────────────────────────────────────
@@ -383,6 +390,26 @@ describe('custom definition buttons', () => {
 
         fireEvent.click(screen.getByRole('button', { name: 'Multiplayer' }));
         expect(mockPush).toHaveBeenCalledWith('/lobby');
+    });
+
+    it('open-lobby action preserves ?gameId= when game context is active (§4.37.6)', () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [{ label: 'Play', action: { type: 'open-lobby' } }],
+        };
+        renderMenu(def, undefined, 'tactics');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Play' }));
+        expect(mockPush).toHaveBeenCalledWith('/lobby?gameId=tactics');
+    });
+
+    it('navigate action preserves ?gameId= when game context is active (§4.37.6)', () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [{ label: 'Settings', action: { type: 'navigate', target: '/settings' } }],
+        };
+        renderMenu(def, undefined, 'tactics');
+
+        fireEvent.click(screen.getByRole('button', { name: 'Settings' }));
+        expect(mockPush).toHaveBeenCalledWith('/settings?gameId=tactics');
     });
 
     it('quit action calls window.__chimera.system.quit()', () => {

@@ -1,3 +1,4 @@
+export const TACTICS_GAME_ID = 'tactics';
 export const TACTICS_MOVE_UNIT_ACTION = 'tactics:move_unit';
 export const TACTICS_ATTACK_ACTION = 'tactics:attack';
 export const TACTICS_REVEAL_TILE_ACTION = 'tactics:reveal_tile';

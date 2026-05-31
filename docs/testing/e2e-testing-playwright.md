@@ -190,10 +190,10 @@ export { expect } from '@playwright/test';
 
 `initialRoute` is an E2E-only shortcut for loading a static-export route directly.
 When provided, `createE2eElectronLaunchConfig()` sets `CHIMERA_E2E_INITIAL_URL`, and
-`createMainWindow()` loads that URL instead of the root app URL. The value must be a
+`createMainWindow()` loads that URL instead of the default launch URL. The value must be a
 slash-prefixed Next.js route path; the fixture appends a trailing slash so it matches
 the renderer's `trailingSlash: true` static-export output. The override is read only
-when `CHIMERA_E2E=1`; production builds always load the default renderer URL.
+when `CHIMERA_E2E=1`; production builds load the explicit game main-menu launch URL.
 
 ---
 

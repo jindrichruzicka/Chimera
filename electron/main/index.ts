@@ -121,13 +121,20 @@ import {
 } from '@chimera/simulation/profile/ProfileSchema.js';
 import {
     CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_LAUNCH_URL,
     CHIMERA_RENDERER_PROTOCOL,
     CHIMERA_RENDERER_URL,
     type ChimeraRendererUrl,
 } from './renderer-url.js';
+import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
-export { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL, CHIMERA_RENDERER_URL };
+export {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_LAUNCH_URL,
+    CHIMERA_RENDERER_PROTOCOL,
+    CHIMERA_RENDERER_URL,
+};
 export type { ChimeraRendererUrl };
 
 export const DEFAULT_LOCAL_PROFILE_ID = 'local-default';
@@ -695,8 +702,9 @@ export function registerClientRevealForwarding(
  * Security invariant (BLOCK-1): the env var is untrusted input — accept only
  * URLs whose protocol is `chimera:` and whose host is `renderer`.  Any other
  * value (remote https, wrong host, malformed string, undefined) falls back to
- * the canonical app entry URL so a BrowserWindow can never load a remote URL
- * via the E2E path.
+ * `CHIMERA_RENDERER_URL` (the renderer root, distinct from the production
+ * launch URL `CHIMERA_RENDERER_LAUNCH_URL`) so a BrowserWindow can never load
+ * a remote URL via the E2E path.
  */
 export function sanitiseE2eInitialUrl(raw: string | undefined): ChimeraRendererUrl {
     if (raw === undefined) {
@@ -745,7 +753,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         },
     });
 
-    const urlToLoad = options.initialUrl ?? CHIMERA_RENDERER_URL;
+    const urlToLoad = options.initialUrl ?? CHIMERA_RENDERER_LAUNCH_URL;
     // Defense-in-depth: validate protocol and host even though the branded type
     // already enforces this statically.  Guards against callers that bypass the
     // type via `as`.
@@ -985,7 +993,7 @@ export async function main(): Promise<void> {
 
     // M1: only `'tactics'` is registered.  Stamped on captured save files
     // and used as the qualified slot prefix.
-    const HOSTED_GAME_ID = 'tactics';
+    const HOSTED_GAME_ID = TACTICS_GAME_ID;
     const HOSTED_GAME_VERSION = '0.1.0';
 
     // Register E2E hooks at the wiring point so no module-level side effects
@@ -1615,7 +1623,7 @@ export async function main(): Promise<void> {
             initialUrl:
                 process.env['CHIMERA_E2E'] === '1'
                     ? sanitiseE2eInitialUrl(process.env['CHIMERA_E2E_INITIAL_URL'])
-                    : CHIMERA_RENDERER_URL,
+                    : CHIMERA_RENDERER_LAUNCH_URL,
             env,
             logger,
         });

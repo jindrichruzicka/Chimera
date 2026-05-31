@@ -1,3 +1,4 @@
+import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
 import { themeId as makeThemeId } from '../../theme/types';
 import type { ThemeId } from '../../theme/types';
 
@@ -7,7 +8,7 @@ export interface LobbyConfig {
     readonly themeId?: ThemeId;
 }
 
-const DEFAULT_GAME_ID = 'tactics';
+const DEFAULT_GAME_ID = TACTICS_GAME_ID;
 const DEFAULT_MAX_PLAYERS = 4;
 const MIN_MAX_PLAYERS = 2;
 const MAX_MAX_PLAYERS = 16;

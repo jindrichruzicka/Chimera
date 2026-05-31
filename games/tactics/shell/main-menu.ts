@@ -37,7 +37,7 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
     buttons: [
         {
             label: 'New Game',
-            action: { type: 'navigate', target: '/game' },
+            action: { type: 'open-lobby' },
             variant: 'primary',
         },
         {
@@ -61,6 +61,6 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
 // ─── Commands ─────────────────────────────────────────────────────────────────
 
 /**
- * Tactics currently uses route navigation only for main-menu actions.
+ * Tactics currently uses built-in shell actions only.
  */
 export const tacticsMenuCommands: Record<GameMenuCommandId, () => void> = {};
