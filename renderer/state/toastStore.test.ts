@@ -116,6 +116,17 @@ describe('toastStore', () => {
         expect(store.getState().queue.map((toast) => toast.title)).toEqual(['First', 'Second']);
     });
 
+    it('push does not mutate existing toast entries in the queue', () => {
+        const store = createToastStore();
+        randomUUID.mockReturnValueOnce(UUID_1).mockReturnValueOnce(UUID_2);
+        store.getState().push({ severity: 'info', title: 'First' });
+        const firstToastRef = store.getState().queue[0]!;
+
+        store.getState().push({ severity: 'success', title: 'Second' });
+
+        expect(store.getState().queue[0]).toBe(firstToastRef);
+    });
+
     it('dismiss removes the matching toast', () => {
         const store = createToastStore();
         randomUUID.mockReturnValueOnce(UUID_1).mockReturnValueOnce(UUID_2);
