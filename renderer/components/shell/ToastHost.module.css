@@ -1,0 +1,111 @@
+.host {
+    align-items: flex-end;
+    bottom: var(--ch-space-md);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-sm);
+    inline-size: min(calc(var(--ch-space-xl) * 10), calc(100vw - (var(--ch-space-md) * 2)));
+    pointer-events: none;
+    position: fixed;
+    right: var(--ch-space-md);
+    z-index: var(--ch-z-modal);
+}
+
+.toast {
+    animation: toast-enter var(--ch-duration-normal) var(--ch-easing-standard);
+    background: var(--ch-color-surface-raised);
+    border-color: var(--_toast-border-color);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    box-shadow: var(--ch-shadow-lg);
+    color: var(--ch-color-text-primary);
+    display: grid;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-sm);
+    inline-size: 100%;
+    opacity: var(--ch-opacity-full);
+    padding: var(--ch-space-md);
+    pointer-events: auto;
+    transition: opacity var(--ch-duration-normal) var(--ch-easing-standard);
+}
+
+.reducedMotion .toast {
+    animation-name: toast-fade-in;
+}
+
+.content {
+    align-items: start;
+    display: grid;
+    gap: var(--ch-space-sm);
+    grid-template-columns: minmax(var(--ch-space-none), 1fr) max-content;
+}
+
+.copy {
+    display: grid;
+    gap: var(--ch-space-xs);
+    min-inline-size: var(--ch-space-none);
+}
+
+.title {
+    color: var(--ch-color-text-primary);
+    font-size: var(--ch-font-size-md);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+    overflow-wrap: anywhere;
+}
+
+.body {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-relaxed);
+    margin: var(--ch-space-none);
+    overflow-wrap: anywhere;
+}
+
+.actions {
+    display: flex;
+    justify-content: flex-start;
+}
+
+.dismiss {
+    flex: none;
+}
+
+.info {
+    --_toast-border-color: var(--ch-color-border-subtle);
+}
+
+.success {
+    --_toast-border-color: var(--ch-color-success-border);
+}
+
+.warning {
+    --_toast-border-color: var(--ch-color-warning-border);
+}
+
+.error {
+    --_toast-border-color: var(--ch-color-error-border);
+}
+
+@keyframes toast-enter {
+    from {
+        opacity: var(--ch-opacity-disabled);
+        transform: translateY(var(--ch-space-md));
+    }
+
+    to {
+        opacity: var(--ch-opacity-full);
+        transform: translateY(var(--ch-space-none));
+    }
+}
+
+@keyframes toast-fade-in {
+    from {
+        opacity: var(--ch-opacity-disabled);
+    }
+
+    to {
+        opacity: var(--ch-opacity-full);
+    }
+}
