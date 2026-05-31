@@ -1,4 +1,5 @@
 import React from 'react';
+import { usePathname } from 'next/navigation';
 
 const menuBackgroundStyles = `
 .menu-bg {
@@ -27,13 +28,58 @@ const menuBackgroundStyles = `
     0%, 100% { transform: translate(-50%, -50%) scale(1); opacity: 0.5; }
     50% { transform: translate(-50%, -50%) scale(1.3); opacity: 1; }
 }
+
+.main-menu-overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    transform: translateY(-100px);
+}
+
+.game-title {
+    font-family: 'Cinzel', serif; font-size: 4rem; font-weight: 900;
+    background: linear-gradient(135deg, #f4d03f, #e67e22, #f4d03f);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    text-shadow: none; margin-bottom: 0.5rem; letter-spacing: 3px;
+    line-height: 0.75;
+}
+.subtitle { font-size: 1.2rem; color: #9b8ec4; font-style: italic; }
 `;
 
 export function TacticsShellBackground(): React.ReactElement {
+    const pathname = usePathname();
+    const isMainMenu = normalizeRoutePath(pathname) === '/main-menu';
+
     return (
         <>
             <style>{menuBackgroundStyles}</style>
             <div data-testid="tactics-shell-background" className="menu-bg" />
+            {isMainMenu && (
+                <div
+                    data-testid="tactics-shell-background-main-menu-overlay"
+                    className="main-menu-overlay"
+                >
+                    <h1 data-testid="tactics-shell-background-title" className="game-title">
+                        Tactics
+                    </h1>
+                    <p data-testid="tactics-shell-background-subtitle" className="subtitle">
+                        Chimera testing stub
+                    </p>
+                </div>
+            )}
         </>
     );
+}
+
+function normalizeRoutePath(pathname: string | null): string {
+    if (pathname === null || pathname.length === 0) {
+        return '/';
+    }
+
+    return pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 }

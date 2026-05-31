@@ -127,6 +127,11 @@ test.describe('Game-customized main menu (§4.37 / #622)', () => {
         // Engine-default "Play" must never appear once the tactics shell is loaded.
         expect(labels).not.toContain('Play');
 
+        await expect(window.getByTestId('tactics-shell-background-title')).toHaveText('Tactics');
+        await expect(window.getByTestId('tactics-shell-background-subtitle')).toHaveText(
+            'Chimera testing stub',
+        );
+
         // Each button must also be reachable by its accessible name so that
         // screen readers and POM helpers can target them reliably.
         for (const label of ['New Game', 'Load Game', 'Settings', 'Quit']) {
