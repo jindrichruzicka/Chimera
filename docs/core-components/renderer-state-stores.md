@@ -60,7 +60,7 @@ The renderer composes several small Zustand stores rather than one god-store (IS
 | `settingsStore` | app     | main (`SettingsManager`)                    | `ipcClient.applySettings`; settings UI via `settings.update()` IPC                   | —              |
 | `profileStore`  | session | main (`ProfileManager` + `PlayerDirectory`) | `ipcClient.applyProfileDirectory`; `profile.updateLocal()` IPC                       | lobby close    |
 | `chatStore`     | session | renderer (rolling 500-entry buffer)         | `ipcClient.onChatMessage` push; components (mute flags)                              | lobby close    |
-| `toastStore`    | app     | renderer                                    | any component via `show()` / `dismiss()`                                             | app close      |
+| `toastStore`    | app     | renderer                                    | any component via `push()` / `dismiss()` / `dismissAll()`                            | app close      |
 | `perfStore`     | app     | renderer                                    | `PerfProbe` (GL metrics); `bootstrapPerfStore` (tick/ping/heap); action system (RTT) | app close      |
 | `uiStore`       | app     | renderer                                    | components (menu state, modal stack, `activeScreenKey`)                              | app close      |
 | `cameraStore`   | screen  | renderer                                    | game board components                                                                | screen unmount |
