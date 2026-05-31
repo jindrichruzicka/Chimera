@@ -260,7 +260,7 @@ visual customization still flows through tokens and component props.
 
 `renderer/app/component-gallery/` is a **development and E2E-only** visual fixture for the §4.35 primitive library. It is gated by `isGalleryEnabled()` (active in any non-production `NODE_ENV` — i.e. `development`, `test`, or any value other than `production` — and when `NEXT_PUBLIC_CHIMERA_E2E=1` regardless of environment) and is not part of the production navigation tree.
 
-The gallery covers all six §4.35 primitive categories — **Actions**, **Overlays**, **Containers**, **Forms**, **Feedback**, and **Typography** — each rendered as a named section. The top-level category navigation is implemented with `Tabs` (from the Containers category), making the gallery the primary live demonstration of that component.
+The gallery covers all six §4.35 primitive categories — **Actions**, **Overlays**, **Containers**, **Forms**, **Feedback**, and **Typography** — each rendered as a named section. The top-level category navigation is implemented with `Tabs` (from the Containers category), making the gallery the primary live demonstration of that component. The gallery also includes a **Toasts** dev tab for exercising the §4.30 `toastStore` and `ToastHost` stack.
 
 Boundary rules (invariants [#93](../executive-architecture/architecture-invariants.md) and [#94](../executive-architecture/architecture-invariants.md)): the gallery must not import from any `games/*` path, and must not directly import game token override CSS — overrides enter the cascade only as side-effects of game registry initialisation (§4.36).
 

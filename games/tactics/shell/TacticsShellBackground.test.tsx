@@ -116,12 +116,12 @@ describe('TacticsShellBackground', () => {
         );
     });
 
-    it('shifts the main-menu overlay content 100px above center', () => {
+    it('shifts the main-menu overlay content 130px above center', () => {
         render(<TacticsShellBackground />);
 
         const styles = document.querySelector('style')?.textContent ?? '';
 
-        expect(styles).toContain('transform: translateY(-100px);');
+        expect(styles).toContain('transform: translateY(-130px);');
     });
 
     it('defines .game-title and .subtitle CSS rules', () => {

@@ -30,8 +30,8 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
     layout: {
         orientation: 'vertical',
         align: 'center',
-        anchor: 'bottom',
-        offsetY: 75,
+        anchor: 'center',
+        offsetY: 85,
         gap: 16,
     },
     buttons: [

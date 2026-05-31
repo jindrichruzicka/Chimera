@@ -114,8 +114,8 @@ describe('layout', () => {
         expect(tacticsMainMenuDefinition.layout?.orientation).toBe('vertical');
     });
 
-    it('anchors to center-bottom', () => {
-        expect(tacticsMainMenuDefinition.layout?.anchor).toBe('bottom');
+    it('anchors to center', () => {
+        expect(tacticsMainMenuDefinition.layout?.anchor).toBe('center');
     });
 
     it('has a defined numeric gap', () => {

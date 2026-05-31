@@ -38,7 +38,7 @@ const menuBackgroundStyles = `
     align-items: center;
     justify-content: center;
     text-align: center;
-    transform: translateY(-100px);
+    transform: translateY(-130px);
 }
 
 .game-title {

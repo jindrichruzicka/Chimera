@@ -17,6 +17,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { ToastHost } from '../../components/shell/ToastHost';
+import { useToastStore } from '../../state/toastStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import ComponentGalleryClient from './ComponentGalleryClient';
 import galleryCss from './ComponentGallery.module.css?raw';
@@ -37,8 +39,19 @@ function renderGallery(): void {
     );
 }
 
+function renderGalleryWithToastHost(): void {
+    render(
+        <ThemeProvider>
+            <ComponentGalleryClient />
+            <ToastHost />
+        </ThemeProvider>,
+    );
+}
+
 afterEach(() => {
+    useToastStore.getState().dismissAll();
     cleanup();
+    vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
 
@@ -51,7 +64,7 @@ describe('ComponentGalleryClient — root container (AC #1)', () => {
     });
 });
 
-// ── AC #2 — All six category tabs ─────────────────────────────────────────────
+// ── AC #2 — All category tabs ──────────────────────────────────────────────────
 
 describe('ComponentGalleryClient — category tabs present (AC #2)', () => {
     it('renders an Actions tab', () => {
@@ -82,6 +95,11 @@ describe('ComponentGalleryClient — category tabs present (AC #2)', () => {
     it('renders a Typography tab', () => {
         renderGallery();
         expect(screen.getByRole('tab', { name: /typography/i })).toBeTruthy();
+    });
+
+    it('renders a Toasts tab', () => {
+        renderGallery();
+        expect(screen.getByRole('tab', { name: /toasts/i })).toBeTruthy();
     });
 });
 
@@ -480,6 +498,87 @@ describe('ComponentGalleryClient — Feedback section (issue #609)', () => {
         expect(section.querySelector('[data-ch-badge-variant="success"]')).toBeTruthy();
         expect(section.querySelector('[data-ch-badge-variant="warning"]')).toBeTruthy();
         expect(section.querySelector('[data-ch-badge-variant="error"]')).toBeTruthy();
+    });
+});
+
+// ── Issue #648 — ToastPanel live notification stack ─────────────────────────
+
+const TOAST_TEST_IDS = [
+    '00000000-0000-4000-8000-000000000648',
+    '00000000-0000-4000-8000-000000000649',
+    '00000000-0000-4000-8000-000000000650',
+    '00000000-0000-4000-8000-000000000651',
+] as const;
+
+const TOAST_BUTTON_CASES = [
+    ['Info toast', 'info'],
+    ['Success toast', 'success'],
+    ['Warning toast', 'warning'],
+    ['Error toast', 'error'],
+] as const;
+
+describe('ComponentGalleryClient — ToastPanel (issue #648)', () => {
+    beforeEach(() => {
+        let nextIdIndex = 0;
+        vi.stubGlobal('crypto', {
+            randomUUID: vi.fn(() => TOAST_TEST_IDS[nextIdIndex++] ?? TOAST_TEST_IDS[0]),
+        });
+
+        renderGalleryWithToastHost();
+        fireEvent.click(screen.getByRole('tab', { name: /toasts/i }));
+    });
+
+    it('renders the ToastPanel section with all severity controls', () => {
+        const section = screen.getByTestId('component-gallery-toasts');
+
+        expect(section).toBeTruthy();
+        for (const [buttonLabel] of TOAST_BUTTON_CASES) {
+            expect(within(section).getByRole('button', { name: buttonLabel })).toBeTruthy();
+        }
+        expect(within(section).getByRole('button', { name: /dismiss all/i })).toBeTruthy();
+        expect(within(section).getByRole('list', { name: /toast queue/i })).toBeTruthy();
+    });
+
+    it.each(TOAST_BUTTON_CASES)(
+        'fires the %s control as a %s ToastHost item',
+        (label, severity) => {
+            fireEvent.click(screen.getByRole('button', { name: label }));
+
+            const toast = screen.getByRole('status');
+            expect(toast).toHaveAttribute('data-toast-severity', severity);
+            expect(within(toast).getByTestId('toast-title')).toHaveTextContent(label);
+        },
+    );
+
+    it('shows the current toastStore queue with id, severity, and title', () => {
+        for (const [buttonLabel] of TOAST_BUTTON_CASES) {
+            fireEvent.click(screen.getByRole('button', { name: buttonLabel }));
+        }
+
+        const queue = screen.getByRole('list', { name: /toast queue/i });
+        const queueItems = within(queue).getAllByRole('listitem');
+
+        expect(queueItems).toHaveLength(TOAST_BUTTON_CASES.length);
+        queueItems.forEach((item, index) => {
+            const [title, severity] = TOAST_BUTTON_CASES[index]!;
+
+            expect(item).toHaveTextContent(TOAST_TEST_IDS[index]!);
+            expect(item).toHaveTextContent(severity);
+            expect(item).toHaveTextContent(title);
+        });
+    });
+
+    it('clears the queue and ToastHost stack when Dismiss all is clicked', () => {
+        fireEvent.click(screen.getByRole('button', { name: /info toast/i }));
+        expect(useToastStore.getState().queue).toHaveLength(1);
+
+        fireEvent.click(screen.getByRole('button', { name: /dismiss all/i }));
+
+        expect(useToastStore.getState().queue).toHaveLength(0);
+        expect(screen.queryByRole('status')).toBeNull();
+        expect(
+            within(screen.getByRole('list', { name: /toast queue/i })).queryAllByRole('listitem'),
+        ).toHaveLength(0);
     });
 });
 

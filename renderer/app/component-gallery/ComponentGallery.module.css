@@ -86,3 +86,45 @@
 .scrollRow {
     margin: var(--ch-space-xs) var(--ch-space-none);
 }
+
+.toastQueuePanel {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+}
+
+.toastQueue {
+    display: grid;
+    gap: var(--ch-space-xs);
+    list-style: none;
+    margin: var(--ch-space-none);
+    padding: var(--ch-space-none);
+}
+
+.toastQueueItem {
+    align-items: center;
+    background-color: var(--ch-color-surface-raised);
+    border: var(--ch-border-width-sm) solid var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+    padding: var(--ch-space-sm);
+}
+
+.toastQueueId {
+    color: var(--ch-color-text-muted);
+    font-family: var(--ch-font-mono);
+    overflow-wrap: anywhere;
+}
+
+.toastQueueSeverity {
+    color: var(--ch-color-text-secondary);
+    font-family: var(--ch-font-ui-button);
+    text-transform: uppercase;
+}
+
+.toastQueueTitle {
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-ui);
+}

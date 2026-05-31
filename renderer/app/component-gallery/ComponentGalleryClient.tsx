@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useToastStore, type ToastSeverity } from '../../state/toastStore';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';
@@ -27,6 +28,17 @@ import { Toggle } from '../../components/ui/Toggle';
 import { ToggleButton } from '../../components/ui/ToggleButton';
 import { Tooltip } from '../../components/ui/Tooltip';
 import styles from './ComponentGallery.module.css';
+
+const TOAST_PANEL_ACTIONS = [
+    { severity: 'info', title: 'Info toast', variant: 'primary' },
+    { severity: 'success', title: 'Success toast', variant: 'secondary' },
+    { severity: 'warning', title: 'Warning toast', variant: 'secondary' },
+    { severity: 'error', title: 'Error toast', variant: 'danger' },
+] as const satisfies readonly {
+    readonly severity: ToastSeverity;
+    readonly title: string;
+    readonly variant: 'primary' | 'secondary' | 'danger';
+}[];
 
 // ── Panel definitions ─────────────────────────────────────────────────────────
 
@@ -270,6 +282,46 @@ function FeedbackPanel(): React.ReactElement {
     );
 }
 
+function ToastPanel(): React.ReactElement {
+    const queue = useToastStore((state) => state.queue);
+    const push = useToastStore((state) => state.push);
+    const dismissAll = useToastStore((state) => state.dismissAll);
+
+    return (
+        <div className={styles['section']} data-testid="component-gallery-toasts">
+            <div className={styles['row']}>
+                {TOAST_PANEL_ACTIONS.map((action) => (
+                    <Button
+                        key={action.severity}
+                        onClick={() => {
+                            push({ severity: action.severity, title: action.title });
+                        }}
+                        variant={action.variant}
+                    >
+                        {action.title}
+                    </Button>
+                ))}
+                <Button onClick={dismissAll} variant="ghost">
+                    Dismiss all
+                </Button>
+            </div>
+            <div className={styles['toastQueuePanel']}>
+                <Label>Toast queue</Label>
+                <ol aria-label="Toast queue" className={styles['toastQueue']}>
+                    {queue.map((toast) => (
+                        <li key={toast.id} className={styles['toastQueueItem']}>
+                            <span className={styles['toastQueueId']}>{toast.id}</span>
+                            <span className={styles['toastQueueSeverity']}>{toast.severity}</span>
+                            <span className={styles['toastQueueTitle']}>{toast.title}</span>
+                        </li>
+                    ))}
+                </ol>
+                {queue.length === 0 ? <Caption tone="muted">No active toasts</Caption> : null}
+            </div>
+        </div>
+    );
+}
+
 function TypographyPanel(): React.ReactElement {
     return (
         <div className={styles['section']} data-testid="component-gallery-typography">
@@ -378,6 +430,11 @@ export default function ComponentGalleryClient(): React.ReactElement {
             id: 'feedback',
             label: 'Feedback',
             panel: <FeedbackPanel />,
+        },
+        {
+            id: 'toasts',
+            label: 'Toasts',
+            panel: <ToastPanel />,
         },
         {
             id: 'typography',
