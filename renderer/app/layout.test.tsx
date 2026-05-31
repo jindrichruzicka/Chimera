@@ -4,9 +4,12 @@
 // Tests for the root layout CSP meta tag (WARN-1 / #193).
 
 import '@testing-library/jest-dom/vitest';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { useToastStore } from '../state/toastStore';
+import { AppShell } from './AppShell';
 import RootLayout from './layout';
 
 vi.mock('next/navigation', () => ({
@@ -15,12 +18,39 @@ vi.mock('next/navigation', () => ({
     useSearchParams: () => new URLSearchParams(),
 }));
 
-function renderLayoutDocument(): Document {
-    const markup = `<!DOCTYPE html>${renderToStaticMarkup(<RootLayout>{null}</RootLayout>)}`;
+const TOAST_ID = '00000000-0000-4000-8000-000000000645';
+
+function installMatchMedia(): void {
+    Object.defineProperty(window, 'matchMedia', {
+        configurable: true,
+        value: vi.fn().mockImplementation((query: string) => ({
+            matches: false,
+            media: query,
+            onchange: null,
+            addEventListener: vi.fn(),
+            removeEventListener: vi.fn(),
+            dispatchEvent: vi.fn(() => true),
+        })),
+    });
+}
+
+function renderLayoutDocument(children: React.ReactNode = null): Document {
+    const markup = `<!DOCTYPE html>${renderToStaticMarkup(<RootLayout>{children}</RootLayout>)}`;
     return new DOMParser().parseFromString(markup, 'text/html');
 }
 
+function ThrowingRoute(): React.ReactElement {
+    throw new Error('simulated route crash');
+}
+
 beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('crypto', { randomUUID: vi.fn(() => TOAST_ID) });
+    vi.spyOn(performance, 'now').mockReturnValue(0);
+    vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    installMatchMedia();
+    useToastStore.getState().dismissAll();
+
     Object.defineProperty(window, '__chimera', {
         configurable: true,
         value: {
@@ -32,8 +62,12 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+    useToastStore.getState().dismissAll();
+    cleanup();
     delete (window as unknown as Record<string, unknown>)['__chimera'];
+    vi.useRealTimers();
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
 });
 
 describe('RootLayout', () => {
@@ -59,6 +93,41 @@ describe('RootLayout', () => {
 
         const node = renderedDocument.querySelector('[data-testid="connection-status"]');
         expect(node).toBeTruthy();
+    });
+
+    it('mounts ToastHost as a sibling of routed content in the shell root', () => {
+        const renderedDocument = renderLayoutDocument(<main data-testid="route-content" />);
+
+        const routeContent = renderedDocument.querySelector('[data-testid="route-content"]');
+        const toastHost = renderedDocument.querySelector('[data-testid="toast-host"]');
+
+        expect(routeContent).toBeTruthy();
+        expect(toastHost).toBeTruthy();
+        expect(toastHost?.parentElement).toBe(routeContent?.parentElement);
+        expect(routeContent?.contains(toastHost)).toBe(false);
+        expect(toastHost?.contains(routeContent)).toBe(false);
+    });
+
+    it('keeps ToastHost mounted when RootErrorBoundary catches a routed subtree crash', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        act(() => {
+            useToastStore.getState().push({
+                severity: 'error',
+                title: 'Crash toast survives',
+                durationMs: 60_000,
+            });
+        });
+
+        render(
+            <AppShell>
+                <ThrowingRoute />
+            </AppShell>,
+        );
+
+        expect(screen.getByRole('alert')).toHaveTextContent('An unexpected error occurred.');
+        expect(screen.getByTestId('toast-host')).toBeInTheDocument();
+        expect(screen.getByText('Crash toast survives')).toBeInTheDocument();
     });
 
     it('seeds shell pages with first-paint-safe token background and text colors', () => {
