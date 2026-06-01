@@ -24,8 +24,8 @@ import type { Logger } from './logger.js';
 
 // ── public constants ────────────────────────────────────────────────────────────
 
-/** Maximum number of recent log entries embedded in a crash dump. */
-export const MAX_CRASH_LOG_ENTRIES = 200;
+/** Maximum number of recent log entries embedded in a crash dump (§4.27). */
+export const MAX_CRASH_LOG_ENTRIES = 1000;
 
 // ── public contract ────────────────────────────────────────────────────────────
 

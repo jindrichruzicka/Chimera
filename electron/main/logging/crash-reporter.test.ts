@@ -71,6 +71,12 @@ function makeLogEntry(message: string, timestamp: number): LogEntry {
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
+describe('constants', () => {
+    it('MAX_CRASH_LOG_ENTRIES equals 1000 (architecture §4.27: "Last 1000 log entries")', () => {
+        expect(MAX_CRASH_LOG_ENTRIES).toBe(1000);
+    });
+});
+
 let tmpDir: string;
 
 beforeEach(() => {
