@@ -12,6 +12,18 @@ import { useToastStore } from '../state/toastStore';
 import { AppShell } from './AppShell';
 import RootLayout from './layout';
 
+const { mockInstallRendererLogger, mockRendererLoggerTeardown } = vi.hoisted(() => {
+    const teardown = vi.fn();
+    return {
+        mockInstallRendererLogger: vi.fn(() => teardown),
+        mockRendererLoggerTeardown: teardown,
+    };
+});
+
+vi.mock('../logging/rendererLogger', () => ({
+    installRendererLogger: mockInstallRendererLogger,
+}));
+
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
     usePathname: () => '/',
@@ -48,6 +60,8 @@ beforeEach(() => {
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => TOAST_ID) });
     vi.spyOn(performance, 'now').mockReturnValue(0);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockInstallRendererLogger.mockClear();
+    mockRendererLoggerTeardown.mockClear();
     installMatchMedia();
     useToastStore.getState().dismissAll();
 
@@ -128,6 +142,27 @@ describe('RootLayout', () => {
         expect(screen.getByRole('alert')).toHaveTextContent('An unexpected error occurred.');
         expect(screen.getByTestId('toast-host')).toBeInTheDocument();
         expect(screen.getByText('Crash toast survives')).toBeInTheDocument();
+    });
+
+    it('installs renderer logging from the window.__chimera.logs IPC surface', () => {
+        vi.spyOn(console, 'error').mockImplementation(() => undefined);
+        const logsApi = {
+            emit: vi.fn(),
+            readRecent: vi.fn(() => Promise.resolve([])),
+        };
+        (window as unknown as { __chimera: { logs?: typeof logsApi } }).__chimera.logs = logsApi;
+
+        const rendered = render(
+            <AppShell>
+                <main />
+            </AppShell>,
+        );
+
+        expect(mockInstallRendererLogger).toHaveBeenCalledWith(logsApi);
+
+        rendered.unmount();
+
+        expect(mockRendererLoggerTeardown).toHaveBeenCalledOnce();
     });
 
     it('seeds shell pages with first-paint-safe token background and text colors', () => {

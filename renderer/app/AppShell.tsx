@@ -6,6 +6,7 @@ import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
 import { ToastHost } from '../components/shell/ToastHost';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
+import { LoggingBootstrap } from './LoggingBootstrap';
 import { LobbyStoreBootstrap } from './LobbyStoreBootstrap';
 import { SaveStoreBootstrap } from './SaveStoreBootstrap';
 import { SettingsBootstrap } from './SettingsBootstrap';
@@ -15,6 +16,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
     return (
         <Providers>
             <ThemeProvider>
+                <LoggingBootstrap />
                 <SettingsBootstrap />
                 <LobbyStoreBootstrap />
                 <GameStoreBootstrap />
