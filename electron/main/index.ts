@@ -28,7 +28,7 @@ import {
     type LoggerSink,
     type FlushableSink,
 } from './logging/logger.js';
-import { registerCrashReporter } from './logging/crash-reporter.js';
+import { makeRendererGoneHandler, registerCrashReporter } from './logging/crash-reporter.js';
 import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
@@ -879,16 +879,22 @@ export async function main(): Promise<void> {
         sink: combinedSink,
     });
 
+    // The single live `SessionRuntime` for the currently-hosted session, or
+    // `null` when no session is running. Declared before crash-reporter wiring
+    // so crash dumps can include the current authoritative snapshot.
+    let activeSession: SessionRuntime | null = null;
+
     // Register crash reporter early — before any window opens — so all
     // subsequent crashes are captured (Invariant 68).
     const crashLogger = logger.child({ module: 'crash' });
+    const crashesDir = path.join(userData, 'crashes');
     registerCrashReporter({
         logger: crashLogger,
-        crashesDir: path.join(userData, 'crashes'),
+        crashesDir,
         flush: () => {
             pinoSink.flushSync();
         },
-        getSnapshot: () => null, // F14 wires the live snapshot when simulation is running
+        getSnapshot: () => activeSession?.getSnapshot() ?? null,
         autosave: autosaveActiveSessionBeforeCrash,
     });
 
@@ -967,11 +973,8 @@ export async function main(): Promise<void> {
     const profileManager = new ProfileManager(profileRepository);
     await ensureActiveProfile(profileManager, profileRepository, harnessFlags?.profileId);
 
-    // The single live `SessionRuntime` for the currently-hosted session, or
-    // `null` when no session is running.  Wired by the `onSessionHosted`
-    // callback below and consumed by the saves IPC adapter to capture
+    // Session wiring callbacks consumed by the saves IPC adapter to capture
     // SaveFiles (BLOCK-3) and apply restored files (WARN-2).
-    let activeSession: SessionRuntime | null = null;
     let dispatchRendererAction: ((action: ActionEnvelope) => void) | null = null;
     let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
     let handleHostedLocalSeatAdded: ((entry: LobbyPlayerEntry) => void) | null = null;
@@ -1617,7 +1620,7 @@ export async function main(): Promise<void> {
 
     const createWindow = (): void => {
         deviceProbeWatcher?.dispose();
-        mainWindow = createMainWindow({
+        const createdWindow = createMainWindow({
             preloadPath,
             rendererEntry,
             initialUrl:
@@ -1627,6 +1630,20 @@ export async function main(): Promise<void> {
             env,
             logger,
         });
+        mainWindow = createdWindow;
+        createdWindow.webContents.on(
+            'render-process-gone',
+            makeRendererGoneHandler({
+                logger: crashLogger,
+                crashesDir,
+                getSnapshot: () => activeSession?.getSnapshot() ?? null,
+                reloadRenderer: () => {
+                    if (!createdWindow.isDestroyed()) {
+                        createdWindow.reload();
+                    }
+                },
+            }),
+        );
 
         // Create the device-probe watcher now that we have a window.
         // The watcher subscribes to display-metrics-changed and pushes updates

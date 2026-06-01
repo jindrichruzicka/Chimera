@@ -3,7 +3,11 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { Logger } from './logger.js';
-import { type CrashReporterOptions, registerCrashReporter } from './crash-reporter.js';
+import {
+    type CrashReporterOptions,
+    makeRendererGoneHandler,
+    registerCrashReporter,
+} from './crash-reporter.js';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
 
@@ -315,5 +319,72 @@ describe('registerCrashReporter', () => {
         // flush must happen BEFORE exit
         expect(flushOrder.indexOf('flush')).toBeLessThan(flushOrder.indexOf('exit'));
         exitSpy.mockRestore();
+    });
+});
+
+describe('makeRendererGoneHandler', () => {
+    it('logs renderer process-gone details at fatal level', () => {
+        const logger = makeLogger();
+        const handler = makeRendererGoneHandler({
+            logger,
+            crashesDir: path.join(tmpDir, 'crashes'),
+            getSnapshot: () => null,
+            reloadRenderer: vi.fn(),
+        });
+
+        handler({}, { reason: 'crashed', exitCode: 9 });
+
+        expect(logger.fatal).toHaveBeenCalledWith(
+            expect.stringContaining('render-process-gone'),
+            expect.any(Error),
+            expect.objectContaining({ reason: 'crashed', exitCode: 9 }),
+        );
+    });
+
+    it('writes the renderer crash dump atomically', () => {
+        const logger = makeLogger();
+        const crashesDir = path.join(tmpDir, 'crashes');
+        const handler = makeRendererGoneHandler({
+            logger,
+            crashesDir,
+            getSnapshot: () => ({ tick: 17 }),
+            reloadRenderer: vi.fn(),
+        });
+
+        handler({}, { reason: 'oom', exitCode: 137 });
+
+        const files = fs.readdirSync(crashesDir);
+        const jsonFiles = files.filter((f) => f.endsWith('.json'));
+        const tmpFiles = files.filter((f) => f.endsWith('.tmp'));
+        expect(jsonFiles).toHaveLength(1);
+        expect(tmpFiles).toHaveLength(0);
+
+        const dumpPath = path.join(crashesDir, jsonFiles[0]!);
+        const dump = JSON.parse(fs.readFileSync(dumpPath, 'utf-8')) as {
+            readonly error: { readonly message: string };
+            readonly snapshot: { readonly tick: number };
+        };
+        expect(dump.error.message).toContain('oom');
+        expect(dump.snapshot).toEqual({ tick: 17 });
+    });
+
+    it('reloads the window at most once for repeated renderer process-gone events', () => {
+        const logger = makeLogger();
+        const reloadRenderer = vi.fn();
+        const handler = makeRendererGoneHandler({
+            logger,
+            crashesDir: path.join(tmpDir, 'crashes'),
+            getSnapshot: () => null,
+            reloadRenderer,
+        });
+
+        handler({}, { reason: 'crashed', exitCode: 9 });
+        handler({}, { reason: 'crashed', exitCode: 9 });
+
+        expect(reloadRenderer).toHaveBeenCalledOnce();
+        expect(logger.warn).toHaveBeenCalledWith(
+            expect.stringContaining('renderer restart skipped'),
+            expect.objectContaining({ reason: 'crashed', exitCode: 9 }),
+        );
     });
 });

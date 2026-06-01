@@ -70,11 +70,26 @@ vi.mock('node:os', async (importOriginal) => {
 });
 
 // ── crash-reporter mock — spy on registerCrashReporter options ────────────────
-const { mockRegisterCrashReporter } = vi.hoisted(() => ({
-    mockRegisterCrashReporter: vi.fn<(options: { autosave?: () => Promise<void> }) => void>(),
-}));
+const { mockMakeRendererGoneHandler, mockRegisterCrashReporter, mockRendererGoneHandler } =
+    vi.hoisted(() => {
+        const rendererGoneHandler = vi.fn();
+        return {
+            mockMakeRendererGoneHandler: vi.fn<
+                (options: { reloadRenderer: () => void }) => (...args: readonly unknown[]) => void
+            >(() => rendererGoneHandler),
+            mockRegisterCrashReporter:
+                vi.fn<
+                    (options: {
+                        autosave?: () => Promise<void>;
+                        getSnapshot?: () => unknown;
+                    }) => void
+                >(),
+            mockRendererGoneHandler: rendererGoneHandler,
+        };
+    });
 
 vi.mock('./logging/crash-reporter.js', () => ({
+    makeRendererGoneHandler: mockMakeRendererGoneHandler,
     registerCrashReporter: mockRegisterCrashReporter,
 }));
 
@@ -251,6 +266,7 @@ class FakeBrowserWindow {
     public readonly options: FakeBrowserWindowOptions;
     public readonly loadFile = vi.fn();
     public readonly loadURL = vi.fn();
+    public readonly reload = vi.fn<() => void>();
     public readonly webContents = new FakeWebContents();
     public readonly isDestroyed = vi.fn<() => boolean>(() => false);
     public readonly getContentSize = vi.fn<() => [number, number]>(() => [1280, 720]);
@@ -2223,6 +2239,29 @@ describe('main', () => {
         expect(mockRegisterCrashReporter).toHaveBeenCalledOnce();
         const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
         expect(options?.autosave).toBeDefined();
+    });
+
+    it('attaches the renderer process-gone handler to the created main window', async () => {
+        await main();
+        await Promise.resolve();
+
+        const [win] = browserWindowInstances;
+        expect(mockMakeRendererGoneHandler).toHaveBeenCalledOnce();
+        expect(win?.webContents.on).toHaveBeenCalledWith(
+            'render-process-gone',
+            mockRendererGoneHandler,
+        );
+    });
+
+    it('passes a per-window reload callback to the renderer process-gone handler', async () => {
+        await main();
+        await Promise.resolve();
+
+        const [win] = browserWindowInstances;
+        const options = mockMakeRendererGoneHandler.mock.calls[0]?.[0];
+        options?.reloadRenderer();
+
+        expect(win?.reload).toHaveBeenCalledOnce();
     });
 
     it('autosave callback resolves without throwing when no session is active (null activeSession)', async () => {

@@ -1,12 +1,13 @@
 /**
  * @module crash-reporter
  *
- * Registers three failure listeners for the Electron main process (§4.27):
+ * Registers failure listeners for the Electron main process (§4.27):
  *
  *   1. `process.on('uncaughtException')` — logs fatal, autosaves, writes an
  *      atomic JSON crash dump under `crashesDir/`, then exits gracefully.
  *   2. `process.on('unhandledRejection')` — logs error; does NOT exit.
- *   3. `app.on('before-quit')` — placeholder for future renderer-gone handling.
+ *   3. `webContents.on('render-process-gone')` — logs fatal, writes an atomic
+ *      renderer crash dump, then attempts one renderer restart per window.
  *
  * The crash dump is written atomically: first to `<path>.tmp`, then renamed
  * to the final path to prevent partial writes (Invariant 68).
@@ -52,6 +53,20 @@ export interface CrashReporterOptions {
     };
 }
 
+export interface RendererGoneDetails {
+    readonly reason: string;
+    readonly exitCode: number;
+}
+
+export type RendererGoneHandler = (event: unknown, details: RendererGoneDetails) => void;
+
+export interface RendererGoneHandlerOptions {
+    readonly logger: Logger;
+    readonly crashesDir: string;
+    readonly getSnapshot?: () => unknown;
+    readonly reloadRenderer: () => void;
+}
+
 // ── implementation ─────────────────────────────────────────────────────────────
 
 /**
@@ -79,6 +94,47 @@ export function registerCrashReporter(options: CrashReporterOptions): void {
         const err = reason instanceof Error ? reason : new Error(String(reason));
         logger.error('Unhandled promise rejection', err, { reason: String(reason) });
     });
+}
+
+export function makeRendererGoneHandler(options: RendererGoneHandlerOptions): RendererGoneHandler {
+    let restartAttempted = false;
+
+    return (_event, details) => {
+        const context = { reason: details.reason, exitCode: details.exitCode };
+        const rendererError = new Error(
+            `Renderer process gone: ${details.reason} (exitCode ${details.exitCode})`,
+        );
+
+        options.logger.fatal('render-process-gone — writing crash dump', rendererError, context);
+
+        try {
+            writeCrashDump(options.crashesDir, rendererError, options.getSnapshot?.() ?? null);
+        } catch (writeError) {
+            const error = writeError instanceof Error ? writeError : new Error(String(writeError));
+            options.logger.error('failed to write renderer crash dump', error, context);
+        }
+
+        if (restartAttempted) {
+            options.logger.warn(
+                'renderer restart skipped after repeated render-process-gone',
+                context,
+            );
+            return;
+        }
+
+        restartAttempted = true;
+        try {
+            options.reloadRenderer();
+        } catch (reloadError) {
+            const error =
+                reloadError instanceof Error ? reloadError : new Error(String(reloadError));
+            options.logger.error(
+                'renderer restart failed after render-process-gone',
+                error,
+                context,
+            );
+        }
+    };
 }
 
 // ── private helpers ────────────────────────────────────────────────────────────
