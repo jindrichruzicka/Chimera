@@ -2,9 +2,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { LogEntry } from '@chimera/shared/logging.js';
 import type { Logger } from './logger.js';
+import { LogRingBufferSink } from './log-ring-buffer-sink.js';
 import {
     type CrashReporterOptions,
+    MAX_CRASH_LOG_ENTRIES,
     makeRendererGoneHandler,
     registerCrashReporter,
 } from './crash-reporter.js';
@@ -54,6 +57,15 @@ function makeProcess(): FakeProcess {
 function makeApp(): FakeApp {
     return {
         on: vi.fn(),
+    };
+}
+
+function makeLogEntry(message: string, timestamp: number): LogEntry {
+    return {
+        level: 'info',
+        message,
+        timestamp,
+        source: { process: 'main', module: 'test' },
     };
 }
 
@@ -320,6 +332,84 @@ describe('registerCrashReporter', () => {
         expect(flushOrder.indexOf('flush')).toBeLessThan(flushOrder.indexOf('exit'));
         exitSpy.mockRestore();
     });
+
+    it('writes appVersion and recentLogs into the crash dump JSON', async () => {
+        const logger = makeLogger();
+        const proc = makeProcess();
+        const app = makeApp();
+        const crashesDir = path.join(tmpDir, 'crashes');
+        const ring = new LogRingBufferSink({ write: vi.fn() }, 2);
+        ring.write(makeLogEntry('first', 1));
+        ring.write(makeLogEntry('second', 2));
+        ring.write(makeLogEntry('third', 3));
+
+        const options: CrashReporterOptions = {
+            logger,
+            crashesDir,
+            getSnapshot: () => null,
+            getRecentLogs: () => ring.getEntries(),
+            getAppVersion: () => '0.7.0-test',
+            autosave: vi.fn(() => Promise.resolve()),
+            process: proc as unknown as NodeJS.Process,
+            app,
+        };
+
+        registerCrashReporter(options);
+        proc._emit('uncaughtException', new Error('complete dump test'));
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        const files = fs.readdirSync(crashesDir);
+        const dumpFile = files.find((f) => f.startsWith('crash-') && f.endsWith('.json'));
+        expect(dumpFile).toBeDefined();
+        const dump = JSON.parse(fs.readFileSync(path.join(crashesDir, dumpFile!), 'utf-8')) as {
+            readonly appVersion?: unknown;
+            readonly recentLogs?: readonly LogEntry[];
+        };
+
+        expect(dump.appVersion).toBe('0.7.0-test');
+        expect(Array.isArray(dump.recentLogs)).toBe(true);
+        expect(dump.recentLogs?.map((entry) => entry.message)).toEqual(['second', 'third']);
+        expect(dump.recentLogs?.length).toBeLessThanOrEqual(2);
+    });
+
+    it('caps recentLogs at MAX_CRASH_LOG_ENTRIES, keeping the most recent entries', async () => {
+        const logger = makeLogger();
+        const proc = makeProcess();
+        const app = makeApp();
+        const crashesDir = path.join(tmpDir, 'crashes');
+        const totalEntries = MAX_CRASH_LOG_ENTRIES + 1;
+        const allEntries = Array.from({ length: totalEntries }, (_, i) =>
+            makeLogEntry(`msg-${i}`, i),
+        );
+
+        const options: CrashReporterOptions = {
+            logger,
+            crashesDir,
+            getSnapshot: () => null,
+            getRecentLogs: () => allEntries,
+            getAppVersion: () => '0.7.0-test',
+            autosave: vi.fn(() => Promise.resolve()),
+            process: proc as unknown as NodeJS.Process,
+            app,
+        };
+
+        registerCrashReporter(options);
+        proc._emit('uncaughtException', new Error('cap test'));
+
+        await new Promise((r) => setTimeout(r, 50));
+
+        const files = fs.readdirSync(crashesDir);
+        const dumpFile = files.find((f) => f.startsWith('crash-') && f.endsWith('.json'));
+        expect(dumpFile).toBeDefined();
+        const dump = JSON.parse(fs.readFileSync(path.join(crashesDir, dumpFile!), 'utf-8')) as {
+            readonly recentLogs: readonly LogEntry[];
+        };
+
+        expect(dump.recentLogs.length).toBe(MAX_CRASH_LOG_ENTRIES);
+        expect(dump.recentLogs[0]?.message).toBe('msg-1');
+        expect(dump.recentLogs[MAX_CRASH_LOG_ENTRIES - 1]?.message).toBe(`msg-${totalEntries - 1}`);
+    });
 });
 
 describe('makeRendererGoneHandler', () => {
@@ -344,10 +434,13 @@ describe('makeRendererGoneHandler', () => {
     it('writes the renderer crash dump atomically', () => {
         const logger = makeLogger();
         const crashesDir = path.join(tmpDir, 'crashes');
+        const recentLogs = [makeLogEntry('renderer-before-crash', 1)];
         const handler = makeRendererGoneHandler({
             logger,
             crashesDir,
             getSnapshot: () => ({ tick: 17 }),
+            getRecentLogs: () => recentLogs,
+            getAppVersion: () => '0.7.0-test',
             reloadRenderer: vi.fn(),
         });
 
@@ -361,10 +454,14 @@ describe('makeRendererGoneHandler', () => {
 
         const dumpPath = path.join(crashesDir, jsonFiles[0]!);
         const dump = JSON.parse(fs.readFileSync(dumpPath, 'utf-8')) as {
+            readonly appVersion: string;
             readonly error: { readonly message: string };
+            readonly recentLogs: readonly LogEntry[];
             readonly snapshot: { readonly tick: number };
         };
+        expect(dump.appVersion).toBe('0.7.0-test');
         expect(dump.error.message).toContain('oom');
+        expect(dump.recentLogs).toEqual(recentLogs);
         expect(dump.snapshot).toEqual({ tick: 17 });
     });
 

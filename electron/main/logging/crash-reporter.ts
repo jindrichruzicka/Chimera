@@ -19,7 +19,13 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import type { LogEntry } from '@chimera/shared/logging.js';
 import type { Logger } from './logger.js';
+
+// ── public constants ────────────────────────────────────────────────────────────
+
+/** Maximum number of recent log entries embedded in a crash dump. */
+export const MAX_CRASH_LOG_ENTRIES = 200;
 
 // ── public contract ────────────────────────────────────────────────────────────
 
@@ -30,6 +36,18 @@ export interface CrashReporterOptions {
     readonly crashesDir: string;
     /** Returns the current game snapshot (or `null` if no simulation is running). */
     readonly getSnapshot?: () => unknown;
+    /**
+     * Returns recent local log entries for crash dump post-mortems.
+     *
+     * **Caller responsibility:** `LogEntry.context` is untyped (`Record<string,
+     * unknown>`) — any data a callsite passes as context will be serialised into
+     * the crash dump verbatim. Do not log credentials, tokens, or user PII in
+     * context fields. Crash dumps are local-only (invariant 69), but they are
+     * plain JSON on disk and may be shared manually during support.
+     */
+    readonly getRecentLogs?: () => readonly LogEntry[];
+    /** Returns the application version to embed in crash dumps. */
+    readonly getAppVersion?: () => string;
     /** Called before writing the crash dump on `uncaughtException`. */
     readonly autosave?: () => Promise<void>;
     /**
@@ -64,7 +82,18 @@ export interface RendererGoneHandlerOptions {
     readonly logger: Logger;
     readonly crashesDir: string;
     readonly getSnapshot?: () => unknown;
+    /**
+     * Returns recent local log entries for crash dump post-mortems.
+     * See `CrashReporterOptions.getRecentLogs` for the PII caveat.
+     */
+    readonly getRecentLogs?: () => readonly LogEntry[];
+    readonly getAppVersion?: () => string;
     readonly reloadRenderer: () => void;
+}
+
+interface CrashDumpContextProviders {
+    readonly getRecentLogs?: () => readonly LogEntry[];
+    readonly getAppVersion?: () => string;
 }
 
 // ── implementation ─────────────────────────────────────────────────────────────
@@ -76,7 +105,7 @@ export interface RendererGoneHandlerOptions {
  * before the first `BrowserWindow` is created.
  */
 export function registerCrashReporter(options: CrashReporterOptions): void {
-    const { logger, crashesDir, getSnapshot, autosave } = options;
+    const { logger, crashesDir, getSnapshot, getRecentLogs, getAppVersion, autosave } = options;
     const proc: NodeJS.Process = options.process ?? process;
 
     proc.on('uncaughtException', (err: Error) => {
@@ -86,6 +115,8 @@ export function registerCrashReporter(options: CrashReporterOptions): void {
             proc,
             ...(options.flush !== undefined && { flush: options.flush }),
             ...(getSnapshot !== undefined && { getSnapshot }),
+            ...(getRecentLogs !== undefined && { getRecentLogs }),
+            ...(getAppVersion !== undefined && { getAppVersion }),
             ...(autosave !== undefined && { autosave }),
         });
     });
@@ -108,7 +139,14 @@ export function makeRendererGoneHandler(options: RendererGoneHandlerOptions): Re
         options.logger.fatal('render-process-gone — writing crash dump', rendererError, context);
 
         try {
-            writeCrashDump(options.crashesDir, rendererError, options.getSnapshot?.() ?? null);
+            writeCrashDump(options.crashesDir, rendererError, options.getSnapshot?.() ?? null, {
+                ...(options.getRecentLogs !== undefined && {
+                    getRecentLogs: options.getRecentLogs,
+                }),
+                ...(options.getAppVersion !== undefined && {
+                    getAppVersion: options.getAppVersion,
+                }),
+            });
         } catch (writeError) {
             const error = writeError instanceof Error ? writeError : new Error(String(writeError));
             options.logger.error('failed to write renderer crash dump', error, context);
@@ -197,10 +235,13 @@ async function handleUncaughtException(
         readonly proc: NodeJS.Process;
         readonly flush?: () => void;
         readonly getSnapshot?: () => unknown;
+        readonly getRecentLogs?: () => readonly LogEntry[];
+        readonly getAppVersion?: () => string;
         readonly autosave?: () => Promise<void>;
     },
 ): Promise<void> {
-    const { logger, crashesDir, proc, getSnapshot, autosave } = options;
+    const { logger, crashesDir, proc, getSnapshot, getRecentLogs, getAppVersion, autosave } =
+        options;
 
     logger.fatal('uncaughtException — writing crash dump', err, { stack: err.stack });
 
@@ -215,7 +256,10 @@ async function handleUncaughtException(
         }
 
         try {
-            writeCrashDump(crashesDir, err, getSnapshot?.() ?? null);
+            writeCrashDump(crashesDir, err, getSnapshot?.() ?? null, {
+                ...(getRecentLogs !== undefined && { getRecentLogs }),
+                ...(getAppVersion !== undefined && { getAppVersion }),
+            });
         } catch (writeErr) {
             const e = writeErr instanceof Error ? writeErr : new Error(String(writeErr));
             logger.error('failed to write crash dump', e, {});
@@ -227,7 +271,12 @@ async function handleUncaughtException(
     }
 }
 
-function writeCrashDump(crashesDir: string, err: Error, snapshot: unknown): void {
+function writeCrashDump(
+    crashesDir: string,
+    err: Error,
+    snapshot: unknown,
+    contextProviders: CrashDumpContextProviders = {},
+): void {
     fs.mkdirSync(crashesDir, { recursive: true });
 
     const isoTimestamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -245,6 +294,8 @@ function writeCrashDump(crashesDir: string, err: Error, snapshot: unknown): void
         versions: process.versions,
         osRelease: os.release(),
         snapshot: safeSerialiseSnapshot(snapshot ?? null),
+        appVersion: contextProviders.getAppVersion?.() ?? 'unknown',
+        recentLogs: (contextProviders.getRecentLogs?.() ?? []).slice(-MAX_CRASH_LOG_ENTRIES),
     };
 
     const data = JSON.stringify(dump, null, 2);

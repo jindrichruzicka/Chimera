@@ -29,6 +29,7 @@ import {
     type FlushableSink,
 } from './logging/logger.js';
 import { makeRendererGoneHandler, registerCrashReporter } from './logging/crash-reporter.js';
+import { LogRingBufferSink } from './logging/log-ring-buffer-sink.js';
 import { SaveManager } from './saves/SaveManager.js';
 import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
@@ -870,13 +871,14 @@ export async function main(): Promise<void> {
             memorySink.write(entry);
         },
     };
+    const crashLogSink = new LogRingBufferSink(combinedSink);
 
     // Construct the root main-process logger once (invariant 67). Child
     // loggers injected into each register*Handlers call so every namespace
     // is tagged with its own `module`.
     const logger: Logger = createLogger({
         source: { process: 'main', module: 'root' },
-        sink: combinedSink,
+        sink: crashLogSink,
     });
 
     // The single live `SessionRuntime` for the currently-hosted session, or
@@ -895,6 +897,8 @@ export async function main(): Promise<void> {
             pinoSink.flushSync();
         },
         getSnapshot: () => activeSession?.getSnapshot() ?? null,
+        getRecentLogs: () => crashLogSink.getEntries(),
+        getAppVersion: () => app.getVersion(),
         autosave: autosaveActiveSessionBeforeCrash,
     });
 
@@ -1605,7 +1609,7 @@ export async function main(): Promise<void> {
         ipcMain,
         logger: logger.child({ module: 'logs' }),
         memorySink,
-        sink: combinedSink,
+        sink: crashLogSink,
     });
 
     // Register the `chimera:profile:*` channels.  All profile state is
@@ -1637,6 +1641,8 @@ export async function main(): Promise<void> {
                 logger: crashLogger,
                 crashesDir,
                 getSnapshot: () => activeSession?.getSnapshot() ?? null,
+                getRecentLogs: () => crashLogSink.getEntries(),
+                getAppVersion: () => app.getVersion(),
                 reloadRenderer: () => {
                     if (!createdWindow.isDestroyed()) {
                         createdWindow.reload();

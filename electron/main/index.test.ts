@@ -75,12 +75,18 @@ const { mockMakeRendererGoneHandler, mockRegisterCrashReporter, mockRendererGone
         const rendererGoneHandler = vi.fn();
         return {
             mockMakeRendererGoneHandler: vi.fn<
-                (options: { reloadRenderer: () => void }) => (...args: readonly unknown[]) => void
+                (options: {
+                    getRecentLogs?: () => readonly unknown[];
+                    getAppVersion?: () => string;
+                    reloadRenderer: () => void;
+                }) => (...args: readonly unknown[]) => void
             >(() => rendererGoneHandler),
             mockRegisterCrashReporter:
                 vi.fn<
                     (options: {
                         autosave?: () => Promise<void>;
+                        getRecentLogs?: () => readonly unknown[];
+                        getAppVersion?: () => string;
                         getSnapshot?: () => unknown;
                     }) => void
                 >(),
@@ -286,6 +292,7 @@ const appExit = vi.fn<(code: number) => void>();
 const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
 const appGetLocale = vi.fn<() => string>(() => 'en-US');
+const appGetVersion = vi.fn<() => string>(() => '0.7.0-test');
 const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
 const ipcMainOn = vi.fn<(channel: string, handler: () => void) => void>();
 const protocolRegisterSchemesAsPrivileged = vi.fn<
@@ -339,6 +346,7 @@ vi.mock('electron', () => ({
         whenReady: appWhenReady,
         getPath: appGetPath,
         getLocale: appGetLocale,
+        getVersion: appGetVersion,
     },
     BrowserWindow: FakeBrowserWindow,
     ipcMain: {
@@ -1146,6 +1154,8 @@ describe('main', () => {
         appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
         appGetLocale.mockClear();
         appGetLocale.mockImplementation(() => 'en-US');
+        appGetVersion.mockClear();
+        appGetVersion.mockImplementation(() => '0.7.0-test');
         ipcMainHandle.mockClear();
         screenGetAllDisplays.mockClear();
         screenGetPrimaryDisplay.mockClear();
@@ -2241,6 +2251,14 @@ describe('main', () => {
         expect(options?.autosave).toBeDefined();
     });
 
+    it('passes app version and recent-log callbacks to registerCrashReporter', async () => {
+        await main();
+
+        const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
+        expect(options?.getAppVersion?.()).toBe('0.7.0-test');
+        expect(Array.isArray(options?.getRecentLogs?.())).toBe(true);
+    });
+
     it('attaches the renderer process-gone handler to the created main window', async () => {
         await main();
         await Promise.resolve();
@@ -2262,6 +2280,15 @@ describe('main', () => {
         options?.reloadRenderer();
 
         expect(win?.reload).toHaveBeenCalledOnce();
+    });
+
+    it('passes app version and recent-log callbacks to the renderer process-gone handler', async () => {
+        await main();
+        await Promise.resolve();
+
+        const options = mockMakeRendererGoneHandler.mock.calls[0]?.[0];
+        expect(options?.getAppVersion?.()).toBe('0.7.0-test');
+        expect(Array.isArray(options?.getRecentLogs?.())).toBe(true);
     });
 
     it('autosave callback resolves without throwing when no session is active (null activeSession)', async () => {
