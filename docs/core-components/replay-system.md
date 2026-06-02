@@ -57,17 +57,20 @@ export class ReplayPlayer {
     constructor(
         private readonly file: ReplayFile,
         private readonly pipeline: ActionPipeline, // same instance as live play
-        private readonly registry: ActionRegistry,
+        private readonly initialSnapshotFactory: ReplayInitialSnapshotFactory<GameSnapshot>,
     ) {}
 
     initialize(): GameSnapshot; // seed + gameConfig → initial state
     step(): GameSnapshot; // apply next recorded action
     seek(tick: number): GameSnapshot; // fast-forward or jump
-    play(speedMultiplier: number, onFrame: (s: GameSnapshot) => void): StopFn;
+    play(speedMultiplier: number, onFrame: (s: GameSnapshot, stop: StopFn) => void): StopFn;
+    playSync(): GameSnapshot; // deterministic batch playback for tests/tools
 }
 ```
 
-Replay playback reuses the **exact same `ActionPipeline`** as a live match — no separate replay reducer codepath. A divergence is a determinism bug, not an acceptable simplification.
+Replay playback reuses the **exact same `ActionPipeline`** as a live match — no separate replay reducer codepath. A divergence is a determinism bug, not an acceptable simplification. `ActionRegistry` remains encapsulated by the injected live pipeline.
+
+The `initialSnapshotFactory` reconstructs the concrete game snapshot type from `seed + gameConfig`. The engine provides `createBaseReplayInitialSnapshot()` for base fields; games compose on top of it to add required game-specific fields without unsafe casts. The simulation-layer `play()` API invokes `onFrame` for each produced snapshot and passes a stop handle that can end playback before the next action while preserving pure, tick-driven replay; UI timing/scheduling lives outside `simulation/`.
 
 ---
 
