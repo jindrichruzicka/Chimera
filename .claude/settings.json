@@ -1,0 +1,20 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -Eq '^git commit\\b.*--no-verify'; then echo '[hook:pre-commit-gate] --no-verify is prohibited on the Chimera project.' >&2; exit 2; fi"
+                    },
+                    {
+                        "type": "command",
+                        "command": "if echo \"$CLAUDE_TOOL_INPUT\" | grep -Eq '^git (commit|push)\\b'; then pnpm format:check && pnpm lint && pnpm typecheck && pnpm test || { echo '[hook:pre-commit-gate] Gate failed. Fix the above errors and retry.' >&2; exit 2; }; fi"
+                    }
+                ]
+            }
+        ]
+    }
+}
