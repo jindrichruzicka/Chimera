@@ -91,6 +91,29 @@ export interface ReplayFile {
     readonly metadata: ReplayMetadata;
 }
 
+// ─── ReplayHeader ───────────────────────────────────────────────────────────
+
+/**
+ * The static (non-action) portion of a recording, supplied to
+ * `ReplayManager.startRecording()` before any `RecordedAction` is appended.
+ *
+ * Contains every `ReplayFile` field except `formatVersion` (the constant `1`),
+ * the `actions` log (accumulated during recording), and
+ * `metadata.durationTicks` (computed at finalise from the recorded actions).
+ * `recordedAt` is captured by the caller at recording start so the simulation
+ * layer stays free of wall-clock reads (invariant #43).
+ */
+export interface ReplayHeader {
+    readonly engineVersion: string;
+    readonly gameId: string;
+    readonly gameVersion: string;
+    readonly gameConfig: Readonly<Record<string, unknown>>;
+    readonly seed: number;
+    /** ISO-8601 UTC timestamp captured at recording start. */
+    readonly recordedAt: string;
+    readonly players: readonly ReplayPlayerMetadata[];
+}
+
 // ─── parseReplayFile ──────────────────────────────────────────────────────────
 
 /**

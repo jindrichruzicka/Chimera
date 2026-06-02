@@ -18,7 +18,7 @@
 import { promisify } from 'node:util';
 import { gzip, gunzip } from 'node:zlib';
 import { serializeReplay, deserializeReplay } from '@chimera/simulation/replay/index.js';
-import type { ReplayFile } from '@chimera/simulation/replay/index.js';
+import type { ReplayFile, ReplaySerializer } from '@chimera/simulation/replay/index.js';
 import { ReplayParseError } from '@chimera/simulation/replay/index.js';
 
 const gzipAsync = promisify(gzip);
@@ -49,4 +49,22 @@ export async function deserializeReplayCompressed(buf: Buffer): Promise<ReplayFi
         );
     }
     return deserializeReplay(decompressed.toString('utf8'));
+}
+
+/**
+ * `ReplaySerializer` strategy backed by the async gzip functions above.
+ *
+ * Inject this into `FileReplayRepository` for space-efficient production
+ * storage; inject `JsonReplaySerializer` (simulation/replay) when
+ * human-readable output is preferred.
+ */
+export class CompressedReplaySerializer implements ReplaySerializer {
+    serialize(file: ReplayFile): Promise<Buffer> {
+        return serializeReplayCompressed(file);
+    }
+
+    deserialize(raw: string | Buffer): Promise<ReplayFile> {
+        const buf = typeof raw === 'string' ? Buffer.from(raw, 'utf8') : raw;
+        return deserializeReplayCompressed(buf);
+    }
 }

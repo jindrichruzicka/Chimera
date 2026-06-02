@@ -1,0 +1,68 @@
+/**
+ * simulation/replay/InMemoryReplayRepository.ts
+ *
+ * In-memory ReplayRepository implementation for unit tests and E2E fixtures.
+ * Backed by a `Map`; no filesystem access (§4.28, invariant #41).
+ *
+ * Storage paths are synthetic, deterministic keys (a monotonic counter) so the
+ * double needs neither `crypto.randomUUID` nor wall-clock reads — keeping
+ * simulation/ free of non-deterministic globals.
+ *
+ * Architecture reference: §4.28
+ * Task: F44 / T3 (issue #657)
+ *
+ * Invariants upheld:
+ *   #2  — simulation/ is side-effect-free; no FS or Electron imports.
+ *   #41 — Passes the identical contract test suite as FileReplayRepository.
+ */
+
+import type { ReplayFile } from './ReplayFile.js';
+import type { ReplayRepository } from './ReplayRepository.js';
+import { ReplayNotFoundError } from './ReplayRepository.js';
+
+/**
+ * In-memory test double for `ReplayRepository`. Each `save()` assigns a fresh
+ * synthetic path and never overwrites a prior entry, matching the file-backed
+ * repository's UUID-per-replay behaviour.
+ */
+export class InMemoryReplayRepository implements ReplayRepository {
+    private readonly store = new Map<string, ReplayFile>();
+    private counter = 0;
+
+    save(file: ReplayFile): Promise<string> {
+        const path = `mem://replays/${file.gameId}/${String(this.counter++)}.chimera-replay`;
+        this.store.set(path, file);
+        return Promise.resolve(path);
+    }
+
+    load(filePath: string): Promise<ReplayFile> {
+        const file = this.store.get(filePath);
+        if (file === undefined) {
+            return Promise.reject(new ReplayNotFoundError(filePath));
+        }
+        return Promise.resolve(file);
+    }
+
+    list(gameId: string): Promise<string[]> {
+        const matches = [...this.store.entries()].filter(([, file]) => file.gameId === gameId);
+
+        matches.sort(([pathA, a], [pathB, b]) => {
+            // Newest-first by recordedAt; stable tiebreak by path so equal
+            // timestamps yield a deterministic order.
+            if (a.metadata.recordedAt !== b.metadata.recordedAt) {
+                return a.metadata.recordedAt < b.metadata.recordedAt ? 1 : -1;
+            }
+            return pathA < pathB ? 1 : -1;
+        });
+
+        return Promise.resolve(matches.map(([path]) => path));
+    }
+
+    delete(filePath: string): Promise<void> {
+        if (!this.store.has(filePath)) {
+            return Promise.reject(new ReplayNotFoundError(filePath));
+        }
+        this.store.delete(filePath);
+        return Promise.resolve();
+    }
+}

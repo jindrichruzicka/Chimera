@@ -14,7 +14,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { serializeReplay, deserializeReplay } from './ReplaySerializer.js';
+import { serializeReplay, deserializeReplay, JsonReplaySerializer } from './ReplaySerializer.js';
 import { ReplayParseError } from './ReplayFile.js';
 import type { ReplayFile } from './ReplayFile.js';
 import { playerId as toPlayerId } from '../engine/types.js';
@@ -256,5 +256,35 @@ describe('deserializeReplay — prototype pollution defence', () => {
             constructor: 'barracks',
             prototype: { armor: 2 },
         });
+    });
+});
+
+// ─── JsonReplaySerializer (ReplaySerializer strategy) ──────────────────────────
+
+describe('JsonReplaySerializer', () => {
+    it('round-trips a ReplayFile through serialize → deserialize', async () => {
+        const serializer = new JsonReplaySerializer();
+        const file = makeReplayFile();
+
+        const bytes = await serializer.serialize(file);
+        const restored = await serializer.deserialize(bytes);
+
+        expect(restored).toStrictEqual(file);
+    });
+
+    it('deserialize accepts a Buffer as well as a string', async () => {
+        const serializer = new JsonReplaySerializer();
+        const file = makeReplayFile();
+
+        const text = await serializer.serialize(file);
+        const restored = await serializer.deserialize(Buffer.from(String(text), 'utf8'));
+
+        expect(restored).toStrictEqual(file);
+    });
+
+    it('deserialize rejects malformed JSON with ReplayParseError', async () => {
+        const serializer = new JsonReplaySerializer();
+
+        await expect(serializer.deserialize('not json')).rejects.toBeInstanceOf(ReplayParseError);
     });
 });

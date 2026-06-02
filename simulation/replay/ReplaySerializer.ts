@@ -74,3 +74,47 @@ export function deserializeReplay(json: string): ReplayFile {
 
     return parseReplayFile(parsed);
 }
+
+// ─── ReplaySerializer strategy ───────────────────────────────────────────────
+
+/**
+ * Strategy interface for turning a `ReplayFile` into storable bytes and back
+ * (mirrors `SaveSerializer`, §4.11). The repository owns file paths; the
+ * serializer owns only the byte representation.
+ *
+ * `serialize` may return a string (plain JSON) or a `Buffer` (e.g. gzip);
+ * `deserialize` accepts either. Both are async so implementations may perform
+ * non-blocking transforms — `CompressedReplaySerializer` (electron/main) uses
+ * async gzip. Synchronous implementations wrap their result in a resolved
+ * Promise.
+ *
+ * Implementations must be stateless and round-trip stable:
+ * `deserialize(serialize(file))` is structurally equal to `file`.
+ */
+export interface ReplaySerializer {
+    serialize(file: ReplayFile): Promise<string | Buffer>;
+    deserialize(raw: string | Buffer): Promise<ReplayFile>;
+}
+
+/**
+ * Plain-JSON `ReplaySerializer` — wraps the pure `serializeReplay` /
+ * `deserializeReplay` functions and adapts them to the `ReplaySerializer`
+ * contract. Human-readable; use `CompressedReplaySerializer` (electron/main)
+ * when storage size matters.
+ */
+export class JsonReplaySerializer implements ReplaySerializer {
+    serialize(file: ReplayFile): Promise<string> {
+        return Promise.resolve(serializeReplay(file));
+    }
+
+    deserialize(raw: string | Buffer): Promise<ReplayFile> {
+        const text = typeof raw === 'string' ? raw : raw.toString('utf8');
+        // Convert a synchronous ReplayParseError into a rejected promise so
+        // callers can rely on `.catch` / `await … rejects` uniformly.
+        try {
+            return Promise.resolve(deserializeReplay(text));
+        } catch (cause) {
+            return Promise.reject(cause instanceof Error ? cause : new Error(String(cause)));
+        }
+    }
+}
