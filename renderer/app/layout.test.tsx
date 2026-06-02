@@ -12,15 +12,19 @@ import { useToastStore } from '../state/toastStore';
 import { AppShell } from './AppShell';
 import RootLayout from './layout';
 
-const { mockInstallRendererLogger, mockRendererLoggerTeardown } = vi.hoisted(() => {
-    const teardown = vi.fn();
-    return {
-        mockInstallRendererLogger: vi.fn(() => teardown),
-        mockRendererLoggerTeardown: teardown,
-    };
-});
+const { mockEmitRendererError, mockInstallRendererLogger, mockRendererLoggerTeardown } = vi.hoisted(
+    () => {
+        const teardown = vi.fn();
+        return {
+            mockEmitRendererError: vi.fn(),
+            mockInstallRendererLogger: vi.fn(() => teardown),
+            mockRendererLoggerTeardown: teardown,
+        };
+    },
+);
 
 vi.mock('../logging/rendererLogger', () => ({
+    emitRendererError: mockEmitRendererError,
     installRendererLogger: mockInstallRendererLogger,
 }));
 
@@ -60,6 +64,7 @@ beforeEach(() => {
     vi.stubGlobal('crypto', { randomUUID: vi.fn(() => TOAST_ID) });
     vi.spyOn(performance, 'now').mockReturnValue(0);
     vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    mockEmitRendererError.mockClear();
     mockInstallRendererLogger.mockClear();
     mockRendererLoggerTeardown.mockClear();
     installMatchMedia();

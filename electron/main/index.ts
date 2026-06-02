@@ -1648,6 +1648,9 @@ export async function main(): Promise<void> {
                         createdWindow.reload();
                     }
                 },
+                shutdownAfterRepeatedCrash: () => {
+                    app.quit();
+                },
             }),
         );
 

@@ -5,12 +5,13 @@
 // React class-based error boundary (§4.27). On catch:
 //   1. Renders <CrashFallback /> with crash ID, "Return to Main Menu",
 //      and "Restart Application" buttons.
-//   2. "Restart Application" calls globalThis.__chimera?.system.quit().
+//   2. "Restart Application" calls globalThis.__chimera?.system.relaunch().
 //
 // ToastHost MUST be mounted as a SIBLING, not a child — see §4.27
 // shell-root mount ordering.
 
 import React from 'react';
+import { emitRendererError } from '../../logging/rendererLogger';
 
 // ── types ──────────────────────────────────────────────────────────────────────
 
@@ -68,11 +69,17 @@ export class RootErrorBoundary extends React.Component<Props, State> {
     }
 
     public override componentDidCatch(error: Error, info: React.ErrorInfo): void {
-        // Forward to console so the renderer logger hooks pick it up
-        console.error(
+        const logsApi = (
+            globalThis as Record<string, unknown> & {
+                __chimera?: { logs?: Parameters<typeof emitRendererError>[0] };
+            }
+        ).__chimera?.logs;
+        emitRendererError(
+            logsApi,
             '[RootErrorBoundary] Uncaught error in React tree',
             error,
-            info.componentStack,
+            { componentStack: info.componentStack },
+            'RootErrorBoundary',
         );
     }
 

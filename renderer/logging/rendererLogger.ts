@@ -27,6 +27,10 @@ interface PromiseRejectionEvent extends Event {
     readonly reason: unknown;
 }
 
+export interface RendererLogEmitter {
+    emit(entry: LogEntry): void;
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────────
 
 function now(): number {
@@ -37,13 +41,24 @@ function makeEntry(
     level: LogEntry['level'],
     message: string,
     context?: Record<string, unknown>,
+    error?: Error,
+    moduleName = 'global',
 ): LogEntry {
     return {
         level,
         message,
         timestamp: now(),
-        source: { process: 'renderer', module: 'global' },
+        source: { process: 'renderer', module: moduleName },
         ...(context !== undefined && { context }),
+        ...(error !== undefined && { error: serialiseError(error) }),
+    };
+}
+
+function serialiseError(error: Error): NonNullable<LogEntry['error']> {
+    return {
+        name: error.name,
+        message: error.message,
+        ...(error.stack !== undefined && { stack: error.stack }),
     };
 }
 
@@ -154,4 +169,18 @@ export function installRendererLogger(logsApi: LogsAPI): () => void {
         window.removeEventListener('unhandledrejection', onUnhandledRejection);
         installed = false;
     };
+}
+
+export function emitRendererError(
+    logsApi: RendererLogEmitter | undefined,
+    message: string,
+    error: Error,
+    context?: Record<string, unknown>,
+    moduleName = 'global',
+): void {
+    try {
+        logsApi?.emit(makeEntry('error', message, context, error, moduleName));
+    } catch {
+        // swallow — prevent re-entry if IPC bridge throws
+    }
 }

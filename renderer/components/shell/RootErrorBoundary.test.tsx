@@ -40,6 +40,34 @@ describe('RootErrorBoundary', () => {
         expect(screen.getByText(/unexpected error/i)).toBeTruthy();
     });
 
+    it('forwards caught errors through the logs IPC surface with component context', () => {
+        const emit = vi.fn();
+        (globalThis as Record<string, unknown>)['__chimera'] = { logs: { emit } };
+
+        render(
+            <RootErrorBoundary>
+                <Bomb shouldThrow={true} />
+            </RootErrorBoundary>,
+        );
+
+        expect(emit).toHaveBeenCalledWith(
+            expect.objectContaining({
+                level: 'error',
+                message: '[RootErrorBoundary] Uncaught error in React tree',
+                source: { process: 'renderer', module: 'RootErrorBoundary' },
+                error: expect.objectContaining({
+                    name: 'Error',
+                    message: 'test explosion',
+                }),
+                context: expect.objectContaining({
+                    componentStack: expect.stringContaining('Bomb'),
+                }),
+            }),
+        );
+
+        delete (globalThis as Record<string, unknown>)['__chimera'];
+    });
+
     it('CrashFallback renders "Return to Main Menu" button', () => {
         render(
             <RootErrorBoundary>

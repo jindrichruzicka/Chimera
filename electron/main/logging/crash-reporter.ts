@@ -89,6 +89,7 @@ export interface RendererGoneHandlerOptions {
     readonly getRecentLogs?: () => readonly LogEntry[];
     readonly getAppVersion?: () => string;
     readonly reloadRenderer: () => void;
+    readonly shutdownAfterRepeatedCrash?: () => void;
 }
 
 interface CrashDumpContextProviders {
@@ -157,6 +158,19 @@ export function makeRendererGoneHandler(options: RendererGoneHandlerOptions): Re
                 'renderer restart skipped after repeated render-process-gone',
                 context,
             );
+            try {
+                options.shutdownAfterRepeatedCrash?.();
+            } catch (shutdownError) {
+                const error =
+                    shutdownError instanceof Error
+                        ? shutdownError
+                        : new Error(String(shutdownError));
+                options.logger.error(
+                    'renderer crash-loop shutdown failed after render-process-gone',
+                    error,
+                    context,
+                );
+            }
             return;
         }
 

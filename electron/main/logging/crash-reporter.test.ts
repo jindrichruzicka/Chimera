@@ -370,13 +370,25 @@ describe('registerCrashReporter', () => {
         expect(dumpFile).toBeDefined();
         const dump = JSON.parse(fs.readFileSync(path.join(crashesDir, dumpFile!), 'utf-8')) as {
             readonly appVersion?: unknown;
+            readonly error?: { readonly name?: unknown; readonly message?: unknown };
+            readonly osRelease?: unknown;
             readonly recentLogs?: readonly LogEntry[];
+            readonly snapshot?: unknown;
+            readonly timestamp?: unknown;
+            readonly versions?: { readonly node?: unknown };
         };
 
         expect(dump.appVersion).toBe('0.7.0-test');
+        expect(dump.error).toEqual(
+            expect.objectContaining({ name: 'Error', message: 'complete dump test' }),
+        );
+        expect(typeof dump.osRelease).toBe('string');
         expect(Array.isArray(dump.recentLogs)).toBe(true);
         expect(dump.recentLogs?.map((entry) => entry.message)).toEqual(['second', 'third']);
         expect(dump.recentLogs?.length).toBeLessThanOrEqual(2);
+        expect(dump.snapshot).toBeNull();
+        expect(typeof dump.timestamp).toBe('string');
+        expect(dump.versions?.node).toEqual(expect.any(String));
     });
 
     it('caps recentLogs at MAX_CRASH_LOG_ENTRIES, keeping the most recent entries', async () => {
@@ -462,13 +474,19 @@ describe('makeRendererGoneHandler', () => {
         const dump = JSON.parse(fs.readFileSync(dumpPath, 'utf-8')) as {
             readonly appVersion: string;
             readonly error: { readonly message: string };
+            readonly osRelease?: unknown;
             readonly recentLogs: readonly LogEntry[];
             readonly snapshot: { readonly tick: number };
+            readonly timestamp?: unknown;
+            readonly versions?: { readonly node?: unknown };
         };
         expect(dump.appVersion).toBe('0.7.0-test');
         expect(dump.error.message).toContain('oom');
+        expect(typeof dump.osRelease).toBe('string');
         expect(dump.recentLogs).toEqual(recentLogs);
         expect(dump.snapshot).toEqual({ tick: 17 });
+        expect(typeof dump.timestamp).toBe('string');
+        expect(dump.versions?.node).toEqual(expect.any(String));
     });
 
     it('reloads the window at most once for repeated renderer process-gone events', () => {
@@ -489,5 +507,26 @@ describe('makeRendererGoneHandler', () => {
             expect.stringContaining('renderer restart skipped'),
             expect.objectContaining({ reason: 'crashed', exitCode: 9 }),
         );
+    });
+
+    it('calls the repeated-crash shutdown callback on the second renderer process-gone event', () => {
+        const logger = makeLogger();
+        const reloadRenderer = vi.fn();
+        const shutdownAfterRepeatedCrash = vi.fn();
+        const handler = makeRendererGoneHandler({
+            logger,
+            crashesDir: path.join(tmpDir, 'crashes'),
+            getSnapshot: () => null,
+            reloadRenderer,
+            shutdownAfterRepeatedCrash,
+        });
+
+        handler({}, { reason: 'crashed', exitCode: 9 });
+        expect(shutdownAfterRepeatedCrash).not.toHaveBeenCalled();
+
+        handler({}, { reason: 'crashed', exitCode: 9 });
+
+        expect(reloadRenderer).toHaveBeenCalledOnce();
+        expect(shutdownAfterRepeatedCrash).toHaveBeenCalledOnce();
     });
 });
