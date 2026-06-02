@@ -28,7 +28,7 @@ export class LogRingBufferSink implements LoggerSink {
         this.wrapped.write(entry);
     }
 
-    public getEntries(): readonly LogEntry[] {
+    public drain(): readonly LogEntry[] {
         const entries: LogEntry[] = [];
         for (let index = 0; index < this.size; index++) {
             const entry = this.buffer[(this.head + index) % this.buffer.length];

@@ -353,7 +353,7 @@ describe('registerCrashReporter', () => {
             logger,
             crashesDir,
             getSnapshot: () => null,
-            getRecentLogs: () => ring.getEntries(),
+            getRecentLogs: () => ring.drain(),
             getAppVersion: () => '0.7.0-test',
             autosave: vi.fn(() => Promise.resolve()),
             process: proc as unknown as NodeJS.Process,

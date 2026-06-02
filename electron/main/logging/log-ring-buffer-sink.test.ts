@@ -21,7 +21,7 @@ describe('LogRingBufferSink', () => {
         sink.write(makeEntry('second', 2));
         sink.write(makeEntry('third', 3));
 
-        expect(sink.getEntries().map((entry) => entry.message)).toEqual(['second', 'third']);
+        expect(sink.drain().map((entry) => entry.message)).toEqual(['second', 'third']);
     });
 
     it('returns drained entries in insertion order after wraparound', () => {
@@ -34,19 +34,19 @@ describe('LogRingBufferSink', () => {
         sink.write(makeEntry('d', 4));
         sink.write(makeEntry('e', 5));
 
-        expect(sink.getEntries().map((entry) => entry.message)).toEqual(['c', 'd', 'e']);
+        expect(sink.drain().map((entry) => entry.message)).toEqual(['c', 'd', 'e']);
     });
 
-    it('snapshot() returns entries without clearing the buffer', () => {
+    it('drain() returns entries without clearing the buffer', () => {
         const wrapped: LoggerSink = { write: vi.fn() };
         const sink = new LogRingBufferSink(wrapped, 2);
 
         sink.write(makeEntry('first', 1));
-        const snap = sink.getEntries();
+        const snap = sink.drain();
         sink.write(makeEntry('second', 2));
 
         expect(snap.map((entry) => entry.message)).toEqual(['first']);
-        expect(sink.getEntries().map((entry) => entry.message)).toEqual(['first', 'second']);
+        expect(sink.drain().map((entry) => entry.message)).toEqual(['first', 'second']);
     });
 
     it('delegates writes to the wrapped sink', () => {

@@ -897,7 +897,7 @@ export async function main(): Promise<void> {
             pinoSink.flushSync();
         },
         getSnapshot: () => activeSession?.getSnapshot() ?? null,
-        getRecentLogs: () => crashLogSink.getEntries(),
+        getRecentLogs: () => crashLogSink.drain(),
         getAppVersion: () => app.getVersion(),
         autosave: autosaveActiveSessionBeforeCrash,
     });
@@ -1641,7 +1641,7 @@ export async function main(): Promise<void> {
                 logger: crashLogger,
                 crashesDir,
                 getSnapshot: () => activeSession?.getSnapshot() ?? null,
-                getRecentLogs: () => crashLogSink.getEntries(),
+                getRecentLogs: () => crashLogSink.drain(),
                 getAppVersion: () => app.getVersion(),
                 reloadRenderer: () => {
                     if (!createdWindow.isDestroyed()) {

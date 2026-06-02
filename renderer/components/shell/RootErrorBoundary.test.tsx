@@ -58,25 +58,6 @@ describe('RootErrorBoundary', () => {
         expect(screen.getByRole('button', { name: /restart application/i })).toBeTruthy();
     });
 
-    it('"Restart Application" calls __chimera.system.quit', async () => {
-        const quit = vi.fn();
-        (globalThis as Record<string, unknown>)['__chimera'] = { system: { quit } };
-
-        render(
-            <RootErrorBoundary>
-                <Bomb shouldThrow={true} />
-            </RootErrorBoundary>,
-        );
-        await userEvent.click(screen.getByRole('button', { name: /restart application/i }));
-        // NOTE: handleRestart now calls relaunch(); this test preserves the
-        // original assertion shape but the fixture no longer routes through quit.
-        // The dedicated 'calls relaunch not quit' test below is the authoritative check.
-        // quit is NOT called — passing this test validates backward-compat shape only.
-        expect(quit).not.toHaveBeenCalled();
-
-        delete (globalThis as Record<string, unknown>)['__chimera'];
-    });
-
     it('"Restart Application" calls __chimera.system.relaunch(), not quit()', async () => {
         const relaunch = vi.fn();
         const quit = vi.fn();
