@@ -20,6 +20,7 @@ import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,
+    buildReplayPlayers,
 } from './HostedSessionAgents.js';
 import { buildHostSessionPipeline } from './HostSessionPipeline.js';
 import { SessionRuntime } from './SessionRuntime.js';
@@ -197,5 +198,50 @@ describe('buildInitialHostedSessionSnapshot', () => {
 
         expect(snapshot.sceneId).toBe(sceneId('engine:lobby'));
         expect(snapshot.sceneTransition).toBeNull();
+    });
+});
+
+describe('buildReplayPlayers', () => {
+    it('resolves each slot to its directory display name', () => {
+        const host = playerId('host-1');
+        const client = playerId('client-2');
+
+        const players = buildReplayPlayers(
+            [
+                { slotIndex: 0, playerId: host },
+                { slotIndex: 1, playerId: client },
+            ],
+            (id) => (id === host ? 'Alice' : id === client ? 'Bob' : undefined),
+        );
+
+        expect(players).toEqual([
+            { playerId: host, displayName: 'Alice' },
+            { playerId: client, displayName: 'Bob' },
+        ]);
+    });
+
+    it('falls back to the stringified playerId when no display name is known', () => {
+        const ai = playerId('ai-1');
+
+        const players = buildReplayPlayers([{ slotIndex: 1, playerId: ai }], () => undefined);
+
+        expect(players).toEqual([{ playerId: ai, displayName: String(ai) }]);
+    });
+
+    it('preserves slot order', () => {
+        const a = playerId('a');
+        const b = playerId('b');
+        const c = playerId('c');
+
+        const players = buildReplayPlayers(
+            [
+                { slotIndex: 2, playerId: c },
+                { slotIndex: 0, playerId: a },
+                { slotIndex: 1, playerId: b },
+            ],
+            () => undefined,
+        );
+
+        expect(players.map((p) => p.playerId)).toEqual([c, a, b]);
     });
 });

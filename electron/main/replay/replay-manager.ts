@@ -130,6 +130,19 @@ export class ReplayManager {
         }
     }
 
+    /**
+     * Discard the in-progress recording without persisting it.
+     *
+     * Called when a host session closes mid-match (an abandoned game produces no
+     * replay file). Idempotent: a no-op when no recording is in progress, so it
+     * is safe to call unconditionally at session teardown — and it guarantees the
+     * next session's `startRecording` starts from a clean state.
+     */
+    abortRecording(): void {
+        this.log.debug('abortRecording', { active: this.recording !== null });
+        this.recording = null;
+    }
+
     // ── Persistence ─────────────────────────────────────────────────────────────
 
     /**

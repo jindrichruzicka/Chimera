@@ -140,6 +140,43 @@ describe('ReplayManager — recording', () => {
     });
 });
 
+// ── Abort (mid-match session close) ──────────────────────────────────────────
+
+describe('ReplayManager — abortRecording', () => {
+    it('discards the in-progress recording without persisting', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        manager.abortRecording();
+
+        // Nothing was saved.
+        expect(await manager.list('tactics')).toStrictEqual([]);
+        // State cleared — finalise now reports no recording.
+        await expect(manager.finaliseRecording()).rejects.toThrow(/no recording/);
+    });
+
+    it('lets a fresh recording start afterwards without leaking actions', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(7));
+        manager.abortRecording();
+
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        const savedPath = await manager.finaliseRecording();
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.actions).toHaveLength(1);
+        expect(loaded.actions[0]?.tick).toBe(0);
+    });
+
+    it('is a no-op when no recording is in progress', () => {
+        const { manager } = makeManager();
+        expect(() => manager.abortRecording()).not.toThrow();
+    });
+});
+
 // ── Compatibility guard ──────────────────────────────────────────────────────
 
 describe('ReplayManager — load compatibility guard', () => {

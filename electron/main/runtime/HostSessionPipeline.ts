@@ -43,6 +43,7 @@ import {
 } from '@chimera/simulation/engine/UndoManager.js';
 import type { ActionHistoryEntry } from '@chimera/simulation/engine/UndoManager.js';
 import { DEFAULT_UNDO_POLICY } from '@chimera/simulation/engine/UndoPolicy.js';
+import type { RecordedAction, ReplayHeader } from '@chimera/simulation/replay/index.js';
 import type { Logger } from '../logging/logger.js';
 import { createNoopLogger } from '../logging/logger.js';
 
@@ -73,6 +74,32 @@ export interface GameEndPort {
     readonly onGameEnd: (snapshot: Readonly<BaseGameSnapshot>, result: GameResult) => void;
 }
 
+// ─── Replay port ─────────────────────────────────────────────────────────────
+
+/**
+ * Narrow interface through which `buildHostSessionPipeline` records a live match
+ * for later replay (§4.28, F44 / T4).  Wired to `ReplayManager` in `index.ts`.
+ *
+ * `startRecording` is called by the composition root at session initialisation
+ * (after `seed` and `gameConfig` are resolved); the pipeline itself only calls
+ * `recordAction` (per successfully applied `EngineAction`, while the match is
+ * live) and `finaliseRecording` (once, when the match resolves).
+ *
+ * Recording is a best-effort side effect: a failure must never propagate to the
+ * live transport path (same guarantee as `AutoSavePort`, invariant #25 spirit).
+ */
+export interface ReplayPort {
+    /** Begin recording a new match with its static header metadata. */
+    startRecording(header: ReplayHeader): void;
+    /**
+     * Append one applied action to the in-progress recording.  Stores the
+     * `EngineAction` payload only — never a `GameSnapshot` (invariants #3/#71).
+     */
+    recordAction(entry: RecordedAction): void;
+    /** Finalise and persist the in-progress recording at match end. */
+    finaliseRecording(): Promise<void>;
+}
+
 // ─── HostSessionPipelineOptions ──────────────────────────────────────────────
 
 /**
@@ -95,6 +122,12 @@ export interface HostSessionPipelineOptions {
     readonly savePort: AutoSavePort;
     /** Optional game-end notification port, wired to SimulationHost.onGameEnd. */
     readonly gameEndPort?: GameEndPort;
+    /**
+     * Optional live-match replay recording port, wired to `ReplayManager`.
+     * When absent, recording is silently skipped (no error).  Purely additive:
+     * `AutoSavePort`/`GameEndPort` behaviour is unchanged.
+     */
+    readonly replayPort?: ReplayPort;
     /**
      * Optional logger for autosave error reporting.
      * Defaults to a noop logger when absent.
@@ -226,7 +259,7 @@ export function buildHostSessionPipeline(
     // Resolve the optional logger and save port once at construction time so
     // the hot `processAction` path has no conditional property accesses.
     const log: Logger = resolvedOptions?.logger ?? createNoopLogger();
-    const { gameId, savePort, gameEndPort } = resolvedOptions ?? {};
+    const { gameId, savePort, gameEndPort, replayPort } = resolvedOptions ?? {};
 
     /**
      * Thin wrapper around `ActionPipeline.process` that fires autosave as a
@@ -246,8 +279,40 @@ export function buildHostSessionPipeline(
         const wasResolved = snapshot.gameResult !== null;
         const nextState = pipeline.process(snapshot, action);
 
+        // ── Replay recording (Issue #658) ─────────────────────────────────────
+        // Record every successfully applied action while the match is live.
+        // After resolution the recording is already finalised, so the
+        // `!wasResolved` guard both records the match-ending action and prevents
+        // a record-after-finalise.  Side-channel traffic never reaches here, so
+        // it is excluded by construction (invariant #71).  A recording failure
+        // must never break the live pipeline (invariant #25 spirit).
+        if (!wasResolved && replayPort !== undefined) {
+            try {
+                replayPort.recordAction({
+                    tick: action.tick, // invariant #42: tick at the time of the action
+                    playerId: action.playerId,
+                    action, // invariants #3/#71: EngineAction payload only — never a snapshot
+                });
+            } catch (err: unknown) {
+                log.error(
+                    'replay recordAction failed',
+                    err instanceof Error ? err : new Error(String(err)),
+                    { actionType: action.type },
+                );
+            }
+        }
+
         if (!wasResolved && nextState.gameResult !== null) {
             gameEndPort?.onGameEnd(nextState, nextState.gameResult);
+            if (replayPort !== undefined) {
+                void replayPort.finaliseRecording().catch((err: unknown) => {
+                    log.error(
+                        'replay finalise failed at match end',
+                        err instanceof Error ? err : new Error(String(err)),
+                        gameId !== undefined ? { gameId } : {},
+                    );
+                });
+            }
         }
 
         if (action.type === 'engine:end_turn' && gameId !== undefined && savePort !== undefined) {

@@ -21,6 +21,7 @@ import type {
 } from '@chimera/simulation/engine/types.js';
 import { playerId, sceneId } from '@chimera/simulation/engine/types.js';
 import type { LobbyAgentSlot } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { ReplayPlayerMetadata } from '@chimera/simulation/replay/ReplayFile.js';
 
 export interface HostedSessionAgentMetadata {
     readonly hostId: PlayerId;
@@ -76,6 +77,26 @@ export function collectInitialPlayerSlots(
         }
     }
     return slots;
+}
+
+/**
+ * Maps the resolved player slots to replay `players` metadata, sourcing each
+ * display name from `resolveDisplayName` (typically the host `PlayerDirectory`).
+ *
+ * Pure and order-preserving. When no display name is known for a slot — e.g.
+ * synthetic AI players, or a client whose profile has not reached the directory
+ * yet — it falls back to the stringified `playerId` so the field is never empty.
+ * This is non-gameplay metadata only (it is never read back into the snapshot),
+ * so the fallback cannot affect replay determinism.
+ */
+export function buildReplayPlayers(
+    slots: readonly HostedSessionPlayerSlot[],
+    resolveDisplayName: (id: PlayerId) => string | undefined,
+): readonly ReplayPlayerMetadata[] {
+    return slots.map((slot) => ({
+        playerId: slot.playerId,
+        displayName: resolveDisplayName(slot.playerId) ?? String(slot.playerId),
+    }));
 }
 
 export function buildInitialHostedSessionSnapshot(

@@ -51,10 +51,14 @@ import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
-import { buildHostSessionPipeline } from './runtime/HostSessionPipeline.js';
+import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
+import { FileReplayRepository } from './replay/FileReplayRepository.js';
+import { ReplayManager } from './replay/replay-manager.js';
+import { JsonReplaySerializer, ReplayMigrator } from '@chimera/simulation/replay/index.js';
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,
+    buildReplayPlayers,
     collectInitialPlayerSlots,
     resolveAgentSlot,
 } from './runtime/HostedSessionAgents.js';
@@ -919,6 +923,22 @@ export async function main(): Promise<void> {
     // and registers the before-quit handler. Returns wasCleanExit for the IPC
     // channel so the renderer can prompt crash-recovery on startup, and
     // autosaveMeta for the chimera:saves:check-crash-recovery handler.
+    // ReplayManager owns live-match recording and replay persistence (§4.28,
+    // F44). Concrete repository/serializer/migrator are chosen here at the DIP
+    // wiring point; the manager itself imports none of them. Replays are stored
+    // under <userData>/replays/<gameId>/<uuid>.chimera-replay (atomic write).
+    // The manager re-childs the logger to module 'replay-manager' internally
+    // (invariant #67), so the root logger is passed directly.
+    const replayManager = new ReplayManager(
+        new FileReplayRepository(new JsonReplaySerializer(), path.join(userData, 'replays')),
+        new ReplayMigrator(),
+        {
+            engineVersion: app.getVersion(),
+            gameVersions: new Map([[TACTICS_GAME_ID, '0.1.0']]),
+        },
+        logger,
+    );
+
     const { wasCleanExit, autosaveMeta } = await registerSaveManagerLifecycle({
         app,
         saveManager,
@@ -1029,14 +1049,30 @@ export async function main(): Promise<void> {
                 initialPlayerIds,
             );
 
+            // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).
+            // Captured once so the same value seeds both the live snapshot and
+            // the replay header (replay reconstructs initial state from it).
+            const sessionSeed = Date.now() >>> 0;
             const initialSnapshot = buildInitialHostedSessionSnapshot({
-                // 32-bit unsigned mask keeps `seed` an integer (Invariant #42).
-                seed: Date.now() >>> 0,
+                seed: sessionSeed,
                 hostPlayerId: metadata.hostId,
                 playerSlots: initialPlayerSlots,
                 phase: gamePhase('lobby'),
                 ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
             });
+
+            // Live-match replay recording adapter (F44 / T4, Issue #658).
+            // Delegates to the shared `ReplayManager`; `recordAction` /
+            // `finaliseRecording` are driven by the pipeline, `startRecording`
+            // by the composition root just below.
+            const replayPort: ReplayPort = {
+                startRecording: (header) => replayManager.startRecording(header),
+                recordAction: (entry) => replayManager.recordAction(entry),
+                finaliseRecording: async () => {
+                    await replayManager.finaliseRecording();
+                },
+            };
+
             // `pipeline`, `processAction`, and `clearUndoHistory` come from
             // the same factory; `processAction` adds the autosave fire-and-
             // forget hook on top of `pipeline.process` (Issue #375).
@@ -1075,9 +1111,60 @@ export async function main(): Promise<void> {
                             simulationHostRef.current?.onGameEnd(snapshot, result);
                         },
                     },
+                    replayPort,
                     logger: lobbyLogger,
                 },
             );
+
+            // Begin recording now that `seed` and `gameConfig` are resolved. The
+            // gameConfig mirrors the inputs to `buildInitialHostedSessionSnapshot`
+            // so a replay can reconstruct the same initial snapshot from seed +
+            // config (see `createBaseReplayInitialSnapshot`). Recording finalises
+            // on match end (in the pipeline) or is discarded on session close
+            // (in the teardown below). A startup failure must not break hosting.
+            //
+            // Intentional trade-off: a single `replayManager` is shared across all
+            // hosted sessions, and `finaliseRecording` is fire-and-forget (it clears
+            // `recording` only after the async `repository.save` resolves). If a new
+            // session's `startRecording` were to fire before a slow finalise resolved,
+            // `startRecording` would throw "a recording is already in progress"; the
+            // catch below keeps hosting alive and that session's replay is dropped
+            // rather than corrupting the in-flight one. The teardown's
+            // `abortRecording()` clears state between sessions, so this only bites on
+            // a back-to-back host with a still-saving prior replay. We accept that
+            // narrow, gracefully-degrading loss over blocking session startup on a
+            // disk write; the live transport path must never wait on replay I/O.
+            const playerDirectorySnapshot = playerDirectory.snapshot();
+            try {
+                replayPort.startRecording({
+                    engineVersion: app.getVersion(),
+                    gameId: HOSTED_GAME_ID,
+                    gameVersion: HOSTED_GAME_VERSION,
+                    gameConfig: {
+                        hostPlayerId: metadata.hostId,
+                        playerIds: initialPlayerIds,
+                        phase: 'lobby',
+                        ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
+                    },
+                    seed: sessionSeed,
+                    recordedAt: new Date().toISOString(),
+                    // Source display names from the host PlayerDirectory (all
+                    // connected clients' sanitised profiles). Synthetic AI slots
+                    // and not-yet-registered clients fall back to the stringified
+                    // playerId — cosmetic replay metadata only, never gameplay
+                    // state (invariant #59 unaffected).
+                    players: buildReplayPlayers(
+                        initialPlayerSlots,
+                        (id) => playerDirectorySnapshot[id]?.displayName,
+                    ),
+                });
+            } catch (err: unknown) {
+                lobbyLogger.error(
+                    'replay startRecording failed',
+                    err instanceof Error ? err : new Error(String(err)),
+                    { gameId: HOSTED_GAME_ID },
+                );
+            }
 
             // Per-session commitment runtime shared between the projector and
             // SessionRuntime so `commit()` envelopes are automatically included
@@ -1340,6 +1427,11 @@ export async function main(): Promise<void> {
                 unsubLeft();
                 unsubAction();
                 clearUndoHistory([...activePlayers]);
+                // Discard any still-in-progress replay recording (F44 / T4): a
+                // match that ended already finalised+cleared the recording, so
+                // this is a no-op then; an abandoned mid-match session produces
+                // no replay file. Also guarantees the next session starts clean.
+                replayManager.abortRecording();
                 unsubscribeHostRenderer();
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
