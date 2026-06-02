@@ -18,3 +18,4 @@ export * from './scene/index.js';
 export * from './persistence/index.js';
 export * from './profile/index.js';
 export * from './projection/index.js';
+export * from './replay/index.js';
