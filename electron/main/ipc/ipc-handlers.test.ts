@@ -33,9 +33,15 @@ import {
     registerGameHandlers,
     registerLobbyHandlers,
     registerProfileHandlers,
+    registerReplayHandlers,
     registerSavesHandlers,
     registerSettingsHandlers,
     registerSystemHandlers,
+    REPLAY_DELETE_CHANNEL,
+    REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+    REPLAY_LIST_CHANNEL,
+    REPLAY_NAVIGATE_CHANNEL,
+    REPLAY_OPEN_IN_PLAYER_CHANNEL,
     PROFILE_DIRECTORY_CHANGED_CHANNEL,
     PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
     PROFILE_GET_LOCAL_CHANNEL,
@@ -50,6 +56,9 @@ import {
     type LobbyInvokeHandler,
     type ProfileHandlersIpcMain,
     type ProfileInvokeHandler,
+    type ReplayHandlersIpcMain,
+    type ReplayInvokeHandler,
+    type ReplayIpcPort,
     type SavesHandlersIpcMain,
     type SavesInvokeHandler,
     type SavesIpcPort,
@@ -72,10 +81,12 @@ import type {
     HostLobbyParams,
     JoinLobbyParams,
     PlayerProfile,
+    ReplayListItem,
     SaveRequest,
     SaveSlotMeta,
     UserSettings,
 } from '../../preload/api-types.js';
+import * as nodePath from 'node:path';
 
 /**
  * Recording stub for the narrow `SystemHandlersIpcMain` slice used by the
@@ -2201,5 +2212,212 @@ describe('registerProfileHandlers', () => {
         const result = await Promise.resolve(handler?.({}, { localProfileId: 'local-a' }));
 
         expect(result).toBeUndefined();
+    });
+});
+
+// ─── Replay namespace (§4.28, F44 / T5, #659) ────────────────────────────────
+
+function makeReplayIpcMainStub(): {
+    readonly ipcMain: ReplayHandlersIpcMain;
+    readonly handled: Map<string, ReplayInvokeHandler>;
+} {
+    const handled = new Map<string, ReplayInvokeHandler>();
+    const ipcMain: ReplayHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+    };
+    return { ipcMain, handled };
+}
+
+function makeReplayItem(path: string): ReplayListItem {
+    return {
+        path,
+        gameId: 'tactics',
+        gameVersion: '0.1.0',
+        engineVersion: '0.1.0',
+        recordedAt: '2026-06-02T10:00:00.000Z',
+        durationTicks: 9,
+        playerIds: ['p1', 'p2'],
+    };
+}
+
+/** Minimal `ReplayIpcPort` whose methods resolve with canonical empty results. */
+function makeNoopReplayPort(): ReplayIpcPort {
+    return {
+        listItems: () => Promise.resolve([]),
+        delete: () => Promise.resolve(),
+    };
+}
+
+const REPLAY_DIR = nodePath.resolve('/var/userData/replays');
+
+function registerReplay(overrides: {
+    ipcMain: ReplayHandlersIpcMain;
+    replay?: ReplayIpcPort;
+    exportCurrentMatch?: () => Promise<string>;
+    navigateToPlayer?: (path: string) => void;
+    replayDir?: string;
+}): void {
+    registerReplayHandlers({
+        ipcMain: overrides.ipcMain,
+        replay: overrides.replay ?? makeNoopReplayPort(),
+        replayDir: overrides.replayDir ?? REPLAY_DIR,
+        exportCurrentMatch:
+            overrides.exportCurrentMatch ??
+            (() => Promise.resolve(nodePath.join(REPLAY_DIR, 'tactics', 'abc.chimera-replay'))),
+        navigateToPlayer: overrides.navigateToPlayer ?? (() => undefined),
+    });
+}
+
+describe('registerReplayHandlers', () => {
+    it('registers exactly the four invoke channels (navigate is push-only)', () => {
+        const stub = makeReplayIpcMainStub();
+        registerReplay({ ipcMain: stub.ipcMain });
+
+        expect([...stub.handled.keys()].sort()).toEqual(
+            [
+                REPLAY_LIST_CHANNEL,
+                REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+                REPLAY_OPEN_IN_PLAYER_CHANNEL,
+                REPLAY_DELETE_CHANNEL,
+            ].sort(),
+        );
+        expect(stub.handled.has(REPLAY_NAVIGATE_CHANNEL)).toBe(false);
+    });
+
+    describe('chimera:replay:list', () => {
+        it('validates the gameId and delegates to replay.listItems', async () => {
+            const stub = makeReplayIpcMainStub();
+            const items = [
+                makeReplayItem(nodePath.join(REPLAY_DIR, 'tactics', 'a.chimera-replay')),
+            ];
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopReplayPort(), listItems: () => Promise.resolve(items) },
+            });
+
+            const handler = stub.handled.get(REPLAY_LIST_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, 'tactics'))).resolves.toStrictEqual(items);
+        });
+
+        it('rejects a malformed gameId before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const listItems = vi.fn(() => Promise.resolve([] as ReplayListItem[]));
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopReplayPort(), listItems },
+            });
+
+            const handler = stub.handled.get(REPLAY_LIST_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(listItems).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:export-current-match', () => {
+        it('delegates to exportCurrentMatch and resolves with the saved path', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(REPLAY_DIR, 'tactics', 'saved.chimera-replay');
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrentMatch: () => Promise.resolve(saved),
+            });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).resolves.toBe(saved);
+        });
+
+        it('rejects when there is no active hosted session', async () => {
+            const stub = makeReplayIpcMainStub();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrentMatch: () => Promise.reject(new Error('no active hosted session')),
+            });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).rejects.toThrow(
+                /no active hosted session/,
+            );
+        });
+    });
+
+    describe('chimera:replay:open-in-player', () => {
+        it('validates the path is inside the replay dir, then navigates the renderer', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string) => void>();
+            registerReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const target = nodePath.join(REPLAY_DIR, 'tactics', 'abc.chimera-replay');
+            const handler = stub.handled.get(REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            handler?.({}, target);
+
+            expect(navigateToPlayer).toHaveBeenCalledOnce();
+            expect(navigateToPlayer).toHaveBeenCalledWith(target);
+        });
+
+        it('rejects a path that escapes the replay dir and never navigates', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string) => void>();
+            registerReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const traversal = nodePath.join(REPLAY_DIR, '..', '..', 'etc', 'passwd');
+            const handler = stub.handled.get(REPLAY_OPEN_IN_PLAYER_CHANNEL);
+
+            expect(() => handler?.({}, traversal)).toThrow();
+            expect(navigateToPlayer).not.toHaveBeenCalled();
+        });
+
+        it('rejects a malformed (empty) path argument', () => {
+            const stub = makeReplayIpcMainStub();
+            registerReplay({ ipcMain: stub.ipcMain });
+
+            const handler = stub.handled.get(REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+        });
+    });
+
+    describe('chimera:replay:delete', () => {
+        it('validates the path and delegates to replay.delete', async () => {
+            const stub = makeReplayIpcMainStub();
+            const target = nodePath.join(REPLAY_DIR, 'tactics', 'abc.chimera-replay');
+            const del = vi.fn((_path: string) => Promise.resolve());
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopReplayPort(), delete: del },
+            });
+
+            const handler = stub.handled.get(REPLAY_DELETE_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, target))).resolves.toBeUndefined();
+            expect(del).toHaveBeenCalledWith(target);
+        });
+
+        it('rejects a malformed (empty) path before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const del = vi.fn((_path: string) => Promise.resolve());
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopReplayPort(), delete: del },
+            });
+
+            const handler = stub.handled.get(REPLAY_DELETE_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(del).not.toHaveBeenCalled();
+        });
+
+        it('rejects a path that escapes the replay dir at the IPC layer (never reaches the port)', () => {
+            const stub = makeReplayIpcMainStub();
+            const del = vi.fn((_path: string) => Promise.resolve());
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopReplayPort(), delete: del },
+            });
+
+            const traversal = nodePath.join(REPLAY_DIR, '..', '..', 'etc', 'passwd');
+            const handler = stub.handled.get(REPLAY_DELETE_CHANNEL);
+
+            expect(() => handler?.({}, traversal)).toThrow();
+            expect(del).not.toHaveBeenCalled();
+        });
     });
 });

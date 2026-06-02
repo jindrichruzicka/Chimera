@@ -28,6 +28,7 @@ import type {
     ReplayRepository,
 } from '@chimera/simulation/replay/index.js';
 import type { Logger } from '../logging/logger.js';
+import type { ReplayListItem } from '../../preload/api-types.js';
 
 /** The single `formatVersion` written by this engine build. */
 const FORMAT_VERSION = 1 as const;
@@ -163,6 +164,31 @@ export class ReplayManager {
     list(gameId: string): Promise<string[]> {
         this.log.debug('list', { gameId });
         return this.repository.list(gameId);
+    }
+
+    /**
+     * List stored replays for `gameId`, newest-first, projected to
+     * {@link ReplayListItem}s for the renderer's replay browser.
+     *
+     * Delegates to {@link ReplayRepository.listItems}, which reads each file in
+     * a single pass (no double deserialization, descriptor-bounded) and applies
+     * no compatibility guard: a replay the running engine can no longer play
+     * must still appear so the user can see and delete it. Only non-gameplay
+     * scalars are projected; the recorded action log never leaves the main
+     * process here (invariant #3 / #71).
+     */
+    async listItems(gameId: string): Promise<ReplayListItem[]> {
+        this.log.debug('listItems', { gameId });
+        const entries = await this.repository.listItems(gameId);
+        return entries.map((entry) => ({
+            path: entry.path,
+            gameId: entry.gameId,
+            gameVersion: entry.gameVersion,
+            engineVersion: entry.engineVersion,
+            recordedAt: entry.recordedAt,
+            durationTicks: entry.durationTicks,
+            playerIds: [...entry.playerIds],
+        }));
     }
 
     /** Permanently delete the replay at `filePath`. */

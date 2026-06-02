@@ -17,7 +17,7 @@
  */
 
 import type { ReplayFile } from './ReplayFile.js';
-import type { ReplayRepository } from './ReplayRepository.js';
+import type { ReplayListingEntry, ReplayRepository } from './ReplayRepository.js';
 import { ReplayNotFoundError } from './ReplayRepository.js';
 
 /**
@@ -44,6 +44,28 @@ export class InMemoryReplayRepository implements ReplayRepository {
     }
 
     list(gameId: string): Promise<string[]> {
+        return Promise.resolve(this.sortedMatches(gameId).map(([path]) => path));
+    }
+
+    listItems(gameId: string): Promise<ReplayListingEntry[]> {
+        const items = this.sortedMatches(gameId).map(([path, file]) => ({
+            path,
+            engineVersion: file.engineVersion,
+            gameId: file.gameId,
+            gameVersion: file.gameVersion,
+            recordedAt: file.metadata.recordedAt,
+            durationTicks: file.metadata.durationTicks,
+            playerIds: file.metadata.players.map((p) => p.playerId),
+        }));
+        return Promise.resolve(items);
+    }
+
+    /**
+     * The stored `[path, file]` entries for `gameId`, newest-first by
+     * `recordedAt` with a stable path tiebreak. Shared by `list` and
+     * `listItems` so both surface identical ordering.
+     */
+    private sortedMatches(gameId: string): [string, ReplayFile][] {
         const matches = [...this.store.entries()].filter(([, file]) => file.gameId === gameId);
 
         matches.sort(([pathA, a], [pathB, b]) => {
@@ -55,7 +77,7 @@ export class InMemoryReplayRepository implements ReplayRepository {
             return pathA < pathB ? 1 : -1;
         });
 
-        return Promise.resolve(matches.map(([path]) => path));
+        return matches;
     }
 
     delete(filePath: string): Promise<void> {

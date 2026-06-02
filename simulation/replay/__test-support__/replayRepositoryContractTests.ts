@@ -125,6 +125,43 @@ export function runReplayRepositoryContractTests(
             expect(await repo.list('chess')).toHaveLength(1);
         });
 
+        // ── listItems (enriched, single-read projection) ────────────────────────
+
+        it('listItems returns an empty array for an unknown gameId', async () => {
+            const repo = factory();
+
+            expect(await repo.listItems('unknown-game')).toStrictEqual([]);
+        });
+
+        it('listItems returns enriched entries newest-first with projected fields', async () => {
+            const repo = factory();
+            const oldPath = await repo.save(makeReplayFile('tactics', '2026-01-01T00:00:00.000Z'));
+            const newPath = await repo.save(makeReplayFile('tactics', '2026-06-01T00:00:00.000Z'));
+
+            const items = await repo.listItems('tactics');
+
+            expect(items.map((i) => i.path)).toStrictEqual([newPath, oldPath]);
+            expect(items[0]).toStrictEqual({
+                path: newPath,
+                engineVersion: '0.1.0',
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                recordedAt: '2026-06-01T00:00:00.000Z',
+                durationTicks: 1,
+                playerIds: [toPlayerId('p1')],
+            });
+        });
+
+        it('listItems filters by gameId and excludes other games', async () => {
+            const repo = factory();
+            await repo.save(makeReplayFile('tactics'));
+            await repo.save(makeReplayFile('chess'));
+
+            const tacticsItems = await repo.listItems('tactics');
+            expect(tacticsItems).toHaveLength(1);
+            expect(tacticsItems[0]?.gameId).toBe('tactics');
+        });
+
         // ── delete ────────────────────────────────────────────────────────────
 
         it('delete removes the replay from list', async () => {

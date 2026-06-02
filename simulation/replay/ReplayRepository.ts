@@ -22,6 +22,33 @@
  */
 
 import type { ReplayFile } from './ReplayFile.js';
+import type { PlayerId } from '../engine/types.js';
+
+// ─── ReplayListingEntry ───────────────────────────────────────────────────────
+
+/**
+ * One stored replay projected to its header + metadata scalars, as returned by
+ * {@link ReplayRepository.listItems}. Carries no gameplay state — never the
+ * recorded `EngineAction` log (invariant #71) — so the renderer's replay
+ * browser can be populated without the full file ever leaving the host.
+ *
+ * Read in a single pass per file by the repository: `list()` and `listItems()`
+ * share the same enumeration so a browser listing pays one deserialization, not
+ * two.
+ */
+export interface ReplayListingEntry {
+    /** Opaque storage path (the same handle returned by `save()` / accepted by `load()`). */
+    readonly path: string;
+    readonly engineVersion: string;
+    readonly gameId: string;
+    readonly gameVersion: string;
+    /** ISO-8601 UTC timestamp captured at recording start. */
+    readonly recordedAt: string;
+    /** Highest recorded tick — the replay's length. */
+    readonly durationTicks: number;
+    /** Participating player ids, in recording order. */
+    readonly playerIds: readonly PlayerId[];
+}
 
 // ─── ReplayNotFoundError ──────────────────────────────────────────────────────
 
@@ -68,6 +95,17 @@ export interface ReplayRepository {
      * (by `metadata.recordedAt` descending).
      */
     list(gameId: string): Promise<string[]>;
+
+    /**
+     * List the stored replays for `gameId` as enriched {@link ReplayListingEntry}
+     * projections, sorted newest-first (same ordering as {@link list}).
+     *
+     * Reads each file exactly once (no compatibility guard is applied — a
+     * replay the running engine can no longer play must still be browsable),
+     * so the renderer's replay browser does not pay the double deserialization
+     * of `list()` + a per-path `load()`.
+     */
+    listItems(gameId: string): Promise<ReplayListingEntry[]>;
 
     /**
      * Permanently delete the replay at `filePath`.

@@ -62,6 +62,13 @@ import {
     PROFILE_SWITCH_SLOT_CHANNEL,
     PROFILE_UPDATE_LOCAL_CHANNEL,
 } from '../../preload/apis/profile-api.js';
+import {
+    REPLAY_DELETE_CHANNEL,
+    REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+    REPLAY_LIST_CHANNEL,
+    REPLAY_NAVIGATE_CHANNEL,
+    REPLAY_OPEN_IN_PLAYER_CHANNEL,
+} from '../../preload/apis/replay-api.js';
 import type {
     ActionRejection,
     CrashRecoveryStatus,
@@ -69,12 +76,14 @@ import type {
     EngineAction,
     PlayerProfile,
     PlayerId,
+    ReplayListItem,
     ResolvedSettings,
     SaveRequest,
     SaveSlotMeta,
     SlotId,
     UserSettings,
 } from '../../preload/api-types.js';
+import { isInsidePath } from '../path-containment.js';
 import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import {
     EngineActionSchema,
@@ -84,6 +93,7 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     LobbyReadyStateSchema,
+    ReplayPathSchema,
     SaveRequestSchema,
     SlotIdSchema,
     SwitchLocalSlotRequestSchema,
@@ -140,6 +150,11 @@ export {
     PROFILE_LIST_LOCAL_SLOTS_CHANNEL,
     PROFILE_SWITCH_SLOT_CHANNEL,
     PROFILE_UPDATE_LOCAL_CHANNEL,
+    REPLAY_DELETE_CHANNEL,
+    REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+    REPLAY_LIST_CHANNEL,
+    REPLAY_NAVIGATE_CHANNEL,
+    REPLAY_OPEN_IN_PLAYER_CHANNEL,
 };
 
 /**
@@ -737,6 +752,137 @@ function parseGameIdFromSlotId(slotId: string): string {
         );
     }
     return slotId.slice(0, idx);
+}
+
+// ─── Replay namespace (§4.28) ─────────────────────────────────────────────────
+
+/**
+ * Shape of a main-side `ipcMain.handle` handler for the replay namespace.
+ * Mirrors the other namespaces — permissive types keep tests free of
+ * Electron imports.
+ */
+export type ReplayInvokeHandler = (event: unknown, ...args: unknown[]) => unknown;
+
+/**
+ * Narrow slice of `Electron.IpcMain` required to register the replay-namespace
+ * channels. The replay namespace never uses `on`: `chimera:replay:navigate` is
+ * a one-way push from main → renderer via `webContents.send`, not an invoke
+ * handler.
+ */
+export interface ReplayHandlersIpcMain {
+    handle(channel: string, handler: ReplayInvokeHandler): unknown;
+}
+
+/**
+ * Narrow port the replay IPC handlers depend on. A subset of
+ * {@link import('../replay/replay-manager.js').ReplayManager} — only the
+ * read/delete projection methods the renderer surface needs. The manager owns
+ * recording state; `exportCurrentMatch` is injected separately because it must
+ * be gated on an active hosted session, which only the wiring layer knows.
+ *
+ * Invariant #3 / #71: `listItems` returns projected {@link ReplayListItem}s
+ * (no `GameSnapshot`, no action log); the full file is loaded only by the
+ * player route, never returned over these channels.
+ */
+export interface ReplayIpcPort {
+    listItems(gameId: string): Promise<ReplayListItem[]>;
+    delete(path: string): Promise<void>;
+}
+
+export interface RegisterReplayHandlersOptions {
+    readonly ipcMain: ReplayHandlersIpcMain;
+    /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
+    readonly logger?: Logger;
+    /** Live replay read/delete port — production wires the `ReplayManager`. */
+    readonly replay: ReplayIpcPort;
+    /**
+     * Absolute path of the replay directory. `chimera:replay:open-in-player`
+     * resolves the requested path and asserts it stays inside this root before
+     * navigating (defence-in-depth for OWASP A01 — `delete` is additionally
+     * guarded by the repository).
+     */
+    readonly replayDir: string;
+    /**
+     * Finalise the in-progress recording to disk and resolve with the saved
+     * file path. Injected by the wiring layer because it must reject when no
+     * match is being hosted — a condition only the live session graph knows.
+     */
+    readonly exportCurrentMatch: () => Promise<string>;
+    /**
+     * Push the validated replay path to the renderer (via
+     * `chimera:replay:navigate`) so it can switch to the replay player route.
+     */
+    readonly navigateToPlayer: (path: string) => void;
+}
+
+/**
+ * Register every `chimera:replay:*` main-side channel (§4.28).
+ *
+ * `chimera:replay:navigate` is intentionally absent: it is a one-way push from
+ * main → renderer via `webContents.send`, fired by `navigateToPlayer`.
+ *
+ * Invariant 5: channel constants come from `preload/apis/replay-api.ts`; there
+ * is no parallel list in this file to drift out of sync.
+ *
+ * Invariant 3 / 71: no `GameSnapshot` and no recorded action log crosses these
+ * channels — `list` returns projected `ReplayListItem`s and
+ * `export-current-match` returns a saved-file path string.
+ *
+ * Invariant 25: every IPC input is validated with a Zod schema before any port
+ * call — invalid payloads throw before the manager is touched.
+ *
+ * Invariant 67: the logger is injected; this function never constructs one.
+ */
+export function registerReplayHandlers(options: RegisterReplayHandlersOptions): void {
+    const { ipcMain, replay, replayDir, exportCurrentMatch, navigateToPlayer } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:replay:* handlers', {
+        channels: [
+            REPLAY_LIST_CHANNEL,
+            REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+            REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            REPLAY_DELETE_CHANNEL,
+        ],
+    });
+
+    ipcMain.handle(REPLAY_LIST_CHANNEL, (_event, gameId) => {
+        const validated = parseInvokeRequest(GameIdSchema, REPLAY_LIST_CHANNEL, gameId);
+        return replay.listItems(validated);
+    });
+
+    ipcMain.handle(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, () => exportCurrentMatch());
+
+    ipcMain.handle(REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath) => {
+        const validated = parseInvokeRequest(
+            ReplayPathSchema,
+            REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            replayPath,
+        );
+        if (!isInsidePath(replayDir, validated)) {
+            throw new Error(
+                `replay:open-in-player: path ${JSON.stringify(validated)} escapes the replay directory`,
+            );
+        }
+        navigateToPlayer(validated);
+        return undefined;
+    });
+
+    ipcMain.handle(REPLAY_DELETE_CHANNEL, (_event, replayPath) => {
+        const validated = parseInvokeRequest(ReplayPathSchema, REPLAY_DELETE_CHANNEL, replayPath);
+        // Containment is also enforced downstream by the repository's
+        // `assertInsideBase` (both share the `isInsidePath` predicate), but the
+        // IPC layer rejects traversal symmetrically with `open-in-player` so the
+        // boundary contract does not depend on the injected port's
+        // implementation (defence-in-depth, OWASP A01). Throws synchronously
+        // before any port call; the delete round-trip then resolves to
+        // `undefined` to satisfy the preload's `Promise<void>`.
+        if (!isInsidePath(replayDir, validated)) {
+            throw new Error(
+                `replay:delete: path ${JSON.stringify(validated)} escapes the replay directory`,
+            );
+        }
+        return replay.delete(validated).then(() => undefined);
+    });
 }
 
 /**

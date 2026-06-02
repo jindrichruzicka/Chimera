@@ -500,9 +500,56 @@ export interface ProfileAPI {
     switchLocalSlot(localProfileId: string): Promise<void>;
 }
 
-/** Stub. Expanded in F44 — Replay System (§4.28). */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ReplayAPI {}
+/**
+ * One stored replay, as projected for the renderer's replay browser (§4.28).
+ *
+ * Built host-side from the replay file's header + metadata by
+ * `ReplayManager.listItems`. Carries no gameplay state — never a
+ * `GameSnapshot` and never the recorded action log (invariant #3 / #71); the
+ * full file is loaded only when a replay is opened in the player.
+ */
+export interface ReplayListItem {
+    /** Absolute path of the `.chimera-replay` file (opaque handle to the renderer). */
+    path: string;
+    gameId: string;
+    gameVersion: string;
+    engineVersion: string;
+    /** ISO-8601 UTC timestamp captured at recording start. */
+    recordedAt: string;
+    /** Highest recorded tick — the replay's length. */
+    durationTicks: number;
+    /** Participating player ids, in recording order. */
+    playerIds: string[];
+}
+
+/**
+ * Renderer surface for the replay system (§4.28). Host-only in practice — the
+ * main-process handlers own recording state and the replay directory; the
+ * renderer only lists, exports, opens, and deletes.
+ */
+export interface ReplayAPI {
+    /** List stored replays for `gameId`, newest-first. */
+    list(gameId: string): Promise<ReplayListItem[]>;
+    /**
+     * Finalise the in-progress recording to disk and resolve with the saved
+     * file path. Stops recording (the natural end-of-match finalise then
+     * no-ops). Rejects when no match is being hosted.
+     */
+    exportCurrentMatch(): Promise<string>;
+    /**
+     * Ask main to open `path` in the replay player. Main validates the path is
+     * inside the replay directory, then pushes `chimera:replay:navigate`; the
+     * renderer route reacts via {@link ReplayAPI.onNavigate}.
+     */
+    openInPlayer(path: string): Promise<void>;
+    /** Permanently delete the replay at `path`. Rejected for paths outside the replay directory. */
+    delete(path: string): Promise<void>;
+    /**
+     * Subscribe to replay-player navigation requests pushed by main (the
+     * payload is the replay file path). Returns an {@link Unsubscribe}.
+     */
+    onNavigate(listener: (path: string) => void): Unsubscribe;
+}
 
 /** Stub. Expanded in F45 — Chat System (§4.29). */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type

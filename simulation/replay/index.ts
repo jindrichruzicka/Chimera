@@ -25,7 +25,7 @@ export type {
 export { parseReplayFile, ReplayParseError } from './ReplayFile.js';
 export { serializeReplay, deserializeReplay, JsonReplaySerializer } from './ReplaySerializer.js';
 export type { ReplaySerializer } from './ReplaySerializer.js';
-export type { ReplayRepository } from './ReplayRepository.js';
+export type { ReplayListingEntry, ReplayRepository } from './ReplayRepository.js';
 export { ReplayNotFoundError } from './ReplayRepository.js';
 export { InMemoryReplayRepository } from './InMemoryReplayRepository.js';
 export type {

@@ -126,6 +126,7 @@ describe('ReplayManager — recording', () => {
             save: () => Promise.reject(new Error('disk full')),
             load: () => Promise.reject(new Error('n/a')),
             list: () => Promise.resolve([]),
+            listItems: () => Promise.resolve([]),
             delete: () => Promise.resolve(),
         };
         const { manager } = makeManager(failingRepo);
@@ -228,6 +229,64 @@ describe('ReplayManager — delegation', () => {
         await manager.delete(savedPath);
 
         expect(await manager.list('tactics')).toStrictEqual([]);
+    });
+});
+
+// ── listItems (enriched projection for the renderer browser) ─────────────────
+
+describe('ReplayManager — listItems', () => {
+    it('projects each stored replay to a ReplayListItem with path + header/metadata fields', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(3));
+        manager.recordAction(recordAction(8));
+        const savedPath = await manager.finaliseRecording();
+
+        const items = await manager.listItems('tactics');
+
+        expect(items).toHaveLength(1);
+        expect(items[0]).toStrictEqual({
+            path: savedPath,
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            engineVersion: '0.1.0',
+            recordedAt: '2026-06-02T10:00:00.000Z',
+            durationTicks: 8,
+            playerIds: ['p1'],
+        });
+    });
+
+    it('orders items newest-first (matching the repository list order)', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader({ recordedAt: '2026-01-01T00:00:00.000Z' }));
+        const older = await manager.finaliseRecording();
+        manager.startRecording(makeHeader({ recordedAt: '2026-06-01T00:00:00.000Z' }));
+        const newer = await manager.finaliseRecording();
+
+        const items = await manager.listItems('tactics');
+
+        expect(items.map((i) => i.path)).toStrictEqual([newer, older]);
+    });
+
+    it('includes replays incompatible with the running engine (no compatibility guard)', async () => {
+        // A replay whose engineVersion would make `load()` throw ReplayVersionError
+        // must still appear in the browser listing so the user can see/delete it.
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader({ engineVersion: '0.0.9' }));
+        manager.recordAction(recordAction(0));
+        const savedPath = await manager.finaliseRecording();
+
+        // Guarded load rejects…
+        await expect(manager.load(savedPath)).rejects.toBeInstanceOf(ReplayVersionError);
+        // …but listItems surfaces it anyway.
+        const items = await manager.listItems('tactics');
+        expect(items).toHaveLength(1);
+        expect(items[0]?.engineVersion).toBe('0.0.9');
+    });
+
+    it('returns an empty array when no replays exist for the game', async () => {
+        const { manager } = makeManager();
+        expect(await manager.listItems('tactics')).toStrictEqual([]);
     });
 });
 

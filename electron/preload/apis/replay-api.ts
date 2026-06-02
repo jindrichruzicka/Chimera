@@ -1,0 +1,100 @@
+// electron/preload/apis/replay-api.ts
+//
+// Implements the `window.__chimera.replay` namespace exposed to the renderer
+// (§4.28). Only depends on a narrow `ReplayApiIpcPort` so the factory is
+// trivially testable without spinning up Electron.
+//
+// Channel names live here (not in `shared/`) because they are an internal
+// preload↔main protocol detail: renderer code never references them, and the
+// main-process handler module imports these same constants to guarantee the
+// channel strings match on both sides (invariant #5).
+//
+// The host-only constraint (§4.28) is enforced in the main-process handlers —
+// the preload bridge simply forwards calls and has no opinion about who is
+// allowed to issue them. No `GameSnapshot` ever crosses these channels: `list`
+// returns projected `ReplayListItem`s, `exportCurrentMatch` returns a path
+// string, and the file itself is only loaded when the player route opens it
+// (invariant #3 / #71).
+
+import type { ReplayAPI, ReplayListItem, Unsubscribe } from '../api-types.js';
+import type { IpcListener, PushListenerPort } from '../shared/listener.js';
+import { subscribePush } from '../shared/listener.js';
+import { ReplayListSchema, ReplaySavedPathSchema, parseInvokeResponse } from '../shared/schemas.js';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.list}. */
+export const REPLAY_LIST_CHANNEL = 'chimera:replay:list';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.exportCurrentMatch}. */
+export const REPLAY_EXPORT_CURRENT_MATCH_CHANNEL = 'chimera:replay:export-current-match';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.openInPlayer}. */
+export const REPLAY_OPEN_IN_PLAYER_CHANNEL = 'chimera:replay:open-in-player';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.delete}. */
+export const REPLAY_DELETE_CHANNEL = 'chimera:replay:delete';
+
+/**
+ * `ipcRenderer.on` target for {@link ReplayAPI.onNavigate}. Main pushes the
+ * replay file path via `webContents.send` when `openInPlayer` is invoked, so
+ * the renderer route can switch to the replay player.
+ */
+export const REPLAY_NAVIGATE_CHANNEL = 'chimera:replay:navigate';
+
+/**
+ * Back-compat alias for {@link IpcListener}. Retained for symmetry with the
+ * other namespaces; new code should use {@link IpcListener} directly.
+ */
+export type ReplayApiListener = IpcListener;
+
+/**
+ * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
+ * `chimera:replay:navigate` subscription slice and adds variadic `invoke`
+ * (`exportCurrentMatch` takes no argument, the rest take exactly one).
+ */
+export interface ReplayApiIpcPort extends PushListenerPort {
+    invoke(channel: string, ...args: unknown[]): Promise<unknown>;
+}
+
+/**
+ * Build the `window.__chimera.replay` namespace. The caller supplies the
+ * `ipcRenderer` port so the factory has no hidden dependency on the Electron
+ * module graph.
+ *
+ * Note: `delete` is a reserved JavaScript keyword but is valid as an object
+ * method name; the preload mirrors the canonical surface verbatim.
+ */
+export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
+    return {
+        list: (gameId: string): Promise<ReplayListItem[]> =>
+            ipc.invoke(REPLAY_LIST_CHANNEL, gameId).then(
+                (value) =>
+                    // The declared contract is `Promise<ReplayListItem[]>` (mutable
+                    // array) whereas the schema returns `readonly ReplayListItem[]`.
+                    // Casting here is safe: the parsed array is a freshly-created
+                    // copy that no other caller holds a reference to.
+                    parseInvokeResponse(
+                        ReplayListSchema,
+                        REPLAY_LIST_CHANNEL,
+                        value,
+                    ) as ReplayListItem[],
+            ),
+        exportCurrentMatch: (): Promise<string> =>
+            ipc
+                .invoke(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL)
+                .then((value) =>
+                    parseInvokeResponse(
+                        ReplaySavedPathSchema,
+                        REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+                        value,
+                    ),
+                ),
+        openInPlayer: async (path: string): Promise<void> => {
+            await ipc.invoke(REPLAY_OPEN_IN_PLAYER_CHANNEL, path);
+        },
+        delete: async (path: string): Promise<void> => {
+            await ipc.invoke(REPLAY_DELETE_CHANNEL, path);
+        },
+        onNavigate: (listener: (path: string) => void): Unsubscribe =>
+            subscribePush<string>(ipc, REPLAY_NAVIGATE_CHANNEL, listener),
+    };
+}

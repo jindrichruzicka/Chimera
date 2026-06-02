@@ -34,6 +34,7 @@ import type {
     LobbyInfo,
     LobbyState,
     PlayerProfile,
+    ReplayListItem,
     ResolvedSettings,
     SaveSlotMeta,
     PlayerId,
@@ -253,6 +254,31 @@ export const LocalProfileSlotListSchema: z.ZodType<readonly LocalProfileSlot[]> 
  * `ActionDefinition.type` string of a predictable action.
  */
 export const PredictableActionTypesSchema: z.ZodType<readonly string[]> = z.array(z.string());
+
+// ─── Replay domain schemas (§4.28) ────────────────────────────────────────────
+
+/**
+ * Schema for a single {@link ReplayListItem} element of the array returned by
+ * `chimera:replay:list`. Structural validation only — the host projects these
+ * from validated replay files; the gate catches main↔preload contract drift.
+ */
+export const ReplayListItemSchema = z.object({
+    path: z.string().min(1),
+    gameId: z.string(),
+    gameVersion: z.string(),
+    engineVersion: z.string(),
+    recordedAt: z.string(),
+    durationTicks: z.number().int(),
+    playerIds: z.array(z.string()),
+}) satisfies z.ZodType<ReplayListItem>;
+
+/** Schema for the array returned by `chimera:replay:list`. */
+export const ReplayListSchema: z.ZodType<readonly ReplayListItem[]> = z.array(ReplayListItemSchema);
+
+/**
+ * Schema for the saved file path returned by `chimera:replay:export-current-match`.
+ */
+export const ReplaySavedPathSchema: z.ZodType<string> = z.string().min(1);
 
 // ─── System device-info schema (§4.17) ───────────────────────────────────────
 

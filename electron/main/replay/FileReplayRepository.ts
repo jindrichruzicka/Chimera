@@ -29,10 +29,12 @@ import * as path from 'path';
 import { randomUUID } from 'node:crypto';
 import type {
     ReplayFile,
+    ReplayListingEntry,
     ReplayRepository,
     ReplaySerializer,
 } from '@chimera/simulation/replay/index.js';
 import { ReplayNotFoundError } from '@chimera/simulation/replay/index.js';
+import { isInsidePath } from '../path-containment.js';
 
 /** Extension used for stored replay files. */
 const FILE_EXT = '.chimera-replay';
@@ -98,13 +100,16 @@ export class FileReplayRepository implements ReplayRepository {
     /**
      * Resolve `filePath` and assert it stays inside `baseDir`. Returns the
      * resolved absolute path. Throws `ReplayPathError` on traversal.
+     *
+     * Containment is delegated to the shared {@link isInsidePath} predicate so
+     * this persistence-layer guard and the IPC-layer guard
+     * (`registerReplayHandlers`) cannot drift (OWASP A01).
      */
     private assertInsideBase(filePath: string): string {
-        const resolved = path.resolve(filePath);
-        if (resolved !== this.resolvedBase && !resolved.startsWith(this.resolvedBase + path.sep)) {
+        if (!isInsidePath(this.resolvedBase, filePath)) {
             throw new ReplayPathError(filePath);
         }
-        return resolved;
+        return path.resolve(filePath);
     }
 
     // ── ReplayRepository implementation ───────────────────────────────────────
@@ -152,6 +157,26 @@ export class FileReplayRepository implements ReplayRepository {
     }
 
     async list(gameId: string): Promise<string[]> {
+        return (await this.readSortedListings(gameId)).map((entry) => entry.path);
+    }
+
+    async listItems(gameId: string): Promise<ReplayListingEntry[]> {
+        return this.readSortedListings(gameId);
+    }
+
+    /**
+     * Read every `.chimera-replay` file under `<baseDir>/<gameId>`, projecting
+     * each to a {@link ReplayListingEntry}, sorted newest-first by `recordedAt`
+     * with a stable path tiebreak. Shared by `list` and `listItems` so a
+     * browser listing pays a single deserialization per file.
+     *
+     * Reads are chunked by {@link LIST_CONCURRENCY} to bound open file
+     * descriptors; the full `ReplayFile` (including its action log) is
+     * projected to scalars within each chunk and then discarded, so memory
+     * stays bounded to one chunk's worth of files rather than every replay's
+     * actions at once.
+     */
+    private async readSortedListings(gameId: string): Promise<ReplayListingEntry[]> {
         FileReplayRepository.validateGameId(gameId);
 
         const dir = path.join(this.resolvedBase, gameId);
@@ -164,15 +189,21 @@ export class FileReplayRepository implements ReplayRepository {
             .filter((name) => name.endsWith(FILE_EXT))
             .map((name) => path.join(dir, name));
 
-        // Read each file's recordedAt for deterministic newest-first ordering,
-        // chunked to bound open file descriptors.
-        const records: { path: string; recordedAt: string }[] = [];
+        const records: ReplayListingEntry[] = [];
         for (let i = 0; i < replayPaths.length; i += LIST_CONCURRENCY) {
             const chunk = replayPaths.slice(i, i + LIST_CONCURRENCY);
             const chunkRecords = await Promise.all(
-                chunk.map(async (p) => {
+                chunk.map(async (p): Promise<ReplayListingEntry> => {
                     const file = await this.serializer.deserialize(await fs.readFile(p));
-                    return { path: p, recordedAt: file.metadata.recordedAt };
+                    return {
+                        path: p,
+                        engineVersion: file.engineVersion,
+                        gameId: file.gameId,
+                        gameVersion: file.gameVersion,
+                        recordedAt: file.metadata.recordedAt,
+                        durationTicks: file.metadata.durationTicks,
+                        playerIds: file.metadata.players.map((player) => player.playerId),
+                    };
                 }),
             );
             records.push(...chunkRecords);
@@ -185,7 +216,7 @@ export class FileReplayRepository implements ReplayRepository {
             return a.path < b.path ? 1 : -1;
         });
 
-        return records.map((r) => r.path);
+        return records;
     }
 
     async delete(filePath: string): Promise<void> {

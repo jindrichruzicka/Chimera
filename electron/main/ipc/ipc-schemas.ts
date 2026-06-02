@@ -98,6 +98,15 @@ export const NonEmptyStringSchema = z.string().min(1);
 export const GameIdSchema = NonEmptyStringSchema;
 
 /**
+ * Schema for a replay file-path argument (`chimera:replay:open-in-player`,
+ * `chimera:replay:delete`). Shape validation only — "is this a populated
+ * string?". The real path-traversal defence is enforced downstream by
+ * `FileReplayRepository.assertInsideBase`, which rejects any path that
+ * resolves outside the replay directory with a `ReplayPathError` (OWASP A01).
+ */
+export const ReplayPathSchema = NonEmptyStringSchema;
+
+/**
  * Pattern for a single slot-ID component (`gameId` or `slotName`).
  * Mirrors `SLOT_COMPONENT_RE` in `FileSaveRepository` — duplicated
  * intentionally so the IPC schema layer has no import dependency on

@@ -19,6 +19,7 @@ import {
     registerSystemHandlers,
     registerLogsHandlers,
     registerProfileHandlers,
+    registerReplayHandlers,
 } from './ipc/ipc-handlers.js';
 import {
     createLogger,
@@ -49,6 +50,7 @@ import {
 } from '@chimera/games/tactics/actions.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
+import { REPLAY_NAVIGATE_CHANNEL } from '../preload/apis/replay-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
@@ -929,8 +931,9 @@ export async function main(): Promise<void> {
     // under <userData>/replays/<gameId>/<uuid>.chimera-replay (atomic write).
     // The manager re-childs the logger to module 'replay-manager' internally
     // (invariant #67), so the root logger is passed directly.
+    const replayDir = path.join(userData, 'replays');
     const replayManager = new ReplayManager(
-        new FileReplayRepository(new JsonReplaySerializer(), path.join(userData, 'replays')),
+        new FileReplayRepository(new JsonReplaySerializer(), replayDir),
         new ReplayMigrator(),
         {
             engineVersion: app.getVersion(),
@@ -1649,6 +1652,38 @@ export async function main(): Promise<void> {
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(SAVES_SLOT_UPDATE_CHANNEL, slots);
+                }
+            });
+        },
+    });
+
+    // Register the `chimera:replay:*` channels backed by the shared
+    // ReplayManager (§4.28, F44 / T5). `exportCurrentMatch` is gated on an
+    // active hosted session here because only this scope knows the live
+    // session graph; the destructive `finaliseRecording` writes the
+    // in-progress recording and stops it (the natural end-of-match finalise
+    // then no-ops). `navigateToPlayer` pushes the validated path so the
+    // renderer can switch to the replay player route.
+    registerReplayHandlers({
+        ipcMain,
+        logger: logger.child({ module: 'replay' }),
+        replay: replayManager,
+        replayDir,
+        exportCurrentMatch: () => {
+            if (activeSession === null) {
+                return Promise.reject(
+                    new Error(
+                        'replay:export-current-match invoked with no active hosted session — ' +
+                            'start a game before exporting.',
+                    ),
+                );
+            }
+            return replayManager.finaliseRecording();
+        },
+        navigateToPlayer: (replayPath) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(REPLAY_NAVIGATE_CHANNEL, replayPath);
                 }
             });
         },
