@@ -107,6 +107,34 @@ export const GameIdSchema = NonEmptyStringSchema;
 export const ReplayPathSchema = NonEmptyStringSchema;
 
 /**
+ * Schema for a replay playback tick argument (`chimera:replay:snapshot-at`).
+ * Ticks are non-negative integers (invariant #42); the playback manager
+ * additionally rejects ticks beyond the replay's length.
+ */
+export const ReplayTickSchema = z.number().int().nonnegative();
+
+/**
+ * Hard upper bound on the number of ticks a single
+ * `chimera:replay:snapshot-range` request may span. Bounds the per-call
+ * projection loop so a malformed/hostile renderer cannot ask main to project an
+ * unbounded number of snapshots in one round-trip (OWASP A05 — resource limit).
+ */
+export const MAX_SNAPSHOT_RANGE = 256;
+
+/**
+ * Schema for a replay playback *range* argument
+ * (`chimera:replay:snapshot-range`). Both bounds are non-negative integer ticks
+ * (invariant #42), `to` must not precede `from`, and the inclusive span is
+ * capped at {@link MAX_SNAPSHOT_RANGE} ticks.
+ */
+export const ReplaySnapshotRangeSchema = z
+    .object({ from: ReplayTickSchema, to: ReplayTickSchema })
+    .refine(({ from, to }) => to >= from, { message: '`to` must be >= `from`' })
+    .refine(({ from, to }) => to - from < MAX_SNAPSHOT_RANGE, {
+        message: `snapshot range may span at most ${MAX_SNAPSHOT_RANGE.toString()} ticks`,
+    });
+
+/**
  * Pattern for a single slot-ID component (`gameId` or `slotName`).
  * Mirrors `SLOT_COMPONENT_RE` in `FileSaveRepository` — duplicated
  * intentionally so the IPC schema layer has no import dependency on

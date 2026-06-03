@@ -56,6 +56,10 @@ import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
 import { ReplayManager } from './replay/replay-manager.js';
+import {
+    ReplayPlaybackManager,
+    createVisibilityRulesResolver,
+} from './replay/replay-playback-manager.js';
 import { JsonReplaySerializer, ReplayMigrator } from '@chimera/simulation/replay/index.js';
 import {
     buildDefaultAIPlayerAgent,
@@ -1664,10 +1668,23 @@ export async function main(): Promise<void> {
     // in-progress recording and stops it (the natural end-of-match finalise
     // then no-ops). `navigateToPlayer` pushes the validated path so the
     // renderer can switch to the replay player route.
+    // Playback session (§4.28, F44 / T6): loads a replay and serves projected
+    // per-viewer PlayerSnapshots tick-by-tick to the renderer's replay player.
+    // Reuses the shared `gameRegistry` (live ActionPipeline wiring, invariant
+    // #70) and projects via each game's visibility rules; only a PlayerSnapshot
+    // crosses IPC (invariant #3).
+    const replayPlaybackManager = new ReplayPlaybackManager(
+        gameRegistry,
+        createVisibilityRulesResolver({ [TACTICS_GAME_ID]: tacticsVisibilityRules }),
+        replayManager,
+        logger.child({ module: 'replay-playback' }),
+    );
+
     registerReplayHandlers({
         ipcMain,
         logger: logger.child({ module: 'replay' }),
         replay: replayManager,
+        playback: replayPlaybackManager,
         replayDir,
         exportCurrentMatch: () => {
             if (activeSession === null) {

@@ -1,0 +1,323 @@
+'use client';
+
+/**
+ * renderer/app/replays/player/page.tsx — Replay Player (§4.28, F44 / T6, #660).
+ *
+ * Plays back a recorded match. The player does NOT run a `ReplayPlayer` itself:
+ * it requests {@link PlayerSnapshot}s from the main process over IPC (only
+ * `PlayerSnapshot`s ever cross — Invariant #3) and feeds them to the
+ * store-agnostic `GameShell`, exactly as the live game route does. Playback
+ * state (current tick / playing / speed) lives here; `ReplayControls` is
+ * display-only.
+ *
+ * To keep auto-advance cheap, snapshots are fetched in batches via
+ * `snapshotRange` and held in an in-memory buffer: stepping/playing reads from
+ * the buffer, and the buffer is refilled ahead of the playhead rather than once
+ * per tick. Playback speed scales the auto-advance interval.
+ *
+ * Engine shell page: it loads the game renderer through the engine's
+ * `loadRendererGame` registry and passes the registry to `GameShell` as data —
+ * it never imports from `games/*` (Invariants #80/#94). The replay file path
+ * arrives as a `?path=` query param, written by `ReplayNavigationBridge` in
+ * response to a main-process `navigate` push.
+ */
+
+import React from 'react';
+import type {
+    EngineAction,
+    PlayerSnapshot,
+    ReplayPlaybackInfo,
+} from '@chimera/electron/preload/api-types.js';
+import { createAssetManager, type AssetManager } from '@chimera/renderer/assets/AssetManager';
+import { createRendererGameAssetResolver } from '@chimera/renderer/assets/AssetResolver';
+import { GameShell } from '@chimera/renderer/components/shell/GameShell';
+import { ReplayControls } from '@chimera/renderer/components/replay/ReplayControls';
+import {
+    loadRendererGame,
+    type LoadedRendererGame,
+} from '@chimera/renderer/game/rendererGameRegistry';
+import { useReplayApi } from '@chimera/renderer/hooks/useReplayApi';
+
+/** Wall-clock spacing between auto-advanced ticks at 1× playback speed. */
+const PLAYBACK_INTERVAL_MS = 1000;
+
+/**
+ * Number of ticks fetched per `snapshotRange` round-trip. Auto-advance reads
+ * from this in-memory buffer rather than issuing one IPC call per tick.
+ */
+const PREFETCH_BATCH = 32;
+
+/** Refill the buffer once fewer than this many ticks are buffered ahead. */
+const PREFETCH_LOW_WATERMARK = 8;
+
+const NOOP_SEND_ACTION = (_action: EngineAction): void => undefined;
+
+const pageStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    height: '100vh',
+    fontFamily: 'var(--ch-font-ui)',
+};
+
+const boardStyle: React.CSSProperties = { flex: '1 1 auto', minHeight: 0, position: 'relative' };
+
+const errorStyle: React.CSSProperties = {
+    padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
+    margin: 'var(--ch-space-md)',
+    background: 'var(--ch-color-error-surface-muted)',
+    border: 'var(--ch-border-width-sm) solid var(--ch-color-error-border-muted)',
+    borderRadius: 'var(--ch-radius-sm)',
+    color: 'var(--ch-color-error-text-muted)',
+};
+
+function clamp(value: number, min: number, max: number): number {
+    return Math.min(Math.max(value, min), max);
+}
+
+function useLoadedRendererGame(
+    gameId: string | null,
+    onError: (error: Error) => void,
+): LoadedRendererGame | null {
+    const [game, setGame] = React.useState<LoadedRendererGame | null>(null);
+
+    React.useEffect(() => {
+        if (gameId === null) {
+            setGame(null);
+            return;
+        }
+        let active = true;
+        loadRendererGame(gameId)
+            .then((loaded) => {
+                if (active) {
+                    setGame(loaded);
+                }
+            })
+            .catch((error: unknown) => {
+                if (active) {
+                    onError(error instanceof Error ? error : new Error(String(error)));
+                }
+            });
+        return () => {
+            active = false;
+        };
+    }, [gameId, onError]);
+
+    return game;
+}
+
+export default function ReplayPlayerPage(): React.ReactElement {
+    const replayApi = useReplayApi();
+    const path = React.useMemo(() => new URLSearchParams(window.location.search).get('path'), []);
+
+    const [info, setInfo] = React.useState<ReplayPlaybackInfo | null>(null);
+    const [snapshot, setSnapshot] = React.useState<PlayerSnapshot | null>(null);
+    const [currentTick, setCurrentTick] = React.useState(0);
+    const [isPlaying, setIsPlaying] = React.useState(false);
+    const [playbackSpeed, setPlaybackSpeed] = React.useState(1);
+    const [error, setError] = React.useState<string | null>(null);
+
+    // In-memory snapshot buffer (tick → projected snapshot) plus a version
+    // counter so a resolved prefetch re-runs the display effect. `inFlightRef`
+    // dedupes concurrent fetches of the same range anchor.
+    const bufferRef = React.useRef<Map<number, PlayerSnapshot>>(new Map());
+    const inFlightRef = React.useRef<Set<number>>(new Set());
+    const [bufferVersion, setBufferVersion] = React.useState(0);
+
+    const reportError = React.useCallback((err: Error) => {
+        setError(err.message);
+    }, []);
+
+    const totalTicks = info?.totalTicks ?? 0;
+
+    // Open the playback session for the requested path; close it on unmount.
+    React.useEffect(() => {
+        if (path === null) {
+            setError('No replay path provided.');
+            return;
+        }
+        let active = true;
+        setError(null);
+        replayApi
+            .openPlayback(path)
+            .then((opened) => {
+                if (active) {
+                    bufferRef.current = new Map();
+                    inFlightRef.current = new Set();
+                    setBufferVersion(0);
+                    setSnapshot(null);
+                    setInfo(opened);
+                    setCurrentTick(0);
+                }
+            })
+            .catch((err: unknown) => {
+                if (active) {
+                    setError(err instanceof Error ? err.message : 'Failed to open replay.');
+                }
+            });
+        return () => {
+            active = false;
+            void replayApi.closePlayback();
+        };
+    }, [replayApi, path]);
+
+    // Fetch (and buffer) a batch of snapshots anchored at `from`, deduping
+    // concurrent requests for the same anchor.
+    const fetchRange = React.useCallback(
+        (from: number) => {
+            if (info === null || inFlightRef.current.has(from)) {
+                return;
+            }
+            const to = Math.min(from + PREFETCH_BATCH - 1, info.totalTicks);
+            inFlightRef.current.add(from);
+            replayApi
+                .snapshotRange(from, to)
+                .then((snaps) => {
+                    snaps.forEach((snap, index) => bufferRef.current.set(from + index, snap));
+                    setBufferVersion((version) => version + 1);
+                })
+                .catch((err: unknown) => {
+                    setError(err instanceof Error ? err.message : 'Failed to load ticks.');
+                })
+                .finally(() => {
+                    inFlightRef.current.delete(from);
+                });
+        },
+        [replayApi, info],
+    );
+
+    // Display the current tick from the buffer, fetching it (and prefetching
+    // ahead of the playhead) as needed. `bufferVersion` re-runs this once a
+    // pending range resolves.
+    React.useEffect(() => {
+        if (info === null) {
+            return;
+        }
+        const buffer = bufferRef.current;
+        const cached = buffer.get(currentTick);
+        if (cached === undefined) {
+            fetchRange(currentTick);
+            return;
+        }
+        setSnapshot(cached);
+
+        // Find the highest contiguously-buffered tick ahead of the playhead and
+        // refill once the runway drops below the low-water mark.
+        let ahead = currentTick;
+        while (ahead < info.totalTicks && buffer.has(ahead + 1)) {
+            ahead += 1;
+        }
+        if (ahead < info.totalTicks && ahead - currentTick < PREFETCH_LOW_WATERMARK) {
+            fetchRange(ahead + 1);
+        }
+    }, [info, currentTick, bufferVersion, fetchRange]);
+
+    // Auto-advance while playing; the interval scales inversely with speed.
+    React.useEffect(() => {
+        if (!isPlaying || info === null) {
+            return;
+        }
+        const id = setInterval(() => {
+            setCurrentTick((tick) => Math.min(tick + 1, info.totalTicks));
+        }, PLAYBACK_INTERVAL_MS / playbackSpeed);
+        return () => {
+            clearInterval(id);
+        };
+    }, [isPlaying, info, playbackSpeed]);
+
+    // Stop playback once the final tick is reached.
+    React.useEffect(() => {
+        if (isPlaying && info !== null && currentTick >= info.totalTicks) {
+            setIsPlaying(false);
+        }
+    }, [isPlaying, info, currentTick]);
+
+    const loadedGame = useLoadedRendererGame(info?.gameId ?? null, reportError);
+    const assetManager = React.useMemo<AssetManager | null>(
+        () => (loadedGame === null ? null : createAssetManager(createRendererGameAssetResolver())),
+        [loadedGame],
+    );
+
+    const handlePlay = React.useCallback(() => {
+        setIsPlaying(true);
+    }, []);
+    const handlePause = React.useCallback(() => {
+        setIsPlaying(false);
+    }, []);
+    const handleStep = React.useCallback(
+        (delta: number) => {
+            setIsPlaying(false);
+            setCurrentTick((tick) => clamp(tick + delta, 0, totalTicks));
+        },
+        [totalTicks],
+    );
+    const handleSeek = React.useCallback(
+        (tick: number) => {
+            setIsPlaying(false);
+            setCurrentTick(clamp(tick, 0, totalTicks));
+        },
+        [totalTicks],
+    );
+    const handleSpeedChange = React.useCallback((speed: number) => {
+        setPlaybackSpeed(speed);
+    }, []);
+
+    if (error !== null) {
+        return (
+            <main style={pageStyle}>
+                <div style={errorStyle} role="alert">
+                    {error}
+                </div>
+            </main>
+        );
+    }
+
+    const isReady =
+        info !== null && snapshot !== null && loadedGame !== null && assetManager !== null;
+
+    if (!isReady) {
+        return (
+            <main style={pageStyle}>
+                <div
+                    role="status"
+                    aria-label="Loading replay"
+                    style={{ padding: 'var(--ch-space-md)' }}
+                >
+                    Loading replay…
+                </div>
+            </main>
+        );
+    }
+
+    return (
+        <main style={pageStyle}>
+            <div style={boardStyle}>
+                <GameShell
+                    registry={loadedGame.registry}
+                    assetManager={assetManager}
+                    {...(loadedGame.assetManifest === undefined
+                        ? {}
+                        : { assetManifest: loadedGame.assetManifest })}
+                    {...(loadedGame.inputActions === undefined
+                        ? {}
+                        : { inputActions: loadedGame.inputActions })}
+                    snapshot={snapshot}
+                    currentTick={currentTick}
+                    sendAction={NOOP_SEND_ACTION}
+                    canEndTurn={false}
+                    localPlayerId={info.viewerId as PlayerSnapshot['viewerId']}
+                />
+            </div>
+            <ReplayControls
+                currentTick={currentTick}
+                totalTicks={totalTicks}
+                isPlaying={isPlaying}
+                playbackSpeed={playbackSpeed}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onStep={handleStep}
+                onSeek={handleSeek}
+                onSpeedChange={handleSpeedChange}
+            />
+        </main>
+    );
+}

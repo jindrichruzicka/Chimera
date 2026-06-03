@@ -1,0 +1,16 @@
+.root {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: var(--ch-space-sm);
+    padding: var(--ch-space-sm) var(--ch-space-md);
+}
+
+.scrubber {
+    flex: 1 1 auto;
+    min-width: var(--ch-space-xl);
+}
+
+.speed {
+    flex: 0 0 auto;
+}

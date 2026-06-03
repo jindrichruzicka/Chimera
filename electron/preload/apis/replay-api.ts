@@ -16,10 +16,21 @@
 // string, and the file itself is only loaded when the player route opens it
 // (invariant #3 / #71).
 
-import type { ReplayAPI, ReplayListItem, Unsubscribe } from '../api-types.js';
+import type {
+    PlayerSnapshot,
+    ReplayAPI,
+    ReplayListItem,
+    ReplayPlaybackInfo,
+    Unsubscribe,
+} from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush } from '../shared/listener.js';
-import { ReplayListSchema, ReplaySavedPathSchema, parseInvokeResponse } from '../shared/schemas.js';
+import {
+    ReplayListSchema,
+    ReplayPlaybackInfoSchema,
+    ReplaySavedPathSchema,
+    parseInvokeResponse,
+} from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link ReplayAPI.list}. */
 export const REPLAY_LIST_CHANNEL = 'chimera:replay:list';
@@ -39,6 +50,18 @@ export const REPLAY_DELETE_CHANNEL = 'chimera:replay:delete';
  * the renderer route can switch to the replay player.
  */
 export const REPLAY_NAVIGATE_CHANNEL = 'chimera:replay:navigate';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.openPlayback}. */
+export const REPLAY_OPEN_PLAYBACK_CHANNEL = 'chimera:replay:open-playback';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.snapshotAt}. */
+export const REPLAY_SNAPSHOT_AT_CHANNEL = 'chimera:replay:snapshot-at';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.snapshotRange}. */
+export const REPLAY_SNAPSHOT_RANGE_CHANNEL = 'chimera:replay:snapshot-range';
+
+/** `ipcRenderer.invoke` target for {@link ReplayAPI.closePlayback}. */
+export const REPLAY_CLOSE_PLAYBACK_CHANNEL = 'chimera:replay:close-playback';
 
 /**
  * Back-compat alias for {@link IpcListener}. Retained for symmetry with the
@@ -96,5 +119,31 @@ export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
         },
         onNavigate: (listener: (path: string) => void): Unsubscribe =>
             subscribePush<string>(ipc, REPLAY_NAVIGATE_CHANNEL, listener),
+        openPlayback: (path: string): Promise<ReplayPlaybackInfo> =>
+            ipc
+                .invoke(REPLAY_OPEN_PLAYBACK_CHANNEL, path)
+                .then((value) =>
+                    parseInvokeResponse(
+                        ReplayPlaybackInfoSchema,
+                        REPLAY_OPEN_PLAYBACK_CHANNEL,
+                        value,
+                    ),
+                ),
+        // The returned value is a PlayerSnapshot already projected by main; no
+        // structural re-validation here, mirroring `game.getCurrentSnapshot`
+        // (invariant #3: main is the sole producer; a full GameSnapshot can
+        // never reach this channel).
+        snapshotAt: (tick: number): Promise<PlayerSnapshot> =>
+            ipc.invoke(REPLAY_SNAPSHOT_AT_CHANNEL, tick).then((value) => value as PlayerSnapshot),
+        // Like `snapshotAt`, every element is a PlayerSnapshot already projected
+        // by main (invariant #3); the range is passed as a single `{from, to}`
+        // payload validated by `ReplaySnapshotRangeSchema` on the main side.
+        snapshotRange: (from: number, to: number): Promise<PlayerSnapshot[]> =>
+            ipc
+                .invoke(REPLAY_SNAPSHOT_RANGE_CHANNEL, { from, to })
+                .then((value) => value as PlayerSnapshot[]),
+        closePlayback: async (): Promise<void> => {
+            await ipc.invoke(REPLAY_CLOSE_PLAYBACK_CHANNEL);
+        },
     };
 }

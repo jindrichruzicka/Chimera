@@ -523,9 +523,28 @@ export interface ReplayListItem {
 }
 
 /**
+ * Static playback metadata returned by {@link ReplayAPI.openPlayback} (§4.28).
+ *
+ * Carries no gameplay state — the renderer's replay player uses it to size the
+ * tick scrubber, choose a viewer perspective, and load the matching game
+ * renderer. The authoritative per-tick state is fetched separately, and only
+ * ever as a projected {@link PlayerSnapshot} (invariant #3).
+ */
+export interface ReplayPlaybackInfo {
+    /** Game identifier of the recorded match (drives renderer-game loading). */
+    gameId: string;
+    /** Highest tick in the replay — the scrubber's upper bound. */
+    totalTicks: number;
+    /** Participating player ids, in the game's player order. */
+    playerIds: string[];
+    /** Viewer perspective the projected snapshots are produced for. */
+    viewerId: string;
+}
+
+/**
  * Renderer surface for the replay system (§4.28). Host-only in practice — the
  * main-process handlers own recording state and the replay directory; the
- * renderer only lists, exports, opens, and deletes.
+ * renderer only lists, exports, opens, deletes, and drives playback.
  */
 export interface ReplayAPI {
     /** List stored replays for `gameId`, newest-first. */
@@ -549,6 +568,31 @@ export interface ReplayAPI {
      * payload is the replay file path). Returns an {@link Unsubscribe}.
      */
     onNavigate(listener: (path: string) => void): Unsubscribe;
+    /**
+     * Load the replay at `path` into the main-process playback session and
+     * resolve with its {@link ReplayPlaybackInfo}. Main validates the path is
+     * inside the replay directory. Replaces any previously open playback.
+     */
+    openPlayback(path: string): Promise<ReplayPlaybackInfo>;
+    /**
+     * Fetch the projected {@link PlayerSnapshot} at `tick` from the open
+     * playback session. Main drives the `ReplayPlayer` and projects the
+     * authoritative state before it crosses IPC — only a `PlayerSnapshot` is
+     * returned, never a `GameSnapshot` (invariant #3). Rejects when no playback
+     * is open.
+     */
+    snapshotAt(tick: number): Promise<PlayerSnapshot>;
+    /**
+     * Fetch the projected {@link PlayerSnapshot}s for the inclusive tick range
+     * `[from, to]` in a single round-trip, so the replay player can prefetch a
+     * buffer of ticks instead of one IPC call per tick. Each element is a
+     * projected `PlayerSnapshot`, never a `GameSnapshot` (invariant #3). Main
+     * caps the span (`MAX_SNAPSHOT_RANGE`) and rejects `to < from`. Rejects when
+     * no playback is open.
+     */
+    snapshotRange(from: number, to: number): Promise<PlayerSnapshot[]>;
+    /** Close the open playback session, releasing its `ReplayPlayer`. */
+    closePlayback(): Promise<void>;
 }
 
 /** Stub. Expanded in F45 — Chat System (§4.29). */

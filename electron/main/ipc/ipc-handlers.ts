@@ -68,6 +68,10 @@ import {
     REPLAY_LIST_CHANNEL,
     REPLAY_NAVIGATE_CHANNEL,
     REPLAY_OPEN_IN_PLAYER_CHANNEL,
+    REPLAY_OPEN_PLAYBACK_CHANNEL,
+    REPLAY_SNAPSHOT_AT_CHANNEL,
+    REPLAY_SNAPSHOT_RANGE_CHANNEL,
+    REPLAY_CLOSE_PLAYBACK_CHANNEL,
 } from '../../preload/apis/replay-api.js';
 import type {
     ActionRejection,
@@ -76,7 +80,9 @@ import type {
     EngineAction,
     PlayerProfile,
     PlayerId,
+    PlayerSnapshot,
     ReplayListItem,
+    ReplayPlaybackInfo,
     ResolvedSettings,
     SaveRequest,
     SaveSlotMeta,
@@ -94,6 +100,8 @@ import {
     JoinLobbyParamsSchema,
     LobbyReadyStateSchema,
     ReplayPathSchema,
+    ReplaySnapshotRangeSchema,
+    ReplayTickSchema,
     SaveRequestSchema,
     SlotIdSchema,
     SwitchLocalSlotRequestSchema,
@@ -155,6 +163,10 @@ export {
     REPLAY_LIST_CHANNEL,
     REPLAY_NAVIGATE_CHANNEL,
     REPLAY_OPEN_IN_PLAYER_CHANNEL,
+    REPLAY_OPEN_PLAYBACK_CHANNEL,
+    REPLAY_SNAPSHOT_AT_CHANNEL,
+    REPLAY_SNAPSHOT_RANGE_CHANNEL,
+    REPLAY_CLOSE_PLAYBACK_CHANNEL,
 };
 
 /**
@@ -789,12 +801,28 @@ export interface ReplayIpcPort {
     delete(path: string): Promise<void>;
 }
 
+/**
+ * Narrow port driving replay *playback* (§4.28, F44 / T6). Wired to
+ * `ReplayPlaybackManager` in `index.ts`.
+ *
+ * Invariant #3: `snapshotAt` returns a projected {@link PlayerSnapshot}; the
+ * authoritative `BaseGameSnapshot` it is projected from never leaves main.
+ */
+export interface ReplayPlaybackPort {
+    open(path: string): Promise<ReplayPlaybackInfo>;
+    snapshotAt(tick: number): PlayerSnapshot;
+    snapshotRange(from: number, to: number): PlayerSnapshot[];
+    close(): void;
+}
+
 export interface RegisterReplayHandlersOptions {
     readonly ipcMain: ReplayHandlersIpcMain;
     /** Injected logger (invariant 67). See `RegisterSystemHandlersOptions`. */
     readonly logger?: Logger;
     /** Live replay read/delete port — production wires the `ReplayManager`. */
     readonly replay: ReplayIpcPort;
+    /** Live replay playback port — production wires the `ReplayPlaybackManager`. */
+    readonly playback: ReplayPlaybackPort;
     /**
      * Absolute path of the replay directory. `chimera:replay:open-in-player`
      * resolves the requested path and asserts it stays inside this root before
@@ -834,7 +862,7 @@ export interface RegisterReplayHandlersOptions {
  * Invariant 67: the logger is injected; this function never constructs one.
  */
 export function registerReplayHandlers(options: RegisterReplayHandlersOptions): void {
-    const { ipcMain, replay, replayDir, exportCurrentMatch, navigateToPlayer } = options;
+    const { ipcMain, replay, playback, replayDir, exportCurrentMatch, navigateToPlayer } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:replay:* handlers', {
         channels: [
@@ -842,6 +870,10 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
             REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
             REPLAY_OPEN_IN_PLAYER_CHANNEL,
             REPLAY_DELETE_CHANNEL,
+            REPLAY_OPEN_PLAYBACK_CHANNEL,
+            REPLAY_SNAPSHOT_AT_CHANNEL,
+            REPLAY_SNAPSHOT_RANGE_CHANNEL,
+            REPLAY_CLOSE_PLAYBACK_CHANNEL,
         ],
     });
 
@@ -882,6 +914,46 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
             );
         }
         return replay.delete(validated).then(() => undefined);
+    });
+
+    ipcMain.handle(REPLAY_OPEN_PLAYBACK_CHANNEL, (_event, replayPath) => {
+        const validated = parseInvokeRequest(
+            ReplayPathSchema,
+            REPLAY_OPEN_PLAYBACK_CHANNEL,
+            replayPath,
+        );
+        // Symmetric traversal defence with open-in-player/delete (OWASP A01):
+        // the playback session loads the file, so the boundary must reject any
+        // path outside the replay directory before the manager is touched.
+        if (!isInsidePath(replayDir, validated)) {
+            throw new Error(
+                `replay:open-playback: path ${JSON.stringify(validated)} escapes the replay directory`,
+            );
+        }
+        return playback.open(validated);
+    });
+
+    ipcMain.handle(REPLAY_SNAPSHOT_AT_CHANNEL, (_event, tick) => {
+        const validated = parseInvokeRequest(ReplayTickSchema, REPLAY_SNAPSHOT_AT_CHANNEL, tick);
+        // Invariant #3: the manager projects to a PlayerSnapshot before return;
+        // no GameSnapshot crosses this channel.
+        return playback.snapshotAt(validated);
+    });
+
+    ipcMain.handle(REPLAY_SNAPSHOT_RANGE_CHANNEL, (_event, range) => {
+        const { from, to } = parseInvokeRequest(
+            ReplaySnapshotRangeSchema,
+            REPLAY_SNAPSHOT_RANGE_CHANNEL,
+            range,
+        );
+        // Invariant #3: every element is a projected PlayerSnapshot. The schema
+        // caps the span (MAX_SNAPSHOT_RANGE) so the projection loop is bounded.
+        return playback.snapshotRange(from, to);
+    });
+
+    ipcMain.handle(REPLAY_CLOSE_PLAYBACK_CHANNEL, () => {
+        playback.close();
+        return undefined;
     });
 }
 

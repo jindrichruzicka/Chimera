@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
+import { ReplayNavigationBridge } from '../components/replay/ReplayNavigationBridge';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
@@ -21,6 +22,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                 <LobbyStoreBootstrap />
                 <GameStoreBootstrap />
                 <SaveStoreBootstrap />
+                <ReplayNavigationBridge />
                 <React.Suspense fallback={null}>
                     <ShellBackgroundHost />
                 </React.Suspense>

@@ -35,6 +35,7 @@ import type {
     LobbyState,
     PlayerProfile,
     ReplayListItem,
+    ReplayPlaybackInfo,
     ResolvedSettings,
     SaveSlotMeta,
     PlayerId,
@@ -279,6 +280,23 @@ export const ReplayListSchema: z.ZodType<readonly ReplayListItem[]> = z.array(Re
  * Schema for the saved file path returned by `chimera:replay:export-current-match`.
  */
 export const ReplaySavedPathSchema: z.ZodType<string> = z.string().min(1);
+
+/**
+ * Schema for the {@link ReplayPlaybackInfo} returned by
+ * `chimera:replay:open-playback`. Structural validation only — the host builds
+ * it from a validated replay file; the gate catches main↔preload contract drift.
+ *
+ * The per-tick `PlayerSnapshot` returned by `chimera:replay:snapshot-at` is not
+ * schema-validated here: it is projected host-side and handled exactly like
+ * `chimera:game:get-current-snapshot` (a trusted cast — invariant #3 guarantees
+ * only a `PlayerSnapshot` can reach that channel).
+ */
+export const ReplayPlaybackInfoSchema = z.object({
+    gameId: z.string(),
+    totalTicks: z.number().int(),
+    playerIds: z.array(z.string()),
+    viewerId: z.string(),
+}) satisfies z.ZodType<ReplayPlaybackInfo>;
 
 // ─── System device-info schema (§4.17) ───────────────────────────────────────
 

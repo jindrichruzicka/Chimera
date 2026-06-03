@@ -42,6 +42,10 @@ import {
     REPLAY_LIST_CHANNEL,
     REPLAY_NAVIGATE_CHANNEL,
     REPLAY_OPEN_IN_PLAYER_CHANNEL,
+    REPLAY_OPEN_PLAYBACK_CHANNEL,
+    REPLAY_SNAPSHOT_AT_CHANNEL,
+    REPLAY_SNAPSHOT_RANGE_CHANNEL,
+    REPLAY_CLOSE_PLAYBACK_CHANNEL,
     PROFILE_DIRECTORY_CHANGED_CHANNEL,
     PROFILE_GET_LOBBY_DIRECTORY_CHANNEL,
     PROFILE_GET_LOCAL_CHANNEL,
@@ -59,6 +63,7 @@ import {
     type ReplayHandlersIpcMain,
     type ReplayInvokeHandler,
     type ReplayIpcPort,
+    type ReplayPlaybackPort,
     type SavesHandlersIpcMain,
     type SavesInvokeHandler,
     type SavesIpcPort,
@@ -67,7 +72,7 @@ import {
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
-import { IpcRequestValidationError } from './ipc-schemas.js';
+import { IpcRequestValidationError, MAX_SNAPSHOT_RANGE } from './ipc-schemas.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from '../lobby/LobbyManager.js';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
@@ -81,6 +86,7 @@ import type {
     HostLobbyParams,
     JoinLobbyParams,
     PlayerProfile,
+    PlayerSnapshot,
     ReplayListItem,
     SaveRequest,
     SaveSlotMeta,
@@ -2250,11 +2256,44 @@ function makeNoopReplayPort(): ReplayIpcPort {
     };
 }
 
+function makePlayerSnapshotAt(tick: number): PlayerSnapshot {
+    return {
+        tick,
+        viewerId: playerId('p1'),
+        players: {},
+        entities: {},
+        phase: 'playing' as PlayerSnapshot['phase'],
+        events: [],
+        gameResult: null,
+        commitments: {},
+        undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
+    };
+}
+
+/** Minimal `ReplayPlaybackPort` resolving with canonical playback results. */
+function makeNoopPlaybackPort(): ReplayPlaybackPort {
+    return {
+        open: () =>
+            Promise.resolve({
+                gameId: 'tactics',
+                totalTicks: 0,
+                playerIds: ['p1'],
+                viewerId: 'p1',
+            }),
+        snapshotAt: (tick) => makePlayerSnapshotAt(tick),
+        snapshotRange: (from, to) =>
+            Array.from({ length: to - from + 1 }, (_unused, i) => makePlayerSnapshotAt(from + i)),
+        close: () => undefined,
+    };
+}
+
 const REPLAY_DIR = nodePath.resolve('/var/userData/replays');
 
 function registerReplay(overrides: {
     ipcMain: ReplayHandlersIpcMain;
     replay?: ReplayIpcPort;
+    playback?: ReplayPlaybackPort;
     exportCurrentMatch?: () => Promise<string>;
     navigateToPlayer?: (path: string) => void;
     replayDir?: string;
@@ -2262,6 +2301,7 @@ function registerReplay(overrides: {
     registerReplayHandlers({
         ipcMain: overrides.ipcMain,
         replay: overrides.replay ?? makeNoopReplayPort(),
+        playback: overrides.playback ?? makeNoopPlaybackPort(),
         replayDir: overrides.replayDir ?? REPLAY_DIR,
         exportCurrentMatch:
             overrides.exportCurrentMatch ??
@@ -2271,7 +2311,7 @@ function registerReplay(overrides: {
 }
 
 describe('registerReplayHandlers', () => {
-    it('registers exactly the four invoke channels (navigate is push-only)', () => {
+    it('registers exactly the eight invoke channels (navigate is push-only)', () => {
         const stub = makeReplayIpcMainStub();
         registerReplay({ ipcMain: stub.ipcMain });
 
@@ -2281,6 +2321,10 @@ describe('registerReplayHandlers', () => {
                 REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
                 REPLAY_OPEN_IN_PLAYER_CHANNEL,
                 REPLAY_DELETE_CHANNEL,
+                REPLAY_OPEN_PLAYBACK_CHANNEL,
+                REPLAY_SNAPSHOT_AT_CHANNEL,
+                REPLAY_SNAPSHOT_RANGE_CHANNEL,
+                REPLAY_CLOSE_PLAYBACK_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(REPLAY_NAVIGATE_CHANNEL)).toBe(false);
@@ -2418,6 +2462,196 @@ describe('registerReplayHandlers', () => {
 
             expect(() => handler?.({}, traversal)).toThrow();
             expect(del).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:open-playback', () => {
+        it('validates the path is inside the replay dir, then opens playback', async () => {
+            const stub = makeReplayIpcMainStub();
+            const info = {
+                gameId: 'tactics',
+                totalTicks: 9,
+                playerIds: ['p1', 'p2'],
+                viewerId: 'p1',
+            };
+            const open = vi.fn((_path: string) => Promise.resolve(info));
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), open },
+            });
+
+            const target = nodePath.join(REPLAY_DIR, 'tactics', 'abc.chimera-replay');
+            const handler = stub.handled.get(REPLAY_OPEN_PLAYBACK_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, target))).resolves.toStrictEqual(info);
+            expect(open).toHaveBeenCalledWith(target);
+        });
+
+        it('rejects a path that escapes the replay dir and never opens playback', () => {
+            const stub = makeReplayIpcMainStub();
+            const open = vi.fn();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), open },
+            });
+
+            const traversal = nodePath.join(REPLAY_DIR, '..', '..', 'etc', 'passwd');
+            const handler = stub.handled.get(REPLAY_OPEN_PLAYBACK_CHANNEL);
+
+            expect(() => handler?.({}, traversal)).toThrow();
+            expect(open).not.toHaveBeenCalled();
+        });
+
+        it('rejects a malformed (empty) path before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const open = vi.fn();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), open },
+            });
+
+            const handler = stub.handled.get(REPLAY_OPEN_PLAYBACK_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(open).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:snapshot-at', () => {
+        it('validates the tick and returns the projected PlayerSnapshot', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotAt = vi.fn((tick: number) => makePlayerSnapshotAt(tick));
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), snapshotAt },
+            });
+
+            const handler = stub.handled.get(REPLAY_SNAPSHOT_AT_CHANNEL);
+            const result = handler?.({}, 3) as PlayerSnapshot;
+
+            expect(result.tick).toBe(3);
+            // Invariant #3: the boundary returns a PlayerSnapshot — the
+            // host-internal `seed` of a raw GameSnapshot is never present.
+            expect('seed' in result).toBe(false);
+            expect(snapshotAt).toHaveBeenCalledWith(3);
+        });
+
+        it('rejects a non-integer / negative tick before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotAt = vi.fn((tick: number) => makePlayerSnapshotAt(tick));
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), snapshotAt },
+            });
+
+            const handler = stub.handled.get(REPLAY_SNAPSHOT_AT_CHANNEL);
+            expect(() => handler?.({}, -1)).toThrow(IpcRequestValidationError);
+            expect(() => handler?.({}, 1.5)).toThrow(IpcRequestValidationError);
+            expect(snapshotAt).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:snapshot-range', () => {
+        it('validates the range and returns the projected PlayerSnapshots', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn((from: number, to: number) =>
+                Array.from({ length: to - from + 1 }, (_u, i) => makePlayerSnapshotAt(from + i)),
+            );
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(REPLAY_SNAPSHOT_RANGE_CHANNEL);
+            const result = handler?.({}, { from: 2, to: 4 }) as PlayerSnapshot[];
+
+            expect(result.map((s) => s.tick)).toEqual([2, 3, 4]);
+            // Invariant #3: every element is a PlayerSnapshot — no raw `seed`.
+            expect(result.every((s) => !('seed' in s))).toBe(true);
+            expect(snapshotRange).toHaveBeenCalledWith(2, 4);
+        });
+
+        it('rejects a malformed range (to < from) before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(REPLAY_SNAPSHOT_RANGE_CHANNEL);
+            expect(() => handler?.({}, { from: 5, to: 2 })).toThrow(IpcRequestValidationError);
+            expect(snapshotRange).not.toHaveBeenCalled();
+        });
+
+        it('rejects a non-integer / negative bound before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(REPLAY_SNAPSHOT_RANGE_CHANNEL);
+            expect(() => handler?.({}, { from: -1, to: 2 })).toThrow(IpcRequestValidationError);
+            expect(() => handler?.({}, { from: 0, to: 1.5 })).toThrow(IpcRequestValidationError);
+            expect(snapshotRange).not.toHaveBeenCalled();
+        });
+
+        it('rejects an over-large range before touching the port (DoS guard)', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(REPLAY_SNAPSHOT_RANGE_CHANNEL);
+            expect(() => handler?.({}, { from: 0, to: 100_000 })).toThrow(
+                IpcRequestValidationError,
+            );
+            expect(snapshotRange).not.toHaveBeenCalled();
+        });
+
+        it('rejects a span of exactly MAX_SNAPSHOT_RANGE but accepts one tick less (cap boundary)', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn((from: number, to: number) =>
+                Array.from({ length: to - from + 1 }, (_u, i) => makePlayerSnapshotAt(from + i)),
+            );
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(REPLAY_SNAPSHOT_RANGE_CHANNEL);
+
+            // Span === MAX_SNAPSHOT_RANGE (256) is rejected: the cap is exclusive
+            // (`to - from < MAX_SNAPSHOT_RANGE`), so the port is never touched.
+            expect(() => handler?.({}, { from: 0, to: MAX_SNAPSHOT_RANGE })).toThrow(
+                IpcRequestValidationError,
+            );
+            expect(snapshotRange).not.toHaveBeenCalled();
+
+            // Span === MAX_SNAPSHOT_RANGE - 1 (255) is the largest accepted range.
+            const result = handler?.(
+                {},
+                { from: 0, to: MAX_SNAPSHOT_RANGE - 1 },
+            ) as PlayerSnapshot[];
+            expect(result).toHaveLength(MAX_SNAPSHOT_RANGE);
+            expect(snapshotRange).toHaveBeenCalledWith(0, MAX_SNAPSHOT_RANGE - 1);
+        });
+    });
+
+    describe('chimera:replay:close-playback', () => {
+        it('delegates to playback.close and resolves with undefined', async () => {
+            const stub = makeReplayIpcMainStub();
+            const close = vi.fn();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), close },
+            });
+
+            const handler = stub.handled.get(REPLAY_CLOSE_PLAYBACK_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).resolves.toBeUndefined();
+            expect(close).toHaveBeenCalledOnce();
         });
     });
 });

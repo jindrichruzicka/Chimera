@@ -5,12 +5,16 @@ import {
     REPLAY_LIST_CHANNEL,
     REPLAY_NAVIGATE_CHANNEL,
     REPLAY_OPEN_IN_PLAYER_CHANNEL,
+    REPLAY_OPEN_PLAYBACK_CHANNEL,
+    REPLAY_SNAPSHOT_AT_CHANNEL,
+    REPLAY_SNAPSHOT_RANGE_CHANNEL,
+    REPLAY_CLOSE_PLAYBACK_CHANNEL,
     createReplayApi,
     type ReplayApiIpcPort,
 } from './replay-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
 import type { IpcListener } from '../shared/listener.js';
-import type { ReplayListItem } from '../api-types.js';
+import type { PlayerSnapshot, ReplayListItem, ReplayPlaybackInfo } from '../api-types.js';
 
 /**
  * Recording stub for the narrow `ReplayApiIpcPort` slice. Captures every call
@@ -139,6 +143,86 @@ describe('createReplayApi', () => {
             ).resolves.toBeUndefined();
             expect(stub.invocations).toEqual([
                 { channel: REPLAY_DELETE_CHANNEL, args: ['/replays/tactics/abc.chimera-replay'] },
+            ]);
+        });
+    });
+
+    describe('openPlayback()', () => {
+        const info: ReplayPlaybackInfo = {
+            gameId: 'tactics',
+            totalTicks: 9,
+            playerIds: ['p1', 'p2'],
+            viewerId: 'p1',
+        };
+
+        it('invokes chimera:replay:open-playback with the path and resolves to ReplayPlaybackInfo', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(REPLAY_OPEN_PLAYBACK_CHANNEL, info);
+            const api = createReplayApi(stub.port);
+
+            const result = await api.openPlayback('/replays/tactics/abc.chimera-replay');
+
+            expect(stub.invocations).toEqual([
+                {
+                    channel: REPLAY_OPEN_PLAYBACK_CHANNEL,
+                    args: ['/replays/tactics/abc.chimera-replay'],
+                },
+            ]);
+            expect(result).toStrictEqual(info);
+        });
+
+        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(REPLAY_OPEN_PLAYBACK_CHANNEL, { gameId: 'tactics' });
+            const api = createReplayApi(stub.port);
+
+            await expect(
+                api.openPlayback('/replays/tactics/abc.chimera-replay'),
+            ).rejects.toBeInstanceOf(PreloadIpcValidationError);
+        });
+    });
+
+    describe('snapshotAt()', () => {
+        it('invokes chimera:replay:snapshot-at with the tick and resolves to the PlayerSnapshot', async () => {
+            const stub = makeIpcStub();
+            const snapshot = { tick: 3, viewerId: 'p1' } as unknown as PlayerSnapshot;
+            stub.invokeResults.set(REPLAY_SNAPSHOT_AT_CHANNEL, snapshot);
+            const api = createReplayApi(stub.port);
+
+            const result = await api.snapshotAt(3);
+
+            expect(stub.invocations).toEqual([{ channel: REPLAY_SNAPSHOT_AT_CHANNEL, args: [3] }]);
+            expect(result).toBe(snapshot);
+        });
+    });
+
+    describe('snapshotRange()', () => {
+        it('invokes chimera:replay:snapshot-range with a {from,to} payload and resolves to the array', async () => {
+            const stub = makeIpcStub();
+            const snapshots = [
+                { tick: 2, viewerId: 'p1' },
+                { tick: 3, viewerId: 'p1' },
+            ] as unknown as PlayerSnapshot[];
+            stub.invokeResults.set(REPLAY_SNAPSHOT_RANGE_CHANNEL, snapshots);
+            const api = createReplayApi(stub.port);
+
+            const result = await api.snapshotRange(2, 3);
+
+            expect(stub.invocations).toEqual([
+                { channel: REPLAY_SNAPSHOT_RANGE_CHANNEL, args: [{ from: 2, to: 3 }] },
+            ]);
+            expect(result).toBe(snapshots);
+        });
+    });
+
+    describe('closePlayback()', () => {
+        it('invokes chimera:replay:close-playback with no argument and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createReplayApi(stub.port);
+
+            await expect(api.closePlayback()).resolves.toBeUndefined();
+            expect(stub.invocations).toEqual([
+                { channel: REPLAY_CLOSE_PLAYBACK_CHANNEL, args: [] },
             ]);
         });
     });
