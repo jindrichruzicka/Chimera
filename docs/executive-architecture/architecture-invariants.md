@@ -182,7 +182,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **70.** `ReplayPlayer` uses the same `ActionPipeline` instance wiring as live play. Any "replay-only" shortcut code path is forbidden — a replay divergence is a determinism bug, not an acceptable replay-layer simplification.
 
-**71.** Replay files contain full `EngineAction` payloads — never projected `PlayerSnapshot`s. Playback starts from seed + gameConfig and reconstructs state through the pipeline. A replay file without `seed` or `actions` is malformed and rejected at load.
+**71.** Deterministic replay files (`ReplayFile`, no `kind` discriminator) contain full `EngineAction` payloads — never projected `PlayerSnapshot`s. Playback starts from seed + gameConfig and reconstructs state through the pipeline. A replay file without `seed` or `actions` is malformed and rejected at load. (The distinct _perspective_ replay format of Invariant #98 deliberately inverts this — it stores projected snapshots and no seed/actions — and is identified by its `kind: 'perspective'` discriminator.)
 
 **72.** `CHAT` messages are not `EngineAction`s. They must not advance `tick`, invoke `ActionPipeline`, or be recorded in `ActionHistory` / replays / saves. Chat is a cosmetic communication channel, parallel to `PROFILE_UPDATE`.
 
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–96
+## Invariants 91–98
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -243,6 +243,8 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **96.** Game renderer surfaces may import renderer UI primitives only through the public `@chimera/renderer/components/ui` barrel. This allowance is limited to game screen components under `games/<name>/screens/*.tsx` and React shell contributions under `games/<name>/shell/*.tsx`. Game code must not import renderer stores, IPC bridges, shell components, R3F components, asset managers, hooks, stylesheets, or other renderer internals; non-renderer game modules must not import renderer code.
 
 **97.** Game-owned assets — audio, fonts, textures, models, and similar binary resources — must be committed and declared by the game package, not by `renderer/public`. Runtime renderer loading must resolve local `game-id/relative/path` references through the game-asset protocol. `GameFontFace.src` must not be an external URL, and runtime font loading must not fetch Google Fonts CSS or `fonts.gstatic.com` files; development-time downloads are allowed only through tooling that commits the resulting `.woff2` files into the game asset directory.
+
+**98.** A _perspective_ replay (`PerspectiveReplayFile`, `kind: 'perspective'`) is the privacy-preserving counterpart to the deterministic `ReplayFile` of Invariant #71: it carries only already-projected `PlayerSnapshot` frames for a single, **locked, immutable** `viewerId` — never `seed`, `gameConfig`, or `actions` — so it exposes only what one player legitimately saw. A perspective replay is malformed (rejected at parse) if `viewerId` or `frames` is missing, if any `frame.snapshot.viewerId` differs from the file's locked `viewerId`, if any `frame.tick` disagrees with its embedded `frame.snapshot.tick`, or if frame ticks are not strictly increasing (playback walks `frames` in order, so duplicate or out-of-order ticks are rejected). The `kind` discriminator distinguishes it from the deterministic `ReplayFile` (which has no `kind`); both kinds coexist on disk (§4.28, ADR F44b).
 
 ---
 

@@ -13,8 +13,18 @@
  *                typed initial snapshots, assertReplayDeterministic
  *   - T3 (#657): ReplayHeader, ReplayRepository + in-memory double,
  *                ReplaySerializer strategy, ReplayMigrator + ReplayVersionError
+ *
+ * F44b (perspective replays):
+ *   - T1 (#667): PerspectiveReplayFile schema + header/frame types,
+ *                parsePerspectiveReplayFile
  */
 
+export type {
+    PerspectiveReplayFile,
+    PerspectiveReplayFrame,
+    PerspectiveReplayHeader,
+} from './PerspectiveReplayFile.js';
+export { parsePerspectiveReplayFile } from './PerspectiveReplayFile.js';
 export type {
     RecordedAction,
     ReplayFile,

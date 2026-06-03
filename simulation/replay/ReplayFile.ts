@@ -15,9 +15,7 @@
  */
 
 import type { EngineAction, PlayerId } from '../engine/types.js';
-
-const ISO_8601_UTC_TIMESTAMP_PATTERN =
-    /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d):([0-5]\d)(?:\.\d{1,9})?Z$/u;
+import { isIso8601UtcTimestamp } from './iso8601.js';
 
 // ─── ReplayParseError ─────────────────────────────────────────────────────────
 
@@ -278,50 +276,36 @@ function validateMetadata(meta: Record<string, unknown>): void {
     }
 
     for (let i = 0; i < players.length; i++) {
-        validateReplayPlayerMetadata(players[i], i);
+        validateReplayPlayerMetadata(players[i], i, 'metadata.players');
     }
 }
 
-function isIso8601UtcTimestamp(value: string): boolean {
-    const match = ISO_8601_UTC_TIMESTAMP_PATTERN.exec(value);
-    if (match === null) {
-        return false;
-    }
-
-    const year = Number(match[1]);
-    const month = Number(match[2]);
-    const day = Number(match[3]);
-    return day >= 1 && day <= getDaysInMonth(year, month);
-}
-
-function getDaysInMonth(year: number, month: number): number {
-    if (month === 2) {
-        return isLeapYear(year) ? 29 : 28;
-    }
-    return [4, 6, 9, 11].includes(month) ? 30 : 31;
-}
-
-function isLeapYear(year: number): boolean {
-    return year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0);
-}
-
-function validateReplayPlayerMetadata(entry: unknown, index: number): void {
+/**
+ * Validates a single `ReplayPlayerMetadata` entry. Shared by both replay formats:
+ * `pathPrefix` selects the schema-correct error path (`metadata.players` for the
+ * deterministic `ReplayFile`, `players` for the top-level `PerspectiveReplayFile`).
+ */
+export function validateReplayPlayerMetadata(
+    entry: unknown,
+    index: number,
+    pathPrefix: string,
+): void {
     if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) {
-        throw new ReplayParseError(`metadata.players[${index.toString()}] must be an object`);
+        throw new ReplayParseError(`${pathPrefix}[${index.toString()}] must be an object`);
     }
 
     const player = entry as Record<string, unknown>;
     const playerId = player['playerId'];
     if (typeof playerId !== 'string') {
         throw new ReplayParseError(
-            `metadata.players[${index.toString()}].playerId must be a string, got ${JSON.stringify(playerId)}`,
+            `${pathPrefix}[${index.toString()}].playerId must be a string, got ${JSON.stringify(playerId)}`,
         );
     }
 
     const displayName = player['displayName'];
     if (typeof displayName !== 'string') {
         throw new ReplayParseError(
-            `metadata.players[${index.toString()}].displayName must be a string, got ${JSON.stringify(displayName)}`,
+            `${pathPrefix}[${index.toString()}].displayName must be a string, got ${JSON.stringify(displayName)}`,
         );
     }
 }
