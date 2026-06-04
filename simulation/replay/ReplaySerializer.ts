@@ -19,14 +19,19 @@
 
 import { parseReplayFile, ReplayParseError } from './ReplayFile.js';
 import type { ReplayFile } from './ReplayFile.js';
+import type { PerspectiveReplayFile } from './PerspectiveReplayFile.js';
 
 // ─── Prototype-pollution defence ─────────────────────────────────────────────
 
 /**
  * JSON.parse reviver that rejects the legacy __proto__ mutator key without
  * removing valid action payload fields such as `constructor` or `prototype`.
+ *
+ * Exported so the perspective serializer (electron/main) parses its gzipped
+ * envelope with the identical guard — the deterministic and perspective read
+ * paths share one prototype-pollution defence rather than diverging.
  */
-function safeReviver(key: string, value: unknown): unknown {
+export function safeReviver(key: string, value: unknown): unknown {
     if (key === '__proto__') {
         throw new ReplayParseError("Replay JSON contains disallowed '__proto__' key");
     }
@@ -117,4 +122,26 @@ export class JsonReplaySerializer implements ReplaySerializer {
             return Promise.reject(cause instanceof Error ? cause : new Error(String(cause)));
         }
     }
+}
+
+// ─── PerspectiveReplaySerializer strategy ────────────────────────────────────
+
+/**
+ * Strategy interface for turning a `PerspectiveReplayFile` into storable bytes
+ * and back — the privacy-preserving counterpart to {@link ReplaySerializer}.
+ *
+ * Unlike the deterministic side there is no plain-JSON implementation in
+ * `simulation/`: the only production serializer (`CompressedPerspectiveReplaySerializer`,
+ * electron/main) is keyframe + structural-delta + gzip, because a perspective
+ * replay stores one projected `PlayerSnapshot` per tick and is therefore far
+ * larger than an action log. The diff/gzip transform stays in `electron/main/`
+ * (invariant #1); this interface is the pure abstraction both the repository and
+ * that serializer depend on.
+ *
+ * Implementations must be stateless and round-trip stable at the snapshot level:
+ * `deserialize(serialize(file))` is structurally equal to `file`.
+ */
+export interface PerspectiveReplaySerializer {
+    serialize(file: PerspectiveReplayFile): Promise<string | Buffer>;
+    deserialize(raw: string | Buffer): Promise<PerspectiveReplayFile>;
 }

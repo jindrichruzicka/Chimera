@@ -33,11 +33,18 @@ export type {
     ReplayPlayerMetadata,
 } from './ReplayFile.js';
 export { parseReplayFile, ReplayParseError } from './ReplayFile.js';
-export { serializeReplay, deserializeReplay, JsonReplaySerializer } from './ReplaySerializer.js';
-export type { ReplaySerializer } from './ReplaySerializer.js';
+export {
+    serializeReplay,
+    deserializeReplay,
+    safeReviver,
+    JsonReplaySerializer,
+} from './ReplaySerializer.js';
+export type { ReplaySerializer, PerspectiveReplaySerializer } from './ReplaySerializer.js';
 export type { ReplayListingEntry, ReplayRepository } from './ReplayRepository.js';
 export { ReplayNotFoundError } from './ReplayRepository.js';
+export type { PerspectiveReplayRepository } from './PerspectiveReplayRepository.js';
 export { InMemoryReplayRepository } from './InMemoryReplayRepository.js';
+export { InMemoryPerspectiveReplayRepository } from './InMemoryPerspectiveReplayRepository.js';
 export type {
     ReplayCompatibilityTarget,
     ReplayMigration,
