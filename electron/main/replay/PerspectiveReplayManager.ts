@@ -83,6 +83,16 @@ export class PerspectiveReplayManager {
     // ── Recording ─────────────────────────────────────────────────────────────
 
     /**
+     * Whether a recording is currently in progress. Lets a single shared manager
+     * assert the host/joined-client mutual-exclusion assumption at its egress
+     * seam (only one recording is ever live, since a process either hosts or
+     * joins, never both) instead of relying on caller-side flags alone.
+     */
+    isRecording(): boolean {
+        return this.recording !== null;
+    }
+
+    /**
      * Begin recording a new perspective for a single locked `viewerId`. Must be
      * called before `recordSnapshot`.
      * @throws {Error} if a recording is already in progress.

@@ -316,6 +316,33 @@ describe('PerspectiveReplayManager — abort', () => {
     });
 });
 
+// ── isRecording (mutual-exclusion query) ─────────────────────────────────────
+
+describe('PerspectiveReplayManager — isRecording', () => {
+    it('is false before start, true while recording, false after finalise', async () => {
+        const { manager } = makeManager();
+        expect(manager.isRecording()).toBe(false);
+
+        manager.start(makeStartHeader());
+        expect(manager.isRecording()).toBe(true);
+
+        manager.recordSnapshot(frame(VIEWER, 0));
+        expect(manager.isRecording()).toBe(true);
+
+        await manager.finalise();
+        expect(manager.isRecording()).toBe(false);
+    });
+
+    it('is false after abort', () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        expect(manager.isRecording()).toBe(true);
+
+        manager.abort();
+        expect(manager.isRecording()).toBe(false);
+    });
+});
+
 // ── Compatibility guard (engineVersion) ──────────────────────────────────────
 
 describe('PerspectiveReplayManager — load compatibility guard', () => {

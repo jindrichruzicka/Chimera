@@ -231,6 +231,33 @@ vi.mock('./runtime/SimulationHost.js', () => ({
     SimulationHost: vi.fn(() => mockSimulationHostInstance),
 }));
 
+// ── FilePerspectiveReplayRepository mock (F44b T5) ────────────────────────────
+// Capture every PerspectiveReplayFile that the (real) PerspectiveReplayManager
+// persists at finalise, without touching disk. The manager itself is exercised
+// for real so these tests cover the egress wiring + manager together (start /
+// recordSnapshot lock-to-seat / finalise / abort), asserting on the saved file.
+const { perspectiveSaves, mockFilePerspectiveReplayRepoCtor } = vi.hoisted(() => {
+    const perspectiveSaves: { value: unknown[] } = { value: [] };
+    return {
+        perspectiveSaves,
+        mockFilePerspectiveReplayRepoCtor: vi.fn(() => ({
+            save: vi.fn((file: unknown) => {
+                perspectiveSaves.value.push(file);
+                return Promise.resolve(
+                    `/tmp/perspective-${perspectiveSaves.value.length}.chimera-perspective-replay`,
+                );
+            }),
+            load: vi.fn(() => Promise.reject(new Error('load not used in T5 wiring tests'))),
+            list: vi.fn<(gameId: string) => Promise<string[]>>(() => Promise.resolve([])),
+            delete: vi.fn<(filePath: string) => Promise<void>>(() => Promise.resolve()),
+        })),
+    };
+});
+
+vi.mock('./replay/FilePerspectiveReplayRepository.js', () => ({
+    FilePerspectiveReplayRepository: mockFilePerspectiveReplayRepoCtor,
+}));
+
 // ── E2E hooks mock — captures getE2eHooks for wiring tests ────────────────────
 const { mockGetE2eHooks } = vi.hoisted(() => ({
     mockGetE2eHooks: vi.fn<() => unknown>(() => undefined),
@@ -3198,5 +3225,215 @@ describe('onSessionHosted session teardown: onGameEnd not called when gameResult
         // Negative path assertion (onGameEnd not called) is covered by the
         // HostSessionPipeline AC4 test which directly controls the snapshot.
         expect(mockSimulationHostInstance.onGameEnd).toHaveBeenCalledOnce();
+    });
+});
+
+// ── Perspective-replay recording wiring (F44b T5, #671) ───────────────────────
+// Drives the snapshot egress on both host and client through the (real)
+// PerspectiveReplayManager, asserting the captured PerspectiveReplayFile.
+describe('main() — perspective replay recording (F44b T5)', () => {
+    interface PerspectiveTestFrame {
+        readonly tick: number;
+        readonly snapshot: { readonly tick: number; readonly viewerId: unknown };
+    }
+    interface PerspectiveTestFile {
+        readonly kind: string;
+        readonly viewerId: unknown;
+        readonly durationTicks: number;
+        readonly frames: readonly PerspectiveTestFrame[];
+        readonly players: readonly { readonly playerId: unknown }[];
+    }
+    interface HostRecipient {
+        readonly viewerId: unknown;
+        readonly sendSnapshot: (snapshot: unknown) => void;
+    }
+    interface HostTransport {
+        readonly onPlayerJoined: ReturnType<typeof vi.fn>;
+        readonly onPlayerLeft: ReturnType<typeof vi.fn>;
+        readonly onActionReceived: ReturnType<typeof vi.fn>;
+    }
+    interface ClientTransport {
+        readonly onReveal: ReturnType<typeof vi.fn>;
+        readonly onSnapshotReceived: ReturnType<typeof vi.fn>;
+    }
+    interface LobbyOptionsForPerspective {
+        readonly onSessionHosted?: (
+            transport: HostTransport,
+            metadata: { readonly hostId: ReturnType<typeof playerId>; readonly maxPlayers: number },
+        ) => () => void;
+        readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void;
+        readonly onClientSnapshotReceived?: (snapshot: unknown, checksum: number) => void;
+    }
+
+    /** Flush pending microtasks + the fire-and-forget finalise promise. */
+    const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
+
+    const makeSnapshot = (
+        viewerId: ReturnType<typeof playerId>,
+        tick: number,
+        gameResult: unknown = null,
+    ): Record<string, unknown> => ({
+        tick,
+        viewerId,
+        phase: 'playing',
+        players: { [viewerId]: {} },
+        entities: {},
+        events: [],
+        gameResult,
+        commitments: {},
+        undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
+    });
+
+    const makeHostTransport = (): HostTransport => ({
+        onPlayerJoined: vi.fn(() => () => {}),
+        onPlayerLeft: vi.fn(() => () => {}),
+        onActionReceived: vi.fn(() => () => {}),
+    });
+
+    const makeClientTransport = (): ClientTransport => ({
+        onReveal: vi.fn(() => () => {}),
+        onSnapshotReceived: vi.fn(() => () => {}),
+    });
+
+    const getLobbyOptions = (): LobbyOptionsForPerspective =>
+        mockLobbyManagerCtor.mock.calls[0]?.[2] as LobbyOptionsForPerspective;
+
+    beforeEach(() => {
+        perspectiveSaves.value = [];
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
+        mockFilePerspectiveReplayRepoCtor.mockClear();
+    });
+
+    it('constructs a FilePerspectiveReplayRepository at the composition root', async () => {
+        await main();
+        expect(mockFilePerspectiveReplayRepoCtor).toHaveBeenCalledOnce();
+    });
+
+    it('host egress: starts, records each snapshot, and finalises for the host viewerId', async () => {
+        await main();
+        const hostId = playerId('host-perspective');
+
+        getLobbyOptions().onSessionHosted?.(makeHostTransport(), { hostId, maxPlayers: 1 });
+
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
+            .calls[0]?.[0] as HostRecipient | undefined;
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0));
+        recipient?.sendSnapshot(makeSnapshot(hostId, 1));
+        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+
+        await flush();
+
+        expect(perspectiveSaves.value).toHaveLength(1);
+        const file = perspectiveSaves.value[0] as PerspectiveTestFile;
+        expect(file.kind).toBe('perspective');
+        expect(file.viewerId).toBe(hostId);
+        expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 1, 2]);
+        expect(file.durationTicks).toBe(2);
+    });
+
+    it('host egress: skips frames projected for a different seat (post-handoff lock, #98)', async () => {
+        await main();
+        const hostId = playerId('host-locked');
+        const otherSeat = playerId('other-seat');
+
+        getLobbyOptions().onSessionHosted?.(makeHostTransport(), { hostId, maxPlayers: 2 });
+
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
+            .calls[0]?.[0] as HostRecipient | undefined;
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0));
+        // After a pass-and-play handoff the renderer is bound to another seat;
+        // those frames must NOT enter the host's locked recording.
+        recipient?.sendSnapshot(makeSnapshot(otherSeat, 1));
+        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+
+        await flush();
+
+        const file = perspectiveSaves.value[0] as PerspectiveTestFile;
+        expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 2]);
+        for (const frame of file.frames) {
+            expect(frame.snapshot.viewerId).toBe(hostId);
+        }
+    });
+
+    it('host abnormal teardown: aborts the in-progress recording, persisting no file', async () => {
+        await main();
+        const hostId = playerId('host-abandoned');
+
+        const cleanup = getLobbyOptions().onSessionHosted?.(makeHostTransport(), {
+            hostId,
+            maxPlayers: 2, // never reaches the 2-player start, so the match is abandoned
+        });
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
+            .calls[0]?.[0] as HostRecipient | undefined;
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0)); // mid-match, no gameResult
+
+        cleanup?.();
+        await flush();
+
+        expect(perspectiveSaves.value).toHaveLength(0);
+    });
+
+    it('client egress: starts on first snapshot, records, and finalises for the client viewerId', async () => {
+        await main();
+        const options = getLobbyOptions();
+        const clientId = playerId('client-perspective');
+
+        options.onSessionJoined?.(makeClientTransport());
+        options.onClientSnapshotReceived?.(makeSnapshot(clientId, 0), 0);
+        options.onClientSnapshotReceived?.(makeSnapshot(clientId, 1), 0);
+        options.onClientSnapshotReceived?.(makeSnapshot(clientId, 2, { winnerIds: [clientId] }), 0);
+
+        await flush();
+
+        expect(perspectiveSaves.value).toHaveLength(1);
+        const file = perspectiveSaves.value[0] as PerspectiveTestFile;
+        expect(file.kind).toBe('perspective');
+        expect(file.viewerId).toBe(clientId);
+        expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 1, 2]);
+        expect(file.players.map((p) => p.playerId)).toContain(clientId);
+    });
+
+    it('client abnormal teardown: aborts when the session closes before match end', async () => {
+        await main();
+        const options = getLobbyOptions();
+        const clientId = playerId('client-abandoned');
+
+        const cleanup = options.onSessionJoined?.(makeClientTransport());
+        options.onClientSnapshotReceived?.(makeSnapshot(clientId, 0), 0); // no gameResult yet
+
+        cleanup?.();
+        await flush();
+
+        expect(perspectiveSaves.value).toHaveLength(0);
+    });
+
+    it('rejects a client recording that would overlap a live host recording (mutual exclusion)', async () => {
+        await main();
+        const options = getLobbyOptions();
+        const hostId = playerId('host-live');
+        const clientId = playerId('client-overlap');
+
+        // Host recording goes live first.
+        options.onSessionHosted?.(makeHostTransport(), { hostId, maxPlayers: 2 });
+        const recipient = mockStateBroadcasterInstance.registerRendererRecipient.mock
+            .calls[0]?.[0] as HostRecipient | undefined;
+        recipient?.sendSnapshot(makeSnapshot(hostId, 0));
+
+        // A client snapshot now arrives (a contrived overlap the process should
+        // never produce). The guard must refuse to start a second recording over
+        // the live host one rather than throw inside the shared manager.
+        options.onSessionJoined?.(makeClientTransport());
+        options.onClientSnapshotReceived?.(makeSnapshot(clientId, 1), 0);
+
+        // The host recording is unaffected and finalises cleanly to the host seat.
+        recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
+        await flush();
+
+        expect(perspectiveSaves.value).toHaveLength(1);
+        const file = perspectiveSaves.value[0] as PerspectiveTestFile;
+        expect(file.viewerId).toBe(hostId);
+        expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 2]);
     });
 });

@@ -60,7 +60,12 @@ import {
     ReplayPlaybackManager,
     createVisibilityRulesResolver,
 } from './replay/replay-playback-manager.js';
+import { PerspectiveReplayManager } from './replay/PerspectiveReplayManager.js';
+import type { PerspectiveReplayStartHeader } from './replay/PerspectiveReplayManager.js';
+import { FilePerspectiveReplayRepository } from './replay/FilePerspectiveReplayRepository.js';
+import { CompressedPerspectiveReplaySerializer } from './replay/CompressedReplaySerializer.js';
 import { JsonReplaySerializer, ReplayMigrator } from '@chimera/simulation/replay/index.js';
+import type { PerspectiveReplayFrame } from '@chimera/simulation/replay/index.js';
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,
@@ -82,6 +87,7 @@ import type {
     LobbyPlayerEntry,
     LobbyState,
     Unsubscribe,
+    PlayerSnapshot as WirePlayerSnapshot,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import {
     GAME_REVEAL_CHANNEL,
@@ -151,6 +157,46 @@ export type { ChimeraRendererUrl };
 export const DEFAULT_LOCAL_PROFILE_ID = 'local-default';
 const BOOTSTRAP_BACKGROUND_COLOR = '#111113';
 const LOCAL_SEAT_HANDOFF_DELAY_MS = 150;
+
+/**
+ * Bridge a wire-level {@link WirePlayerSnapshot} (the networking-brand snapshot a
+ * joined client receives over transport) to the simulation `PlayerSnapshot` the
+ * perspective recorder consumes. The two declarations describe the *same*
+ * projected payload and converge once `simulation/snapshot.ts` lands (see the
+ * "Wire-level snapshot type" note in `MultiplayerProvider.ts`); until then this
+ * is the single, documented home for that boundary cast — no shape change
+ * crosses it. The host path needs no such bridge: it already holds a simulation
+ * `PlayerSnapshot` straight from the projector.
+ */
+function asProjectedSnapshot(wire: WirePlayerSnapshot): PlayerSnapshot {
+    return wire as unknown as PlayerSnapshot;
+}
+
+/**
+ * Egress seam for perspective-replay recording (§4.28, ADR F44b, T5). Mirrors
+ * the role `ReplayPort` plays for the deterministic recorder, but is driven from
+ * the snapshot *egress* (host renderer + joined-client) rather than the pipeline:
+ * it records only already-projected `PlayerSnapshot`s and never re-runs the
+ * simulation or reads `seed` (invariant #98). Recording locks to the seat active
+ * at `start`; later frames for other seats are skipped by the manager behind it.
+ *
+ * The two egress paths (host renderer, joined client) are mutually exclusive —
+ * a process either hosts or joins, never both — so at most one recording is ever
+ * live. That assumption is asserted, not assumed: each start site checks
+ * `isRecording()` first and refuses to start over a live recording.
+ */
+interface PerspectiveReplayPort {
+    /** Whether a recording is already in progress (asserts host/client exclusion). */
+    isRecording(): boolean;
+    /** Begin recording for the single locked `viewerId` in `header`. */
+    start(header: PerspectiveReplayStartHeader): void;
+    /** Append one projected frame (the manager enforces the lock + tick order). */
+    recordSnapshot(frame: PerspectiveReplayFrame): void;
+    /** Finalise and persist the recording at match end. */
+    finalise(): Promise<void>;
+    /** Discard an in-progress recording on abnormal teardown (idempotent). */
+    abort(): void;
+}
 
 export function createDefaultPlayerProfile(
     rawLocalProfileId: string = DEFAULT_LOCAL_PROFILE_ID,
@@ -946,6 +992,43 @@ export async function main(): Promise<void> {
         logger,
     );
 
+    // PerspectiveReplayManager owns *perspective* replay recording — the
+    // privacy-preserving counterpart that captures only already-projected
+    // PlayerSnapshots for a single locked viewerId (§4.28, ADR F44b, invariant
+    // #98). Wired here at the DIP point alongside ReplayManager; the egress paths
+    // (host renderer + joined-client) drive it through `perspectiveReplayPort`
+    // below. Files land under <userData>/perspective-replays/<gameId>/<uuid>.
+    // Compressed (keyframe + delta) serialization keeps the snapshot stream small.
+    // The manager re-childs the logger to 'perspective-replay-manager' internally
+    // (invariant #67), so the root logger is passed directly.
+    const perspectiveReplayDir = path.join(userData, 'perspective-replays');
+    const perspectiveReplayManager = new PerspectiveReplayManager(
+        new FilePerspectiveReplayRepository(
+            new CompressedPerspectiveReplaySerializer(),
+            perspectiveReplayDir,
+            logger,
+        ),
+        { engineVersion: app.getVersion() },
+        logger,
+    );
+
+    // Egress seam for perspective recording, driven on both the host renderer
+    // path and the joined-client path. A single shared manager is safe because a
+    // process is either hosting or joined (never both), so only one recording is
+    // ever in progress (the same assumption `replayManager` relies on). Both
+    // start sites assert that exclusion via `isRecording()` so a future overlap
+    // surfaces as a precise diagnostic rather than a swallowed "already in
+    // progress" throw.
+    const perspectiveReplayPort: PerspectiveReplayPort = {
+        isRecording: () => perspectiveReplayManager.isRecording(),
+        start: (header) => perspectiveReplayManager.start(header),
+        recordSnapshot: (frame) => perspectiveReplayManager.recordSnapshot(frame),
+        finalise: async () => {
+            await perspectiveReplayManager.finalise();
+        },
+        abort: () => perspectiveReplayManager.abort(),
+    };
+
     const { wasCleanExit, autosaveMeta } = await registerSaveManagerLifecycle({
         app,
         saveManager,
@@ -1010,6 +1093,15 @@ export async function main(): Promise<void> {
     let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
     let handleHostedLocalSeatAdded: ((entry: LobbyPlayerEntry) => void) | null = null;
     let broadcastRestoredSnapshot: (() => void) | null = null;
+
+    // Joined-client perspective recording state (F44b T5). Non-null only inside a
+    // joined session: `onSessionJoined` arms it, the cleanup fn disarms it, and
+    // `onClientSnapshotReceived` lazily starts recording on the first snapshot
+    // (the client has no session-start header — `viewerId` is read off the first
+    // projected snapshot, which is always the local seat). Set back to null once
+    // the match finalises so trailing snapshots neither re-start nor record after
+    // finalise. Host recording is independent (scoped inside `onSessionHosted`).
+    let clientPerspective: { started: boolean } | null = null;
 
     // The single primary renderer window, captured when app.whenReady()
     // resolves.  Used to target IPC snapshot/reveal messages to the one
@@ -1173,6 +1265,48 @@ export async function main(): Promise<void> {
                 );
             }
 
+            // Begin the host's *perspective* recording (F44b T5), locked to the
+            // seat the renderer is bound to at start (`metadata.hostId`, see
+            // `bindHostRendererRecipient` below). Frames are appended in
+            // `sendHostedRendererSnapshot`; after a pass-and-play handoff that
+            // egress sees snapshots for other seats, which the manager skips by
+            // the lock (invariant #98). Recorded in its own try/catch so neither
+            // recorder's startup failure suppresses the other or breaks hosting.
+            let hostPerspectiveActive = false;
+            if (perspectiveReplayPort.isRecording()) {
+                // Host/joined-client exclusion violated: another recording is
+                // already live. Skip rather than start over it (which would throw
+                // inside the manager) so the assumption fails loudly, not silently.
+                lobbyLogger.error(
+                    'perspective replay overlap: a recording was already in progress at host start',
+                    new Error('host/joined-client perspective recording mutual-exclusion violated'),
+                    { gameId: HOSTED_GAME_ID },
+                );
+            } else {
+                try {
+                    perspectiveReplayPort.start({
+                        formatVersion: 1,
+                        kind: 'perspective',
+                        engineVersion: app.getVersion(),
+                        gameId: HOSTED_GAME_ID,
+                        gameVersion: HOSTED_GAME_VERSION,
+                        viewerId: metadata.hostId,
+                        recordedAt: new Date().toISOString(),
+                        players: buildReplayPlayers(
+                            initialPlayerSlots,
+                            (id) => playerDirectorySnapshot[id]?.displayName,
+                        ),
+                    });
+                    hostPerspectiveActive = true;
+                } catch (err: unknown) {
+                    lobbyLogger.error(
+                        'perspective replay start failed',
+                        err instanceof Error ? err : new Error(String(err)),
+                        { gameId: HOSTED_GAME_ID },
+                    );
+                }
+            }
+
             // Per-session commitment runtime shared between the projector and
             // SessionRuntime so `commit()` envelopes are automatically included
             // in the next broadcasted PlayerSnapshot (BLOCK-1 fix, §4.6 / §8).
@@ -1231,9 +1365,30 @@ export async function main(): Promise<void> {
 
             const sendHostedRendererSnapshot = (snapshot: PlayerSnapshot): void => {
                 lastSentPlayerSnapshot = snapshot;
+                // Live egress first: recording must never break the renderer IPC
+                // path, so the snapshot is sent before any recorder work runs
+                // (symmetric with the joined-client path in
+                // `onClientSnapshotReceived`).
                 const win = mainWindow;
                 if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+                }
+                // Perspective recording (F44b T5): append this projected frame,
+                // then finalise once the match resolves. The manager skips frames
+                // for any seat other than the locked one (post-handoff), so no
+                // call-site filtering is needed; finalise is fire-and-forget.
+                if (hostPerspectiveActive) {
+                    perspectiveReplayPort.recordSnapshot({ tick: snapshot.tick, snapshot });
+                    if (snapshot.gameResult !== null) {
+                        hostPerspectiveActive = false;
+                        void perspectiveReplayPort.finalise().catch((err: unknown) => {
+                            lobbyLogger.error(
+                                'perspective replay finalise failed at match end',
+                                err instanceof Error ? err : new Error(String(err)),
+                                { gameId: HOSTED_GAME_ID },
+                            );
+                        });
+                    }
                 }
             };
             const sendHostedRendererTick = (tick: number): void => {
@@ -1439,6 +1594,13 @@ export async function main(): Promise<void> {
                 // this is a no-op then; an abandoned mid-match session produces
                 // no replay file. Also guarantees the next session starts clean.
                 replayManager.abortRecording();
+                // Same for the perspective recording (F44b T5): a finalised
+                // match has cleared `hostPerspectiveActive`, so only an abandoned
+                // mid-match session aborts here — no partial perspective file.
+                if (hostPerspectiveActive) {
+                    hostPerspectiveActive = false;
+                    perspectiveReplayPort.abort();
+                }
                 unsubscribeHostRenderer();
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
@@ -1458,6 +1620,11 @@ export async function main(): Promise<void> {
             handleHostedLocalSeatAdded?.(entry);
         },
         onSessionJoined: (transport) => {
+            // Arm the joined-client perspective recording (F44b T5). Recording is
+            // started lazily on the first received snapshot (in
+            // `onClientSnapshotReceived`) since the client has no session-start
+            // header; the cleanup fn below aborts anything still in progress.
+            clientPerspective = { started: false };
             const clientCommitments = new SessionCommitmentRuntime();
             const unsubSnapshotCommitments = transport.onSnapshotReceived((snapshot) => {
                 if (snapshot.commitments !== undefined) {
@@ -1478,6 +1645,12 @@ export async function main(): Promise<void> {
             });
 
             return () => {
+                // Abnormal teardown: discard any unfinalised perspective
+                // recording so an abandoned joined match leaves no partial file.
+                if (clientPerspective !== null) {
+                    perspectiveReplayPort.abort();
+                    clientPerspective = null;
+                }
                 unsubSnapshotCommitments();
                 unsubReveal();
             };
@@ -1563,6 +1736,75 @@ export async function main(): Promise<void> {
             const win = mainWindow;
             if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                 win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
+            }
+            // Joined-client perspective recording (F44b T5). Lazily start on the
+            // first snapshot (locking to its `viewerId`, always the local seat),
+            // append every frame, then finalise once the match resolves. Failures
+            // never break the live egress; finalise is fire-and-forget. The
+            // transport snapshot is bridged to the simulation `PlayerSnapshot` the
+            // recorder expects through `asProjectedSnapshot` (the one documented
+            // home for that wire→sim boundary cast).
+            if (clientPerspective !== null) {
+                const projected = asProjectedSnapshot(snapshot);
+                if (!clientPerspective.started) {
+                    if (perspectiveReplayPort.isRecording()) {
+                        // Host/joined-client exclusion violated (see the port's
+                        // contract): another recording is already live. Surface it
+                        // loudly and stand down rather than throwing inside start().
+                        lobbyLogger.error(
+                            'perspective replay overlap: a recording was already in progress at client start',
+                            new Error(
+                                'host/joined-client perspective recording mutual-exclusion violated',
+                            ),
+                            { gameId: HOSTED_GAME_ID },
+                        );
+                        clientPerspective = null;
+                        return;
+                    }
+                    try {
+                        const directory = playerDirectory.snapshot();
+                        perspectiveReplayPort.start({
+                            formatVersion: 1,
+                            kind: 'perspective',
+                            engineVersion: app.getVersion(),
+                            gameId: HOSTED_GAME_ID,
+                            gameVersion: HOSTED_GAME_VERSION,
+                            viewerId: projected.viewerId,
+                            recordedAt: new Date().toISOString(),
+                            players: Object.keys(projected.players).map((id) => {
+                                const pid = id as PlayerId;
+                                return {
+                                    playerId: pid,
+                                    displayName: directory[pid]?.displayName ?? String(pid),
+                                };
+                            }),
+                        });
+                        clientPerspective.started = true;
+                    } catch (err: unknown) {
+                        lobbyLogger.error(
+                            'perspective replay start failed',
+                            err instanceof Error ? err : new Error(String(err)),
+                            { gameId: HOSTED_GAME_ID },
+                        );
+                        clientPerspective = null;
+                    }
+                }
+                if (clientPerspective?.started === true) {
+                    perspectiveReplayPort.recordSnapshot({
+                        tick: projected.tick,
+                        snapshot: projected,
+                    });
+                    if (projected.gameResult !== null) {
+                        clientPerspective = null;
+                        void perspectiveReplayPort.finalise().catch((err: unknown) => {
+                            lobbyLogger.error(
+                                'perspective replay finalise failed at match end',
+                                err instanceof Error ? err : new Error(String(err)),
+                                { gameId: HOSTED_GAME_ID },
+                            );
+                        });
+                    }
+                }
             }
         },
         onClientTickReceived: (tick) => {
