@@ -180,7 +180,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **69.** No log entry, crash dump, or telemetry ever leaves the user's machine automatically. Export is an explicit, user-initiated action. The main process must not register network telemetry in 1.0.0.
 
-**70.** `ReplayPlayer` uses the same `ActionPipeline` instance wiring as live play. Any "replay-only" shortcut code path is forbidden — a replay divergence is a determinism bug, not an acceptable replay-layer simplification.
+**70.** `ReplayPlayer` uses the same `ActionPipeline` instance wiring as live play. Any "replay-only" shortcut code path is forbidden — a replay divergence is a determinism bug, not an acceptable replay-layer simplification. This invariant governs **deterministic replay playback only**; a _perspective_ replay (Invariant #98) is never re-simulated — playback walks its stored `PlayerSnapshot` frames in order and never touches `ActionPipeline` — so this rule does not apply to it.
 
 **71.** Deterministic replay files (`ReplayFile`, no `kind` discriminator) contain full `EngineAction` payloads — never projected `PlayerSnapshot`s. Playback starts from seed + gameConfig and reconstructs state through the pipeline. A replay file without `seed` or `actions` is malformed and rejected at load. (The distinct _perspective_ replay format of Invariant #98 deliberately inverts this — it stores projected snapshots and no seed/actions — and is identified by its `kind: 'perspective'` discriminator.)
 
