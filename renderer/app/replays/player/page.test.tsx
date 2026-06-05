@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+    PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
     ReplayAPI,
     ReplayPlaybackInfo,
@@ -253,5 +254,103 @@ describe('ReplayPlayerPage', () => {
         unmount();
 
         expect(bridge.closePlayback).toHaveBeenCalled();
+    });
+
+    describe('perspective replays (?kind=perspective)', () => {
+        const PERSPECTIVE_INFO: PerspectiveReplayPlaybackInfo = {
+            gameId: 'tactics',
+            totalTicks: 5,
+            viewerId: 'p1',
+        };
+
+        // The perspective playback API serves verbatim, sparsely-recorded frames
+        // (T7). `snapshotAt` does a floor lookup on main — here ticks 0 and 3 are
+        // recorded, so requesting tick 4 yields the frame stored at tick 3.
+        const RECORDED_TICKS = [0, 3];
+
+        interface PerspectiveBridge {
+            readonly openPlayback: ReturnType<typeof vi.fn>;
+            readonly snapshotAt: ReturnType<typeof vi.fn>;
+            readonly closePlayback: ReturnType<typeof vi.fn>;
+        }
+
+        function installPerspectiveBridge(): {
+            perspective: PerspectiveBridge;
+            deterministicOpenPlayback: ReturnType<typeof vi.fn>;
+        } {
+            const snapshotAt = vi.fn((tick: number) => {
+                const floor = Math.max(...RECORDED_TICKS.filter((t) => t <= tick));
+                return Promise.resolve(snapshotAtTick(floor));
+            });
+            const perspective: PerspectiveBridge = {
+                openPlayback: vi.fn(() => Promise.resolve(PERSPECTIVE_INFO)),
+                snapshotAt,
+                closePlayback: vi.fn(() => Promise.resolve()),
+            };
+            const deterministicOpenPlayback = vi.fn(() => Promise.resolve(INFO));
+            Object.defineProperty(window, '__chimera', {
+                configurable: true,
+                value: { replay: { openPlayback: deterministicOpenPlayback, perspective } },
+            });
+            return { perspective, deterministicOpenPlayback };
+        }
+
+        beforeEach(() => {
+            window.history.replaceState(
+                {},
+                '',
+                `/replays/player?path=${encodeURIComponent(PATH)}&kind=perspective`,
+            );
+        });
+
+        it('opens the perspective playback session, not the deterministic one', async () => {
+            const { perspective, deterministicOpenPlayback } = installPerspectiveBridge();
+
+            render(<ReplayPlayerPage />);
+
+            await waitFor(() => {
+                expect(screen.getByTestId('game-shell')).toHaveAttribute('data-tick', '0');
+            });
+            expect(perspective.openPlayback).toHaveBeenCalledWith(PATH);
+            expect(deterministicOpenPlayback).not.toHaveBeenCalled();
+            expect(perspective.snapshotAt).toHaveBeenCalledWith(0);
+        });
+
+        it('shows the floor frame from snapshotAt when seeking to a non-recorded tick', async () => {
+            const { perspective } = installPerspectiveBridge();
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            const { fireEvent } = await import('@testing-library/react');
+            fireEvent.change(screen.getByRole('slider'), { target: { value: '4' } });
+
+            await waitFor(() => {
+                expect(screen.getByTestId('game-shell')).toHaveAttribute('data-tick', '3');
+            });
+            expect(perspective.snapshotAt).toHaveBeenCalledWith(4);
+        });
+
+        it('renders no seat switcher and labels the controls for perspective', async () => {
+            installPerspectiveBridge();
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            expect(screen.queryByRole('combobox', { name: /seat|viewer/i })).toBeNull();
+            expect(
+                screen.getByRole('group', { name: /perspective replay playback controls/i }),
+            ).toBeInTheDocument();
+        });
+
+        it('closes the perspective playback on unmount', async () => {
+            const { perspective } = installPerspectiveBridge();
+
+            const { unmount } = render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+            unmount();
+
+            expect(perspective.closePlayback).toHaveBeenCalled();
+        });
     });
 });

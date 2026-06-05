@@ -13,6 +13,7 @@
 
 import React from 'react';
 import { Button, Caption, Select, Slider, type SelectOption } from '../ui';
+import type { ReplayKind } from './replayKind';
 import styles from './ReplayControls.module.css';
 
 /** Selectable wall-clock playback rates, as multiples of one tick per second. */
@@ -23,7 +24,20 @@ const SPEED_OPTIONS: readonly SelectOption[] = [
     { value: '4', label: '4×' },
 ];
 
+/** Accessible group label per replay kind. */
+const GROUP_LABEL: Record<ReplayKind, string> = {
+    deterministic: 'Replay playback controls',
+    perspective: 'Perspective replay playback controls',
+};
+
 export interface ReplayControlsProps {
+    /**
+     * Which replay kind these controls drive. Perspective playback is locked to
+     * a single recorded viewer, so no seat switcher is ever rendered (Invariant
+     * #98); the deterministic player has none today either. The prop is the seam
+     * that keeps seat UI off the perspective player and labels the group.
+     */
+    readonly kind?: ReplayKind;
     /** Current playback tick (0..totalTicks). */
     readonly currentTick: number;
     /** Highest tick in the replay. */
@@ -45,6 +59,7 @@ export interface ReplayControlsProps {
 }
 
 export function ReplayControls({
+    kind = 'deterministic',
     currentTick,
     totalTicks,
     isPlaying,
@@ -59,7 +74,7 @@ export function ReplayControls({
     const atEnd = currentTick >= totalTicks;
 
     return (
-        <div className={styles['root']} role="group" aria-label="Replay playback controls">
+        <div className={styles['root']} role="group" aria-label={GROUP_LABEL[kind]}>
             <Button
                 size="sm"
                 variant="ghost"

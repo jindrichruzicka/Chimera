@@ -5,8 +5,22 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ReplayAPI, ReplayListItem } from '@chimera/electron/preload/api-types.js';
+import type {
+    PerspectiveReplayAPI,
+    ReplayAPI,
+    ReplayListItem,
+} from '@chimera/electron/preload/api-types.js';
 import ReplaysPage from './page';
+
+// Perspective rows navigate directly with `?kind=perspective` (the shared
+// navigate push is path-only), so the page uses the Next router. Hoisted so the
+// mock factory can close over a stable spy.
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push }),
+}));
+
+const PERSPECTIVE_PATH = '/replays/tactics/persp-1.chimera-perspective-replay';
 
 function makeItem(overrides: Partial<ReplayListItem> = {}): ReplayListItem {
     return {
@@ -21,14 +35,28 @@ function makeItem(overrides: Partial<ReplayListItem> = {}): ReplayListItem {
     };
 }
 
-function installReplayBridge(replay: Partial<ReplayAPI>): void {
-    Object.defineProperty(window, '__chimera', {
-        configurable: true,
-        value: { replay },
-    });
+/**
+ * Install a bridge that answers both the deterministic `list` and the
+ * perspective `perspective.list`; either defaults to an empty result so a test
+ * only has to supply the surface it exercises.
+ */
+function installBridge(
+    opts: {
+        list?: ReplayAPI['list'];
+        perspectiveList?: PerspectiveReplayAPI['list'];
+        openInPlayer?: ReplayAPI['openInPlayer'];
+    } = {},
+): void {
+    const replay = {
+        list: opts.list ?? vi.fn(() => Promise.resolve([])),
+        openInPlayer: opts.openInPlayer ?? vi.fn(() => Promise.resolve()),
+        perspective: { list: opts.perspectiveList ?? vi.fn(() => Promise.resolve([])) },
+    } as unknown as ReplayAPI;
+    Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });
 }
 
 beforeEach(() => {
+    push.mockClear();
     window.history.replaceState({}, '', '/replays?gameId=tactics');
 });
 
@@ -39,7 +67,7 @@ afterEach(() => {
 });
 
 describe('ReplaysPage', () => {
-    it('lists replays for the active game with their metadata', async () => {
+    it('lists deterministic replays with their metadata and a Deterministic badge', async () => {
         const list = vi.fn(() =>
             Promise.resolve([
                 makeItem({ path: '/replays/tactics/a.chimera-replay', gameVersion: '1.2.3' }),
@@ -49,7 +77,7 @@ describe('ReplaysPage', () => {
                 }),
             ]),
         );
-        installReplayBridge({ list });
+        installBridge({ list });
 
         render(<ReplaysPage />);
 
@@ -58,10 +86,39 @@ describe('ReplaysPage', () => {
         });
         expect(list).toHaveBeenCalledWith('tactics');
         expect(screen.getByText(/alice/)).toBeInTheDocument();
+        expect(screen.getAllByText(/^deterministic$/i).length).toBeGreaterThan(0);
     });
 
-    it('shows an accessible empty state when there are no replays', async () => {
-        installReplayBridge({ list: vi.fn(() => Promise.resolve([])) });
+    it('lists perspective replays with a filename label and a Perspective badge', async () => {
+        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
+        installBridge({ perspectiveList });
+
+        render(<ReplaysPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/persp-1\.chimera-perspective-replay/)).toBeInTheDocument();
+        });
+        expect(perspectiveList).toHaveBeenCalledWith('tactics');
+        expect(screen.getByText(/^perspective$/i)).toBeInTheDocument();
+    });
+
+    it('lists both replay kinds together for the active game', async () => {
+        const list = vi.fn(() => Promise.resolve([makeItem()]));
+        const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
+        installBridge({ list, perspectiveList });
+
+        render(<ReplaysPage />);
+
+        await waitFor(() => {
+            expect(screen.getByText(/^perspective$/i)).toBeInTheDocument();
+        });
+        expect(screen.getAllByText(/^deterministic$/i).length).toBeGreaterThan(0);
+        expect(list).toHaveBeenCalledWith('tactics');
+        expect(perspectiveList).toHaveBeenCalledWith('tactics');
+    });
+
+    it('shows the empty state only when both kinds are empty', async () => {
+        installBridge({});
 
         render(<ReplaysPage />);
 
@@ -70,16 +127,16 @@ describe('ReplaysPage', () => {
         });
     });
 
-    it('shows a loading state before the list resolves', () => {
-        installReplayBridge({ list: vi.fn(() => new Promise<ReplayListItem[]>(() => undefined)) });
+    it('shows a loading state before the lists resolve', () => {
+        installBridge({ list: vi.fn(() => new Promise<ReplayListItem[]>(() => undefined)) });
 
         render(<ReplaysPage />);
 
         expect(screen.getByRole('status')).toBeInTheDocument();
     });
 
-    it('shows an error state when listing fails', async () => {
-        installReplayBridge({ list: vi.fn(() => Promise.reject(new Error('disk gone'))) });
+    it('shows an error state when listing deterministic replays fails', async () => {
+        installBridge({ list: vi.fn(() => Promise.reject(new Error('disk gone'))) });
 
         render(<ReplaysPage />);
 
@@ -88,9 +145,21 @@ describe('ReplaysPage', () => {
         });
     });
 
-    it('opens the selected replay in the player via openInPlayer', async () => {
+    it('shows an error state when listing perspective replays fails', async () => {
+        installBridge({
+            perspectiveList: vi.fn(() => Promise.reject(new Error('perspective gone'))),
+        });
+
+        render(<ReplaysPage />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toBeInTheDocument();
+        });
+    });
+
+    it('opens a deterministic replay in the player via openInPlayer', async () => {
         const openInPlayer = vi.fn(() => Promise.resolve());
-        installReplayBridge({
+        installBridge({
             list: vi.fn(() =>
                 Promise.resolve([makeItem({ path: '/replays/tactics/pick.chimera-replay' })]),
             ),
@@ -103,5 +172,21 @@ describe('ReplaysPage', () => {
         await userEvent.click(openButton);
 
         expect(openInPlayer).toHaveBeenCalledWith('/replays/tactics/pick.chimera-replay');
+        expect(push).not.toHaveBeenCalled();
+    });
+
+    it('opens a perspective replay by routing with kind=perspective', async () => {
+        installBridge({ perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_PATH])) });
+
+        render(<ReplaysPage />);
+
+        const openButton = await screen.findByRole('button', {
+            name: /open perspective replay/i,
+        });
+        await userEvent.click(openButton);
+
+        expect(push).toHaveBeenCalledWith(
+            `/replays/player?path=${encodeURIComponent(PERSPECTIVE_PATH)}&kind=perspective`,
+        );
     });
 });

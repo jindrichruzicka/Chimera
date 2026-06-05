@@ -25,6 +25,7 @@
 import React from 'react';
 import type {
     EngineAction,
+    PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
     ReplayPlaybackInfo,
 } from '@chimera/electron/preload/api-types.js';
@@ -32,6 +33,7 @@ import { createAssetManager, type AssetManager } from '@chimera/renderer/assets/
 import { createRendererGameAssetResolver } from '@chimera/renderer/assets/AssetResolver';
 import { GameShell } from '@chimera/renderer/components/shell/GameShell';
 import { ReplayControls } from '@chimera/renderer/components/replay/ReplayControls';
+import { parseReplayKind } from '@chimera/renderer/components/replay/replayKind';
 import {
     loadRendererGame,
     type LoadedRendererGame,
@@ -107,9 +109,23 @@ function useLoadedRendererGame(
 
 export default function ReplayPlayerPage(): React.ReactElement {
     const replayApi = useReplayApi();
-    const path = React.useMemo(() => new URLSearchParams(window.location.search).get('path'), []);
+    const params = React.useMemo(() => new URLSearchParams(window.location.search), []);
+    const path = React.useMemo(() => params.get('path'), [params]);
+    const kind = React.useMemo(() => parseReplayKind(params.get('kind')), [params]);
 
-    const [info, setInfo] = React.useState<ReplayPlaybackInfo | null>(null);
+    // The playback session methods (`openPlayback`/`snapshotAt`/`closePlayback`)
+    // are shared by both surfaces; selecting here keeps the rest of the page
+    // kind-agnostic. Deterministic playback re-projects every tick (dense,
+    // range-buffered below); perspective playback serves verbatim sparse frames
+    // via `snapshotAt`'s floor lookup (Invariant #98).
+    const playback = React.useMemo(
+        () => (kind === 'perspective' ? replayApi.perspective : replayApi),
+        [kind, replayApi],
+    );
+
+    const [info, setInfo] = React.useState<
+        ReplayPlaybackInfo | PerspectiveReplayPlaybackInfo | null
+    >(null);
     const [snapshot, setSnapshot] = React.useState<PlayerSnapshot | null>(null);
     const [currentTick, setCurrentTick] = React.useState(0);
     const [isPlaying, setIsPlaying] = React.useState(false);
@@ -137,7 +153,7 @@ export default function ReplayPlayerPage(): React.ReactElement {
         }
         let active = true;
         setError(null);
-        replayApi
+        playback
             .openPlayback(path)
             .then((opened) => {
                 if (active) {
@@ -156,9 +172,9 @@ export default function ReplayPlayerPage(): React.ReactElement {
             });
         return () => {
             active = false;
-            void replayApi.closePlayback();
+            void playback.closePlayback();
         };
-    }, [replayApi, path]);
+    }, [playback, path]);
 
     // Fetch (and buffer) a batch of snapshots anchored at `from`, deduping
     // concurrent requests for the same anchor.
@@ -185,11 +201,12 @@ export default function ReplayPlayerPage(): React.ReactElement {
         [replayApi, info],
     );
 
-    // Display the current tick from the buffer, fetching it (and prefetching
-    // ahead of the playhead) as needed. `bufferVersion` re-runs this once a
-    // pending range resolves.
+    // Deterministic: display the current tick from the buffer, fetching it (and
+    // prefetching ahead of the playhead) as needed. `bufferVersion` re-runs this
+    // once a pending range resolves. Perspective playback uses the dedicated
+    // effect below instead (sparse frames, floor lookup on main).
     React.useEffect(() => {
-        if (info === null) {
+        if (kind !== 'deterministic' || info === null) {
             return;
         }
         const buffer = bufferRef.current;
@@ -209,7 +226,33 @@ export default function ReplayPlayerPage(): React.ReactElement {
         if (ahead < info.totalTicks && ahead - currentTick < PREFETCH_LOW_WATERMARK) {
             fetchRange(ahead + 1);
         }
-    }, [info, currentTick, bufferVersion, fetchRange]);
+    }, [kind, info, currentTick, bufferVersion, fetchRange]);
+
+    // Perspective: fetch the stored frame for the current tick directly. Frames
+    // are sparse and already projected, so main does a floor lookup (greatest
+    // recorded tick ≤ `currentTick`) and returns it verbatim — there is nothing
+    // to re-project or prefetch (Invariant #98).
+    React.useEffect(() => {
+        if (kind !== 'perspective' || info === null) {
+            return;
+        }
+        let active = true;
+        playback
+            .snapshotAt(currentTick)
+            .then((snap) => {
+                if (active) {
+                    setSnapshot(snap);
+                }
+            })
+            .catch((err: unknown) => {
+                if (active) {
+                    setError(err instanceof Error ? err.message : 'Failed to load frame.');
+                }
+            });
+        return () => {
+            active = false;
+        };
+    }, [kind, info, currentTick, playback]);
 
     // Auto-advance while playing; the interval scales inversely with speed.
     React.useEffect(() => {
@@ -308,6 +351,7 @@ export default function ReplayPlayerPage(): React.ReactElement {
                 />
             </div>
             <ReplayControls
+                kind={kind}
                 currentTick={currentTick}
                 totalTicks={totalTicks}
                 isPlaying={isPlaying}

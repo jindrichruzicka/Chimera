@@ -17,6 +17,7 @@
 
 import { useMemo } from 'react';
 import type {
+    PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
     ReplayAPI,
     ReplayListItem,
@@ -48,6 +49,19 @@ export function getReplayBridge(source: unknown = globalThis): ReplayAPI | null 
 
 // ── Public API type ───────────────────────────────────────────────────────────
 
+/**
+ * The renderer-facing slice of the perspective replay surface
+ * (`window.__chimera.replay.perspective.*`, §4.28 ADR F44b). Only the methods
+ * the browser and player consume are wrapped: `list` (opaque paths),
+ * `openPlayback`, the floor-lookup `snapshotAt`, and `closePlayback`.
+ */
+export interface PerspectiveReplayApi {
+    list(gameId: string): Promise<string[]>;
+    openPlayback(path: string): Promise<PerspectiveReplayPlaybackInfo>;
+    snapshotAt(tick: number): Promise<PlayerSnapshot>;
+    closePlayback(): Promise<void>;
+}
+
 export interface ReplayApi {
     list(gameId: string): Promise<ReplayListItem[]>;
     openInPlayer(path: string): Promise<void>;
@@ -57,6 +71,8 @@ export interface ReplayApi {
     snapshotAt(tick: number): Promise<PlayerSnapshot>;
     snapshotRange(from: number, to: number): Promise<PlayerSnapshot[]>;
     closePlayback(): Promise<void>;
+    /** Perspective replays, exposed alongside the deterministic methods. */
+    perspective: PerspectiveReplayApi;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -95,6 +111,16 @@ export function useReplayApi(): ReplayApi {
             snapshotRange: async (from: number, to: number): Promise<PlayerSnapshot[]> =>
                 requireBridge().snapshotRange(from, to),
             closePlayback: async (): Promise<void> => requireBridge().closePlayback(),
+            perspective: {
+                list: async (gameId: string): Promise<string[]> =>
+                    requireBridge().perspective.list(gameId),
+                openPlayback: async (path: string): Promise<PerspectiveReplayPlaybackInfo> =>
+                    requireBridge().perspective.openPlayback(path),
+                snapshotAt: async (tick: number): Promise<PlayerSnapshot> =>
+                    requireBridge().perspective.snapshotAt(tick),
+                closePlayback: async (): Promise<void> =>
+                    requireBridge().perspective.closePlayback(),
+            },
         }),
         [],
     );

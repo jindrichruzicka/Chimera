@@ -31,6 +31,7 @@ function renderControls(
         totalTicks: number;
         isPlaying: boolean;
         playbackSpeed: number;
+        kind: 'deterministic' | 'perspective';
     }> = {},
     handlers: Handlers = makeHandlers(),
 ): Handlers {
@@ -40,6 +41,7 @@ function renderControls(
             totalTicks={props.totalTicks ?? 10}
             isPlaying={props.isPlaying ?? false}
             playbackSpeed={props.playbackSpeed ?? 1}
+            kind={props.kind ?? 'deterministic'}
             onPlay={handlers.onPlay}
             onPause={handlers.onPause}
             onStep={handlers.onStep}
@@ -137,6 +139,30 @@ describe('ReplayControls', () => {
             expect(screen.getByRole('button', { name: /step forward/i })).toBeDisabled();
             expect(screen.getByRole('button', { name: /seek to end/i })).toBeDisabled();
             expect(screen.getByRole('button', { name: /play/i })).toBeDisabled();
+        });
+    });
+
+    describe('replay kind', () => {
+        it('labels the controls group for the deterministic player by default', () => {
+            renderControls();
+            expect(
+                screen.getByRole('group', { name: /^replay playback controls$/i }),
+            ).toBeInTheDocument();
+        });
+
+        it('labels the controls group for the perspective player', () => {
+            renderControls({ kind: 'perspective' });
+            expect(
+                screen.getByRole('group', { name: /perspective replay playback controls/i }),
+            ).toBeInTheDocument();
+        });
+
+        it('renders no seat or viewer switcher in the perspective player', () => {
+            renderControls({ kind: 'perspective' });
+            expect(screen.queryByRole('combobox', { name: /seat|viewer/i })).toBeNull();
+            // The transport controls remain available — only seat switching is absent.
+            expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument();
+            expect(screen.getByRole('combobox', { name: /speed/i })).toBeInTheDocument();
         });
     });
 });

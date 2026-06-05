@@ -1,12 +1,18 @@
 'use client';
 
 /**
- * renderer/app/replays/page.tsx — Replay Browser (§4.28, F44 / T6, #660).
+ * renderer/app/replays/page.tsx — Replay Browser (§4.28, F44 / T6, #660; F44b / T8, #674).
  *
- * Lists saved replays for the active game via `window.__chimera.replay.list`
- * (through {@link useReplayApi}). Selecting a replay calls `openInPlayer`, which
- * the main process answers with a `navigate` push handled app-wide by
- * `ReplayNavigationBridge` — so this page never routes directly.
+ * Lists saved replays for the active game — **both** deterministic and
+ * perspective kinds, each row carrying a type badge. Deterministic replays come
+ * from `window.__chimera.replay.list` (rich metadata); perspective replays come
+ * from `window.__chimera.replay.perspective.list`, which returns opaque path
+ * handles only (their metadata is read on open, Invariant #98).
+ *
+ * Opening a deterministic replay calls `openInPlayer`, which main answers with a
+ * `navigate` push handled app-wide by `ReplayNavigationBridge`. That shared push
+ * is path-only, so perspective rows instead route directly to the player with
+ * `?kind=perspective` (the route re-validates the path on open).
  *
  * Engine shell page: imports no `games/*` or `electron/` runtime modules
  * (Invariants #94/#1). All buttons use `<Button>` (Invariant #92) and only
@@ -14,14 +20,19 @@
  */
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera/electron/preload/api-types.js';
-import { Button, Caption, Heading } from '../../components/ui';
+import { Badge, Button, Caption, Heading } from '../../components/ui';
 import { useReplayApi } from '../../hooks/useReplayApi';
 import { resolveShellGameId } from '../../shell/resolveMainMenuGameId';
 
 type LoadState =
     | { readonly status: 'loading' }
-    | { readonly status: 'loaded'; readonly items: readonly ReplayListItem[] }
+    | {
+          readonly status: 'loaded';
+          readonly items: readonly ReplayListItem[];
+          readonly perspectivePaths: readonly string[];
+      }
     | { readonly status: 'error'; readonly message: string };
 
 const pageStyle: React.CSSProperties = {
@@ -40,6 +51,12 @@ const rowStyle: React.CSSProperties = {
     borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-border-subtle)',
 };
 
+const titleRowStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--ch-space-sm)',
+};
+
 const errorStyle: React.CSSProperties = {
     padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
     marginBottom: 'var(--ch-space-md)',
@@ -54,6 +71,11 @@ function formatRecordedAt(recordedAt: string): string {
     return Number.isNaN(date.getTime()) ? recordedAt : date.toLocaleString();
 }
 
+/** Filename handle shown for a perspective replay (no metadata until opened). */
+function perspectiveLabel(path: string): string {
+    return path.split('/').pop() ?? path;
+}
+
 function ReplayRow({
     item,
     onOpen,
@@ -64,8 +86,11 @@ function ReplayRow({
     return (
         <li style={rowStyle}>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ch-space-xs)' }}>
-                <span>
-                    v{item.gameVersion} · {item.durationTicks} ticks
+                <span style={titleRowStyle}>
+                    <Badge variant="neutral">Deterministic</Badge>
+                    <span>
+                        v{item.gameVersion} · {item.durationTicks} ticks
+                    </span>
                 </span>
                 <Caption tone="muted">
                     {formatRecordedAt(item.recordedAt)} · {item.playerIds.join(', ')}
@@ -83,8 +108,38 @@ function ReplayRow({
     );
 }
 
+function PerspectiveReplayRow({
+    path,
+    onOpen,
+}: {
+    readonly path: string;
+    readonly onOpen: (path: string) => void;
+}): React.ReactElement {
+    const label = perspectiveLabel(path);
+    return (
+        <li style={rowStyle}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ch-space-xs)' }}>
+                <span style={titleRowStyle}>
+                    <Badge variant="success">Perspective</Badge>
+                    <span>{label}</span>
+                </span>
+                <Caption tone="muted">Single-viewer replay</Caption>
+            </div>
+            <Button
+                size="sm"
+                variant="primary"
+                aria-label={`Open perspective replay ${label}`}
+                onClick={() => onOpen(path)}
+            >
+                Open
+            </Button>
+        </li>
+    );
+}
+
 export default function ReplaysPage(): React.ReactElement {
     const replayApi = useReplayApi();
+    const router = useRouter();
     const gameId = React.useMemo(
         () => resolveShellGameId(new URLSearchParams(window.location.search)) ?? 'tactics',
         [],
@@ -94,11 +149,10 @@ export default function ReplaysPage(): React.ReactElement {
     React.useEffect(() => {
         let active = true;
         setState({ status: 'loading' });
-        replayApi
-            .list(gameId)
-            .then((items) => {
+        Promise.all([replayApi.list(gameId), replayApi.perspective.list(gameId)])
+            .then(([items, perspectivePaths]) => {
                 if (active) {
-                    setState({ status: 'loaded', items });
+                    setState({ status: 'loaded', items, perspectivePaths });
                 }
             })
             .catch((error: unknown) => {
@@ -114,12 +168,24 @@ export default function ReplaysPage(): React.ReactElement {
         };
     }, [replayApi, gameId]);
 
-    const handleOpen = React.useCallback(
+    const handleOpenDeterministic = React.useCallback(
         (path: string) => {
             void replayApi.openInPlayer(path);
         },
         [replayApi],
     );
+
+    const handleOpenPerspective = React.useCallback(
+        (path: string) => {
+            router.push(`/replays/player?path=${encodeURIComponent(path)}&kind=perspective`);
+        },
+        [router],
+    );
+
+    const isEmpty =
+        state.status === 'loaded' &&
+        state.items.length === 0 &&
+        state.perspectivePaths.length === 0;
 
     return (
         <main style={pageStyle}>
@@ -139,16 +205,23 @@ export default function ReplaysPage(): React.ReactElement {
                 </div>
             )}
 
-            {state.status === 'loaded' && state.items.length === 0 && (
+            {isEmpty && (
                 <div aria-label="No replays saved yet" style={{ paddingTop: 'var(--ch-space-md)' }}>
                     <Caption tone="muted">No replays saved yet.</Caption>
                 </div>
             )}
 
-            {state.status === 'loaded' && state.items.length > 0 && (
+            {state.status === 'loaded' && !isEmpty && (
                 <ul style={listStyle}>
                     {state.items.map((item) => (
-                        <ReplayRow key={item.path} item={item} onOpen={handleOpen} />
+                        <ReplayRow key={item.path} item={item} onOpen={handleOpenDeterministic} />
+                    ))}
+                    {state.perspectivePaths.map((path) => (
+                        <PerspectiveReplayRow
+                            key={path}
+                            path={path}
+                            onOpen={handleOpenPerspective}
+                        />
                     ))}
                 </ul>
             )}
