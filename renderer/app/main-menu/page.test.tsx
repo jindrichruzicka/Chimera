@@ -226,6 +226,31 @@ describe('MainMenuPage — URL game context (tactics)', () => {
 
         expect(mockPush).toHaveBeenCalledWith('/settings?gameId=tactics');
     });
+
+    it('tags a Replays navigation button with data-testid="main-menu-replays" for POM targeting', async () => {
+        mockLoadRendererGameShell.mockResolvedValue({
+            mainMenu: {
+                buttons: [
+                    {
+                        label: 'New Game',
+                        action: { type: 'navigate', target: '/game' },
+                        variant: 'primary',
+                    },
+                    {
+                        label: 'Replays',
+                        action: { type: 'navigate', target: '/replays' },
+                        variant: 'secondary',
+                    },
+                    { label: 'Quit', action: { type: 'quit' }, variant: 'danger' },
+                ],
+            },
+            menuCommands: {},
+        } satisfies LoadedRendererGameShell);
+
+        renderMainMenuPage();
+
+        expect(await screen.findByTestId('main-menu-replays')).toBeTruthy();
+    });
 });
 
 describe('MainMenuPage — no engine fallback flash while game shell is loading', () => {

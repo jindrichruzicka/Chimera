@@ -34,6 +34,7 @@ describe('rendererGameRegistry', () => {
             'New Game',
             'Load Game',
             'Settings',
+            'Replays',
             'Quit',
         ]);
         expect(shell.shellBackground).toBeDefined();

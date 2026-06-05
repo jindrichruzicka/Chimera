@@ -9,8 +9,9 @@
 // Module boundary enforced by import statement below:
 //   - games/tactics/shell/ may import from shared/ only (not renderer/)
 
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GameMainMenuDefinition } from '@chimera/shared/game-shell-contract.js';
+import type { PerspectiveReplayListBridge } from '@chimera/shared/replay-bridge-contract.js';
 import { tacticsMainMenuDefinition, tacticsMenuCommands } from './main-menu';
 
 // ─── Export shape ─────────────────────────────────────────────────────────────
@@ -49,9 +50,13 @@ describe('button labels', () => {
         expect(findButton('Quit')).toBeDefined();
     });
 
-    it('buttons appear in the correct order: New Game, Load Game, Settings, Quit', () => {
+    it('includes a "Replays" button', () => {
+        expect(findButton('Replays')).toBeDefined();
+    });
+
+    it('buttons appear in the correct order: New Game, Load Game, Settings, Replays, Quit', () => {
         const labels = tacticsMainMenuDefinition.buttons.map((b) => b.label);
-        expect(labels).toEqual(['New Game', 'Load Game', 'Settings', 'Quit']);
+        expect(labels).toEqual(['New Game', 'Load Game', 'Settings', 'Replays', 'Quit']);
     });
 });
 
@@ -85,6 +90,14 @@ describe('button actions', () => {
         }
     });
 
+    it('"Replays" navigates to /replays', () => {
+        const btn = findButton('Replays');
+        expect(btn.action.type).toBe('navigate');
+        if (btn.action.type === 'navigate') {
+            expect(btn.action.target).toBe('/replays');
+        }
+    });
+
     it('"Quit" has action type "quit"', () => {
         const btn = findButton('Quit');
         expect(btn.action.type).toBe('quit');
@@ -104,6 +117,70 @@ describe('button variants', () => {
 
     it('"Quit" is danger variant', () => {
         expect(findButton('Quit').variant).toBe('danger');
+    });
+
+    it('"Replays" is secondary variant', () => {
+        expect(findButton('Replays').variant).toBe('secondary');
+    });
+});
+
+// ─── Replays button availability check (F44 T7 — #661) ──────────────────────────
+//
+// The Replays button is disabled when there are no *perspective* replays to
+// browse. The check reads the Chimera bridge off `globalThis` (the renderer
+// process exposes `window.__chimera`, which is `globalThis.__chimera` at
+// runtime). These tests stub that global — no jsdom/window required.
+
+describe('Replays button disabled() check', () => {
+    // The stub is typed against the SHARED bridge contract the production module
+    // reads (`PerspectiveReplayListBridge`), so the test and `main-menu.ts` stay
+    // pinned to the same surface — no drift between them.
+    function setBridge(perspective: PerspectiveReplayListBridge | undefined): void {
+        if (perspective) {
+            (
+                globalThis as {
+                    __chimera?: { replay: { perspective: PerspectiveReplayListBridge } };
+                }
+            ).__chimera = { replay: { perspective } };
+        } else {
+            Reflect.deleteProperty(globalThis, '__chimera');
+        }
+    }
+
+    function getDisabledCheck(): () => Promise<boolean> {
+        const btn = tacticsMainMenuDefinition.buttons.find((b) => b.label === 'Replays');
+        if (!btn || typeof btn.disabled !== 'function') {
+            throw new Error('Replays button is missing an async disabled() check');
+        }
+        return btn.disabled;
+    }
+
+    afterEach(() => {
+        Reflect.deleteProperty(globalThis, '__chimera');
+    });
+
+    it('declares an async disabled() check (a function, not a static boolean)', () => {
+        expect(typeof getDisabledCheck()).toBe('function');
+    });
+
+    it('disables the button when no perspective replays exist', async () => {
+        const list = vi.fn(async (): Promise<readonly string[]> => []);
+        setBridge({ list });
+
+        await expect(getDisabledCheck()()).resolves.toBe(true);
+        expect(list).toHaveBeenCalledWith('tactics');
+    });
+
+    it('enables the button when at least one perspective replay exists', async () => {
+        setBridge({ list: async (): Promise<readonly string[]> => ['/saves/p1.chimera-replay'] });
+
+        await expect(getDisabledCheck()()).resolves.toBe(false);
+    });
+
+    it('disables the button (fail-safe) when the bridge is unavailable', async () => {
+        setBridge(undefined);
+
+        await expect(getDisabledCheck()()).resolves.toBe(true);
     });
 });
 

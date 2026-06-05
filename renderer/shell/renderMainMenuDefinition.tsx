@@ -160,6 +160,61 @@ export function RenderMainMenuDefinition({
     const def = definition ?? ENGINE_DEFAULT_DEFINITION;
     const { layout, buttons } = def;
 
+    // ── Disabled resolution ─────────────────────────────────────────────────────
+    // Buttons may declare `disabled` as a plain boolean or as an async check
+    // (e.g. "are there any replays to browse?"). Async checks are evaluated here
+    // and their results stored per-index. A button whose async check is still
+    // pending renders disabled (fail-safe — avoids a flash of enabled→disabled),
+    // and a thrown/rejected check is also treated as disabled and logged at warn.
+    const [asyncDisabled, setAsyncDisabled] = React.useState<readonly (boolean | undefined)[]>(() =>
+        buttons.map(() => undefined),
+    );
+
+    React.useEffect(() => {
+        let cancelled = false;
+        // Clear any results carried over from a previous definition.
+        setAsyncDisabled(buttons.map(() => undefined));
+
+        buttons.forEach((button, index) => {
+            const { disabled } = button;
+            if (typeof disabled !== 'function') return;
+
+            Promise.resolve()
+                .then(() => disabled())
+                .then((value) => {
+                    if (cancelled) return;
+                    setAsyncDisabled((prev) => {
+                        const next = prev.slice();
+                        next[index] = value;
+                        return next;
+                    });
+                })
+                .catch((error: unknown) => {
+                    console.warn(
+                        '[RenderMainMenuDefinition] disabled() check failed; disabling button (fail-safe).',
+                        error,
+                    );
+                    if (cancelled) return;
+                    setAsyncDisabled((prev) => {
+                        const next = prev.slice();
+                        next[index] = true;
+                        return next;
+                    });
+                });
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [buttons]);
+
+    const resolveDisabled = (button: GameMainMenuButton, index: number): boolean => {
+        const { disabled } = button;
+        if (typeof disabled === 'boolean') return disabled;
+        if (typeof disabled === 'function') return asyncDisabled[index] ?? true;
+        return false;
+    };
+
     // ── Handler resolution ────────────────────────────────────────────────────
     // `command` actions fail-fast at render time (unknown commandId → throw
     // before any JSX is produced). Other action types return a stable handler
@@ -223,6 +278,7 @@ export function RenderMainMenuDefinition({
                         key={index}
                         data-testid={getButtonTestId?.(button, index)}
                         variant={button.variant ?? defaultVariant(button.action, index)}
+                        disabled={resolveDisabled(button, index)}
                         onClick={handlers[index]}
                     >
                         {button.label}

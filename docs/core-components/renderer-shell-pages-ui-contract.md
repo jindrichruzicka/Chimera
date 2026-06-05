@@ -246,6 +246,7 @@ export interface GameMainMenuButton {
     readonly label: string;
     readonly action: GameMainMenuAction;
     readonly variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+    readonly disabled?: boolean | (() => Promise<boolean>);
 }
 
 export interface GameMainMenuDefinition {
@@ -271,18 +272,26 @@ menu.
 
 ### Button and Action Semantics
 
-| Field / variant     | Required? | Meaning                                                                                                       |
-| ------------------- | --------- | ------------------------------------------------------------------------------------------------------------- |
-| `label`             | Yes       | Visible button text rendered as the children of the shared `<Button>`.                                        |
-| `action.type`       | Yes       | Discriminant for the action union.                                                                            |
-| `navigate.target`   | Yes       | Internal renderer route passed to `router.push(target)`, for example `'/settings'`, `'/saves'`, or `'/game'`. |
-| `quit`              | Yes       | Calls `window.__chimera.system.quit()` through the renderer system bridge.                                    |
-| `open-lobby`        | Yes       | Engine shortcut for `router.push('/lobby')`; this is the engine default Play action.                          |
-| `command.commandId` | Yes       | Branded `GameMenuCommandId` resolved against the game's registered `menuCommands` registry.                   |
-| `variant`           | No        | Passed to the shared `<Button>` as `primary`, `secondary`, `ghost`, or `danger`.                              |
+| Field / variant     | Required? | Meaning                                                                                                                                                                                                                                            |
+| ------------------- | --------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`             | Yes       | Visible button text rendered as the children of the shared `<Button>`.                                                                                                                                                                             |
+| `action.type`       | Yes       | Discriminant for the action union.                                                                                                                                                                                                                 |
+| `navigate.target`   | Yes       | Internal renderer route passed to `router.push(target)`, for example `'/settings'`, `'/saves'`, or `'/game'`.                                                                                                                                      |
+| `quit`              | Yes       | Calls `window.__chimera.system.quit()` through the renderer system bridge.                                                                                                                                                                         |
+| `open-lobby`        | Yes       | Engine shortcut for `router.push('/lobby')`; this is the engine default Play action.                                                                                                                                                               |
+| `command.commandId` | Yes       | Branded `GameMenuCommandId` resolved against the game's registered `menuCommands` registry.                                                                                                                                                        |
+| `variant`           | No        | Passed to the shared `<Button>` as `primary`, `secondary`, `ghost`, or `danger`.                                                                                                                                                                   |
+| `disabled`          | No        | Controls the `<Button>` disabled state. `boolean` is a static state evaluated at render time; `() => Promise<boolean>` is an async availability check the renderer awaits (e.g. "are there any replays to browse?"). Omitted means always enabled. |
 
 When `variant` is omitted, `RenderMainMenuDefinition` assigns a renderer default: `danger` for
 `quit`, `primary` for the first non-quit button, and `secondary` for all remaining buttons.
+
+`disabled` accepts either a plain `boolean` or an async check `() => Promise<boolean>`. For the
+async form, `RenderMainMenuDefinition` evaluates the check once per button (in a `useEffect` keyed
+on the `buttons` array) and stores the result per index. The button renders **disabled while the
+check is pending** — a fail-safe that avoids a flash of enabled→disabled — and a thrown or rejected
+check is likewise treated as `true` (disabled) and logged at `warn`. Omitting `disabled` leaves the
+button always enabled.
 
 ## 4.37.6 Main Menu Fallback Chain
 

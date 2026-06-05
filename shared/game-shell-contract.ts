@@ -156,6 +156,19 @@ export interface GameMainMenuButton {
      * the first button, `'secondary'` for navigation, `'danger'` for quit).
      */
     readonly variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+
+    /**
+     * Controls whether the button renders disabled.
+     *
+     * - `boolean` — a static disabled state evaluated at render time.
+     * - `() => Promise<boolean>` — an async availability check the renderer
+     *   awaits at render time (e.g. "are there any replays to browse?"). The
+     *   button renders disabled while the check is pending; a thrown or rejected
+     *   check is treated as `true` (fail-safe — the renderer logs at `warn`).
+     *
+     * Omitted means the button is always enabled.
+     */
+    readonly disabled?: boolean | (() => Promise<boolean>);
 }
 
 // ─── Definition ───────────────────────────────────────────────────────────────

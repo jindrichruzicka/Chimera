@@ -14,6 +14,7 @@
 
 import type { LogEntry } from '@chimera/shared/logging.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
+import type { PerspectiveReplayListBridge } from '@chimera/shared/replay-bridge-contract.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { CommitmentId } from '@chimera/simulation/projection/index.js';
 import type {
@@ -626,12 +627,20 @@ export interface ReplayAPI {
  * locked viewer's projected frames; `openInPlayer` reuses the deterministic
  * `chimera:replay:navigate` push (so the renderer subscribes via
  * {@link ReplayAPI.onNavigate} for both surfaces).
+ *
+ * Extends {@link PerspectiveReplayListBridge} (the shared `list` slice) so the
+ * `list` shape stays pinned to the one contract that game shell modules read off
+ * `globalThis` — a divergence is a compile error here, not a silent drift.
  */
-export interface PerspectiveReplayAPI {
+export interface PerspectiveReplayAPI extends PerspectiveReplayListBridge {
     /**
      * List stored perspective-replay file paths for `gameId`, newest-first.
      * Unlike {@link ReplayAPI.list}, this returns opaque path handles — a
      * perspective replay's metadata is read only when it is opened.
+     *
+     * Narrows the shared {@link PerspectiveReplayListBridge.list} return to a
+     * mutable `string[]` for the renderer's replay browser; assignable to the
+     * shared `readonly string[]` view consumed by game shell modules.
      */
     list(gameId: string): Promise<string[]>;
     /**

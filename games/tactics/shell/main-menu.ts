@@ -17,6 +17,25 @@ import type {
     GameMainMenuDefinition,
     GameMenuCommandId,
 } from '@chimera/shared/game-shell-contract.js';
+import type { PerspectiveReplayListBridge } from '@chimera/shared/replay-bridge-contract.js';
+
+// ─── Replay bridge access ───────────────────────────────────────────────────────
+//
+// The Replays button's availability depends on whether any *perspective* replays
+// exist for Tactics. That lives behind the Chimera preload bridge, which the
+// renderer exposes as `window.__chimera` (≡ `globalThis.__chimera` at runtime).
+//
+// Games may not import `renderer/*` or `electron/*` (module boundary §3), and
+// this file is type-checked by the DOM-less root tsconfig (so `window` is not
+// available here). We therefore read the bridge off `globalThis`, typed against
+// the shared `PerspectiveReplayListBridge` contract — the same `list` slice the
+// canonical `PerspectiveReplayAPI` (electron/preload) extends, so the two cannot
+// silently drift apart.
+
+function readPerspectiveReplayBridge(): PerspectiveReplayListBridge | undefined {
+    return (globalThis as { __chimera?: { replay: { perspective: PerspectiveReplayListBridge } } })
+        .__chimera?.replay.perspective;
+}
 
 // ─── Definition ───────────────────────────────────────────────────────────────
 
@@ -49,6 +68,18 @@ export const tacticsMainMenuDefinition: GameMainMenuDefinition = {
             label: 'Settings',
             action: { type: 'navigate', target: '/settings' },
             variant: 'secondary',
+        },
+        {
+            label: 'Replays',
+            action: { type: 'navigate', target: '/replays' },
+            variant: 'secondary',
+            // Disabled until at least one perspective replay has been recorded
+            // for Tactics. A missing/failing bridge resolves to "no replays" and
+            // the renderer renders the button disabled (fail-safe).
+            disabled: async (): Promise<boolean> => {
+                const items = (await readPerspectiveReplayBridge()?.list('tactics')) ?? [];
+                return items.length === 0;
+            },
         },
         {
             label: 'Quit',

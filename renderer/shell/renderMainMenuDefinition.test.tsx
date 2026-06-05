@@ -14,7 +14,7 @@
 // Tests written first (TDD — red confirmed before implementation existed).
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
@@ -470,6 +470,146 @@ describe('command action dispatch', () => {
         };
 
         expect(() => renderMenu(def)).toThrow();
+    });
+});
+
+// ─── Disabled buttons (F44 T7 — #661) ─────────────────────────────────────────
+
+describe('disabled buttons', () => {
+    it('boolean disabled=true renders the button as disabled', () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [
+                {
+                    label: 'Replays',
+                    action: { type: 'navigate', target: '/replays' },
+                    disabled: true,
+                },
+            ],
+        };
+        renderMenu(def);
+
+        expect(screen.getByRole('button', { name: 'Replays' })).toBeDisabled();
+    });
+
+    it('boolean disabled=false renders the button as enabled', () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [
+                {
+                    label: 'Replays',
+                    action: { type: 'navigate', target: '/replays' },
+                    disabled: false,
+                },
+            ],
+        };
+        renderMenu(def);
+
+        expect(screen.getByRole('button', { name: 'Replays' })).not.toBeDisabled();
+    });
+
+    it('button with no disabled field renders as enabled', () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [{ label: 'Replays', action: { type: 'navigate', target: '/replays' } }],
+        };
+        renderMenu(def);
+
+        expect(screen.getByRole('button', { name: 'Replays' })).not.toBeDisabled();
+    });
+
+    it('async disabled() resolving false ends up enabled', async () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [
+                {
+                    label: 'Replays',
+                    action: { type: 'navigate', target: '/replays' },
+                    disabled: async (): Promise<boolean> => false,
+                },
+            ],
+        };
+        renderMenu(def);
+
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Replays' })).not.toBeDisabled(),
+        );
+    });
+
+    it('async disabled() resolving true ends up disabled (e.g. empty replay list)', async () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [
+                {
+                    label: 'Replays',
+                    action: { type: 'navigate', target: '/replays' },
+                    disabled: async (): Promise<boolean> => true,
+                },
+            ],
+        };
+        renderMenu(def);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Replays' })).toBeDisabled());
+    });
+
+    it('renders disabled while an async disabled() check is pending (fail-safe), then resolves', async () => {
+        let resolvePending!: (value: boolean) => void;
+        const pending = new Promise<boolean>((resolve) => {
+            resolvePending = resolve;
+        });
+        const def: GameMainMenuDefinition = {
+            buttons: [
+                {
+                    label: 'Replays',
+                    action: { type: 'navigate', target: '/replays' },
+                    disabled: (): Promise<boolean> => pending,
+                },
+            ],
+        };
+        renderMenu(def);
+
+        // Pending → disabled (fail-safe, avoids a flash of enabled then disabled).
+        expect(screen.getByRole('button', { name: 'Replays' })).toBeDisabled();
+
+        await act(async () => {
+            resolvePending(false);
+        });
+        await waitFor(() =>
+            expect(screen.getByRole('button', { name: 'Replays' })).not.toBeDisabled(),
+        );
+    });
+
+    it('treats a rejected async disabled() check as disabled and logs at warn level', async () => {
+        const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+        const def: GameMainMenuDefinition = {
+            buttons: [
+                {
+                    label: 'Replays',
+                    action: { type: 'navigate', target: '/replays' },
+                    disabled: async (): Promise<boolean> => {
+                        throw new Error('IPC unavailable');
+                    },
+                },
+            ],
+        };
+        renderMenu(def);
+
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Replays' })).toBeDisabled());
+        expect(warnSpy).toHaveBeenCalled();
+    });
+
+    it('an enabled async button still navigates on click', async () => {
+        const def: GameMainMenuDefinition = {
+            buttons: [
+                {
+                    label: 'Replays',
+                    action: { type: 'navigate', target: '/replays' },
+                    disabled: async (): Promise<boolean> => false,
+                },
+            ],
+        };
+        renderMenu(def, undefined, 'tactics');
+
+        const button = await screen.findByRole('button', { name: 'Replays' });
+        await waitFor(() => expect(button).not.toBeDisabled());
+
+        fireEvent.click(button);
+        expect(mockPush).toHaveBeenCalledWith('/replays?gameId=tactics');
     });
 });
 

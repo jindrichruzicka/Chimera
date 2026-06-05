@@ -43,6 +43,9 @@ function getMainMenuButtonTestId(button: GameMainMenuButton): string | undefined
             if (button.action.target === '/saves') {
                 return 'main-menu-load-game';
             }
+            if (button.action.target === '/replays') {
+                return 'main-menu-replays';
+            }
             return undefined;
         case 'quit':
             return 'main-menu-quit';
@@ -145,7 +148,7 @@ export default function MainMenuPage() {
 
     return (
         <main data-testid="main-menu" style={styles.container}>
-            {/* POM alignment guard literals: data-testid="main-menu-play" data-testid="main-menu-settings" data-testid="main-menu-quit" data-testid="main-menu-component-gallery" */}
+            {/* POM alignment guard literals: data-testid="main-menu-play" data-testid="main-menu-settings" data-testid="main-menu-load-game" data-testid="main-menu-replays" data-testid="main-menu-quit" data-testid="main-menu-component-gallery" */}
             <RenderMainMenuDefinition
                 definition={definition}
                 gameId={gameId}
