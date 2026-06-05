@@ -67,3 +67,15 @@
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
 }
+
+.actions {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+    margin-block-start: var(--ch-space-md);
+}
+
+.status {
+    margin: var(--ch-space-none);
+}

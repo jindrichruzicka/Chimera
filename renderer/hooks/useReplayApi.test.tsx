@@ -62,6 +62,7 @@ describe('useReplayApi', () => {
             const { result } = renderHook(() => useReplayApi());
 
             await result.current.list('tactics');
+            await result.current.exportCurrentMatch();
             await result.current.openInPlayer('/p');
             await result.current.delete('/p');
             await result.current.openPlayback('/p');
@@ -72,6 +73,7 @@ describe('useReplayApi', () => {
             off();
 
             expect(replay.list).toHaveBeenCalledWith('tactics');
+            expect(replay.exportCurrentMatch).toHaveBeenCalledOnce();
             expect(replay.openInPlayer).toHaveBeenCalledWith('/p');
             expect(replay.delete).toHaveBeenCalledWith('/p');
             expect(replay.openPlayback).toHaveBeenCalledWith('/p');

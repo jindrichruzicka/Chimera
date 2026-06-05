@@ -14,7 +14,10 @@
 
 import type { LogEntry } from '@chimera/shared/logging.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
-import type { PerspectiveReplayListBridge } from '@chimera/shared/replay-bridge-contract.js';
+import type {
+    PerspectiveReplayListBridge,
+    ReplayExportBridge,
+} from '@chimera/shared/replay-bridge-contract.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { CommitmentId } from '@chimera/simulation/projection/index.js';
 import type {
@@ -563,8 +566,13 @@ export interface PerspectiveReplayPlaybackInfo {
  * Renderer surface for the replay system (§4.28). Host-only in practice — the
  * main-process handlers own recording state and the replay directory; the
  * renderer only lists, exports, opens, deletes, and drives playback.
+ *
+ * Extends {@link ReplayExportBridge} (the shared `exportCurrentMatch` /
+ * `openInPlayer` slice) so the methods a game's post-game summary reads off
+ * `globalThis` stay pinned to one contract — a divergent signature is a compile
+ * error here, not a silent drift.
  */
-export interface ReplayAPI {
+export interface ReplayAPI extends ReplayExportBridge {
     /** List stored replays for `gameId`, newest-first. */
     list(gameId: string): Promise<ReplayListItem[]>;
     /**

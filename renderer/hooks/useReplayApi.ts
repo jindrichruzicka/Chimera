@@ -64,6 +64,12 @@ export interface PerspectiveReplayApi {
 
 export interface ReplayApi {
     list(gameId: string): Promise<ReplayListItem[]>;
+    /**
+     * Finalise the in-progress host recording and resolve with the saved file
+     * path (§4.28). Rejects when no match is being hosted — surfaced as an
+     * inline error by the post-game summary actions (F44 / T8).
+     */
+    exportCurrentMatch(): Promise<string>;
     openInPlayer(path: string): Promise<void>;
     delete(path: string): Promise<void>;
     onNavigate(listener: (path: string) => void): Unsubscribe;
@@ -100,6 +106,7 @@ export function useReplayApi(): ReplayApi {
             // promise (mirrors `useSavesApi`); `onNavigate` stays synchronous
             // because it must return an `Unsubscribe` immediately.
             list: async (gameId: string): Promise<ReplayListItem[]> => requireBridge().list(gameId),
+            exportCurrentMatch: async (): Promise<string> => requireBridge().exportCurrentMatch(),
             openInPlayer: async (path: string): Promise<void> => requireBridge().openInPlayer(path),
             delete: async (path: string): Promise<void> => requireBridge().delete(path),
             onNavigate: (listener: (path: string) => void): Unsubscribe =>

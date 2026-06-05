@@ -38,3 +38,34 @@ export interface PerspectiveReplayListBridge {
      */
     list(gameId: string): Promise<readonly string[]>;
 }
+
+/**
+ * The export / open-in-player slice of `window.__chimera.replay`
+ * (`ReplayAPI`, §4.28) that a game's *screen* module reads off `globalThis` to
+ * finalise the in-progress recording and hand it to the replay player from the
+ * post-game summary (F44 / T8).
+ *
+ * Why this lives in `shared/`: a game screen (`games/<name>/screens/*.tsx`) may
+ * import only from `simulation/`, `ai/`, `shared/`, and its own files (§3 Module
+ * Boundary Table; Invariant #96) — never the canonical `ReplayAPI` in
+ * `electron/*` nor the `useReplayApi` hook in `renderer/*`. It therefore reads
+ * the bridge off `globalThis`, typed against this shared slice.
+ *
+ * Drift protection: `electron/preload/api-types.ts` declares
+ * `ReplayAPI extends ReplayExportBridge`, so the canonical preload surface is
+ * structurally pinned to this slice — a divergent signature is a compile error
+ * in the preload layer, not a silent drift.
+ */
+export interface ReplayExportBridge {
+    /**
+     * Finalise the in-progress host recording to disk and resolve with the saved
+     * file path (§4.28). Rejects when no match is being hosted — surfaced as an
+     * inline error by the post-game summary actions (F44 / T8).
+     */
+    exportCurrentMatch(): Promise<string>;
+    /**
+     * Ask main to open `path` in the replay player. Main validates the path is
+     * inside the replay directory, then pushes `chimera:replay:navigate`.
+     */
+    openInPlayer(path: string): Promise<void>;
+}

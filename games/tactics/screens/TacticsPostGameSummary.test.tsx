@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -11,11 +12,29 @@ import {
     type PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
 import type { GameScreenProps } from '@chimera/shared/game-screen-contract.js';
+import type { ReplayExportBridge } from '@chimera/shared/replay-bridge-contract.js';
 import { TacticsPostGameSummary } from './TacticsPostGameSummary.js';
 
 afterEach(() => {
     cleanup();
+    Reflect.deleteProperty(globalThis, '__chimera');
 });
+
+/**
+ * Install the export / open-in-player slice of `window.__chimera.replay` that
+ * the post-game actions read off `globalThis`. The screen depends only on the
+ * shared {@link ReplayExportBridge} contract, so the fixture satisfies that slice
+ * directly — no cast to the full preload `ReplayAPI`.
+ */
+function installReplayBridge(overrides: Partial<ReplayExportBridge> = {}): ReplayExportBridge {
+    const exportCurrentMatch =
+        overrides.exportCurrentMatch ??
+        vi.fn(() => Promise.resolve('/replays/tactics/m.chimera-replay'));
+    const openInPlayer = overrides.openInPlayer ?? vi.fn(() => Promise.resolve());
+    const replay: ReplayExportBridge = { exportCurrentMatch, openInPlayer };
+    Object.defineProperty(globalThis, '__chimera', { configurable: true, value: { replay } });
+    return replay;
+}
 
 function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     const localPlayerId = playerId('p1');
@@ -147,5 +166,76 @@ describe('TacticsPostGameSummary', () => {
             'neutral',
         );
         expect(screen.getByRole('heading', { name: 'Battle Concluded' })).toBeTruthy();
+    });
+});
+
+describe('TacticsPostGameSummary — replay actions', () => {
+    it('renders Replay and Save Replay buttons once the match has ended', () => {
+        installReplayBridge();
+        render(<TacticsPostGameSummary {...makeSummaryProps()} />);
+
+        expect(screen.getByTestId('post-game-replay-btn')).toHaveTextContent('Replay');
+        expect(screen.getByTestId('post-game-save-replay-btn')).toHaveTextContent('Save Replay');
+    });
+
+    it('hides both replay actions while the match is unresolved', () => {
+        installReplayBridge();
+        render(
+            <TacticsPostGameSummary
+                {...makeSummaryProps({ snapshot: makeSnapshot({ gameResult: null }) })}
+            />,
+        );
+
+        expect(screen.queryByTestId('post-game-replay-btn')).toBeNull();
+        expect(screen.queryByTestId('post-game-save-replay-btn')).toBeNull();
+    });
+
+    it('exports the current match and confirms when Save Replay is clicked', async () => {
+        const { exportCurrentMatch } = installReplayBridge();
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps()} />);
+
+        await user.click(screen.getByTestId('post-game-save-replay-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('post-game-replay-status')).toHaveTextContent('Replay saved');
+        });
+        expect(exportCurrentMatch).toHaveBeenCalledOnce();
+        expect(screen.queryByTestId('post-game-replay-error')).toBeNull();
+    });
+
+    it('surfaces safe generic copy when exporting fails, never the raw bridge error', async () => {
+        installReplayBridge({
+            exportCurrentMatch: vi.fn(() => Promise.reject(new Error('no active hosted session'))),
+        });
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps()} />);
+
+        await user.click(screen.getByTestId('post-game-save-replay-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('post-game-replay-error')).toHaveTextContent(
+                'Could not save replay.',
+            );
+        });
+        // Raw main-process error text must not reach the game UI.
+        expect(screen.queryByText(/no active hosted session/)).toBeNull();
+        expect(screen.queryByTestId('post-game-replay-status')).toBeNull();
+    });
+
+    it('exports then opens the player when Replay is clicked', async () => {
+        const exportCurrentMatch = vi.fn(() =>
+            Promise.resolve('/replays/tactics/done.chimera-replay'),
+        );
+        const { openInPlayer } = installReplayBridge({ exportCurrentMatch });
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps()} />);
+
+        await user.click(screen.getByTestId('post-game-replay-btn'));
+
+        await waitFor(() => {
+            expect(openInPlayer).toHaveBeenCalledWith('/replays/tactics/done.chimera-replay');
+        });
+        expect(exportCurrentMatch).toHaveBeenCalledOnce();
     });
 });
