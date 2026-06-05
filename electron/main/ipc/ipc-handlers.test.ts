@@ -32,6 +32,7 @@ import {
     mapPlatform,
     registerGameHandlers,
     registerLobbyHandlers,
+    registerPerspectiveReplayHandlers,
     registerProfileHandlers,
     registerReplayHandlers,
     registerSavesHandlers,
@@ -58,6 +59,8 @@ import {
     type GameInvokeHandler,
     type LobbyHandlersIpcMain,
     type LobbyInvokeHandler,
+    type PerspectiveReplayIpcPort,
+    type PerspectiveReplayPlaybackPort,
     type ProfileHandlersIpcMain,
     type ProfileInvokeHandler,
     type ReplayHandlersIpcMain,
@@ -72,6 +75,16 @@ import {
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
 } from './ipc-handlers.js';
+import {
+    PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
+    PERSPECTIVE_REPLAY_DELETE_CHANNEL,
+    PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+    PERSPECTIVE_REPLAY_LIST_CHANNEL,
+    PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+    PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,
+    PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
+    PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
+} from '../../preload/apis/perspective-replay-api.js';
 import { IpcRequestValidationError, MAX_SNAPSHOT_RANGE } from './ipc-schemas.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from '../lobby/LobbyManager.js';
@@ -85,6 +98,7 @@ import type {
     EngineAction,
     HostLobbyParams,
     JoinLobbyParams,
+    PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     PlayerSnapshot,
     ReplayListItem,
@@ -2650,6 +2664,406 @@ describe('registerReplayHandlers', () => {
             });
 
             const handler = stub.handled.get(REPLAY_CLOSE_PLAYBACK_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).resolves.toBeUndefined();
+            expect(close).toHaveBeenCalledOnce();
+        });
+    });
+});
+
+// ─── Perspective replay namespace (§4.28, F44b / T7, #673) ───────────────────
+
+/** Minimal `PerspectiveReplayIpcPort` whose methods resolve with empty results. */
+function makeNoopPerspectiveReplayPort(): PerspectiveReplayIpcPort {
+    return {
+        list: () => Promise.resolve([]),
+        delete: () => Promise.resolve(),
+    };
+}
+
+/** Minimal `PerspectiveReplayPlaybackPort` resolving with canonical results. */
+function makeNoopPerspectivePlaybackPort(): PerspectiveReplayPlaybackPort {
+    return {
+        open: () =>
+            Promise.resolve({
+                gameId: 'tactics',
+                totalTicks: 0,
+                viewerId: 'p1',
+            }),
+        snapshotAt: (tick) => makePlayerSnapshotAt(tick),
+        snapshotRange: (from, to) =>
+            Array.from({ length: to - from + 1 }, (_unused, i) => makePlayerSnapshotAt(from + i)),
+        close: () => undefined,
+    };
+}
+
+const PERSPECTIVE_REPLAY_DIR = nodePath.resolve('/var/userData/perspective-replays');
+
+function registerPerspectiveReplay(overrides: {
+    ipcMain: ReplayHandlersIpcMain;
+    replay?: PerspectiveReplayIpcPort;
+    playback?: PerspectiveReplayPlaybackPort;
+    exportCurrent?: () => Promise<string>;
+    navigateToPlayer?: (path: string) => void;
+    perspectiveReplayDir?: string;
+}): void {
+    registerPerspectiveReplayHandlers({
+        ipcMain: overrides.ipcMain,
+        replay: overrides.replay ?? makeNoopPerspectiveReplayPort(),
+        playback: overrides.playback ?? makeNoopPerspectivePlaybackPort(),
+        perspectiveReplayDir: overrides.perspectiveReplayDir ?? PERSPECTIVE_REPLAY_DIR,
+        exportCurrent:
+            overrides.exportCurrent ??
+            (() =>
+                Promise.resolve(
+                    nodePath.join(
+                        PERSPECTIVE_REPLAY_DIR,
+                        'tactics',
+                        'abc.chimera-perspective-replay',
+                    ),
+                )),
+        navigateToPlayer: overrides.navigateToPlayer ?? (() => undefined),
+    });
+}
+
+describe('registerPerspectiveReplayHandlers', () => {
+    it('registers exactly the eight invoke channels (navigate is the shared push, not re-registered)', () => {
+        const stub = makeReplayIpcMainStub();
+        registerPerspectiveReplay({ ipcMain: stub.ipcMain });
+
+        expect([...stub.handled.keys()].sort()).toEqual(
+            [
+                PERSPECTIVE_REPLAY_LIST_CHANNEL,
+                PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+                PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+                PERSPECTIVE_REPLAY_DELETE_CHANNEL,
+                PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,
+                PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
+                PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
+                PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
+            ].sort(),
+        );
+        // The navigate push is the deterministic surface's channel, reused — the
+        // perspective registration never registers a handler for it.
+        expect(stub.handled.has(REPLAY_NAVIGATE_CHANNEL)).toBe(false);
+    });
+
+    describe('chimera:replay:perspective:list', () => {
+        it('validates the gameId and delegates to replay.list', async () => {
+            const stub = makeReplayIpcMainStub();
+            const paths = [
+                nodePath.join(PERSPECTIVE_REPLAY_DIR, 'tactics', 'a.chimera-perspective-replay'),
+            ];
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopPerspectiveReplayPort(), list: () => Promise.resolve(paths) },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_LIST_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, 'tactics'))).resolves.toStrictEqual(paths);
+        });
+
+        it('rejects a malformed gameId before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const list = vi.fn(() => Promise.resolve([] as string[]));
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopPerspectiveReplayPort(), list },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_LIST_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(list).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:perspective:export-current', () => {
+        it('delegates to exportCurrent and resolves with the saved path', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(
+                PERSPECTIVE_REPLAY_DIR,
+                'tactics',
+                'saved.chimera-perspective-replay',
+            );
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrent: () => Promise.resolve(saved),
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).resolves.toBe(saved);
+        });
+
+        it('rejects when there is no active perspective recording', async () => {
+            const stub = makeReplayIpcMainStub();
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrent: () => Promise.reject(new Error('no active perspective recording')),
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).rejects.toThrow(
+                /no active perspective recording/,
+            );
+        });
+    });
+
+    describe('chimera:replay:perspective:open-in-player', () => {
+        it('validates the path is inside the perspective dir, then navigates the renderer', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string) => void>();
+            registerPerspectiveReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const target = nodePath.join(
+                PERSPECTIVE_REPLAY_DIR,
+                'tactics',
+                'abc.chimera-perspective-replay',
+            );
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            handler?.({}, target);
+
+            expect(navigateToPlayer).toHaveBeenCalledOnce();
+            expect(navigateToPlayer).toHaveBeenCalledWith(target);
+        });
+
+        it('rejects a path that escapes the perspective dir and never navigates', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string) => void>();
+            registerPerspectiveReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const traversal = nodePath.join(PERSPECTIVE_REPLAY_DIR, '..', '..', 'etc', 'passwd');
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL);
+
+            expect(() => handler?.({}, traversal)).toThrow();
+            expect(navigateToPlayer).not.toHaveBeenCalled();
+        });
+
+        it('rejects a malformed (empty) path argument', () => {
+            const stub = makeReplayIpcMainStub();
+            registerPerspectiveReplay({ ipcMain: stub.ipcMain });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+        });
+    });
+
+    describe('chimera:replay:perspective:delete', () => {
+        it('validates the path and delegates to replay.delete', async () => {
+            const stub = makeReplayIpcMainStub();
+            const target = nodePath.join(
+                PERSPECTIVE_REPLAY_DIR,
+                'tactics',
+                'abc.chimera-perspective-replay',
+            );
+            const del = vi.fn((_path: string) => Promise.resolve());
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopPerspectiveReplayPort(), delete: del },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_DELETE_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, target))).resolves.toBeUndefined();
+            expect(del).toHaveBeenCalledWith(target);
+        });
+
+        it('rejects a malformed (empty) path before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const del = vi.fn((_path: string) => Promise.resolve());
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopPerspectiveReplayPort(), delete: del },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_DELETE_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(del).not.toHaveBeenCalled();
+        });
+
+        it('rejects a path that escapes the perspective dir at the IPC layer (never reaches the port)', () => {
+            const stub = makeReplayIpcMainStub();
+            const del = vi.fn((_path: string) => Promise.resolve());
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                replay: { ...makeNoopPerspectiveReplayPort(), delete: del },
+            });
+
+            const traversal = nodePath.join(PERSPECTIVE_REPLAY_DIR, '..', '..', 'etc', 'passwd');
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_DELETE_CHANNEL);
+
+            expect(() => handler?.({}, traversal)).toThrow();
+            expect(del).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:perspective:open-playback', () => {
+        it('validates the path is inside the perspective dir, then opens playback', async () => {
+            const stub = makeReplayIpcMainStub();
+            const info: PerspectiveReplayPlaybackInfo = {
+                gameId: 'tactics',
+                totalTicks: 9,
+                viewerId: 'p1',
+            };
+            const open = vi.fn((_path: string) => Promise.resolve(info));
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), open },
+            });
+
+            const target = nodePath.join(
+                PERSPECTIVE_REPLAY_DIR,
+                'tactics',
+                'abc.chimera-perspective-replay',
+            );
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, target))).resolves.toStrictEqual(info);
+            expect(open).toHaveBeenCalledWith(target);
+        });
+
+        it('rejects a path that escapes the perspective dir and never opens playback', () => {
+            const stub = makeReplayIpcMainStub();
+            const open = vi.fn();
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), open },
+            });
+
+            const traversal = nodePath.join(PERSPECTIVE_REPLAY_DIR, '..', '..', 'etc', 'passwd');
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL);
+
+            expect(() => handler?.({}, traversal)).toThrow();
+            expect(open).not.toHaveBeenCalled();
+        });
+
+        it('rejects a malformed (empty) path before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const open = vi.fn();
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), open },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL);
+            expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(open).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:perspective:snapshot-at', () => {
+        it('validates the tick and returns the projected PlayerSnapshot', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotAt = vi.fn((tick: number) => makePlayerSnapshotAt(tick));
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), snapshotAt },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL);
+            const result = handler?.({}, 3) as PlayerSnapshot;
+
+            expect(result.tick).toBe(3);
+            // Invariant #3: the boundary returns a PlayerSnapshot — the
+            // host-internal `seed` of a raw GameSnapshot is never present.
+            expect('seed' in result).toBe(false);
+            expect(snapshotAt).toHaveBeenCalledWith(3);
+        });
+
+        it('rejects a non-integer / negative tick before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotAt = vi.fn((tick: number) => makePlayerSnapshotAt(tick));
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), snapshotAt },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL);
+            expect(() => handler?.({}, -1)).toThrow(IpcRequestValidationError);
+            expect(() => handler?.({}, 1.5)).toThrow(IpcRequestValidationError);
+            expect(snapshotAt).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:replay:perspective:snapshot-range', () => {
+        it('validates the range and returns the projected PlayerSnapshots', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn((from: number, to: number) =>
+                Array.from({ length: to - from + 1 }, (_u, i) => makePlayerSnapshotAt(from + i)),
+            );
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL);
+            const result = handler?.({}, { from: 2, to: 4 }) as PlayerSnapshot[];
+
+            expect(result.map((s) => s.tick)).toEqual([2, 3, 4]);
+            // Invariant #3: every element is a PlayerSnapshot — no raw `seed`.
+            expect(result.every((s) => !('seed' in s))).toBe(true);
+            expect(snapshotRange).toHaveBeenCalledWith(2, 4);
+        });
+
+        it('rejects a malformed range (to < from) before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn();
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL);
+            expect(() => handler?.({}, { from: 5, to: 2 })).toThrow(IpcRequestValidationError);
+            expect(snapshotRange).not.toHaveBeenCalled();
+        });
+
+        it('rejects a non-integer / negative bound before touching the port', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn();
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL);
+            expect(() => handler?.({}, { from: -1, to: 2 })).toThrow(IpcRequestValidationError);
+            expect(() => handler?.({}, { from: 0, to: 1.5 })).toThrow(IpcRequestValidationError);
+            expect(snapshotRange).not.toHaveBeenCalled();
+        });
+
+        it('rejects a span of exactly MAX_SNAPSHOT_RANGE but accepts one tick less (cap boundary)', () => {
+            const stub = makeReplayIpcMainStub();
+            const snapshotRange = vi.fn((from: number, to: number) =>
+                Array.from({ length: to - from + 1 }, (_u, i) => makePlayerSnapshotAt(from + i)),
+            );
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), snapshotRange },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL);
+
+            expect(() => handler?.({}, { from: 0, to: MAX_SNAPSHOT_RANGE })).toThrow(
+                IpcRequestValidationError,
+            );
+            expect(snapshotRange).not.toHaveBeenCalled();
+
+            const result = handler?.(
+                {},
+                { from: 0, to: MAX_SNAPSHOT_RANGE - 1 },
+            ) as PlayerSnapshot[];
+            expect(result).toHaveLength(MAX_SNAPSHOT_RANGE);
+            expect(snapshotRange).toHaveBeenCalledWith(0, MAX_SNAPSHOT_RANGE - 1);
+        });
+    });
+
+    describe('chimera:replay:perspective:close-playback', () => {
+        it('delegates to playback.close and resolves with undefined', async () => {
+            const stub = makeReplayIpcMainStub();
+            const close = vi.fn();
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), close },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL);
             await expect(Promise.resolve(handler?.({}))).resolves.toBeUndefined();
             expect(close).toHaveBeenCalledOnce();
         });

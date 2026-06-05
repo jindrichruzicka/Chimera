@@ -20,6 +20,7 @@ import {
     registerLogsHandlers,
     registerProfileHandlers,
     registerReplayHandlers,
+    registerPerspectiveReplayHandlers,
 } from './ipc/ipc-handlers.js';
 import {
     createLogger,
@@ -62,6 +63,7 @@ import {
 } from './replay/replay-playback-manager.js';
 import { PerspectiveReplayManager } from './replay/PerspectiveReplayManager.js';
 import type { PerspectiveReplayStartHeader } from './replay/PerspectiveReplayManager.js';
+import { PerspectiveReplayPlaybackManager } from './replay/PerspectiveReplayPlaybackManager.js';
 import { FilePerspectiveReplayRepository } from './replay/FilePerspectiveReplayRepository.js';
 import { CompressedPerspectiveReplaySerializer } from './replay/CompressedReplaySerializer.js';
 import { JsonReplaySerializer, ReplayMigrator } from '@chimera/simulation/replay/index.js';
@@ -1922,6 +1924,19 @@ export async function main(): Promise<void> {
         logger.child({ module: 'replay-playback' }),
     );
 
+    // Shared replay-player navigation push: pushes the validated path so the
+    // renderer can switch to the replay player route. Reused by BOTH the
+    // deterministic and perspective `open-in-player` handlers — the renderer
+    // subscribes once via `replay.onNavigate` (the perspective surface reuses
+    // the same `chimera:replay:navigate` channel, F44b / T7).
+    const navigateToReplayPlayer = (replayPath: string): void => {
+        BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(REPLAY_NAVIGATE_CHANNEL, replayPath);
+            }
+        });
+    };
+
     registerReplayHandlers({
         ipcMain,
         logger: logger.child({ module: 'replay' }),
@@ -1939,13 +1954,40 @@ export async function main(): Promise<void> {
             }
             return replayManager.finaliseRecording();
         },
-        navigateToPlayer: (replayPath) => {
-            BrowserWindow.getAllWindows().forEach((win) => {
-                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                    win.webContents.send(REPLAY_NAVIGATE_CHANNEL, replayPath);
-                }
-            });
+        navigateToPlayer: navigateToReplayPlayer,
+    });
+
+    // Register the `chimera:replay:perspective:*` channels backed by the shared
+    // PerspectiveReplayManager (read/delete + gated export) and a verbatim
+    // PerspectiveReplayPlaybackManager (§4.28, ADR F44b, F44b / T7). The manager
+    // satisfies `PerspectiveReplayLoaderPort` via its `load` (engineVersion
+    // guard). `exportCurrent` is gated on an active perspective recording —
+    // `finalise` flushes the in-progress frames and stops recording (the egress
+    // end-of-match finalise then no-ops). Path arguments are confined to
+    // `perspectiveReplayDir`; `open-in-player` reuses the shared navigate push.
+    const perspectiveReplayPlaybackManager = new PerspectiveReplayPlaybackManager(
+        perspectiveReplayManager,
+        logger.child({ module: 'perspective-replay-playback' }),
+    );
+
+    registerPerspectiveReplayHandlers({
+        ipcMain,
+        logger: logger.child({ module: 'replay-perspective' }),
+        replay: perspectiveReplayManager,
+        playback: perspectiveReplayPlaybackManager,
+        perspectiveReplayDir,
+        exportCurrent: () => {
+            if (!perspectiveReplayManager.isRecording()) {
+                return Promise.reject(
+                    new Error(
+                        'replay:perspective:export-current invoked with no active perspective ' +
+                            'recording — start a game before exporting.',
+                    ),
+                );
+            }
+            return perspectiveReplayManager.finalise();
         },
+        navigateToPlayer: navigateToReplayPlayer,
     });
 
     async function autosaveActiveSessionBeforeCrash(): Promise<void> {

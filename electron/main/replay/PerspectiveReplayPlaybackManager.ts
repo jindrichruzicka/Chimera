@@ -35,30 +35,17 @@ import type {
     PerspectiveReplayFile,
     PerspectiveReplayFrame,
 } from '@chimera/simulation/replay/index.js';
-// The IPC-contract `PlayerSnapshot` (the type that crosses the boundary), as used
-// by the deterministic `replay-playback-manager.ts`. The stored `frame.snapshot`
-// is the simulation-projection `PlayerSnapshot` (`projection/StateProjector.ts`);
-// the two are structurally compatible, so serving frames verbatim under this
-// declared type is sound. If the shapes ever diverge, tsc surfaces it here.
-import type { PlayerSnapshot } from '../../preload/api-types.js';
+// The IPC-contract types that cross the boundary, as used by the deterministic
+// `replay-playback-manager.ts`. `PerspectiveReplayPlaybackInfo` is the canonical
+// `open()` return shape — imported here rather than redeclared, mirroring how that
+// manager imports `ReplayPlaybackInfo` (the single source of truth lives in
+// `api-types.ts`, so the IPC port and this manager cannot drift). The stored
+// `frame.snapshot` is the simulation-projection `PlayerSnapshot`
+// (`projection/StateProjector.ts`); the two `PlayerSnapshot`s are structurally
+// compatible, so serving frames verbatim under the declared type is sound. If the
+// shapes ever diverge, tsc surfaces it here.
+import type { PerspectiveReplayPlaybackInfo, PlayerSnapshot } from '../../preload/api-types.js';
 import type { Logger } from '../logging/logger.js';
-
-/**
- * Static playback metadata returned by {@link PerspectiveReplayPlaybackManager.open}.
- *
- * Carries the single **locked** `viewerId` and, unlike the deterministic
- * {@link import('../../preload/api-types.js').ReplayPlaybackInfo}, **no
- * `playerIds` list** — a perspective replay is one seat's view, so there is no
- * other seat to switch to (invariant #98).
- */
-export interface PerspectiveReplayPlaybackInfo {
-    /** Game identifier of the recorded match (drives renderer-game loading). */
-    readonly gameId: string;
-    /** Highest recorded tick — the scrubber's upper bound. */
-    readonly totalTicks: number;
-    /** The single locked viewer whose projection this replay captures. */
-    readonly viewerId: string;
-}
 
 /**
  * Narrow slice of `PerspectiveReplayManager` the playback manager depends on

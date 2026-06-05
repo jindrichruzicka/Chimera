@@ -25,6 +25,7 @@ import type {
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush } from '../shared/listener.js';
+import { createPerspectiveReplayApi } from './perspective-replay-api.js';
 import {
     ReplayListSchema,
     ReplayPlaybackInfoSchema,
@@ -145,5 +146,11 @@ export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
         closePlayback: async (): Promise<void> => {
             await ipc.invoke(REPLAY_CLOSE_PLAYBACK_CHANNEL);
         },
+        // The perspective sub-namespace (§4.28, ADR F44b). Built from the same
+        // `ipcRenderer` port and hung off `.perspective`, so
+        // `window.__chimera.replay.perspective.*` is exposed without disturbing
+        // the deterministic surface above. `ReplayApiIpcPort` structurally
+        // satisfies the narrower `PerspectiveReplayApiIpcPort` (both `invoke`).
+        perspective: createPerspectiveReplayApi(ipc),
     };
 }

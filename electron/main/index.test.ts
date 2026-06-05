@@ -438,6 +438,16 @@ const {
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
 } = await import('../preload/apis/system-api.js');
 const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
+const {
+    PERSPECTIVE_REPLAY_LIST_CHANNEL,
+    PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+    PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+    PERSPECTIVE_REPLAY_DELETE_CHANNEL,
+    PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,
+    PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
+    PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
+    PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
+} = await import('../preload/apis/perspective-replay-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
 const { ActionRegistry } = await import('@chimera/simulation/engine/ActionRegistry.js');
 const { entityId, playerId } = await import('@chimera/simulation/engine/types.js');
@@ -3435,5 +3445,51 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         const file = perspectiveSaves.value[0] as PerspectiveTestFile;
         expect(file.viewerId).toBe(hostId);
         expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 2]);
+    });
+});
+
+// ── Perspective-replay IPC wiring (F44b T7, #673) ─────────────────────────────
+// Covers the index.ts glue that exposes the chimera:replay:perspective:* surface
+// via `registerPerspectiveReplayHandlers`: that every channel is registered, and
+// that the injected `exportCurrent` gate closure rejects when no perspective
+// recording is active. The handler *factory* is unit-tested in
+// `ipc-handlers.test.ts` with injected stubs; these assert main() actually wires
+// it (the real `PerspectiveReplayManager` runs — `isRecording()` is false at boot
+// because no game is hosted, exercising the gate's reject branch for real).
+describe('main() — perspective replay IPC wiring (F44b T7)', () => {
+    const findHandler = (channel: string): ((...args: readonly unknown[]) => unknown) | undefined =>
+        ipcMainHandle.mock.calls.find(([registeredChannel]) => registeredChannel === channel)?.[1];
+
+    beforeEach(() => {
+        // Scope captured ipcMain.handle calls to this test's main() run so the
+        // channel lookup cannot resolve a handler from an earlier registration.
+        ipcMainHandle.mockClear();
+    });
+
+    it('registers every chimera:replay:perspective:* channel', async () => {
+        await main();
+
+        for (const channel of [
+            PERSPECTIVE_REPLAY_LIST_CHANNEL,
+            PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+            PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            PERSPECTIVE_REPLAY_DELETE_CHANNEL,
+            PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,
+            PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
+            PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
+            PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
+        ]) {
+            expect(ipcMainHandle).toHaveBeenCalledWith(channel, expect.any(Function));
+        }
+    });
+
+    it('export-current rejects when no perspective recording is active', async () => {
+        await main();
+
+        const handler = findHandler(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
+        expect(handler).toBeTypeOf('function');
+        await expect(Promise.resolve(handler?.())).rejects.toThrow(
+            /no active perspective recording/,
+        );
     });
 });

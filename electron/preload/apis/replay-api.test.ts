@@ -227,6 +227,58 @@ describe('createReplayApi', () => {
         });
     });
 
+    describe('perspective sub-namespace', () => {
+        it('exposes the PerspectiveReplayAPI under .perspective without disturbing the deterministic surface', () => {
+            const stub = makeIpcStub();
+            const api = createReplayApi(stub.port);
+
+            // The deterministic surface is intact …
+            for (const method of [
+                'list',
+                'exportCurrentMatch',
+                'openInPlayer',
+                'delete',
+                'onNavigate',
+                'openPlayback',
+                'snapshotAt',
+                'snapshotRange',
+                'closePlayback',
+            ] as const) {
+                expect(typeof api[method]).toBe('function');
+            }
+
+            // … and the perspective sub-namespace hangs off it with its own methods.
+            expect(typeof api.perspective).toBe('object');
+            for (const method of [
+                'list',
+                'exportCurrent',
+                'openInPlayer',
+                'delete',
+                'openPlayback',
+                'snapshotAt',
+                'snapshotRange',
+                'closePlayback',
+            ] as const) {
+                expect(typeof api.perspective[method]).toBe('function');
+            }
+            // open-in-player reuses the shared navigate push, so the perspective
+            // surface carries no onNavigate of its own.
+            expect('onNavigate' in api.perspective).toBe(false);
+        });
+
+        it('routes a perspective call to a chimera:replay:perspective:* channel', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set('chimera:replay:perspective:list', []);
+            const api = createReplayApi(stub.port);
+
+            await api.perspective.list('tactics');
+
+            expect(stub.invocations).toEqual([
+                { channel: 'chimera:replay:perspective:list', args: ['tactics'] },
+            ]);
+        });
+    });
+
     describe('onNavigate()', () => {
         it('registers a listener on chimera:replay:navigate and forwards only the path payload', () => {
             const stub = makeIpcStub();

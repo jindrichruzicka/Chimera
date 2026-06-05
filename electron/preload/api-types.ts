@@ -542,6 +542,23 @@ export interface ReplayPlaybackInfo {
 }
 
 /**
+ * Static playback metadata returned by {@link PerspectiveReplayAPI.openPlayback}
+ * (§4.28, ADR F44b). The privacy-preserving counterpart to
+ * {@link ReplayPlaybackInfo}: a perspective replay captures one seat's already
+ * fog-filtered view, so it carries the single **locked** `viewerId` and — unlike
+ * the deterministic info — **no `playerIds` list**, because there is no other
+ * seat to switch to (invariant #98).
+ */
+export interface PerspectiveReplayPlaybackInfo {
+    /** Game identifier of the recorded match (drives renderer-game loading). */
+    gameId: string;
+    /** Highest recorded tick — the scrubber's upper bound. */
+    totalTicks: number;
+    /** The single locked viewer whose projection this replay captures. */
+    viewerId: string;
+}
+
+/**
  * Renderer surface for the replay system (§4.28). Host-only in practice — the
  * main-process handlers own recording state and the replay directory; the
  * renderer only lists, exports, opens, deletes, and drives playback.
@@ -592,6 +609,67 @@ export interface ReplayAPI {
      */
     snapshotRange(from: number, to: number): Promise<PlayerSnapshot[]>;
     /** Close the open playback session, releasing its `ReplayPlayer`. */
+    closePlayback(): Promise<void>;
+    /**
+     * The *perspective* replay surface (§4.28, ADR F44b) — privacy-preserving
+     * replays that store one seat's already-projected `PlayerSnapshot` frames.
+     * Exposed alongside (never replacing) the deterministic methods above; it
+     * reuses the shared `onNavigate` push, so it carries no navigate of its own.
+     */
+    perspective: PerspectiveReplayAPI;
+}
+
+/**
+ * Renderer surface for the *perspective* replay system (§4.28, ADR F44b),
+ * reachable as `window.__chimera.replay.perspective`. Mirrors the deterministic
+ * {@link ReplayAPI} read/playback methods for replays that capture a single
+ * locked viewer's projected frames; `openInPlayer` reuses the deterministic
+ * `chimera:replay:navigate` push (so the renderer subscribes via
+ * {@link ReplayAPI.onNavigate} for both surfaces).
+ */
+export interface PerspectiveReplayAPI {
+    /**
+     * List stored perspective-replay file paths for `gameId`, newest-first.
+     * Unlike {@link ReplayAPI.list}, this returns opaque path handles — a
+     * perspective replay's metadata is read only when it is opened.
+     */
+    list(gameId: string): Promise<string[]>;
+    /**
+     * Finalise the in-progress perspective recording to disk and resolve with
+     * the saved file path. Rejects when no perspective recording is active.
+     */
+    exportCurrent(): Promise<string>;
+    /**
+     * Ask main to open `path` in the replay player. Main validates the path is
+     * inside the perspective-replay directory, then pushes the shared
+     * `chimera:replay:navigate`; the renderer reacts via {@link ReplayAPI.onNavigate}.
+     */
+    openInPlayer(path: string): Promise<void>;
+    /** Permanently delete the perspective replay at `path`. Rejected for paths outside the perspective-replay directory. */
+    delete(path: string): Promise<void>;
+    /**
+     * Load the perspective replay at `path` into the main-process playback
+     * session and resolve with its {@link PerspectiveReplayPlaybackInfo}. Main
+     * validates the path is inside the perspective-replay directory. Replaces
+     * any previously open perspective playback.
+     */
+    openPlayback(path: string): Promise<PerspectiveReplayPlaybackInfo>;
+    /**
+     * Fetch the stored {@link PlayerSnapshot} at `tick` (floor lookup) from the
+     * open perspective playback session. Frames are served verbatim — already
+     * projected for the locked viewer, never re-simulated (invariant #98); only
+     * a `PlayerSnapshot` crosses IPC (invariant #3). Rejects when no playback is open.
+     */
+    snapshotAt(tick: number): Promise<PlayerSnapshot>;
+    /**
+     * Fetch the stored {@link PlayerSnapshot}s within the inclusive tick range
+     * `[from, to]` in a single round-trip. The result is **sparse** — only the
+     * frames actually recorded in the window — because perspective playback
+     * never re-projects (invariant #98). Main caps the span (`MAX_SNAPSHOT_RANGE`)
+     * and rejects `to < from`. Rejects when no playback is open.
+     */
+    snapshotRange(from: number, to: number): Promise<PlayerSnapshot[]>;
+    /** Close the open perspective playback session. */
     closePlayback(): Promise<void>;
 }
 

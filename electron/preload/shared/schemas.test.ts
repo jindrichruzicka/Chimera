@@ -12,6 +12,8 @@ import {
     ActionRejectionSchema,
     DeviceInfoSchema,
     LobbyInfoSchema,
+    PerspectiveReplayPathListSchema,
+    PerspectiveReplayPlaybackInfoSchema,
     PlatformInfoSchema,
     PreloadIpcValidationError,
     ResolvedSettingsSchema,
@@ -153,6 +155,48 @@ describe('ResolvedSettingsSchema', () => {
 
     it('rejects a primitive', () => {
         expect(() => ResolvedSettingsSchema.parse('settings')).toThrow();
+    });
+});
+
+describe('PerspectiveReplayPlaybackInfoSchema', () => {
+    it('accepts a well-formed perspective playback info (single locked viewer, no playerIds)', () => {
+        const info = { gameId: 'tactics', totalTicks: 9, viewerId: 'p1' };
+        expect(PerspectiveReplayPlaybackInfoSchema.parse(info)).toEqual(info);
+    });
+
+    it('rejects a missing viewerId', () => {
+        expect(() =>
+            PerspectiveReplayPlaybackInfoSchema.parse({ gameId: 'tactics', totalTicks: 9 }),
+        ).toThrow();
+    });
+
+    it('rejects a non-integer totalTicks', () => {
+        expect(() =>
+            PerspectiveReplayPlaybackInfoSchema.parse({
+                gameId: 'tactics',
+                totalTicks: 9.5,
+                viewerId: 'p1',
+            }),
+        ).toThrow();
+    });
+});
+
+describe('PerspectiveReplayPathListSchema', () => {
+    it('accepts an empty array', () => {
+        expect(PerspectiveReplayPathListSchema.parse([])).toEqual([]);
+    });
+
+    it('accepts an array of non-empty path strings', () => {
+        const paths = ['/p/a.chimera-perspective-replay', '/p/b.chimera-perspective-replay'];
+        expect(PerspectiveReplayPathListSchema.parse(paths)).toEqual(paths);
+    });
+
+    it('rejects a non-array value', () => {
+        expect(() => PerspectiveReplayPathListSchema.parse('not-an-array')).toThrow();
+    });
+
+    it('rejects an array containing an empty string', () => {
+        expect(() => PerspectiveReplayPathListSchema.parse(['/p/a', ''])).toThrow();
     });
 });
 

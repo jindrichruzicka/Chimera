@@ -73,11 +73,22 @@ import {
     REPLAY_SNAPSHOT_RANGE_CHANNEL,
     REPLAY_CLOSE_PLAYBACK_CHANNEL,
 } from '../../preload/apis/replay-api.js';
+import {
+    PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
+    PERSPECTIVE_REPLAY_DELETE_CHANNEL,
+    PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+    PERSPECTIVE_REPLAY_LIST_CHANNEL,
+    PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+    PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,
+    PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
+    PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
+} from '../../preload/apis/perspective-replay-api.js';
 import type {
     ActionRejection,
     CrashRecoveryStatus,
     DeviceInfo,
     EngineAction,
+    PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     PlayerId,
     PlayerSnapshot,
@@ -952,6 +963,186 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
     });
 
     ipcMain.handle(REPLAY_CLOSE_PLAYBACK_CHANNEL, () => {
+        playback.close();
+        return undefined;
+    });
+}
+
+// ─── Perspective replay namespace (§4.28, ADR F44b, F44b / T7) ────────────────
+
+/**
+ * Narrow port the perspective-replay IPC handlers depend on. A subset of
+ * {@link import('../replay/PerspectiveReplayManager.js').PerspectiveReplayManager}
+ * — only the read/delete methods the renderer surface needs. The manager owns
+ * recording state; `exportCurrent` is injected separately because finalising
+ * the in-progress recording must be gated on an active recording, which only
+ * the wiring layer knows.
+ *
+ * Invariant #98: `list` returns opaque file paths (a perspective replay's
+ * metadata is read only when it is opened); the recorded frames never cross
+ * these read channels.
+ */
+export interface PerspectiveReplayIpcPort {
+    list(gameId: string): Promise<string[]>;
+    delete(path: string): Promise<void>;
+}
+
+/**
+ * Narrow port driving perspective-replay *playback* (§4.28, F44b / T6). Wired to
+ * `PerspectiveReplayPlaybackManager` in `index.ts`.
+ *
+ * Invariant #3 / #98: `snapshotAt` / `snapshotRange` serve stored, already
+ * fog-filtered {@link PlayerSnapshot}s for the single locked viewer; no
+ * `GameSnapshot` is ever produced or returned.
+ */
+export interface PerspectiveReplayPlaybackPort {
+    open(path: string): Promise<PerspectiveReplayPlaybackInfo>;
+    snapshotAt(tick: number): PlayerSnapshot;
+    snapshotRange(from: number, to: number): PlayerSnapshot[];
+    close(): void;
+}
+
+export interface RegisterPerspectiveReplayHandlersOptions {
+    readonly ipcMain: ReplayHandlersIpcMain;
+    /** Injected logger (invariant 67). See {@link RegisterReplayHandlersOptions}. */
+    readonly logger?: Logger;
+    /** Live perspective read/delete port — production wires the `PerspectiveReplayManager`. */
+    readonly replay: PerspectiveReplayIpcPort;
+    /** Live perspective playback port — production wires the `PerspectiveReplayPlaybackManager`. */
+    readonly playback: PerspectiveReplayPlaybackPort;
+    /**
+     * Absolute path of the perspective-replay directory.
+     * `chimera:replay:perspective:open-in-player`, `:delete`, and
+     * `:open-playback` resolve the requested path and assert it stays inside
+     * this root before acting (defence-in-depth for OWASP A01).
+     */
+    readonly perspectiveReplayDir: string;
+    /**
+     * Finalise the in-progress perspective recording to disk and resolve with
+     * the saved file path. Injected by the wiring layer because it must reject
+     * when no perspective recording is active — a condition only the live
+     * session graph knows.
+     */
+    readonly exportCurrent: () => Promise<string>;
+    /**
+     * Push the validated replay path to the renderer (via the shared
+     * `chimera:replay:navigate`) so it can switch to the replay player route.
+     * Reuses the deterministic surface's push channel.
+     */
+    readonly navigateToPlayer: (path: string) => void;
+}
+
+/**
+ * Register every `chimera:replay:perspective:*` main-side channel (§4.28, ADR
+ * F44b). Mirrors {@link registerReplayHandlers} for the privacy-preserving
+ * perspective surface; the navigate push is the deterministic channel reused, so
+ * it is intentionally absent here.
+ *
+ * Invariant 5: channel constants come from `preload/apis/perspective-replay-api.ts`.
+ * Invariant 3 / 98: no `GameSnapshot` crosses these channels — `list` returns
+ * file paths, `export-current` a saved-file path, and every snapshot is a stored
+ * `PlayerSnapshot` for the single locked viewer.
+ * Invariant 25: every input is Zod-validated (reusing the deterministic tick /
+ * range / path schemas) before any port call.
+ * Invariant 67: the logger is injected; this function never constructs one.
+ */
+export function registerPerspectiveReplayHandlers(
+    options: RegisterPerspectiveReplayHandlersOptions,
+): void {
+    const { ipcMain, replay, playback, perspectiveReplayDir, exportCurrent, navigateToPlayer } =
+        options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:replay:perspective:* handlers', {
+        channels: [
+            PERSPECTIVE_REPLAY_LIST_CHANNEL,
+            PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
+            PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            PERSPECTIVE_REPLAY_DELETE_CHANNEL,
+            PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,
+            PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
+            PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
+            PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
+        ],
+    });
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_LIST_CHANNEL, (_event, gameId) => {
+        const validated = parseInvokeRequest(GameIdSchema, PERSPECTIVE_REPLAY_LIST_CHANNEL, gameId);
+        return replay.list(validated);
+    });
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, () => exportCurrent());
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath) => {
+        const validated = parseInvokeRequest(
+            ReplayPathSchema,
+            PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            replayPath,
+        );
+        if (!isInsidePath(perspectiveReplayDir, validated)) {
+            throw new Error(
+                `replay:perspective:open-in-player: path ${JSON.stringify(validated)} escapes the perspective replay directory`,
+            );
+        }
+        navigateToPlayer(validated);
+        return undefined;
+    });
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_DELETE_CHANNEL, (_event, replayPath) => {
+        const validated = parseInvokeRequest(
+            ReplayPathSchema,
+            PERSPECTIVE_REPLAY_DELETE_CHANNEL,
+            replayPath,
+        );
+        // Symmetric traversal defence with open-in-player/open-playback (OWASP
+        // A01); the repository also guards containment, but the IPC boundary
+        // rejects independently of the injected port. Throws synchronously before
+        // any port call; the delete round-trip then resolves to `undefined`.
+        if (!isInsidePath(perspectiveReplayDir, validated)) {
+            throw new Error(
+                `replay:perspective:delete: path ${JSON.stringify(validated)} escapes the perspective replay directory`,
+            );
+        }
+        return replay.delete(validated).then(() => undefined);
+    });
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL, (_event, replayPath) => {
+        const validated = parseInvokeRequest(
+            ReplayPathSchema,
+            PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,
+            replayPath,
+        );
+        if (!isInsidePath(perspectiveReplayDir, validated)) {
+            throw new Error(
+                `replay:perspective:open-playback: path ${JSON.stringify(validated)} escapes the perspective replay directory`,
+            );
+        }
+        return playback.open(validated);
+    });
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL, (_event, tick) => {
+        const validated = parseInvokeRequest(
+            ReplayTickSchema,
+            PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
+            tick,
+        );
+        // Invariant #3 / #98: a stored PlayerSnapshot for the locked viewer; no
+        // GameSnapshot crosses this channel.
+        return playback.snapshotAt(validated);
+    });
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL, (_event, range) => {
+        const { from, to } = parseInvokeRequest(
+            ReplaySnapshotRangeSchema,
+            PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
+            range,
+        );
+        // Reuses the deterministic span cap (MAX_SNAPSHOT_RANGE) so a hostile
+        // renderer cannot request an unbounded buffer. The result is sparse
+        // (only recorded frames in range — invariant #98).
+        return playback.snapshotRange(from, to);
+    });
+
+    ipcMain.handle(PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL, () => {
         playback.close();
         return undefined;
     });

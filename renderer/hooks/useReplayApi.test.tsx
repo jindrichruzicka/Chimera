@@ -23,6 +23,21 @@ function makeReplayBridge(): ReplayAPI {
         snapshotAt: vi.fn(() => Promise.resolve({ tick: 0 } as never)),
         snapshotRange: vi.fn(() => Promise.resolve([])),
         closePlayback: vi.fn(() => Promise.resolve()),
+        // Perspective sub-namespace (F44b / T7). Present so the mock satisfies
+        // `ReplayAPI`; this hook curates the deterministic slice only, so the
+        // stubs are never invoked here.
+        perspective: {
+            list: vi.fn(() => Promise.resolve([])),
+            exportCurrent: vi.fn(() => Promise.resolve('/p')),
+            openInPlayer: vi.fn(() => Promise.resolve()),
+            delete: vi.fn(() => Promise.resolve()),
+            openPlayback: vi.fn(() =>
+                Promise.resolve({ gameId: 'tactics', totalTicks: 3, viewerId: 'p1' }),
+            ),
+            snapshotAt: vi.fn(() => Promise.resolve({ tick: 0 } as never)),
+            snapshotRange: vi.fn(() => Promise.resolve([])),
+            closePlayback: vi.fn(() => Promise.resolve()),
+        },
     };
 }
 

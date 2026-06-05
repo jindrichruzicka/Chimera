@@ -33,6 +33,7 @@ import type {
     LocalProfileSlot,
     LobbyInfo,
     LobbyState,
+    PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     ReplayListItem,
     ReplayPlaybackInfo,
@@ -297,6 +298,33 @@ export const ReplayPlaybackInfoSchema = z.object({
     playerIds: z.array(z.string()),
     viewerId: z.string(),
 }) satisfies z.ZodType<ReplayPlaybackInfo>;
+
+/**
+ * Schema for the path array returned by `chimera:replay:perspective:list`.
+ * A perspective replay's metadata is read only when it is opened, so `list`
+ * yields opaque, non-empty path handles rather than the rich
+ * {@link ReplayListItem}s of the deterministic surface.
+ */
+export const PerspectiveReplayPathListSchema: z.ZodType<readonly string[]> = z.array(
+    z.string().min(1),
+);
+
+/**
+ * Schema for the {@link PerspectiveReplayPlaybackInfo} returned by
+ * `chimera:replay:perspective:open-playback`. Structural validation only — the
+ * host builds it from a validated perspective replay file; the gate catches
+ * main↔preload contract drift. Carries the single locked `viewerId` and **no
+ * `playerIds`** (invariant #98).
+ *
+ * As with the deterministic surface, the per-tick `PlayerSnapshot` returned by
+ * `chimera:replay:perspective:snapshot-at` is not schema-validated here: it is a
+ * stored, already-projected snapshot handled as a trusted cast (invariant #3).
+ */
+export const PerspectiveReplayPlaybackInfoSchema = z.object({
+    gameId: z.string(),
+    totalTicks: z.number().int(),
+    viewerId: z.string(),
+}) satisfies z.ZodType<PerspectiveReplayPlaybackInfo>;
 
 // ─── System device-info schema (§4.17) ───────────────────────────────────────
 
