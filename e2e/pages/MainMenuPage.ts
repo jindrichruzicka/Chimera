@@ -12,6 +12,7 @@ export class MainMenuPage {
     readonly settingsButton: Locator;
     readonly quitButton: Locator;
     readonly componentGalleryButton: Locator;
+    readonly replaysButton: Locator;
     readonly menu: Locator;
 
     public constructor(private readonly page: Page) {
@@ -19,6 +20,10 @@ export class MainMenuPage {
         this.settingsButton = page.getByTestId('main-menu-settings');
         this.quitButton = page.getByTestId('main-menu-quit');
         this.componentGalleryButton = page.getByTestId('main-menu-component-gallery');
+        // Game-contributed "Replays" menu button (F44 / T7), located by its
+        // accessible name. Disabled until at least one perspective replay exists
+        // for the active game.
+        this.replaysButton = page.getByRole('button', { name: 'Replays' });
         this.menu = page.getByTestId('main-menu');
     }
 

@@ -141,6 +141,68 @@ describe('ReplayManager — recording', () => {
     });
 });
 
+// ── exportCurrentMatch (idempotent post-game export) ─────────────────────────
+
+describe('ReplayManager — exportCurrentMatch', () => {
+    it('finalises the active recording and returns a loadable path', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        manager.recordAction(recordAction(4));
+
+        const savedPath = await manager.exportCurrentMatch();
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.actions).toHaveLength(2);
+    });
+
+    it('returns the already-saved path when the recording was finalised at game-over', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        // The host pipeline auto-finalises at game-over, clearing the in-progress
+        // recording before the post-game summary can mount.
+        const autoSaved = await manager.finaliseRecording();
+
+        // The post-game "Save Replay"/"Replay" button then calls exportCurrentMatch:
+        // it must resolve with the same path, not throw.
+        await expect(manager.exportCurrentMatch()).resolves.toBe(autoSaved);
+        // No duplicate file is written.
+        expect(await manager.list('tactics')).toStrictEqual([autoSaved]);
+    });
+
+    it('is repeatable — twice returns the same path and writes one file', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const first = await manager.exportCurrentMatch();
+        const second = await manager.exportCurrentMatch();
+
+        expect(second).toBe(first);
+        expect(await manager.list('tactics')).toStrictEqual([first]);
+    });
+
+    it('rejects when nothing has ever been recorded', async () => {
+        const { manager } = makeManager();
+        await expect(manager.exportCurrentMatch()).rejects.toThrow(/no recording|no saved replay/i);
+    });
+
+    it('does not leak a previous match path after a new recording starts', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        await manager.finaliseRecording(); // match 1 saved → remembered
+
+        // A new match begins (clearing the remembered path), then is abandoned.
+        manager.startRecording(makeHeader());
+        manager.abortRecording();
+
+        // Nothing to export — match 1's path must not be returned.
+        await expect(manager.exportCurrentMatch()).rejects.toThrow(/no recording|no saved replay/i);
+    });
+});
+
 // ── Abort (mid-match session close) ──────────────────────────────────────────
 
 describe('ReplayManager — abortRecording', () => {

@@ -12,9 +12,9 @@ import type {
 } from '@chimera/electron/preload/api-types.js';
 import ReplaysPage from './page';
 
-// Perspective rows navigate directly with `?kind=perspective` (the shared
-// navigate push is path-only), so the page uses the Next router. Hoisted so the
-// mock factory can close over a stable spy.
+// Perspective rows navigate to the player with a client `router.push` (the
+// player reads its `?path=`/`?kind=` query reactively via `useSearchParams`).
+// Hoisted so the mock factory can close over a stable spy.
 const { push } = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ push }),
@@ -117,6 +117,15 @@ describe('ReplaysPage', () => {
         expect(perspectiveList).toHaveBeenCalledWith('tactics');
     });
 
+    it('tags the page container and Open buttons with E2E test ids', async () => {
+        installBridge({ list: vi.fn(() => Promise.resolve([makeItem()])) });
+
+        render(<ReplaysPage />);
+
+        expect(screen.getByTestId('replays-page')).toBeInTheDocument();
+        expect(await screen.findByTestId('replay-open-btn')).toBeInTheDocument();
+    });
+
     it('shows the empty state only when both kinds are empty', async () => {
         installBridge({});
 
@@ -186,7 +195,7 @@ describe('ReplaysPage', () => {
         await userEvent.click(openButton);
 
         expect(push).toHaveBeenCalledWith(
-            `/replays/player?path=${encodeURIComponent(PERSPECTIVE_PATH)}&kind=perspective`,
+            `/replays/player/?path=${encodeURIComponent(PERSPECTIVE_PATH)}&kind=perspective`,
         );
     });
 });

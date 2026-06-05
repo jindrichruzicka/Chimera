@@ -105,6 +105,24 @@ describe('ReplayPlaybackManager', () => {
             });
         });
 
+        it('reports totalTicks as the final reachable state tick, not the file metadata durationTicks', async () => {
+            // A real recording's `durationTicks` is the highest *issued* action
+            // tick (`actions.length - 1` for a contiguous match) — one short of
+            // the final *state* tick the player can scrub to. Playback must
+            // expose that final state tick so the terminal (game-over) snapshot,
+            // where `gameResult` is set, is reachable (F44 / T9, #663).
+            const base = makeReplayFile(3);
+            const file: ReplayFile = {
+                ...base,
+                metadata: { ...base.metadata, durationTicks: 2 },
+            };
+            const manager = makeManager(file);
+
+            const info = await manager.open('/replays/tactics/match.chimera-replay');
+
+            expect(info.totalTicks).toBe(3);
+        });
+
         it('rejects when no visibility rules are registered for the game', async () => {
             const file: ReplayFile = { ...makeReplayFile(), gameId: 'unknown-game' };
             const manager = makeManager(file);

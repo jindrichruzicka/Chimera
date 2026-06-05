@@ -283,6 +283,63 @@ describe('PerspectiveReplayManager — record-time tick validation (#98)', () =>
 
 // ── Abort (mid-match session close) ──────────────────────────────────────────
 
+// ── exportCurrent (idempotent post-game export) ──────────────────────────────
+
+describe('PerspectiveReplayManager — exportCurrent', () => {
+    it('finalises the active recording and returns a loadable path', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+        manager.recordSnapshot(frame(VIEWER, 3));
+
+        const savedPath = await manager.exportCurrent();
+
+        const loaded = await manager.load(savedPath);
+        expect(loaded.frames).toHaveLength(2);
+    });
+
+    it('returns the already-saved path when the recording was finalised at game-over', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+        const autoSaved = await manager.finalise();
+
+        await expect(manager.exportCurrent()).resolves.toBe(autoSaved);
+        expect(await manager.list('tactics')).toStrictEqual([autoSaved]);
+    });
+
+    it('is repeatable — twice returns the same path and writes one file', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        const first = await manager.exportCurrent();
+        const second = await manager.exportCurrent();
+
+        expect(second).toBe(first);
+        expect(await manager.list('tactics')).toStrictEqual([first]);
+    });
+
+    it('rejects when nothing has ever been recorded', async () => {
+        const { manager } = makeManager();
+        await expect(manager.exportCurrent()).rejects.toThrow(/no recording|no saved replay/i);
+    });
+
+    it('does not leak a previous match path after a new recording starts', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+        await manager.finalise();
+
+        manager.start(makeStartHeader());
+        manager.abort();
+
+        await expect(manager.exportCurrent()).rejects.toThrow(/no recording|no saved replay/i);
+    });
+});
+
+// ── abort (mid-match session close) ──────────────────────────────────────────
+
 describe('PerspectiveReplayManager — abort', () => {
     it('discards the in-progress recording without persisting', async () => {
         const { manager } = makeManager();

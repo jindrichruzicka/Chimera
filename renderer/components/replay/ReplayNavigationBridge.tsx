@@ -28,7 +28,10 @@ export function ReplayNavigationBridge(): null {
             return;
         }
         return replayApi.onNavigate((path: string) => {
-            router.push(`/replays/player?path=${encodeURIComponent(path)}`);
+            // Push the canonical trailing-slash URL (next.config `trailingSlash:
+            // true`). The player reads `?path=` reactively via `useSearchParams`,
+            // so it self-corrects once this soft navigation commits the URL.
+            router.push(`/replays/player/?path=${encodeURIComponent(path)}`);
         });
     }, [replayApi, router]);
 

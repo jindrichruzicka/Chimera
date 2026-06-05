@@ -513,7 +513,14 @@ function resolveRendererGameAssetFilePath(gameAssetsRoot: string, url: URL): str
 export function resolveRendererProtocolFilePath(
     options: ResolveRendererProtocolFilePathOptions,
 ): string | null {
-    if (/%2e|%2f|%5c/i.test(options.requestUrl)) {
+    // Guard against encoded traversal sequences in the request *path* only. The
+    // query string legitimately carries URL-encoded separators (e.g. the replay
+    // player route receives an encoded absolute filesystem path via `?path=`),
+    // so testing the full URL here would reject valid nested-route navigations.
+    const queryStart = options.requestUrl.indexOf('?');
+    const rawPathPortion =
+        queryStart === -1 ? options.requestUrl : options.requestUrl.slice(0, queryStart);
+    if (/%2e|%2f|%5c/i.test(rawPathPortion)) {
         return null;
     }
 
@@ -1908,10 +1915,11 @@ export async function main(): Promise<void> {
     // Register the `chimera:replay:*` channels backed by the shared
     // ReplayManager (§4.28, F44 / T5). `exportCurrentMatch` is gated on an
     // active hosted session here because only this scope knows the live
-    // session graph; the destructive `finaliseRecording` writes the
-    // in-progress recording and stops it (the natural end-of-match finalise
-    // then no-ops). `navigateToPlayer` pushes the validated path so the
-    // renderer can switch to the replay player route.
+    // session graph; the manager's `exportCurrentMatch` is idempotent — it
+    // finalises an in-progress recording, or returns the path already written
+    // when the host pipeline auto-finalised at game-over (the post-game summary
+    // buttons run only after that point, F44 / T8). `navigateToPlayer` pushes
+    // the validated path so the renderer can switch to the replay player route.
     // Playback session (§4.28, F44 / T6): loads a replay and serves projected
     // per-viewer PlayerSnapshots tick-by-tick to the renderer's replay player.
     // Reuses the shared `gameRegistry` (live ActionPipeline wiring, invariant
@@ -1952,7 +1960,7 @@ export async function main(): Promise<void> {
                     ),
                 );
             }
-            return replayManager.finaliseRecording();
+            return replayManager.exportCurrentMatch();
         },
         navigateToPlayer: navigateToReplayPlayer,
     });
@@ -1961,9 +1969,10 @@ export async function main(): Promise<void> {
     // PerspectiveReplayManager (read/delete + gated export) and a verbatim
     // PerspectiveReplayPlaybackManager (§4.28, ADR F44b, F44b / T7). The manager
     // satisfies `PerspectiveReplayLoaderPort` via its `load` (engineVersion
-    // guard). `exportCurrent` is gated on an active perspective recording —
-    // `finalise` flushes the in-progress frames and stops recording (the egress
-    // end-of-match finalise then no-ops). Path arguments are confined to
+    // guard). `exportCurrent` is gated on an active hosted session and is
+    // idempotent — it flushes in-progress frames, or returns the path already
+    // written when the egress path auto-finalised at game-over (mirrors the
+    // deterministic `exportCurrentMatch`). Path arguments are confined to
     // `perspectiveReplayDir`; `open-in-player` reuses the shared navigate push.
     const perspectiveReplayPlaybackManager = new PerspectiveReplayPlaybackManager(
         perspectiveReplayManager,
@@ -1977,15 +1986,15 @@ export async function main(): Promise<void> {
         playback: perspectiveReplayPlaybackManager,
         perspectiveReplayDir,
         exportCurrent: () => {
-            if (!perspectiveReplayManager.isRecording()) {
+            if (activeSession === null) {
                 return Promise.reject(
                     new Error(
-                        'replay:perspective:export-current invoked with no active perspective ' +
-                            'recording — start a game before exporting.',
+                        'replay:perspective:export-current invoked with no active hosted session — ' +
+                            'start a game before exporting.',
                     ),
                 );
             }
-            return perspectiveReplayManager.finalise();
+            return perspectiveReplayManager.exportCurrent();
         },
         navigateToPlayer: navigateToReplayPlayer,
     });

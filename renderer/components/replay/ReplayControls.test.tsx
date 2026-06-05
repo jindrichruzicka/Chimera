@@ -142,6 +142,24 @@ describe('ReplayControls', () => {
         });
     });
 
+    describe('E2E test ids', () => {
+        it('tags the Play button, tick counter and scrubber when paused', () => {
+            renderControls({ isPlaying: false, currentTick: 4, totalTicks: 10 });
+
+            expect(screen.getByTestId('replay-play-btn')).toBeInTheDocument();
+            expect(screen.getByTestId('replay-tick-counter')).toHaveTextContent('4 / 10');
+            expect(screen.getByTestId('replay-scrubber')).toBeInTheDocument();
+            expect(screen.queryByTestId('replay-pause-btn')).toBeNull();
+        });
+
+        it('tags the Pause button when playing', () => {
+            renderControls({ isPlaying: true, currentTick: 2, totalTicks: 10 });
+
+            expect(screen.getByTestId('replay-pause-btn')).toBeInTheDocument();
+            expect(screen.queryByTestId('replay-play-btn')).toBeNull();
+        });
+    });
+
     describe('replay kind', () => {
         it('labels the controls group for the deterministic player by default', () => {
             renderControls();

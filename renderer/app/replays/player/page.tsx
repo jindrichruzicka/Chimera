@@ -23,6 +23,7 @@
  */
 
 import React from 'react';
+import { useSearchParams } from 'next/navigation';
 import type {
     EngineAction,
     PerspectiveReplayPlaybackInfo,
@@ -107,13 +108,14 @@ function useLoadedRendererGame(
     return game;
 }
 
-export default function ReplayPlayerPage(): React.ReactElement {
+function ReplayPlayerView(): React.ReactElement {
     const replayApi = useReplayApi();
-    const params = React.useMemo(
-        () => new URLSearchParams(typeof window !== 'undefined' ? window.location.search : ''),
-        [],
-    );
-    const path = React.useMemo(() => params.get('path'), [params]);
+    // `useSearchParams` reflects the live router state, so the `?path=`/`?kind=`
+    // query is read reactively: a client (soft) navigation can mount the player
+    // before the URL is committed, and this re-renders once it settles rather
+    // than capturing a stale snapshot of `window.location.search`.
+    const params = useSearchParams();
+    const path = params.get('path');
     const kind = React.useMemo(() => parseReplayKind(params.get('kind')), [params]);
 
     // The playback session methods (`openPlayback`/`snapshotAt`/`closePlayback`)
@@ -336,6 +338,18 @@ export default function ReplayPlayerPage(): React.ReactElement {
 
     return (
         <main style={pageStyle}>
+            <ReplayControls
+                kind={kind}
+                currentTick={currentTick}
+                totalTicks={totalTicks}
+                isPlaying={isPlaying}
+                playbackSpeed={playbackSpeed}
+                onPlay={handlePlay}
+                onPause={handlePause}
+                onStep={handleStep}
+                onSeek={handleSeek}
+                onSpeedChange={handleSpeedChange}
+            />
             <div style={boardStyle}>
                 <GameShell
                     registry={loadedGame.registry}
@@ -353,18 +367,31 @@ export default function ReplayPlayerPage(): React.ReactElement {
                     localPlayerId={info.viewerId as PlayerSnapshot['viewerId']}
                 />
             </div>
-            <ReplayControls
-                kind={kind}
-                currentTick={currentTick}
-                totalTicks={totalTicks}
-                isPlaying={isPlaying}
-                playbackSpeed={playbackSpeed}
-                onPlay={handlePlay}
-                onPause={handlePause}
-                onStep={handleStep}
-                onSeek={handleSeek}
-                onSpeedChange={handleSpeedChange}
-            />
         </main>
+    );
+}
+
+/**
+ * `useSearchParams` requires a Suspense boundary under static export
+ * (`output: 'export'`), so the reactive view is wrapped here. The fallback
+ * mirrors the view's own "Loading replay…" status so the transition is seamless.
+ */
+export default function ReplayPlayerPage(): React.ReactElement {
+    return (
+        <React.Suspense
+            fallback={
+                <main style={pageStyle}>
+                    <div
+                        role="status"
+                        aria-label="Loading replay"
+                        style={{ padding: 'var(--ch-space-md)' }}
+                    >
+                        Loading replay…
+                    </div>
+                </main>
+            }
+        >
+            <ReplayPlayerView />
+        </React.Suspense>
     );
 }

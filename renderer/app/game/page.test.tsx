@@ -15,7 +15,7 @@
 //   #80 — Verified by the board being injected via registry prop.
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -30,6 +30,7 @@ import type {
     GameScreenRegistry,
 } from '@chimera/shared/game-screen-contract.js';
 import type { DeviceInfo } from '../../device/DeviceInfo.js';
+import { useUiStore } from '../../state/uiStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Providers } from '../providers';
 import GamePage from './page';
@@ -228,6 +229,9 @@ beforeEach(() => {
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
     inputActionCallbacks.clear();
+    // uiStore is a module singleton shared across tests; reset screen navigation
+    // so each test starts on the default 'board' screen.
+    useUiStore.getState().resetScreenNavigation();
     window.history.replaceState({}, '', '/game');
 
     Object.defineProperty(window, '__chimera', {
@@ -631,6 +635,55 @@ describe('GamePage — keyboard-triggered action dispatch', () => {
         inputActionCallbacks.get('engine:redo')?.({ pressed: true });
         inputActionCallbacks.get('game:end-turn')?.({ pressed: true });
 
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+});
+
+describe('GamePage — post-game summary navigation', () => {
+    const summaryRegistry: GameScreenRegistry = {
+        ...testRegistry,
+        screens: { summary: () => <div data-testid="test-summary" /> },
+        sceneDefaultScreens: { 'engine:game': 'board', 'engine:post-game': 'summary' },
+    };
+
+    it('navigates to the post-game summary when game:end-turn (Enter) fires after the match resolves', async () => {
+        mockLocalPlayerId = 'p1';
+        loadRendererGameMock.mockResolvedValue({ registry: summaryRegistry });
+        mockSnapshot = makeSnapshot({
+            phase: gamePhase('ended'),
+            gameResult: { winnerIds: [playerId('p2')] },
+            isMyTurn: true,
+        });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        const cb = inputActionCallbacks.get('game:end-turn');
+        expect(cb).toBeDefined();
+        act(() => {
+            cb!({ pressed: true });
+        });
+
+        expect(useUiStore.getState().activeScreenKey).toBe('summary');
+        expect(await screen.findByTestId('test-summary')).toBeTruthy();
+        expect(mockSendAction).not.toHaveBeenCalled();
+    });
+
+    it('does not change screens when the game declares no post-game summary screen', async () => {
+        mockLocalPlayerId = 'p1';
+        // testRegistry declares no sceneDefaultScreens / summary screen.
+        mockSnapshot = makeSnapshot({
+            phase: gamePhase('ended'),
+            gameResult: { winnerIds: [playerId('p2')] },
+            isMyTurn: true,
+        });
+        renderGamePage();
+        await screen.findByTestId('game-canvas');
+
+        act(() => {
+            inputActionCallbacks.get('game:end-turn')?.({ pressed: true });
+        });
+
+        expect(useUiStore.getState().activeScreenKey).toBe('board');
         expect(mockSendAction).not.toHaveBeenCalled();
     });
 });

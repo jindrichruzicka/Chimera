@@ -22,6 +22,7 @@ import { useAudioManager } from '../../audio/AudioManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';
 import type { InputAction } from '../../input/InputAction.js';
 import { useOptionalInputActionRegistry } from '../../input/InputActionRegistryContext.js';
+import { useActiveScreen } from '../../state/uiStore.js';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
@@ -265,9 +266,15 @@ function GameShellFrame(
         onRedo,
         onEndTurn,
     } = props;
-    const shouldShowResolvedResult = gameResult !== undefined && gameResult !== null;
-    const shouldShowFallbackResult = !shouldShowResolvedResult && isGameOver;
-    const controlsLocked = isGameOver || shouldShowResolvedResult;
+    // The result banner is an overlay on the live board. Once the player advances
+    // to another screen (e.g. the post-game summary), suppress it so it does not
+    // float on top of that screen. Control-lock semantics are unaffected.
+    const activeScreenKey = useActiveScreen();
+    const onBoardScreen = activeScreenKey === 'board';
+    const hasResolvedResult = gameResult !== undefined && gameResult !== null;
+    const shouldShowResolvedResult = hasResolvedResult && onBoardScreen;
+    const shouldShowFallbackResult = !hasResolvedResult && isGameOver && onBoardScreen;
+    const controlsLocked = isGameOver || hasResolvedResult;
     const undoDisabled = controlsLocked || !canUndo || onUndo === undefined;
     const redoDisabled = controlsLocked || !canRedo || onRedo === undefined;
     const endTurnDisabled = controlsLocked || !canEndTurn || onEndTurn === undefined;

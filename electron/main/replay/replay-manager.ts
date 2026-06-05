@@ -55,6 +55,15 @@ interface RecordingState {
 export class ReplayManager {
     private readonly log: Logger;
     private recording: RecordingState | null = null;
+    /**
+     * Path of the most recently finalised replay for the current match, or
+     * `null` when no match has been finalised since the last `startRecording`.
+     * Lets {@link exportCurrentMatch} stay idempotent after the host pipeline has
+     * already auto-finalised the recording at game-over (the post-game summary
+     * mounts only after that point, so its buttons would otherwise have nothing
+     * left to finalise).
+     */
+    private lastSavedPath: string | null = null;
 
     constructor(
         private readonly repository: ReplayRepository,
@@ -76,6 +85,9 @@ export class ReplayManager {
         if (this.recording !== null) {
             throw new Error('ReplayManager.startRecording: a recording is already in progress');
         }
+        // A new match supersedes any path remembered from the previous one, so a
+        // later `exportCurrentMatch` can never return a stale match's replay.
+        this.lastSavedPath = null;
         this.recording = { header, actions: [] };
     }
 
@@ -124,11 +136,45 @@ export class ReplayManager {
 
         try {
             const savedPath = await this.repository.save(file);
+            this.lastSavedPath = savedPath;
             this.log.debug('finaliseRecording: saved', { path: savedPath });
             return savedPath;
         } finally {
             this.recording = null;
         }
+    }
+
+    /**
+     * Idempotent "ensure this match's replay is on disk, and give me its path".
+     *
+     * Backs the post-game summary's Replay / Save Replay buttons (F44 / T8),
+     * which run only after the match has resolved — by which point the host
+     * pipeline has already auto-finalised the recording at game-over. So unlike
+     * the destructive {@link finaliseRecording}, this method does not require an
+     * in-progress recording:
+     *
+     *   - recording still in progress → finalise it and return the new path;
+     *   - already finalised this match → return the remembered path (no second
+     *     file is written);
+     *   - nothing recorded or saved yet → throw.
+     *
+     * @throws {Error} when no recording is in progress and none was finalised
+     *   for the current match.
+     */
+    async exportCurrentMatch(): Promise<string> {
+        this.log.debug('exportCurrentMatch', {
+            recording: this.recording !== null,
+            hasSaved: this.lastSavedPath !== null,
+        });
+        if (this.recording !== null) {
+            return this.finaliseRecording();
+        }
+        if (this.lastSavedPath !== null) {
+            return this.lastSavedPath;
+        }
+        throw new Error(
+            'ReplayManager.exportCurrentMatch: no recording in progress and no saved replay',
+        );
     }
 
     /**

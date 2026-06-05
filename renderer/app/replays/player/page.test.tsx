@@ -25,6 +25,12 @@ vi.mock('@chimera/renderer/components/shell/GameShell', () => ({
     ),
 }));
 
+// The page reads `?path=`/`?kind=` via `useSearchParams`; back it with the URL
+// each test sets through `window.history.replaceState`.
+vi.mock('next/navigation', () => ({
+    useSearchParams: () => new URLSearchParams(window.location.search),
+}));
+
 import ReplayPlayerPage from './page';
 
 const PATH = '/replays/tactics/match.chimera-replay';
@@ -163,6 +169,20 @@ describe('ReplayPlayerPage', () => {
         });
         // A new range anchored at the sought tick, not covered by the tick-0 batch.
         expect(bridge.snapshotRange).toHaveBeenCalledWith(80, expect.any(Number));
+    });
+
+    it('renders the playback controls above the board', async () => {
+        installReplayBridge(makeBridge());
+
+        render(<ReplayPlayerPage />);
+        const board = await screen.findByTestId('game-shell');
+        const controls = screen.getByRole('group', { name: /replay playback controls/i });
+
+        // Controls sit at the top of the player, so they precede the board in the
+        // DOM (keeping focus/reading order aligned with the visual order).
+        expect(
+            controls.compareDocumentPosition(board) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
     });
 
     it('toggles play and pause', async () => {

@@ -119,7 +119,14 @@ export class ReplayPlaybackManager {
 
         return {
             gameId: file.gameId,
-            totalTicks: file.metadata.durationTicks,
+            // The final scrubbable tick is the *state* tick reached after every
+            // recorded action is applied. Under invariant #42 each recorded
+            // action advances the tick by exactly 1, so that final tick is
+            // `initial.tick + actions.length`. The file's `metadata.durationTicks`
+            // records the highest *issued* action tick instead — one short of the
+            // final state tick for a contiguous match — so it cannot be used here
+            // or the terminal (game-over) snapshot would be unreachable (#663).
+            totalTicks: initial.tick + file.actions.length,
             playerIds: [...playerIds],
             viewerId,
         };

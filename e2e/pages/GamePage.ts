@@ -69,6 +69,9 @@ export class GamePage {
     readonly transitionOverlay: Locator;
     readonly postGameSummary: Locator;
     readonly perfHud: Locator;
+    readonly replayButton: Locator;
+    readonly saveReplayButton: Locator;
+    readonly replaySavedStatus: Locator;
 
     public constructor(
         private readonly page: Page,
@@ -86,6 +89,10 @@ export class GamePage {
         this.transitionOverlay = page.getByTestId('transition-overlay');
         this.postGameSummary = page.getByTestId('post-game-summary');
         this.perfHud = page.getByTestId('perf-hud');
+        // Post-game summary replay actions (F44 / T8).
+        this.replayButton = page.getByTestId('post-game-replay-btn');
+        this.saveReplayButton = page.getByTestId('post-game-save-replay-btn');
+        this.replaySavedStatus = page.getByTestId('post-game-replay-status');
     }
 
     public async attackAdjacentEnemy(): Promise<void> {

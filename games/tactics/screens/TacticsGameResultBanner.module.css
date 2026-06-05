@@ -30,6 +30,15 @@
     margin: var(--ch-space-none);
 }
 
+.hint {
+    color: var(--ch-color-text-secondary);
+    font-family: var(--ch-font-ui);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-tight);
+    margin-block: var(--ch-space-sm) var(--ch-space-none);
+    margin-inline: var(--ch-space-none);
+}
+
 /* Outcome-specific accent on the card border */
 .overlay[data-game-result-outcome='win'] .card {
     border-color: var(--ch-color-success);

@@ -358,6 +358,9 @@ describe('GamePage', () => {
         expect(gamePage.transitionOverlay).toBeDefined();
         expect(gamePage.postGameSummary).toBeDefined();
         expect(gamePage.perfHud).toBeDefined();
+        expect(gamePage.replayButton).toBeDefined();
+        expect(gamePage.saveReplayButton).toBeDefined();
+        expect(gamePage.replaySavedStatus).toBeDefined();
         expect(gamePage.selectOwnedPrimitive).toBeDefined();
         expect(gamePage.moveOwnedUnitToOpenTile).toBeDefined();
         expect(gamePage.moveSelectedPrimitiveNearOpponent).toBeDefined();
@@ -379,6 +382,9 @@ describe('GamePage', () => {
             'transition-overlay',
             'post-game-summary',
             'perf-hud',
+            'post-game-replay-btn',
+            'post-game-save-replay-btn',
+            'post-game-replay-status',
         ]);
         expect(requestedTestIds).not.toContain('move-target');
         expect(requestedTestIds).not.toContain('reveal-target');

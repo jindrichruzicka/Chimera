@@ -28,10 +28,15 @@ import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGa
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
+import { useUiStore } from '../../state/uiStore';
 import { useInputAction } from '../../input/useInputAction.js';
 import type { InputEvent } from '../../input/InputAction.js';
 
 type GameActionType = 'engine:undo' | 'engine:redo' | 'engine:end_turn';
+
+// The post-game scene; its registry-declared default screen is the screen the
+// match advances to once the result is resolved (see GameScreenRegistry).
+const POST_GAME_SCENE_ID = 'engine:post-game';
 
 type RendererGameLoadState =
     | { readonly status: 'idle' }
@@ -127,7 +132,17 @@ export default function GamePage(): React.ReactElement | null {
     const onEndTurnKey = React.useCallback(
         (event: InputEvent) => {
             if (!event.pressed || snapshot === null) return;
-            if (isTerminalSnapshot(snapshot)) return;
+            // After the match resolves, End Turn becomes "continue": advance to the
+            // game's post-game summary screen (a renderer-local screen switch — the
+            // authoritative scene is unchanged, so no engine action is dispatched).
+            if (isTerminalSnapshot(snapshot)) {
+                const postGameScreen =
+                    loadedGame?.registry.sceneDefaultScreens?.[POST_GAME_SCENE_ID];
+                if (postGameScreen !== undefined) {
+                    useUiStore.getState().navigateToScreen(postGameScreen);
+                }
+                return;
+            }
             if (!snapshot.isMyTurn) return;
             const actionTick = typeof currentTick === 'number' ? currentTick : snapshot.tick;
             sendAction({
@@ -137,7 +152,7 @@ export default function GamePage(): React.ReactElement | null {
                 payload: {},
             });
         },
-        [snapshot, sendAction, currentTick],
+        [snapshot, sendAction, currentTick, loadedGame],
     );
     useInputAction('engine:undo', onUndoKey);
     useInputAction('engine:redo', onRedoKey);

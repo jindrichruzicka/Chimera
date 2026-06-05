@@ -100,6 +100,7 @@ function ReplayRow({
                 size="sm"
                 variant="primary"
                 aria-label={`Open replay recorded ${formatRecordedAt(item.recordedAt)}`}
+                data-testid="replay-open-btn"
                 onClick={() => onOpen(item.path)}
             >
                 Open
@@ -129,6 +130,7 @@ function PerspectiveReplayRow({
                 size="sm"
                 variant="primary"
                 aria-label={`Open perspective replay ${label}`}
+                data-testid="replay-open-btn"
                 onClick={() => onOpen(path)}
             >
                 Open
@@ -140,6 +142,8 @@ function PerspectiveReplayRow({
 export default function ReplaysPage(): React.ReactElement {
     const replayApi = useReplayApi();
     const router = useRouter();
+    // Read at render time (not in an effect), so guard the static-prerender pass
+    // where `window` is absent — the real query string is read on the client.
     const gameId = React.useMemo(
         () =>
             resolveShellGameId(
@@ -180,7 +184,10 @@ export default function ReplaysPage(): React.ReactElement {
 
     const handleOpenPerspective = React.useCallback(
         (path: string) => {
-            router.push(`/replays/player?path=${encodeURIComponent(path)}&kind=perspective`);
+            // Trailing slash matches next.config `trailingSlash: true`. The
+            // player reads `?path=`/`?kind=` reactively via `useSearchParams`,
+            // so the query survives this soft navigation.
+            router.push(`/replays/player/?path=${encodeURIComponent(path)}&kind=perspective`);
         },
         [router],
     );
@@ -191,7 +198,7 @@ export default function ReplaysPage(): React.ReactElement {
         state.perspectivePaths.length === 0;
 
     return (
-        <main style={pageStyle}>
+        <main style={pageStyle} data-testid="replays-page">
             <Heading level={1} size="xl">
                 Replays
             </Heading>

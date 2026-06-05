@@ -61,6 +61,9 @@ export function TacticsGameResultBanner(props: GameResultBannerProps): React.Rea
                 <p className={styles['text']} data-testid="game-result-text">
                     {resolveTacticsResultMessage(props)}
                 </p>
+                <p className={styles['hint']} data-testid="game-result-hint">
+                    Press Enter to continue
+                </p>
             </Card>
         </div>
     );

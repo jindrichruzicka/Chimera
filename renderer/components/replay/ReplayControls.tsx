@@ -94,7 +94,13 @@ export function ReplayControls({
                 ◀
             </Button>
             {isPlaying ? (
-                <Button size="sm" variant="primary" aria-label="Pause" onClick={onPause}>
+                <Button
+                    size="sm"
+                    variant="primary"
+                    aria-label="Pause"
+                    data-testid="replay-pause-btn"
+                    onClick={onPause}
+                >
                     Pause
                 </Button>
             ) : (
@@ -102,6 +108,7 @@ export function ReplayControls({
                     size="sm"
                     variant="primary"
                     aria-label="Play"
+                    data-testid="replay-play-btn"
                     disabled={atEnd}
                     onClick={onPlay}
                 >
@@ -129,13 +136,17 @@ export function ReplayControls({
             <Slider
                 className={styles['scrubber']}
                 label="Replay position"
+                data-testid="replay-scrubber"
                 min={0}
                 max={totalTicks}
                 step={1}
                 value={currentTick}
                 onChange={onSeek}
             />
-            <Caption tone="muted">{`${currentTick} / ${totalTicks}`}</Caption>
+            <Caption
+                tone="muted"
+                data-testid="replay-tick-counter"
+            >{`${currentTick} / ${totalTicks}`}</Caption>
             <Select
                 className={styles['speed']}
                 label="Playback speed"

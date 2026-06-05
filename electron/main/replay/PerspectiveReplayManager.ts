@@ -71,6 +71,14 @@ interface RecordingState {
 export class PerspectiveReplayManager {
     private readonly log: Logger;
     private recording: RecordingState | null = null;
+    /**
+     * Path of the most recently finalised perspective replay for the current
+     * match, or `null` when none has been finalised since the last `start`.
+     * Lets {@link exportCurrent} stay idempotent after the egress path has
+     * already auto-finalised the recording at game-over (mirrors
+     * `ReplayManager.exportCurrentMatch`).
+     */
+    private lastSavedPath: string | null = null;
 
     constructor(
         private readonly repository: PerspectiveReplayRepository,
@@ -102,6 +110,8 @@ export class PerspectiveReplayManager {
         if (this.recording !== null) {
             throw new Error('PerspectiveReplayManager.start: a recording is already in progress');
         }
+        // A new match supersedes any path remembered from the previous one.
+        this.lastSavedPath = null;
         this.recording = { header, frames: [] };
     }
 
@@ -181,11 +191,42 @@ export class PerspectiveReplayManager {
 
         try {
             const savedPath = await this.repository.save(file);
+            this.lastSavedPath = savedPath;
             this.log.debug('finalise: saved', { path: savedPath });
             return savedPath;
         } finally {
             this.recording = null;
         }
+    }
+
+    /**
+     * Idempotent "ensure this match's perspective replay is on disk, and give me
+     * its path" — the perspective counterpart to
+     * {@link ReplayManager.exportCurrentMatch}. Unlike the destructive
+     * {@link finalise}, it does not require an in-progress recording:
+     *
+     *   - recording still in progress → finalise it and return the new path;
+     *   - already finalised this match → return the remembered path (no second
+     *     file is written);
+     *   - nothing recorded or saved yet → throw.
+     *
+     * @throws {Error} when no recording is in progress and none was finalised
+     *   for the current match.
+     */
+    async exportCurrent(): Promise<string> {
+        this.log.debug('exportCurrent', {
+            recording: this.recording !== null,
+            hasSaved: this.lastSavedPath !== null,
+        });
+        if (this.recording !== null) {
+            return this.finalise();
+        }
+        if (this.lastSavedPath !== null) {
+            return this.lastSavedPath;
+        }
+        throw new Error(
+            'PerspectiveReplayManager.exportCurrent: no recording in progress and no saved replay',
+        );
     }
 
     /**

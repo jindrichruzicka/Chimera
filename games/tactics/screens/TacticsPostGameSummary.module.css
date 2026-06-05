@@ -1,11 +1,14 @@
 .root {
+    position: absolute;
+    inset: var(--ch-space-md);
+    display: grid;
+    place-items: center;
     font-family: var(--ch-font-ui);
-    inline-size: 100%;
-    max-inline-size: calc(var(--ch-button-min-width-lg) * 2 + var(--ch-space-lg));
 }
 
 .panel {
     inline-size: 100%;
+    max-inline-size: calc(var(--ch-button-min-width-lg) * 2 + var(--ch-space-lg));
 }
 
 .root[data-outcome='win'] .panel {

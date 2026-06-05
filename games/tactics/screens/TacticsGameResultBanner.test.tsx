@@ -12,6 +12,17 @@ afterEach(() => {
 });
 
 describe('TacticsGameResultBanner', () => {
+    it('shows a hint to press Enter to continue to the summary', () => {
+        render(
+            <TacticsGameResultBanner
+                localPlayerId={playerId('p1')}
+                gameResult={{ winnerIds: [playerId('p1')] }}
+            />,
+        );
+
+        expect(screen.getByTestId('game-result-hint').textContent).toBe('Press Enter to continue');
+    });
+
     it('shows a tactics victory message when the local player won', () => {
         const localPlayerId = playerId('p1');
 

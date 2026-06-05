@@ -13,6 +13,7 @@ import { AudioManagerContext, useAudioManager } from '../../audio/AudioManagerCo
 import { createAudioManagerSpy } from '../../audio/__test-support__/AudioManagerStubs.js';
 import { createInputActionRegistry } from '../../input/InputActionRegistry.js';
 import { InputActionRegistryContext } from '../../input/InputActionRegistryContext.js';
+import { useUiStore } from '../../state/uiStore.js';
 import {
     GameShell,
     type GameHudProps,
@@ -43,6 +44,9 @@ afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     eventAudioPlayerSpy.mockReset();
+    // uiStore is a module singleton; restore the default 'board' screen so the
+    // banner-visibility tests are independent of execution order.
+    useUiStore.getState().resetScreenNavigation();
 });
 
 describe('GameShell page object locators', () => {
@@ -630,6 +634,58 @@ describe('GameShell page object locators', () => {
     it('mounts PerfHud inside the game shell frame', () => {
         render(<GameShell tick={1} canUndo={false} canRedo={false} />);
         expect(screen.getByTestId('perf-hud-mock')).toBeTruthy();
+    });
+
+    it('shows the resolved result banner while the active screen is the board', () => {
+        useUiStore.getState().resetScreenNavigation();
+        const localPlayerId = playerId('p1');
+
+        render(
+            <GameShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                localPlayerId={localPlayerId}
+                gameResult={{ winnerIds: [localPlayerId] }}
+            />,
+        );
+
+        expect(screen.getByTestId('game-result-banner')).toBeTruthy();
+    });
+
+    it('hides the resolved result banner once the active screen is no longer the board', () => {
+        useUiStore.getState().navigateToScreen('summary');
+        const localPlayerId = playerId('p1');
+
+        render(
+            <GameShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                localPlayerId={localPlayerId}
+                gameResult={{ winnerIds: [localPlayerId] }}
+            />,
+        );
+
+        expect(screen.queryByTestId('game-result-banner')).toBeNull();
+    });
+
+    it('hides the fallback game-over banner once the active screen is no longer the board', () => {
+        useUiStore.getState().navigateToScreen('summary');
+
+        render(
+            <GameShell
+                tick={7}
+                canUndo={false}
+                canRedo={false}
+                isGameOver={true}
+                gameOverMessage="Game Over"
+            />,
+        );
+
+        expect(screen.queryByTestId('game-result-banner')).toBeNull();
     });
 });
 

@@ -823,6 +823,28 @@ describe('renderer app protocol', () => {
         ).toBe(path.join('/abs/path/renderer/out', '_next', 'static', 'chunks', 'app.js'));
     });
 
+    it('resolves nested routes when the query string carries encoded separators', () => {
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                requestUrl:
+                    'chimera://renderer/replays/player?path=%2Fvar%2Freplays%2Fmatch.chimera-replay',
+                headers: new Headers(),
+            }),
+        ).toBe(path.join('/abs/path/renderer/out', 'replays', 'player', 'index.html'));
+    });
+
+    it('resolves nested RSC fetches when the query string carries encoded separators', () => {
+        expect(
+            resolveRendererProtocolFilePath({
+                rendererRoot: '/abs/path/renderer/out',
+                requestUrl:
+                    'chimera://renderer/replays/player/index.txt?path=%2Fvar%2Freplays%2Fmatch.chimera-replay&_rsc=abc',
+                headers: new Headers(),
+            }),
+        ).toBe(path.join('/abs/path/renderer/out', 'replays', 'player', 'index.txt'));
+    });
+
     it('maps game asset requests to the game-owned assets directory', () => {
         expect(
             resolveRendererProtocolFilePath({
@@ -3451,11 +3473,12 @@ describe('main() — perspective replay recording (F44b T5)', () => {
 // ── Perspective-replay IPC wiring (F44b T7, #673) ─────────────────────────────
 // Covers the index.ts glue that exposes the chimera:replay:perspective:* surface
 // via `registerPerspectiveReplayHandlers`: that every channel is registered, and
-// that the injected `exportCurrent` gate closure rejects when no perspective
-// recording is active. The handler *factory* is unit-tested in
-// `ipc-handlers.test.ts` with injected stubs; these assert main() actually wires
-// it (the real `PerspectiveReplayManager` runs — `isRecording()` is false at boot
-// because no game is hosted, exercising the gate's reject branch for real).
+// that the injected `exportCurrent` gate closure rejects when no hosted session
+// is active. The handler *factory* is unit-tested in `ipc-handlers.test.ts` with
+// injected stubs; these assert main() actually wires it. `exportCurrent` itself
+// is idempotent (it returns the already-saved path once a match has finalised);
+// the gate is `activeSession === null`, which is true at boot because no game is
+// hosted — exercising the reject branch for real (F44 / T9).
 describe('main() — perspective replay IPC wiring (F44b T7)', () => {
     const findHandler = (channel: string): ((...args: readonly unknown[]) => unknown) | undefined =>
         ipcMainHandle.mock.calls.find(([registeredChannel]) => registeredChannel === channel)?.[1];
@@ -3483,13 +3506,11 @@ describe('main() — perspective replay IPC wiring (F44b T7)', () => {
         }
     });
 
-    it('export-current rejects when no perspective recording is active', async () => {
+    it('export-current rejects when no hosted session is active', async () => {
         await main();
 
         const handler = findHandler(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
         expect(handler).toBeTypeOf('function');
-        await expect(Promise.resolve(handler?.())).rejects.toThrow(
-            /no active perspective recording/,
-        );
+        await expect(Promise.resolve(handler?.())).rejects.toThrow(/no active hosted session/);
     });
 });

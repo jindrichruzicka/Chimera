@@ -36,7 +36,7 @@ describe('ReplayNavigationBridge', () => {
         listener?.('/replays/tactics/abc.chimera-replay');
 
         expect(mockPush).toHaveBeenCalledWith(
-            `/replays/player?path=${encodeURIComponent('/replays/tactics/abc.chimera-replay')}`,
+            `/replays/player/?path=${encodeURIComponent('/replays/tactics/abc.chimera-replay')}`,
         );
     });
 

@@ -18,6 +18,7 @@ interface LocatorWithChildren {
 interface TestPage {
     goto: (url: string) => Promise<null>;
     getByTestId: (testId: string) => LocatorWithChildren;
+    getByRole: (role: string, options?: { name?: string; exact?: boolean }) => ClickableLocator;
 }
 
 const buildPageDouble = (): {
@@ -56,6 +57,12 @@ const buildPageDouble = (): {
             requestedTestIds.push(testId);
             return makeLocator(testId);
         },
+        getByRole: (role: string, options?: { name?: string }): ClickableLocator => ({
+            click: async (): Promise<void> => {
+                clickedTestIds.push(`role=${role}${options?.name ? `[${options.name}]` : ''}`);
+            },
+            allTextContents: async (): Promise<string[]> => [],
+        }),
     };
 
     return { page: page as Page, clickedTestIds, requestedTestIds, visitedUrls };
@@ -71,6 +78,7 @@ describe('MainMenuPage', () => {
         expect(mainMenu.settingsButton).toBeDefined();
         expect(mainMenu.quitButton).toBeDefined();
         expect(mainMenu.componentGalleryButton).toBeDefined();
+        expect(mainMenu.replaysButton).toBeDefined();
         expect(mainMenu.menu).toBeDefined();
         expect(requestedTestIds).toContain('main-menu-play');
         expect(requestedTestIds).toContain('main-menu-settings');
