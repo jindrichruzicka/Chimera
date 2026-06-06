@@ -109,7 +109,10 @@ function useLoadedRendererGame(
 
 export default function ReplayPlayerPage(): React.ReactElement {
     const replayApi = useReplayApi();
-    const params = React.useMemo(() => new URLSearchParams(window.location.search), []);
+    const params = React.useMemo(
+        () => new URLSearchParams(typeof window !== 'undefined' ? window.location.search : ''),
+        [],
+    );
     const path = React.useMemo(() => params.get('path'), [params]);
     const kind = React.useMemo(() => parseReplayKind(params.get('kind')), [params]);
 

@@ -141,7 +141,10 @@ export default function ReplaysPage(): React.ReactElement {
     const replayApi = useReplayApi();
     const router = useRouter();
     const gameId = React.useMemo(
-        () => resolveShellGameId(new URLSearchParams(window.location.search)) ?? 'tactics',
+        () =>
+            resolveShellGameId(
+                new URLSearchParams(typeof window !== 'undefined' ? window.location.search : ''),
+            ) ?? 'tactics',
         [],
     );
     const [state, setState] = React.useState<LoadState>({ status: 'loading' });
