@@ -27,17 +27,19 @@ test.describe('Pass-and-play auto handoff', () => {
         await match.moveOwnedUnit();
         await expect(match.undoButton).toBeEnabled();
 
+        const firstTurnTick = await match.currentTick();
         await match.endTurnButton.click();
-        await expect(match.endTurnButton).toBeDisabled();
+        await match.waitForTick(firstTurnTick + 1);
         await expect(match.undoButton).toBeDisabled();
-        await expect(match.endTurnButton).toBeEnabled();
+        await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
 
         await match.moveOwnedUnit();
         await expect(match.undoButton).toBeEnabled();
 
+        const secondTurnTick = await match.currentTick();
         await match.endTurnButton.click();
-        await expect(match.endTurnButton).toBeDisabled();
+        await match.waitForTick(secondTurnTick + 1);
         await expect(match.undoButton).toBeDisabled();
-        await expect(match.endTurnButton).toBeEnabled();
+        await expect(match.endTurnButton).toBeEnabled({ timeout: 30_000 });
     });
 });

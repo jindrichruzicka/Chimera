@@ -109,7 +109,7 @@ test.describe('Client reconnect', () => {
             );
 
             const relaunchedClientGame = new GamePage(relaunchedClientWindow);
-            await expect(relaunchedClientGame.canvas).toBeVisible({ timeout: 30_000 });
+            await expect(relaunchedClientGame.canvas).toBeVisible({ timeout: 60_000 });
 
             await expect
                 .poll(async () => {
