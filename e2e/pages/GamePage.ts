@@ -438,7 +438,14 @@ export class GamePage {
     }
 
     private async readTacticsCanvasPixelStats(): Promise<CanvasPixelStats> {
-        await this.waitForCanvasInteractionFrame();
+        try {
+            await this.waitForCanvasInteractionFrame();
+        } catch {
+            // R3F uses demand-mode rendering: once the scene is stable it stops
+            // scheduling requestAnimationFrame callbacks. When no frames are
+            // incoming the canvas pixel state is already settled, so proceeding
+            // to take the screenshot is safe.
+        }
         const screenshot = await this.tacticsCanvas.screenshot({ type: 'png' });
         const frame = await this.decodeCanvasScreenshot(screenshot.toString('base64'));
         return analyzeCanvasPixels(frame);

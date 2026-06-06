@@ -28,7 +28,7 @@ test.describe('Tactics 3D render validation', () => {
         await game.assertTacticsCanvasHasBluePrimitive();
         await game.assertTacticsCanvasHasNoRedPrimitive();
 
-        await game.clickTacticsGridPoint({ x: 0, y: 0 });
+        await game.selectOwnedPrimitive();
         await game.assertTacticsCanvasHasBluePrimitive();
         await game.clickTacticsGridPoint({ x: 1, y: 0 });
 
