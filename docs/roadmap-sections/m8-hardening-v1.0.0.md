@@ -39,6 +39,8 @@ Implement `crash-reporter.ts` (`uncaughtException`, `unhandledRejection`, `rende
 
 Implement `ReplayFile`, `ReplaySerializer` (JSON + compressed), `ReplayPlayer` (reuses live `ActionPipeline`), and `ReplayManager` (record, finalise, load, list). Wire `window.__chimera.replay` IPC surface. Add cross-version compatibility guard.
 
+**GitHub**: [F44 — #654](https://github.com/jindrichruzicka/Chimera/issues/654)
+
 ---
 
 ## F45 — Chat System `§4.29`
