@@ -36,6 +36,7 @@ import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
+import type { ChatRelay } from '../ChatRelay.js';
 import type { E2eHooks } from '../runtime/e2e-hooks.js';
 
 export interface HostedSessionMetadata {
@@ -62,6 +63,11 @@ export interface LobbyManagerOptions {
     readonly onLocalSeatAdded?: (player: LobbyPlayerEntry) => void;
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
     readonly profileGate?: ProfileGate;
+    /**
+     * Mandatory host-side gate for inbound `CHAT` side-channel messages
+     * (Invariant #73). When omitted, chat messages are dropped (no bypass).
+     */
+    readonly chatRelay?: ChatRelay;
     readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot, checksum: number) => void;
     readonly onClientTickReceived?: (tick: number) => void;
     readonly e2eHooks?: E2eHooks;
@@ -107,6 +113,7 @@ export class LobbyManager {
     private readonly onLocalSeatAdded: LobbyManagerOptions['onLocalSeatAdded'];
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
     private readonly profileGate: LobbyManagerOptions['profileGate'];
+    private readonly chatRelay: LobbyManagerOptions['chatRelay'];
     private readonly onClientSnapshotReceived: LobbyManagerOptions['onClientSnapshotReceived'];
     private readonly onClientTickReceived: LobbyManagerOptions['onClientTickReceived'];
     private readonly e2eHooks: LobbyManagerOptions['e2eHooks'];
@@ -124,6 +131,7 @@ export class LobbyManager {
         this.onLocalSeatAdded = options.onLocalSeatAdded;
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
         this.profileGate = options.profileGate;
+        this.chatRelay = options.chatRelay;
         this.onClientSnapshotReceived = options.onClientSnapshotReceived;
         this.onClientTickReceived = options.onClientTickReceived;
         this.e2eHooks = options.e2eHooks;
@@ -216,6 +224,47 @@ export class LobbyManager {
                 // SessionRuntime.applyAction(); see §4.14 & §4.20.
             }),
             session.transport.onSideChannelReceived((from, msg) => {
+                if (msg.kind === 'chat') {
+                    // Invariant #73 — ChatRelay.relay() is the mandatory gate
+                    // between an inbound CHAT and rebroadcast. No bypass: when no
+                    // relay is wired, the message is dropped. The relay assigns
+                    // the authoritative id + serverTime and resolves recipients;
+                    // we only fan the result out over the transport.
+                    if (this.chatRelay === undefined) {
+                        return;
+                    }
+                    const result = this.chatRelay.relay(
+                        { from, body: msg.payload.text, scope: msg.payload.scope },
+                        (recipients, message) => {
+                            for (const pid of recipients) {
+                                session.transport.sendSideChannel(pid, {
+                                    kind: 'chat',
+                                    payload: {
+                                        id: message.id,
+                                        senderId: message.fromPlayerId,
+                                        text: message.body,
+                                        scope: message.scope,
+                                        timestamp: message.serverTime,
+                                    },
+                                });
+                            }
+                        },
+                    );
+                    if (!result.ok) {
+                        // Tell the offending sender why their message was dropped
+                        // (parallel to profile_reject) so the renderer can surface
+                        // a toast instead of the message silently vanishing. The
+                        // renderer toast and the WS wire frame are follow-on tasks;
+                        // today this reaches the sender over the in-process
+                        // provider (see WsHostTransport / chat-system.md).
+                        this.log.debug('chat:rejected', { from, reason: result.reason });
+                        session.transport.sendSideChannel(from, {
+                            kind: 'chat_reject',
+                            reason: result.reason,
+                        });
+                    }
+                    return;
+                }
                 if (msg.kind !== 'profile') {
                     return;
                 }
@@ -585,6 +634,10 @@ export class LobbyManager {
         // Delegate teardown to ProfileGate so the PlayerDirectory is reset and
         // stale profiles do not bleed into the next session (Invariant #61).
         this.profileGate?.onLobbyClose();
+
+        // Clear chat rate-limit buckets so token state does not bleed into the
+        // next session (Invariant #73 — relay state is session-scoped).
+        this.chatRelay?.reset();
 
         // Tear down all transport subscriptions before closing the session so
         // that re-hosting does not accumulate dead callbacks (BLOCK-2 fix).

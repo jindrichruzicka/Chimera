@@ -33,6 +33,17 @@ import type { ClientMessage, ServerMessage } from './messages.js';
 const PlayerId = z.string();
 
 /**
+ * Coarse first-line bound on an inbound `CHAT.body`, in UTF-16 code units, applied
+ * at the wire boundary so a hostile client cannot force the host to materialize an
+ * unbounded string (e.g. the relay's `[...body]` code-point spread) before the
+ * message is rejected. This is intentionally generous and well above the host
+ * relay's default `maxBodyLength` (500 code points): the relay still applies the
+ * precise, configurable per-policy cap and returns `too_long`. Anything past this
+ * coarse bound is clearly abusive and dropped as a malformed frame.
+ */
+export const WIRE_MAX_CHAT_BODY_LENGTH = 4096;
+
+/**
  * Routing scope for a CHAT frame. Mirrors `ChatScope` in `shared/chat.ts`;
  * the discriminated union rejects malformed `kind` discriminants at the wire
  * boundary so stale clients are detected before any field is read.
@@ -177,7 +188,8 @@ const ReadyStateUpdateMessage = z
 const ChatClientMessage = z
     .object({
         type: z.literal('CHAT'),
-        body: z.string(),
+        // Coarse DoS bound only; the host relay applies the precise per-policy cap.
+        body: z.string().max(WIRE_MAX_CHAT_BODY_LENGTH),
         scope: ChatScope,
     })
     .strict();

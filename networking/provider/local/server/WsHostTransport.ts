@@ -114,19 +114,26 @@ export class WsHostTransport implements HostTransport {
 
     private sideChannelToServerMessage(msg: SideChannelMessage): ServerMessage | null {
         if (msg.kind === 'chat') {
+            // The host-side ChatRelay (F45) is the authoritative source of `id`
+            // and `serverTime` (Invariant #73); the transport passes them through
+            // verbatim rather than re-stamping, so recipients see the relay's
+            // ordering clock — not a second, divergent wall-clock read.
             return {
                 type: 'CHAT',
                 id: msg.payload.id,
                 from: msg.payload.senderId,
                 body: msg.payload.text,
                 scope: msg.payload.scope,
-                serverTime: Date.now(),
+                serverTime: msg.payload.timestamp,
             };
         }
-        // profile: The current wire protocol has no SERVER_PROFILE_UPDATE frame.
-        // Sending a garbage LOBBY_STATE frame here is incorrect and confusing.
-        // Drop the side-channel silently until F14 adds proper protocol support.
-        // TODO(F14): add a SERVER_PROFILE_UPDATE message type to ServerMessage
+        // profile / profile_reject / chat_reject: the current wire protocol has
+        // no frame for these host→client side-channels, so they deliver only over
+        // the in-process provider today. Sending a garbage LOBBY_STATE frame here
+        // is incorrect and confusing, so drop silently until proper protocol
+        // support lands. (chat_reject is the sender-side rejection signal; without
+        // a wire frame a WS sender still sees a silent drop — see chat-system.md.)
+        // TODO(F14): add SERVER_PROFILE_UPDATE / chat_reject message types to ServerMessage
         return null;
     }
 }

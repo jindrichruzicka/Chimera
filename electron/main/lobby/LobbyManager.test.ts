@@ -23,6 +23,7 @@ import {
 } from './LobbyManager.js';
 import { PlayerDirectory } from '../profile/PlayerDirectory.js';
 import { createProfileGate } from '../profile/ProfileGate.js';
+import { ChatRelay } from '../ChatRelay.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import {
     playerId,
@@ -1375,6 +1376,140 @@ describe('LobbyManager — PROFILE_UPDATE side-channel', () => {
         // (still holds the profile from the 1st successful update)
         const entries = Object.values(directory.snapshot());
         expect(entries).toHaveLength(1);
+
+        await manager.closeLobby();
+    });
+});
+
+// ── CHAT side-channel (Invariant #73 — mandatory ChatRelay gate, no bypass) ──
+
+describe('LobbyManager — CHAT side-channel', () => {
+    it('routes an inbound CHAT through ChatRelay.relay() and rebroadcasts to recipients', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const chatRelay = new ChatRelay(createNoopLogger(), directory);
+        const relaySpy = vi.spyOn(chatRelay, 'relay');
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            chatRelay,
+        });
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Alice' }),
+        });
+        // Wait for the deferred onPlayerJoined so the client is in the directory
+        // (the recipient universe) before sending the CHAT.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const received: SideChannelMessage[] = [];
+        clientSession.transport.onSideChannelReceived((msg) => received.push(msg));
+
+        clientSession.transport.sendSideChannel({
+            kind: 'chat',
+            payload: {
+                id: '',
+                senderId: clientSession.localPlayerId,
+                text: 'hello world',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
+        });
+
+        // Every inbound CHAT is observably routed through relay() (no bypass).
+        expect(relaySpy).toHaveBeenCalledTimes(1);
+        expect(relaySpy.mock.calls[0]![0]).toEqual({
+            from: clientSession.localPlayerId,
+            body: 'hello world',
+            scope: { kind: 'lobby' },
+        });
+
+        // The rebroadcast reached the connected client with a host-assigned id —
+        // never the client-supplied placeholder.
+        const chat = received.find((m) => m.kind === 'chat');
+        expect(chat).toBeDefined();
+        if (chat?.kind === 'chat') {
+            expect(chat.payload.text).toBe('hello world');
+            expect(chat.payload.id).not.toBe('');
+            expect(chat.payload.senderId).toBe(clientSession.localPlayerId);
+        }
+
+        await manager.closeLobby();
+    });
+
+    it('drops an inbound CHAT when no ChatRelay is wired (no bypass path)', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            // chatRelay intentionally omitted — chat must be dropped, not relayed.
+        });
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Bob' }),
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const received: SideChannelMessage[] = [];
+        clientSession.transport.onSideChannelReceived((msg) => received.push(msg));
+
+        clientSession.transport.sendSideChannel({
+            kind: 'chat',
+            payload: {
+                id: '',
+                senderId: clientSession.localPlayerId,
+                text: 'silence',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
+        });
+
+        expect(received.find((m) => m.kind === 'chat')).toBeUndefined();
+
+        await manager.closeLobby();
+    });
+
+    it('sends chat_reject to the sender (and broadcasts nothing) when relay rejects a CHAT', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        // Tiny length cap so a normal body is rejected with reason 'too_long'.
+        const chatRelay = new ChatRelay(createNoopLogger(), directory, { maxBodyLength: 5 });
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            chatRelay,
+        });
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Carol' }),
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const received: SideChannelMessage[] = [];
+        clientSession.transport.onSideChannelReceived((msg) => received.push(msg));
+
+        clientSession.transport.sendSideChannel({
+            kind: 'chat',
+            payload: {
+                id: '',
+                senderId: clientSession.localPlayerId,
+                text: 'way too long to pass the cap',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
+        });
+
+        // The sender is told why the message was dropped — no longer a silent drop.
+        const reject = received.find((m) => m.kind === 'chat_reject');
+        expect(reject).toBeDefined();
+        expect((reject as { kind: 'chat_reject'; reason: string }).reason).toBe('too_long');
+
+        // A rejected CHAT is never rebroadcast.
+        expect(received.find((m) => m.kind === 'chat')).toBeUndefined();
 
         await manager.closeLobby();
     });

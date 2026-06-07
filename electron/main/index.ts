@@ -83,6 +83,7 @@ import {
 import { wireDefaultSceneActions } from './runtime/SceneActionWiring.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
+import { ChatRelay } from './ChatRelay.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import type {
     ClientTransport,
@@ -1092,6 +1093,12 @@ export async function main(): Promise<void> {
     // so LobbyManager stays a pure orchestrator (Invariant #61).
     const playerDirectory = new PlayerDirectory();
     const profileGate = createProfileGate(playerDirectory);
+
+    // ChatRelay is the sole gate between an inbound CHAT side-channel message and
+    // its rebroadcast (Invariant #73). Constructed here (the DIP wiring point)
+    // and injected into LobbyManager. `teamOf` is left at its default until team
+    // membership is modelled on the host, so `team`-scope routing is inert today.
+    const chatRelay = new ChatRelay(lobbyLogger, playerDirectory);
     const profileRepository = new FileProfileRepository(path.join(userData, 'profiles'));
     const profileManager = new ProfileManager(profileRepository);
     await ensureActiveProfile(profileManager, profileRepository, harnessFlags?.profileId);
@@ -1739,6 +1746,7 @@ export async function main(): Promise<void> {
             });
         },
         profileGate,
+        chatRelay,
         onClientSnapshotReceived: (snapshot, checksum) => {
             lastSentPlayerSnapshot = snapshot;
             resolvedE2eHooks?.onBroadcastChecksum(snapshot.tick, snapshot.viewerId, checksum);

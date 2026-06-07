@@ -56,12 +56,16 @@ export interface ChatMessage {
 }
 
 /**
- * Outcome of submitting a chat message to the host relay. `invalid_scope`
- * covers an unknown discriminant or a recipient the sender may not address.
+ * Why the host relay rejected a submitted chat message. `invalid_scope` covers
+ * an unknown discriminant or a recipient the sender may not address. This is the
+ * single source of truth for both {@link RelayResult} and the `chat_reject`
+ * side-channel frame the host sends back to the offending sender.
+ */
+export type ChatRejectReason = 'too_long' | 'rate_limited' | 'empty' | 'invalid_scope';
+
+/**
+ * Outcome of submitting a chat message to the host relay.
  */
 export type RelayResult =
     | { readonly ok: true }
-    | {
-          readonly ok: false;
-          readonly reason: 'too_long' | 'rate_limited' | 'empty' | 'invalid_scope';
-      };
+    | { readonly ok: false; readonly reason: ChatRejectReason };

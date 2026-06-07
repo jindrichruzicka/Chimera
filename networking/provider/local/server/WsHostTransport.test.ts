@@ -255,37 +255,34 @@ describe('WsHostTransport — sendSideChannel', () => {
         c2.ws.close();
     });
 
-    it('stamps a real serverTime (≈ Date.now()) on relayed CHAT frames', async () => {
+    it('passes through the relay-assigned id + serverTime on relayed CHAT frames', async () => {
         const { server, transport } = makeTransport();
         await server.ready();
         const { ws, playerId } = await connectAndJoin(server);
 
-        const before = Date.now();
         const p = new Promise<ServerMessage>((resolve) => {
             ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
         });
 
-        // Supply timestamp: 0 to simulate a client that sends an unset timestamp.
+        // The host-side ChatRelay is the authoritative source of `id` and
+        // `serverTime`; the transport must forward them verbatim, not re-stamp.
         transport.sendSideChannel(playerId, {
             kind: 'chat',
             payload: {
-                id: '',
+                id: 'relay-assigned-id',
                 senderId: toPlayerId('host'),
                 text: 'hi',
                 scope: { kind: 'lobby' },
-                timestamp: 0,
+                timestamp: 12_345,
             },
         });
 
         const received = await p;
-        const after = Date.now();
 
         expect(received.type).toBe('CHAT');
         if (received.type === 'CHAT') {
-            expect(received.serverTime).not.toBe(0);
-            // serverTime must be a real wall-clock stamp, not the forwarded 0.
-            expect(received.serverTime).toBeGreaterThanOrEqual(before);
-            expect(received.serverTime).toBeLessThanOrEqual(after + 50);
+            expect(received.id).toBe('relay-assigned-id');
+            expect(received.serverTime).toBe(12_345);
         }
 
         ws.close();

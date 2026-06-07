@@ -29,7 +29,7 @@ import type {
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
 import type { CommitmentEnvelope, CommitmentId } from '@chimera/simulation/projection/index.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
-import type { ChatScope } from '@chimera/shared/chat.js';
+import type { ChatScope, ChatRejectReason } from '@chimera/shared/chat.js';
 
 // ─── Re-export simulation primitives used by callers of this module ───────────
 
@@ -213,12 +213,16 @@ export interface PlayerProfilePayload {
  *   profile_ack    — PROFILE_UPDATE was admitted and the directory updated.
  *   profile_reject — PROFILE_UPDATE was rejected; `reason` is either
  *                    `'profile:<AdmissionRejection>'` or `'rate_limit'`.
+ *   chat_reject    — an inbound CHAT was rejected by the host ChatRelay gate
+ *                    (Invariant #73); `reason` is the relay's rejection cause so
+ *                    the sender can surface a toast. Parallel to profile_reject.
  */
 export type SideChannelMessage =
     | { readonly kind: 'chat'; readonly payload: ChatMessage }
     | { readonly kind: 'profile'; readonly payload: PlayerProfilePayload }
     | { readonly kind: 'profile_ack' }
-    | { readonly kind: 'profile_reject'; readonly reason: string };
+    | { readonly kind: 'profile_reject'; readonly reason: string }
+    | { readonly kind: 'chat_reject'; readonly reason: ChatRejectReason };
 
 // ─── Subscription handle ──────────────────────────────────────────────────────
 

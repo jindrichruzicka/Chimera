@@ -10,7 +10,11 @@
 
 import { describe, it, expect } from 'vitest';
 import { playerId as toPlayerId } from '../networking/provider/MultiplayerProvider.js';
-import { ClientMessageSchema, ServerMessageSchema } from './messages-schemas.js';
+import {
+    ClientMessageSchema,
+    ServerMessageSchema,
+    WIRE_MAX_CHAT_BODY_LENGTH,
+} from './messages-schemas.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -160,6 +164,24 @@ describe('ClientMessageSchema — CHAT', () => {
             body: 'hello',
             scope: { kind: 'lobby' },
             extra: true,
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('accepts a CHAT body at the wire length cap', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'CHAT',
+            body: 'x'.repeat(WIRE_MAX_CHAT_BODY_LENGTH),
+            scope: { kind: 'lobby' },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects a CHAT body that exceeds the wire length cap (coarse DoS bound)', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'CHAT',
+            body: 'x'.repeat(WIRE_MAX_CHAT_BODY_LENGTH + 1),
+            scope: { kind: 'lobby' },
         });
         expect(result.success).toBe(false);
     });
