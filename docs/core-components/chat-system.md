@@ -32,7 +32,7 @@ export interface ChatMessage {
     readonly fromPlayerId: PlayerId;
     readonly scope: ChatScope;
     readonly body: string;
-    readonly serverTime: number; // Host's sim tick
+    readonly serverTime: number; // Host wall-clock at relay (ordering only, not sim time)
 }
 ```
 
@@ -49,7 +49,7 @@ Client sends  { type: 'CHAT', body, scope }
   2. Apply rate limit (token bucket per PlayerId)
   3. Trim body to maxBodyLength
   4. Apply profanity filter if configured
-  5. Assign id (UUID) + serverTime (sim tick)
+  5. Assign id (UUID) + serverTime (host wall-clock, ordering only)
      │ if RelayResult.ok = false → send rejection back to sender only
      │ if ok = true ↓
      ▼

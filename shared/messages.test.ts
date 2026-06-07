@@ -58,10 +58,26 @@ describe('shared/messages — ClientMessage', () => {
         expect(msg.type).toBe('PROFILE_UPDATE');
     });
 
-    it('CHAT message has body (scope deferred to F45)', () => {
-        const msg: ClientMessage = { type: 'CHAT', body: 'hello' };
+    it('CHAT message carries a body and a routing scope', () => {
+        const msg: ClientMessage = { type: 'CHAT', body: 'hello', scope: { kind: 'lobby' } };
         expect(msg.type).toBe('CHAT');
         expect(msg.body).toBe('hello');
+        expect(msg.scope.kind).toBe('lobby');
+    });
+
+    it('CHAT message accepts team and private scopes', () => {
+        const team: ClientMessage = {
+            type: 'CHAT',
+            body: 'team only',
+            scope: { kind: 'team', teamId: 'red' },
+        };
+        const priv: ClientMessage = {
+            type: 'CHAT',
+            body: 'psst',
+            scope: { kind: 'private', toPlayerId: toPlayerId('p2') },
+        };
+        expect(team.scope.kind).toBe('team');
+        expect(priv.scope.kind).toBe('private');
     });
 
     it('READY_STATE_UPDATE message has a boolean ready flag', () => {
@@ -122,6 +138,21 @@ describe('shared/messages — ServerMessage', () => {
         const msg: ServerMessage = { type: 'CLOSE', reason: 'host_closed' };
         expect(msg.type).toBe('CLOSE');
         expect(msg.reason).toBe('host_closed');
+    });
+
+    it('CHAT message carries id, from, body, scope and serverTime', () => {
+        const msg: ServerMessage = {
+            type: 'CHAT',
+            id: 'msg-1',
+            from: toPlayerId('p1'),
+            body: 'hello',
+            scope: { kind: 'lobby' },
+            serverTime: 42,
+        };
+        expect(msg.type).toBe('CHAT');
+        expect(msg.id).toBe('msg-1');
+        expect(msg.scope.kind).toBe('lobby');
+        expect(msg.serverTime).toBe(42);
     });
 
     it('PONG message has sentAt (serverTime deferred to F-clock-skew)', () => {

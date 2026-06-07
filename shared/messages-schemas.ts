@@ -32,6 +32,17 @@ import type { ClientMessage, ServerMessage } from './messages.js';
 
 const PlayerId = z.string();
 
+/**
+ * Routing scope for a CHAT frame. Mirrors `ChatScope` in `shared/chat.ts`;
+ * the discriminated union rejects malformed `kind` discriminants at the wire
+ * boundary so stale clients are detected before any field is read.
+ */
+const ChatScope = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('lobby') }).strict(),
+    z.object({ kind: z.literal('team'), teamId: z.string() }).strict(),
+    z.object({ kind: z.literal('private'), toPlayerId: PlayerId }).strict(),
+]);
+
 const WirePlayerProfile = z
     .object({
         localProfileId: z.string(),
@@ -167,6 +178,7 @@ const ChatClientMessage = z
     .object({
         type: z.literal('CHAT'),
         body: z.string(),
+        scope: ChatScope,
     })
     .strict();
 
@@ -259,8 +271,10 @@ const RevealMessage = z
 const ChatServerMessage = z
     .object({
         type: z.literal('CHAT'),
+        id: z.string(),
         from: PlayerId,
         body: z.string(),
+        scope: ChatScope,
         serverTime: z.number(),
     })
     .strict();

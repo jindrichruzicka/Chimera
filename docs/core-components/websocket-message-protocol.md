@@ -82,6 +82,7 @@ type ServerMessage =
       }
     | {
           type: 'CHAT';
+          id: string; // Stable identifier assigned by the host relay (§4.29)
           from: PlayerId;
           body: string;
           scope: ChatScope;

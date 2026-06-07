@@ -80,6 +80,7 @@ export class WsClientTransport implements ClientTransport {
             this.connection.send({
                 type: 'CHAT',
                 body: msg.payload.text,
+                scope: msg.payload.scope,
             });
         }
         // profile updates are handled via PROFILE_UPDATE
@@ -187,7 +188,13 @@ export class WsClientTransport implements ClientTransport {
                 for (const cb of this.sideChannelCbs) {
                     cb({
                         kind: 'chat',
-                        payload: { senderId: msg.from, text: msg.body, timestamp: msg.serverTime },
+                        payload: {
+                            id: msg.id,
+                            senderId: msg.from,
+                            text: msg.body,
+                            scope: msg.scope,
+                            timestamp: msg.serverTime,
+                        },
                     });
                 }
                 break;

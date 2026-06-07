@@ -29,6 +29,7 @@ import type {
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
 import type { CommitmentEnvelope, CommitmentId } from '@chimera/simulation/projection/index.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
+import type { ChatScope } from '@chimera/shared/chat.js';
 
 // ─── Re-export simulation primitives used by callers of this module ───────────
 
@@ -160,12 +161,23 @@ export type DisconnectReason = 'kicked' | 'timeout' | 'host_closed' | 'error' | 
 // ─── Side-channel message types ───────────────────────────────────────────────
 
 /**
- * Stub for chat message payload. Expanded in F29 — Chat System (§4.29).
- * Carried by SideChannelMessage.kind === 'chat'.
+ * Chat message payload carried by `SideChannelMessage.kind === 'chat'`.
+ *
+ * Expanded in F45 — Chat System (§4.29) to carry the host-assigned `id` and the
+ * routing `scope`. The host relay assigns `id` and stamps `timestamp`; on the
+ * inbound (client → host) path both are placeholders (`id: ''`, `timestamp: 0`)
+ * until `ChatRelay` (F45) assigns the authoritative values.
+ *
+ * This payload is the wire form of the canonical `ChatMessage` in
+ * `shared/chat.ts`; the field names differ (`senderId`/`text`/`timestamp`)
+ * because this type predates the contract. Chat is a cosmetic side-channel and
+ * never an `EngineAction` (Invariant #72).
  */
 export interface ChatMessage {
+    readonly id: string;
     readonly senderId: PlayerId;
     readonly text: string;
+    readonly scope: ChatScope;
     readonly timestamp: number;
 }
 

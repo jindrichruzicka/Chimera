@@ -144,7 +144,13 @@ describe('SideChannelMessage', () => {
     it('chat variant has kind and payload', () => {
         const msg: SideChannelMessage = {
             kind: 'chat',
-            payload: { senderId: playerId('p1'), text: 'hello', timestamp: 0 },
+            payload: {
+                id: '',
+                senderId: playerId('p1'),
+                text: 'hello',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
         };
         expect(msg.kind).toBe('chat');
     });

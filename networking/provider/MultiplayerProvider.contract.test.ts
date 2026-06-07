@@ -70,7 +70,13 @@ function makeAction(playerId: PlayerId): EngineAction {
 function makeChatMsg(text: string): SideChannelMessage {
     return {
         kind: 'chat',
-        payload: { senderId: toPlayerId('contract-sender'), text, timestamp: 0 },
+        payload: {
+            id: '',
+            senderId: toPlayerId('contract-sender'),
+            text,
+            scope: { kind: 'lobby' },
+            timestamp: 0,
+        },
     };
 }
 

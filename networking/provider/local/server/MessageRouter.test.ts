@@ -144,13 +144,13 @@ describe('MessageRouter — ACTION routing', () => {
 // ─── Side-channel routing ─────────────────────────────────────────────────────
 
 describe('MessageRouter — side-channel routing', () => {
-    it('routes CHAT messages with timestamp: 0 placeholder for transport stamping', () => {
+    it('routes CHAT messages with id: "" and timestamp: 0 placeholders for the host relay', () => {
         const bus = new FakeMessageBus();
         const router = new MessageRouter(bus);
         const received: { readonly from: PlayerId; readonly message: unknown }[] = [];
         router.onSideChannelReceived((from, message) => received.push({ from, message }));
 
-        bus.emit(playerOne, { type: 'CHAT', body: 'hi' });
+        bus.emit(playerOne, { type: 'CHAT', body: 'hi', scope: { kind: 'team', teamId: 'red' } });
 
         expect(received).toEqual([
             {
@@ -158,8 +158,10 @@ describe('MessageRouter — side-channel routing', () => {
                 message: {
                     kind: 'chat',
                     payload: {
+                        id: '',
                         senderId: playerOne,
                         text: 'hi',
+                        scope: { kind: 'team', teamId: 'red' },
                         timestamp: 0,
                     },
                 },
@@ -197,7 +199,7 @@ describe('MessageRouter — side-channel routing', () => {
         );
         unsubscribe();
 
-        bus.emit(playerOne, { type: 'CHAT', body: 'hi' });
+        bus.emit(playerOne, { type: 'CHAT', body: 'hi', scope: { kind: 'lobby' } });
 
         expect(received).toHaveLength(0);
     });

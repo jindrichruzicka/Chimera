@@ -192,12 +192,23 @@ describe('WsHostTransport — sendSideChannel', () => {
 
         const chatMsg: SideChannelMessage = {
             kind: 'chat',
-            payload: { senderId: toPlayerId('host'), text: 'hello', timestamp: 0 },
+            payload: {
+                id: 'msg-7',
+                senderId: toPlayerId('host'),
+                text: 'hello',
+                scope: { kind: 'team', teamId: 'red' },
+                timestamp: 0,
+            },
         };
         transport.sendSideChannel(c1.playerId, chatMsg);
 
         const r1 = await p1;
         expect(r1.type).toBe('CHAT');
+        // id and scope must survive the side-channel → wire transformation.
+        if (r1.type === 'CHAT') {
+            expect(r1.id).toBe('msg-7');
+            expect(r1.scope).toEqual({ kind: 'team', teamId: 'red' });
+        }
 
         const c2Barrier = new Promise<ServerMessage>((resolve) => {
             c2.ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
@@ -228,7 +239,13 @@ describe('WsHostTransport — sendSideChannel', () => {
 
         transport.sendSideChannel('broadcast', {
             kind: 'chat',
-            payload: { senderId: toPlayerId('host'), text: 'all', timestamp: 0 },
+            payload: {
+                id: '',
+                senderId: toPlayerId('host'),
+                text: 'all',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
         });
 
         const [r1, r2] = await Promise.all([p1, p2]);
@@ -251,7 +268,13 @@ describe('WsHostTransport — sendSideChannel', () => {
         // Supply timestamp: 0 to simulate a client that sends an unset timestamp.
         transport.sendSideChannel(playerId, {
             kind: 'chat',
-            payload: { senderId: toPlayerId('host'), text: 'hi', timestamp: 0 },
+            payload: {
+                id: '',
+                senderId: toPlayerId('host'),
+                text: 'hi',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
         });
 
         const received = await p;

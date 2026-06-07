@@ -416,7 +416,13 @@ describe('WsClientTransport — onSideChannelReceived', () => {
 
         hostTransport.sendSideChannel(playerId, {
             kind: 'chat',
-            payload: { senderId: toPlayerId('host'), text: 'hello', timestamp: 0 },
+            payload: {
+                id: '',
+                senderId: toPlayerId('host'),
+                text: 'hello',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
         });
         const message = await messageReceived;
 

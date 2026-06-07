@@ -119,22 +119,47 @@ describe('ClientMessageSchema — PROFILE_UPDATE', () => {
 });
 
 describe('ClientMessageSchema — CHAT', () => {
-    it('parses a valid CHAT message without scope (scope deferred to F45)', () => {
-        // scope is removed from the wire protocol until F45 Chat System is implemented.
+    it('parses a CHAT message for every scope variant', () => {
+        const scopes = [
+            { kind: 'lobby' },
+            { kind: 'team', teamId: 'red' },
+            { kind: 'private', toPlayerId: toPlayerId('p2') },
+        ];
+        for (const scope of scopes) {
+            const result = ClientMessageSchema.safeParse({ type: 'CHAT', body: 'hi', scope });
+            expect(result.success).toBe(true);
+        }
+    });
+
+    it('rejects CHAT with no scope (scope is required)', () => {
+        const result = ClientMessageSchema.safeParse({ type: 'CHAT', body: 'hello' });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects CHAT with an unknown scope discriminant', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'CHAT',
             body: 'hello',
+            scope: { kind: 'all' },
         });
-        expect(result.success).toBe(true);
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a team scope missing its teamId', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'CHAT',
+            body: 'hello',
+            scope: { kind: 'team' },
+        });
+        expect(result.success).toBe(false);
     });
 
     it('rejects CHAT with unknown extra fields (strict schema)', () => {
-        // After scope removal, sending scope on the wire must be rejected
-        // so both ends stay in sync and stale clients are detected at the boundary.
         const result = ClientMessageSchema.safeParse({
             type: 'CHAT',
             body: 'hello',
-            scope: 'all',
+            scope: { kind: 'lobby' },
+            extra: true,
         });
         expect(result.success).toBe(false);
     });
@@ -191,6 +216,47 @@ describe('ServerMessageSchema — WELCOME', () => {
         const result = ServerMessageSchema.safeParse({
             type: 'WELCOME',
             lobbyState: { info: defaultLobbyInfo, players: [] },
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ServerMessageSchema — CHAT', () => {
+    it('parses a valid CHAT message carrying id and scope', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'CHAT',
+            id: 'msg-1',
+            from: toPlayerId('p1'),
+            body: 'hello',
+            scope: { kind: 'lobby' },
+            serverTime: 42,
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'CHAT') {
+            expect(result.data.id).toBe('msg-1');
+            expect(result.data.scope.kind).toBe('lobby');
+        }
+    });
+
+    it('rejects CHAT missing id', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'CHAT',
+            from: toPlayerId('p1'),
+            body: 'hello',
+            scope: { kind: 'lobby' },
+            serverTime: 42,
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects CHAT with a malformed scope discriminant', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'CHAT',
+            id: 'msg-1',
+            from: toPlayerId('p1'),
+            body: 'hello',
+            scope: { kind: 'whisper', toPlayerId: toPlayerId('p2') },
+            serverTime: 42,
         });
         expect(result.success).toBe(false);
     });

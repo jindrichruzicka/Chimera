@@ -61,7 +61,13 @@ function makeAction(playerId: PlayerId): EngineAction {
 function makeChatSideChannel(text: string): SideChannelMessage {
     return {
         kind: 'chat',
-        payload: { senderId: toPlayerId('p1'), text, timestamp: 0 },
+        payload: {
+            id: '',
+            senderId: toPlayerId('p1'),
+            text,
+            scope: { kind: 'lobby' },
+            timestamp: 0,
+        },
     };
 }
 

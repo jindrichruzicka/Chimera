@@ -221,7 +221,13 @@ describe('LocalWebSocketProvider integration — side-channel', () => {
 
         hosted.transport.sendSideChannel('broadcast', {
             kind: 'chat',
-            payload: { senderId: toPlayerId('host'), text: 'hello', timestamp: 0 },
+            payload: {
+                id: '',
+                senderId: toPlayerId('host'),
+                text: 'hello',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
         });
 
         await wait(40);
@@ -251,7 +257,13 @@ describe('LocalWebSocketProvider integration — side-channel', () => {
 
         client.transport.sendSideChannel({
             kind: 'chat',
-            payload: { senderId: clientId, text: 'ping', timestamp: 0 },
+            payload: {
+                id: '',
+                senderId: clientId,
+                text: 'ping',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
         });
 
         await wait(40);

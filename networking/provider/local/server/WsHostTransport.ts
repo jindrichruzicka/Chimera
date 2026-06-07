@@ -116,8 +116,10 @@ export class WsHostTransport implements HostTransport {
         if (msg.kind === 'chat') {
             return {
                 type: 'CHAT',
+                id: msg.payload.id,
                 from: msg.payload.senderId,
                 body: msg.payload.text,
+                scope: msg.payload.scope,
                 serverTime: Date.now(),
             };
         }

@@ -115,11 +115,19 @@ export class MessageRouter {
 
             case 'CHAT':
                 for (const cb of this.sideChannelCbs) {
-                    // Internal placeholder only: WsHostTransport stamps wire-level CHAT.serverTime.
-                    // Keep this at 0 so review readers do not treat router-local payload time as authoritative.
+                    // Internal placeholders only: the host relay (F45) assigns the
+                    // authoritative `id`, and WsHostTransport stamps wire-level
+                    // CHAT.serverTime. Keep `id` empty and `timestamp` at 0 so review
+                    // readers do not treat router-local payload values as authoritative.
                     cb(from, {
                         kind: 'chat',
-                        payload: { senderId: from, text: msg.body, timestamp: 0 },
+                        payload: {
+                            id: '',
+                            senderId: from,
+                            text: msg.body,
+                            scope: msg.scope,
+                            timestamp: 0,
+                        },
                     });
                 }
                 break;
