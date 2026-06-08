@@ -38,6 +38,7 @@ import {
     type Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
+import type { ChatMessage } from '@chimera/shared/chat.js';
 import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
@@ -1512,6 +1513,130 @@ describe('LobbyManager — CHAT side-channel', () => {
         expect(received.find((m) => m.kind === 'chat')).toBeUndefined();
 
         await manager.closeLobby();
+    });
+
+    it('delivers an inbound CHAT to the local host in-process via onLocalChatDelivered', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const chatRelay = new ChatRelay(createNoopLogger(), directory);
+        const localDelivered: ChatMessage[] = [];
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            chatRelay,
+            onLocalChatDelivered: (message) => localDelivered.push(message),
+        });
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        // Add the host to the directory so it is a recipient of a lobby-scope
+        // message (the recipient universe is the directory roster). A distinct
+        // localProfileId avoids a namespace collision with the joining client.
+        directory.add(
+            hostInfo.hostId,
+            makeValidProfile({ localProfileId: localProfileId('host-001'), displayName: 'Host' }),
+        );
+
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Alice' }),
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        clientSession.transport.sendSideChannel({
+            kind: 'chat',
+            payload: {
+                id: '',
+                senderId: clientSession.localPlayerId,
+                text: 'hello host',
+                scope: { kind: 'lobby' },
+                timestamp: 0,
+            },
+        });
+
+        // The host renderer now sees inbound chat (previously it reached no one):
+        // delivered in-process with the host-assigned id, not the placeholder.
+        expect(localDelivered).toHaveLength(1);
+        expect(localDelivered[0]!.body).toBe('hello host');
+        expect(localDelivered[0]!.fromPlayerId).toBe(clientSession.localPlayerId);
+        expect(localDelivered[0]!.id).not.toBe('');
+
+        await manager.closeLobby();
+    });
+
+    it('sendLocalChat routes through the relay, delivering locally and to remote recipients', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const chatRelay = new ChatRelay(createNoopLogger(), directory);
+        const relaySpy = vi.spyOn(chatRelay, 'relay');
+        const localDelivered: ChatMessage[] = [];
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            chatRelay,
+            onLocalChatDelivered: (message) => localDelivered.push(message),
+        });
+
+        const hostInfo = await manager.hostLobby(HOST_PARAMS);
+        const clientSession = await provider.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Alice' }),
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        const received: SideChannelMessage[] = [];
+        clientSession.transport.onSideChannelReceived((msg) => received.push(msg));
+
+        // Private scope guarantees the sender (local host) is a recipient
+        // regardless of directory membership; the client is the remote recipient.
+        const result = manager.sendLocalChat('hi there', {
+            kind: 'private',
+            toPlayerId: clientSession.localPlayerId,
+        });
+
+        expect(result).toEqual({ ok: true });
+        // The local host's own message is delivered in-process (it reaches the renderer).
+        expect(relaySpy).toHaveBeenCalledTimes(1);
+        expect(localDelivered).toHaveLength(1);
+        expect(localDelivered[0]!.body).toBe('hi there');
+        expect(localDelivered[0]!.fromPlayerId).toBe(hostInfo.hostId);
+        expect(localDelivered[0]!.id).not.toBe('');
+        // The remote recipient receives the wire form over the transport.
+        const chat = received.find((m) => m.kind === 'chat');
+        expect(chat).toBeDefined();
+        if (chat?.kind === 'chat') {
+            expect(chat.payload.text).toBe('hi there');
+            expect(chat.payload.senderId).toBe(hostInfo.hostId);
+        }
+
+        await manager.closeLobby();
+    });
+
+    it('sendLocalChat returns a benign rejection on a joined-client session (host path only)', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const code = (await hostManager.hostLobby(HOST_PARAMS)).sessionId;
+
+        const directory = new PlayerDirectory();
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            chatRelay: new ChatRelay(createNoopLogger(), directory),
+        });
+        await joinManager.joinLobby({ address: code });
+
+        // Client send over the wire is a deliberate follow-on — no local relay path.
+        expect(joinManager.sendLocalChat('hi', { kind: 'lobby' })).toEqual({
+            ok: false,
+            reason: 'no_session',
+        });
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('sendLocalChat returns a no_session rejection when there is no active session', () => {
+        const manager = makeManager();
+
+        expect(manager.sendLocalChat('hi', { kind: 'lobby' })).toEqual({
+            ok: false,
+            reason: 'no_session',
+        });
     });
 });
 

@@ -27,6 +27,7 @@
 
 import { z } from 'zod';
 import type { ClientMessage, ServerMessage } from './messages.js';
+import { ChatScopeSchema } from './chat-schemas.js';
 
 // ─── Primitive re-usable schemas ──────────────────────────────────────────────
 
@@ -44,15 +45,12 @@ const PlayerId = z.string();
 export const WIRE_MAX_CHAT_BODY_LENGTH = 4096;
 
 /**
- * Routing scope for a CHAT frame. Mirrors `ChatScope` in `shared/chat.ts`;
- * the discriminated union rejects malformed `kind` discriminants at the wire
- * boundary so stale clients are detected before any field is read.
+ * Routing scope for a CHAT frame. Reuses the canonical {@link ChatScopeSchema}
+ * from `shared/chat-schemas.ts` so the wire boundary, the IPC boundary, and the
+ * preload boundary all validate the same shape — the discriminated union rejects
+ * malformed `kind` discriminants before any field is read.
  */
-const ChatScope = z.discriminatedUnion('kind', [
-    z.object({ kind: z.literal('lobby') }).strict(),
-    z.object({ kind: z.literal('team'), teamId: z.string() }).strict(),
-    z.object({ kind: z.literal('private'), toPlayerId: PlayerId }).strict(),
-]);
+const ChatScope = ChatScopeSchema;
 
 const WirePlayerProfile = z
     .object({

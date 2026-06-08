@@ -13,6 +13,7 @@
 // the Debug Inspector preload lives elsewhere.
 
 import type { LogEntry } from '@chimera/shared/logging.js';
+import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
 import type {
     PerspectiveReplayListBridge,
@@ -50,6 +51,9 @@ export type { SceneId, SceneTransitionState };
 
 /** Resolved game outcome. Canonical: simulation/ (§4.38). */
 export type { GameResult };
+
+/** Chat contract types. Canonical: shared/chat.ts (§4.29 — Chat System). */
+export type { ChatMessage, ChatScope, RelayResult };
 
 /**
  * Constructs a branded {@link PlayerId} from a raw string.
@@ -690,9 +694,36 @@ export interface PerspectiveReplayAPI extends PerspectiveReplayListBridge {
     closePlayback(): Promise<void>;
 }
 
-/** Stub. Expanded in F45 — Chat System (§4.29). */
-// eslint-disable-next-line @typescript-eslint/no-empty-object-type
-export interface ChatAPI {}
+/**
+ * F45 — Chat System (§4.29). The renderer's window into the bounded,
+ * host-relayed chat layer. All messages route through the host's `ChatRelay`;
+ * `send` resolves the relay's {@link RelayResult}, `onMessage` delivers relayed
+ * messages, `history` returns a bounded server-ordered list, and `mute`/`unmute`
+ * manage the local mute filter (main-side; muted senders are not delivered).
+ */
+export interface ChatAPI {
+    /**
+     * Submit a chat message to the host relay. Resolves the relay's outcome —
+     * `{ ok: true }` on acceptance, or `{ ok: false, reason }` when the relay
+     * rejects it (empty / too long / invalid scope / rate limited).
+     */
+    send(body: string, scope: ChatScope): Promise<RelayResult>;
+    /**
+     * Subscribe to relayed chat messages delivered to the local player. Returns
+     * an {@link Unsubscribe} that removes exactly this listener.
+     */
+    onMessage(cb: (message: ChatMessage) => void): Unsubscribe;
+    /**
+     * Fetch up to `maxEntries` of the most recent messages, in server order.
+     * Omitting `maxEntries` returns the full bounded buffer. Muted senders are
+     * excluded.
+     */
+    history(maxEntries?: number): Promise<readonly ChatMessage[]>;
+    /** Mute a player: their messages are no longer delivered or shown in history. */
+    mute(playerId: PlayerId): void;
+    /** Unmute a player: restores delivery and history visibility. */
+    unmute(playerId: PlayerId): void;
+}
 
 /** Stub. Expanded in F43 — Crash Reporter / Logging (§4.27). */
 export interface LogsAPI {

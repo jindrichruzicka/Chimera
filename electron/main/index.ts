@@ -21,6 +21,7 @@ import {
     registerProfileHandlers,
     registerReplayHandlers,
     registerPerspectiveReplayHandlers,
+    registerChatHandlers,
 } from './ipc/ipc-handlers.js';
 import {
     createLogger,
@@ -84,6 +85,7 @@ import { wireDefaultSceneActions } from './runtime/SceneActionWiring.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { ChatRelay } from './ChatRelay.js';
+import { ChatHub } from './ChatHub.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import type {
     ClientTransport,
@@ -98,6 +100,7 @@ import {
     GAME_TICK_CHANNEL,
 } from '../preload/apis/game-api.js';
 import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
+import { CHAT_MESSAGE_CHANNEL } from '../preload/apis/chat-api.js';
 import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
@@ -1144,6 +1147,20 @@ export async function main(): Promise<void> {
     const resolvedE2eHooks = getE2eHooks();
     let activeE2eHooks: E2eHooks | undefined = undefined;
 
+    // ChatHub is the recipient-side terminus for the local player (§4.29): it
+    // owns the bounded history buffer + mute set and pushes delivered messages to
+    // the renderer. Chat is private-capable, so it targets the primary game window
+    // only (mirroring snapshot egress, WARN-1) rather than every BrowserWindow.
+    const chatHub = new ChatHub({
+        logger: lobbyLogger,
+        onMessage: (message) => {
+            const win = mainWindow;
+            if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(CHAT_MESSAGE_CHANNEL, message);
+            }
+        },
+    });
+
     const lobbyManager = new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, {
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
         onSessionHosted: (transport, metadata) => {
@@ -1747,6 +1764,9 @@ export async function main(): Promise<void> {
         },
         profileGate,
         chatRelay,
+        onLocalChatDelivered: (message) => {
+            chatHub.deliverLocal(message);
+        },
         onClientSnapshotReceived: (snapshot, checksum) => {
             lastSentPlayerSnapshot = snapshot;
             resolvedE2eHooks?.onBroadcastChecksum(snapshot.tick, snapshot.viewerId, checksum);
@@ -2065,6 +2085,24 @@ export async function main(): Promise<void> {
         logger: logger.child({ module: 'profile' }),
         profileManager,
         playerDirectory,
+    });
+
+    // Register the `chimera:chat:*` channels (§4.29). `send` routes through the
+    // host ChatRelay via LobbyManager.sendLocalChat (the mandatory gate,
+    // Invariant #73); `history` / `mute` / `unmute` read and mutate ChatHub
+    // state. The `chimera:chat:message` push is driven by ChatHub's `onMessage`
+    // (configured above) — there is no invoke handler for it.
+    registerChatHandlers({
+        ipcMain,
+        logger: logger.child({ module: 'chat' }),
+        sendChat: (body, scope) => lobbyManager.sendLocalChat(body, scope),
+        history: (maxEntries) => chatHub.history(maxEntries),
+        mute: (playerId) => {
+            chatHub.mute(playerId);
+        },
+        unmute: (playerId) => {
+            chatHub.unmute(playerId);
+        },
     });
 
     const createWindow = (): void => {

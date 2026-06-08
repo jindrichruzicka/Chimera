@@ -27,6 +27,7 @@ import { toCommitmentId } from '@chimera/simulation/projection/index.js';
 import { toSlotId, playerId } from '../api-types.js';
 import type {
     ActionRejection,
+    ChatMessage,
     CommitmentReveal,
     CrashRecoveryStatus,
     DeviceInfo,
@@ -35,6 +36,7 @@ import type {
     LobbyState,
     PerspectiveReplayPlaybackInfo,
     PlayerProfile,
+    RelayResult,
     ReplayListItem,
     ReplayPlaybackInfo,
     ResolvedSettings,
@@ -325,6 +327,53 @@ export const PerspectiveReplayPlaybackInfoSchema = z.object({
     totalTicks: z.number().int(),
     viewerId: z.string(),
 }) satisfies z.ZodType<PerspectiveReplayPlaybackInfo>;
+
+// ─── Chat domain schemas (§4.29) ──────────────────────────────────────────────
+//
+// Response-side mirror of the canonical chat contract (`shared/chat.ts`). Kept
+// local to the preload boundary like every other namespace's response schema —
+// the preload owns its own drift gate and imports `shared/` type-only.
+
+/**
+ * Schema for the {@link import('../api-types.js').ChatScope} routing discriminant
+ * embedded in a {@link ChatMessage}. Structural validation only; the host relay
+ * is the source of truth for scope semantics (recipient resolution, Invariant #73).
+ */
+const ChatScopeSchema = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('lobby') }).strict(),
+    z.object({ kind: z.literal('team'), teamId: z.string() }).strict(),
+    z.object({ kind: z.literal('private'), toPlayerId: z.string() }).strict(),
+]);
+
+/**
+ * Schema for a {@link ChatMessage} pushed on `chimera:chat:message` or returned
+ * by `chimera:chat:history`. The `as unknown as` cast bridges the `PlayerId`
+ * brand on `fromPlayerId` (and inside a private `scope`) — the runtime shape is
+ * validated exactly; only the compile-time brand is re-applied by the annotation.
+ */
+export const ChatMessageSchema: z.ZodType<ChatMessage> = z
+    .object({
+        id: z.string(),
+        fromPlayerId: z.string(),
+        scope: ChatScopeSchema,
+        body: z.string(),
+        serverTime: z.number(),
+    })
+    .strict() as unknown as z.ZodType<ChatMessage>;
+
+/** Schema for the bounded, server-ordered list returned by `chimera:chat:history`. */
+export const ChatMessageListSchema: z.ZodType<readonly ChatMessage[]> = z.array(ChatMessageSchema);
+
+/** Schema for the {@link RelayResult} returned by `chimera:chat:send`. */
+export const RelayResultSchema = z.discriminatedUnion('ok', [
+    z.object({ ok: z.literal(true) }).strict(),
+    z
+        .object({
+            ok: z.literal(false),
+            reason: z.enum(['too_long', 'rate_limited', 'empty', 'invalid_scope', 'no_session']),
+        })
+        .strict(),
+]) satisfies z.ZodType<RelayResult>;
 
 // ─── System device-info schema (§4.17) ───────────────────────────────────────
 

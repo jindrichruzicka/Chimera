@@ -84,7 +84,13 @@ describe('shared/chat — RelayResult', () => {
     });
 
     it('failure result carries a reason for each rejection cause', () => {
-        const reasons = ['too_long', 'rate_limited', 'empty', 'invalid_scope'] as const;
+        const reasons = [
+            'too_long',
+            'rate_limited',
+            'empty',
+            'invalid_scope',
+            'no_session',
+        ] as const;
         for (const reason of reasons) {
             const result: RelayResult = { ok: false, reason };
             expect(result.ok).toBe(false);

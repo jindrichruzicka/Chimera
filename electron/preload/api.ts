@@ -20,6 +20,7 @@
 import { contextBridge, ipcRenderer } from 'electron';
 import type { ChimeraAPI } from './api-types.js';
 import { buildExtensionsApi } from './apis/extensions-api.js';
+import { createChatApi } from './apis/chat-api.js';
 import { createGameApi } from './apis/game-api.js';
 import { createLobbyApi } from './apis/lobby-api.js';
 import { createProfileApi } from './apis/profile-api.js';
@@ -77,11 +78,11 @@ const api: ChimeraAPI = {
     system: createSystemApi(port),
     profile: createProfileApi(port),
     replay: createReplayApi(port),
+    chat: createChatApi(port),
     // Deferred namespaces — the interfaces are empty stubs today (see the
     // `*API` declarations in `api-types.ts`) and will gain concrete methods
-    // in their respective milestones (F45, F43). Exposing empty objects now
-    // keeps `window.__chimera` shape-stable for the renderer.
-    chat: {},
+    // in their respective milestones (F43). Exposing empty objects now keeps
+    // `window.__chimera` shape-stable for the renderer.
     logs: buildLogsApi(port),
     extensions: buildExtensionsApi(),
 };

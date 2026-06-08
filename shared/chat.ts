@@ -56,12 +56,25 @@ export interface ChatMessage {
 }
 
 /**
- * Why the host relay rejected a submitted chat message. `invalid_scope` covers
- * an unknown discriminant or a recipient the sender may not address. This is the
- * single source of truth for both {@link RelayResult} and the `chat_reject`
- * side-channel frame the host sends back to the offending sender.
+ * Why a submitted chat message did not result in a relay. The first four are
+ * the host relay's policy rejections — `invalid_scope` covers an unknown
+ * discriminant or a recipient the sender may not address. `no_session` is a
+ * *submission-path* outcome, not a relay-policy one: the local sender had no
+ * active hosted session to gate the message (e.g. `send` was called before a
+ * lobby was hosted, or from a joined client whose wire send-path is not yet
+ * implemented). The host relay (`ChatRelay.relay`) never emits `no_session`, so
+ * the host→sender `chat_reject` frame never carries it; it surfaces only on the
+ * local `RelayResult` returned by the submission path.
+ *
+ * This is the single source of truth for both {@link RelayResult} and the
+ * `chat_reject` side-channel frame the host sends back to the offending sender.
  */
-export type ChatRejectReason = 'too_long' | 'rate_limited' | 'empty' | 'invalid_scope';
+export type ChatRejectReason =
+    | 'too_long'
+    | 'rate_limited'
+    | 'empty'
+    | 'invalid_scope'
+    | 'no_session';
 
 /**
  * Outcome of submitting a chat message to the host relay.

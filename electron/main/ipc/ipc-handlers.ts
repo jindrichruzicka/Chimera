@@ -83,8 +83,16 @@ import {
     PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
     PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
 } from '../../preload/apis/perspective-replay-api.js';
+import {
+    CHAT_SEND_CHANNEL,
+    CHAT_HISTORY_CHANNEL,
+    CHAT_MUTE_CHANNEL,
+    CHAT_UNMUTE_CHANNEL,
+} from '../../preload/apis/chat-api.js';
 import type {
     ActionRejection,
+    ChatMessage,
+    ChatScope,
     CrashRecoveryStatus,
     DeviceInfo,
     EngineAction,
@@ -92,6 +100,7 @@ import type {
     PlayerProfile,
     PlayerId,
     PlayerSnapshot,
+    RelayResult,
     ReplayListItem,
     ReplayPlaybackInfo,
     ResolvedSettings,
@@ -103,6 +112,9 @@ import type {
 import { isInsidePath } from '../path-containment.js';
 import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import {
+    ChatHistoryRequestSchema,
+    ChatMuteRequestSchema,
+    ChatSendRequestSchema,
     EngineActionSchema,
     EngineProfilePatchSchema,
     GameIdSchema,
@@ -178,6 +190,10 @@ export {
     REPLAY_SNAPSHOT_AT_CHANNEL,
     REPLAY_SNAPSHOT_RANGE_CHANNEL,
     REPLAY_CLOSE_PLAYBACK_CHANNEL,
+    CHAT_SEND_CHANNEL,
+    CHAT_HISTORY_CHANNEL,
+    CHAT_MUTE_CHANNEL,
+    CHAT_UNMUTE_CHANNEL,
 };
 
 /**
@@ -1511,4 +1527,104 @@ export function registerProfileHandlers(options: RegisterProfileHandlersOptions)
         // No manager wired yet — no-op; renderer's Promise<void> contract is honest.
         return undefined;
     });
+}
+
+// ─── Chat (§4.29) ──────────────────────────────────────────────────────────────
+
+/** Shape of a main-side `ipcMain.handle` handler for the chat namespace. */
+export type ChatInvokeHandler = (event: unknown, ...args: unknown[]) => unknown;
+
+/** Shape of a main-side `ipcMain.on` listener for the chat namespace. */
+export type ChatSendListener = (event: unknown, ...args: unknown[]) => void;
+
+/**
+ * Narrow slice of `Electron.IpcMain` required to register the chat-namespace
+ * channels. `send` / `history` are invoke-style round-trips (the renderer needs
+ * the relay outcome / the buffered list); `mute` / `unmute` are fire-and-forget
+ * `on` sends because the {@link ChatAPI} methods return `void`.
+ */
+export interface ChatHandlersIpcMain {
+    handle(channel: string, handler: ChatInvokeHandler): unknown;
+    on(channel: string, handler: ChatSendListener): unknown;
+}
+
+export interface RegisterChatHandlersOptions {
+    readonly ipcMain: ChatHandlersIpcMain;
+    /**
+     * Submit a locally-originated chat message to the host relay and return its
+     * outcome. Wired to `LobbyManager.sendLocalChat` at the DIP point so the
+     * mandatory `ChatRelay` gate runs (Invariant #73) and remote recipients are
+     * reached over the transport.
+     */
+    readonly sendChat: (body: string, scope: ChatScope) => RelayResult;
+    /** Return up to `maxEntries` of the most recent (non-muted) messages. */
+    readonly history: (maxEntries?: number) => readonly ChatMessage[];
+    /** Mute a player locally (suppresses delivery + history; reversible). */
+    readonly mute: (playerId: PlayerId) => void;
+    /** Unmute a player locally. */
+    readonly unmute: (playerId: PlayerId) => void;
+    /** Injected logger (Invariant #67). */
+    readonly logger?: Logger;
+}
+
+/**
+ * Register every `chimera:chat:*` main-side channel (§4.29 — Chat System).
+ *
+ * `chimera:chat:message` is intentionally absent: it is a one-way push from
+ * main → renderer via `webContents.send`, driven by `ChatHub` at the wiring
+ * point whenever the local player is a recipient. There is no invoke handler.
+ *
+ * Invariant #5: channel constants come from `preload/apis/chat-api.ts`; there is
+ * no parallel list in this file to drift out of sync.
+ *
+ * Invariant #72/#73: these handlers never touch the simulation; `send` routes
+ * through the mandatory `ChatRelay` gate via the injected `sendChat` port — there
+ * is no bypass.
+ */
+export function registerChatHandlers(options: RegisterChatHandlersOptions): void {
+    const { ipcMain, sendChat, history, mute, unmute } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:chat:* handlers', {
+        channels: [CHAT_SEND_CHANNEL, CHAT_HISTORY_CHANNEL, CHAT_MUTE_CHANNEL, CHAT_UNMUTE_CHANNEL],
+    });
+
+    ipcMain.handle(CHAT_SEND_CHANNEL, (_event, payload) => {
+        const { body, scope } = parseInvokeRequest(
+            ChatSendRequestSchema,
+            CHAT_SEND_CHANNEL,
+            payload,
+        );
+        return sendChat(body, scope);
+    });
+
+    ipcMain.handle(CHAT_HISTORY_CHANNEL, (_event, payload) => {
+        const { maxEntries } = parseInvokeRequest(
+            ChatHistoryRequestSchema,
+            CHAT_HISTORY_CHANNEL,
+            payload,
+        );
+        return history(maxEntries);
+    });
+
+    // `mute` / `unmute` are fire-and-forget `on` sends — the ChatAPI methods
+    // return void. A throw inside an `on` callback is silently dropped by
+    // Electron, so a malformed payload is logged and ignored (no state change)
+    // rather than surfacing on a rejection channel.
+    const onMutePlayerChannel =
+        (channel: string, apply: (playerId: PlayerId) => void): ChatSendListener =>
+        (_event, payload) => {
+            try {
+                const { playerId } = parseInvokeRequest(ChatMuteRequestSchema, channel, payload);
+                apply(playerId);
+            } catch (err) {
+                if (err instanceof IpcRequestValidationError) {
+                    logger.warn('ipc chat payload rejected', { channel, issues: err.issues });
+                    return;
+                }
+                throw err;
+            }
+        };
+
+    ipcMain.on(CHAT_MUTE_CHANNEL, onMutePlayerChannel(CHAT_MUTE_CHANNEL, mute));
+    ipcMain.on(CHAT_UNMUTE_CHANNEL, onMutePlayerChannel(CHAT_UNMUTE_CHANNEL, unmute));
 }

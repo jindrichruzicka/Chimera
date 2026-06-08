@@ -29,7 +29,12 @@ import {
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANNEL,
+    CHAT_SEND_CHANNEL,
+    CHAT_HISTORY_CHANNEL,
+    CHAT_MUTE_CHANNEL,
+    CHAT_UNMUTE_CHANNEL,
     mapPlatform,
+    registerChatHandlers,
     registerGameHandlers,
     registerLobbyHandlers,
     registerPerspectiveReplayHandlers,
@@ -74,6 +79,9 @@ import {
     type SettingsInvokeHandler,
     type SystemHandlersAppHost,
     type SystemHandlersIpcMain,
+    type ChatHandlersIpcMain,
+    type ChatInvokeHandler,
+    type ChatSendListener,
 } from './ipc-handlers.js';
 import {
     PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
@@ -94,6 +102,8 @@ import { playerId as toPlayerId } from '@chimera/networking/provider/Multiplayer
 import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     ActionRejection,
+    ChatMessage,
+    ChatScope,
     DeviceInfo,
     EngineAction,
     HostLobbyParams,
@@ -101,6 +111,7 @@ import type {
     PerspectiveReplayPlaybackInfo,
     PlayerProfile,
     PlayerSnapshot,
+    RelayResult,
     ReplayListItem,
     SaveRequest,
     SaveSlotMeta,
@@ -3066,6 +3077,183 @@ describe('registerPerspectiveReplayHandlers', () => {
             const handler = stub.handled.get(PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL);
             await expect(Promise.resolve(handler?.({}))).resolves.toBeUndefined();
             expect(close).toHaveBeenCalledOnce();
+        });
+    });
+});
+
+// ─── registerChatHandlers (§4.29) ──────────────────────────────────────────────
+
+/**
+ * Recording stub for the narrow `ChatHandlersIpcMain` slice. Captures every
+ * `handle` (invoke) and `on` (fire-and-forget) registration so the test can
+ * assert channel wiring and drive the registered handlers with a payload.
+ */
+function makeChatIpcMainStub(): {
+    readonly ipcMain: ChatHandlersIpcMain;
+    readonly handled: Map<string, ChatInvokeHandler>;
+    readonly listeners: Map<string, ChatSendListener>;
+} {
+    const handled = new Map<string, ChatInvokeHandler>();
+    const listeners = new Map<string, ChatSendListener>();
+    const ipcMain: ChatHandlersIpcMain = {
+        handle: (channel, handler) => {
+            handled.set(channel, handler);
+        },
+        on: (channel, handler) => {
+            listeners.set(channel, handler);
+        },
+    };
+    return { ipcMain, handled, listeners };
+}
+
+function makeChatPorts(
+    overrides: {
+        readonly sendChat?: (body: string, scope: ChatScope) => RelayResult;
+        readonly history?: (maxEntries?: number) => readonly ChatMessage[];
+    } = {},
+): {
+    readonly sendChat: ReturnType<typeof vi.fn>;
+    readonly history: ReturnType<typeof vi.fn>;
+    readonly mute: ReturnType<typeof vi.fn>;
+    readonly unmute: ReturnType<typeof vi.fn>;
+} {
+    return {
+        sendChat: vi
+            .fn<(body: string, scope: ChatScope) => RelayResult>()
+            .mockImplementation(overrides.sendChat ?? (() => ({ ok: true }))),
+        history: vi
+            .fn<(maxEntries?: number) => readonly ChatMessage[]>()
+            .mockImplementation(overrides.history ?? (() => [])),
+        mute: vi.fn<(id: ReturnType<typeof playerId>) => void>(),
+        unmute: vi.fn<(id: ReturnType<typeof playerId>) => void>(),
+    };
+}
+
+describe('registerChatHandlers', () => {
+    const LOBBY_SCOPE: ChatScope = { kind: 'lobby' };
+
+    it('registers send/history as invoke handlers and mute/unmute as on listeners', () => {
+        const stub = makeChatIpcMainStub();
+        const ports = makeChatPorts();
+
+        registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+        expect([...stub.handled.keys()].sort()).toEqual(
+            [CHAT_SEND_CHANNEL, CHAT_HISTORY_CHANNEL].sort(),
+        );
+        expect([...stub.listeners.keys()].sort()).toEqual(
+            [CHAT_MUTE_CHANNEL, CHAT_UNMUTE_CHANNEL].sort(),
+        );
+    });
+
+    describe('chimera:chat:send', () => {
+        it('validates the payload and forwards body + scope to sendChat, returning the RelayResult', () => {
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts({ sendChat: () => ({ ok: true }) });
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            const handler = stub.handled.get(CHAT_SEND_CHANNEL);
+            const result = handler?.({}, { body: 'hi', scope: LOBBY_SCOPE });
+
+            expect(ports.sendChat).toHaveBeenCalledWith('hi', LOBBY_SCOPE);
+            expect(result).toEqual({ ok: true });
+        });
+
+        it('propagates the relay rejection outcome', () => {
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts({
+                sendChat: () => ({ ok: false, reason: 'rate_limited' }),
+            });
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            const handler = stub.handled.get(CHAT_SEND_CHANNEL);
+            expect(handler?.({}, { body: 'spam', scope: LOBBY_SCOPE })).toEqual({
+                ok: false,
+                reason: 'rate_limited',
+            });
+        });
+
+        it('throws IpcRequestValidationError and does not call sendChat for a malformed payload', () => {
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts();
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            const handler = stub.handled.get(CHAT_SEND_CHANNEL);
+            // Missing `body`.
+            expect(() => handler?.({}, { scope: LOBBY_SCOPE })).toThrow(IpcRequestValidationError);
+            // Unknown scope discriminant.
+            expect(() => handler?.({}, { body: 'x', scope: { kind: 'global' } })).toThrow(
+                IpcRequestValidationError,
+            );
+            expect(ports.sendChat).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:chat:history', () => {
+        it('forwards the requested bound to the history port and returns the list', () => {
+            const message: ChatMessage = {
+                id: 'm1',
+                fromPlayerId: playerId('p1'),
+                scope: LOBBY_SCOPE,
+                body: 'hi',
+                serverTime: 1,
+            };
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts({ history: () => [message] });
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            const handler = stub.handled.get(CHAT_HISTORY_CHANNEL);
+            const result = handler?.({}, { maxEntries: 5 });
+
+            expect(ports.history).toHaveBeenCalledWith(5);
+            expect(result).toEqual([message]);
+        });
+
+        it('forwards undefined when no bound is supplied', () => {
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts();
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            const handler = stub.handled.get(CHAT_HISTORY_CHANNEL);
+            handler?.({}, {});
+
+            expect(ports.history).toHaveBeenCalledWith(undefined);
+        });
+
+        it('throws IpcRequestValidationError for a non-integer maxEntries', () => {
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts();
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            const handler = stub.handled.get(CHAT_HISTORY_CHANNEL);
+            expect(() => handler?.({}, { maxEntries: -1 })).toThrow(IpcRequestValidationError);
+            expect(ports.history).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('chimera:chat:mute / :unmute', () => {
+        it('validates the payload and forwards the branded playerId', () => {
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts();
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            stub.listeners.get(CHAT_MUTE_CHANNEL)?.({}, { playerId: 'p2' });
+            stub.listeners.get(CHAT_UNMUTE_CHANNEL)?.({}, { playerId: 'p2' });
+
+            expect(ports.mute).toHaveBeenCalledWith(playerId('p2'));
+            expect(ports.unmute).toHaveBeenCalledWith(playerId('p2'));
+        });
+
+        it('silently ignores a malformed payload (no throw, no port call)', () => {
+            const stub = makeChatIpcMainStub();
+            const ports = makeChatPorts();
+            registerChatHandlers({ ipcMain: stub.ipcMain, ...ports });
+
+            const listener = stub.listeners.get(CHAT_MUTE_CHANNEL);
+            // A throw inside an `on` callback would be dropped by Electron; the
+            // handler swallows the validation error so it never escapes.
+            expect(() => listener?.({}, { playerId: '' })).not.toThrow();
+            expect(ports.mute).not.toHaveBeenCalled();
         });
     });
 });

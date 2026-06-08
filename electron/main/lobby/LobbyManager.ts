@@ -37,6 +37,7 @@ import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
 import type { ChatRelay } from '../ChatRelay.js';
+import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
 import type { E2eHooks } from '../runtime/e2e-hooks.js';
 
 export interface HostedSessionMetadata {
@@ -68,6 +69,14 @@ export interface LobbyManagerOptions {
      * (Invariant #73). When omitted, chat messages are dropped (no bypass).
      */
     readonly chatRelay?: ChatRelay;
+    /**
+     * Invoked once per accepted {@link ChatMessage} for which the *local* player
+     * is a recipient — whether locally-originated (via {@link LobbyManager.sendLocalChat})
+     * or relayed from a remote client. The wiring point forwards this to
+     * `ChatHub` to buffer the message and push it to the renderer (§4.29). Remote
+     * recipients are reached over the transport, not through this callback.
+     */
+    readonly onLocalChatDelivered?: (message: ChatMessage) => void;
     readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot, checksum: number) => void;
     readonly onClientTickReceived?: (tick: number) => void;
     readonly e2eHooks?: E2eHooks;
@@ -114,6 +123,7 @@ export class LobbyManager {
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
     private readonly profileGate: LobbyManagerOptions['profileGate'];
     private readonly chatRelay: LobbyManagerOptions['chatRelay'];
+    private readonly onLocalChatDelivered: LobbyManagerOptions['onLocalChatDelivered'];
     private readonly onClientSnapshotReceived: LobbyManagerOptions['onClientSnapshotReceived'];
     private readonly onClientTickReceived: LobbyManagerOptions['onClientTickReceived'];
     private readonly e2eHooks: LobbyManagerOptions['e2eHooks'];
@@ -132,6 +142,7 @@ export class LobbyManager {
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
         this.profileGate = options.profileGate;
         this.chatRelay = options.chatRelay;
+        this.onLocalChatDelivered = options.onLocalChatDelivered;
         this.onClientSnapshotReceived = options.onClientSnapshotReceived;
         this.onClientTickReceived = options.onClientTickReceived;
         this.e2eHooks = options.e2eHooks;
@@ -150,6 +161,38 @@ export class LobbyManager {
         const session = this.session;
         if (session !== null && 'close' in session) {
             session.transport.broadcastLobbyState(state);
+        }
+    }
+
+    /**
+     * Fan an accepted {@link ChatMessage} out to its resolved recipients (§4.29).
+     * The local player (when present in `recipients`) is delivered in-process via
+     * {@link LobbyManagerOptions.onLocalChatDelivered} so the message reaches the
+     * renderer; every remote recipient receives the wire form over the transport
+     * side-channel. Shared by the inbound (remote → host) relay path and the
+     * locally-originated {@link sendLocalChat} path so delivery is identical
+     * regardless of origin.
+     */
+    private deliverChat(
+        transport: HostTransport,
+        recipients: readonly PlayerId[],
+        message: ChatMessage,
+    ): void {
+        for (const recipient of recipients) {
+            if (recipient === this.localPlayerId) {
+                this.onLocalChatDelivered?.(message);
+                continue;
+            }
+            transport.sendSideChannel(recipient, {
+                kind: 'chat',
+                payload: {
+                    id: message.id,
+                    senderId: message.fromPlayerId,
+                    text: message.body,
+                    scope: message.scope,
+                    timestamp: message.serverTime,
+                },
+            });
         }
     }
 
@@ -235,20 +278,8 @@ export class LobbyManager {
                     }
                     const result = this.chatRelay.relay(
                         { from, body: msg.payload.text, scope: msg.payload.scope },
-                        (recipients, message) => {
-                            for (const pid of recipients) {
-                                session.transport.sendSideChannel(pid, {
-                                    kind: 'chat',
-                                    payload: {
-                                        id: message.id,
-                                        senderId: message.fromPlayerId,
-                                        text: message.body,
-                                        scope: message.scope,
-                                        timestamp: message.serverTime,
-                                    },
-                                });
-                            }
-                        },
+                        (recipients, message) =>
+                            this.deliverChat(session.transport, recipients, message),
                     );
                     if (!result.ok) {
                         // Tell the offending sender why their message was dropped
@@ -517,6 +548,43 @@ export class LobbyManager {
         }
 
         session.transport.sendAction(action);
+    }
+
+    /**
+     * Submit a locally-originated chat message to the host relay (§4.29). Runs
+     * the mandatory `ChatRelay` gate (Invariant #73), then fans the accepted
+     * message out via {@link deliverChat}. Returns the relay's {@link RelayResult}
+     * so the renderer can surface a rejection.
+     *
+     * Host/local path only (F45 T03): a joined-client session has no local relay
+     * — client send over the wire is a deliberate follow-on — so this returns a
+     * `no_session` rejection there (and when called before a lobby is hosted)
+     * rather than bypassing the gate.
+     *
+     * NOTE (follow-on): the local host is delivered its own `lobby`/`team`-scope
+     * messages only if it is present in the `PlayerDirectory` (the relay's
+     * recipient universe). The host is admitted to the directory solely through
+     * `ProfileGate.admit()` (Invariant #61 — the one authorised path), which today
+     * runs only for *joining* clients. Until the host self-registers via that gate,
+     * local echo of `lobby`/`team` scope (and receipt of such messages from
+     * clients) depends on host admission — tracked for the profile/renderer
+     * follow-on. `private` scope is unaffected: the relay always includes the
+     * sender.
+     */
+    sendLocalChat(body: string, scope: ChatScope): RelayResult {
+        const session = this.session;
+        if (session === null || !('close' in session)) {
+            this.log.debug('chat:send-local:no-host-session');
+            return { ok: false, reason: 'no_session' };
+        }
+        if (this.chatRelay === undefined || this.localPlayerId === null) {
+            this.log.debug('chat:send-local:no-relay');
+            return { ok: false, reason: 'no_session' };
+        }
+        return this.chatRelay.relay(
+            { from: this.localPlayerId, body, scope },
+            (recipients, message) => this.deliverChat(session.transport, recipients, message),
+        );
     }
 
     switchActiveSeat(playerId: PlayerId): Promise<void> {

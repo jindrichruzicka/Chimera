@@ -17,6 +17,8 @@
 // `electron/preload/schemas.ts`.
 
 import { z } from 'zod';
+import { ChatScopeSchema } from '@chimera/shared/chat-schemas.js';
+import type { ChatScope } from '@chimera/shared/chat.js';
 import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     EngineAction,
@@ -359,5 +361,49 @@ export const EngineProfilePatchSchema = z
         displayName: z.string().optional(),
         avatar: AvatarSourceSchema.optional(),
         locale: z.string().optional(),
+    })
+    .strict();
+
+// ─── Chat domain schemas (§4.29) ──────────────────────────────────────────────
+
+/**
+ * Schema for the `{ body, scope }` payload accepted by `chimera:chat:send`.
+ *
+ * Reuses the canonical {@link ChatScopeSchema} (shared with the wire `CHAT`
+ * frame in `shared/messages-schemas.ts`) so a single scope definition guards
+ * every *server-side* boundary — this does not span the main↔preload IPC
+ * boundary (the preload owns an independent copy, Invariant #5). The
+ * `as unknown as` cast bridges the `PlayerId` brand inside a `private` scope; the
+ * runtime shape is validated exactly. The relay re-checks scope semantics and
+ * caps `body` length (Invariant #73); this guards only the envelope.
+ */
+export const ChatSendRequestSchema: z.ZodType<{
+    readonly body: string;
+    readonly scope: ChatScope;
+}> = z
+    .object({
+        body: z.string(),
+        scope: ChatScopeSchema,
+    })
+    .strict() as unknown as z.ZodType<{ readonly body: string; readonly scope: ChatScope }>;
+
+/**
+ * Schema for the `{ maxEntries? }` payload accepted by `chimera:chat:history`.
+ * `maxEntries` bounds the returned slice; the hub clamps it to the buffer size.
+ */
+export const ChatHistoryRequestSchema = z
+    .object({
+        maxEntries: z.number().int().nonnegative().optional(),
+    })
+    .strict();
+
+/**
+ * Schema for the `{ playerId }` payload accepted by `chimera:chat:mute` and
+ * `chimera:chat:unmute`. Reuses {@link PlayerIdSchema} so the handler receives a
+ * branded `PlayerId`.
+ */
+export const ChatMuteRequestSchema = z
+    .object({
+        playerId: PlayerIdSchema,
     })
     .strict();
