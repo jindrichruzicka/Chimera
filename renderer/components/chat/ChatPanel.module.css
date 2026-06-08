@@ -77,10 +77,26 @@
 }
 
 .composer {
-    align-items: end;
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-sm);
+}
+
+/*
+ * Scope (+ recipient) share one row above the message input. Keeping the
+ * selectors on their own row means the message input always sits on the row
+ * below at full width — it never shifts when the recipient picker toggles in
+ * and out for the `private` scope.
+ */
+.selectors {
     display: flex;
     flex-wrap: wrap;
     gap: var(--ch-space-sm);
+}
+
+.selector {
+    flex: 1 1 var(--ch-space-none);
+    min-inline-size: 0;
 }
 
 .error {

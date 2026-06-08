@@ -17,7 +17,7 @@ Running multiplayer scenarios by hand is the single biggest development friction
 
 ```bash
 pnpm dev:mp 3                              # 1 host + 2 auto-joining clients
-pnpm dev:mp 4 --game tactics --scenario skirmish
+pnpm dev:mp 4 --game <game> --scenario skirmish
 ```
 
 Each instance boots, consumes its CLI flags, and automatically hosts or joins before the main menu renders. All instances use distinct `userData` directories and distinct seed profiles.

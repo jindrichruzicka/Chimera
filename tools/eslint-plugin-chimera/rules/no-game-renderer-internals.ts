@@ -3,8 +3,10 @@
  *
  * ESLint rule: `chimera/no-game-renderer-internals`
  *
- * Allows game-owned renderer surfaces to consume the public UI primitive barrel
- * while blocking all other renderer internals from games packages.
+ * Allows game-owned renderer surfaces to consume the public renderer component
+ * library — the UI primitive barrel (`@chimera/renderer/components/ui`) and the
+ * chat barrel (`@chimera/renderer/components/chat`) — while blocking all other
+ * renderer internals from games packages.
  *
  * Architecture reference: §3 Module Boundaries, §4.35 UI Design System
  */
@@ -99,6 +101,15 @@ function isPublicUiBarrelImport(source: string): boolean {
     );
 }
 
+function isPublicChatBarrelImport(source: string): boolean {
+    return (
+        source === '@chimera/renderer/components/chat' ||
+        source === '@chimera/renderer/components/chat/index' ||
+        source === '@chimera/renderer/components/chat/index.ts' ||
+        source === '@chimera/renderer/components/chat/index.js'
+    );
+}
+
 function isUiDeepImport(filename: string, source: string): boolean {
     const normalized = resolveImportPath(filename, source);
     return (
@@ -112,13 +123,13 @@ const rule: Rule.RuleModule = {
         type: 'problem',
         docs: {
             description:
-                'Allow games to import only the public renderer UI primitive barrel from renderer code.',
+                'Allow games to import only the public renderer component-library barrels (ui, chat) from renderer code.',
         },
         messages: {
             gameRendererImportOutsideSurface:
                 'Only game renderer surfaces under games/<name>/screens/*.tsx or games/<name>/shell/*.tsx may import renderer UI primitives.',
             gameRendererInternalImport:
-                'Game renderer surfaces may import only the public @chimera/renderer/components/ui barrel from renderer code. Renderer internals are forbidden in games packages.',
+                'Game renderer surfaces may import only the public @chimera/renderer/components/ui or @chimera/renderer/components/chat barrels from renderer code. Renderer internals are forbidden in games packages.',
             gameRendererUiDeepImport:
                 'Game renderer surfaces must import UI primitives from the public @chimera/renderer/components/ui barrel, not individual renderer component files.',
         },
@@ -140,7 +151,7 @@ const rule: Rule.RuleModule = {
                 return;
             }
 
-            if (isPublicUiBarrelImport(source)) {
+            if (isPublicUiBarrelImport(source) || isPublicChatBarrelImport(source)) {
                 return;
             }
 

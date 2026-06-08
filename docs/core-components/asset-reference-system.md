@@ -60,7 +60,7 @@ export type AssetKind = AssetKindRegistry[keyof AssetKindRegistry];
 export type AssetKindId<T extends AssetKind = AssetKind> = T['__kind'];
 
 // Format: "<game-id>/<relative-path-under-assets/>"
-// Example: "tactics/textures/units/warrior-portrait.webp"
+// Example: "<game>/textures/entities/entity-portrait.webp"
 export type AssetRef<T extends AssetKind = AssetKind> = string & { readonly __assetRef: T };
 
 // Parsing and traversal-safety utilities live in shared/asset-ref-parse.ts
@@ -93,34 +93,34 @@ The `T` parameter is intentionally embedded in the brand. This keeps refs for di
 Games and first-party extension libraries may contribute new phantom kinds without changing `simulation/content/AssetRef.ts`:
 
 ```typescript
-// games/tactics/assets/asset-kinds.ts
+// games/<game>/assets/asset-kinds.ts
 import type { AssetKindBrand } from '@chimera/simulation/content/AssetRef.js';
 
-export interface TacticsVoxelAsset extends AssetKindBrand<'tactics:voxel'> {
-    readonly __tacticsVoxelAsset: unique symbol;
+export interface GameVoxelAsset extends AssetKindBrand<'<game>:voxel'> {
+    readonly __gameVoxelAsset: unique symbol;
 }
 
 declare module '@chimera/simulation/content/AssetRef.js' {
     interface AssetKindRegistry {
-        readonly 'tactics:voxel': TacticsVoxelAsset;
+        readonly '<game>:voxel': GameVoxelAsset;
     }
 }
 ```
 
-Custom kind ids should be namespaced by game or package (`tactics:voxel`, `cards:deck-art`) so independent extensions cannot collide accidentally.
+Custom kind ids should be namespaced by game or package (`<game>:voxel`, `<package>:deck-art`) so independent extensions cannot collide accidentally.
 
 ---
 
 ## Asset References in Content JSON
 
 ```json
-// games/tactics/data/units/warrior.json
+// games/<game>/data/entities/entity.json
 {
-    "id": "warrior",
-    "portrait": "tactics/textures/units/warrior-portrait.webp",
-    "model": "tactics/models/units/warrior.glb",
+    "id": "entity",
+    "portrait": "<game>/textures/entities/entity-portrait.webp",
+    "model": "<game>/models/entities/entity.glb",
     "sfx": {
-        "attack": "tactics/audio/sfx/sword-hit.ogg"
+        "attack": "<game>/audio/sfx/attack-hit.ogg"
     }
 }
 ```
@@ -266,18 +266,18 @@ export function useAsset<T extends AssetKind>(
 };
 ```
 
-### Example — Unit Component
+### Example — Entity Component
 
 ```tsx
-// games/tactics/screens/components/UnitMesh.tsx
+// games/<game>/screens/components/EntityMesh.tsx
 import { useAsset } from '@chimera/renderer/assets/useAsset';
 import { TextureAsset, AssetRef } from '@chimera/simulation/content';
 
-interface UnitMeshProps {
+interface EntityMeshProps {
     portraitRef: AssetRef<TextureAsset>;
 }
 
-function UnitMesh({ portraitRef }: UnitMeshProps) {
+function EntityMesh({ portraitRef }: EntityMeshProps) {
     const { asset: texture, loading } = useAsset(portraitRef);
     if (loading || !texture)
         return (

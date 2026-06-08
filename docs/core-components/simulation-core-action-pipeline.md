@@ -69,7 +69,7 @@ interface EngineAction<
     TType extends string = string,
     TPayload extends object = Record<string, unknown>,
 > {
-    readonly type: TType; // namespaced: 'engine:end_turn', 'tactics:move_unit'
+    readonly type: TType; // namespaced: 'engine:end_turn', '<game>:move_entity'
     readonly playerId: PlayerId;
     readonly tick: number;
     readonly payload: Readonly<TPayload>;
@@ -164,7 +164,7 @@ Games register a `GameDefinition` alongside their action definitions during star
 | Namespace  | Owner       | Examples                                        |
 | ---------- | ----------- | ----------------------------------------------- |
 | `engine:*` | Engine core | `engine:undo`, `engine:redo`, `engine:end_turn` |
-| `<game>:*` | Game        | `tactics:move_unit`, `puzzle:rotate_tile`       |
+| `<game>:*` | Game        | `<game>:move_entity`, `<game>:use_ability`      |
 
 The engine **rejects** any attempt to register an action with the `engine:` prefix at startup.
 
@@ -346,22 +346,22 @@ Floats are permitted inside the renderer (camera, animation, UI) but must never 
 ### Full Implementation Example
 
 ```typescript
-// games/tactics/actions/MoveUnitAction.ts
+// games/<game>/actions/MoveEntityAction.ts
 import { ActionDefinition, ValidationResult } from '@chimera/simulation/engine';
-import { TacticsSnapshot } from '../state/GameSnapshot';
+import { MyGameSnapshot } from '../state/GameSnapshot';
 
-interface MoveUnitPayload {
+interface MoveEntityPayload {
     readonly entityId: string;
     readonly to: { readonly x: number; readonly y: number };
 }
 
-const MoveUnitAction: ActionDefinition<MoveUnitPayload, TacticsSnapshot> = {
-    type: 'tactics:move_unit',
+const MoveEntityAction: ActionDefinition<MoveEntityPayload, MyGameSnapshot> = {
+    type: '<game>:move_entity',
 
-    parsePayload(raw): MoveUnitPayload {
+    parsePayload(raw): MoveEntityPayload {
         if (typeof raw.entityId !== 'string' || typeof raw.to !== 'object')
-            throw new ActionSchemaError('tactics:move_unit', raw);
-        return raw as MoveUnitPayload;
+            throw new ActionSchemaError('<game>:move_entity', raw);
+        return raw as MoveEntityPayload;
     },
 
     validate(payload, state, playerId, _ctx): ValidationResult {
@@ -372,7 +372,7 @@ const MoveUnitAction: ActionDefinition<MoveUnitPayload, TacticsSnapshot> = {
         return { ok: true };
     },
 
-    reduce(state, payload, _playerId, _ctx): TacticsSnapshot {
+    reduce(state, payload, _playerId, _ctx): MyGameSnapshot {
         return {
             ...state,
             entities: {
@@ -389,7 +389,7 @@ const MoveUnitAction: ActionDefinition<MoveUnitPayload, TacticsSnapshot> = {
     predictable: true,
 };
 
-export default MoveUnitAction;
+export default MoveEntityAction;
 ```
 
 ---

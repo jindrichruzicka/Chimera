@@ -156,7 +156,7 @@ export class SaveMigrator {
   → slotId = '<gameId>/autosave'
 
 ─── LOAD ──────────────────────────────────────────────────────────────────
-[Renderer] window.__chimera.saves.load('tactics/slot-1')
+[Renderer] window.__chimera.saves.load('<game>/slot-1')
   → IPC → [SaveManager]
   1. SaveRepository.load(slotId)   ← auto-migrates if needed
   2. Validate header (gameId, gameVersion compatibility)

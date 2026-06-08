@@ -30,10 +30,10 @@ const state = useGameStore();
 ```typescript
 // ✅ Via typed hook
 const sendAction = useSendAction();
-sendAction({ type: 'tactics:move_unit', payload: { unitId, to } });
+sendAction({ type: '<game>:move_unit', payload: { unitId, to } });
 
 // ❌ BLOCK — direct call from component
-window.__chimera.game.sendAction({ type: 'tactics:move_unit', payload: { ... } });
+window.__chimera.game.sendAction({ type: '<game>:move_unit', payload: { ... } });
 ```
 
 ## 5.4 Derived state

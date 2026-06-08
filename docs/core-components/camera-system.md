@@ -96,7 +96,7 @@ interface GameCanvasProps {
     …
 </GameCanvas>
 
-// Expanded ortho bounds for a zoomed-out tactics map
+// Expanded ortho bounds for a zoomed-out game map
 <GameCanvas
     cameraMode="orthographic"
     cameraPreset="isometric"
@@ -164,7 +164,7 @@ export function useCamera(): CameraController;
 ## Usage Example
 
 ```typescript
-// In a tactics game's BoardScreen.tsx:
+// In a game's BoardScreen.tsx:
 const camera = useCamera();
 
 function onUnitSelected(unit: Entity) {

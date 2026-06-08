@@ -49,22 +49,22 @@ export interface GameResultBannerProps {
 ### Game Registration Pattern
 
 ```typescript
-// games/tactics/screens/index.ts
+// games/<game>/screens/index.ts
 const BoardScreen = React.lazy(() => import('./BoardScreen'));
-const TacticsGameHud = React.lazy(() => import('./TacticsGameHud'));
+const GameHud = React.lazy(() => import('./GameHud'));
 const TechTreeScreen = React.lazy(() => import('./TechTreeScreen'));
-const DiplomacyScreen = React.lazy(() => import('./DiplomacyScreen'));
-const UnitDetailScreen = React.lazy(() => import('./UnitDetailScreen'));
+const DetailScreen = React.lazy(() => import('./DetailScreen'));
+const SecondaryScreen = React.lazy(() => import('./SecondaryScreen'));
 const GameResultBanner = React.lazy(() => import('./GameResultBanner'));
 
-export const TacticsGameScreenRegistry: GameScreenRegistry = {
+export const gameScreenRegistry: GameScreenRegistry = {
     board: BoardScreen,
-    hud: TacticsGameHud,
+    hud: GameHud,
     gameResultBanner: GameResultBanner,
     screens: {
         'tech-tree': TechTreeScreen,
-        diplomacy: DiplomacyScreen,
-        'unit-detail': UnitDetailScreen,
+        secondary: SecondaryScreen,
+        detail: DetailScreen,
     },
 };
 ```
@@ -75,8 +75,8 @@ export const TacticsGameScreenRegistry: GameScreenRegistry = {
 // renderer/app/game/page.tsx
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
-        case 'tactics':
-            return (await import('../../games/tactics/screens/index')).TacticsGameScreenRegistry;
+        case '<game>':
+            return (await import('../../games/<game>/screens/index')).gameScreenRegistry;
         default:
             throw new Error(`No screen registry for game '${gameId}'`);
     }
@@ -108,7 +108,7 @@ interface GameShellProps {
  * Responsibilities:
  *   1. Mount active screen from registry (driven by useActiveScreen)
  *   2. Build engine-owned HUD props and render registry.hud when present
- *   3. Render engine chrome: PerfHud, ChatPanel, ToastHost
+ *   3. Render built-in engine UI: PerfHud, ToastHost
  *   4. Pass all engine contexts down the tree (§4.34)
  *   5. Gate screen components behind React.Suspense
  *   6. Delegate scene transitions to SceneRouter (§4.18)
@@ -231,21 +231,45 @@ All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 
 ### Game Surface Consumption
 
-Game-owned renderer surfaces may use the shared primitive library for HUDs,
-in-match menus, result banners, post-game summaries, and similar UI. The public
-import surface is the UI barrel only:
+Game-owned renderer surfaces may use the shared component library for HUDs,
+in-match menus, result banners, post-game summaries, and similar UI. The library
+exposes **two** public barrels, and those are the only renderer import surfaces a
+game may use:
 
 ```typescript
+// Tier 1 — stateless design primitives (this section, §4.35):
 import { Button, Card, Heading } from '@chimera/renderer/components/ui/index.js';
+
+// Tier 2 — the shared chat component (§4.35.1):
+import { ChatPanel } from '@chimera/renderer/components/chat';
 ```
 
 This allowance applies only to React components under `games/<name>/screens/*.tsx`
 and React shell contributions under `games/<name>/shell/*.tsx`. Game actions,
 state, projection, AI, content, and non-React shell definition files must not
 import renderer code. Game renderer surfaces also must not import renderer stores,
-IPC bridges, shell components, R3F components, asset managers, hooks, stylesheets,
-or individual UI component files. Token overrides remain the mechanism for game
-visual customization.
+IPC bridges, `shell/` components, R3F components, asset managers, hooks,
+stylesheets, or individual component files behind either barrel — only the two
+barrels above. Token overrides remain the mechanism for game visual customization.
+
+### 4.35.1 Chat Component (`renderer/components/chat/`)
+
+The chat barrel is the second tier of the shared component library: a higher-level,
+**stateful** feature component wired to renderer stores and the host IPC bridge — in
+contrast to the stateless primitives of `renderer/components/ui/`. It carries a
+different stability and review bar, so it lives behind its own public specifier
+`@chimera/renderer/components/chat` (whitelisted alongside the UI barrel by the
+`chimera/no-game-renderer-internals` lint rule; deep imports into the directory stay
+forbidden).
+
+| Component   | Source                                   | Notes                                               |
+| ----------- | ---------------------------------------- | --------------------------------------------------- |
+| `ChatPanel` | `renderer/components/chat/ChatPanel.tsx` | Lobby + in-match chat UI; see §4.29. Game-agnostic. |
+
+The engine never mounts `ChatPanel` for a game implicitly. A game mounts it from one
+of its own renderer surfaces — Tactics renders it inside `TacticsGameHud` (a sibling
+of the HUD footer), and the panel owns its own positioning. The engine itself (e.g.
+the lobby page) consumes it directly as an ordinary renderer internal.
 
 ### Primitive State Attributes
 
@@ -297,7 +321,7 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 
 /* ── Typography ──────────────────────────────────────────── */
 --ch-font-ui: 'Inter', system-ui, sans-serif;
---ch-font-game: 'Cinzel', serif;
+--ch-font-game: 'Tahoma', serif;
 --ch-font-mono: 'JetBrains Mono', monospace;
 --ch-font-size-sm: 12px;
 --ch-font-size-md: 14px;
@@ -339,14 +363,14 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 Games inject a CSS file as a side-effect import:
 
 ```css
-/* games/tactics/styles/tokens-override.css */
+/* games/<game>/styles/tokens-override.css */
 --ch-color-surface: #0d1117;
 --ch-color-accent: #58a6ff;
 --ch-radius-md: 2px;
 ```
 
 ```typescript
-// games/tactics/screens/index.ts
+// games/<game>/screens/index.ts
 import './styles/tokens-override.css'; // side-effect; redefines tokens for this game
 ```
 
@@ -354,9 +378,9 @@ Games may only override tokens declared in `renderer/styles/tokens.css`. Inventi
 
 Font-family tokens may reference game-contributed font faces only after the game declares those
 faces through `LoadedRendererGameShell.fonts` (§4.37.7). The font files must be self-hosted local
-assets, not runtime Google Fonts URLs. For example, Tactics declares local Cinzel `.woff2` files and
-then overrides `--ch-font-game` and `--ch-font-ui` to `'Cinzel', serif` in
-`games/tactics/styles/tokens-override.css`.
+assets, not runtime Google Fonts URLs. For example, a game may declare local `.woff2` font files and
+then override `--ch-font-game` and `--ch-font-ui` to `'MyFont', serif` in
+`games/<game>/styles/tokens-override.css`.
 
 ### Component API Shape
 
@@ -392,11 +416,11 @@ renderer/
 
 ### Invariants
 
-| #   | Rule                                                                                                                                                                  |
-| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #85 | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation. |
-| #86 | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.      |
-| #96 | Game renderer surfaces may import UI primitives only through the public `@chimera/renderer/components/ui` barrel; all other renderer internals stay off-limits.       |
+| #   | Rule                                                                                                                                                                                                                                                               |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #85 | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                              |
+| #86 | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                   |
+| #96 | Game renderer surfaces may import the shared component library only through its public barrels — `@chimera/renderer/components/ui` (primitives) and `@chimera/renderer/components/chat` (the shared chat component); all other renderer internals stay off-limits. |
 
 ---
 
@@ -415,8 +439,8 @@ renderer/
 // renderer/app/game/page.tsx
 async function loadRegistry(gameId: string): Promise<GameScreenRegistry> {
     switch (gameId) {
-        case 'tactics':
-            return (await import('../../games/tactics/screens/index')).TacticsGameScreenRegistry;
+        case '<game>':
+            return (await import('../../games/<game>/screens/index')).gameScreenRegistry;
         default:
             throw new Error(`No screen registry for game '${gameId}'`);
     }

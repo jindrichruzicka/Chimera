@@ -1,4 +1,4 @@
-// renderer/components/shell/ChatPanel.test.tsx
+// renderer/components/chat/ChatPanel.test.tsx
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
@@ -65,6 +65,11 @@ function installChat(overrides: Partial<ChatMock> = {}): ChatMock {
 
 async function waitUntilReady(): Promise<void> {
     await waitFor(() => expect(screen.queryByTestId('chat-loading')).not.toBeInTheDocument());
+}
+
+/** Simulate the user pressing Enter inside the message input to send. */
+function pressEnter(input: HTMLElement): void {
+    fireEvent.keyDown(input, { key: 'Enter' });
 }
 
 let chatMock: ChatMock;
@@ -237,13 +242,20 @@ describe('ChatPanel', () => {
 
     // ── Send dispatch ────────────────────────────────────────────────────────
 
-    it('sends a lobby-scoped message and clears the input on success', async () => {
+    it('renders no send button (Enter submits the composer)', async () => {
+        render(<ChatPanel />);
+        await waitUntilReady();
+
+        expect(screen.queryByTestId('chat-send')).not.toBeInTheDocument();
+    });
+
+    it('sends a lobby-scoped message on Enter and clears the input on success', async () => {
         render(<ChatPanel />);
         await waitUntilReady();
 
         const input = screen.getByTestId('chat-body-input');
         fireEvent.change(input, { target: { value: 'hi everyone' } });
-        fireEvent.click(screen.getByTestId('chat-send'));
+        pressEnter(input);
 
         expect(chatMock.send).toHaveBeenCalledWith('hi everyone', { kind: 'lobby' });
         await waitFor(() => expect(input).toHaveValue(''));
@@ -265,8 +277,9 @@ describe('ChatPanel', () => {
         fireEvent.change(screen.getByTestId('chat-recipient-select'), {
             target: { value: 'player-b' },
         });
-        fireEvent.change(screen.getByTestId('chat-body-input'), { target: { value: 'psst' } });
-        fireEvent.click(screen.getByTestId('chat-send'));
+        const input = screen.getByTestId('chat-body-input');
+        fireEvent.change(input, { target: { value: 'psst' } });
+        pressEnter(input);
 
         expect(chatMock.send).toHaveBeenCalledWith('psst', {
             kind: 'private',
@@ -278,7 +291,7 @@ describe('ChatPanel', () => {
         render(<ChatPanel />);
         await waitUntilReady();
 
-        fireEvent.click(screen.getByTestId('chat-send'));
+        pressEnter(screen.getByTestId('chat-body-input'));
 
         expect(chatMock.send).not.toHaveBeenCalled();
     });
@@ -291,10 +304,9 @@ describe('ChatPanel', () => {
         render(<ChatPanel />);
         await waitUntilReady();
 
-        fireEvent.change(screen.getByTestId('chat-body-input'), {
-            target: { value: 'a very long message' },
-        });
-        fireEvent.click(screen.getByTestId('chat-send'));
+        const input = screen.getByTestId('chat-body-input');
+        fireEvent.change(input, { target: { value: 'a very long message' } });
+        pressEnter(input);
 
         expect(mock.send).toHaveBeenCalled();
         expect(await screen.findByTestId('chat-send-error')).toHaveTextContent(/too long/i);

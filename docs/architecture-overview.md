@@ -96,34 +96,34 @@ tags: [architecture, index, chimera, engine, overview, invariants, ipc, simulati
 
 ## Appendix B — Worked Example: Gameplay ↔ Renderer Connection
 
-This appendix walks through how a single gameplay entity — a `Soldier` with stats — connects from authoritative simulation state all the way to an on-screen sprite that changes with those stats. It ties together §4.2 (simulation), §4.6 (projection), §4.8 (content database), §4.10 (assets), §4.4 (renderer state), and the module tree in §3.
+This appendix walks through how a single gameplay entity — an `Entity` with stats — connects from authoritative simulation state all the way to an on-screen sprite that changes with those stats. It ties together §4.2 (simulation), §4.6 (projection), §4.8 (content database), §4.10 (assets), §4.4 (renderer state), and the module tree in §3.
 
-### B.1 The Three "Soldier" Shapes
+### B.1 The Three "Entity" Shapes
 
 A gameplay entity exists in three layers, connected only by **IDs and ref strings** — never by direct object references.
 
-| Layer                           | What "Soldier" looks like                                                                              | Where it lives                                                                 |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------ |
-| **Content** (static definition) | `SoldierData` JSON — max HP, damage, sprites, model, sfx. Designer-authored, read-only at runtime.     | `games/tactics/data/units/soldier.json` → loaded into `ContentDatabase` (§4.8) |
-| **Simulation** (dynamic state)  | `EntityState` — `{ id, unitDefId: 'soldier', hp: 47, position, ownerId }`. The _current_ numbers only. | `GameSnapshot.entities` on the host (§4.2)                                     |
-| **Renderer** (visual)           | `<Unit />` R3F component that reads sprites and models via `useAsset()`                                | `renderer/components/r3f/Unit.tsx` (§4.10)                                     |
+| Layer                           | What "Entity" looks like                                                                                | Where it lives                                                                  |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| **Content** (static definition) | `EntityData` JSON — max HP, damage, sprites, model, sfx. Designer-authored, read-only at runtime.       | `games/<game>/data/entities/entity.json` → loaded into `ContentDatabase` (§4.8) |
+| **Simulation** (dynamic state)  | `EntityState` — `{ id, entityDefId: 'entity', hp: 47, position, ownerId }`. The _current_ numbers only. | `GameSnapshot.entities` on the host (§4.2)                                      |
+| **Renderer** (visual)           | `<Entity />` R3F component that reads sprites and models via `useAsset()`                               | `renderer/components/r3f/Entity.tsx` (§4.10)                                    |
 
-The simulation entity stores only `unitDefId: 'soldier'`, not the stats themselves. All _static_ soldier data (portrait, model, sfx, base stats, sprite variants) stays in the content database. This is what lets a designer change a sprite by editing JSON without recompiling anything, and why a 200-soldier snapshot stays small over the wire.
+The simulation entity stores only `entityDefId: 'entity'`, not the stats themselves. All _static_ entity data (portrait, model, sfx, base stats, sprite variants) stays in the content database. This is what lets a designer change a sprite by editing JSON without recompiling anything, and why a 200-entity snapshot stays small over the wire.
 
 ### B.2 The Connection Chain
 
 ```
-games/tactics/data/units/soldier.json           ← static definition
+games/<game>/data/entities/entity.json           ← static definition
                 │                                  (AssetRef<TextureAsset> strings inside)
                 │  loaded once at startup
                 ▼
            ContentDatabase                      ← simulation/content/ (§4.8)
                 │
-                │  db.getByIdOrThrow('units', 'soldier') → SoldierData
+                │  db.getByIdOrThrow('entities', 'entity') → EntityData
                 ▼
    ┌───────────────── HOST (Electron main process) ─────────┐
-   │  GameSnapshot.entities['soldier-42'] = {                │
-   │     unitDefId: 'soldier',  hp: 47,  x: 3, y: 5,  ...    │
+   │  GameSnapshot.entities['entity-42'] = {                │
+   │     entityDefId: 'entity',  hp: 47,  x: 3, y: 5,  ...    │
    │  }                                                      │
    │                                                         │
    │  StateProjector.project(snapshot, playerId)             │
@@ -135,10 +135,10 @@ games/tactics/data/units/soldier.json           ← static definition
    │  gameStore.snapshot  (Zustand — §4.4)                   │
    │                                                         │
    │  <BoardScreen>                                          │
-   │    snapshot.entities.map(e => <Unit key={e.id} …/>)     │
+   │    snapshot.entities.map(e => <Entity key={e.id} …/>)     │
    │                                                         │
-   │  <Unit entity={e}>                                      │
-   │     const def = db.getByIdOrThrow('units', e.unitDefId) │
+   │  <Entity entity={e}>                                      │
+   │     const def = db.getByIdOrThrow('entities', e.entityDefId) │
    │     const sprite = pickSprite(def, e.hp)  ← stat-driven │
    │     const { asset } = useAsset(sprite)    ← §4.10 hook  │
    │     return <mesh>…<spriteMaterial map={asset}/>…        │
@@ -150,29 +150,29 @@ games/tactics/data/units/soldier.json           ← static definition
 #### Content JSON (pure data, one file)
 
 ```json
-// games/tactics/data/units/soldier.json
+// games/<game>/data/entities/entity.json
 {
-    "id": "soldier",
-    "name": "Soldier",
+    "id": "entity",
+    "name": "Entity",
     "stats": { "maxHp": 100, "damage": 25, "armor": 10 },
     "sprites": {
-        "healthy": "tactics/sprites/units/soldier-healthy.webp",
-        "wounded": "tactics/sprites/units/soldier-wounded.webp",
-        "critical": "tactics/sprites/units/soldier-critical.webp"
+        "healthy": "<game>/sprites/entities/entity-healthy.webp",
+        "wounded": "<game>/sprites/entities/entity-wounded.webp",
+        "critical": "<game>/sprites/entities/entity-critical.webp"
     },
-    "sfx": { "hit": "tactics/audio/sfx/soldier-hit.ogg" }
+    "sfx": { "hit": "<game>/audio/sfx/entity-hit.ogg" }
 }
 ```
 
-The `"tactics/sprites/…"` strings are `AssetRef<TextureAsset>` per §4.10 — typed at compile time, plain strings at rest.
+The `"<game>/sprites/…"` strings are `AssetRef<TextureAsset>` per §4.10 — typed at compile time, plain strings at rest.
 
 #### Simulation State (dynamic bits only)
 
 ```typescript
 // Inside GameSnapshot.entities on the host
-'soldier-42': {
-  id: 'soldier-42',
-  unitDefId: 'soldier',   // ← ref into ContentDatabase
+'entity-42': {
+  id: 'entity-42',
+  entityDefId: 'entity',   // ← ref into ContentDatabase
   ownerId: 'p1',
   position: { x: 3, y: 5 },
   hp: 47,                 // ← dynamic, changes via reduce()
@@ -184,20 +184,20 @@ No sprite info here. No Three.js import reachable from this file — the simulat
 #### R3F Component (renderer — the only place that sees pixels)
 
 ```typescript
-// renderer/components/r3f/Unit.tsx
+// renderer/components/r3f/Entity.tsx
 import { useAsset } from '../../assets/useAsset';
 import { useContentDb } from '../../content/useContentDb';
 
-function pickSpriteRef(def: SoldierData, hp: number): AssetRef<TextureAsset> {
+function pickSpriteRef(def: EntityData, hp: number): AssetRef<TextureAsset> {
   const ratio = hp / def.stats.maxHp;
   if (ratio > 0.66) return def.sprites.healthy;
   if (ratio > 0.33) return def.sprites.wounded;
   return def.sprites.critical;
 }
 
-export function Unit({ entity }: { entity: ObservedEntityState }) {
+export function Entity({ entity }: { entity: ObservedEntityState }) {
   const db        = useContentDb();
-  const def       = db.getByIdOrThrow<SoldierData>('units', entity.unitDefId);
+  const def       = db.getByIdOrThrow<EntityData>('entities', entity.entityDefId);
   const spriteRef = pickSpriteRef(def, entity.hp);
   const { asset, loading } = useAsset(spriteRef);   // §4.10
   if (loading) return <FallbackSprite position={entity.position}/>;
@@ -209,7 +209,7 @@ export function Unit({ entity }: { entity: ObservedEntityState }) {
 }
 ```
 
-#### BoardScreen (game-declared, in `games/tactics/screens/`)
+#### BoardScreen (game-declared, in `games/<game>/screens/`)
 
 ```typescript
 function BoardScreen() {
@@ -218,7 +218,7 @@ function BoardScreen() {
   return (
     <GameCanvas>
       {Object.values(snapshot.entities).map(e =>
-        <Unit key={e.id} entity={e}/>
+        <Entity key={e.id} entity={e}/>
       )}
     </GameCanvas>
   );
@@ -229,18 +229,18 @@ function BoardScreen() {
 
 A damage action flows like this:
 
-1. Player dispatches `tactics:attack` via `window.__chimera.game.dispatch(...)` (§4.1).
+1. Player dispatches `<game>:attack` via `window.__chimera.game.dispatch(...)` (§4.1).
 2. Host `ActionPipeline.process()` runs the 7-step pipeline (§4.7): validate → reduce → history → project → broadcast.
-3. `reduce()` returns a new `GameSnapshot` where `entities['soldier-42'].hp = 22`.
-4. `StateProjector` produces a `PlayerSnapshot` per player (fog of war applied — a soldier in fog never reaches the renderer at all).
+3. `reduce()` returns a new `GameSnapshot` where `entities['entity-42'].hp = 22`.
+4. `StateProjector` produces a `PlayerSnapshot` per player (fog of war applied — an entity in fog never reaches the renderer at all).
 5. IPC pushes the `PlayerSnapshot` into `gameStore.applySnapshot(...)` (§4.4).
-6. React re-renders `<Unit>`; `pickSpriteRef` now returns `def.sprites.critical`; `useAsset` returns the critical texture from the `AssetManager` cache (§4.10). If it was preloaded as `'critical'` priority, no flicker.
+6. React re-renders `<Entity>`; `pickSpriteRef` now returns `def.sprites.critical`; `useAsset` returns the critical texture from the `AssetManager` cache (§4.10). If it was preloaded as `'critical'` priority, no flicker.
 
 ### B.5 Why the Indirection Is Worth It
 
 - **Simulation has zero Three.js / DOM dependency** — same code runs headless in tests, in the AI layer (§4.9), and in save/load replay (§4.11).
 - **Designers change sprites by editing JSON.** No TypeScript rebuild. `tools/validate-assets.ts` (§4.10) catches typos at CI time.
-- **Fog of war is automatic.** The renderer literally cannot render a soldier it never received in its `PlayerSnapshot` — `VisibilityRules` decided upstream (§4.6).
+- **Fog of war is automatic.** The renderer literally cannot render an entity it never received in its `PlayerSnapshot` — `VisibilityRules` decided upstream (§4.6).
 - **Bit-identical determinism.** Stats live in integer fields per §4.2.1 Rule 3; the sprite bucket is derived deterministically from `(hp, maxHp)`, so every client shows the same sprite for the same state.
 - **Stat-driven visuals are a pure renderer concern.** Adding a `"legendary"` sprite variant for `hp > 150%` is a `pickSpriteRef` change and one JSON edit — no engine, no network, no save-migration changes.
 
@@ -248,23 +248,23 @@ A damage action flows like this:
 
 | Temptation                                                     | Why it's wrong here                                                                                                               | Correct place                                                                                                        |
 | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Store `currentSprite: THREE.Texture` on the entity             | Couples simulation to Three.js; breaks determinism, replay, save. Violates invariant "simulation has zero renderer dependencies." | Derive in `<Unit>` from stats + content def via `pickSpriteRef`.                                                     |
-| Put `maxHp: 100` on every entity                               | Duplicates static data in every snapshot; bloats saves and network frames.                                                        | Put on `SoldierData` in content; entity stores only `unitDefId` + `hp`.                                              |
+| Store `currentSprite: THREE.Texture` on the entity             | Couples simulation to Three.js; breaks determinism, replay, save. Violates invariant "simulation has zero renderer dependencies." | Derive in `<Entity>` from stats + content def via `pickSpriteRef`.                                                   |
+| Put `maxHp: 100` on every entity                               | Duplicates static data in every snapshot; bloats saves and network frames.                                                        | Put on `EntityData` in content; entity stores only `entityDefId` + `hp`.                                             |
 | Have the renderer directly mutate `entity.hp`                  | Breaks host-authoritative rule (§1, §6); causes desync.                                                                           | Dispatch an action; wait for the authoritative snapshot.                                                             |
 | Use `Math.random()` to roll a critical hit inside `reduce()`   | Violates invariant #43 — non-deterministic; soak test (§10) catches it within minutes.                                            | Use `ctx.rng.intBetween(1, 100)` — seeded from `(state.seed, state.tick)`.                                           |
 | Use `Date.now()` as a cooldown timer in state                  | Violates invariants #42 and #43; breaks replay and save-file portability across timezones/clocks.                                 | Store `cooldownUntilTick: number` and compare to `state.tick`.                                                       |
 | Store `hp: 47.5` (fractional HP)                               | Violates invariant #44 — floats are not bit-exact across CPUs; causes cross-platform desync.                                      | Scale up: use integer HP `475` with "tenths of HP" semantics, or fixed-point.                                        |
-| Load `soldier-critical.webp` on first damage tick              | First-hit stutter; 200ms frame spike.                                                                                             | Declare it `'critical'` priority in `asset-manifest.ts` → preloaded before match (§4.10).                            |
-| Reach directly from `<Unit>` into the host's `GameSnapshot`    | There is no such access path; attempting it via Electron remote is a security violation (§9).                                     | Read `PlayerSnapshot` from `gameStore` (§4.4). If a field is missing, it was masked by `VisibilityRules` on purpose. |
-| Put HUD logic (turn timer, undo button) into `<Unit>`          | Conflates entity rendering with shell chrome.                                                                                     | HUD lives in engine `shell/` or game `screens/`; the `<Unit>` component only draws a unit.                           |
-| Add a new action type by editing `StateReducer` in engine core | Breaks the Action Registry pattern (§4.7); engine must stay game-agnostic.                                                        | Add an `ActionDefinition` in `games/tactics/actions/` and register it.                                               |
+| Load `entity-critical.webp` on first damage tick               | First-hit stutter; 200ms frame spike.                                                                                             | Declare it `'critical'` priority in `asset-manifest.ts` → preloaded before match (§4.10).                            |
+| Reach directly from `<Entity>` into the host's `GameSnapshot`  | There is no such access path; attempting it via Electron remote is a security violation (§9).                                     | Read `PlayerSnapshot` from `gameStore` (§4.4). If a field is missing, it was masked by `VisibilityRules` on purpose. |
+| Put HUD logic (turn timer, undo button) into `<Entity>`        | Conflates entity rendering with shell chrome.                                                                                     | HUD lives in engine `shell/` or game `screens/`; the `<Entity>` component only draws an entity.                      |
+| Add a new action type by editing `StateReducer` in engine core | Breaks the Action Registry pattern (§4.7); engine must stay game-agnostic.                                                        | Add an `ActionDefinition` in `games/<game>/actions/` and register it.                                                |
 | Read a game setting inside `reduce()` to change outcome        | Violates invariant #36 — settings are UI-only; they are not replayed or synchronised.                                             | Put it in match config (lobby setup) so all clients agree.                                                           |
 | Call `useAsset()` with a ref that isn't in `asset-manifest.ts` | Works in dev but `validate-assets.ts` will flag it, and it won't be packaged into `resources/` in production.                     | Register every `AssetRef` in the manifest with `'critical'` or `'deferred'` priority.                                |
 | Send the full `GameSnapshot` to the renderer "for convenience" | Leaks hidden information (opponent hand, fog-covered entities); trivially cheatable via devtools.                                 | Always route through `StateProjector` → `PlayerSnapshot`, even for the host's own renderer.                          |
 
 ### B.7 The One-Sentence Version
 
-**Content defines what a Soldier _is_; simulation tracks what a Soldier _is currently doing_; renderer decides what a Soldier _looks like right now_ — and `AssetRef` strings + `unitDefId` strings are the only glue between them.**
+**Content defines what a Entity _is_; simulation tracks what a Entity _is currently doing_; renderer decides what a Entity _looks like right now_ — and `AssetRef` strings + `entityDefId` strings are the only glue between them.**
 
 ---
 

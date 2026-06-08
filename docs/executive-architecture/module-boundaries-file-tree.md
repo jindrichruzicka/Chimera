@@ -24,14 +24,14 @@ Filename case encodes the primary export type:
 
 These boundaries are **hard constraints**. Any violation is a BLOCK finding at review.
 
-| Package                      | May import from                                                                                                                                                                                 | Must NOT import from                                                        |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| `simulation/`                | `shared/`                                                                                                                                                                                       | `renderer/`, `electron/`, `games/*`, any DOM API                            |
-| `ai/`                        | `simulation/`, `shared/`                                                                                                                                                                        | `renderer/`, `electron/`, `games/*`, any DOM API                            |
-| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals; test files may also `import type` from `simulation/settings` for cross-boundary compatibility guards (no runtime coupling) | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data`           |
-| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces in `screens/` and React shell contributions in `shell/` may also import the public `@chimera/renderer/components/ui` barrel       | Other `games/` directories; renderer internals outside the public UI barrel |
-| `electron/main/`             | All packages                                                                                                                                                                                    | DOM APIs                                                                    |
-| `networking/provider/local/` | Only within `local/`                                                                                                                                                                            | Engine or renderer internals                                                |
+| Package                      | May import from                                                                                                                                                                                                                                                                               | Must NOT import from                                                                        |
+| ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `simulation/`                | `shared/`                                                                                                                                                                                                                                                                                     | `renderer/`, `electron/`, `games/*`, any DOM API                                            |
+| `ai/`                        | `simulation/`, `shared/`                                                                                                                                                                                                                                                                      | `renderer/`, `electron/`, `games/*`, any DOM API                                            |
+| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals; test files may also `import type` from `simulation/settings` for cross-boundary compatibility guards (no runtime coupling)                                                                                               | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data`                           |
+| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces in `screens/` and React shell contributions in `shell/` may also import the public component-library barrels `@chimera/renderer/components/ui` (primitives) and `@chimera/renderer/components/chat` (the shared chat component) | Other `games/` directories; renderer internals outside the public component-library barrels |
+| `electron/main/`             | All packages                                                                                                                                                                                                                                                                                  | DOM APIs                                                                                    |
+| `networking/provider/local/` | Only within `local/`                                                                                                                                                                                                                                                                          | Engine or renderer internals                                                                |
 
 ---
 
@@ -217,13 +217,15 @@ chimera/
 │   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
 │   │   │   ├── ToastHost.tsx        # Renders transient notifications; see §4.30
-│   │   │   ├── ChatPanel.tsx        # Lobby + in-match chat UI; see §4.29
 │   │   │   └── perf/                # Performance HUD — toggled with F3; see §4.16
 │   │   │       ├── PerfHud.tsx
 │   │   │       ├── PerfProbe.tsx
 │   │   │       └── perfStore.ts
 │   │   ├── audio/                   # Event-driven audio playback components (e.g. EventAudioPlayer)
-│   │   ├── ui/                      # Pure 2D React UI primitives (buttons, modals)
+│   │   ├── chat/                    # PUBLIC chat component (Tier 2); barrel: @chimera/renderer/components/chat; mounted by lobby + game HUDs; see §4.35.1
+│   │   │   ├── index.ts             # Public barrel
+│   │   │   └── ChatPanel.tsx        # Lobby + in-match chat UI; see §4.29
+│   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera/renderer/components/ui
 │   │   └── r3f/                     # Reusable R3F building blocks
 │   │       ├── GameCanvas.tsx       # <Canvas> root; cameraMode + cameraPreset props; see §4.22
 │   │       ├── InteractionBlocker.tsx  # Context provider; see §4.23

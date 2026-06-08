@@ -3,13 +3,31 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 import { TacticsGameHud } from './TacticsGameHud';
 
+beforeEach(() => {
+    // The HUD now mounts the shared ChatPanel, which resolves past its
+    // loading/unavailable states via the host chat IPC bridge; stub it.
+    Object.defineProperty(window, '__chimera', {
+        configurable: true,
+        value: {
+            chat: {
+                send: vi.fn().mockResolvedValue({ ok: true }),
+                onMessage: vi.fn().mockReturnValue(vi.fn()),
+                history: vi.fn().mockResolvedValue([]),
+                mute: vi.fn(),
+                unmute: vi.fn(),
+            },
+        },
+    });
+});
+
 afterEach(() => {
     cleanup();
+    delete (window as unknown as { __chimera?: unknown }).__chimera;
 });
 
 function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
@@ -54,6 +72,64 @@ describe('TacticsGameHud', () => {
         expect(screen.getByTestId('undo')).toBeTruthy();
         expect(screen.getByTestId('redo')).toBeTruthy();
         expect(screen.getByTestId('end-turn')).toBeTruthy();
+    });
+
+    it('keeps the in-match chat collapsed by default so it cannot cover the board', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        // Collapsed by default: only the toggle is mounted; the ChatPanel is not
+        // in the tree, so it cannot occlude board interaction behind it.
+        const toggle = screen.getByTestId('tactics-chat-toggle');
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(screen.queryByTestId('chat-panel')).toBeNull();
+        expect(screen.queryByTestId('chat-unavailable')).toBeNull();
+    });
+
+    it('opens the chat inside the shared Drawer dialog when toggled, as a sibling of the HUD footer', async () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        fireEvent.click(screen.getByTestId('tactics-chat-toggle'));
+
+        // Tactics mounts the shared ChatPanel inside the shared Drawer primitive,
+        // so in-match chat is a proper accessible dialog rather than an ad-hoc div.
+        const dialog = await screen.findByRole('dialog', { name: 'Match chat' });
+        expect(dialog).toHaveAttribute('aria-modal', 'true');
+
+        const chatPanel = screen.getByTestId('chat-panel');
+        expect(dialog.contains(chatPanel)).toBe(true);
+        expect(screen.getByTestId('tactics-chat-toggle')).toHaveAttribute('aria-expanded', 'true');
+
+        // The drawer is a sibling of the HUD footer, not nested inside the landmark.
+        expect(screen.getByLabelText('Game HUD').contains(chatPanel)).toBe(false);
+    });
+
+    it('collapses the chat drawer again when toggled off', async () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        const toggle = screen.getByTestId('tactics-chat-toggle');
+        fireEvent.click(toggle);
+        expect(await screen.findByRole('dialog', { name: 'Match chat' })).toBeTruthy();
+
+        fireEvent.click(toggle);
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByTestId('chat-panel')).toBeNull();
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    });
+
+    it('closes the chat drawer through the shared Drawer dismissal affordances, keeping the toggle in sync', async () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        const toggle = screen.getByTestId('tactics-chat-toggle');
+        fireEvent.click(toggle);
+        expect(await screen.findByRole('dialog', { name: 'Match chat' })).toBeTruthy();
+
+        // The Drawer owns Escape-to-dismiss; closing it drives the toggle state so
+        // the corner button reflects the collapsed chat afterwards.
+        fireEvent.keyDown(document, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog')).toBeNull();
+        expect(screen.queryByTestId('chat-panel')).toBeNull();
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
     });
 
     it('renders engine controls with shared UI button primitives', () => {

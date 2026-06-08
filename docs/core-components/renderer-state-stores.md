@@ -123,7 +123,7 @@ The lobby screen uses two small renderer-local helpers to keep component code ty
 
 Rules enforced by `parseLobbyConfig`:
 
-- `gameId` defaults to `'tactics'` when absent.
+- `gameId` defaults to the configured default game's id when absent.
 - `maxPlayers` accepts only integer strings.
 - Invalid values fall back to `4`.
 - Final `maxPlayers` is clamped to `[2, 16]`.

@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'path';
 import globalSetup from '../global-setup';
 import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import { inheritEnv } from './inherit-env';
 
 export interface ElectronFixtures {
     readonly electronApp: ElectronApplication;
@@ -45,15 +46,6 @@ export interface E2eElectronLaunchOptions {
 export interface E2eElectronLaunchConfig {
     readonly args: readonly string[];
     readonly env: Readonly<Record<string, string>>;
-}
-
-/** Filter out undefined entries from process.env to satisfy electron.launch's env type. */
-function inheritEnv(): Record<string, string> {
-    return Object.fromEntries(
-        Object.entries(process.env).filter(
-            (entry): entry is [string, string] => entry[1] !== undefined,
-        ),
-    );
 }
 
 let e2eBuildReady = false;

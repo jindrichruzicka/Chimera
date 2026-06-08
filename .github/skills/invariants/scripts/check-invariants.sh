@@ -104,6 +104,20 @@ check_grep "3" \
     'GameSnapshot' \
     electron/preload renderer
 
+# ─── Check 7: GameShell.tsx must not import from games/ (invariants 48 & 80) ──
+# GameShell stays game-agnostic; the GameScreenRegistry passed as a prop is the
+# sole coupling point between the engine renderer and a game's React code.
+GAMESHELL="renderer/components/shell/GameShell.tsx"
+if [[ -f "${GAMESHELL}" ]]; then
+    while IFS= read -r match; do
+        violation "48/80" "${match}"
+    done < <(
+        grep -nE "from ['\"].*games/" "${GAMESHELL}" \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

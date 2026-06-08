@@ -85,7 +85,7 @@ interface DataObject {
 **Preferred: one directory per collection, one file per item** (easy to diff/review in git)
 
 ```
-games/tactics/data/
+games/<game>/data/
 ├── damage-types/
 │   ├── fire.json
 │   └── physical.json
@@ -97,7 +97,7 @@ games/tactics/data/
 **Alternative: flat array file** (for small collections)
 
 ```
-games/tactics/data/
+games/<game>/data/
 └── abilities.json   ← [{ "id": "taunt", ... }, { "id": "rally", ... }]
 ```
 
@@ -155,8 +155,8 @@ interface ContentLoadOptions {
 ```typescript
 const db = await createContentLoader().load(
     [
-        { type: 'directory', path: 'games/tactics/data' }, // base game
-        { type: 'directory', path: 'games/tactics-expansion/data' }, // expansion
+        { type: 'directory', path: 'games/<game>/data' }, // base game
+        { type: 'directory', path: 'games/<game>-expansion/data' }, // expansion
     ],
     { schemas: { 'damage-types': DamageTypeSchema, units: UnitSchema }, validateRefs: true },
 );
@@ -173,7 +173,7 @@ validate(payload, state, playerId, ctx): ValidationResult {
     return { ok: true };
 },
 
-reduce(state, payload, playerId, ctx): TacticsSnapshot {
+reduce(state, payload, playerId, ctx): MyGameSnapshot {
     const attack = ctx.db!.getByIdOrThrow<UnitData>('units', attacker.unitDefId).attacks[0];
     const damageType = ctx.db!.resolveRef<DamageTypeData>(attack.damageType);
     const variance = ctx.rng.int(-2, 2);

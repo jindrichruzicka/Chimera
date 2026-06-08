@@ -78,8 +78,8 @@ interface GameSettingsSchema<TGameSettings> {
     readonly schema: ZodSchema<TGameSettings>; // for parse + runtime validation
 }
 
-// Example: tactics game extends EngineSettings with tactics-specific renderer preferences
-interface TacticsSettings extends EngineSettings {
+// Example: a game extends EngineSettings with game-specific renderer preferences
+interface GameSettings extends EngineSettings {
     showGrid: boolean;
     animationSpeed: 'slow' | 'normal' | 'fast' | 'instant';
     showDamageNumbers: boolean;
@@ -159,23 +159,23 @@ interface SettingsManager {
 ```
 App Start
   1. SettingsManager.registerSchema(engineSchema)            ← always first
-  2. SettingsManager.registerSchema(tacticsSchema)           ← per game at init
-  3. SettingsManager.getSettings('tactics')
-       → SettingsRepository.load('tactics')                  ← reads userData/settings/tactics.json
-       → SettingsMerger.mergeAll(engineDef, tacticsDef, userOverrides)
+  2. SettingsManager.registerSchema(gameSchema)              ← per game at init
+  3. SettingsManager.getSettings('<game>')
+       → SettingsRepository.load('<game>')                  ← reads userData/settings/<game>.json
+       → SettingsMerger.mergeAll(engineDef, gameDef, userOverrides)
        → returns ResolvedSettings
 
 User Changes Volume
-  1. Renderer: window.__chimera.settings.update({ audio: { masterVolume: 0.7 } }, 'tactics')
-     → IPC → SettingsManager.updateSettings(patch, 'tactics')
+  1. Renderer: window.__chimera.settings.update({ audio: { masterVolume: 0.7 } }, '<game>')
+     → IPC → SettingsManager.updateSettings(patch, '<game>')
      → SettingsMerger.mergeAll(..., newOverrides)
-     → SettingsRepository.save('tactics', newOverrides)   ← atomic write
+     → SettingsRepository.save('<game>', newOverrides)   ← atomic write
      → broadcast onChange → renderer → settingsStore.applySettings(resolved)
 
 Settings UI Reset
-  1. window.__chimera.settings.reset('tactics')
-     → SettingsManager.resetSettings('tactics')
-     → SettingsRepository.reset('tactics')               ← deletes userData file
+  1. window.__chimera.settings.reset('<game>')
+     → SettingsManager.resetSettings('<game>')
+     → SettingsRepository.reset('<game>')               ← deletes userData file
      → broadcast onChange → renderer with engine+game defaults
 ```
 

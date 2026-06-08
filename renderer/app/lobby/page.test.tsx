@@ -507,3 +507,64 @@ describe('Start Game button enable/disable', () => {
         expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(true);
     });
 });
+
+describe('LobbyPage chat panel', () => {
+    beforeEach(() => {
+        mockLocalSeatIds = [];
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
+        };
+        mockPush.mockReset();
+
+        Object.defineProperty(window, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
+                    join: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
+                    getLocalPlayerId: vi.fn(async () => 'p1'),
+                    leave: vi.fn(async () => undefined),
+                    startGame: vi.fn(async () => undefined),
+                    updatePlayerReadyState: vi.fn(async () => undefined),
+                },
+                system: { onConnectionStatus: vi.fn(() => () => undefined) },
+                game: { sendAction: vi.fn() },
+                chat: {
+                    send: vi.fn().mockResolvedValue({ ok: true }),
+                    onMessage: vi.fn().mockReturnValue(vi.fn()),
+                    history: vi.fn().mockResolvedValue([]),
+                    mute: vi.fn(),
+                    unmute: vi.fn(),
+                },
+            },
+        });
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+        delete (window as unknown as { __chimera?: unknown }).__chimera;
+    });
+
+    it('mounts the chat panel (lobby-scope chat) during an active lobby', async () => {
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('chat-panel')).toBeTruthy();
+        // The panel ships its own send affordances; assert the key E2E hooks.
+        // Sending is Enter-driven, so the composer exposes the input, not a button.
+        expect(screen.getByTestId('chat-messages')).toBeTruthy();
+        expect(screen.getByTestId('chat-body-input')).toBeTruthy();
+    });
+
+    it('does not mount the chat panel before a lobby is joined', () => {
+        mockLobbyState = null;
+        mockLocalPlayerId = null;
+
+        renderLobbyPage();
+
+        expect(screen.queryByTestId('chat-panel')).toBeNull();
+        expect(screen.queryByTestId('chat-unavailable')).toBeNull();
+    });
+});

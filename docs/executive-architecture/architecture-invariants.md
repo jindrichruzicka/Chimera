@@ -13,18 +13,18 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Thematic Index
 
-| Theme                                  | Invariants                                                                                                     |
-| -------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                                       |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95                          |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                              |
-| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                 |
-| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                         |
-| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                                     |
-| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                                 |
-| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96, 97 |
-| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                                            |
-| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                                 |
+| Theme                                  | Invariants                                                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                                           |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95                              |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                                  |
+| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                     |
+| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                             |
+| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                                         |
+| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                                     |
+| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96, 97, 99 |
+| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                                                |
+| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                                     |
 
 ---
 
@@ -132,7 +132,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **47.** `StateBroadcaster`, `MessageRouter`, `LobbyManager`, `SaveManager` and all other main-process orchestration modules must not import from `networking/provider/local/` or any other provider-specific subdirectory. Cross-module communication goes exclusively through `MultiplayerProvider`, `HostTransport`, and `ClientTransport`.
 
-**48.** Game UI beyond engine chrome lives in `games/<name>/screens/` and is registered via `GameScreenRegistry`. `GameShell.tsx` is game-agnostic — it never imports from any specific game package.
+**48.** Game UI beyond the engine's built-in shell lives in `games/<name>/screens/` and is registered via `GameScreenRegistry`. `GameShell.tsx` is game-agnostic — it never imports from any specific game package.
 
 **49.** Scene transitions are host-authoritative. `engine:scene_prepare` and `engine:scene_commit` are rejected if the dispatcher is not the host player. (See [Scene Transitions](../core-components/scene-transitions-fade.md).)
 
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–98
+## Invariants 91–99
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -240,7 +240,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **95.** `chimera:game:get-current-snapshot` is a read-only renderer-to-main IPC replay channel. It may return only the most recent projected `PlayerSnapshot` already stored for renderer delivery, or `null` when no snapshot has been sent. It must never expose `GameSnapshot`, accept renderer payload that changes gameplay state, trigger `ActionPipeline`, or mutate simulation state.
 
-**96.** Game renderer surfaces may import renderer UI primitives only through the public `@chimera/renderer/components/ui` barrel. This allowance is limited to game screen components under `games/<name>/screens/*.tsx` and React shell contributions under `games/<name>/shell/*.tsx`. Game code must not import renderer stores, IPC bridges, shell components, R3F components, asset managers, hooks, stylesheets, or other renderer internals; non-renderer game modules must not import renderer code.
+**96.** Game renderer surfaces may import the shared renderer component library only through its two public barrels — `@chimera/renderer/components/ui` (stateless design primitives, §4.35) and `@chimera/renderer/components/chat` (the shared chat component, §4.35.1). This allowance is limited to game screen components under `games/<name>/screens/*.tsx` and React shell contributions under `games/<name>/shell/*.tsx`. Game code must not import renderer stores, IPC bridges, `shell/` components, R3F components, asset managers, hooks, stylesheets, individual component files behind either barrel, or other renderer internals; non-renderer game modules must not import renderer code.
 
 **97.** Game-owned assets — audio, fonts, textures, models, and similar binary resources — must be committed and declared by the game package, not by `renderer/public`. Runtime renderer loading must resolve local `game-id/relative/path` references through the game-asset protocol. `GameFontFace.src` must not be an external URL, and runtime font loading must not fetch Google Fonts CSS or `fonts.gstatic.com` files; development-time downloads are allowed only through tooling that commits the resulting `.woff2` files into the game asset directory.
 

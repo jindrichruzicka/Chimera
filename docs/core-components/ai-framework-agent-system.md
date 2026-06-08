@@ -88,7 +88,7 @@ interface AgentManager {
 interface AIParams extends Record<string, number | string | boolean | null | undefined> {}
 
 // Example game extension:
-interface TacticsAIParams extends AIParams {
+interface GameAIParams extends AIParams {
     aggressivity: number; // 0.0 (passive) → 1.0 (all-out attack)
     riskTolerance: number; // 0.0 (never gambles) → 1.0 (high risk)
     preferredStrategy?: string; // strategy key (e.g. 'rush' | 'turtle' | 'balanced')
@@ -148,7 +148,7 @@ Commands span multiple simulation ticks. `onTick` returns `CommandProgress` to d
 // ai/engine/AICommand.ts
 
 interface AICommand<TParams extends AIParams = AIParams, TPayload = unknown> {
-    readonly type: string; // namespaced: 'tactics:move-to-target'
+    readonly type: string; // namespaced: '<game>:move-to-target'
     readonly payload: Readonly<TPayload>;
 
     onStart(snapshot: PlayerSnapshot, params: TParams, context: CommandContext): void;

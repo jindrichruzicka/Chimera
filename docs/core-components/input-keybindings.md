@@ -55,7 +55,7 @@ export type EngineBindings = Record<InputActionId, KeyBinding>;
  *
  * @example
  * ```ts
- * type TacticsBindings = GameBindingSchema<{
+ * type GameBindings = GameBindingSchema<{
  *     'engine:undo': KeyBinding;
  *     'game:end-turn': KeyBinding;
  * }>;

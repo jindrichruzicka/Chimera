@@ -50,6 +50,19 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { resolveGameResultOutcome } from '@chimera/shared/game-screen-contract.js';`,
         },
         {
+            // Public chat library barrel is allowed from a game surface.
+            filename: 'games/tactics/screens/TacticsGameHud.tsx',
+            code: `import { ChatPanel } from '@chimera/renderer/components/chat';`,
+        },
+        {
+            filename: 'games/tactics/screens/TacticsGameHud.tsx',
+            code: `import { ChatPanel } from '@chimera/renderer/components/chat/index.js';`,
+        },
+        {
+            filename: 'games/tactics/shell/TacticsShellChat.tsx',
+            code: `import { ChatPanel } from '@chimera/renderer/components/chat';`,
+        },
+        {
             filename: 'games/tactics/actions/MoveUnitAction.ts',
             code: `import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';`,
         },
@@ -142,6 +155,12 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             // shell .tsx file importing a renderer internal (not the barrel)
             filename: 'games/tactics/shell/TacticsShellSidebar.tsx',
             code: `import { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // chat exposes only its barrel; deep file imports stay forbidden.
+            filename: 'games/tactics/screens/TacticsGameHud.tsx',
+            code: `import { ChatPanel } from '@chimera/renderer/components/chat/ChatPanel.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
     ],

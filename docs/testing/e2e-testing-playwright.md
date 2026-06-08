@@ -76,7 +76,7 @@ e2e/
     ├── save-load.spec.ts
     ├── crash-recovery.spec.ts
     ├── settings-persistence.spec.ts
-    └── tactics-3d-render.spec.ts
+    └── game-3d-render.spec.ts
 ```
 
 > **Note — Vitest shape-check files in `e2e/` root:** `playwright.config.test.ts` and
@@ -709,7 +709,7 @@ test.describe('Save / load', () => {
         }
 
         await saveLoadWindow.evaluate(() =>
-            globalThis.__chimera.saves.save({ gameId: 'tactics', label: 'save-load-spec' }),
+            globalThis.__chimera.saves.save({ gameId: '<game>', label: 'save-load-spec' }),
         );
         const slotId = await getLastSavedSlotId(saveLoadApp);
         const savedTick = await getLastSavedTick(saveLoadApp);

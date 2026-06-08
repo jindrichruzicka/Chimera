@@ -148,7 +148,7 @@ Shell page containers should also use tokens rather than hardcoded layout values
 
 When a game is in context, shell-level UI may load the game's renderer shell contribution through
 the renderer game registry. This context is explicit launch or URL state such as
-`/main-menu/?gameId=tactics`, `/settings/?gameId=tactics`, or `/lobby/?gameId=tactics`; it does not
+`/main-menu/?gameId=<game>`, `/settings/?gameId=<game>`, or `/lobby/?gameId=<game>`; it does not
 require a running lobby to exist. The default production launch route carries the built-in game's
 `gameId`, so normal shell navigation preserves a stable game context from first paint. Lobby runtime
 state and `LobbyConfig` defaults are not used as shell background/theme context. Once a game registry
@@ -157,11 +157,11 @@ CSS, because the override is a side-effect import loaded at game registry initia
 (§4.35):
 
 ```typescript
-// games/tactics/styles/register-token-overrides.tsx
-import './tokens-override.css'; // Re-declares --ch-* tokens for Tactics visual language
+// games/<game>/styles/register-token-overrides.tsx
+import './tokens-override.css'; // Re-declares --ch-* tokens for the game's visual language
 
-// games/tactics/screens/index.tsx and renderer-owned shell loaders import the registration module.
-export const TacticsGameScreenRegistry: GameScreenRegistry = { ... };
+// games/<game>/screens/index.tsx and renderer-owned shell loaders import the registration module.
+export const gameScreenRegistry: GameScreenRegistry = { ... };
 ```
 
 Because token overrides are global CSS custom properties, they cascade into _all_ descendant
@@ -356,25 +356,25 @@ export interface GameFontFace {
 ```
 
 `src` must use the local `game-id/relative/path` asset-ref shape, for example
-`tactics/fonts/Cinzel-Regular.woff2`. Runtime Google Fonts URLs are forbidden. Font files are
+`<game>/fonts/MyFont-Regular.woff2`. Runtime Google Fonts URLs are forbidden. Font files are
 committed only as game-owned assets:
 
-| Purpose                 | Path example                                      |
-| ----------------------- | ------------------------------------------------- |
-| Game-owned source asset | `games/tactics/assets/fonts/Cinzel-Regular.woff2` |
+| Purpose                 | Path example                                     |
+| ----------------------- | ------------------------------------------------ |
+| Game-owned source asset | `games/<game>/assets/fonts/MyFont-Regular.woff2` |
 
 `renderer/game/GameFontLoader.ts` resolves the local `src` through the app protocol as
-`chimera://renderer/game-assets/tactics/fonts/Cinzel-Regular.woff2`, loads it with the browser
+`chimera://renderer/game-assets/<game>/fonts/MyFont-Regular.woff2`, loads it with the browser
 `FontFace` API, and adds the loaded face to `document.fonts`. The loader deduplicates by family,
 source, weight, and style so repeated shell loads do not add duplicate faces.
 
-The Tactics shell provides Cinzel at weights 400, 700, and 900:
+A game's shell may provide a custom font at weights 400, 700, and 900:
 
 ```typescript
-export const tacticsFonts: readonly GameFontFace[] = [
-    { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Regular.woff2', weight: '400', display: 'swap' },
-    { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Bold.woff2', weight: '700', display: 'swap' },
-    { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Black.woff2', weight: '900', display: 'swap' },
+export const gameFonts: readonly GameFontFace[] = [
+    { family: 'MyFont', src: '<game>/fonts/MyFont-Regular.woff2', weight: '400', display: 'swap' },
+    { family: 'MyFont', src: '<game>/fonts/MyFont-Bold.woff2', weight: '700', display: 'swap' },
+    { family: 'MyFont', src: '<game>/fonts/MyFont-Black.woff2', weight: '900', display: 'swap' },
 ];
 ```
 
@@ -582,14 +582,14 @@ When settings is opened with explicit URL game context, the Close action returns
 ### Declaring a Game Settings Page
 
 A game declares its settings page in `games/<name>/shell/settings-page.ts` and exposes it through
-the renderer game registry as `LoadedRendererGame.shell.settings`. The canonical example is
-`games/tactics/shell/settings-page.ts`, which contributes five tabs: Audio, Display, Gameplay, AI,
+the renderer game registry as `LoadedRendererGame.shell.settings`. A game's definition (e.g.
+`games/<game>/shell/settings-page.ts`) might contribute five tabs: Audio, Display, Gameplay, AI,
 and Controls.
 
 ```typescript
 import type { GameSettingsPageDefinition } from '@chimera/shared/game-shell-contract.js';
 
-export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
+export const gameSettingsPageDefinition: GameSettingsPageDefinition = {
     tabs: [
         {
             id: 'gameplay',
@@ -601,8 +601,8 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
                     items: [{ kind: 'engine-field', fieldId: 'gameplay.showPerfHud' }],
                 },
                 {
-                    id: 'tactics-gameplay',
-                    label: 'Tactics',
+                    id: 'game-gameplay',
+                    label: 'Game',
                     items: [
                         {
                             kind: 'game-field',
@@ -618,10 +618,10 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
 };
 ```
 
-`game-field.path` is a dot-path into the resolved settings object returned by §4.13. Tactics adds
+`game-field.path` is a dot-path into the resolved settings object returned by §4.13. A game that adds
 root-level extension keys (`showGrid`, `animationSpeed`, `showDamageNumbers`,
-`aiThinkingDelayMs`) because its `TacticsSettings` interface extends `EngineSettings` directly.
-Games that nest their own settings may use paths such as `tactics.difficulty` instead.
+`aiThinkingDelayMs`) does so because its `GameSettings` interface extends `EngineSettings` directly.
+Games that nest their own settings may use paths such as `<game>.difficulty` instead.
 
 The registry wiring keeps shell pages free of static game imports:
 
@@ -670,9 +670,9 @@ renderer/
     └── saves/
         └── page.tsx            # Uses <Button variant="primary|ghost|danger" />
 games/
-└── tactics/
+└── <game>/
     └── shell/
-    ├── TacticsShellBackground.tsx # Optional shellBackground component contribution
+    ├── ShellBackground.tsx # Optional shellBackground component contribution
         ├── main-menu.ts        # Sample GameMainMenuDefinition + menuCommands registry
         └── settings-page.ts    # Optional GameSettingsPageDefinition contribution
 ```

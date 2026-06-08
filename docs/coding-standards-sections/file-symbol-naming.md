@@ -28,4 +28,4 @@ Test files mirror their source: `ActionPipeline.test.ts` alongside `ActionPipeli
 - **Hooks**: `useCamelCase`.
 - **IPC channels**: `chimera:<domain>:<verb>` — all lowercase kebab. Example: `chimera:game:send-action`.
 - **Zustand store methods**: `camelCase` verbs — `applySnapshot`, `setLobbyState`, `clearPredictions`.
-- **Action types**: `<namespace>:<verb_noun>` — all lowercase with underscores for space. Example: `tactics:move_unit`, `engine:end_turn`.
+- **Action types**: `<namespace>:<verb_noun>` — all lowercase with underscores for space. Example: `<game>:move_unit`, `engine:end_turn`.

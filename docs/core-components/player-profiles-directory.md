@@ -115,7 +115,7 @@ type AdmissionRejection =
 //                        used for NAMESPACE_COLLISION detection. Defaults to empty set.
 // gameSchemaValidator  — optional game-specific validator; receives the base-validated
 //                        PlayerProfile and returns false to trigger SCHEMA_MISMATCH.
-//                        Enables game extensions (e.g. TacticsProfile) to enforce
+//                        Enables game extensions (e.g. a game-specific Profile) to enforce
 //                        fields beyond the EngineProfile base.
 function admit(
     attestation: unknown,

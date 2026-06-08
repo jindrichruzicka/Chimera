@@ -1,13 +1,13 @@
 'use client';
 
-// renderer/components/shell/ChatPanel.tsx
+// renderer/components/chat/ChatPanel.tsx
 //
-// Engine-chrome chat UI (§4.29 — Chat System). Renders the renderer `chatStore`
+// Shared chat UI (§4.29 — Chat System). Renders the renderer `chatStore`
 // rolling buffer, hides muted senders at render time, subscribes to the host
 // push channel (`window.__chimera.chat.onMessage`) and feeds it into the store,
 // and provides a send box with a scope selector.
 //
-// This is game-agnostic engine chrome: it imports nothing from `games/*` and
+// This is a game-agnostic shared component: it imports nothing from `games/*` and
 // never derives content from authoritative simulation state. Chat is a cosmetic
 // side channel (Invariant #72) and is routed through the host relay (Invariant
 // #73) — this component never messages peers directly.
@@ -22,7 +22,6 @@
 // Task: F45 / T05 (issue #683)
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { ScrollArea } from '../ui/ScrollArea';
 import { Select } from '../ui/Select';
@@ -174,11 +173,20 @@ export function ChatPanel(): React.ReactElement {
 
     const trimmedBody = body.trim();
     const scope = buildScope();
-    const canSend = bridgeAvailable && trimmedBody !== '' && scope !== null;
 
     function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
         event.preventDefault();
         void submit();
+    }
+
+    // Enter sends the message (there is no Send button). Route through the form's
+    // submit handler so there is a single send path; skip while an IME candidate
+    // is being composed. `submit()` guards empty/unaddressed messages internally.
+    function handleBodyKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
+        if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+            event.preventDefault();
+            event.currentTarget.form?.requestSubmit();
+        }
     }
 
     async function submit(): Promise<void> {
@@ -254,30 +262,35 @@ export function ChatPanel(): React.ReactElement {
             ) : null}
 
             <form className={styles['composer']} onSubmit={handleSubmit}>
-                <Select
-                    data-testid="chat-scope-select"
-                    label="Scope"
-                    onValueChange={(value) => {
-                        setScopeKind(value as ScopeKind);
-                    }}
-                    options={SCOPE_OPTIONS}
-                    value={scopeKind}
-                />
-                {scopeKind === 'private' ? (
+                <div className={styles['selectors']}>
                     <Select
-                        data-testid="chat-recipient-select"
-                        label="Recipient"
-                        onValueChange={setRecipientId}
-                        options={recipientOptions}
-                        value={recipientId}
+                        className={styles['selector']}
+                        data-testid="chat-scope-select"
+                        label="Scope"
+                        onValueChange={(value) => {
+                            setScopeKind(value as ScopeKind);
+                        }}
+                        options={SCOPE_OPTIONS}
+                        value={scopeKind}
                     />
-                ) : null}
+                    {scopeKind === 'private' ? (
+                        <Select
+                            className={styles['selector']}
+                            data-testid="chat-recipient-select"
+                            label="Recipient"
+                            onValueChange={setRecipientId}
+                            options={recipientOptions}
+                            value={recipientId}
+                        />
+                    ) : null}
+                </div>
                 <TextInput
                     autoComplete="off"
                     data-testid="chat-body-input"
                     label="Message"
+                    onKeyDown={handleBodyKeyDown}
                     onValueChange={setBody}
-                    placeholder="Type a message…"
+                    placeholder="Type a message and press Enter…"
                     value={body}
                 />
                 {sendError ? (
@@ -285,9 +298,6 @@ export function ChatPanel(): React.ReactElement {
                         {sendError}
                     </p>
                 ) : null}
-                <Button data-testid="chat-send" disabled={!canSend} type="submit">
-                    Send
-                </Button>
             </form>
         </section>
     );

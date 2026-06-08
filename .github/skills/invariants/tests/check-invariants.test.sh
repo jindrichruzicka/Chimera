@@ -297,6 +297,50 @@ test_production_still_flagged_alongside_test_mention() {
     fi
 }
 
+# Test 11: import from games/ inside GameShell.tsx → violation [invariant-48/80]
+test_games_import_in_gameshell_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/components/shell/GameShell.tsx" \
+        "import { TacticsBoard } from '../../../games/tactics/screens/Board';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-48/80\]'; then
+            pass "games/ import in GameShell.tsx detected as [invariant-48/80]"
+        else
+            fail "GameShell games/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "games/ import in GameShell.tsx not detected (exit 0)"
+    fi
+}
+
+# Test 12: clean GameShell.tsx (engine-internal import only) → NOT flagged
+test_clean_gameshell_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/components/shell/GameShell.tsx" \
+        "import { PerfHud } from './perf/PerfHud.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "clean GameShell.tsx (engine-internal import) not flagged"
+    else
+        fail "clean GameShell.tsx wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -310,6 +354,8 @@ test_comment_mention_not_flagged
 test_test_title_string_not_flagged
 test_eslint_fixture_not_flagged
 test_production_still_flagged_alongside_test_mention
+test_games_import_in_gameshell_detected
+test_clean_gameshell_passes
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

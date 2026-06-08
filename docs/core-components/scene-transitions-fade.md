@@ -23,7 +23,7 @@ Transitions are expressed as normal engine actions — deterministic, logged in 
 
 | Layer                      | Scope                                                          | Owner                   | Example                                 |
 | -------------------------- | -------------------------------------------------------------- | ----------------------- | --------------------------------------- |
-| `phase`                    | Intra-match state machine (`deployment → combat → resolution`) | Game reducer            | Tactics combat round phase              |
+| `phase`                    | Intra-match state machine (`deployment → combat → resolution`) | Game reducer            | A game's combat round phase             |
 | `sceneId`                  | Cross-match / level structure                                  | Engine + scene registry | `'lobby'`, `'level-1'`, `'post-game'`   |
 | `GameScreenRegistry` entry | Active UI panel within the current scene                       | Renderer (local)        | `'tech-tree'` vs `'board'` during match |
 
@@ -34,7 +34,7 @@ A scene change is a simulation event broadcast to all clients. A screen change i
 ```typescript
 // simulation/scenes/SceneDescriptor.ts
 
-type SceneId = string; // namespaced: 'engine:lobby', 'tactics:level-1'
+type SceneId = string; // namespaced: 'engine:lobby', '<game>:level-1'
 
 interface SceneDescriptor {
     readonly id: SceneId;
