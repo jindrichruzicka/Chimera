@@ -1,0 +1,91 @@
+.root {
+    color: var(--ch-color-text-primary);
+    display: grid;
+    font-family: var(--ch-font-ui);
+    gap: var(--ch-space-sm);
+}
+
+.messages {
+    display: grid;
+    min-block-size: 0;
+}
+
+.placeholder {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    margin: var(--ch-space-none);
+    padding: var(--ch-space-sm);
+}
+
+.scroll {
+    max-block-size: calc(var(--ch-space-xl) * 5);
+}
+
+.list {
+    display: grid;
+    gap: var(--ch-space-xs);
+    list-style: none;
+    margin: var(--ch-space-none);
+    padding: var(--ch-space-none);
+}
+
+.message {
+    align-items: baseline;
+    column-gap: var(--ch-space-sm);
+    display: grid;
+    grid-template-columns: max-content minmax(var(--ch-space-none), 1fr) max-content;
+    padding-block: var(--ch-space-xs);
+}
+
+.author {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+}
+
+.body {
+    color: var(--ch-color-text-primary);
+    font-size: var(--ch-font-size-md);
+    line-height: var(--ch-line-height-tight);
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+
+.mutedStrip {
+    align-items: center;
+    border-color: var(--ch-color-border-muted);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-xs);
+    padding: var(--ch-space-xs);
+}
+
+.mutedLabel {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+}
+
+.mutedChip {
+    align-items: center;
+    color: var(--ch-color-text-primary);
+    display: inline-flex;
+    font-size: var(--ch-font-size-sm);
+    gap: var(--ch-space-xs);
+}
+
+.composer {
+    align-items: end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+}
+
+.error {
+    color: var(--ch-color-error);
+    font-size: var(--ch-font-size-sm);
+    inline-size: 100%;
+    margin: var(--ch-space-none);
+}
