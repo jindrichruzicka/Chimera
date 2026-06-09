@@ -1161,6 +1161,17 @@ export async function main(): Promise<void> {
         },
     });
 
+    // Wire the CHIMERA_E2E-only `deliverChat` hook to the ChatHub sink so chat
+    // E2E specs can drive the renderer 500-entry rolling-buffer cap through the
+    // real ChatHub → CHAT_MESSAGE_CHANNEL → chatStore → ChatPanel path, bypassing
+    // the relay + rate limit (both irrelevant to the cap). No-op when CHIMERA_E2E
+    // is absent (resolvedE2eHooks is undefined).
+    if (resolvedE2eHooks !== undefined) {
+        resolvedE2eHooks.deliverChat = (message) => {
+            chatHub.deliverLocal(message);
+        };
+    }
+
     const lobbyManager = new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, {
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
         onSessionHosted: (transport, metadata) => {

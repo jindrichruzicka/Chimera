@@ -1609,25 +1609,111 @@ describe('LobbyManager — CHAT side-channel', () => {
         await manager.closeLobby();
     });
 
-    it('sendLocalChat returns a benign rejection on a joined-client session (host path only)', async () => {
+    it('forwards an inbound CHAT to a joined client renderer via onLocalChatDelivered', async () => {
         const provider = makeProvider();
-        const hostManager = makeManager(provider);
-        const code = (await hostManager.hostLobby(HOST_PARAMS)).sessionId;
-
         const directory = new PlayerDirectory();
-        const joinManager = new LobbyManager(provider, createNoopLogger(), {
-            chatRelay: new ChatRelay(createNoopLogger(), directory),
+        const chatRelay = new ChatRelay(createNoopLogger(), directory);
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            chatRelay,
         });
-        await joinManager.joinLobby({ address: code });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
 
-        // Client send over the wire is a deliberate follow-on — no local relay path.
-        expect(joinManager.sendLocalChat('hi', { kind: 'lobby' })).toEqual({
-            ok: false,
-            reason: 'no_session',
+        const clientDelivered: ChatMessage[] = [];
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            onLocalChatDelivered: (message) => clientDelivered.push(message),
         });
+        await joinManager.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Alice' }),
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        // Host sends a private message to the client; the relay fans it out over
+        // the transport, and the joined client must surface it to its renderer.
+        const clientId = joinManager.getLocalPlayerId()!;
+        hostManager.sendLocalChat('hello client', { kind: 'private', toPlayerId: clientId });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        expect(clientDelivered).toHaveLength(1);
+        expect(clientDelivered[0]!.body).toBe('hello client');
+        expect(clientDelivered[0]!.fromPlayerId).toBe(hostInfo.hostId);
+        expect(clientDelivered[0]!.id).not.toBe('');
 
         await joinManager.closeLobby();
         await hostManager.closeLobby();
+    });
+
+    it('sendLocalChat on a joined client routes over the transport; the host relay delivers it', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const chatRelay = new ChatRelay(createNoopLogger(), directory);
+        const hostDelivered: ChatMessage[] = [];
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            chatRelay,
+            onLocalChatDelivered: (message) => hostDelivered.push(message),
+        });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+        // The host is NOT added to the directory here: deliverChat includes the
+        // local host as a `lobby`-scope recipient at the delivery layer, so a
+        // client's lobby message still reaches the host without host
+        // self-registration (which would collide with the client's localProfileId).
+
+        const clientDelivered: ChatMessage[] = [];
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            onLocalChatDelivered: (message) => clientDelivered.push(message),
+        });
+        await joinManager.joinLobby({
+            address: hostInfo.sessionId,
+            profile: makeValidProfile({ displayName: 'Alice' }),
+        });
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        // The client no longer gets a benign no_session rejection — the message
+        // is sent to the host (the authoritative relay) and optimistically ok'd.
+        const result = joinManager.sendLocalChat('hi from client', { kind: 'lobby' });
+        expect(result).toEqual({ ok: true });
+
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        // The host relay stamped + delivered the client's message to both seats
+        // (the host via local delivery, the client via the wire echo).
+        const clientId = joinManager.getLocalPlayerId()!;
+        expect(hostDelivered).toHaveLength(1);
+        expect(hostDelivered[0]!.body).toBe('hi from client');
+        expect(hostDelivered[0]!.fromPlayerId).toBe(clientId);
+        expect(hostDelivered[0]!.id).not.toBe('');
+        expect(clientDelivered).toHaveLength(1);
+        expect(clientDelivered[0]!.body).toBe('hi from client');
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('delivers a host-originated lobby message to the local host even when it is absent from the directory', async () => {
+        const provider = makeProvider();
+        const directory = new PlayerDirectory();
+        const chatRelay = new ChatRelay(createNoopLogger(), directory);
+        const localDelivered: ChatMessage[] = [];
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            profileGate: createProfileGate(directory),
+            chatRelay,
+            onLocalChatDelivered: (message) => localDelivered.push(message),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        // Lobby means "every connected player"; the host is one. The relay's
+        // recipient universe (the directory) omits the unregistered host, but
+        // deliverChat includes the local host for lobby scope so it still sees it.
+        const result = manager.sendLocalChat('hello lobby', { kind: 'lobby' });
+
+        expect(result).toEqual({ ok: true });
+        expect(localDelivered).toHaveLength(1);
+        expect(localDelivered[0]!.body).toBe('hello lobby');
+        expect(localDelivered[0]!.fromPlayerId).toBe(manager.getLocalPlayerId());
+
+        await manager.closeLobby();
     });
 
     it('sendLocalChat returns a no_session rejection when there is no active session', () => {

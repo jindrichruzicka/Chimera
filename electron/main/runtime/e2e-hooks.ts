@@ -18,6 +18,7 @@
  */
 
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import type { ChatMessage } from '@chimera/shared/chat.js';
 import { createRingBuffer } from './ws-ring-buffer.js';
 
 /** Maximum number of WebSocket frames retained in the E2E buffer. Oldest frames are evicted when this limit is reached. */
@@ -96,6 +97,22 @@ export interface E2eHooks {
      *   to connect the hook to the real crash autosave path.
      */
     triggerCrashSave: () => void;
+    /**
+     * Deliver a synthetic {@link ChatMessage} straight to the local `ChatHub`,
+     * bypassing the relay + rate limit (both irrelevant to the renderer rolling
+     * buffer cap). Lets E2E exercise the 500-entry `chatStore` trimming through
+     * the real `ChatHub → CHAT_MESSAGE_CHANNEL → chatStore → ChatPanel` path
+     * without fighting the 20/minute token bucket and `Date.now` clock.
+     *
+     * No-op-throws until wired by the composition root (mirrors `dispatchTick`).
+     * Must NOT be called from `simulation/` or `renderer/` — this property exists
+     * only for the CHIMERA_E2E test path. Chat is a cosmetic side-channel and is
+     * never recorded in `tick`/replays/saves (Invariant #72).
+     *
+     * @chimera-review: intentionally mutable — replaced by the composition root
+     *   to connect the hook to the real `ChatHub.deliverLocal` sink.
+     */
+    deliverChat: (message: ChatMessage) => void;
 }
 
 declare global {
@@ -199,6 +216,19 @@ export function createE2eHooks(): E2eHooks {
                 'triggerCrashSave has not been wired by the session runtime. ' +
                     'Assign hooks.triggerCrashSave = () => autosaveActiveSessionBeforeCrash() ' +
                     'in SessionRuntime (or equivalent) before calling triggerCrashSave() from E2E specs.',
+            );
+        },
+        // Guard: throw loudly if called before the composition root wires the
+        // real ChatHub sink. A silent no-op here would let the chat 500-cap E2E
+        // spec poll on an unchanged message count and pass without delivering
+        // anything. The composition root must assign:
+        // hooks.deliverChat = (message) => chatHub.deliverLocal(message)
+        // before any E2E spec calls deliverChat() (§13.7).
+        deliverChat: () => {
+            throw new Error(
+                'deliverChat has not been wired by the composition root. ' +
+                    'Assign hooks.deliverChat = (message) => chatHub.deliverLocal(message) ' +
+                    'in index.ts before calling deliverChat() from E2E specs.',
             );
         },
     };

@@ -31,6 +31,7 @@ import type {
     PlayerSnapshot,
     LobbyAgentSlot,
     Unsubscribe,
+    ChatMessage as WireChatMessage,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
@@ -178,7 +179,22 @@ export class LobbyManager {
         recipients: readonly PlayerId[],
         message: ChatMessage,
     ): void {
-        for (const recipient of recipients) {
+        // The local host is always a recipient of `lobby`-scope chat on its own
+        // machine — lobby means "every connected player", and the host is one.
+        // The relay resolves recipients from the PlayerDirectory, which does not
+        // include the host (it is admitted only via the ProfileGate on JOIN, and
+        // self-registering it there would collide with a client sharing the
+        // host's localProfileId — NAMESPACE_COLLISION). Including it here, at the
+        // delivery layer, keeps the relay the sole acceptance gate (Invariant #73)
+        // while ensuring the host sees its own and clients' lobby messages.
+        // `team` scope stays relay-resolved (inert until team membership exists);
+        // `private` already includes the sender. A Set dedupes the host if the
+        // relay already listed it.
+        const targets = new Set<PlayerId>(recipients);
+        if (this.localPlayerId !== null && message.scope.kind === 'lobby') {
+            targets.add(this.localPlayerId);
+        }
+        for (const recipient of targets) {
             if (recipient === this.localPlayerId) {
                 this.onLocalChatDelivered?.(message);
                 continue;
@@ -194,6 +210,22 @@ export class LobbyManager {
                 },
             });
         }
+    }
+
+    /**
+     * Convert the wire chat payload (`{id, senderId, text, scope, timestamp}`)
+     * back to the canonical {@link ChatMessage} (`{id, fromPlayerId, scope, body,
+     * serverTime}`). Inverse of the map in {@link deliverChat}; used on the
+     * joined-client receive path to surface host-relayed chat to the renderer.
+     */
+    private static wireChatToCanonical(payload: WireChatMessage): ChatMessage {
+        return {
+            id: payload.id,
+            fromPlayerId: payload.senderId,
+            scope: payload.scope,
+            body: payload.text,
+            serverTime: payload.timestamp,
+        };
     }
 
     /**
@@ -463,6 +495,16 @@ export class LobbyManager {
             session.transport.onLobbyStateChanged((state) => {
                 this.publishLobbyState(state);
             }),
+            // Surface host-relayed chat to the joined client's renderer (§4.29).
+            // The host ChatRelay is the only gate (Invariant #73); the client
+            // merely forwards what the host delivered, mapping the wire payload
+            // to the canonical ChatMessage. Mirrors the host's onLocalChatDelivered
+            // sink so both roles reach the renderer the same way.
+            session.transport.onSideChannelReceived((msg) => {
+                if (msg.kind === 'chat') {
+                    this.onLocalChatDelivered?.(LobbyManager.wireChatToCanonical(msg.payload));
+                }
+            }),
             session.transport.onDisconnected((_reason) => {
                 this.publishConnectionStatus('disconnected');
             }),
@@ -573,10 +615,35 @@ export class LobbyManager {
      */
     sendLocalChat(body: string, scope: ChatScope): RelayResult {
         const session = this.session;
-        if (session === null || !('close' in session)) {
-            this.log.debug('chat:send-local:no-host-session');
+        if (session === null) {
+            this.log.debug('chat:send-local:no-session');
             return { ok: false, reason: 'no_session' };
         }
+
+        // Joined client: there is no local relay. Send the CHAT frame up to the
+        // host — the authoritative ChatRelay gate (Invariant #73) — and report
+        // success optimistically. The host re-validates, assigns the
+        // authoritative `id`/`serverTime`, and echoes accepted messages back over
+        // the side-channel (surfaced via the joinLobby receive wiring). Per-send
+        // rejection feedback to the client (wire `chat_reject` frame + toast) is a
+        // deliberate follow-on (F14 wire frame / F46 toast, #646), so the client
+        // never blocks on a synchronous verdict.
+        if (!('close' in session)) {
+            session.transport.sendSideChannel({
+                kind: 'chat',
+                payload: {
+                    id: '',
+                    // The host overrides this with the transport-authenticated
+                    // sender; sent only to satisfy the wire payload shape.
+                    senderId: session.localPlayerId,
+                    text: body,
+                    scope,
+                    timestamp: 0,
+                },
+            });
+            return { ok: true };
+        }
+
         if (this.chatRelay === undefined || this.localPlayerId === null) {
             this.log.debug('chat:send-local:no-relay');
             return { ok: false, reason: 'no_session' };

@@ -12,6 +12,7 @@ import { createE2eHooks, registerE2eHooks, getE2eHooks, MAX_WS_FRAMES } from './
 import type { WsFrame } from './e2e-hooks';
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import type { ChatMessage } from '@chimera/shared/chat.js';
 
 const HOST_VIEWER_ID = toPlayerId('player-host');
 
@@ -217,5 +218,41 @@ describe('directGameLobbyCode', () => {
         hooks.directGameLobbyCode = null;
 
         expect(hooks.directGameLobbyCode).toBeNull();
+    });
+});
+
+// ---------------------------------------------------------------------------
+// deliverChat
+// ---------------------------------------------------------------------------
+
+function makeChatMessage(overrides?: Partial<ChatMessage>): ChatMessage {
+    return {
+        id: 'msg-1',
+        fromPlayerId: HOST_VIEWER_ID,
+        scope: { kind: 'lobby' },
+        body: 'hello',
+        serverTime: 1,
+        ...overrides,
+    };
+}
+
+describe('deliverChat', () => {
+    it('throws until the composition root wires it (mirrors dispatchTick)', () => {
+        const hooks = createE2eHooks();
+
+        expect(() => hooks.deliverChat(makeChatMessage())).toThrow(
+            /deliverChat has not been wired/,
+        );
+    });
+
+    it('forwards the message once the composition root assigns a real sink', () => {
+        const hooks = createE2eHooks();
+        const delivered: ChatMessage[] = [];
+        hooks.deliverChat = (message) => delivered.push(message);
+
+        const message = makeChatMessage({ id: 'msg-42', body: 'capped buffer probe' });
+        hooks.deliverChat(message);
+
+        expect(delivered).toEqual([message]);
     });
 });

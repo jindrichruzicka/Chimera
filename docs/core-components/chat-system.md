@@ -81,6 +81,16 @@ profile is therefore not a chat recipient and gets no `lobby`-scope echo;
 `private` scope still always includes the sender regardless of directory
 membership.
 
+The **host is not in the directory** (it never JOINs, and self-registering it
+would collide with a client sharing the host's `localProfileId` —
+`NAMESPACE_COLLISION`). So the host is added as a `lobby`-scope recipient at the
+_delivery_ layer (`LobbyManager.deliverChat`), not by the relay's recipient
+resolution: lobby means "every connected player" and the host is one, so it
+always sees its own and clients' lobby messages on its own machine. The relay
+remains the sole acceptance gate (Invariant #73); delivery-layer inclusion does
+not bypass it. `team`-scope routing stays relay-resolved (inert until team
+membership is modelled).
+
 ---
 
 ## ChatRelay
@@ -96,7 +106,12 @@ export interface ChatRelayOptions {
     now?: () => number; // injected clock (ms) for token replenishment + serverTime; default Date.now
 }
 
-export type ChatRejectReason = 'too_long' | 'rate_limited' | 'empty' | 'invalid_scope';
+export type ChatRejectReason =
+    | 'too_long'
+    | 'rate_limited'
+    | 'empty'
+    | 'invalid_scope'
+    | 'no_session';
 
 export type RelayResult = { ok: true } | { ok: false; reason: ChatRejectReason };
 
@@ -124,6 +139,17 @@ interface ChatAPI {
     unmute(playerId: PlayerId): void;
 }
 ```
+
+`send` is wired for **both roles** over the `LocalWebSocketProvider` side-channel.
+On the **host**, `LobbyManager.sendLocalChat` runs the relay synchronously and
+returns the authoritative `RelayResult` (so the host sees `rate_limited` etc.).
+On a **joined client**, `sendLocalChat` forwards a `CHAT` frame to the host and
+returns `{ ok: true }` optimistically — the host relay is authoritative, assigns
+`id`/`serverTime`, and echoes accepted messages back over the side-channel, which
+the client surfaces via `onMessage`. Per-send rejection feedback to a client (the
+wire `chat_reject` frame + a toast) is a follow-on; until then a client's rejected
+message is simply not echoed. `no_session` is returned only when there is no
+active session at all.
 
 ---
 
