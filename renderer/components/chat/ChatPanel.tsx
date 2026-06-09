@@ -7,6 +7,12 @@
 // push channel (`window.__chimera.chat.onMessage`) and feeds it into the store,
 // and provides a send box with a scope selector.
 //
+// Mute/unmute is dual-written: the renderer `chatStore` gives an instant local
+// view filter (and reveals already-buffered messages on unmute), while the same
+// action is mirrored to the host-side `ChatHub` via `window.__chimera.chat.mute`
+// /`unmute` so the main process also suppresses delivery and filters `history()`
+// backfill — the IPC mute surface is not a dead path.
+//
 // This is a game-agnostic shared component: it imports nothing from `games/*` and
 // never derives content from authoritative simulation state. Chat is a cosmetic
 // side channel (Invariant #72) and is routed through the host relay (Invariant
@@ -55,6 +61,24 @@ const REJECT_REASON_LABELS: Record<ChatRejectReason, string> = {
 
 /** Stable empty roster reference so the selector default keeps a steady identity. */
 const EMPTY_ROSTER: LobbyState['players'] = [];
+
+/**
+ * Mute a sender. Updates the renderer `chatStore` (the instant local view
+ * filter) AND mirrors the mute to the host-side `ChatHub` over the IPC bridge,
+ * so the main process suppresses further delivery of that sender's messages and
+ * filters them from `history()` backfill — not merely a render-time filter.
+ */
+function muteSender(id: PlayerId): void {
+    useChatStore.getState().mute(id);
+    window.__chimera?.chat?.mute(id);
+}
+
+/** Reverse {@link muteSender}: restore the renderer view and the host-side
+ *  `ChatHub` delivery/history filter. */
+function unmuteSender(id: PlayerId): void {
+    useChatStore.getState().unmute(id);
+    window.__chimera?.chat?.unmute(id);
+}
 
 export function ChatPanel(): React.ReactElement {
     const messages = useChatStore((state) => state.messages);
@@ -231,7 +255,7 @@ export function ChatPanel(): React.ReactElement {
                                     message={message}
                                     senderName={displayNameOf(message.fromPlayerId)}
                                     onMute={() => {
-                                        useChatStore.getState().mute(message.fromPlayerId);
+                                        muteSender(message.fromPlayerId);
                                     }}
                                 />
                             ))}
@@ -250,7 +274,7 @@ export function ChatPanel(): React.ReactElement {
                                 aria-label={`Unmute ${displayNameOf(id)}`}
                                 data-testid={`chat-unmute-${id}`}
                                 onClick={() => {
-                                    useChatStore.getState().unmute(id);
+                                    unmuteSender(id);
                                 }}
                                 variant="ghost"
                             >

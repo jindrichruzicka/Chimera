@@ -170,10 +170,11 @@ export type DisconnectReason = 'kicked' | 'timeout' | 'host_closed' | 'error' | 
  *
  * This payload is the wire form of the canonical `ChatMessage` in
  * `shared/chat.ts`; the field names differ (`senderId`/`text`/`timestamp`)
- * because this type predates the contract. Chat is a cosmetic side-channel and
- * never an `EngineAction` (Invariant #72).
+ * because this type predates the contract. It is named `WireChatPayload` (not
+ * `ChatMessage`) precisely so the two never collide at a call site. Chat is a
+ * cosmetic side-channel and never an `EngineAction` (Invariant #72).
  */
-export interface ChatMessage {
+export interface WireChatPayload {
     readonly id: string;
     readonly senderId: PlayerId;
     readonly text: string;
@@ -218,7 +219,7 @@ export interface PlayerProfilePayload {
  *                    the sender can surface a toast. Parallel to profile_reject.
  */
 export type SideChannelMessage =
-    | { readonly kind: 'chat'; readonly payload: ChatMessage }
+    | { readonly kind: 'chat'; readonly payload: WireChatPayload }
     | { readonly kind: 'profile'; readonly payload: PlayerProfilePayload }
     | { readonly kind: 'profile_ack' }
     | { readonly kind: 'profile_reject'; readonly reason: string }

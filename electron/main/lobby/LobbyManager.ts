@@ -31,7 +31,7 @@ import type {
     PlayerSnapshot,
     LobbyAgentSlot,
     Unsubscribe,
-    ChatMessage as WireChatMessage,
+    WireChatPayload,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
@@ -218,7 +218,7 @@ export class LobbyManager {
      * serverTime}`). Inverse of the map in {@link deliverChat}; used on the
      * joined-client receive path to surface host-relayed chat to the renderer.
      */
-    private static wireChatToCanonical(payload: WireChatMessage): ChatMessage {
+    private static wireChatToCanonical(payload: WireChatPayload): ChatMessage {
         return {
             id: payload.id,
             fromPlayerId: payload.senderId,

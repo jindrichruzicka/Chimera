@@ -342,6 +342,10 @@ describe('ChatPanel', () => {
         expect(screen.queryByText('from A')).not.toBeInTheDocument();
         expect(screen.getByText('from B')).toBeInTheDocument();
         expect(useChatStore.getState().muted.has(pid('player-a'))).toBe(true);
+        // Mute also propagates to the main-process ChatHub over IPC so it
+        // suppresses further delivery and filters history() — not only a
+        // renderer-side render filter.
+        expect(chatMock.mute).toHaveBeenCalledWith(pid('player-a'));
     });
 
     it('unmutes a sender from the muted strip, restoring their messages', async () => {
@@ -358,5 +362,8 @@ describe('ChatPanel', () => {
 
         expect(screen.getByText('from A')).toBeInTheDocument();
         expect(useChatStore.getState().muted.has(pid('player-a'))).toBe(false);
+        // Unmute is mirrored to the main-process ChatHub over IPC so delivery
+        // and history() are restored there too.
+        expect(chatMock.unmute).toHaveBeenCalledWith(pid('player-a'));
     });
 });
