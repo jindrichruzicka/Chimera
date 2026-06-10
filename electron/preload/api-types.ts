@@ -241,6 +241,31 @@ export interface LobbyListEntry {
     readonly maxPlayers: number;
 }
 
+/**
+ * Transition of an opponent's connection presence, pushed host→renderer so the
+ * renderer can raise the §4.30 "Player disconnected"/"Player reconnected" toasts
+ * (#687). `disconnected` is a transient drop (not an intentional leave);
+ * `reconnected` is the same player rejoining after such a drop.
+ */
+export type PlayerConnectionStatus = 'disconnected' | 'reconnected';
+
+/** Payload of the `chimera:lobby:player-connection` push (§4.30 / #687). */
+export interface PlayerConnectionEvent {
+    readonly playerId: PlayerId;
+    readonly status: PlayerConnectionStatus;
+}
+
+/**
+ * Structured profile-admission rejection, pushed host→renderer so the renderer
+ * can raise the §4.30 "Profile rejected: {reason}" toast (#688). `reason` is the
+ * raw gate code — `'profile:<AdmissionRejection>'` or `'rate_limit'` — never a
+ * parsed `Error.message` (Invariants #61/#62). The renderer maps it to friendly
+ * copy.
+ */
+export interface ProfileRejection {
+    readonly reason: string;
+}
+
 // ─── Save domain stubs ────────────────────────────────────────────────────────
 // Superseded by simulation/ saves module (F06).
 
@@ -883,6 +908,17 @@ export interface LobbyAPI {
     getLocalPlayerId(): Promise<PlayerId | null>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;
+    /**
+     * Fires when an opponent's connection presence transitions (transient drop or
+     * reconnect). Drives the §4.30 "Player disconnected"/"Player reconnected"
+     * toasts (#687). Never fires for an intentional leave or a first-time join.
+     */
+    onPlayerConnectionChanged(cb: (event: PlayerConnectionEvent) => void): Unsubscribe;
+    /**
+     * Fires when this client's profile is rejected — at JOIN or for a mid-session
+     * PROFILE_UPDATE. Drives the §4.30 "Profile rejected: {reason}" toast (#688).
+     */
+    onProfileRejected(cb: (rejection: ProfileRejection) => void): Unsubscribe;
 }
 
 // ─── lobbyDiscovery namespace ─────────────────────────────────────────────────

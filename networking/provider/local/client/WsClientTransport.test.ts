@@ -428,6 +428,28 @@ describe('WsClientTransport — onSideChannelReceived', () => {
 
         expect(message.kind).toBe('chat');
     });
+
+    it('fires with a profile_reject when the host sends a PROFILE_REJECT frame (#688)', async () => {
+        const { hostTransport, playerId, transport } = await makeClientTransport();
+
+        const messageReceived = new Promise<SideChannelMessage>((resolve) => {
+            const unsubscribe = transport.onSideChannelReceived((message) => {
+                unsubscribe();
+                resolve(message);
+            });
+        });
+
+        hostTransport.sendSideChannel(playerId, {
+            kind: 'profile_reject',
+            reason: 'rate_limit',
+        });
+        const message = await messageReceived;
+
+        expect(message.kind).toBe('profile_reject');
+        if (message.kind === 'profile_reject') {
+            expect(message.reason).toBe('rate_limit');
+        }
+    });
 });
 
 // ─── onReveal ────────────────────────────────────────────────────────────────

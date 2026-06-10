@@ -38,7 +38,7 @@ import type {
 import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
-import { playerId as toPlayerId } from './MultiplayerProvider.js';
+import { playerId as toPlayerId, JoinRejectedError } from './MultiplayerProvider.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────
 
@@ -261,7 +261,9 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         if (channel.profileGate !== null) {
             const gateResult = channel.profileGate(clientPlayerId, params.profile);
             if (!gateResult.admitted) {
-                return Promise.reject(new Error(`JOIN rejected: ${gateResult.reason}`));
+                // Typed rejection so consumers branch on the structured reason
+                // (parity with LocalWebSocketProvider) — see JoinRejectedError (#688).
+                return Promise.reject(new JoinRejectedError(gateResult.reason));
             }
             displayName = gateResult.displayName;
         }

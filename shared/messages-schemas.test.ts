@@ -14,6 +14,7 @@ import {
     ClientMessageSchema,
     ServerMessageSchema,
     WIRE_MAX_CHAT_BODY_LENGTH,
+    WIRE_MAX_PROFILE_REJECT_REASON_LENGTH,
 } from './messages-schemas.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -205,6 +206,18 @@ describe('ClientMessageSchema — READY_STATE_UPDATE', () => {
     });
 });
 
+describe('ClientMessageSchema — LEAVE', () => {
+    it('parses a valid LEAVE message (no payload)', () => {
+        const result = ClientMessageSchema.safeParse({ type: 'LEAVE' });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects LEAVE with unknown extra fields (strict schema)', () => {
+        const result = ClientMessageSchema.safeParse({ type: 'LEAVE', reason: 'bye' });
+        expect(result.success).toBe(false);
+    });
+});
+
 describe('ClientMessageSchema — invalid type', () => {
     it('rejects an unknown type', () => {
         const result = ClientMessageSchema.safeParse({ type: 'UNKNOWN', data: 'x' });
@@ -363,6 +376,37 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
             },
         });
         expect(result.success).toBe(true);
+    });
+});
+
+describe('ServerMessageSchema — PROFILE_REJECT', () => {
+    it('parses a valid PROFILE_REJECT message', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'PROFILE_REJECT',
+            reason: 'profile:AVATAR_TOO_LARGE',
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects PROFILE_REJECT missing reason', () => {
+        const result = ServerMessageSchema.safeParse({ type: 'PROFILE_REJECT' });
+        expect(result.success).toBe(false);
+    });
+
+    it('accepts a PROFILE_REJECT reason at the wire length cap', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'PROFILE_REJECT',
+            reason: 'x'.repeat(WIRE_MAX_PROFILE_REJECT_REASON_LENGTH),
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects a PROFILE_REJECT reason that exceeds the wire length cap (coarse DoS bound)', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'PROFILE_REJECT',
+            reason: 'x'.repeat(WIRE_MAX_PROFILE_REJECT_REASON_LENGTH + 1),
+        });
+        expect(result.success).toBe(false);
     });
 });
 

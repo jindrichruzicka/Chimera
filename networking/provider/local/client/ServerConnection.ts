@@ -25,6 +25,7 @@ import type {
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { JoinRejectedError } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { Logger } from '@chimera/shared/logging.js';
 import { ServerMessageSchema } from '@chimera/shared/messages-schemas.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
@@ -35,6 +36,11 @@ export interface ConnectResult {
     readonly playerId: PlayerId;
     readonly lobbyState: LobbyState;
 }
+
+// `JoinRejectedError` is defined on the provider abstraction so consumers can
+// catch it without importing this provider-internal module; re-exported here for
+// call sites that already depend on ServerConnection.
+export { JoinRejectedError };
 
 // ─── Options ──────────────────────────────────────────────────────────────────
 
@@ -158,6 +164,12 @@ export class ServerConnection {
     /** Cleanly close the connection. Resolves when the socket is closed. */
     close(): Promise<void> {
         this.intentionalClose = true;
+        // Announce a deliberate departure before tearing down the socket so the
+        // host distinguishes this from a transient drop and suppresses the
+        // opponent "disconnected" presence toast (#687). Best-effort: send() is a
+        // no-op unless the socket is OPEN, and `ws` flushes buffered frames before
+        // the close handshake, so the LEAVE reaches the host ahead of the close.
+        this.send({ type: 'LEAVE' });
         // Cancel any pending reconnect timer (W-6)
         if (this.reconnectTimer !== null) {
             clearTimeout(this.reconnectTimer);
@@ -261,7 +273,7 @@ export class ServerConnection {
                     return;
                 }
                 if (msg.type === 'REJECT') {
-                    reject(new Error(`ServerConnection: server rejected JOIN: ${msg.reason}`));
+                    reject(new JoinRejectedError(msg.reason));
                     ws.close();
                 }
             };

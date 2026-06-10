@@ -27,16 +27,23 @@ import { ChatRelay } from '../ChatRelay.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import {
     playerId,
+    JoinRejectedError,
     type HostLobbyParams,
     type HostTransport,
     type ClientTransport,
+    type HostedSession,
+    type JoinedSession,
     type JoinLobbyParams,
     type MultiplayerProvider,
+    type PlayerId,
     type PlayerSnapshot,
+    type LobbyPlayerEntry,
     type LobbyState,
+    type DisconnectReason,
     type SideChannelMessage,
     type Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { PlayerConnectionEvent } from '../../preload/api-types.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
 import type { ChatMessage } from '@chimera/shared/chat.js';
 import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
@@ -181,6 +188,70 @@ function makeTrackingProvider(inner: InMemoryMultiplayerProvider = makeProvider(
         provider,
         activeHostSubs: () => hostCounter.count,
         activeClientSubs: () => clientCounter.count,
+    };
+}
+
+/**
+ * Wraps an {@link InMemoryMultiplayerProvider} so a test can drive the exact
+ * host/client transport callbacks {@link LobbyManager} registers — firing
+ * `onPlayerLeft` with a chosen {@link DisconnectReason}, `onPlayerJoined`, or an
+ * inbound client side-channel message. The InMemory double only models clean
+ * `'normal'` disconnects, so this is how the transient-drop ('timeout') and
+ * mid-session `profile_reject` paths get covered deterministically (#687/#688).
+ */
+function makeControllableProvider(inner: InMemoryMultiplayerProvider = makeProvider()): {
+    provider: MultiplayerProvider;
+    fireHostPlayerLeft: (pid: PlayerId, reason: DisconnectReason) => void;
+    fireHostPlayerJoined: (entry: LobbyPlayerEntry) => void;
+    fireClientSideChannel: (msg: SideChannelMessage) => void;
+} {
+    const playerLeftCbs: ((pid: PlayerId, reason: DisconnectReason) => void)[] = [];
+    const playerJoinedCbs: ((entry: LobbyPlayerEntry) => void)[] = [];
+    const clientSideChannelCbs: ((msg: SideChannelMessage) => void)[] = [];
+
+    const provider: MultiplayerProvider = {
+        async hostLobby(params): Promise<HostedSession> {
+            const session = await inner.hostLobby(params);
+            const t = session.transport;
+            return {
+                ...session,
+                transport: {
+                    ...t,
+                    onPlayerLeft: (cb) => {
+                        playerLeftCbs.push(cb);
+                        return t.onPlayerLeft(cb);
+                    },
+                    onPlayerJoined: (cb) => {
+                        playerJoinedCbs.push(cb);
+                        return t.onPlayerJoined(cb);
+                    },
+                },
+            };
+        },
+        async joinLobby(params): Promise<JoinedSession> {
+            const session = await inner.joinLobby(params);
+            const t = session.transport;
+            return {
+                ...session,
+                transport: {
+                    ...t,
+                    onSideChannelReceived: (cb) => {
+                        clientSideChannelCbs.push(cb);
+                        return t.onSideChannelReceived(cb);
+                    },
+                },
+            };
+        },
+        dispose() {
+            inner.dispose();
+        },
+    };
+
+    return {
+        provider,
+        fireHostPlayerLeft: (pid, reason) => playerLeftCbs.forEach((cb) => cb(pid, reason)),
+        fireHostPlayerJoined: (entry) => playerJoinedCbs.forEach((cb) => cb(entry)),
+        fireClientSideChannel: (msg) => clientSideChannelCbs.forEach((cb) => cb(msg)),
     };
 }
 
@@ -1177,7 +1248,7 @@ describe('LobbyManager — JOIN profile attestation', () => {
         const invalidProfile = makeValidProfile({ displayName: 'A'.repeat(33) });
         await expect(
             provider.joinLobby({ address: hostInfo.sessionId, profile: invalidProfile }),
-        ).rejects.toThrow(/JOIN rejected/);
+        ).rejects.toBeInstanceOf(JoinRejectedError);
 
         expect(Object.keys(directory.snapshot())).toHaveLength(0);
 
@@ -1855,5 +1926,143 @@ describe('LobbyManagerOptions', () => {
         const captured = requireMetadata(metadata);
         expect(captured.e2eHooks).toBe(hooks);
         await manager.closeLobby();
+    });
+});
+
+// ── opponent presence: disconnect / reconnect (#687) ────────────────────────────
+
+describe('LobbyManager — opponent presence (#687)', () => {
+    const OPP = playerId('opponent-1');
+    const oppEntry: LobbyPlayerEntry = { playerId: OPP, displayName: 'Opp', ready: false };
+
+    it('emits "disconnected" on a transient drop and "reconnected" on the rejoin', async () => {
+        const ctl = makeControllableProvider();
+        const events: PlayerConnectionEvent[] = [];
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            onPlayerConnectionChanged: (e) => events.push(e),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        // First-time join is silent.
+        ctl.fireHostPlayerJoined(oppEntry);
+        expect(events).toEqual([]);
+
+        // Transient drop ('timeout') → "disconnected"; rejoin → "reconnected".
+        ctl.fireHostPlayerLeft(OPP, 'timeout');
+        ctl.fireHostPlayerJoined(oppEntry);
+
+        expect(events).toEqual([
+            { playerId: OPP, status: 'disconnected' },
+            { playerId: OPP, status: 'reconnected' },
+        ]);
+
+        await manager.closeLobby();
+    });
+
+    it('also treats a max-retries "error" drop as a disconnect', async () => {
+        const ctl = makeControllableProvider();
+        const events: PlayerConnectionEvent[] = [];
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            onPlayerConnectionChanged: (e) => events.push(e),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        ctl.fireHostPlayerJoined(oppEntry);
+        ctl.fireHostPlayerLeft(OPP, 'error');
+
+        expect(events).toEqual([{ playerId: OPP, status: 'disconnected' }]);
+        await manager.closeLobby();
+    });
+
+    it('does not emit anything for an intentional leave, nor "reconnected" on a later fresh join', async () => {
+        const ctl = makeControllableProvider();
+        const events: PlayerConnectionEvent[] = [];
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            onPlayerConnectionChanged: (e) => events.push(e),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        ctl.fireHostPlayerJoined(oppEntry);
+        ctl.fireHostPlayerLeft(OPP, 'normal'); // deliberate leave → silent
+        ctl.fireHostPlayerJoined(oppEntry); // rejoining after a leave is a fresh join
+
+        expect(events).toEqual([]);
+        await manager.closeLobby();
+    });
+
+    it('clears presence tracking on closeLobby so it does not bleed across sessions', async () => {
+        const ctl = makeControllableProvider();
+        const events: PlayerConnectionEvent[] = [];
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            onPlayerConnectionChanged: (e) => events.push(e),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        ctl.fireHostPlayerJoined(oppEntry);
+        ctl.fireHostPlayerLeft(OPP, 'timeout'); // remembered as disconnected
+        await manager.closeLobby();
+
+        events.length = 0;
+        await manager.hostLobby(HOST_PARAMS);
+        ctl.fireHostPlayerJoined(oppEntry); // would be "reconnected" if state leaked
+        expect(events).toEqual([]);
+        await manager.closeLobby();
+    });
+});
+
+// ── profile rejection forwarding (#688) ─────────────────────────────────────────
+
+describe('LobbyManager — profile rejection forwarding (#688)', () => {
+    it('forwards a JOIN-time profile rejection as onProfileRejected and rethrows', async () => {
+        const directory = new PlayerDirectory();
+        const inner = makeProvider();
+        const hostManager = makeManager(inner, directory);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const reasons: string[] = [];
+        const joinManager = new LobbyManager(inner, createNoopLogger(), {
+            onProfileRejected: (reason) => reasons.push(reason),
+        });
+
+        const invalidProfile = makeValidProfile({ displayName: 'A'.repeat(33) });
+        await expect(
+            joinManager.joinLobby({ address: hostInfo.sessionId, profile: invalidProfile }),
+        ).rejects.toBeInstanceOf(JoinRejectedError);
+
+        expect(reasons).toEqual(['profile:DISPLAY_NAME_TOO_LONG']);
+        await hostManager.closeLobby();
+    });
+
+    it('does not fire onProfileRejected for a non-profile JOIN rejection (e.g. lobby_full)', async () => {
+        const provider: MultiplayerProvider = {
+            hostLobby: () => Promise.reject(new Error('unused in this test')),
+            joinLobby: () => Promise.reject(new JoinRejectedError('lobby_full')),
+            dispose: () => undefined,
+        };
+        const reasons: string[] = [];
+        const manager = new LobbyManager(provider, createNoopLogger(), {
+            onProfileRejected: (reason) => reasons.push(reason),
+        });
+
+        await expect(manager.joinLobby({ address: 'x' })).rejects.toBeInstanceOf(JoinRejectedError);
+        expect(reasons).toEqual([]);
+    });
+
+    it('forwards a mid-session profile_reject side-channel as onProfileRejected', async () => {
+        const inner = makeProvider();
+        const hostManager = makeManager(inner);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const ctl = makeControllableProvider(inner);
+        const reasons: string[] = [];
+        const joinManager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            onProfileRejected: (reason) => reasons.push(reason),
+        });
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        ctl.fireClientSideChannel({ kind: 'profile_reject', reason: 'rate_limit' });
+        expect(reasons).toEqual(['rate_limit']);
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
     });
 });

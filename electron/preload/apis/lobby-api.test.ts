@@ -8,12 +8,22 @@ import {
     LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
+    LOBBY_PLAYER_CONNECTION_CHANNEL,
+    LOBBY_PROFILE_REJECTED_CHANNEL,
     createLobbyApi,
     type LobbyApiIpcPort,
     type LobbyApiListener,
 } from './lobby-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
-import type { HostLobbyParams, JoinLobbyParams, LobbyInfo, LobbyState } from '../api-types.js';
+import { playerId } from '../api-types.js';
+import type {
+    HostLobbyParams,
+    JoinLobbyParams,
+    LobbyInfo,
+    LobbyState,
+    PlayerConnectionEvent,
+    ProfileRejection,
+} from '../api-types.js';
 
 /**
  * Recording stub for the narrow `LobbyApiIpcPort` slice. Captures every call
@@ -318,6 +328,71 @@ describe('createLobbyApi', () => {
             }
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
+        });
+    });
+
+    describe('onPlayerConnectionChanged()', () => {
+        it('registers a listener on chimera:lobby:player-connection and forwards only the event payload', () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+            const callback = vi.fn<(event: PlayerConnectionEvent) => void>();
+
+            api.onPlayerConnectionChanged(callback);
+
+            const registered = stub.listeners.get(LOBBY_PLAYER_CONNECTION_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const event: PlayerConnectionEvent = {
+                playerId: playerId('p2'),
+                status: 'disconnected',
+            };
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, event);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(event);
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+            const callback = vi.fn<(event: PlayerConnectionEvent) => void>();
+
+            const unsubscribe = api.onPlayerConnectionChanged(callback);
+            expect(stub.listeners.get(LOBBY_PLAYER_CONNECTION_CHANNEL)?.size).toBe(1);
+            unsubscribe();
+            expect(stub.listeners.get(LOBBY_PLAYER_CONNECTION_CHANNEL)?.size).toBe(0);
+        });
+    });
+
+    describe('onProfileRejected()', () => {
+        it('registers a listener on chimera:lobby:profile-rejected and forwards only the rejection payload', () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+            const callback = vi.fn<(rejection: ProfileRejection) => void>();
+
+            api.onProfileRejected(callback);
+
+            const registered = stub.listeners.get(LOBBY_PROFILE_REJECTED_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const rejection: ProfileRejection = { reason: 'profile:AVATAR_TOO_LARGE' };
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, rejection);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(rejection);
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+            const callback = vi.fn<(rejection: ProfileRejection) => void>();
+
+            const unsubscribe = api.onProfileRejected(callback);
+            expect(stub.listeners.get(LOBBY_PROFILE_REJECTED_CHANNEL)?.size).toBe(1);
+            unsubscribe();
+            expect(stub.listeners.get(LOBBY_PROFILE_REJECTED_CHANNEL)?.size).toBe(0);
         });
     });
 });

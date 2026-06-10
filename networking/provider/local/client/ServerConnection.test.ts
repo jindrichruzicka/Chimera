@@ -11,11 +11,12 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { DisconnectReason } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
-import { ServerConnection } from './ServerConnection.js';
+import { ServerConnection, JoinRejectedError } from './ServerConnection.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -70,6 +71,57 @@ describe('ServerConnection — connect', () => {
         await expect(
             conn.connect('ws://127.0.0.1:19999', 'token', defaultProfile),
         ).rejects.toThrow();
+    });
+
+    it('rejects with a JoinRejectedError carrying the structured reason on a gated JOIN (#688)', async () => {
+        const server = makeServer();
+        await server.ready();
+        server.setJoinGate(() => ({ admitted: false, reason: 'profile:NAMESPACE_COLLISION' }));
+
+        const conn = new ServerConnection({ maxRetries: 0 });
+        await expect(
+            conn.connect(`ws://127.0.0.1:${server.port}`, server.token, defaultProfile),
+        ).rejects.toMatchObject({ reason: 'profile:NAMESPACE_COLLISION' });
+    });
+
+    it('exposes the structured reason via JoinRejectedError.reason (not by parsing message) (#688)', async () => {
+        const server = makeServer();
+        await server.ready();
+        server.setJoinGate(() => ({ admitted: false, reason: 'profile:AVATAR_TOO_LARGE' }));
+
+        const conn = new ServerConnection({ maxRetries: 0 });
+        let caught: unknown;
+        try {
+            await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, defaultProfile);
+        } catch (err) {
+            caught = err;
+        }
+        expect(caught).toBeInstanceOf(JoinRejectedError);
+        expect((caught as JoinRejectedError).reason).toBe('profile:AVATAR_TOO_LARGE');
+    });
+});
+
+// ─── close() sends LEAVE (#687) ─────────────────────────────────────────────────
+
+describe('ServerConnection — close sends LEAVE (#687)', () => {
+    it('an intentional close() makes the host report a "normal" (deliberate) disconnect', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const reasons: DisconnectReason[] = [];
+        server.onPlayerDisconnected((_id, reason) => reasons.push(reason));
+
+        const conn = new ServerConnection();
+        await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, defaultProfile);
+
+        await new Promise<void>((resolve) => {
+            server.onPlayerDisconnected(() => resolve());
+            void conn.close();
+        });
+
+        // Without the LEAVE frame the host would read this as a transient drop
+        // ('timeout'); the explicit LEAVE marks it deliberate ('normal').
+        expect(reasons).toEqual(['normal']);
     });
 });
 

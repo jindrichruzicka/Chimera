@@ -309,6 +309,36 @@ describe('window.__chimera.lobby — contract', () => {
         unsubscribe();
         expect(listeners.get('chimera:lobby:update')?.size).toBe(0);
     });
+
+    it('onPlayerConnectionChanged() registers on chimera:lobby:player-connection; Unsubscribe removes the listener', () => {
+        const calls: unknown[] = [];
+        const unsubscribe = api.lobby.onPlayerConnectionChanged((event) => {
+            calls.push(event);
+        });
+        expect(listeners.get('chimera:lobby:player-connection')?.size).toBe(1);
+
+        const event = { playerId: 'p2', status: 'disconnected' };
+        emit('chimera:lobby:player-connection', event);
+        expect(calls).toEqual([event]);
+
+        unsubscribe();
+        expect(listeners.get('chimera:lobby:player-connection')?.size).toBe(0);
+    });
+
+    it('onProfileRejected() registers on chimera:lobby:profile-rejected; Unsubscribe removes the listener', () => {
+        const calls: unknown[] = [];
+        const unsubscribe = api.lobby.onProfileRejected((rejection) => {
+            calls.push(rejection);
+        });
+        expect(listeners.get('chimera:lobby:profile-rejected')?.size).toBe(1);
+
+        const rejection = { reason: 'rate_limit' };
+        emit('chimera:lobby:profile-rejected', rejection);
+        expect(calls).toEqual([rejection]);
+
+        unsubscribe();
+        expect(listeners.get('chimera:lobby:profile-rejected')?.size).toBe(0);
+    });
 });
 
 // ─── saves namespace ─────────────────────────────────────────────────────────

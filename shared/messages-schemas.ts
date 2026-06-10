@@ -45,6 +45,18 @@ const PlayerId = z.string();
 export const WIRE_MAX_CHAT_BODY_LENGTH = 4096;
 
 /**
+ * Coarse bound on an inbound `PROFILE_REJECT.reason`, in UTF-16 code units,
+ * applied at the wire boundary. The reason is network-derived (a remote host
+ * sends the frame) and flows through to the renderer's §4.30 "Profile rejected"
+ * toast title, so an unbounded string would let a hostile or buggy host push
+ * arbitrarily long text into the UI. Legitimate reasons are short admission
+ * gate codes (e.g. `profile:DISPLAY_NAME_TOO_LONG`, `rate_limit`), so this cap
+ * is intentionally generous yet well above any real value — anything past it is
+ * clearly abusive and dropped as a malformed frame.
+ */
+export const WIRE_MAX_PROFILE_REJECT_REASON_LENGTH = 256;
+
+/**
  * Routing scope for a CHAT frame. Reuses the canonical {@link ChatScopeSchema}
  * from `shared/chat-schemas.ts` so the wire boundary, the IPC boundary, and the
  * preload boundary all validate the same shape — the discriminated union rejects
@@ -199,6 +211,12 @@ const PingMessage = z
     })
     .strict();
 
+const LeaveMessage = z
+    .object({
+        type: z.literal('LEAVE'),
+    })
+    .strict();
+
 // ─── ClientMessageSchema ──────────────────────────────────────────────────────
 
 /**
@@ -214,6 +232,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     ReadyStateUpdateMessage,
     ChatClientMessage,
     PingMessage,
+    LeaveMessage,
 ]);
 
 // Make TypeScript confirm the inferred type is compatible with ClientMessage.
@@ -304,6 +323,13 @@ const LobbyStateMessage = z
     })
     .strict();
 
+const ProfileRejectMessage = z
+    .object({
+        type: z.literal('PROFILE_REJECT'),
+        reason: z.string().max(WIRE_MAX_PROFILE_REJECT_REASON_LENGTH),
+    })
+    .strict();
+
 // ─── ServerMessageSchema ──────────────────────────────────────────────────────
 
 /**
@@ -323,6 +349,7 @@ export const ServerMessageSchema = z.discriminatedUnion('type', [
     ChatServerMessage,
     PongMessage,
     LobbyStateMessage,
+    ProfileRejectMessage,
 ]);
 
 type _AssertServerMessage =

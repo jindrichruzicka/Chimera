@@ -19,6 +19,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { DisconnectReason } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
 import { LobbyServer } from './LobbyServer.js';
 
@@ -187,6 +188,59 @@ describe('LobbyServer — JOIN handshake', () => {
         });
         expect(rejected.type).toBe('REJECT');
         first.ws.close();
+    });
+});
+
+// ─── LEAVE / intentional departure (#687) ──────────────────────────────────────
+
+describe('LobbyServer — LEAVE / intentional departure (#687)', () => {
+    it('fires onPlayerDisconnected with reason "normal" when the client sends LEAVE', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const reasons: DisconnectReason[] = [];
+        const { ws } = await connectAndJoin(server);
+        await new Promise<void>((resolve) => {
+            server.onPlayerDisconnected((_id, reason) => {
+                reasons.push(reason);
+                resolve();
+            });
+            ws.send(JSON.stringify({ type: 'LEAVE' } satisfies ClientMessage));
+        });
+
+        expect(reasons).toEqual(['normal']);
+    });
+
+    it('fires onPlayerDisconnected with reason "timeout" on a bare socket close (transient drop)', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const reasons: DisconnectReason[] = [];
+        const { ws } = await connectAndJoin(server);
+        await new Promise<void>((resolve) => {
+            server.onPlayerDisconnected((_id, reason) => {
+                reasons.push(reason);
+                resolve();
+            });
+            ws.close();
+        });
+
+        expect(reasons).toEqual(['timeout']);
+    });
+
+    it('treats a reconnect after LEAVE as a fresh join (assigns a new PlayerId)', async () => {
+        const server = makeServer();
+        await server.ready();
+        const first = await connectAndJoin(server, 'Leaver');
+
+        await new Promise<void>((resolve) => {
+            first.ws.once('close', () => resolve());
+            first.ws.send(JSON.stringify({ type: 'LEAVE' } satisfies ClientMessage));
+        });
+
+        const second = await connectAndJoin(server, 'Leaver', first.playerId);
+        expect(second.playerId).not.toBe(first.playerId);
+        second.ws.close();
     });
 });
 

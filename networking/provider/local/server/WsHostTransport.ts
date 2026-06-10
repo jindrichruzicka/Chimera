@@ -127,13 +127,20 @@ export class WsHostTransport implements HostTransport {
                 serverTime: msg.payload.timestamp,
             };
         }
-        // profile / profile_reject / chat_reject: the current wire protocol has
+        if (msg.kind === 'profile_reject') {
+            // Mid-session PROFILE_UPDATE rejection (#688). Carries the structured
+            // reason (`'profile:<AdmissionRejection>'` or `'rate_limit'`) so the
+            // client can raise the §4.30 "Profile rejected" toast. Originates from
+            // the ProfileGate/ProfileSanitizer admission path (Invariants #61/#62).
+            return { type: 'PROFILE_REJECT', reason: msg.reason };
+        }
+        // profile / profile_ack / chat_reject: the current wire protocol still has
         // no frame for these host→client side-channels, so they deliver only over
         // the in-process provider today. Sending a garbage LOBBY_STATE frame here
         // is incorrect and confusing, so drop silently until proper protocol
         // support lands. (chat_reject is the sender-side rejection signal; without
         // a wire frame a WS sender still sees a silent drop — see chat-system.md.)
-        // TODO(F14): add SERVER_PROFILE_UPDATE / chat_reject message types to ServerMessage
+        // TODO(F14): add a wire frame for chat_reject too.
         return null;
     }
 }

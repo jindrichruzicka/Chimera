@@ -26,6 +26,8 @@ import type {
     LobbyInfo,
     LobbyState,
     PlayerId,
+    PlayerConnectionEvent,
+    ProfileRejection,
     Unsubscribe,
 } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
@@ -64,6 +66,20 @@ export const LOBBY_UPDATE_READY_STATE_CHANNEL = 'chimera:lobby:update-ready-stat
  * readiness, or lobby metadata changes.
  */
 export const LOBBY_UPDATE_CHANNEL = 'chimera:lobby:update';
+
+/**
+ * `ipcRenderer.on` target for {@link LobbyAPI.onPlayerConnectionChanged}. Main
+ * pushes a {@link PlayerConnectionEvent} when an opponent transiently drops or
+ * reconnects, driving the §4.30 presence toasts (#687).
+ */
+export const LOBBY_PLAYER_CONNECTION_CHANNEL = 'chimera:lobby:player-connection';
+
+/**
+ * `ipcRenderer.on` target for {@link LobbyAPI.onProfileRejected}. Main pushes a
+ * {@link ProfileRejection} when this client's profile is rejected at JOIN or for
+ * a mid-session PROFILE_UPDATE, driving the §4.30 "Profile rejected" toast (#688).
+ */
+export const LOBBY_PROFILE_REJECTED_CHANNEL = 'chimera:lobby:profile-rejected';
 
 /**
  * Back-compat alias for {@link IpcListener}. Retained so test files that
@@ -124,5 +140,9 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
             ipc.invoke(LOBBY_UPDATE_READY_STATE_CHANNEL, ready).then(() => undefined),
         onUpdate: (cb: (lobby: LobbyState) => void): Unsubscribe =>
             subscribePush<LobbyState>(ipc, LOBBY_UPDATE_CHANNEL, cb),
+        onPlayerConnectionChanged: (cb: (event: PlayerConnectionEvent) => void): Unsubscribe =>
+            subscribePush<PlayerConnectionEvent>(ipc, LOBBY_PLAYER_CONNECTION_CHANNEL, cb),
+        onProfileRejected: (cb: (rejection: ProfileRejection) => void): Unsubscribe =>
+            subscribePush<ProfileRejection>(ipc, LOBBY_PROFILE_REJECTED_CHANNEL, cb),
     };
 }

@@ -203,6 +203,15 @@ export class WsClientTransport implements ClientTransport {
                 for (const cb of this.revealCbs) cb(msg.reveal);
                 break;
 
+            case 'PROFILE_REJECT':
+                // Mid-session PROFILE_UPDATE rejection (#688). Surfaced as the
+                // `profile_reject` side-channel so LobbyManager can raise the
+                // §4.30 "Profile rejected" toast on the joined client.
+                for (const cb of this.sideChannelCbs) {
+                    cb({ kind: 'profile_reject', reason: msg.reason });
+                }
+                break;
+
             default:
                 // WELCOME handled by ServerConnection; DELTA and non-terminal REJECT ignored
                 break;

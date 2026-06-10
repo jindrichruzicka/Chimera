@@ -85,6 +85,11 @@ describe('shared/messages — ClientMessage', () => {
         expect(msg.type).toBe('READY_STATE_UPDATE');
         expect(msg.ready).toBe(true);
     });
+
+    it('LEAVE message signals an intentional departure (no payload)', () => {
+        const msg: ClientMessage = { type: 'LEAVE' };
+        expect(msg.type).toBe('LEAVE');
+    });
 });
 
 // ─── ServerMessage ────────────────────────────────────────────────────────────
@@ -168,6 +173,15 @@ describe('shared/messages — ServerMessage', () => {
         };
         expect(msg.type).toBe('LOBBY_STATE');
     });
+
+    it('PROFILE_REJECT message carries a structured rejection reason', () => {
+        const msg: ServerMessage = {
+            type: 'PROFILE_REJECT',
+            reason: 'profile:NAMESPACE_COLLISION',
+        };
+        expect(msg.type).toBe('PROFILE_REJECT');
+        expect(msg.reason).toBe('profile:NAMESPACE_COLLISION');
+    });
 });
 
 // ─── isClientMessage ──────────────────────────────────────────────────────────
@@ -194,6 +208,10 @@ describe('shared/messages — isClientMessage type guard', () => {
     it('returns true for READY_STATE_UPDATE', () => {
         expect(isClientMessage({ type: 'READY_STATE_UPDATE', ready: false })).toBe(true);
     });
+
+    it('returns true for LEAVE', () => {
+        expect(isClientMessage({ type: 'LEAVE' })).toBe(true);
+    });
 });
 
 // ─── isServerMessage ──────────────────────────────────────────────────────────
@@ -209,6 +227,10 @@ describe('shared/messages — isServerMessage type guard', () => {
 
     it('returns true for TICK', () => {
         expect(isServerMessage({ type: 'TICK', tick: 3 })).toBe(true);
+    });
+
+    it('returns true for PROFILE_REJECT', () => {
+        expect(isServerMessage({ type: 'PROFILE_REJECT', reason: 'rate_limit' })).toBe(true);
     });
 
     it('returns false for an unknown type string', () => {

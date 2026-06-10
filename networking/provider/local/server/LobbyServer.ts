@@ -247,6 +247,11 @@ export class LobbyServer implements MessageBus {
     private handleConnection(ws: WebSocket): void {
         let authenticated = false;
         let playerId: PlayerId | null = null;
+        // Set when the client sends an explicit LEAVE before closing. Lets the
+        // close handler distinguish an intentional departure (`'normal'`) from a
+        // transient drop (`'timeout'`), so the host's opponent-presence toasts
+        // (#687) never fire "disconnected" on a deliberate leave.
+        let intentionalLeave = false;
 
         const onMessage = (raw: Buffer | ArrayBuffer | Buffer[]): void => {
             let parsed: unknown;
@@ -348,6 +353,19 @@ export class LobbyServer implements MessageBus {
 
             // Authenticated — route message to subscribers
             const pid = playerId!;
+
+            // LEAVE is a connection-control message handled here, not routed to
+            // subscribers: it marks the departure as intentional and forgets the
+            // player so a later JOIN with the same reconnectPlayerId is treated as
+            // a fresh join (no "reconnected" toast). The socket close that follows
+            // then reports `'normal'` (#687).
+            if (msg.type === 'LEAVE') {
+                intentionalLeave = true;
+                this.knownPlayers.delete(pid);
+                ws.close();
+                return;
+            }
+
             for (const cb of this.messageCbs) {
                 cb(pid, msg);
             }
@@ -357,9 +375,14 @@ export class LobbyServer implements MessageBus {
             if (playerId !== null) {
                 this.connections.delete(playerId);
                 const pid = playerId;
-                this.logger?.info('player disconnected', { playerId: pid });
+                this.logger?.info('player disconnected', { playerId: pid, intentionalLeave });
+                // An explicit LEAVE → `'normal'` (deliberate). A bare socket close
+                // with no preceding LEAVE → `'timeout'` (transient drop); the
+                // player stays in `knownPlayers` so a reconnect resolves the same
+                // PlayerId and the host can raise the "reconnected" toast (#687).
+                const reason: DisconnectReason = intentionalLeave ? 'normal' : 'timeout';
                 for (const cb of this.disconnectedCbs) {
-                    cb(pid, 'normal');
+                    cb(pid, reason);
                 }
             }
         };

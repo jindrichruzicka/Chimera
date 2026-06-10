@@ -99,7 +99,11 @@ import {
     GAME_SNAPSHOT_CHANNEL,
     GAME_TICK_CHANNEL,
 } from '../preload/apis/game-api.js';
-import { LOBBY_UPDATE_CHANNEL } from '../preload/apis/lobby-api.js';
+import {
+    LOBBY_UPDATE_CHANNEL,
+    LOBBY_PLAYER_CONNECTION_CHANNEL,
+    LOBBY_PROFILE_REJECTED_CHANNEL,
+} from '../preload/apis/lobby-api.js';
 import { CHAT_MESSAGE_CHANNEL } from '../preload/apis/chat-api.js';
 import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
@@ -1770,6 +1774,24 @@ export async function main(): Promise<void> {
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(SYSTEM_CONNECTION_STATUS_CHANNEL, status);
+                }
+            });
+        },
+        // Opponent presence transitions (host-side): a transient drop or reconnect
+        // → renderer "Player disconnected"/"Player reconnected" toast (§4.30 / #687).
+        onPlayerConnectionChanged: (event) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(LOBBY_PLAYER_CONNECTION_CHANNEL, event);
+                }
+            });
+        },
+        // Profile-admission rejection (JOIN or mid-session PROFILE_UPDATE) →
+        // renderer "Profile rejected: {reason}" toast (§4.30 / #688).
+        onProfileRejected: (reason) => {
+            BrowserWindow.getAllWindows().forEach((win) => {
+                if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(LOBBY_PROFILE_REJECTED_CHANNEL, { reason });
                 }
             });
         },

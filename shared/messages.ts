@@ -81,6 +81,12 @@ export interface WireCommitmentReveal {
  *                 Host remains authoritative and rebroadcasts LOBBY_STATE.
  * - CHAT          Player chat message; rate-limited on the server (§4.29).
  * - PING          Latency probe; server responds with PONG.
+ * - LEAVE         Explicit, graceful departure sent just before the client
+ *                 closes its socket. Lets the host distinguish an intentional
+ *                 leave from a transient connection drop, so opponent
+ *                 "disconnected"/"reconnected" presence toasts (§4.30) never
+ *                 fire on a deliberate leave. Carries no payload — the host
+ *                 already knows which connection sent it.
  */
 export type ClientMessage =
     | {
@@ -104,7 +110,8 @@ export type ClientMessage =
     | { readonly type: 'PROFILE_UPDATE'; readonly profile: WirePlayerProfile }
     | { readonly type: 'READY_STATE_UPDATE'; readonly ready: boolean }
     | { readonly type: 'CHAT'; readonly body: string; readonly scope: ChatScope }
-    | { readonly type: 'PING'; readonly sentAt: number };
+    | { readonly type: 'PING'; readonly sentAt: number }
+    | { readonly type: 'LEAVE' };
 
 // ─── Server → Client messages ─────────────────────────────────────────────────
 
@@ -131,6 +138,11 @@ export type ClientMessage =
  *                 clock-skew estimation.
  * - LOBBY_STATE   Pushed whenever the lobby roster changes (player joins, leaves,
  *                 changes ready state). Keeps all clients in sync.
+ * - PROFILE_REJECT Host→client rejection of a mid-session PROFILE_UPDATE. Carries
+ *                 the structured `reason` (`'profile:<AdmissionRejection>'` or
+ *                 `'rate_limit'`) so the client can raise the §4.30 "Profile
+ *                 rejected" toast. The wire form of the `profile_reject`
+ *                 side-channel (Invariants #61/#62).
  */
 export type ServerMessage =
     | {
@@ -157,7 +169,8 @@ export type ServerMessage =
           readonly serverTime: number;
       }
     | { readonly type: 'PONG'; readonly sentAt: number }
-    | { readonly type: 'LOBBY_STATE'; readonly state: LobbyState };
+    | { readonly type: 'LOBBY_STATE'; readonly state: LobbyState }
+    | { readonly type: 'PROFILE_REJECT'; readonly reason: string };
 
 // ─── Type guards ──────────────────────────────────────────────────────────────
 
@@ -169,6 +182,7 @@ const CLIENT_MESSAGE_TYPES = new Set<string>([
     'READY_STATE_UPDATE',
     'CHAT',
     'PING',
+    'LEAVE',
 ]);
 
 /** All valid `ServerMessage.type` values. */
@@ -183,6 +197,7 @@ const SERVER_MESSAGE_TYPES = new Set<string>([
     'CHAT',
     'PONG',
     'LOBBY_STATE',
+    'PROFILE_REJECT',
 ]);
 
 /**

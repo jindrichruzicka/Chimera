@@ -423,3 +423,30 @@ describe('WsHostTransport — profile side-channel (T04)', () => {
         ws.close();
     });
 });
+
+// ─── profile_reject side-channel → PROFILE_REJECT wire frame (#688) ─────────────
+
+describe('WsHostTransport — profile_reject side-channel (#688)', () => {
+    it('unicast delivers a PROFILE_REJECT frame carrying the structured reason', async () => {
+        const { server, transport } = makeTransport();
+        await server.ready();
+        const { ws, playerId } = await connectAndJoin(server);
+
+        const p = new Promise<ServerMessage>((resolve) => {
+            ws.once('message', (raw) => resolve(JSON.parse(rawToString(raw)) as ServerMessage));
+        });
+
+        const rejectMsg: SideChannelMessage = {
+            kind: 'profile_reject',
+            reason: 'profile:NAMESPACE_COLLISION',
+        };
+        transport.sendSideChannel(playerId, rejectMsg);
+
+        const received = await p;
+        expect(received.type).toBe('PROFILE_REJECT');
+        if (received.type === 'PROFILE_REJECT') {
+            expect(received.reason).toBe('profile:NAMESPACE_COLLISION');
+        }
+        ws.close();
+    });
+});

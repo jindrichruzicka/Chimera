@@ -242,6 +242,25 @@ export type JoinGateResult =
     | { readonly admitted: true; readonly displayName: string }
     | { readonly admitted: false; readonly reason: string };
 
+/**
+ * Thrown by {@link MultiplayerProvider.joinLobby} when the host rejects the JOIN
+ * handshake. Part of the provider contract (not a provider-internal type) so
+ * consumers — e.g. `LobbyManager` raising the §4.30 "Profile rejected" toast
+ * (#688) — can branch on the structured `reason` instead of string-matching
+ * `Error.message`.
+ *
+ * For a profile-gate rejection, `reason` is `'profile:<AdmissionRejection>'`;
+ * for other handshake failures it is the raw reason (`'lobby_full'`,
+ * `'invalid_token'`, …). Every concrete provider must throw this (not a plain
+ * `Error`) on a JOIN rejection.
+ */
+export class JoinRejectedError extends Error {
+    constructor(readonly reason: string) {
+        super(`MultiplayerProvider: server rejected JOIN: ${reason}`);
+        this.name = 'JoinRejectedError';
+    }
+}
+
 // ─── Host-side session ────────────────────────────────────────────────────────
 
 /**

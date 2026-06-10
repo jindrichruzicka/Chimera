@@ -33,9 +33,10 @@ import type {
     Unsubscribe,
     WireChatPayload,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { JoinRejectedError } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
-import type { ConnectionStatus } from '../../preload/api-types.js';
+import type { ConnectionStatus, PlayerConnectionEvent } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
 import type { ChatRelay } from '../ChatRelay.js';
 import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
@@ -80,6 +81,21 @@ export interface LobbyManagerOptions {
     readonly onLocalChatDelivered?: (message: ChatMessage) => void;
     readonly onClientSnapshotReceived?: (snapshot: PlayerSnapshot, checksum: number) => void;
     readonly onClientTickReceived?: (tick: number) => void;
+    /**
+     * Invoked when an opponent's connection presence transitions (transient drop
+     * or reconnect) while hosting. The wiring point forwards this to the renderer
+     * over `chimera:lobby:player-connection` so it can raise the §4.30
+     * "Player disconnected"/"Player reconnected" toasts (#687).
+     */
+    readonly onPlayerConnectionChanged?: (event: PlayerConnectionEvent) => void;
+    /**
+     * Invoked when this client's profile is rejected — at JOIN or for a
+     * mid-session PROFILE_UPDATE. The wiring point forwards this to the renderer
+     * over `chimera:lobby:profile-rejected` for the §4.30 "Profile rejected"
+     * toast (#688). `reason` is the raw gate code (`'profile:<...>'` /
+     * `'rate_limit'`), never a parsed `Error.message`.
+     */
+    readonly onProfileRejected?: (reason: string) => void;
     readonly e2eHooks?: E2eHooks;
 }
 
@@ -127,7 +143,16 @@ export class LobbyManager {
     private readonly onLocalChatDelivered: LobbyManagerOptions['onLocalChatDelivered'];
     private readonly onClientSnapshotReceived: LobbyManagerOptions['onClientSnapshotReceived'];
     private readonly onClientTickReceived: LobbyManagerOptions['onClientTickReceived'];
+    private readonly onPlayerConnectionChanged: LobbyManagerOptions['onPlayerConnectionChanged'];
+    private readonly onProfileRejected: LobbyManagerOptions['onProfileRejected'];
     private readonly e2eHooks: LobbyManagerOptions['e2eHooks'];
+    /**
+     * Opponents currently in a transient-drop state (left with a non-deliberate
+     * reason, not yet reconnected). Gates the "reconnected" toast so it fires
+     * only for a genuine reconnect — never for a first-time join (#687). Cleared
+     * on lobby close so presence does not bleed across sessions.
+     */
+    private readonly disconnectedPlayers = new Set<PlayerId>();
 
     constructor(
         private readonly provider: MultiplayerProvider,
@@ -146,6 +171,8 @@ export class LobbyManager {
         this.onLocalChatDelivered = options.onLocalChatDelivered;
         this.onClientSnapshotReceived = options.onClientSnapshotReceived;
         this.onClientTickReceived = options.onClientTickReceived;
+        this.onPlayerConnectionChanged = options.onPlayerConnectionChanged;
+        this.onProfileRejected = options.onProfileRejected;
         this.e2eHooks = options.e2eHooks;
     }
 
@@ -156,6 +183,14 @@ export class LobbyManager {
 
     private publishConnectionStatus(status: ConnectionStatus): void {
         this.onConnectionStatusChanged?.(status);
+    }
+
+    private publishPlayerConnection(event: PlayerConnectionEvent): void {
+        this.onPlayerConnectionChanged?.(event);
+    }
+
+    private publishProfileRejected(reason: string): void {
+        this.onProfileRejected?.(reason);
     }
 
     private broadcastLobbyStateIfHosted(state: LobbyState): void {
@@ -398,6 +433,16 @@ export class LobbyManager {
                     return;
                 }
 
+                // A player rejoining after a transient drop → "reconnected"
+                // (#687). A first-time join is silent — only players we saw drop
+                // are in `disconnectedPlayers`.
+                if (this.disconnectedPlayers.delete(player.playerId)) {
+                    this.publishPlayerConnection({
+                        playerId: player.playerId,
+                        status: 'reconnected',
+                    });
+                }
+
                 const existing = this.lobbyState.players.find(
                     (entry) => entry.playerId === player.playerId,
                 );
@@ -415,9 +460,20 @@ export class LobbyManager {
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
             }),
-            session.transport.onPlayerLeft((playerId, _reason) => {
+            session.transport.onPlayerLeft((playerId, reason) => {
                 if (this.lobbyState === null) {
                     return;
+                }
+
+                // A transient drop ('timeout'/'error') raises the opponent
+                // "disconnected" toast and remembers the player so a later rejoin
+                // counts as a reconnect. A deliberate leave ('normal'/'kicked'/
+                // 'host_closed') is silent and clears any pending drop state (#687).
+                if (reason === 'timeout' || reason === 'error') {
+                    this.disconnectedPlayers.add(playerId);
+                    this.publishPlayerConnection({ playerId, status: 'disconnected' });
+                } else {
+                    this.disconnectedPlayers.delete(playerId);
                 }
 
                 const nextState: LobbyState = {
@@ -475,6 +531,14 @@ export class LobbyManager {
             session = await this.provider.joinLobby(params);
         } catch (error) {
             this.publishConnectionStatus('error');
+            // A profile-gate JOIN rejection carries a structured reason
+            // (`'profile:<AdmissionRejection>'`); surface it for the §4.30
+            // "Profile rejected" toast (#688), then rethrow so the lobby page
+            // still shows its inline error. Non-profile rejections (lobby_full,
+            // invalid_token) and other failures are not profile toasts.
+            if (error instanceof JoinRejectedError && error.reason.startsWith('profile:')) {
+                this.publishProfileRejected(error.reason);
+            }
             throw error;
         }
         this.session = session;
@@ -503,6 +567,10 @@ export class LobbyManager {
             session.transport.onSideChannelReceived((msg) => {
                 if (msg.kind === 'chat') {
                     this.onLocalChatDelivered?.(LobbyManager.wireChatToCanonical(msg.payload));
+                } else if (msg.kind === 'profile_reject') {
+                    // Mid-session PROFILE_UPDATE rejection (#688) — surface the
+                    // structured reason for the §4.30 "Profile rejected" toast.
+                    this.publishProfileRejected(msg.reason);
                 }
             }),
             session.transport.onDisconnected((_reason) => {
@@ -757,6 +825,9 @@ export class LobbyManager {
         // Clear rate-limit timestamps so they do not bleed into the next session
         // (Invariant #62).
         this.profileUpdateTimestamps.clear();
+        // Clear opponent-presence tracking so a stale "disconnected" player does
+        // not produce a spurious "reconnected" toast in the next session (#687).
+        this.disconnectedPlayers.clear();
 
         if (session === null) {
             return;
