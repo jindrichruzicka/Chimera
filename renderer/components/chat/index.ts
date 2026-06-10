@@ -11,7 +11,8 @@
 //
 // A game mounts the chat panel from one of its own renderer surfaces — e.g.
 // Tactics renders it inside `TacticsGameHud`. The engine never mounts it for a
-// game implicitly. The lobby page mounts it directly.
+// game implicitly, and no engine shell surface (lobby included) mounts it:
+// chat is an in-match-only UI.
 //
 // Architecture reference: §4.29 Chat System, §4.35 UI Design System,
 // §3 Module Boundaries.

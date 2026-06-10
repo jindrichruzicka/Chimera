@@ -224,10 +224,10 @@ describe('SettingsPage — tabbed definition rendering (AC #1, #627)', () => {
         expect(screen.getByRole('switch', { name: 'Auto Save' })).toBeTruthy();
     });
 
-    it('renders the Controls tab with registered input actions', async () => {
+    it('renders the Controls tab with registered game input actions', async () => {
         await renderSettingsPageAndOpenTab('Controls');
 
-        expect(screen.getByText('Undo last action')).toBeTruthy();
+        expect(screen.getByText('End current turn')).toBeTruthy();
     });
 
     it('shows a Spinner while active game settings are loading', async () => {
@@ -467,6 +467,28 @@ describe('SettingsPage — reset to defaults (AC #3)', () => {
         );
     });
 
+    it('keeps the dialog height static across tabs and scrolls overflowing tab content', async () => {
+        await renderSettingsPage();
+
+        const dialogRule = /\.settings-dialog\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+
+        // Static height: the dialog must not grow/shrink with the active tab's content.
+        expect(dialogRule).toMatch(/[^-]block-size: min\(/);
+        expect(dialogRule).not.toContain('max-block-size');
+        // The middle (tab panels) takes the remaining space; footer actions stay pinned.
+        expect(dialogRule).toContain('grid-template-rows: minmax(var(--ch-space-none), 1fr) auto');
+        // Scrolling happens inside the active tab panel, not on the dialog itself.
+        expect(dialogRule).not.toContain('overflow: auto');
+    });
+
+    it('pads the dialog with the standard container spacing token', async () => {
+        await renderSettingsPage();
+
+        const dialogRule = /\.settings-dialog\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+
+        expect(dialogRule).toContain('padding: var(--ch-space-lg)');
+    });
+
     it('calls window.__chimera.settings.reset with the active gameId when reset is clicked', async () => {
         await renderSettingsPage();
         const btn = screen.getByRole('button', { name: /^reset$/i });
@@ -626,12 +648,19 @@ const END_TURN_ACTION: InputAction = {
     category: 'Game',
     oneShot: true,
 };
+const CYCLE_UNIT_ACTION: InputAction = {
+    id: 'game:cycle-unit',
+    description: 'Cycle to next unit',
+    category: 'Game',
+    oneShot: true,
+};
 
 function makeInputManagerDouble(overrides: Partial<InputManager> = {}): InputManager {
     const bindings: Record<InputActionId, KeyBinding> = {
         'engine:undo': { primary: 'KeyZ', modifiers: ['Ctrl'] },
         'engine:toggle-menu': { primary: 'Escape' },
         'game:end-turn': { primary: 'Enter' },
+        'game:cycle-unit': { primary: 'KeyN' },
     };
     return {
         start: vi.fn(),
@@ -641,7 +670,9 @@ function makeInputManagerDouble(overrides: Partial<InputManager> = {}): InputMan
         setActiveCategory: vi.fn(),
         rebind: vi.fn().mockResolvedValue({ ok: true }),
         pollGamepad: vi.fn(),
-        getActions: vi.fn().mockReturnValue([UNDO_ACTION, TOGGLE_MENU_ACTION, END_TURN_ACTION]),
+        getActions: vi
+            .fn()
+            .mockReturnValue([UNDO_ACTION, TOGGLE_MENU_ACTION, END_TURN_ACTION, CYCLE_UNIT_ACTION]),
         getBinding: vi.fn((id: InputActionId) => bindings[id]),
         resetBinding: vi.fn().mockResolvedValue(undefined),
         ...overrides,
@@ -653,47 +684,75 @@ async function renderWithInputManager(inputManager: InputManager): Promise<void>
     await renderSettingsPageAndOpenTab('Controls');
 }
 
-// ── AC #6 — Controls rebind panel renders all registered actions ──────────────
+// ── AC #6 — Controls rebind panel renders game actions only ───────────────────
 
 describe('SettingsPage — controls rebind panel (AC #6)', () => {
-    it('renders action descriptions for all registered actions', async () => {
+    it('renders descriptions for game actions and hides engine actions', async () => {
         await renderWithInputManager(makeInputManagerDouble());
-        expect(screen.getByText('Undo last action')).toBeTruthy();
-        expect(screen.getByText('Toggle game menu')).toBeTruthy();
         expect(screen.getByText('End current turn')).toBeTruthy();
+        expect(screen.getByText('Cycle to next unit')).toBeTruthy();
+        expect(screen.queryByText('Undo last action')).toBeNull();
+        expect(screen.queryByText('Toggle game menu')).toBeNull();
     });
 
-    it('renders current binding key for each action', async () => {
+    it('renders current binding key for each game action and no engine bindings', async () => {
         await renderWithInputManager(makeInputManagerDouble());
-        // engine:undo → Ctrl+KeyZ
-        expect(screen.getByText(/Ctrl\+KeyZ/i)).toBeTruthy();
-        // engine:toggle-menu → Escape
-        expect(screen.getByText(/Escape/i)).toBeTruthy();
+        const values = screen.getAllByTestId('binding-value').map((el) => el.textContent);
+        expect(values).toEqual(['Enter', 'KeyN']);
     });
 
-    it('renders an "Edit" button for each action', async () => {
+    it('renders an "Edit" button for each game action', async () => {
         await renderWithInputManager(makeInputManagerDouble());
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
-        expect(editButtons.length).toBe(3);
+        expect(editButtons.length).toBe(2);
     });
 
-    it('renders a "Reset" button for each action', async () => {
+    it('renders a "Reset" button for each game action', async () => {
         await renderWithInputManager(makeInputManagerDouble());
         const resetButtons = screen.getAllByTestId('binding-reset');
-        expect(resetButtons.length).toBe(3);
+        expect(resetButtons.length).toBe(2);
     });
 
-    it('groups actions by category', async () => {
+    it('omits category captions when only one category is visible', async () => {
         await renderWithInputManager(makeInputManagerDouble());
-        expect(screen.getByText('Engine')).toBeTruthy();
-        expect(screen.getByText('Game')).toBeTruthy();
+        expect(screen.queryByText('Engine')).toBeNull();
+        expect(screen.queryByText('Game')).toBeNull();
+    });
+
+    it('renders category captions when game actions span multiple categories', async () => {
+        const moveCursorAction: InputAction = {
+            id: 'game:move-cursor',
+            description: 'Move cursor',
+            category: 'Movement',
+            oneShot: false,
+        };
+        await renderWithInputManager(
+            makeInputManagerDouble({
+                getActions: vi
+                    .fn()
+                    .mockReturnValue([UNDO_ACTION, END_TURN_ACTION, moveCursorAction]),
+            }),
+        );
+        expect(screen.getByRole('heading', { level: 3, name: 'Game' })).toBeTruthy();
+        expect(screen.getByRole('heading', { level: 3, name: 'Movement' })).toBeTruthy();
+        expect(screen.queryByText('Engine')).toBeNull();
+    });
+
+    it('shows the empty state when only engine actions are registered', async () => {
+        await renderWithInputManager(
+            makeInputManagerDouble({
+                getActions: vi.fn().mockReturnValue([UNDO_ACTION, TOGGLE_MENU_ACTION]),
+            }),
+        );
+        expect(screen.getByText('No controls registered.')).toBeTruthy();
+        expect(screen.queryByTestId('binding-action-row')).toBeNull();
     });
 
     it('right-aligns current bindings and left-aligns per-action buttons', async () => {
         await renderWithInputManager(makeInputManagerDouble());
 
         const bindingValues = screen.getAllByTestId('binding-value');
-        expect(bindingValues[0]).toHaveTextContent('Ctrl+KeyZ');
+        expect(bindingValues[0]).toHaveTextContent('Enter');
         expect(pageCss).toContain('.binding-value');
         expect(pageCss).toContain('justify-self: end');
         expect(pageCss).toContain('text-align: right');
@@ -716,7 +775,7 @@ describe('SettingsPage — controls rebind panel (AC #6)', () => {
             }),
         );
 
-        expect(screen.getByText('Undo last action')).toBeTruthy();
+        expect(screen.getByText('No controls registered.')).toBeTruthy();
         expect(screen.queryByText('End current turn')).toBeNull();
 
         registeredActions = [UNDO_ACTION, END_TURN_ACTION];
@@ -754,13 +813,16 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
         await renderWithInputManager(makeInputManagerDouble({ rebind: mockRebind }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
-        fireEvent.click(editButtons[0]!); // Edit engine:undo
+        fireEvent.click(editButtons[0]!); // Edit game:end-turn
 
         await act(async () => {
             fireEvent.keyDown(document, { code: 'KeyA', key: 'a', ctrlKey: false });
         });
 
-        expect(mockRebind).toHaveBeenCalledWith('engine:undo', { primary: 'KeyA', modifiers: [] });
+        expect(mockRebind).toHaveBeenCalledWith('game:end-turn', {
+            primary: 'KeyA',
+            modifiers: [],
+        });
     });
 
     it('capture mode with Ctrl held includes Ctrl in the binding modifiers', async () => {
@@ -774,7 +836,7 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
             fireEvent.keyDown(document, { code: 'KeyB', key: 'b', ctrlKey: true });
         });
 
-        expect(mockRebind).toHaveBeenCalledWith('engine:undo', {
+        expect(mockRebind).toHaveBeenCalledWith('game:end-turn', {
             primary: 'KeyB',
             modifiers: ['Ctrl'],
         });
@@ -801,7 +863,7 @@ describe('SettingsPage — rebind capture mode (AC #7)', () => {
             fireEvent.keyDown(document, { code: 'KeyC', key: 'c' });
         });
 
-        expect(secondRebind).toHaveBeenCalledWith('engine:undo', {
+        expect(secondRebind).toHaveBeenCalledWith('game:end-turn', {
             primary: 'KeyC',
             modifiers: [],
         });
@@ -844,12 +906,12 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
         const conflictRebind = vi.fn().mockResolvedValue({
             ok: false,
             reason: 'conflict',
-            conflictingAction: 'engine:undo',
+            conflictingAction: 'game:end-turn',
         });
         await renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
-        fireEvent.click(editButtons[1]!); // Edit engine:toggle-menu
+        fireEvent.click(editButtons[1]!); // Edit game:cycle-unit
 
         await act(async () => {
             fireEvent.keyDown(document, { code: 'KeyZ', key: 'z', ctrlKey: true });
@@ -862,7 +924,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
         const conflictRebind = vi.fn().mockResolvedValue({
             ok: false,
             reason: 'conflict',
-            conflictingAction: 'engine:undo',
+            conflictingAction: 'game:end-turn',
         });
         await renderWithInputManager(makeInputManagerDouble({ rebind: conflictRebind }));
 
@@ -882,7 +944,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
             .mockResolvedValueOnce({
                 ok: false,
                 reason: 'conflict',
-                conflictingAction: 'engine:undo',
+                conflictingAction: 'game:end-turn',
             })
             .mockResolvedValue({ ok: true });
         const mockResetBinding = vi.fn().mockResolvedValue(undefined);
@@ -901,7 +963,7 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
             fireEvent.click(screen.getByRole('button', { name: /unbind existing/i }));
         });
 
-        expect(mockResetBinding).toHaveBeenCalledWith('engine:undo');
+        expect(mockResetBinding).toHaveBeenCalledWith('game:end-turn');
         // rebind must be called twice: once producing conflict, once after unbing
         expect(conflictRebind).toHaveBeenCalledTimes(2);
     });
@@ -912,12 +974,12 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
             .mockResolvedValueOnce({
                 ok: false,
                 reason: 'conflict',
-                conflictingAction: 'engine:toggle-menu',
+                conflictingAction: 'game:cycle-unit',
             })
             .mockResolvedValueOnce({
                 ok: false,
                 reason: 'conflict',
-                conflictingAction: 'engine:undo',
+                conflictingAction: 'game:end-turn',
             })
             .mockResolvedValue({ ok: true });
         const mockResetBinding = vi.fn().mockResolvedValue(undefined);
@@ -928,13 +990,13 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
 
         const editButtons = screen.getAllByRole('button', { name: /^edit$/i });
 
-        // Capture conflict for engine:undo with Ctrl+X.
+        // Capture conflict for game:end-turn with Ctrl+X.
         fireEvent.click(editButtons[0]!);
         await act(async () => {
             fireEvent.keyDown(document, { code: 'KeyX', key: 'x', ctrlKey: true });
         });
 
-        // Capture conflict for engine:toggle-menu with Ctrl+Y.
+        // Capture conflict for game:cycle-unit with Ctrl+Y.
         fireEvent.click(editButtons[1]!);
         await act(async () => {
             fireEvent.keyDown(document, { code: 'KeyY', key: 'y', ctrlKey: true });
@@ -942,11 +1004,11 @@ describe('SettingsPage — conflict handling (AC #8)', () => {
 
         const forceButtons = screen.getAllByRole('button', { name: /unbind existing/i });
         await act(async () => {
-            // Resolve first conflict (engine:undo) and assert it keeps its own captured key.
+            // Resolve first conflict (game:end-turn) and assert it keeps its own captured key.
             fireEvent.click(forceButtons[0]!);
         });
 
-        expect(conflictRebind).toHaveBeenLastCalledWith('engine:undo', {
+        expect(conflictRebind).toHaveBeenLastCalledWith('game:end-turn', {
             primary: 'KeyX',
             modifiers: ['Ctrl'],
         });
@@ -962,9 +1024,9 @@ describe('SettingsPage — per-action reset (AC #9)', () => {
 
         const resetButtons = screen.getAllByTestId('binding-reset');
         await act(async () => {
-            fireEvent.click(resetButtons[0]!); // reset engine:undo
+            fireEvent.click(resetButtons[0]!); // reset game:end-turn
         });
 
-        expect(mockResetBinding).toHaveBeenCalledWith('engine:undo');
+        expect(mockResetBinding).toHaveBeenCalledWith('game:end-turn');
     });
 });

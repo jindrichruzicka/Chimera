@@ -7,22 +7,22 @@
     z-index: var(--ch-z-modal);
 }
 
-.left {
+.overlay.left {
     align-items: stretch;
     justify-content: flex-start;
 }
 
-.right {
+.overlay.right {
     align-items: stretch;
     justify-content: flex-end;
 }
 
-.top {
+.overlay.top {
     align-items: flex-start;
     justify-content: center;
 }
 
-.bottom {
+.overlay.bottom {
     align-items: flex-end;
     justify-content: center;
 }
@@ -73,8 +73,21 @@
     flex: none;
 }
 
+/* flex: 1 hands the leftover drawer height to the body so full-height content
+   (e.g. the chat panel) can stretch into it; short content still sits at the
+   top because the body itself is a plain block container. */
 .body {
     color: var(--ch-color-text-secondary);
+    flex: 1 1 auto;
     font-size: var(--ch-font-size-md);
+    min-block-size: var(--ch-space-none);
     overflow: auto;
+}
+
+.body > :first-child {
+    margin-block-start: var(--ch-space-none);
+}
+
+.body > :last-child {
+    margin-block-end: var(--ch-space-none);
 }

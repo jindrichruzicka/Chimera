@@ -1,12 +1,25 @@
+/*
+ * The panel is height-agnostic: it stretches to whatever block size the host
+ * container hands it (Drawer body, a lobby pane, …), the composer pins to the
+ * bottom, and the messages region absorbs the leftover space and scrolls
+ * internally once the buffer outgrows it. In an unconstrained (auto-height)
+ * host the percentages resolve to auto and the panel simply grows with its
+ * content — bounding the panel is the host's job.
+ */
 .root {
+    block-size: 100%;
     color: var(--ch-color-text-primary);
-    display: grid;
+    display: flex;
+    flex-direction: column;
     font-family: var(--ch-font-ui);
     gap: var(--ch-space-sm);
+    min-block-size: 0;
 }
 
 .messages {
     display: grid;
+    flex: 1 1 auto;
+    grid-template-rows: minmax(0, 1fr);
     min-block-size: 0;
 }
 
@@ -17,8 +30,12 @@
     padding: var(--ch-space-sm);
 }
 
-.scroll {
-    max-block-size: calc(var(--ch-space-xl) * 5);
+/* Two classes outrank the shared `.scrollArea` single-class rule, so the
+   scroller fills the delegated region instead of the ScrollArea default cap,
+   with tighter padding than the ScrollArea default. */
+.messages .scroll {
+    max-block-size: 100%;
+    padding: var(--ch-space-sm);
 }
 
 .list {
@@ -34,7 +51,6 @@
     column-gap: var(--ch-space-sm);
     display: grid;
     grid-template-columns: max-content minmax(var(--ch-space-none), 1fr) max-content;
-    padding-block: var(--ch-space-xs);
 }
 
 .author {

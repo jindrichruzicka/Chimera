@@ -3,12 +3,14 @@
  * §13.8 Core E2E Test Specifications · §4.29 Chat System
  *
  * End-to-end coverage of the Tactics chat lifecycle through the real renderer +
- * main IPC + host-relay path (not mocks), in both a lobby and a live match:
- *   - lobby-scope send/receive across host and client;
+ * main IPC + host-relay path (not mocks). The ChatPanel UI is in-match only —
+ * the lobby screen mounts no chat UI — so all UI-driven cases run in a live
+ * match through the collapsed-by-default chat drawer:
+ *   - in-match send/receive across host and client (chat drawer);
  *   - mute hides a sender's messages, unmute restores them;
- *   - rate-limit rejection once messagesPerMinute is exceeded;
  *   - the 500-entry rolling-buffer cap;
- *   - in-match send/receive across clients (chat drawer);
+ *   - rate-limit rejection once messagesPerMinute is exceeded (sent through the
+ *     IPC bridge from a hosted lobby session — the relay is UI-independent);
  *   - Invariant #72: chat never advances `tick` and is absent from the replay.
  *
  * Cross-client chat rides the LocalWebSocketProvider side-channel: the client
@@ -16,7 +18,8 @@
  * (Invariant #73), and accepted messages fan back out to recipients. The host is
  * not in the PlayerDirectory (it never JOINs); it is added as a lobby-scope
  * recipient at the delivery layer (LobbyManager.deliverChat), so it sees its own
- * and clients' lobby messages.
+ * and clients' lobby-scope messages ("lobby" names the recipient set — every
+ * connected player — not the lobby screen).
  *
  * Invariants asserted:
  *   #72 — chat does not advance `tick` and never enters ActionHistory / replays.
@@ -84,28 +87,6 @@ interface ChimeraReplayGlobal {
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Host creates a lobby and the client joins; returns both resolved PlayerIds. */
-async function openSharedLobby(
-    hostWindow: Page,
-    clientWindow: Page,
-): Promise<{ readonly hostId: string; readonly clientId: string }> {
-    const hostLobby = new LobbyPage(hostWindow);
-    const clientLobby = new LobbyPage(clientWindow);
-
-    await hostLobby.hostLobby();
-    const lobbyCode = await hostLobby.lobbyCode();
-    await clientLobby.joinLobby(lobbyCode);
-    await hostLobby.waitForPlayerCount(2);
-    await clientLobby.waitForPlayerCount(2);
-
-    const hostId = await hostLobby.localPlayerId();
-    const clientId = await clientLobby.localPlayerId();
-    if (!hostId || !clientId) {
-        throw new Error('Could not resolve host/client player IDs from the lobby roster');
-    }
-    return { hostId, clientId };
-}
-
 /** Drive the host to game-over through the canonical move + attack flow. */
 async function playToGameOver(hostGame: GamePage): Promise<void> {
     await hostGame.assertOwnedSelectionFeedbackChangesCanvas();
@@ -164,54 +145,16 @@ function readDeterministicReplay(filePath: string): {
     return { actionTypes, raw };
 }
 
-// ── Lobby-scope chat ─────────────────────────────────────────────────────────
+// ── Relay rate limit (bridge-driven; the lobby screen mounts no chat UI) ─────
 
-lobbyTest.describe('Tactics chat — lobby', () => {
-    lobbyTest(
-        'lobby-scope messages are delivered across host and client',
-        async ({ hostWindow, clientWindow }) => {
-            await openSharedLobby(hostWindow, clientWindow);
-            const hostChat = new ChatPanelPage(hostWindow);
-            const clientChat = new ChatPanelPage(clientWindow);
-            await hostChat.waitForReady();
-            await clientChat.waitForReady();
-
-            await hostChat.sendLobby('hello from host');
-            await clientChat.waitForMessage('hello from host');
-
-            await clientChat.sendLobby('hi from client');
-            await hostChat.waitForMessage('hi from client');
-        },
-    );
-
-    lobbyTest(
-        'muting a sender hides their messages; unmuting restores them',
-        async ({ hostWindow, clientWindow }) => {
-            const { clientId } = await openSharedLobby(hostWindow, clientWindow);
-            const hostChat = new ChatPanelPage(hostWindow);
-            const clientChat = new ChatPanelPage(clientWindow);
-            await hostChat.waitForReady();
-            await clientChat.waitForReady();
-
-            await clientChat.sendLobby('mute me please');
-            await hostChat.waitForMessage('mute me please');
-
-            await hostChat.muteSender(clientId);
-            await expect.poll(() => hostChat.messagesFrom(clientId).count()).toBe(0);
-
-            await hostChat.unmuteSender(clientId);
-            await hostChat.waitForMessage('mute me please');
-        },
-    );
-
+lobbyTest.describe('Tactics chat — relay rate limit', () => {
     lobbyTest(
         'the sender receives rate_limited once messagesPerMinute is exceeded',
         async ({ hostWindow }) => {
-            // Host-only lobby: the host is both sender and a lobby-scope recipient.
+            // Host-only lobby session: the relay is live as soon as a lobby is
+            // hosted, so sends go through the IPC bridge — no chat UI involved.
             const hostLobby = new LobbyPage(hostWindow);
             await hostLobby.hostLobby();
-            const hostChat = new ChatPanelPage(hostWindow);
-            await hostChat.waitForReady();
 
             // Default token bucket is 20/min; the 21st send is rejected.
             const results = await hostWindow.evaluate(async () => {
@@ -228,14 +171,60 @@ lobbyTest.describe('Tactics chat — lobby', () => {
             expect(results[20]).toEqual({ ok: false, reason: 'rate_limited' });
         },
     );
+});
 
-    lobbyTest(
+// ── In-match chat ─────────────────────────────────────────────────────────────
+
+gameTest.describe('Tactics chat — in-match', () => {
+    gameTest(
+        'in-match chat is delivered across host and client',
+        async ({ hostWindow, clientWindow }) => {
+            const hostChat = new ChatPanelPage(hostWindow);
+            const clientChat = new ChatPanelPage(clientWindow);
+            await hostChat.openInMatchChat();
+            await clientChat.openInMatchChat();
+
+            await hostChat.sendLobby('gg from host');
+            await clientChat.waitForMessage('gg from host');
+        },
+    );
+
+    gameTest(
+        'muting a sender hides their messages; unmuting restores them',
+        async ({ hostWindow, clientWindow }) => {
+            const hostChat = new ChatPanelPage(hostWindow);
+            const clientChat = new ChatPanelPage(clientWindow);
+            await hostChat.openInMatchChat();
+            await clientChat.openInMatchChat();
+
+            await clientChat.sendLobby('mute me please');
+            await hostChat.waitForMessage('mute me please');
+
+            // Resolve the client's PlayerId from the delivered row's `data-from`
+            // (the lobby roster UI is no longer on screen once the match starts).
+            const clientId = await hostChat
+                .withText('mute me please')
+                .first()
+                .getAttribute('data-from');
+            if (!clientId) {
+                throw new Error('delivered chat row is missing its data-from sender id');
+            }
+
+            await hostChat.muteSender(clientId);
+            await expect.poll(() => hostChat.messagesFrom(clientId).count()).toBe(0);
+
+            await hostChat.unmuteSender(clientId);
+            await hostChat.waitForMessage('mute me please');
+        },
+    );
+
+    gameTest(
         'the rolling buffer caps at 500 entries (oldest dropped)',
         async ({ hostApp, hostWindow }) => {
-            const hostLobby = new LobbyPage(hostWindow);
-            await hostLobby.hostLobby();
             const hostChat = new ChatPanelPage(hostWindow);
-            await hostChat.waitForReady();
+            // Open the drawer first: ChatPanel subscribes to the push channel on
+            // mount, and the cap is asserted on rendered message rows.
+            await hostChat.openInMatchChat();
 
             // Drive the cap through the real ChatHub → IPC → chatStore → ChatPanel
             // path via the CHIMERA_E2E deliverChat hook, bypassing the relay + rate
@@ -257,23 +246,6 @@ lobbyTest.describe('Tactics chat — lobby', () => {
             });
 
             await expect.poll(() => hostChat.messageCount(), { timeout: 15_000 }).toBe(500);
-        },
-    );
-});
-
-// ── In-match chat ─────────────────────────────────────────────────────────────
-
-gameTest.describe('Tactics chat — in-match', () => {
-    gameTest(
-        'in-match chat is delivered across host and client',
-        async ({ hostWindow, clientWindow }) => {
-            const hostChat = new ChatPanelPage(hostWindow);
-            const clientChat = new ChatPanelPage(clientWindow);
-            await hostChat.openInMatchChat();
-            await clientChat.openInMatchChat();
-
-            await hostChat.sendLobby('gg from host');
-            await clientChat.waitForMessage('gg from host');
         },
     );
 

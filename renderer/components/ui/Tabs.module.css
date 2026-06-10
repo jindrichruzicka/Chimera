@@ -4,6 +4,7 @@
     flex-direction: column;
     font-family: var(--ch-font-ui);
     gap: var(--ch-space-md);
+    min-block-size: var(--ch-space-none);
 }
 
 .tablist {
@@ -12,6 +13,10 @@
     border-bottom-style: solid;
     border-bottom-width: var(--ch-border-width-sm);
     display: flex;
+    /* A scroll container's automatic minimum size is zero, so without this the
+       tablist gets compressed (and grows a vertical scrollbar) whenever the
+       panel overflows a height-constrained tabs container. */
+    flex: none;
     gap: var(--ch-space-xs);
     overflow-x: auto;
 }
@@ -82,8 +87,13 @@
     border-style: solid;
     border-width: var(--ch-border-width-sm);
     color: var(--ch-color-text-secondary);
+    /* In a height-constrained container the active panel fills the remaining
+       space and scrolls; with auto-sized tabs both declarations are inert. */
+    flex: 1 1 auto;
     font-size: var(--ch-font-size-md);
     line-height: var(--ch-line-height-relaxed);
+    min-block-size: var(--ch-space-none);
+    overflow: auto;
     padding: var(--ch-space-md);
 }
 

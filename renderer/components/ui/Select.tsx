@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useId } from 'react';
-import type { ChangeEvent, CSSProperties, SelectHTMLAttributes } from 'react';
+import React, { useEffect, useId, useRef, useState } from 'react';
+import type { ChangeEvent, CSSProperties, PointerEvent, SelectHTMLAttributes } from 'react';
 import styles from './Select.module.css';
 
 export type SelectOption = Readonly<{
@@ -23,6 +23,25 @@ export type SelectProps = Readonly<
     }
 >;
 
+type PopupAnchor = 'macos' | undefined;
+
+/**
+ * On macOS the native popup anchors to the <select> border-box, so the CSS
+ * offsets that box inside the shell (see Select.module.css). Detected in an
+ * effect because the statically exported markup has no navigator to consult.
+ */
+function usePopupAnchor(): PopupAnchor {
+    const [popupAnchor, setPopupAnchor] = useState<PopupAnchor>(undefined);
+
+    useEffect(() => {
+        if (navigator.platform.startsWith('Mac')) {
+            setPopupAnchor('macos');
+        }
+    }, []);
+
+    return popupAnchor;
+}
+
 export function Select({
     className,
     error,
@@ -42,6 +61,8 @@ export function Select({
     const helperId = `${selectId}-helper`;
     const errorId = `${selectId}-error`;
     const isInvalid = invalid || Boolean(error);
+    const popupAnchor = usePopupAnchor();
+    const selectRef = useRef<HTMLSelectElement>(null);
     const describedBy = [
         ariaDescribedBy,
         helperText ? helperId : undefined,
@@ -55,12 +76,35 @@ export function Select({
         onValueChange?.(event.currentTarget.value);
     }
 
+    // The macOS anchor offset leaves a popup-overhang-wide strip of the shell
+    // uncovered by the <select>; hand clicks there back to the picker.
+    function handleShellPointerDown(event: PointerEvent<HTMLSpanElement>): void {
+        if (event.target !== event.currentTarget) {
+            return;
+        }
+        const select = selectRef.current;
+        if (!select || select.disabled) {
+            return;
+        }
+        select.focus();
+        try {
+            select.showPicker();
+        } catch {
+            // Without user activation (or with the picker already open) the
+            // browser refuses; keeping focus is the best remaining behaviour.
+        }
+    }
+
     return (
-        <div className={classNames} style={style}>
+        <div className={classNames} data-popup-anchor={popupAnchor} style={style}>
             <label className={styles['label']} htmlFor={selectId}>
                 {label}
             </label>
-            <span className={styles['controlShell']}>
+            <span
+                className={styles['controlShell']}
+                onPointerDown={handleShellPointerDown}
+                role="presentation"
+            >
                 <select
                     {...selectProps}
                     aria-describedby={describedBy || undefined}
@@ -69,6 +113,7 @@ export function Select({
                     data-invalid={String(isInvalid)}
                     id={selectId}
                     onChange={handleChange}
+                    ref={selectRef}
                     value={value}
                 >
                     {options.map((option) => (

@@ -134,6 +134,22 @@ describe('Drawer', () => {
         expect(trigger).toHaveFocus();
     });
 
+    it('anchors panel content to the top and scrolls overflowing body content', () => {
+        const source = drawerCss;
+
+        expect(source).toMatch(/\.overlay\.left\s*\{[^}]*justify-content: flex-start;/);
+        expect(source).toMatch(/\.overlay\.right\s*\{[^}]*justify-content: flex-end;/);
+        expect(source).toMatch(/\.overlay\.top\s*\{[^}]*align-items: flex-start;/);
+        expect(source).toMatch(/\.overlay\.bottom\s*\{[^}]*align-items: flex-end;/);
+        expect(source).not.toMatch(/^\.(left|right|top|bottom)\s*\{/mu);
+        expect(source).toMatch(/\.body\s*\{[^}]*min-block-size: var\(--ch-space-none\);/);
+        expect(source).toMatch(/\.body\s*\{[^}]*overflow: auto;/);
+    });
+
+    it('delegates the leftover drawer height to the body so content can stretch to fill it', () => {
+        expect(drawerCss).toMatch(/\.body\s*\{[^}]*flex: 1 1 auto;/);
+    });
+
     it('uses token-backed placement styles without hardcoded visual literals', () => {
         const source = drawerCss;
 

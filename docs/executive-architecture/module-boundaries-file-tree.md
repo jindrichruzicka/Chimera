@@ -222,9 +222,9 @@ chimera/
 │   │   │       ├── PerfProbe.tsx
 │   │   │       └── perfStore.ts
 │   │   ├── audio/                   # Event-driven audio playback components (e.g. EventAudioPlayer)
-│   │   ├── chat/                    # PUBLIC chat component (Tier 2); barrel: @chimera/renderer/components/chat; mounted by lobby + game HUDs; see §4.35.1
+│   │   ├── chat/                    # PUBLIC chat component (Tier 2); barrel: @chimera/renderer/components/chat; mounted by game HUDs only; see §4.35.1
 │   │   │   ├── index.ts             # Public barrel
-│   │   │   └── ChatPanel.tsx        # Lobby + in-match chat UI; see §4.29
+│   │   │   └── ChatPanel.tsx        # In-match chat UI; see §4.29
 │   │   ├── ui/                      # PUBLIC UI primitive library (Tier 1); barrel: @chimera/renderer/components/ui
 │   │   └── r3f/                     # Reusable R3F building blocks
 │   │       ├── GameCanvas.tsx       # <Canvas> root; cameraMode + cameraPreset props; see §4.22

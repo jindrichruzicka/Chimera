@@ -4,21 +4,40 @@
     flex-direction: column;
     font-family: var(--ch-font-ui);
     gap: var(--ch-space-xs);
+    max-inline-size: calc(var(--ch-space-xl) * 12);
     min-inline-size: 0;
 }
 
 .label {
-    color: var(--ch-color-text-primary);
+    align-self: flex-start;
+    color: var(--ch-color-text-secondary);
     font-size: var(--ch-font-size-sm);
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
 }
 
+/* The shell, not the <select>, draws the field chrome: the macOS native popup
+   anchors to the <select> border-box, which is offset inside the shell (see
+   the macOS rules below) so the menu lands flush with this visible box.
+
+   overflow: hidden contains the macOS anchor overhang — the widened <select>
+   sticks out past the shell's inline-end edge, and clip-path hides its paint
+   but NOT its scrollable overflow, so without containment every scrollable
+   ancestor grows a phantom horizontal scrollbar. */
 .controlShell {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    box-sizing: border-box;
+    cursor: pointer;
     display: block;
     inline-size: 100%;
     min-inline-size: 0;
+    overflow: hidden;
     position: relative;
+    transition: var(--ch-button-transition);
 }
 
 .controlShell::after {
@@ -28,53 +47,76 @@
     content: '';
     inline-size: var(--ch-space-sm);
     inset-block-start: 50%;
-    inset-inline-end: var(--ch-space-md);
+    inset-inline-end: calc(var(--ch-space-sm) + var(--ch-space-xs));
     pointer-events: none;
     position: absolute;
     transform: translateY(-50%);
 }
 
-.controlShell:has(.control:disabled)::after {
-    background-color: var(--ch-color-text-disabled);
+.controlShell:has(.control:enabled):hover {
+    border-color: var(--ch-color-border-subtle);
+}
+
+/* Single highlighted border; the transparent outline overlaps the border so
+   forced-colors modes still draw a focus indicator without a visible halo. */
+.controlShell:has(.control:focus-visible) {
+    background-color: var(--ch-color-surface-overlay);
+    border-color: var(--ch-color-text-secondary);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
+}
+
+.controlShell:has(.control[data-invalid='true']) {
+    border-color: var(--ch-color-error);
+}
+
+.controlShell:has(.control:disabled) {
+    cursor: var(--ch-cursor-disabled);
     opacity: var(--ch-opacity-disabled);
 }
 
+.controlShell:has(.control:disabled)::after {
+    background-color: var(--ch-color-text-disabled);
+}
+
+/* Inline-start padding or transforms here make Chromium auto-dismiss the
+   macOS native popup moments after it opens — text-indent positions the value
+   instead, and only margin/width/clip-path may shape the anchor box. */
 .control {
     appearance: none;
-    background-color: var(--ch-color-surface-raised);
-    border-color: var(--ch-color-border);
-    border-radius: var(--ch-radius-md);
-    border-style: solid;
-    border-width: var(--ch-border-width-sm);
+    background-color: var(--ch-color-transparent);
+    border: none;
     box-sizing: border-box;
     color: var(--ch-color-text-primary);
-    cursor: pointer;
+    cursor: inherit;
     font-family: var(--ch-font-ui);
     font-size: var(--ch-font-size-md);
     inline-size: 100%;
     line-height: var(--ch-line-height-tight);
     min-inline-size: 0;
+    outline: none;
     padding-block: var(--ch-space-sm);
     padding-inline-start: 0;
-    padding-inline-end: calc(var(--ch-space-md) + var(--ch-space-lg));
-    text-indent: var(--ch-space-md);
-    transition: var(--ch-button-transition);
-}
-
-.control:focus-visible {
-    border-color: var(--ch-focus-ring-color);
-    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
-}
-
-.control[data-invalid='true'] {
-    border-color: var(--ch-color-error);
+    padding-inline-end: calc(var(--ch-space-lg) + var(--ch-space-sm));
+    text-indent: calc(var(--ch-space-sm) + var(--ch-space-xs));
 }
 
 .control:disabled {
     color: var(--ch-color-text-disabled);
-    cursor: var(--ch-cursor-disabled);
-    opacity: var(--ch-opacity-disabled);
+}
+
+/* macOS: shift the <select> border-box inline-start-wards inside the shell by
+   the menu overhang and extend it past the inline-end edge by the menu
+   shortfall, so the native popup lands on the visible shell box. The margin
+   replaces the text indent, keeping the value text in place, and the
+   clip-path keeps the painted/clickable area inside the shell. */
+.root[data-popup-anchor='macos'] .control {
+    clip-path: inset(0 var(--ch-select-popup-shortfall-mac) 0 0);
+    inline-size: calc(
+        100% - var(--ch-select-popup-overhang-mac) + var(--ch-select-popup-shortfall-mac)
+    );
+    margin-inline-start: var(--ch-select-popup-overhang-mac);
+    text-indent: 0;
 }
 
 .helper {

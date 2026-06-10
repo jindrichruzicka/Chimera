@@ -262,7 +262,9 @@ export default function SettingsPage(): React.ReactElement {
         Partial<Record<InputActionId, { ok: boolean; conflict?: InputActionId }>>
     >({});
 
-    const actionsByCategory = groupActionsByCategory(inputManager.getActions());
+    const actionsByCategory = groupActionsByCategory(
+        inputManager.getActions().filter((action) => !isEngineAction(action)),
+    );
 
     React.useEffect(() => {
         if (urlGameId === undefined || urlGameId === null) {
@@ -407,9 +409,11 @@ export default function SettingsPage(): React.ReactElement {
             <div className={styles['controls-panel']}>
                 {Array.from(actionsByCategory.entries()).map(([category, actions]) => (
                     <section className={styles['controls-category']} key={category}>
-                        <Heading level={3} size="md">
-                            {category}
-                        </Heading>
+                        {actionsByCategory.size > 1 && (
+                            <Heading level={3} size="md">
+                                {category}
+                            </Heading>
+                        )}
                         <div className={styles['binding-list']}>
                             {actions.map((action) => {
                                 const binding = inputManager.getBinding(action.id);
@@ -948,6 +952,15 @@ function getSettingsControlTestId(path: string): string {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
+}
+
+/**
+ * Engine-reserved actions (`engine:*`) are never player-rebindable — they are
+ * hidden from the Controls panel and only configurable by the game creator
+ * through the settings defaults/config layers.
+ */
+function isEngineAction(action: InputAction): boolean {
+    return action.id.startsWith('engine:');
 }
 
 function groupActionsByCategory(actions: readonly InputAction[]): Map<string, InputAction[]> {

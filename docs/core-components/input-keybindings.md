@@ -13,7 +13,7 @@ tags: [input, keybindings, keyboard, gamepad, renderer, settings]
 
 ## Overview
 
-Centralise keyboard and gamepad input behind named `InputAction`s. Decouple response code from physical keys. Let players rebind keys through the settings UI. Mirrors the Command pattern from §4.7 but for client-local input rather than authoritative game actions.
+Centralise keyboard and gamepad input behind named `InputAction`s. Decouple response code from physical keys. Let players rebind **game** action keys through the settings UI; engine-reserved actions (`engine:*`) are hidden from the rebind UI and configurable only by the game creator through the settings defaults/config layers. Mirrors the Command pattern from §4.7 but for client-local input rather than authoritative game actions.
 
 ---
 
@@ -27,7 +27,7 @@ export type InputActionId = `engine:${string}` | `game:${string}`;
 
 export interface InputAction {
     readonly id: InputActionId;
-    readonly description: string; // Shown in rebind UI
+    readonly description: string; // Shown in rebind UI (game actions only; engine:* hidden)
     readonly category: string; // Groups related actions ("Movement", "UI", …)
     readonly oneShot: boolean; // true = fire on press; false = held
 }
@@ -117,13 +117,13 @@ export type RebindResult =
 
 ## Settings Integration
 
-Key bindings are stored in `settings.controls.bindings: GameBindingSchema<EngineBindings>`. The rebind UI reads from and writes to `settingsStore`. `KeyBindingRepository` is implemented as a dedicated thin wrapper module over the `settings.controls` namespace.
+Key bindings are stored in `settings.controls.bindings: GameBindingSchema<EngineBindings>`. The rebind UI reads from and writes to `settingsStore`. `KeyBindingRepository` is implemented as a dedicated thin wrapper module over the `settings.controls` namespace. The Controls panel filters out `engine:*` actions before rendering, so players only see and edit game actions; engine bindings still load, dispatch, and persist through the same settings layers. Category captions render only when the visible actions span more than one category.
 
 ---
 
 ## Conflict Detection
 
-`InputManager.rebind()` rejects bindings that collide with an existing one in the same category (same key + modifier + category scope). Cross-category duplicates are allowed, but dispatch uses explicit category routing: call `setActiveCategory(...)` to resolve which category receives a combo when duplicates exist. When no active category is set and a combo matches multiple categories, no action is dispatched because the combo is ambiguous. The UI offers "unbind existing action" as a resolution. Engine-reserved bindings (`engine:*`) may be rebound but not removed.
+`InputManager.rebind()` rejects bindings that collide with an existing one in the same category (same key + modifier + category scope). Cross-category duplicates are allowed, but dispatch uses explicit category routing: call `setActiveCategory(...)` to resolve which category receives a combo when duplicates exist. When no active category is set and a combo matches multiple categories, no action is dispatched because the combo is ambiguous. The UI offers "unbind existing action" as a resolution. Engine-reserved bindings (`engine:*`) are not exposed in the rebind UI; they remain configurable through the settings defaults/config layers and may be rebound programmatically but not removed.
 
 ---
 

@@ -23,6 +23,14 @@
     display: none;
 }
 
+.content > :first-child {
+    margin-block-start: var(--ch-space-none);
+}
+
+.content > :last-child {
+    margin-block-end: var(--ch-space-none);
+}
+
 .top {
     inset-block-end: calc(100% + var(--ch-space-sm));
 }

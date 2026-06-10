@@ -27,7 +27,7 @@
 //
 // Task: F45 / T05 (issue #683)
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { IconButton } from '../ui/IconButton';
 import { ScrollArea } from '../ui/ScrollArea';
 import { Select } from '../ui/Select';
@@ -188,6 +188,17 @@ export function ChatPanel(): React.ReactElement {
     );
     const mutedSenders = useMemo(() => Array.from(muted), [muted]);
 
+    // Pin the view to the newest message: whenever one lands (live push, history
+    // backfill, or an unmute reveal), scroll the message region to the bottom.
+    const messageListRef = useRef<HTMLUListElement | null>(null);
+    const lastVisibleMessageId = visibleMessages[visibleMessages.length - 1]?.id;
+    useEffect(() => {
+        const scroller = messageListRef.current?.closest('[data-ch-scroll-area]');
+        if (scroller instanceof HTMLElement) {
+            scroller.scrollTop = scroller.scrollHeight;
+        }
+    }, [lastVisibleMessageId]);
+
     function buildScope(): ChatScope | null {
         if (scopeKind === 'lobby') {
             return { kind: 'lobby' };
@@ -261,7 +272,7 @@ export function ChatPanel(): React.ReactElement {
                     </p>
                 ) : (
                     <ScrollArea aria-label="Chat messages" className={styles['scroll']}>
-                        <ul className={styles['list']}>
+                        <ul className={styles['list']} ref={messageListRef}>
                             {visibleMessages.map((message) => (
                                 <ChatMessageRow
                                     key={message.id}
@@ -321,6 +332,13 @@ export function ChatPanel(): React.ReactElement {
                         />
                     ) : null}
                 </div>
+                {/* The error sits above the input, not below it, so the input
+                    keeps its bottom-anchored position when an error appears. */}
+                {sendError ? (
+                    <p className={styles['error']} data-testid="chat-send-error" role="alert">
+                        {sendError}
+                    </p>
+                ) : null}
                 <TextInput
                     autoComplete="off"
                     data-testid="chat-body-input"
@@ -330,11 +348,6 @@ export function ChatPanel(): React.ReactElement {
                     placeholder="Type a message and press Enter…"
                     value={body}
                 />
-                {sendError ? (
-                    <p className={styles['error']} data-testid="chat-send-error" role="alert">
-                        {sendError}
-                    </p>
-                ) : null}
             </form>
         </section>
     );

@@ -63,15 +63,22 @@ test.describe('Settings tabs', () => {
         );
     });
 
-    test('tab navigation shows display controls and key rebinding UI', async ({ mainWindow }) => {
+    test('tab navigation shows display controls and hides engine-only rebinding UI', async ({
+        mainWindow,
+    }) => {
         const settingsPage = await openSettingsPage(mainWindow);
 
         await settingsPage.clickTab('Display');
         await expect(settingsPage.getControlByLabel('Fullscreen')).toBeVisible();
         await expect(settingsPage.getControlByLabel('Target FPS')).toBeVisible();
 
+        // Engine-reserved actions are not player-rebindable; with no game
+        // actions registered the Controls panel shows its empty state.
         await settingsPage.clickTab('Controls');
-        await expect(settingsPage.bindingValue('engine:undo')).toBeVisible({ timeout: 10_000 });
+        await expect(mainWindow.getByText('No controls registered.')).toBeVisible({
+            timeout: 10_000,
+        });
+        await expect(settingsPage.bindingValue('engine:undo')).toHaveCount(0);
     });
 
     test('tactics active game shows gameplay and AI override tabs', async () => {
@@ -97,6 +104,18 @@ test.describe('Settings tabs', () => {
                 'type',
                 'range',
             );
+
+            // Controls lists only game actions — engine bindings stay hidden,
+            // and the lone category renders without a section caption.
+            await settingsPage.clickTab('Controls');
+            await expect(settingsPage.bindingValue('game:end-turn')).toBeVisible({
+                timeout: 10_000,
+            });
+            await expect(settingsPage.bindingValue('engine:undo')).toHaveCount(0);
+            await expect(window.getByRole('heading', { name: 'Engine', exact: true })).toHaveCount(
+                0,
+            );
+            await expect(window.getByRole('heading', { name: 'Game', exact: true })).toHaveCount(0);
         } finally {
             await app.close().catch(() => undefined);
         }

@@ -6,7 +6,6 @@ import { ActiveLobbyPanel } from './ActiveLobbyPanel';
 import { LobbyEntryTabs } from './LobbyEntryTabs';
 import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
 import { Button } from '../../components/ui/Button';
-import { ChatPanel } from '../../components/chat';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
@@ -177,20 +176,15 @@ export default function LobbyPage() {
                     ) : null}
 
                     {lobbyState ? (
-                        <>
-                            <ActiveLobbyPanel
-                                canStartGame={canStartGame}
-                                lobbyState={lobbyState}
-                                localPlayerId={localPlayerId}
-                                onLeave={handleLeave}
-                                onStartGame={handleStartGame}
-                                onToggleReady={handleToggleReady}
-                                pendingAction={pendingAction}
-                            />
-                            {/* Lobby-scope chat. Mounted only with a live lobby
-                                session — the relay rejects sends otherwise. */}
-                            <ChatPanel />
-                        </>
+                        <ActiveLobbyPanel
+                            canStartGame={canStartGame}
+                            lobbyState={lobbyState}
+                            localPlayerId={localPlayerId}
+                            onLeave={handleLeave}
+                            onStartGame={handleStartGame}
+                            onToggleReady={handleToggleReady}
+                            pendingAction={pendingAction}
+                        />
                     ) : (
                         <LobbyEntryTabs
                             activeTabId={activeTabId}
@@ -218,6 +212,7 @@ export default function LobbyPage() {
                                     onClick={() => {
                                         void handleHost();
                                     }}
+                                    size="sm"
                                     variant="primary"
                                 >
                                     {pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby'}
@@ -229,6 +224,7 @@ export default function LobbyPage() {
                                     onClick={() => {
                                         void handleJoin();
                                     }}
+                                    size="sm"
                                     variant="primary"
                                 >
                                     {pendingAction === 'joining' ? 'Joining...' : 'Join Lobby'}

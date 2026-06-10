@@ -1,11 +1,19 @@
 .gallery {
     background-color: var(--ch-color-surface);
+    block-size: 100vh;
     box-sizing: border-box;
     color: var(--ch-color-text-primary);
+    display: flex;
+    flex-direction: column;
     font-family: var(--ch-font-ui);
     inline-size: 100%;
-    min-block-size: 100vh;
     padding: var(--ch-space-lg);
+}
+
+/* Stretches the Tabs root into the viewport-pinned gallery so the active
+   tab panel fills the remaining height and scrolls its own overflow. */
+.galleryTabs {
+    flex: 1 1 auto;
 }
 
 .header {
@@ -34,12 +42,6 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--ch-space-sm);
-}
-
-.popoverContent {
-    color: var(--ch-color-text-primary);
-    margin: 0;
-    padding: var(--ch-space-sm);
 }
 
 .scrollSample {

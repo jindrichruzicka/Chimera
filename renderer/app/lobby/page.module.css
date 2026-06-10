@@ -23,7 +23,7 @@
     inline-size: min(100%, calc(var(--ch-space-xl) * 18));
     max-block-size: calc(100vh - (var(--ch-space-xl) * 2));
     overflow: auto;
-    padding: var(--ch-space-xl);
+    padding: var(--ch-space-lg);
 }
 
 .dialog-header {

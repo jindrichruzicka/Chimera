@@ -2,10 +2,10 @@ import { expect, type Locator, type Page } from '@playwright/test';
 
 /**
  * Page Object for the shared chat surface (`renderer/components/chat/ChatPanel.tsx`,
- * §4.29 — Chat System). The same component is mounted directly in the lobby and,
- * in a Tactics match, inside a collapsed-by-default drawer in
- * `games/tactics/screens/TacticsGameHud.tsx` — call {@link openInMatchChat}
- * first for the in-match surface.
+ * §4.29 — Chat System). The component is mounted in-match only — in a Tactics
+ * match it lives inside a collapsed-by-default drawer in
+ * `games/tactics/screens/TacticsGameHud.tsx` — so call {@link openInMatchChat}
+ * before interacting with it.
  *
  * There is no Send button: messages are submitted by pressing Enter in the body
  * input. The scope selector is a native `<select>` (driven via `selectOption`).
@@ -34,12 +34,6 @@ export class ChatPanelPage {
     /** Reveal the in-match chat drawer (collapsed by default in TacticsGameHud). */
     public async openInMatchChat(): Promise<void> {
         await this.inMatchToggle.click();
-        await this.panel.waitFor({ state: 'visible' });
-        await this.bodyInput.waitFor({ state: 'visible' });
-    }
-
-    /** Wait until the composer is interactable (lobby surface; panel mounted). */
-    public async waitForReady(): Promise<void> {
         await this.panel.waitFor({ state: 'visible' });
         await this.bodyInput.waitFor({ state: 'visible' });
     }

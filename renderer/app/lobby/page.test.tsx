@@ -7,6 +7,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
+import pageCss from './page.module.css?raw';
 
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -378,6 +379,12 @@ describe('LobbyPage pending actions', () => {
         );
     });
 
+    it('pads the dialog with the standard container spacing token', () => {
+        const dialogRule = /\.dialog\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+
+        expect(dialogRule).toContain('padding: var(--ch-space-lg)');
+    });
+
     it('uses shared Typography primitives for shell copy', () => {
         renderLobbyPage();
 
@@ -531,13 +538,6 @@ describe('LobbyPage chat panel', () => {
                 },
                 system: { onConnectionStatus: vi.fn(() => () => undefined) },
                 game: { sendAction: vi.fn() },
-                chat: {
-                    send: vi.fn().mockResolvedValue({ ok: true }),
-                    onMessage: vi.fn().mockReturnValue(vi.fn()),
-                    history: vi.fn().mockResolvedValue([]),
-                    mute: vi.fn(),
-                    unmute: vi.fn(),
-                },
             },
         });
     });
@@ -548,14 +548,18 @@ describe('LobbyPage chat panel', () => {
         delete (window as unknown as { __chimera?: unknown }).__chimera;
     });
 
-    it('mounts the chat panel (lobby-scope chat) during an active lobby', async () => {
+    // Chat is an in-match-only UI: the lobby page must not mount ChatPanel
+    // (in any state), even while a live lobby session exists.
+    it('does not mount the chat panel during an active lobby', () => {
         renderLobbyPage();
 
-        expect(await screen.findByTestId('chat-panel')).toBeTruthy();
-        // The panel ships its own send affordances; assert the key E2E hooks.
-        // Sending is Enter-driven, so the composer exposes the input, not a button.
-        expect(screen.getByTestId('chat-messages')).toBeTruthy();
-        expect(screen.getByTestId('chat-body-input')).toBeTruthy();
+        // The active-lobby branch rendered…
+        expect(screen.getByTestId('lobby-dialog')).toBeTruthy();
+        expect(screen.getByTestId('start-game')).toBeTruthy();
+        // …without any chat surface.
+        expect(screen.queryByTestId('chat-panel')).toBeNull();
+        expect(screen.queryByTestId('chat-unavailable')).toBeNull();
+        expect(screen.queryByTestId('chat-body-input')).toBeNull();
     });
 
     it('does not mount the chat panel before a lobby is joined', () => {

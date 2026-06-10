@@ -414,7 +414,7 @@ Each entry notes the existing anchor point in the 1.0.0 architecture and the bro
 
 - Extend `PerfProbe` (or add a sibling `NetworkProbe`) that maintains an EWMA of RTT and its variance; estimates packet loss from sequence-number gaps in `SNAPSHOT` messages.
 - A `connectionHealthStore` in the renderer exposes `rttMs`, `jitterMs`, `lossEstimate` to the UI.
-- A small lobby indicator (green / yellow / red dot next to each player's avatar in `ChatPanel` / `PlayerListPanel`) surfaces the health state.
+- A small indicator (green / yellow / red dot next to each player's avatar in `PlayerListPanel` and the in-match `ChatPanel`) surfaces the health state.
 - Telemetry is **local only** (invariant 69) — these metrics are shown to the player, not exported or reported to any server.
 
 ---

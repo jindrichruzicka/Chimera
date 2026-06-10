@@ -7,6 +7,14 @@
     font-family: var(--ch-font-ui);
 }
 
+.card > :first-child {
+    margin-block-start: var(--ch-space-none);
+}
+
+.card > :last-child {
+    margin-block-end: var(--ch-space-none);
+}
+
 .surface {
     background-color: var(--ch-color-surface);
 }

@@ -1,0 +1,13 @@
+/* Engine-wide element defaults layered on top of the design tokens.
+ * Keep this file free of component styles — those live in CSS modules. */
+
+/* Modern scrollbars: a token-backed thumb over a transparent track.
+ * `scrollbar-color` is inherited, so the root rule reaches every scrollable
+ * element; `scrollbar-width` is not inherited and needs the universal rule. */
+:root {
+    scrollbar-color: var(--ch-color-border) var(--ch-color-transparent);
+}
+
+* {
+    scrollbar-width: thin;
+}

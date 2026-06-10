@@ -1,6 +1,6 @@
 ---
 title: 'Chat System'
-description: 'ChatScope (lobby/team/private), ChatMessage, ChatRelay (token-bucket rate limiting, maxBodyLength, profanityFilter), RelayResult, ChatAPI IPC, chatStore (500-entry buffer), ChatPanel (shared renderer chat component, mounted by the lobby and game HUDs) — not persisted in 1.0.0.'
+description: 'ChatScope (lobby/team/private), ChatMessage, ChatRelay (token-bucket rate limiting, maxBodyLength, profanityFilter), RelayResult, ChatAPI IPC, chatStore (500-entry buffer), ChatPanel (shared renderer chat component, mounted by game HUDs only) — not persisted in 1.0.0.'
 tags: [chat, lobby, messaging, rate-limiting, zustand, renderer]
 ---
 
@@ -13,7 +13,7 @@ tags: [chat, lobby, messaging, rate-limiting, zustand, renderer]
 
 ## Overview
 
-A bounded, rate-limited chat layer for in-match and lobby communication. All messages route through the host. The host assigns IDs, timestamps, and applies policy — clients are untrusted.
+A bounded, rate-limited chat layer for in-match communication. All messages route through the host. The host assigns IDs, timestamps, and applies policy — clients are untrusted. The `lobby` _scope_ names the recipient set ("all connected players"), not the lobby screen — the lobby page mounts no chat UI.
 
 ---
 
@@ -177,10 +177,7 @@ The renderer side: `renderer/components/chat/ChatPanel.tsx`. Reads from `chatSto
 
 Mute/unmute is **dual-written**: the renderer `chatStore` provides the instant local view filter (and reveals already-buffered messages on unmute), and the same action is mirrored to the host-side `ChatHub` via `window.__chimera.chat.mute` / `unmute`, so the main process also suppresses delivery of that sender and filters them from `history()` backfill. The two layers are complementary, not redundant: the store is the immediate render filter, the `ChatHub` is the authoritative delivery/history gate.
 
-`ChatPanel` is the shared **chat component** (§4.35.1), exported from the public barrel `@chimera/renderer/components/chat`. The engine never mounts it for a game implicitly — each surface that wants chat mounts it directly:
-
-- **In-match:** a game mounts `ChatPanel` from its own renderer surfaces. Tactics renders it inside `TacticsGameHud` (a sibling of the HUD footer) within a drawer that is **collapsed by default** — a corner toggle expands it on demand, so chat never occludes board interaction behind it. The dock owns its own positioning. Games that do not mount it get no in-match chat.
-- **Lobby:** the lobby page mounts it directly while a live lobby session exists.
+`ChatPanel` is the shared **chat component** (§4.35.1), exported from the public barrel `@chimera/renderer/components/chat`. It is an **in-match-only UI**: the engine never mounts it — no engine shell surface (lobby included) renders chat — and a game mounts it from its own renderer surfaces. Tactics renders it inside `TacticsGameHud` (a sibling of the HUD footer) within a drawer that is **collapsed by default** — a corner toggle expands it on demand, so chat never occludes board interaction behind it. The dock owns its own positioning. Games that do not mount it get no chat.
 
 ---
 

@@ -21,6 +21,7 @@ import { ToastHost } from '../../components/shell/ToastHost';
 import { useToastStore } from '../../state/toastStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import ComponentGalleryClient from './ComponentGalleryClient';
+import galleryStyles from './ComponentGallery.module.css';
 import galleryCss from './ComponentGallery.module.css?raw';
 import ComponentGalleryPage from './page';
 
@@ -61,6 +62,27 @@ describe('ComponentGalleryClient — root container (AC #1)', () => {
     it('renders the gallery root with data-testid="component-gallery"', () => {
         renderGallery();
         expect(screen.getByTestId('component-gallery')).toBeTruthy();
+    });
+});
+
+// ── Viewport-filling tabs — the active panel scrolls, not the page ───────────
+
+describe('ComponentGalleryClient — viewport-filling tabs', () => {
+    it('pins the gallery to the viewport and stretches the tabs into the remaining space', () => {
+        const galleryRule = /\.gallery\s*\{[^}]*\}/s.exec(galleryCss)?.[0] ?? '';
+        const galleryTabsRule = /\.galleryTabs\s*\{[^}]*\}/s.exec(galleryCss)?.[0] ?? '';
+
+        expect(galleryRule).toContain('block-size: 100vh');
+        expect(galleryRule).not.toContain('min-block-size');
+        expect(galleryRule).toContain('display: flex');
+        expect(galleryRule).toContain('flex-direction: column');
+        expect(galleryTabsRule).toContain('flex: 1 1 auto');
+    });
+
+    it('applies the galleryTabs class to the Tabs root', () => {
+        renderGallery();
+        const tabsRoot = screen.getByRole('tablist').parentElement;
+        expect(tabsRoot?.className).toContain(galleryStyles['galleryTabs']);
     });
 });
 
@@ -324,6 +346,13 @@ describe('ComponentGalleryClient — Overlays section test IDs (issue #608)', ()
     it('opens the Drawer when gallery-open-drawer button is clicked', () => {
         fireEvent.click(screen.getByTestId('gallery-open-drawer'));
         expect(screen.getByTestId('gallery-drawer')).toBeTruthy();
+    });
+
+    it('fills the Drawer with long demo copy so overflow scrolling is observable', () => {
+        fireEvent.click(screen.getByTestId('gallery-open-drawer'));
+        const drawer = screen.getByTestId('gallery-drawer');
+        expect(drawer.textContent).toMatch(/Lorem ipsum dolor sit amet/);
+        expect(drawer.querySelectorAll('p').length).toBeGreaterThanOrEqual(8);
     });
 
     it('closes the Drawer when its close affordance is clicked', () => {

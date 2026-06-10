@@ -12,6 +12,9 @@
 
 .settings-dialog {
     background-color: var(--ch-color-surface-raised);
+    /* Static height so switching tabs never resizes the dialog; overflowing
+       tab content scrolls inside the active tab panel instead. */
+    block-size: min(calc(var(--ch-space-xl) * 16), calc(100vh - (var(--ch-space-xl) * 2)));
     border-color: var(--ch-color-border);
     border-radius: var(--ch-radius-md);
     border-style: solid;
@@ -20,10 +23,9 @@
     box-sizing: border-box;
     display: grid;
     gap: var(--ch-space-lg);
+    grid-template-rows: minmax(var(--ch-space-none), 1fr) auto;
     inline-size: min(100%, calc(var(--ch-space-xl) * 16));
-    max-block-size: calc(100vh - (var(--ch-space-xl) * 2));
-    overflow: auto;
-    padding: var(--ch-space-xl);
+    padding: var(--ch-space-lg);
 }
 
 .loading {

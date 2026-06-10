@@ -6,6 +6,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatPanel } from './ChatPanel';
+import chatPanelCss from './ChatPanel.module.css?raw';
 import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
@@ -19,6 +20,18 @@ import type { PlayerId } from '@chimera/electron/preload/api-types.js';
 /** Cast a raw string to the branded {@link PlayerId} (test-only). */
 function pid(raw: string): PlayerId {
     return raw as unknown as PlayerId;
+}
+
+/** Pull the declaration block for `selector` out of a raw CSS module source. */
+function extractDeclarations(source: string, selector: string): string {
+    const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const match = new RegExp(`${escapedSelector}\\s*\\{([^}]*)\\}`).exec(source);
+
+    if (match?.[1] === undefined) {
+        throw new Error(`Missing rule for selector "${selector}"`);
+    }
+
+    return match[1];
 }
 
 function makeMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
@@ -358,6 +371,51 @@ describe('ChatPanel', () => {
 
         const teamOption = screen.getByRole('option', { name: /team/i });
         expect(teamOption).toBeDisabled();
+    });
+
+    // ── Auto-scroll ────────────────────────────────────────────────────────────
+
+    it('scrolls the message list to the bottom when a new message arrives', async () => {
+        useChatStore.setState({
+            messages: [makeMessage({ id: 'm-1', body: 'first' })],
+            muted: new Set<PlayerId>(),
+        });
+
+        render(<ChatPanel />);
+        await waitUntilReady();
+
+        // jsdom has no layout, so give the scroller a synthetic content height.
+        const scroller = screen.getByRole('region', { name: 'Chat messages' });
+        Object.defineProperty(scroller, 'scrollHeight', { configurable: true, value: 480 });
+        const push = chatMock.onMessage.mock.calls[0]![0] as (msg: ChatMessage) => void;
+
+        act(() => {
+            push(makeMessage({ id: 'm-2', fromPlayerId: pid('player-b'), body: 'second' }));
+        });
+
+        expect(scroller.scrollTop).toBe(480);
+    });
+
+    // ── Layout contract (ChatPanel.module.css) ─────────────────────────────────
+    //
+    // The panel is height-agnostic: it stretches to whatever block size the host
+    // container hands it, the composer pins to the bottom, and the messages
+    // region absorbs the leftover space and scrolls internally.
+
+    it('stretches to the host container and delegates leftover space to messages', () => {
+        const root = extractDeclarations(chatPanelCss, '.root');
+        expect(root).toContain('block-size: 100%');
+        expect(root).toContain('flex-direction: column');
+
+        const messages = extractDeclarations(chatPanelCss, '.messages');
+        expect(messages).toContain('flex: 1 1 auto');
+        expect(messages).toContain('min-block-size: 0');
+    });
+
+    it('lets the messages scroller fill its region instead of the shared ScrollArea cap', () => {
+        expect(extractDeclarations(chatPanelCss, '.messages .scroll')).toContain(
+            'max-block-size: 100%',
+        );
     });
 
     // ── Mute toggle ──────────────────────────────────────────────────────────

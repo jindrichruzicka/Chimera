@@ -4,11 +4,13 @@
     flex-direction: column;
     font-family: var(--ch-font-ui);
     gap: var(--ch-space-xs);
+    max-inline-size: calc(var(--ch-space-xl) * 12);
     min-inline-size: 0;
 }
 
 .label {
-    color: var(--ch-color-text-primary);
+    align-self: flex-start;
+    color: var(--ch-color-text-secondary);
     font-size: var(--ch-font-size-sm);
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
@@ -27,14 +29,21 @@
     inline-size: 100%;
     line-height: var(--ch-line-height-tight);
     min-inline-size: 0;
-    padding: var(--ch-space-sm) var(--ch-space-md);
+    padding: var(--ch-space-sm) calc(var(--ch-space-sm) + var(--ch-space-xs));
     transition: var(--ch-button-transition);
 }
 
+.control:hover:not(:disabled) {
+    border-color: var(--ch-color-border-subtle);
+}
+
+/* Single highlighted border; the transparent outline overlaps the border so
+   forced-colors modes still draw a focus indicator without a visible halo. */
 .control:focus-visible {
-    border-color: var(--ch-focus-ring-color);
-    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
+    background-color: var(--ch-color-surface-overlay);
+    border-color: var(--ch-color-text-secondary);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }
 
 .control[data-invalid='true'] {

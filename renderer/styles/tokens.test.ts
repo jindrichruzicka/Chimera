@@ -218,6 +218,8 @@ const expectedTokens = [
     '--ch-focus-ring-width',
     '--ch-focus-ring-color',
     '--ch-focus-ring-offset',
+    '--ch-select-popup-overhang-mac',
+    '--ch-select-popup-shortfall-mac',
     '--ch-spinner-opacity-min',
     '--ch-cursor-disabled',
     '--ch-z-tooltip',

@@ -163,6 +163,22 @@ describe('Tabs', () => {
         expect(css).toContain('inset-inline: var(--ch-space-none);');
     });
 
+    it('lets the active panel fill and scroll inside a height-constrained tabs container', () => {
+        const tabsRule = /\.tabs\s*\{[^}]*\}/s.exec(tabsCss)?.[0] ?? '';
+        const panelRule = /\.tabpanel\s*\{[^}]*\}/s.exec(tabsCss)?.[0] ?? '';
+
+        expect(tabsRule).toContain('min-block-size: var(--ch-space-none)');
+        expect(panelRule).toContain('flex: 1 1 auto');
+        expect(panelRule).toContain('min-block-size: var(--ch-space-none)');
+        expect(panelRule).toContain('overflow: auto');
+    });
+
+    it('keeps the tablist at its natural height when the panel overflows', () => {
+        const tablistRule = /\.tablist\s*\{[^}]*\}/s.exec(tabsCss)?.[0] ?? '';
+
+        expect(tablistRule).toContain('flex: none');
+    });
+
     it('follows the controlled activeTabId prop across re-renders', () => {
         const controlledTabs: ComponentProps<typeof Tabs>['tabs'] = [
             { id: 'overview', label: 'Overview', panel: <p>Overview panel</p> },

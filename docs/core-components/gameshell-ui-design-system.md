@@ -262,14 +262,14 @@ different stability and review bar, so it lives behind its own public specifier
 `chimera/no-game-renderer-internals` lint rule; deep imports into the directory stay
 forbidden).
 
-| Component   | Source                                   | Notes                                               |
-| ----------- | ---------------------------------------- | --------------------------------------------------- |
-| `ChatPanel` | `renderer/components/chat/ChatPanel.tsx` | Lobby + in-match chat UI; see §4.29. Game-agnostic. |
+| Component   | Source                                   | Notes                                       |
+| ----------- | ---------------------------------------- | ------------------------------------------- |
+| `ChatPanel` | `renderer/components/chat/ChatPanel.tsx` | In-match chat UI; see §4.29. Game-agnostic. |
 
-The engine never mounts `ChatPanel` for a game implicitly. A game mounts it from one
-of its own renderer surfaces — Tactics renders it inside `TacticsGameHud` (a sibling
-of the HUD footer), and the panel owns its own positioning. The engine itself (e.g.
-the lobby page) consumes it directly as an ordinary renderer internal.
+The engine never mounts `ChatPanel` — no engine shell surface (lobby included)
+renders chat. A game mounts it from one of its own renderer surfaces — Tactics
+renders it inside `TacticsGameHud` (a sibling of the HUD footer), and the panel
+owns its own positioning.
 
 ### Primitive State Attributes
 

@@ -32,3 +32,11 @@
     color: var(--ch-color-text-secondary);
     font-size: var(--ch-font-size-md);
 }
+
+.body > :first-child {
+    margin-block-start: var(--ch-space-none);
+}
+
+.body > :last-child {
+    margin-block-end: var(--ch-space-none);
+}
