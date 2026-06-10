@@ -19,6 +19,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SavesPage from './page';
 import { toSlotId } from '@chimera/electron/preload/api-types';
 import type { SaveSlotMeta } from '@chimera/electron/preload/api-types';
+import { useToastStore } from '../../state/toastStore';
 
 // ── Mock window.__chimera.saves ───────────────────────────────────────────────
 
@@ -35,6 +36,7 @@ const mockDelete = vi.fn(async () => undefined);
 
 beforeEach(() => {
     vi.resetAllMocks();
+    useToastStore.getState().dismissAll();
     Object.defineProperty(window, '__chimera', {
         configurable: true,
         value: {
@@ -293,6 +295,69 @@ describe('SavesPage — error reporting', () => {
         await Promise.resolve();
 
         expect(screen.queryByRole('alert')).toBeNull();
+    });
+});
+
+describe('SavesPage — save-failed toast (§4.30 engine-wired source)', () => {
+    it('pushes an error toast when a save action rejects', async () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-1')];
+        mockSave.mockRejectedValueOnce(new Error('disk full while writing SaveFile'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /save slot-1/i }));
+
+        await screen.findByRole('alert');
+        const queue = useToastStore.getState().queue;
+        expect(queue).toHaveLength(1);
+        expect(queue[0]!.severity).toBe('error');
+        expect(queue[0]!.title).toBe('Save failed');
+        // Invariant #74: the raw error text (potentially SaveFile-derived) must
+        // not leak into the toast — only the static title surfaces. Detail stays
+        // in the inline alert.
+        expect(queue[0]!.body).toBeUndefined();
+    });
+
+    it('pushes an error toast when a new-save action rejects', async () => {
+        mockIsLoading = false;
+        mockSlots = [];
+        mockSave.mockRejectedValueOnce(new Error('no active session'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
+
+        await screen.findByRole('alert');
+        const queue = useToastStore.getState().queue;
+        expect(queue).toHaveLength(1);
+        expect(queue[0]!.title).toBe('Save failed');
+    });
+
+    it('does not push a toast when a load action rejects', async () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-1')];
+        mockLoad.mockRejectedValueOnce(new Error('save not found'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /load slot-1/i }));
+
+        await screen.findByRole('alert');
+        expect(useToastStore.getState().queue).toHaveLength(0);
+    });
+
+    it('does not push a toast when a delete action rejects', async () => {
+        mockIsLoading = false;
+        mockSlots = [makeSlot('slot-1')];
+        mockDelete.mockRejectedValueOnce(new Error('permission denied'));
+
+        render(<SavesPage />);
+
+        fireEvent.click(screen.getByRole('button', { name: /delete slot-1/i }));
+
+        await screen.findByRole('alert');
+        expect(useToastStore.getState().queue).toHaveLength(0);
     });
 });
 

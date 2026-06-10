@@ -36,6 +36,7 @@ import { TextInput } from '../ui/TextInput';
 import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { useToastStore } from '../../state/toastStore';
 import type { ChatMessage, ChatRejectReason } from '@chimera/shared/chat.js';
 import type { LobbyState } from '@chimera/shared/messages-schemas.js';
 import { playerId, type ChatScope, type PlayerId } from '@chimera/electron/preload/api-types.js';
@@ -50,7 +51,12 @@ const SCOPE_OPTIONS: readonly SelectOption[] = [
     { value: 'private', label: 'Private' },
 ];
 
-/** Friendly, inline copy for a relay rejection (toast wiring is F46 #646). */
+/**
+ * Friendly, inline copy for a relay rejection. Shown next to the composer for
+ * every rejection reason; `rate_limited` additionally raises a toast (§4.30
+ * engine-wired source, F46 #646) so the throttle is noticed even if the user
+ * has looked away from the composer.
+ */
 const REJECT_REASON_LABELS: Record<ChatRejectReason, string> = {
     too_long: 'Message is too long.',
     rate_limited: 'You are sending messages too quickly.',
@@ -224,6 +230,13 @@ export function ChatPanel(): React.ReactElement {
             setBody('');
         } else {
             setSendError(REJECT_REASON_LABELS[result.reason]);
+            if (result.reason === 'rate_limited') {
+                // §4.30 engine-wired source: the relay throttled us. Duration is
+                // the severity default (Invariant #74); title is a static literal.
+                useToastStore
+                    .getState()
+                    .push({ severity: 'warning', title: 'Sending messages too quickly' });
+            }
         }
     }
 

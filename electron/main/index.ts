@@ -52,7 +52,7 @@ import {
 } from '@chimera/games/tactics/actions.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
-import { REPLAY_NAVIGATE_CHANNEL } from '../preload/apis/replay-api.js';
+import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/apis/replay-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
@@ -1984,6 +1984,17 @@ export async function main(): Promise<void> {
         });
     };
 
+    // Replay-export-completed push: fired by the export handler after a
+    // successful `export-current-match`, so a renderer listener can raise the
+    // "Replay saved" toast (§4.30). Mirrors `navigateToReplayPlayer`.
+    const notifyReplayExported = (replayPath: string): void => {
+        BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(REPLAY_EXPORTED_CHANNEL, replayPath);
+            }
+        });
+    };
+
     registerReplayHandlers({
         ipcMain,
         logger: logger.child({ module: 'replay' }),
@@ -2002,6 +2013,7 @@ export async function main(): Promise<void> {
             return replayManager.exportCurrentMatch();
         },
         navigateToPlayer: navigateToReplayPlayer,
+        notifyExported: notifyReplayExported,
     });
 
     // Register the `chimera:replay:perspective:*` channels backed by the shared

@@ -20,6 +20,7 @@ import type {
     PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
     ReplayAPI,
+    ReplayExportIntent,
     ReplayListItem,
     ReplayPlaybackInfo,
     Unsubscribe,
@@ -68,11 +69,19 @@ export interface ReplayApi {
      * Finalise the in-progress host recording and resolve with the saved file
      * path (§4.28). Rejects when no match is being hosted — surfaced as an
      * inline error by the post-game summary actions (F44 / T8).
+     *
+     * `intent` (default `'save'`) gates the "Replay saved" toast: `'save'`
+     * raises it, `'view'` suppresses it. See {@link ReplayExportIntent}.
      */
-    exportCurrentMatch(): Promise<string>;
+    exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>;
     openInPlayer(path: string): Promise<void>;
     delete(path: string): Promise<void>;
     onNavigate(listener: (path: string) => void): Unsubscribe;
+    /**
+     * Subscribe to successful replay-export pushes (the saved path payload).
+     * Drives the "Replay saved" toast (§4.30) via `ReplayExportToastBridge`.
+     */
+    onExported(listener: (path: string) => void): Unsubscribe;
     openPlayback(path: string): Promise<ReplayPlaybackInfo>;
     snapshotAt(tick: number): Promise<PlayerSnapshot>;
     snapshotRange(from: number, to: number): Promise<PlayerSnapshot[]>;
@@ -106,11 +115,14 @@ export function useReplayApi(): ReplayApi {
             // promise (mirrors `useSavesApi`); `onNavigate` stays synchronous
             // because it must return an `Unsubscribe` immediately.
             list: async (gameId: string): Promise<ReplayListItem[]> => requireBridge().list(gameId),
-            exportCurrentMatch: async (): Promise<string> => requireBridge().exportCurrentMatch(),
+            exportCurrentMatch: async (intent?: ReplayExportIntent): Promise<string> =>
+                requireBridge().exportCurrentMatch(intent),
             openInPlayer: async (path: string): Promise<void> => requireBridge().openInPlayer(path),
             delete: async (path: string): Promise<void> => requireBridge().delete(path),
             onNavigate: (listener: (path: string) => void): Unsubscribe =>
                 requireBridge().onNavigate(listener),
+            onExported: (listener: (path: string) => void): Unsubscribe =>
+                requireBridge().onExported(listener),
             openPlayback: async (path: string): Promise<ReplayPlaybackInfo> =>
                 requireBridge().openPlayback(path),
             snapshotAt: async (tick: number): Promise<PlayerSnapshot> =>

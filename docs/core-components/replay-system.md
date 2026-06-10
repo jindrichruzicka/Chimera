@@ -141,7 +141,8 @@ The four core `window.__chimera.replay` methods (bridge factory in `electron/pre
 
 interface ReplayAPI {
     list(gameId: string): Promise<ReplayListItem[]>; // chimera:replay:list
-    exportCurrentMatch(): Promise<string>; // chimera:replay:export-current-match → saved path
+    // intent defaults to 'save' (raises the "Replay saved" toast); 'view' suppresses it
+    exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>; // chimera:replay:export-current-match → saved path
     openInPlayer(path: string): Promise<void>; // chimera:replay:open-in-player
     delete(path: string): Promise<void>; // chimera:replay:delete
 }
@@ -151,7 +152,7 @@ Handlers are registered by `registerReplayHandlers()` in `electron/main/ipc/ipc-
 
 **Argument constraints / path-traversal guard.** `openInPlayer` and `delete` accept a file path, validated with `isInsidePath(replayDir, candidate)` (`electron/main/path-containment.ts`): both arguments are `path.resolve()`d, and the `base + path.sep` check rejects `..` escapes **and** sibling directories such as `<base>-evil`. A path escaping the replay directory throws before the manager is touched (OWASP A01). This is the single source of truth for the guard — the persistence layer (`FileReplayRepository.assertInsideBase`) re-applies the identical predicate (defence-in-depth), so the two checks cannot drift.
 
-> The live bridge also exposes (all shipped, beyond the four core methods): the one-way `onNavigate` subscription (`chimera:replay:navigate`, a main → renderer push), scrubbing playback methods (`openPlayback` / `snapshotAt` / `snapshotRange` / `closePlayback`, all returning projected `PlayerSnapshot`s), and a `perspective` sub-namespace mirroring these for [perspective replays](#perspective-replay-perspectivereplayfile).
+> The live bridge also exposes (all shipped, beyond the four core methods): the one-way `onNavigate` subscription (`chimera:replay:navigate`, a main → renderer push), the one-way `onExported` subscription (`chimera:replay:exported`, a main → renderer push carrying the saved replay path for the §4.30 replay-exported toast — **pushed only for the `'save'` export intent, never for `'view'`**), scrubbing playback methods (`openPlayback` / `snapshotAt` / `snapshotRange` / `closePlayback`, all returning projected `PlayerSnapshot`s), and a `perspective` sub-namespace mirroring these for [perspective replays](#perspective-replay-perspectivereplayfile).
 
 ---
 
@@ -172,8 +173,8 @@ The canonical preload `ReplayAPI extends ReplayExportBridge` and `PerspectiveRep
 
 **Post-game summary buttons** — a game's `PostGameReplayActions` (e.g. in `games/<game>/screens/PostGameSummary.tsx`) renders **Replay** (primary `<Button>`) and **Save Replay** (secondary `<Button>`), mounted only when `snapshot.gameResult !== null`:
 
-- _Save Replay_ → `exportCurrentMatch()`.
-- _Replay_ → `exportCurrentMatch()` then `openInPlayer(path)`.
+- _Save Replay_ → `exportCurrentMatch('save')` — finalises the recording and raises the "Replay saved" toast (§4.30).
+- _Replay_ → `exportCurrentMatch('view')` then `openInPlayer(path)` — the `'view'` intent exports only to obtain a stable on-disk path; the main handler suppresses the `chimera:replay:exported` push so no misleading "Replay saved" toast fires.
 
 Both are disabled while a request is in flight, with inline status feedback. The bridge is read off `globalThis.__chimera.replay` as a `ReplayExportBridge` — no `electron/*` / `renderer/*` import (invariants #92/#96).
 

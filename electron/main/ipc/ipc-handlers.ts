@@ -122,6 +122,7 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     LobbyReadyStateSchema,
+    ReplayExportIntentSchema,
     ReplayPathSchema,
     ReplaySnapshotRangeSchema,
     ReplayTickSchema,
@@ -868,13 +869,23 @@ export interface RegisterReplayHandlersOptions {
      * `chimera:replay:navigate`) so it can switch to the replay player route.
      */
     readonly navigateToPlayer: (path: string) => void;
+    /**
+     * Notify the renderer that a replay was exported successfully (via
+     * `chimera:replay:exported`, the saved path as payload) so a renderer
+     * listener can raise the "Replay saved" toast (§4.30). Fired only after
+     * `exportCurrentMatch` resolves with a non-`'view'` intent — never on
+     * rejection, and never for the **Replay** (view) action, which exports only
+     * to obtain a stable path for `openInPlayer`.
+     */
+    readonly notifyExported: (path: string) => void;
 }
 
 /**
  * Register every `chimera:replay:*` main-side channel (§4.28).
  *
- * `chimera:replay:navigate` is intentionally absent: it is a one-way push from
- * main → renderer via `webContents.send`, fired by `navigateToPlayer`.
+ * `chimera:replay:navigate` and `chimera:replay:exported` are intentionally
+ * absent from the handle list: both are one-way pushes from main → renderer via
+ * `webContents.send`, fired by `navigateToPlayer` and `notifyExported`.
  *
  * Invariant 5: channel constants come from `preload/apis/replay-api.ts`; there
  * is no parallel list in this file to drift out of sync.
@@ -889,7 +900,15 @@ export interface RegisterReplayHandlersOptions {
  * Invariant 67: the logger is injected; this function never constructs one.
  */
 export function registerReplayHandlers(options: RegisterReplayHandlersOptions): void {
-    const { ipcMain, replay, playback, replayDir, exportCurrentMatch, navigateToPlayer } = options;
+    const {
+        ipcMain,
+        replay,
+        playback,
+        replayDir,
+        exportCurrentMatch,
+        navigateToPlayer,
+        notifyExported,
+    } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:replay:* handlers', {
         channels: [
@@ -909,7 +928,25 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
         return replay.listItems(validated);
     });
 
-    ipcMain.handle(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, () => exportCurrentMatch());
+    ipcMain.handle(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, async (_event, intent) => {
+        // Fail-safe: a malformed/absent intent coerces to 'save' (toast shown),
+        // never throwing — see `ReplayExportIntentSchema`.
+        const validatedIntent = parseInvokeRequest(
+            ReplayExportIntentSchema,
+            REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+            intent,
+        );
+        const path = await exportCurrentMatch();
+        // Push the saved path so a renderer listener can raise the "Replay saved"
+        // toast (§4.30) — but only for the save intent, and only on success (a
+        // rejected export throws before here). The "Replay" (view) action exports
+        // solely to obtain a stable on-disk path for `openInPlayer`; raising a
+        // "saved" toast then would be misleading (Invariant #74).
+        if (validatedIntent !== 'view') {
+            notifyExported(path);
+        }
+        return path;
+    });
 
     ipcMain.handle(REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath) => {
         const validated = parseInvokeRequest(

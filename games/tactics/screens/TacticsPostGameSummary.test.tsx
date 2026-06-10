@@ -201,6 +201,8 @@ describe('TacticsPostGameSummary — replay actions', () => {
             expect(screen.getByTestId('post-game-replay-status')).toHaveTextContent('Replay saved');
         });
         expect(exportCurrentMatch).toHaveBeenCalledOnce();
+        // 'save' intent → main raises the "Replay saved" toast (§4.30).
+        expect(exportCurrentMatch).toHaveBeenCalledWith('save');
         expect(screen.queryByTestId('post-game-replay-error')).toBeNull();
     });
 
@@ -237,5 +239,8 @@ describe('TacticsPostGameSummary — replay actions', () => {
             expect(openInPlayer).toHaveBeenCalledWith('/replays/tactics/done.chimera-replay');
         });
         expect(exportCurrentMatch).toHaveBeenCalledOnce();
+        // 'view' intent → main suppresses the "Replay saved" toast (§4.30): the
+        // export only obtains a stable on-disk path for the player.
+        expect(exportCurrentMatch).toHaveBeenCalledWith('view');
     });
 });

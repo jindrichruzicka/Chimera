@@ -165,7 +165,7 @@ function PostGameReplayActions(): React.ReactElement {
     const handleSaveReplay = React.useCallback(async (): Promise<void> => {
         setStatus({ kind: 'working' });
         try {
-            await requireReplayBridge().exportCurrentMatch();
+            await requireReplayBridge().exportCurrentMatch('save');
             setStatus({ kind: 'saved' });
         } catch {
             setStatus({ kind: 'error', message: 'Could not save replay.' });
@@ -176,7 +176,9 @@ function PostGameReplayActions(): React.ReactElement {
         setStatus({ kind: 'working' });
         try {
             const bridge = requireReplayBridge();
-            const path = await bridge.exportCurrentMatch();
+            // 'view' intent: export only to obtain a stable on-disk path for the
+            // player — main suppresses the "Replay saved" toast (§4.30).
+            const path = await bridge.exportCurrentMatch('view');
             await bridge.openInPlayer(path);
             // Success navigates to the replay player via the main-pushed
             // `chimera:replay:navigate`; the summary unmounts, so no terminal

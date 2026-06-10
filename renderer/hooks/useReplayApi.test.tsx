@@ -12,6 +12,7 @@ function makeReplayBridge(): ReplayAPI {
         openInPlayer: vi.fn(() => Promise.resolve()),
         delete: vi.fn(() => Promise.resolve()),
         onNavigate: vi.fn(() => () => undefined),
+        onExported: vi.fn(() => () => undefined),
         openPlayback: vi.fn(() =>
             Promise.resolve({
                 gameId: 'tactics',
@@ -71,6 +72,8 @@ describe('useReplayApi', () => {
             await result.current.closePlayback();
             const off = result.current.onNavigate(() => undefined);
             off();
+            const offExported = result.current.onExported(() => undefined);
+            offExported();
 
             expect(replay.list).toHaveBeenCalledWith('tactics');
             expect(replay.exportCurrentMatch).toHaveBeenCalledOnce();
@@ -81,6 +84,7 @@ describe('useReplayApi', () => {
             expect(replay.snapshotRange).toHaveBeenCalledWith(1, 3);
             expect(replay.closePlayback).toHaveBeenCalledOnce();
             expect(replay.onNavigate).toHaveBeenCalledOnce();
+            expect(replay.onExported).toHaveBeenCalledOnce();
         } finally {
             Reflect.deleteProperty(window, '__chimera');
         }

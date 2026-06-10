@@ -18,6 +18,7 @@ import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/me
 import type {
     PerspectiveReplayListBridge,
     ReplayExportBridge,
+    ReplayExportIntent,
 } from '@chimera/shared/replay-bridge-contract.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { CommitmentId } from '@chimera/simulation/projection/index.js';
@@ -54,6 +55,13 @@ export type { GameResult };
 
 /** Chat contract types. Canonical: shared/chat.ts (§4.29 — Chat System). */
 export type { ChatMessage, ChatScope, RelayResult };
+
+/**
+ * Replay-export intent. Canonical: shared/replay-bridge-contract.ts (§4.28).
+ * Re-exported so renderer/preload consumers reach it through the api-types
+ * surface alongside {@link ReplayAPI}.
+ */
+export type { ReplayExportIntent };
 
 /**
  * Constructs a branded {@link PlayerId} from a raw string.
@@ -583,8 +591,12 @@ export interface ReplayAPI extends ReplayExportBridge {
      * Finalise the in-progress recording to disk and resolve with the saved
      * file path. Stops recording (the natural end-of-match finalise then
      * no-ops). Rejects when no match is being hosted.
+     *
+     * `intent` (default `'save'`) gates the "Replay saved" toast: `'save'`
+     * raises it, `'view'` (export-for-path-only) suppresses it. See
+     * {@link ReplayExportIntent}.
      */
-    exportCurrentMatch(): Promise<string>;
+    exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>;
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the replay directory, then pushes `chimera:replay:navigate`; the
@@ -598,6 +610,15 @@ export interface ReplayAPI extends ReplayExportBridge {
      * payload is the replay file path). Returns an {@link Unsubscribe}.
      */
     onNavigate(listener: (path: string) => void): Unsubscribe;
+    /**
+     * Subscribe to successful replay-export notifications pushed by main after
+     * `export-current-match` resolves (the payload is the saved replay path).
+     * Lets a renderer listener raise the "Replay saved" toast (§4.30) when the
+     * in-match game screen — which triggers the export but may not reach the
+     * renderer toast store (Invariant #96) — saves a replay. Returns an
+     * {@link Unsubscribe}.
+     */
+    onExported(listener: (path: string) => void): Unsubscribe;
     /**
      * Load the replay at `path` into the main-process playback session and
      * resolve with its {@link ReplayPlaybackInfo}. Main validates the path is

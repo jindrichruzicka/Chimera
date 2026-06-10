@@ -56,13 +56,33 @@ export interface PerspectiveReplayListBridge {
  * structurally pinned to this slice — a divergent signature is a compile error
  * in the preload layer, not a silent drift.
  */
+/**
+ * Why the post-game summary is finalising the recording:
+ *
+ * - `'save'` — the user pressed **Save Replay**. Main raises the "Replay saved"
+ *   toast (§4.30) once the export resolves.
+ * - `'view'` — the user pressed **Replay**. The recording is exported only to
+ *   obtain a stable on-disk path for `openInPlayer`; raising a "Replay saved"
+ *   toast then would be misleading, so main suppresses the
+ *   `chimera:replay:exported` push for this intent.
+ *
+ * Defaults to `'save'` everywhere it is optional, so the historical
+ * "export ⇒ toast" behaviour is preserved for any caller that omits it
+ * (fail-safe — an absent or unknown intent shows the toast rather than hides it).
+ */
+export type ReplayExportIntent = 'save' | 'view';
+
 export interface ReplayExportBridge {
     /**
      * Finalise the in-progress host recording to disk and resolve with the saved
      * file path (§4.28). Rejects when no match is being hosted — surfaced as an
      * inline error by the post-game summary actions (F44 / T8).
+     *
+     * `intent` (default `'save'`) decides whether main raises the "Replay saved"
+     * toast: `'save'` does, `'view'` (export-for-path-only) does not. See
+     * {@link ReplayExportIntent}.
      */
-    exportCurrentMatch(): Promise<string>;
+    exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>;
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the replay directory, then pushes `chimera:replay:navigate`.

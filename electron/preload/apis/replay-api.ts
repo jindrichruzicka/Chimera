@@ -19,6 +19,7 @@
 import type {
     PlayerSnapshot,
     ReplayAPI,
+    ReplayExportIntent,
     ReplayListItem,
     ReplayPlaybackInfo,
     Unsubscribe,
@@ -52,6 +53,15 @@ export const REPLAY_DELETE_CHANNEL = 'chimera:replay:delete';
  */
 export const REPLAY_NAVIGATE_CHANNEL = 'chimera:replay:navigate';
 
+/**
+ * `ipcRenderer.on` target for {@link ReplayAPI.onExported}. Main pushes the
+ * saved replay path via `webContents.send` after a successful
+ * `export-current-match`, so a renderer listener can raise the "Replay saved"
+ * toast (§4.30) — the in-match game screen that triggers the export may not
+ * reach the renderer toast store (Invariant #96).
+ */
+export const REPLAY_EXPORTED_CHANNEL = 'chimera:replay:exported';
+
 /** `ipcRenderer.invoke` target for {@link ReplayAPI.openPlayback}. */
 export const REPLAY_OPEN_PLAYBACK_CHANNEL = 'chimera:replay:open-playback';
 
@@ -73,7 +83,8 @@ export type ReplayApiListener = IpcListener;
 /**
  * Narrow port over `ipcRenderer`. Extends {@link PushListenerPort} for the
  * `chimera:replay:navigate` subscription slice and adds variadic `invoke`
- * (`exportCurrentMatch` takes no argument, the rest take exactly one).
+ * (`exportCurrentMatch` takes an optional intent argument, the rest take
+ * exactly one or none).
  */
 export interface ReplayApiIpcPort extends PushListenerPort {
     invoke(channel: string, ...args: unknown[]): Promise<unknown>;
@@ -102,9 +113,12 @@ export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
                         value,
                     ) as ReplayListItem[],
             ),
-        exportCurrentMatch: (): Promise<string> =>
+        // Resolve the default here so the wire always carries a concrete intent
+        // (`'save' | 'view'`); main also fail-safe-defaults, giving defence in
+        // depth against an omitted argument.
+        exportCurrentMatch: (intent: ReplayExportIntent = 'save'): Promise<string> =>
             ipc
-                .invoke(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL)
+                .invoke(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, intent)
                 .then((value) =>
                     parseInvokeResponse(
                         ReplaySavedPathSchema,
@@ -120,6 +134,8 @@ export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
         },
         onNavigate: (listener: (path: string) => void): Unsubscribe =>
             subscribePush<string>(ipc, REPLAY_NAVIGATE_CHANNEL, listener),
+        onExported: (listener: (path: string) => void): Unsubscribe =>
+            subscribePush<string>(ipc, REPLAY_EXPORTED_CHANNEL, listener),
         openPlayback: (path: string): Promise<ReplayPlaybackInfo> =>
             ipc
                 .invoke(REPLAY_OPEN_PLAYBACK_CHANNEL, path)

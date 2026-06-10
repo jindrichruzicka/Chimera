@@ -1,0 +1,39 @@
+'use client';
+
+/**
+ * renderer/components/replay/ReplayExportToastBridge.tsx (§4.30, F46 / #646).
+ *
+ * App-wide listener that turns a main-process replay-export-completed push into
+ * a "Replay saved" toast. The in-match "Save Replay" button lives in game code
+ * (`games/<name>/screens/*`), which may not reach the renderer toast store
+ * (Invariant #96); main therefore pushes `chimera:replay:exported` after a
+ * successful `export-current-match`, and this bridge — a renderer module that
+ * *is* allowed to use `toastStore` — raises the toast.
+ *
+ * Mounted once in `AppShell` (sibling of `ReplayNavigationBridge`) so the push
+ * is never missed. Renders nothing.
+ */
+
+import { useEffect } from 'react';
+import { getReplayBridge, useReplayApi } from '../../hooks/useReplayApi';
+import { useToastStore } from '../../state/toastStore';
+
+export function ReplayExportToastBridge(): null {
+    const replayApi = useReplayApi();
+
+    useEffect(() => {
+        // Guard: in a non-Electron context (or before preload wiring) there is
+        // no bridge to subscribe to — do nothing rather than throw.
+        if (getReplayBridge() === null) {
+            return;
+        }
+        return replayApi.onExported(() => {
+            // §4.30 engine-wired source. Static title, no body — toast content is
+            // not derived from the pushed path (Invariant #74); duration is the
+            // severity default.
+            useToastStore.getState().push({ severity: 'success', title: 'Replay saved' });
+        });
+    }, [replayApi]);
+
+    return null;
+}

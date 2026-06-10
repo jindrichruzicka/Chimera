@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
     REPLAY_DELETE_CHANNEL,
     REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+    REPLAY_EXPORTED_CHANNEL,
     REPLAY_LIST_CHANNEL,
     REPLAY_NAVIGATE_CHANNEL,
     REPLAY_OPEN_IN_PLAYER_CHANNEL,
@@ -89,7 +90,7 @@ describe('createReplayApi', () => {
     });
 
     describe('exportCurrentMatch()', () => {
-        it('invokes chimera:replay:export-current-match with no argument and resolves to the saved path', async () => {
+        it("defaults to the 'save' intent and resolves to the saved path", async () => {
             const stub = makeIpcStub();
             stub.invokeResults.set(
                 REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
@@ -99,10 +100,42 @@ describe('createReplayApi', () => {
 
             const result = await api.exportCurrentMatch();
 
+            // The default is resolved preload-side so the wire always carries a
+            // concrete intent.
             expect(stub.invocations).toEqual([
-                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: [] },
+                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: ['save'] },
             ]);
             expect(result).toBe('/replays/tactics/abc.chimera-replay');
+        });
+
+        it("forwards the 'view' intent to the channel", async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(
+                REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+                '/replays/tactics/abc.chimera-replay',
+            );
+            const api = createReplayApi(stub.port);
+
+            await api.exportCurrentMatch('view');
+
+            expect(stub.invocations).toEqual([
+                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: ['view'] },
+            ]);
+        });
+
+        it("forwards the 'save' intent to the channel", async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(
+                REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
+                '/replays/tactics/abc.chimera-replay',
+            );
+            const api = createReplayApi(stub.port);
+
+            await api.exportCurrentMatch('save');
+
+            expect(stub.invocations).toEqual([
+                { channel: REPLAY_EXPORT_CURRENT_MATCH_CHANNEL, args: ['save'] },
+            ]);
         });
 
         it('rejects with PreloadIpcValidationError when main returns a non-string path', async () => {
@@ -239,6 +272,7 @@ describe('createReplayApi', () => {
                 'openInPlayer',
                 'delete',
                 'onNavigate',
+                'onExported',
                 'openPlayback',
                 'snapshotAt',
                 'snapshotRange',
@@ -308,6 +342,38 @@ describe('createReplayApi', () => {
 
             expect(beforeUnsub).toBe(1);
             expect(stub.listeners.get(REPLAY_NAVIGATE_CHANNEL)?.size).toBe(0);
+        });
+    });
+
+    describe('onExported()', () => {
+        it('registers a listener on chimera:replay:exported and forwards only the path payload', () => {
+            const stub = makeIpcStub();
+            const api = createReplayApi(stub.port);
+            const callback = vi.fn<(path: string) => void>();
+
+            api.onExported(callback);
+
+            const registered = stub.listeners.get(REPLAY_EXPORTED_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, '/replays/tactics/abc.chimera-replay');
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith('/replays/tactics/abc.chimera-replay');
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createReplayApi(stub.port);
+            const callback = vi.fn<(path: string) => void>();
+
+            const unsubscribe = api.onExported(callback);
+            const beforeUnsub = stub.listeners.get(REPLAY_EXPORTED_CHANNEL)?.size;
+            unsubscribe();
+
+            expect(beforeUnsub).toBe(1);
+            expect(stub.listeners.get(REPLAY_EXPORTED_CHANNEL)?.size).toBe(0);
         });
     });
 });

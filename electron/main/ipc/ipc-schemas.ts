@@ -25,6 +25,7 @@ import type {
     HostLobbyParams,
     JoinLobbyParams,
     LobbyAgentSlot,
+    ReplayExportIntent,
     SaveRequest,
     UserSettings,
 } from '../../preload/api-types.js';
@@ -135,6 +136,24 @@ export const ReplaySnapshotRangeSchema = z
     .refine(({ from, to }) => to - from < MAX_SNAPSHOT_RANGE, {
         message: `snapshot range may span at most ${MAX_SNAPSHOT_RANGE.toString()} ticks`,
     });
+
+/**
+ * Schema for the optional `intent` argument of
+ * `chimera:replay:export-current-match`. `'save'` (the user pressed
+ * **Save Replay**) raises the §4.30 "Replay saved" toast; `'view'` (**Replay**)
+ * exports only to obtain a stable on-disk path for `openInPlayer` and suppresses
+ * the toast.
+ *
+ * Unlike the other replay schemas this one is deliberately **non-throwing**:
+ * `.catch('save')` coerces an absent, `undefined`, or otherwise malformed value
+ * to `'save'`. The only thing this boundary must prevent is a hostile or buggy
+ * renderer *suppressing* a toast it should not — never breaking the export
+ * itself over a cosmetic decision. Failing safe to `'save'` means an unexpected
+ * payload shows the (harmless) toast rather than silently hiding it.
+ */
+export const ReplayExportIntentSchema: z.ZodType<ReplayExportIntent> = z
+    .enum(['save', 'view'])
+    .catch('save');
 
 /**
  * Pattern for a single slot-ID component (`gameId` or `slotName`).

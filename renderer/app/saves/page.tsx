@@ -28,6 +28,7 @@ import { Caption } from '../../components/ui/Caption';
 import { Heading } from '../../components/ui/Heading';
 import { Label } from '../../components/ui/Label';
 import { useSaveStore } from '../../state/saveStore.js';
+import { useToastStore } from '../../state/toastStore.js';
 import { useSavesApi } from './useSavesApi.js';
 
 // ── SaveSlotRow ───────────────────────────────────────────────────────────────
@@ -158,6 +159,9 @@ function NewSaveForm({ gameId, onNewSave }: NewSaveFormProps): React.ReactElemen
 
 // ── SavesPage ─────────────────────────────────────────────────────────────────
 
+/** The save-screen operations routed through {@link runSavesAction}. */
+type SavesOp = 'Save' | 'Load' | 'Delete';
+
 export default function SavesPage(): React.ReactElement {
     const slots = useSaveStore((s) => s.slots);
     const isLoading = useSaveStore((s) => s.isLoading);
@@ -167,13 +171,21 @@ export default function SavesPage(): React.ReactElement {
     const [error, setError] = useState<string | null>(null);
 
     const runSavesAction = useCallback(
-        async (op: string, fn: () => Promise<unknown>): Promise<void> => {
+        async (op: SavesOp, fn: () => Promise<unknown>): Promise<void> => {
             try {
                 setError(null);
                 await fn();
             } catch (e: unknown) {
                 const message = e instanceof Error ? e.message : String(e);
                 setError(`${op} failed: ${message}`);
+                if (op === 'Save') {
+                    // §4.30 engine-wired source: a save attempt failed. The toast
+                    // title is a static literal and carries no `message` body —
+                    // toast content must not derive from SaveFile (Invariant #74);
+                    // the detail stays in the inline alert above. Duration is the
+                    // severity default (no arbitrary durationMs).
+                    useToastStore.getState().push({ severity: 'error', title: 'Save failed' });
+                }
             }
         },
         [],

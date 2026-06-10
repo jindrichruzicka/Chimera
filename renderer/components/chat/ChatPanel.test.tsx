@@ -9,6 +9,7 @@ import { ChatPanel } from './ChatPanel';
 import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { useToastStore } from '../../state/toastStore';
 import type { ChatMessage } from '@chimera/shared/chat.js';
 import type { LobbyState } from '@chimera/shared/messages-schemas.js';
 import type { PlayerId } from '@chimera/electron/preload/api-types.js';
@@ -78,6 +79,7 @@ beforeEach(() => {
     useChatStore.setState({ messages: [], muted: new Set<PlayerId>() });
     useLobbyStore.getState().applyLobbyState(null);
     useLobbyUiStore.getState().clearLocalLobbyContext();
+    useToastStore.getState().dismissAll();
     chatMock = installChat();
 });
 
@@ -310,6 +312,42 @@ describe('ChatPanel', () => {
 
         expect(mock.send).toHaveBeenCalled();
         expect(await screen.findByTestId('chat-send-error')).toHaveTextContent(/too long/i);
+    });
+
+    // ── Rate-limit toast (§4.30 engine-wired source) ───────────────────────────
+
+    it('pushes a warning toast when a send is rate-limited', async () => {
+        installChat({
+            send: vi.fn().mockResolvedValue({ ok: false, reason: 'rate_limited' }),
+        });
+
+        render(<ChatPanel />);
+        await waitUntilReady();
+
+        const input = screen.getByTestId('chat-body-input');
+        fireEvent.change(input, { target: { value: 'spam spam spam' } });
+        pressEnter(input);
+
+        await waitFor(() => expect(useToastStore.getState().queue).toHaveLength(1));
+        const toast = useToastStore.getState().queue[0]!;
+        expect(toast.severity).toBe('warning');
+        expect(toast.title).toBe('Sending messages too quickly');
+    });
+
+    it('does not push a toast for non-rate-limit send rejections', async () => {
+        installChat({
+            send: vi.fn().mockResolvedValue({ ok: false, reason: 'too_long' }),
+        });
+
+        render(<ChatPanel />);
+        await waitUntilReady();
+
+        const input = screen.getByTestId('chat-body-input');
+        fireEvent.change(input, { target: { value: 'a very long message' } });
+        pressEnter(input);
+
+        expect(await screen.findByTestId('chat-send-error')).toBeInTheDocument();
+        expect(useToastStore.getState().queue).toHaveLength(0);
     });
 
     // ── Scope selector ─────────────────────────────────────────────────────────

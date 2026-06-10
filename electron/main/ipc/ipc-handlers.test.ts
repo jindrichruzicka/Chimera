@@ -2321,6 +2321,7 @@ function registerReplay(overrides: {
     playback?: ReplayPlaybackPort;
     exportCurrentMatch?: () => Promise<string>;
     navigateToPlayer?: (path: string) => void;
+    notifyExported?: (path: string) => void;
     replayDir?: string;
 }): void {
     registerReplayHandlers({
@@ -2332,6 +2333,7 @@ function registerReplay(overrides: {
             overrides.exportCurrentMatch ??
             (() => Promise.resolve(nodePath.join(REPLAY_DIR, 'tactics', 'abc.chimera-replay'))),
         navigateToPlayer: overrides.navigateToPlayer ?? (() => undefined),
+        notifyExported: overrides.notifyExported ?? (() => undefined),
     });
 }
 
@@ -2408,6 +2410,91 @@ describe('registerReplayHandlers', () => {
             await expect(Promise.resolve(handler?.({}))).rejects.toThrow(
                 /no active hosted session/,
             );
+        });
+
+        it('pushes the saved path via notifyExported after a successful export (default intent)', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(REPLAY_DIR, 'tactics', 'saved.chimera-replay');
+            const notifyExported = vi.fn<(path: string) => void>();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrentMatch: () => Promise.resolve(saved),
+                notifyExported,
+            });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            await Promise.resolve(handler?.({}, undefined));
+
+            expect(notifyExported).toHaveBeenCalledOnce();
+            expect(notifyExported).toHaveBeenCalledWith(saved);
+        });
+
+        it('pushes notifyExported when the intent is "save"', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(REPLAY_DIR, 'tactics', 'saved.chimera-replay');
+            const notifyExported = vi.fn<(path: string) => void>();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrentMatch: () => Promise.resolve(saved),
+                notifyExported,
+            });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            await Promise.resolve(handler?.({}, 'save'));
+
+            expect(notifyExported).toHaveBeenCalledOnce();
+            expect(notifyExported).toHaveBeenCalledWith(saved);
+        });
+
+        it('does NOT push notifyExported when the intent is "view" but still resolves the saved path', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(REPLAY_DIR, 'tactics', 'saved.chimera-replay');
+            const notifyExported = vi.fn<(path: string) => void>();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrentMatch: () => Promise.resolve(saved),
+                notifyExported,
+            });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            // The view path still needs the returned path for `openInPlayer`.
+            await expect(Promise.resolve(handler?.({}, 'view'))).resolves.toBe(saved);
+
+            expect(notifyExported).not.toHaveBeenCalled();
+        });
+
+        it('fails safe to the toast for a malformed intent', async () => {
+            const stub = makeReplayIpcMainStub();
+            const saved = nodePath.join(REPLAY_DIR, 'tactics', 'saved.chimera-replay');
+            const notifyExported = vi.fn<(path: string) => void>();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrentMatch: () => Promise.resolve(saved),
+                notifyExported,
+            });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            // ReplayExportIntentSchema.catch('save') coerces garbage to 'save' —
+            // a hostile/buggy renderer can never silently suppress the toast.
+            await expect(Promise.resolve(handler?.({}, 42))).resolves.toBe(saved);
+
+            expect(notifyExported).toHaveBeenCalledOnce();
+            expect(notifyExported).toHaveBeenCalledWith(saved);
+        });
+
+        it('does not call notifyExported when the export rejects', async () => {
+            const stub = makeReplayIpcMainStub();
+            const notifyExported = vi.fn<(path: string) => void>();
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                exportCurrentMatch: () => Promise.reject(new Error('no active hosted session')),
+                notifyExported,
+            });
+
+            const handler = stub.handled.get(REPLAY_EXPORT_CURRENT_MATCH_CHANNEL);
+            await expect(Promise.resolve(handler?.({}))).rejects.toThrow();
+
+            expect(notifyExported).not.toHaveBeenCalled();
         });
     });
 
