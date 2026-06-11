@@ -42,6 +42,7 @@ chimera/
 ├── electron/                        # Electron shell
 │   ├── main/
 │   │   ├── index.ts                 # App entry, window creation; injects dependencies and wires all subsystems
+│   │   ├── debug-bridge.ts          # debug-only: chimera:debug IPC bridge + lazy Inspector window; loaded via IS_DEBUG_MODE dynamic import (§4.12)
 │   │   ├── ipc/                     # IPC handler registrations per preload namespace
 │   │   │   ├── ipc-handlers.ts      # All contextBridge IPC registrations (one register* per namespace)
 │   │   │   └── ipc-schemas.ts       # Zod schemas for IPC message payloads (validation at IPC boundaries)

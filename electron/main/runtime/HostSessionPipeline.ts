@@ -100,6 +100,41 @@ export interface ReplayPort {
     finaliseRecording(): Promise<void>;
 }
 
+// ─── Debug port ──────────────────────────────────────────────────────────────
+
+/**
+ * Narrow interface through which the Runtime Debug Layer observes a hosted
+ * session (§4.12, F47 T5). Implemented by `electron/main/debug-bridge.ts`
+ * and supplied only when `IS_DEBUG_MODE` is true — when absent, the pipeline
+ * context carries NO `debugObserver` field (Invariant #31) and
+ * `processAction` performs no timing work.
+ *
+ * Both callbacks are invoked from the live action path; implementations must
+ * never throw (`observer` is invoked unguarded by `ActionPipeline`;
+ * `onActionApplied` is guarded here, mirroring the replayPort isolation).
+ */
+export interface HostSessionDebugPort {
+    /**
+     * Wired as `PipelineContext.debugObserver`: fires between stage 5
+     * (reduce) and stage 7 (broadcast) with the post-reduce state, and on
+     * the Stage 3 undo/redo intercept with the reconstructed state.
+     */
+    readonly observer: (tick: number, snapshot: Readonly<BaseGameSnapshot>) => void;
+    /**
+     * Fires once per `processAction` call after `pipeline.process` returns.
+     * `entry` mirrors the Stage 6 history append shape (`tickApplied` is the
+     * PRE-state tick); `next` is the resulting authoritative state;
+     * `durationMs` is the wall-clock duration of the `pipeline.process` call
+     * (wall-clock reads are forbidden in `simulation/`, Invariant #43 — the
+     * measurement therefore lives here, at the host orchestration layer).
+     */
+    readonly onActionApplied: (
+        entry: ActionHistoryEntry,
+        next: Readonly<BaseGameSnapshot>,
+        durationMs: number,
+    ) => void;
+}
+
 // ─── HostSessionPipelineOptions ──────────────────────────────────────────────
 
 /**
@@ -133,6 +168,12 @@ export interface HostSessionPipelineOptions {
      * Defaults to a noop logger when absent.
      */
     readonly logger?: Logger;
+    /**
+     * Optional Runtime Debug Layer port (§4.12). Supplied by the debug
+     * bridge only when `IS_DEBUG_MODE` is true; absent in production so the
+     * pipeline context never carries a `debugObserver` field (Invariant #31).
+     */
+    readonly debugPort?: HostSessionDebugPort;
 }
 
 /**
@@ -166,6 +207,16 @@ export interface HostSessionPipelineResult {
     ) => BaseGameSnapshot;
     readonly undoManager: InMemoryUndoManager;
     readonly clearUndoHistory: (activePlayerIds: readonly PlayerId[]) => void;
+    /**
+     * The session's pure replay callback (same instance injected into
+     * `InMemoryUndoManager`). Exposed so the debug bridge can reconstruct
+     * snapshots from a turn memento (§4.12); pure and deterministic
+     * (Invariant #43).
+     */
+    readonly replay: (
+        base: BaseGameSnapshot,
+        entries: readonly ActionHistoryEntry[],
+    ) => BaseGameSnapshot;
 }
 
 /**
@@ -246,6 +297,11 @@ export function buildHostSessionPipeline(
             history,
             broadcast: broadcastFn,
             ...(broadcastTickFn === undefined ? {} : { broadcastTick: broadcastTickFn }),
+            // Invariant #31: the field is ABSENT (not undefined-assigned)
+            // unless the debug bridge supplied a port.
+            ...(resolvedOptions?.debugPort === undefined
+                ? {}
+                : { debugObserver: resolvedOptions.debugPort.observer }),
         },
     });
 
@@ -259,7 +315,7 @@ export function buildHostSessionPipeline(
     // Resolve the optional logger and save port once at construction time so
     // the hot `processAction` path has no conditional property accesses.
     const log: Logger = resolvedOptions?.logger ?? createNoopLogger();
-    const { gameId, savePort, gameEndPort, replayPort } = resolvedOptions ?? {};
+    const { gameId, savePort, gameEndPort, replayPort, debugPort } = resolvedOptions ?? {};
 
     /**
      * Thin wrapper around `ActionPipeline.process` that fires autosave as a
@@ -277,7 +333,34 @@ export function buildHostSessionPipeline(
         action: ActionEnvelope,
     ): BaseGameSnapshot => {
         const wasResolved = snapshot.gameResult !== null;
+        const processStartMs = debugPort === undefined ? 0 : performance.now();
         const nextState = pipeline.process(snapshot, action);
+
+        // ── Runtime Debug Layer feed (§4.12, F47 T5) ───────────────────────────
+        // Mirror the Stage 6 history append shape (tickApplied = PRE-state
+        // tick) and report the wall-clock pipeline.process duration. A debug
+        // feed failure must never break the live pipeline (Invariant #25
+        // spirit — same isolation as the replayPort block below).
+        if (debugPort !== undefined) {
+            const durationMs = performance.now() - processStartMs;
+            try {
+                debugPort.onActionApplied(
+                    {
+                        tickApplied: snapshot.tick,
+                        turnNumber: snapshot.turnNumber,
+                        action,
+                    },
+                    nextState,
+                    durationMs,
+                );
+            } catch (err: unknown) {
+                log.error(
+                    'debug onActionApplied failed',
+                    err instanceof Error ? err : new Error(String(err)),
+                    { actionType: action.type },
+                );
+            }
+        }
 
         // ── Replay recording (Issue #658) ─────────────────────────────────────
         // Record every successfully applied action while the match is live.
@@ -328,5 +411,5 @@ export function buildHostSessionPipeline(
         return nextState;
     };
 
-    return { pipeline, processAction, undoManager, clearUndoHistory };
+    return { pipeline, processAction, undoManager, clearUndoHistory, replay };
 }

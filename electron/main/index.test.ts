@@ -1271,6 +1271,44 @@ describe('main', () => {
         expect(appOn).toHaveBeenCalledWith('before-quit', expect.any(Function));
     });
 
+    // ── Runtime Debug Layer gate (§4.12, F47 T5, Invariant #27) ──────────────
+
+    it('registers NO debug handlers when IS_DEBUG_MODE is false (gate not entered)', async () => {
+        await main();
+
+        const handleChannels = ipcMainHandle.mock.calls.map(([channel]) => channel);
+        const onChannels = ipcMainOn.mock.calls.map(([channel]) => channel);
+        expect(handleChannels).not.toContain('chimera:debug');
+        expect(onChannels).not.toContain('chimera:debug:toggle-inspector');
+    });
+
+    it('with CHIMERA_DEBUG=1 registers both debug handlers but creates NO Inspector window', async () => {
+        vi.stubEnv('CHIMERA_DEBUG', '1');
+        vi.resetModules();
+        try {
+            // Fresh import so shared/constants re-evaluates IS_DEBUG_MODE
+            // (NODE_ENV is 'test' under vitest, so the guard passes).
+            const fresh = await import('./index.js');
+            await fresh.main();
+
+            const handleChannels = ipcMainHandle.mock.calls.map(([channel]) => channel);
+            const onChannels = ipcMainOn.mock.calls.map(([channel]) => channel);
+            expect(handleChannels).toContain('chimera:debug');
+            expect(onChannels).toContain('chimera:debug:toggle-inspector');
+
+            // Closed by default: only the main renderer window exists, and
+            // nothing loaded the Inspector /debug/ route.
+            expect(browserWindowInstances).toHaveLength(1);
+            const debugLoads = browserWindowInstances.filter((win) =>
+                win.loadURL.mock.calls.some(([url]) => String(url).includes('/debug')),
+            );
+            expect(debugLoads).toHaveLength(0);
+        } finally {
+            vi.unstubAllEnvs();
+            vi.resetModules();
+        }
+    });
+
     it('uses os.release() for the system device-info osVersion', async () => {
         mockOsRelease.mockReturnValue('24.1.0-test');
 

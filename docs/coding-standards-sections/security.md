@@ -39,7 +39,7 @@ This section maps directly to OWASP Top 10 risks relevant to Electron desktop ap
 
 ## 11.4 Snapshot leakage (A01)
 
-- `GameSnapshot` must never appear in an IPC response, a WebSocket message, or a log line. Only `PlayerSnapshot` crosses any boundary.
+- `GameSnapshot` must never appear in an IPC response, a WebSocket message, or a log line. Only `PlayerSnapshot` crosses any boundary. Exception: the debug layer (`debug-bridge.ts`) returns full snapshots to the Inspector Window over `chimera:debug*` ("full truth — debug only", §4.12); it loads solely under the `IS_DEBUG_MODE` gate (Invariant 27) and validates every request sender against the Inspector's `webContents.id` (Invariant 29).
 - Reviewer must run `assertNoLeakedFields()` logic against the diff for any change touching IPC handlers or `StateBroadcaster`.
 
 ## 11.5 Electron node access (A05 — Security Misconfiguration)

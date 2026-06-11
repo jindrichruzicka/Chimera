@@ -178,6 +178,8 @@ describe('DebugProtocol — DebugResponse union', () => {
                 return `live:${response.tick}`;
             case 'ERROR':
                 return `error:${response.message}`;
+            case 'ACK':
+                return 'ack';
             default: {
                 const exhaustive: never = response;
                 return exhaustive;
@@ -195,6 +197,7 @@ describe('DebugProtocol — DebugResponse union', () => {
             { type: 'PERF_STATS', stats: makePerfStats() },
             { type: 'LIVE_TICK', tick: 9, snapshot: makeSnapshot(9) },
             { type: 'ERROR', message: 'TickNotAvailableError: invalid_tick (tick 1.5)' },
+            { type: 'ACK' },
         ];
         expect(responses.map(classify)).toEqual([
             'tick-list:1',
@@ -205,6 +208,7 @@ describe('DebugProtocol — DebugResponse union', () => {
             'perf-stats:2',
             'live:9',
             'error:TickNotAvailableError: invalid_tick (tick 1.5)',
+            'ack',
         ]);
     });
 

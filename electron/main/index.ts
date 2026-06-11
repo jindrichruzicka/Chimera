@@ -9,7 +9,11 @@ import {
     screen as electronScreen,
     session,
 } from 'electron';
-import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera/shared/constants.js';
+import { CLEAN_EXIT_IPC_CHANNEL, IS_DEBUG_MODE } from '@chimera/shared/constants.js';
+// Type-only import — erased at compile time, so the debug-bridge module graph
+// stays out of the production bundle (Invariant #27); the runtime import is
+// the dynamic one behind the IS_DEBUG_MODE gate in main().
+import type { DebugBridge } from './debug-bridge.js';
 import { MalformedAssetRefError, parseAssetRef } from '@chimera/shared/asset-ref-parse.js';
 import {
     registerGameHandlers,
@@ -1081,6 +1085,22 @@ export async function main(): Promise<void> {
         getDeviceInfo: () => deviceProbeWatcher?.getCurrentInfo(),
     });
 
+    // Runtime Debug Layer (§4.12, F47 T5). The bridge module is loaded ONLY
+    // via this dynamic import behind the dot-access IS_DEBUG_MODE constant so
+    // the bundler's define replacement constant-folds the branch and
+    // tree-shakes the whole debug graph in production (Invariant #27).
+    // Sessions attach per-hosted-session inside `onSessionHosted` below; the
+    // Inspector window itself stays closed until the first toggle IPC.
+    let debugBridge: DebugBridge | undefined = undefined;
+    if (IS_DEBUG_MODE) {
+        const { startDebugBridge } = await import('./debug-bridge.js');
+        debugBridge = startDebugBridge({
+            ipcMain,
+            logger: logger.child({ module: 'debug-bridge' }),
+            debugPreloadPath: path.join(path.dirname(preloadPath), 'debug-api.js'),
+        });
+    }
+
     // Build the LobbyManager once so both lobby IPC and game seat-switch IPC
     // use the same authoritative local-seat context.
     const lobbyLogger = logger.child({ module: 'lobby-manager' });
@@ -1218,48 +1238,60 @@ export async function main(): Promise<void> {
                 },
             };
 
+            // Runtime Debug Layer per-session attach (§4.12, F47 T5).
+            // Both getters are lazy: `projector` and `replay` are declared
+            // further down in this closure and are only dereferenced from IPC
+            // query handling, which cannot run before this synchronous body
+            // completes (TDZ-safe). No-op `undefined` outside debug mode.
+            const debugPort = debugBridge?.attachSession({
+                getProjector: () => projector,
+                getReplay: () => replay,
+            });
+
             // `pipeline`, `processAction`, and `clearUndoHistory` come from
             // the same factory; `processAction` adds the autosave fire-and-
             // forget hook on top of `pipeline.process` (Issue #375).
-            const { processAction, clearUndoHistory, undoManager } = buildHostSessionPipeline(
-                gameRegistry,
-                (snap, to) => {
-                    if (broadcasterRef.current === null) {
-                        throw new Error(
-                            'StateBroadcaster used before hosted session wiring completed',
-                        );
-                    }
-                    broadcasterRef.current.broadcast(snap, to);
-                },
-                (tick, to) => {
-                    if (broadcasterRef.current === null) {
-                        throw new Error(
-                            'StateBroadcaster used before hosted session wiring completed',
-                        );
-                    }
-                    broadcasterRef.current.broadcastTick(tick, to);
-                },
-                {
-                    gameId: HOSTED_GAME_ID,
-                    savePort: {
-                        autoSave: async (
-                            gameId: string,
-                            snapshot: BaseGameSnapshot,
-                        ): Promise<void> => {
-                            if (activeSession === null) return;
-                            const file = activeSession.captureSaveFile({ gameId }, snapshot);
-                            await saveManager.autoSave(file);
-                        },
+            const { processAction, clearUndoHistory, undoManager, replay } =
+                buildHostSessionPipeline(
+                    gameRegistry,
+                    (snap, to) => {
+                        if (broadcasterRef.current === null) {
+                            throw new Error(
+                                'StateBroadcaster used before hosted session wiring completed',
+                            );
+                        }
+                        broadcasterRef.current.broadcast(snap, to);
                     },
-                    gameEndPort: {
-                        onGameEnd: (snapshot, result) => {
-                            simulationHostRef.current?.onGameEnd(snapshot, result);
-                        },
+                    (tick, to) => {
+                        if (broadcasterRef.current === null) {
+                            throw new Error(
+                                'StateBroadcaster used before hosted session wiring completed',
+                            );
+                        }
+                        broadcasterRef.current.broadcastTick(tick, to);
                     },
-                    replayPort,
-                    logger: lobbyLogger,
-                },
-            );
+                    {
+                        gameId: HOSTED_GAME_ID,
+                        savePort: {
+                            autoSave: async (
+                                gameId: string,
+                                snapshot: BaseGameSnapshot,
+                            ): Promise<void> => {
+                                if (activeSession === null) return;
+                                const file = activeSession.captureSaveFile({ gameId }, snapshot);
+                                await saveManager.autoSave(file);
+                            },
+                        },
+                        gameEndPort: {
+                            onGameEnd: (snapshot, result) => {
+                                simulationHostRef.current?.onGameEnd(snapshot, result);
+                            },
+                        },
+                        replayPort,
+                        logger: lobbyLogger,
+                        ...(debugPort === undefined ? {} : { debugPort }),
+                    },
+                );
 
             // Begin recording now that `seed` and `gameConfig` are resolved. The
             // gameConfig mirrors the inputs to `buildInitialHostedSessionSnapshot`

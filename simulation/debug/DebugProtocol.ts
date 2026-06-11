@@ -103,4 +103,6 @@ export type DebugResponse<TState extends BaseGameSnapshot = BaseGameSnapshot> =
     | { readonly type: 'ACTION_LOG'; readonly entries: readonly ActionHistoryEntry[] }
     | { readonly type: 'PERF_STATS'; readonly stats: PerfStats }
     | { readonly type: 'LIVE_TICK'; readonly tick: number; readonly snapshot: Readonly<TState> }
-    | { readonly type: 'ERROR'; readonly message: string };
+    | { readonly type: 'ERROR'; readonly message: string }
+    // Data-free acknowledgement for SUBSCRIBE_LIVE / UNSUBSCRIBE_LIVE.
+    | { readonly type: 'ACK' };

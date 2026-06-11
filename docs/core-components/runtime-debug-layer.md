@@ -33,14 +33,27 @@ export const IS_DEBUG_MODE =
 | CI (unit/integration) | absent          | `false`         | Never                |
 | E2E tests             | absent          | `false`         | Never                |
 
-Dynamic import gate in `electron/main/index.ts`:
+Dynamic import gate in `electron/main/index.ts` — the dot-access constant lets the bundler's `define` replacement constant-fold the branch and tree-shake the debug graph:
 
 ```typescript
+let debugBridge: DebugBridge | undefined = undefined;
 if (IS_DEBUG_MODE) {
-    const { startDebugBridge } = await import('./debug-bridge');
-    await startDebugBridge(simulationHost, stateProjector);
+    const { startDebugBridge } = await import('./debug-bridge.js');
+    debugBridge = startDebugBridge({ ipcMain, logger, debugPreloadPath });
 }
+
+// Later, once per hosted session (getters are lazy — projector and replay
+// are declared after the attach inside the session wiring closure):
+const debugPort = debugBridge?.attachSession({
+    getProjector: () => projector,
+    getReplay: () => replay,
+});
+// debugPort (HostSessionDebugPort) feeds buildHostSessionPipeline, which
+// wires its observer into PipelineContext.debugObserver. Outside debug mode
+// debugPort is undefined and the pipeline context carries no debugObserver.
 ```
+
+`startDebugBridge` registers the IPC surface immediately but creates **no** Inspector window — the window is lazily created on the first `chimera:debug:toggle-inspector` send and closed on the next. `attachSession` resets the ring buffer, inspector, action log, and mementos for each freshly hosted session (live subscribers and the window survive re-attach).
 
 > **Invariant #27** — `CHIMERA_DEBUG` must never appear in production packaging. The production build asserts `IS_DEBUG_MODE === false` at startup.
 
@@ -154,8 +167,19 @@ export type DebugResponse =
     | { type: 'ACTION_LOG'; entries: ActionHistoryEntry[] }
     | { type: 'PERF_STATS'; stats: PerfStats }
     | { type: 'LIVE_TICK'; tick: number; snapshot: GameSnapshot }
-    | { type: 'ERROR'; message: string };
+    | { type: 'ERROR'; message: string }
+    | { type: 'ACK' }; // data-free acknowledgement for SUBSCRIBE_LIVE / UNSUBSCRIBE_LIVE
 ```
+
+### IPC channels
+
+Channel constants are plain strings in `shared/constants.ts` (precedent: `CLEAN_EXIT_IPC_CHANNEL`) so the Inspector preload mirrors them without importing the debug module graph (Invariant #27). In production no handler or listener exists on any of them — renderer sends are true no-ops.
+
+| Constant                         | Channel                          | Direction                 | Payload                                                             |
+| -------------------------------- | -------------------------------- | ------------------------- | ------------------------------------------------------------------- |
+| `DEBUG_CHANNEL`                  | `chimera:debug`                  | Inspector → Main (invoke) | `DebugRequest` → `DebugResponse`; sender validated (Invariant #29)  |
+| `DEBUG_TOGGLE_INSPECTOR_CHANNEL` | `chimera:debug:toggle-inspector` | Renderer → Main (send)    | none — lazily creates the Inspector window / closes it on re-toggle |
+| `DEBUG_PUSH_CHANNEL`             | `chimera:debug:push`             | Main → Inspector (send)   | `LIVE_TICK` responses for `SUBSCRIBE_LIVE` subscribers              |
 
 ---
 
