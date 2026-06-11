@@ -12,7 +12,10 @@
  * Populated as F47 tasks land:
  *   - T1 (#690): SnapshotRingBuffer, RingBufferEntry,
  *                DEFAULT_RING_BUFFER_CAPACITY
+ *   - T2 (#691): diffSnapshots, DiffEntry, SnapshotDiff
  */
 
 export { SnapshotRingBuffer, DEFAULT_RING_BUFFER_CAPACITY } from './SnapshotRingBuffer.js';
 export type { RingBufferEntry } from './SnapshotRingBuffer.js';
+export { diffSnapshots } from './SnapshotDiff.js';
+export type { DiffEntry, SnapshotDiff } from './SnapshotDiff.js';
