@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { SnapshotRingBuffer } from './SnapshotRingBuffer.js';
+import { DEFAULT_RING_BUFFER_CAPACITY, SnapshotRingBuffer } from './SnapshotRingBuffer.js';
 import type { RingBufferEntry } from './SnapshotRingBuffer.js';
 import { gamePhase } from '../engine/types.js';
 import type { BaseGameSnapshot } from '../engine/types.js';
@@ -65,6 +65,18 @@ describe('SnapshotRingBuffer — constructor', () => {
 
     it('throws RangeError for a non-integer capacity', () => {
         expect(() => new SnapshotRingBuffer(2.5)).toThrow(RangeError);
+    });
+});
+
+// ─── capacity getter (PerfStats.ringBufferFill, F47 T3) ───────────────────────
+
+describe('SnapshotRingBuffer — capacity getter', () => {
+    it('reports the constructed capacity', () => {
+        expect(new SnapshotRingBuffer(3).capacity).toBe(3);
+    });
+
+    it('defaults to DEFAULT_RING_BUFFER_CAPACITY', () => {
+        expect(new SnapshotRingBuffer().capacity).toBe(DEFAULT_RING_BUFFER_CAPACITY);
     });
 });
 

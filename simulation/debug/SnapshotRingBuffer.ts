@@ -79,6 +79,11 @@ export class SnapshotRingBuffer<TState extends BaseGameSnapshot = BaseGameSnapsh
         this.onRecord?.(entry);
     }
 
+    /** Fixed capacity (Invariant #30); exposed for `PerfStats.ringBufferFill`. */
+    get capacity(): number {
+        return this.#capacity;
+    }
+
     /** O(1) lookup; `undefined` when the tick was never recorded or evicted. */
     get(tick: number): RingBufferEntry<TState> | undefined {
         const slot = this.#tickToSlot.get(tick);
