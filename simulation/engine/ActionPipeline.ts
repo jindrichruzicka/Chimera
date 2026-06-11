@@ -137,6 +137,10 @@ type MutableReduceContext = { -readonly [K in keyof ReduceContext]: ReduceContex
  *   6. History record      — appends ActionEnvelope to HistoryContext (F16).
  *   7. Snapshot broadcast  — fires only when nextState !== snapshot (F26).
  *
+ * Between stages 5 and 7 the optional `context.debugObserver` is invoked with
+ * the post-reduce state (§4.12, Invariant #31) — undefined in production. The
+ * Stage-3 undo/redo intercept fires it likewise with the reconstructed state.
+ *
  * Constructor:
  *   `new ActionPipeline(registry, { logger?, context? })`
  *   `context` is an optional `PipelineContext` carrying all role-specific
@@ -314,6 +318,11 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                     : undoManager.redo(action.playerId, steps);
             const resolvedReconstructed = this.#resolveGameResult(reconstructed as TState);
 
+            // Debug observer hook (§4.12) — fires on the intercept path too, so
+            // a live Inspector sees undo/redo transitions and the ring buffer
+            // replaces any stale entry held for the reconstructed tick.
+            this.#context.debugObserver?.(resolvedReconstructed.tick, resolvedReconstructed);
+
             // Stage 6 equivalent — record undo/redo in history so it appears in replay.
             this.#context.history?.append({
                 tickApplied: snapshot.tick,
@@ -371,6 +380,13 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             playerId: action.playerId,
             tick: action.tick,
         });
+
+        // ── Debug observer hook (§4.12, Invariant #31) ─────────────────────
+        // The single simulation-side debug coupling: pushes the post-reduce
+        // state to the Runtime Debug Layer (SnapshotRingBuffer) between
+        // stage 5 (reduce) and stage 7 (broadcast). `debugObserver` is
+        // undefined in production — the optional chain is the entire cost.
+        this.#context?.debugObserver?.(nextState.tick, nextState);
 
         // ── Stage 6 — history record ────────────────────────────────────────
         // Append the action envelope to the history so the undo/redo subsystem

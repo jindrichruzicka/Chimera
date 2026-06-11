@@ -353,8 +353,13 @@ export interface BroadcastContext {
 /**
  * Narrow context for pipeline stages that emit debug observations.
  *
- * Allows the runtime debug layer (§4.26) to inspect every tick/snapshot pair
+ * Allows the runtime debug layer (§4.12) to inspect every tick/snapshot pair
  * without the pipeline having a hard dependency on the debug subsystem.
+ *
+ * Contract: the observer must never throw. The pipeline invokes it unguarded
+ * (the exact §4.12 call shape), so a thrown error would abort the in-flight
+ * authoritative action — and on the stage-3 undo/redo intercept path also skip
+ * the history append. The debug bridge catches all errors inside its observer.
  *
  * Invariant #12: each pipeline stage receives only the context it needs.
  */

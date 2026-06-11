@@ -170,6 +170,12 @@ context.debugObserver?.(nextState.tick, nextState);
 
 `debugObserver` is `undefined` in production — zero overhead.
 
+The stage-3 undo/redo intercept (which short-circuits stages 4–5) fires the same callback with the reconstructed state, so the Inspector timeline sees undo/redo transitions and the ring buffer never holds a stale entry for a reconstructed tick.
+
+The observer fires once per `process()` invocation, outer and nested dispatches alike, so consumers (e.g. a `LIVE_TICK` push from `onRecord`) may receive several intermediate states for the same tick; the final same-tick record supersedes the intermediates via the ring buffer's in-place replacement.
+
+**Observer contract:** the pipeline invokes the callback unguarded — exactly the call shape above — so the observer must never throw. A thrown error would abort the in-flight authoritative action, and on the stage-3 intercept path also skip the undo/redo history append. The debug bridge therefore catches all errors inside its observer and reports failures over its own channel instead of letting them propagate into the pipeline.
+
 ---
 
 ## Inspector Window UI Panels

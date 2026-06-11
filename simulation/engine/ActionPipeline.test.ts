@@ -39,7 +39,9 @@ import type {
     PipelineContext,
 } from './types.js';
 import { playerId as toPlayerId, isReduceContext } from './types.js';
+import type { GameTimer, TimerId } from './GameTimer.js';
 import { createContentDatabase } from '../content/index.js';
+import { SnapshotRingBuffer } from '../debug/SnapshotRingBuffer.js';
 import {
     engineUndoDefinition,
     engineRedoDefinition,
@@ -485,6 +487,217 @@ describe('ActionPipeline — post-reduce game-result resolution', () => {
         expect(next).toBe(resolvedSnapshot);
         expect(broadcast).toHaveBeenCalledOnce();
         expect(broadcast).toHaveBeenCalledWith(resolvedSnapshot, PID);
+    });
+});
+
+// ─── debugObserver hook (§4.12, Invariant #31) ────────────────────────────────
+
+describe('ActionPipeline — debugObserver hook (§4.12, Invariant #31)', () => {
+    const advanceDef: ActionDefinition<Record<string, never>> = {
+        type: 'game:advance',
+        parsePayload: () => ({}),
+        validate: () => ({ ok: true }),
+        reduce: (state) => ({ ...state, tick: state.tick + 1 }),
+    };
+
+    it('calls debugObserver once with the post-reduce tick and state', () => {
+        const debugObserver = vi.fn();
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(advanceDef);
+        const p = new ActionPipeline(r, { context: { debugObserver } });
+
+        const next = p.process(makeSnapshot(0), makeEnvelope(0, 'game:advance'));
+
+        expect(debugObserver).toHaveBeenCalledOnce();
+        expect(debugObserver).toHaveBeenCalledWith(next.tick, next);
+        expect(next.tick).toBe(1);
+    });
+
+    it('passes the game-result-resolved state, not the raw reducer output', () => {
+        const debugObserver = vi.fn();
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(advanceDef);
+        r.registerGame('test-game', {
+            resolveGameResult: (snapshot) => (snapshot.tick === 1 ? { winnerIds: [PID] } : null),
+        });
+        const p = new ActionPipeline(r, { context: { debugObserver }, gameId: 'test-game' });
+
+        const next = p.process(makeSnapshot(0), makeEnvelope(0, 'game:advance'));
+
+        expect(debugObserver).toHaveBeenCalledOnce();
+        const [observedTick, observedState] = debugObserver.mock.calls[0] as [
+            number,
+            BaseGameSnapshot,
+        ];
+        expect(observedTick).toBe(1);
+        expect(observedState).toBe(next);
+        expect(observedState.gameResult).toEqual({ winnerIds: [PID] });
+    });
+
+    it('fires even when the reducer returns the input state unchanged', () => {
+        const debugObserver = vi.fn();
+        const p = new ActionPipeline(registry, { context: { debugObserver } });
+        const snapshot = makeSnapshot(0);
+
+        const next = p.process(snapshot, makeEnvelope(0));
+
+        expect(next).toBe(snapshot);
+        expect(debugObserver).toHaveBeenCalledOnce();
+        expect(debugObserver).toHaveBeenCalledWith(0, snapshot);
+    });
+
+    it('is unaffected when debugObserver is undefined — production path (Invariant #31)', () => {
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(advanceDef);
+        const p = new ActionPipeline(r, { context: {} });
+        const frozen = Object.freeze(makeSnapshot(0));
+
+        const next = p.process(frozen, makeEnvelope(0, 'game:advance'));
+
+        expect(next.tick).toBe(1);
+        expect(frozen.tick).toBe(0); // input never mutated
+    });
+
+    it('feeds a real SnapshotRingBuffer wired as debugObserver', () => {
+        const buffer = new SnapshotRingBuffer();
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.register(advanceDef);
+        const p = new ActionPipeline(r, {
+            context: { debugObserver: (tick, snapshot) => buffer.record(tick, snapshot) },
+        });
+
+        const next = p.process(makeSnapshot(0), makeEnvelope(0, 'game:advance'));
+
+        expect(buffer.get(1)?.snapshot).toBe(next);
+        expect(buffer.allTicks()).toEqual([1]);
+    });
+
+    // ── Stage-3 undo/redo intercept path ──────────────────────────────────────
+    // The intercept short-circuits Stages 4–5 but still produces a new
+    // authoritative state, so the observer must fire there too — otherwise a
+    // live Inspector never sees undo/redo transitions and the ring buffer can
+    // hold a stale entry for the reconstructed tick.
+
+    const makeInterceptUndoManager = (
+        reconstructed: BaseGameSnapshot,
+    ): NonNullable<PipelineContext['undoManager']> => ({
+        canUndo: vi.fn(() => true),
+        canRedo: vi.fn(() => true),
+        undo: vi.fn(() => reconstructed),
+        redo: vi.fn(() => reconstructed),
+        clearUndoHistory: vi.fn(),
+        saveTurnMemento: vi.fn(),
+    });
+
+    it('fires on the Stage-3 engine:undo intercept path with the reconstructed state', () => {
+        const debugObserver = vi.fn();
+        const reconstructed = makeSnapshot(3);
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.registerEngineAction(engineUndoDefinition);
+        const p = new ActionPipeline(r, {
+            context: { undoManager: makeInterceptUndoManager(reconstructed), debugObserver },
+        });
+
+        const result = p.process(makeSnapshot(5), makeEnvelope(5, 'engine:undo'));
+
+        expect(result).toBe(reconstructed);
+        expect(debugObserver).toHaveBeenCalledOnce();
+        expect(debugObserver).toHaveBeenCalledWith(3, reconstructed);
+    });
+
+    it('fires on the Stage-3 engine:redo intercept path with the reconstructed state', () => {
+        const debugObserver = vi.fn();
+        const reconstructed = makeSnapshot(4);
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.registerEngineAction(engineRedoDefinition);
+        const p = new ActionPipeline(r, {
+            context: { undoManager: makeInterceptUndoManager(reconstructed), debugObserver },
+        });
+
+        const result = p.process(makeSnapshot(5), makeEnvelope(5, 'engine:redo'));
+
+        expect(result).toBe(reconstructed);
+        expect(debugObserver).toHaveBeenCalledOnce();
+        expect(debugObserver).toHaveBeenCalledWith(4, reconstructed);
+    });
+
+    it('passes the game-result-resolved state on the undo intercept path, not the raw reconstruction', () => {
+        const debugObserver = vi.fn();
+        const reconstructed = makeSnapshot(3);
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.registerEngineAction(engineUndoDefinition);
+        r.registerGame('test-game', {
+            resolveGameResult: (snapshot) => (snapshot.tick === 3 ? { winnerIds: [PID] } : null),
+        });
+        const p = new ActionPipeline(r, {
+            context: { undoManager: makeInterceptUndoManager(reconstructed), debugObserver },
+            gameId: 'test-game',
+        });
+
+        const result = p.process(makeSnapshot(5), makeEnvelope(5, 'engine:undo'));
+
+        expect(debugObserver).toHaveBeenCalledOnce();
+        expect(debugObserver).toHaveBeenCalledWith(3, result);
+        const [, observedState] = debugObserver.mock.calls[0] as [number, BaseGameSnapshot];
+        expect(observedState.gameResult).toEqual({ winnerIds: [PID] });
+    });
+
+    // ── Nested dispatch (engine:tick timers) ─────────────────────────────────
+    // The observer fires at every dispatch depth (unlike history/broadcast,
+    // which are gated to depth 0); same-tick re-records collapse in place so
+    // the buffer ends up holding only the final state for the tick.
+
+    it('collapses nested-dispatch intermediates: the buffer keeps only the final engine:tick state', () => {
+        const markDef = (type: string): ActionDefinition<Record<string, never>> => ({
+            type,
+            parsePayload: () => ({}),
+            validate: () => ({ ok: true }),
+            reduce: (state) => ({ ...state, events: [...state.events, { type }] }),
+        });
+        const makeFiringTimer = (id: string, actionType: string): GameTimer => ({
+            id: id as TimerId,
+            remainingTicks: 1,
+            intervalTicks: 0,
+            actionType,
+            payload: {},
+            active: true,
+        });
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.registerEngineAction(engineTickDefinition);
+        r.register(markDef('game:mark_a'));
+        r.register(markDef('game:mark_b'));
+
+        const buffer = new SnapshotRingBuffer();
+        const recorded: { tick: number; eventTypes: string[] }[] = [];
+        buffer.onRecord = (entry) => {
+            recorded.push({
+                tick: entry.tick,
+                eventTypes: entry.snapshot.events.map((e) => e.type),
+            });
+        };
+        const p = new ActionPipeline(r, {
+            context: { debugObserver: (tick, snapshot) => buffer.record(tick, snapshot) },
+        });
+
+        const snapshot: BaseGameSnapshot = {
+            ...makeSnapshot(0),
+            timers: {
+                ['tmr-a' as TimerId]: makeFiringTimer('tmr-a', 'game:mark_a'),
+                ['tmr-b' as TimerId]: makeFiringTimer('tmr-b', 'game:mark_b'),
+            },
+        };
+        const next = p.process(snapshot, makeEnvelope(0, 'engine:tick', { seed: 1 }));
+
+        // onRecord saw every depth: two nested intermediates, then the outer final.
+        expect(recorded).toEqual([
+            { tick: 1, eventTypes: ['game:mark_a'] },
+            { tick: 1, eventTypes: ['game:mark_a', 'game:mark_b'] },
+            { tick: 1, eventTypes: ['game:mark_a', 'game:mark_b'] },
+        ]);
+        // Same-tick re-records collapsed in place — one slot, holding the final state.
+        expect(buffer.allTicks()).toEqual([1]);
+        expect(buffer.get(1)?.snapshot).toBe(next);
+        expect(next.events.map((e) => e.type)).toEqual(['game:mark_a', 'game:mark_b']);
     });
 });
 

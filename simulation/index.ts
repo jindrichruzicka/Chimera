@@ -13,6 +13,9 @@
  *   - F26 (§8): projection types (StateProjector interface, VisibilityRules, VisibilityScope)
  */
 
+// debug/ is deliberately NOT re-exported here: it is debug-mode-only tooling
+// (Invariant #31), imported via the `@chimera/simulation/debug` subpath so the
+// production root barrel never pulls in its module graph.
 export * from './engine/index.js';
 export * from './scene/index.js';
 export * from './persistence/index.js';
