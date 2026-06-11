@@ -118,6 +118,86 @@ if [[ -f "${GAMESHELL}" ]]; then
     )
 fi
 
+# ─── Check 8: CHIMERA_DEBUG never appears in packaging config (invariant 27) ──
+# Production packaging must never be able to set the debug flag. The scan
+# recurses the whole tree so packaging configs in subdirectories (e.g.
+# build/electron-builder.yml) are guarded the moment they land; third-party
+# and generated trees (node_modules, .git, dist, out, coverage) are pruned —
+# they are outside the invariant and node_modules would dominate the scan.
+# Deliberately broader than the invariant text: a dev-only script setting
+# CHIMERA_DEBUG would also be flagged — debug-mode dev entry points must live
+# outside package.json (e.g. under tools/).
+while IFS= read -r cfg; do
+    cfg="${cfg#./}"
+    while IFS= read -r match; do
+        violation "27" "${cfg}:${match}"
+    done < <(grep -n 'CHIMERA_DEBUG' "${cfg}" || true)
+done < <(
+    find . \( -name node_modules -o -name .git -o -name dist -o -name out -o -name coverage \) -prune -o \
+        -type f \( -name 'package.json' \
+            -o -name 'electron-builder*.json' -o -name 'electron-builder*.yml' \
+            -o -name 'electron-builder*.yaml' -o -name 'electron-builder*.js' \
+            -o -name 'forge.config.*' \) -print 2>/dev/null \
+    | sort
+)
+
+# ─── Check 9: IS_DEBUG_MODE keeps its define-replaceable shape (invariant 27) ─
+# Bundler `define` replacement only matches dot-access member expressions; a
+# refactor to bracket access would silently break production tree-shaking of
+# the debug module graph. Both reads of the expression are pinned — the
+# CHIMERA_DEBUG flag and the NODE_ENV production gate.
+CONSTANTS="shared/constants.ts"
+if [[ -f "${CONSTANTS}" ]]; then
+    # Anchor to the assignment itself: strip /* */ block comments (a block
+    # comment citing the full spec shape must not anchor the capture) and all
+    # `//` comments — full-line and trailing — then capture from
+    # `export const IS_DEBUG_MODE` through its terminating `;`, so the pinned
+    # literals surviving in any comment cannot mask a regressed initializer.
+    # The stripper is string-aware: `//` and `/*` inside '…'/"…"/`…` literals
+    # (URLs, globs) are content, not comment markers, and must survive — a
+    # string-blind stripper truncates them and raises false violations.
+    # Known limitation: regex literals are not modelled; a `//` inside one
+    # would still be treated as a comment (fails closed — false positive).
+    IS_DEBUG_ASSIGNMENT=$(
+        awk '{
+            line = $0; out = ""
+            n = length(line); i = 1
+            while (i <= n) {
+                c = substr(line, i, 1)
+                two = substr(line, i, 2)
+                if (inblock) {
+                    if (two == "*/") { inblock = 0; i += 2 } else { i++ }
+                } else if (instr != "") {
+                    out = out c
+                    if (c == "\\") { out = out substr(line, i + 1, 1); i += 2 }
+                    else { if (c == instr) instr = ""; i++ }
+                } else if (two == "/*") { inblock = 1; i += 2 }
+                else if (two == "//") { break }
+                else {
+                    if (c == "\x27" || c == "\"" || c == "`") instr = c
+                    out = out c; i++
+                }
+            }
+            # Only template literals span lines; an open quote string at EOL
+            # is invalid JS — reset so it cannot poison the following lines.
+            if (instr == "\x27" || instr == "\"") instr = ""
+            print out
+        }' "${CONSTANTS}" \
+        | awk '/export const IS_DEBUG_MODE/{found=1} found{print} found&&/;/{exit}' \
+        || true
+    )
+    if [[ -z "${IS_DEBUG_ASSIGNMENT}" ]]; then
+        violation "27" "${CONSTANTS}: export const IS_DEBUG_MODE assignment not found (invariant 27 pins its define-replaceable shape)"
+    else
+        if ! grep -q "process\.env\.CHIMERA_DEBUG === '1'" <<<"${IS_DEBUG_ASSIGNMENT}"; then
+            violation "27" "${CONSTANTS}: IS_DEBUG_MODE must read process.env.CHIMERA_DEBUG === '1' via dot access (define-replaceable shape)"
+        fi
+        if ! grep -q "process\.env\.NODE_ENV !== 'production'" <<<"${IS_DEBUG_ASSIGNMENT}"; then
+            violation "27" "${CONSTANTS}: IS_DEBUG_MODE must read process.env.NODE_ENV !== 'production' via dot access (define-replaceable shape)"
+        fi
+    fi
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

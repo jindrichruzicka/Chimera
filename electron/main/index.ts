@@ -139,7 +139,7 @@ import {
     type E2eFirstPlayerRole,
     type E2eHooks,
 } from './runtime/e2e-hooks.js';
-import { assertProductionDebugGuard } from './startup-guard.js';
+import { assertProductionDebugGuard, assertProductionDevHarnessGuard } from './startup-guard.js';
 import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import {
     localProfileId,
@@ -919,9 +919,7 @@ export async function main(): Promise<void> {
     assertProductionDebugGuard(process.env);
 
     // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
-    if (process.env['CHIMERA_DEV_HARNESS'] === '1' && process.env['NODE_ENV'] === 'production') {
-        throw new Error('CHIMERA_DEV_HARNESS is enabled in a production build. Refusing to start.');
-    }
+    assertProductionDevHarnessGuard(process.env);
 
     const { preloadPath, rendererEntry, gameAssetsRoot } = resolveRuntimePaths({
         moduleDirname: __dirname,

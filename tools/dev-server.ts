@@ -124,7 +124,10 @@ export type SpawnFn = (command: string, args: string[], options: SpawnOptions) =
  * terminates the entire group, preventing orphan `sh → pnpm → electron`
  * chains that arise from `shell: true`.
  */
-export function spawnElectronProcess(spawnFn: SpawnFn, env: NodeJS.ProcessEnv): ChildProcess {
+export function spawnElectronProcess(
+    spawnFn: SpawnFn,
+    env: Readonly<Record<string, string | undefined>>,
+): ChildProcess {
     return spawnFn('pnpm', ['electron', '.'], {
         stdio: 'inherit',
         detached: true,

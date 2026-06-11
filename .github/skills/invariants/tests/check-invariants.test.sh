@@ -341,6 +341,362 @@ test_clean_gameshell_passes() {
     fi
 }
 
+# Test 13: CHIMERA_DEBUG in package.json → violation [invariant-27]
+test_chimera_debug_in_package_json_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "package.json" \
+        '{ "scripts": { "dev:debug": "cross-env CHIMERA_DEBUG=1 electron ." } }'
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\].*package.json'; then
+            pass "CHIMERA_DEBUG in package.json detected as [invariant-27]"
+        else
+            fail "CHIMERA_DEBUG violation detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "CHIMERA_DEBUG in package.json not detected (exit 0)"
+    fi
+}
+
+# Test 14: bracket-access CHIMERA_DEBUG read in shared/constants.ts
+#          → violation [invariant-27] (breaks define replacement)
+test_bracket_access_chimera_debug_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const IS_DEBUG_MODE = process.env['CHIMERA_DEBUG'] === '1' && process.env.NODE_ENV !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\].*CHIMERA_DEBUG'; then
+            pass "bracket-access CHIMERA_DEBUG read detected as [invariant-27]"
+        else
+            fail "bracket-access CHIMERA_DEBUG detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "bracket-access CHIMERA_DEBUG read not detected (exit 0)"
+    fi
+}
+
+# Test 15: bracket-access NODE_ENV read in shared/constants.ts
+#          → violation [invariant-27] (both reads must stay dot access)
+test_bracket_access_node_env_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env['NODE_ENV'] !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\].*NODE_ENV'; then
+            pass "bracket-access NODE_ENV read detected as [invariant-27]"
+        else
+            fail "bracket-access NODE_ENV detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "bracket-access NODE_ENV read not detected (exit 0)"
+    fi
+}
+
+# Test 16: clean package.json + spec-shaped shared/constants.ts → exit 0
+test_clean_debug_mode_shape_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "package.json" \
+        '{ "scripts": { "dev": "electron ." } }'
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "clean package.json and dot-access IS_DEBUG_MODE not flagged"
+    else
+        fail "clean debug-mode shape wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 17: dot-access literals surviving only in a comment while the real
+#          initializer regressed to bracket access → still flagged
+#          [invariant-27] (check must anchor to the assignment, not the file)
+test_comment_masked_bracket_access_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "// Spec shape: process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'"$'\n'"export const IS_DEBUG_MODE = process.env['CHIMERA_DEBUG'] === '1' && process.env['NODE_ENV'] !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\]'; then
+            pass "comment-masked bracket-access initializer detected as [invariant-27]"
+        else
+            fail "comment-masked bracket access detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "comment-masked bracket-access initializer not detected (exit 0)"
+    fi
+}
+
+# Test 18: shared/constants.ts exists but the IS_DEBUG_MODE assignment was
+#          removed/renamed → flagged [invariant-27] (shape can't be verified)
+test_missing_is_debug_mode_assignment_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const CLEAN_EXIT_FLAG_FILENAME = 'lastCleanExit.flag';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\].*IS_DEBUG_MODE'; then
+            pass "missing IS_DEBUG_MODE assignment detected as [invariant-27]"
+        else
+            fail "missing assignment detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "missing IS_DEBUG_MODE assignment not detected (exit 0)"
+    fi
+}
+
+# Test 19: real-file layout — docblock above a multi-line dot-access
+#          assignment → NOT flagged (anchored extraction spans the full
+#          statement and ignores surrounding comments)
+test_multiline_spec_shape_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "/**"$'\n'" * Invariant #27: production asserts IS_DEBUG_MODE === false at startup."$'\n'" */"$'\n'"export const IS_DEBUG_MODE ="$'\n'"    process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "multi-line dot-access IS_DEBUG_MODE with docblock not flagged"
+    else
+        fail "multi-line spec shape wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 20: dot-access literals surviving only in a /* */ block comment while
+#          the real initializer regressed to bracket access → still flagged
+#          [invariant-27] (block comments must not anchor the extraction)
+test_block_comment_masked_bracket_access_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "/**"$'\n'" * Spec shape: export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"$'\n'" */"$'\n'"export const IS_DEBUG_MODE = process.env['CHIMERA_DEBUG'] === '1' && process.env['NODE_ENV'] !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\]'; then
+            pass "block-comment-masked bracket-access initializer detected as [invariant-27]"
+        else
+            fail "block-comment-masked bracket access detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "block-comment-masked bracket-access initializer not detected (exit 0)"
+    fi
+}
+
+# Test 21: /* */ block comment citing the full spec shape above a clean
+#          dot-access assignment → NOT flagged (stripping block comments must
+#          not break the real-assignment extraction)
+test_block_comment_spec_citation_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "/**"$'\n'" * Spec shape: export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"$'\n'" */"$'\n'"export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "block-comment spec citation above clean assignment not flagged"
+    else
+        fail "block-comment spec citation wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 22: dot-access literals surviving only in a trailing // comment while
+#          the real initializer regressed → still flagged [invariant-27]
+#          (a trailing comment on the assignment line must not mask it)
+test_trailing_comment_masked_regression_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const IS_DEBUG_MODE = true; // spec: process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\]'; then
+            pass "trailing-comment-masked regressed initializer detected as [invariant-27]"
+        else
+            fail "trailing-comment-masked regression detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "trailing-comment-masked regressed initializer not detected (exit 0)"
+    fi
+}
+
+# Test 23: trailing // comment on a clean dot-access assignment → NOT flagged
+#          (comment stripping must not break the real-assignment extraction)
+test_trailing_comment_on_clean_assignment_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production'; // baked at build time"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "trailing comment on clean dot-access assignment not flagged"
+    else
+        fail "trailing comment on clean assignment wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 24: CHIMERA_DEBUG in a nested packaging config (e.g. build/electron-builder.yml)
+#          → violation [invariant-27] (scan must recurse beyond the repo root)
+test_chimera_debug_in_nested_packaging_config_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "build/electron-builder.yml" \
+        'extraMetadata:'$'\n''  env:'$'\n''    CHIMERA_DEBUG: "1"'
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-27\].*build/electron-builder.yml'; then
+            pass "CHIMERA_DEBUG in nested packaging config detected as [invariant-27]"
+        else
+            fail "nested packaging config violation detected but invariant number/path missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "CHIMERA_DEBUG in nested packaging config not detected (exit 0)"
+    fi
+}
+
+# Test 25: CHIMERA_DEBUG in node_modules/*/package.json → NOT flagged
+#          (third-party packages are outside the packaging-config invariant;
+#          guards the recursive scan against over-flagging)
+test_chimera_debug_in_node_modules_not_flagged() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "node_modules/some-dep/package.json" \
+        '{ "scripts": { "weird": "CHIMERA_DEBUG=1 node ./bin.js" } }'
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "CHIMERA_DEBUG in node_modules/ package.json not flagged (no false positive)"
+    else
+        fail "CHIMERA_DEBUG in node_modules/ wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 26: clean dot-access assignment containing a string literal with `//`
+#          (a URL) before the pinned reads → NOT flagged (the line-comment
+#          stripper must not truncate inside string literals)
+test_url_string_in_assignment_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const IS_DEBUG_MODE = process.env.UPDATE_URL !== 'https://updates.chimera.dev' && process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "URL string literal inside the assignment not flagged (no false positive)"
+    else
+        fail "URL string literal inside the assignment wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 27: string literal containing `/*` (a glob) on a line before a clean
+#          dot-access assignment → NOT flagged (the block-comment stripper
+#          must not open a comment inside a string literal and swallow the
+#          rest of the file)
+test_glob_string_before_assignment_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/constants.ts" \
+        "export const SAVE_GLOB = 'saves/*.json';"$'\n'"export const IS_DEBUG_MODE = process.env.CHIMERA_DEBUG === '1' && process.env.NODE_ENV !== 'production';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "glob string literal before the assignment not flagged (no false positive)"
+    else
+        fail "glob string literal before the assignment wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -356,6 +712,21 @@ test_eslint_fixture_not_flagged
 test_production_still_flagged_alongside_test_mention
 test_games_import_in_gameshell_detected
 test_clean_gameshell_passes
+test_chimera_debug_in_package_json_detected
+test_bracket_access_chimera_debug_detected
+test_bracket_access_node_env_detected
+test_clean_debug_mode_shape_passes
+test_comment_masked_bracket_access_detected
+test_missing_is_debug_mode_assignment_detected
+test_multiline_spec_shape_passes
+test_block_comment_masked_bracket_access_detected
+test_block_comment_spec_citation_passes
+test_trailing_comment_masked_regression_detected
+test_trailing_comment_on_clean_assignment_passes
+test_chimera_debug_in_nested_packaging_config_detected
+test_chimera_debug_in_node_modules_not_flagged
+test_url_string_in_assignment_passes
+test_glob_string_before_assignment_passes
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

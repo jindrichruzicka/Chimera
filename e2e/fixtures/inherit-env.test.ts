@@ -23,6 +23,13 @@ describe('inheritEnv', () => {
         expect(result['PATH']).toBe('/usr/bin');
     });
 
+    it('strips CHIMERA_DEBUG so E2E launches never enter debug mode (§4.12 matrix)', () => {
+        const result = inheritEnv({ CHIMERA_DEBUG: '1', PATH: '/usr/bin' });
+
+        expect(result['CHIMERA_DEBUG']).toBeUndefined();
+        expect(result['PATH']).toBe('/usr/bin');
+    });
+
     it('drops undefined values to satisfy the launch env type', () => {
         const result = inheritEnv({ DEFINED: 'x', MISSING: undefined });
 

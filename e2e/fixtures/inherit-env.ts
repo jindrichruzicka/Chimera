@@ -10,12 +10,18 @@
  * Chromium flags Playwright injects to drive the app — most visibly
  * `--remote-debugging-port=0`, which Node reports as `bad option`. A GUI
  * Electron launch must never inherit it, so it is removed unconditionally.
+ *
+ * Strips CHIMERA_DEBUG: the §4.12 environment matrix (Invariant #27) requires
+ * E2E runs to never enter the runtime debug layer, so a debug flag exported by
+ * the developer's shell must not leak into the launched app.
  */
 
-const STRIPPED_ENV_KEYS: ReadonlySet<string> = new Set(['ELECTRON_RUN_AS_NODE']);
+const STRIPPED_ENV_KEYS: ReadonlySet<string> = new Set(['ELECTRON_RUN_AS_NODE', 'CHIMERA_DEBUG']);
 
 /** Filter out undefined and Node-mode-forcing entries from the source env. */
-export function inheritEnv(source: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function inheritEnv(
+    source: Readonly<Record<string, string | undefined>> = process.env,
+): Record<string, string> {
     return Object.fromEntries(
         Object.entries(source).filter(
             (entry): entry is [string, string] =>

@@ -2900,6 +2900,10 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
     });
 
     it('does not throw when CHIMERA_DEBUG is absent and NODE_ENV=production', async () => {
+        // Ambient sensitivity: the guard's default parameter bakes IS_DEBUG_MODE
+        // at module load, so a runner shell exporting CHIMERA_DEBUG=1 would make
+        // this case throw. The §4.12 matrix forbids CHIMERA_DEBUG in unit-test
+        // environments, so that ambient state is itself a violation.
         const origEnv = process.env;
         const { CHIMERA_DEBUG: _removed, ...envWithout } = origEnv;
         process.env = { ...envWithout, NODE_ENV: 'production', CHIMERA_DEV_HARNESS: undefined };

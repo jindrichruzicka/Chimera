@@ -12,6 +12,7 @@
         "**/*.ts",
         "**/*.tsx",
         "../electron/preload/api.ts",
+        "../shared/env.d.ts",
         "next-env.d.ts",
         ".next/types/**/*.ts"
     ],
