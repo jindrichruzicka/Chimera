@@ -183,4 +183,44 @@ describe('ActionLogPanel', () => {
         expect(screen.getByTestId('action-row-2')).toHaveAttribute('data-selected', 'true');
         expect(screen.getByTestId('action-row-1')).toHaveAttribute('data-selected', 'false');
     });
+
+    it('reports loaded entries through onEntriesLoaded after each fetch', async () => {
+        const user = userEvent.setup();
+        const onEntriesLoaded = vi.fn();
+        const api = createDebugApiMock({
+            getActionLog: vi.fn(() => Promise.resolve(ENTRIES)),
+        });
+        render(<ActionLogPanel api={api} onEntriesLoaded={onEntriesLoaded} selectedTick={null} />);
+
+        await waitUntilLoaded();
+        expect(onEntriesLoaded).toHaveBeenCalledTimes(1);
+        expect(onEntriesLoaded).toHaveBeenCalledWith(ENTRIES);
+
+        await user.click(screen.getByRole('button', { name: 'Refresh' }));
+
+        await waitFor(() => {
+            expect(onEntriesLoaded).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    it('invokes onNavigateToSnapshot with the row tick on double-click', async () => {
+        const user = userEvent.setup();
+        const onNavigateToSnapshot = vi.fn();
+        const api = createDebugApiMock({
+            getActionLog: vi.fn(() => Promise.resolve(ENTRIES)),
+        });
+        render(
+            <ActionLogPanel
+                api={api}
+                onNavigateToSnapshot={onNavigateToSnapshot}
+                selectedTick={null}
+            />,
+        );
+
+        await waitUntilLoaded();
+        await user.dblClick(screen.getByTestId('action-row-2'));
+
+        expect(onNavigateToSnapshot).toHaveBeenCalledTimes(1);
+        expect(onNavigateToSnapshot).toHaveBeenCalledWith(2);
+    });
 });

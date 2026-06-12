@@ -1,4 +1,5 @@
 .root {
+    block-size: 100%;
     display: flex;
     flex-direction: column;
     gap: var(--ch-space-sm);
@@ -20,14 +21,19 @@
     inline-size: calc(var(--ch-space-xl) * 2);
 }
 
-.scroll {
-    max-block-size: calc(var(--ch-space-xl) * 12);
+/* Fills the height-constrained panel to the window bottom. The descendant
+   selector outranks the ScrollArea base max-height regardless of CSS module
+   order. */
+.root .scroll {
+    flex: 1 1 auto;
+    max-block-size: none;
 }
 
 .table {
     border-collapse: collapse;
     font-size: var(--ch-font-size-sm);
     inline-size: 100%;
+    user-select: none;
 }
 
 .table th {
@@ -42,9 +48,16 @@
     padding: var(--ch-space-xs) var(--ch-space-sm);
 }
 
+.table tbody tr {
+    cursor: pointer;
+}
+
+.table tbody tr:hover td {
+    background: var(--ch-color-surface-raised);
+}
+
 .table tr[data-selected='true'] td {
     background: var(--ch-color-surface-raised);
-    box-shadow: inset var(--ch-border-width-md) 0 0 var(--ch-color-accent);
 }
 
 .tick,

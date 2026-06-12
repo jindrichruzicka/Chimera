@@ -1,38 +1,42 @@
 .root {
+    block-size: 100%;
     display: flex;
     flex-direction: column;
     gap: var(--ch-space-sm);
     min-block-size: 0;
 }
 
-.controls {
-    align-items: end;
-    display: flex;
-    gap: var(--ch-space-md);
-    justify-content: space-between;
-}
-
 .legend {
+    align-self: end;
     display: flex;
     gap: var(--ch-space-xs);
 }
 
+/* Three shared rows — controls (legend / player select), caption, tree.
+   Each column is a subgrid over them so the two trees always start at the
+   same offset and split the remaining height equally. */
 .columns {
+    column-gap: var(--ch-space-md);
     display: grid;
-    gap: var(--ch-space-md);
+    flex: 1 1 auto;
     grid-template-columns: 1fr 1fr;
+    grid-template-rows: auto auto minmax(0, 1fr);
     min-block-size: 0;
+    row-gap: var(--ch-space-xs);
 }
 
 .column {
-    display: flex;
-    flex-direction: column;
-    gap: var(--ch-space-xs);
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    min-block-size: 0;
     min-inline-size: 0;
 }
 
-.scroll {
-    max-block-size: calc(var(--ch-space-xl) * 12);
+/* Fills the shared tree row to the window bottom. The descendant selector
+   outranks the ScrollArea base max-height regardless of CSS module order. */
+.root .scroll {
+    max-block-size: none;
     padding: var(--ch-space-sm);
 }
 

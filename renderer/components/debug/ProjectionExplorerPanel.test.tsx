@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -46,7 +46,7 @@ describe('ProjectionExplorerPanel', () => {
         const api = createDebugApiMock();
         render(<ProjectionExplorerPanel api={api} selectedTick={null} />);
 
-        expect(screen.getByText('Select a tick to explore its projection.')).toBeInTheDocument();
+        expect(screen.getByText('Select a tick to explore its snapshot.')).toBeInTheDocument();
         expect(api.getSnapshot).not.toHaveBeenCalled();
         expect(api.getProjection).not.toHaveBeenCalled();
     });
@@ -143,6 +143,51 @@ describe('ProjectionExplorerPanel', () => {
         // only in the projection → extra.
         expect(container.querySelector('[data-highlight="hidden"]')).not.toBeNull();
         expect(container.querySelector('[data-highlight="extra"]')).not.toBeNull();
+    });
+
+    it('renders the highlight legend in the full-snapshot column, not the projection column', async () => {
+        const api = createDebugApiMock({
+            getSnapshot: vi.fn(() => Promise.resolve(makeSnapshotResult(5, FULL_SNAPSHOT))),
+            getProjection: vi.fn((tick: number, viewer: string) =>
+                Promise.resolve(makeProjectionFor(tick, viewer)),
+            ),
+        });
+        render(<ProjectionExplorerPanel api={api} selectedTick={5} />);
+
+        await waitFor(() => {
+            expect(screen.getAllByTestId('json-tree')).toHaveLength(2);
+        });
+
+        const fullColumn = screen.getByText(/Full snapshot \(debug truth\)/).closest('section');
+        const projectionColumn = screen.getByLabelText('Player').closest('section');
+        expect(fullColumn).not.toBeNull();
+        expect(projectionColumn).not.toBeNull();
+
+        for (const label of ['hidden', 'masked', 'projection-only']) {
+            expect(within(fullColumn!).getByText(label)).toBeInTheDocument();
+            expect(within(projectionColumn!).queryByText(label)).toBeNull();
+        }
+    });
+
+    it('renders the projection column first and the full-snapshot column second', async () => {
+        const api = createDebugApiMock({
+            getSnapshot: vi.fn(() => Promise.resolve(makeSnapshotResult(5, FULL_SNAPSHOT))),
+            getProjection: vi.fn((tick: number, viewer: string) =>
+                Promise.resolve(makeProjectionFor(tick, viewer)),
+            ),
+        });
+        render(<ProjectionExplorerPanel api={api} selectedTick={5} />);
+
+        await waitFor(() => {
+            expect(screen.getAllByTestId('json-tree')).toHaveLength(2);
+        });
+
+        const columns = screen
+            .getByTestId('snapshot-panel')
+            .querySelectorAll<HTMLElement>('section');
+        expect(columns).toHaveLength(2);
+        expect(within(columns[0]!).getByLabelText('Player')).toBeInTheDocument();
+        expect(within(columns[1]!).getByText(/Full snapshot \(debug truth\)/)).toBeInTheDocument();
     });
 
     it('shows an empty state when the snapshot has no players', async () => {

@@ -48,9 +48,9 @@ export function makeLiveTickEvent(tick: number): LiveTickEvent {
     return { tick, snapshot: makeSnapshotResult(tick).snapshot };
 }
 
-/** Timeline row fixture; metadata fields stay absent unless overridden. */
+/** Tick-list row fixture; metadata fields stay absent unless overridden. */
 export function makeTickEntry(overrides: Partial<TickEntry> & Pick<TickEntry, 'tick'>): TickEntry {
-    return { inRingBuffer: false, ...overrides };
+    return { inRingBuffer: false, resolvable: true, ...overrides };
 }
 
 /** Action-log row fixture with a branded `PlayerId`. */

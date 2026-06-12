@@ -149,16 +149,29 @@ export class SnapshotInspector<TState extends BaseGameSnapshot = BaseGameSnapsho
         for (const tick of this.#ringBuffer.allTicks()) {
             ticks.add(tick);
         }
+        let earliestMementoTick: number | undefined;
+        for (const memento of this.#getMementos()) {
+            if (
+                earliestMementoTick === undefined ||
+                memento.tickAtTurnStart < earliestMementoTick
+            ) {
+                earliestMementoTick = memento.tickAtTurnStart;
+            }
+        }
         return [...ticks]
             .sort((a, b) => a - b)
             .map((tick) => {
                 const logEntry = logByTick.get(tick);
                 const inRingBuffer = this.#ringBuffer.get(tick) !== undefined;
+                const resolvable =
+                    inRingBuffer ||
+                    (earliestMementoTick !== undefined && tick >= earliestMementoTick);
                 return logEntry === undefined
-                    ? { tick, inRingBuffer }
+                    ? { tick, inRingBuffer, resolvable }
                     : {
                           tick,
                           inRingBuffer,
+                          resolvable,
                           actionType: logEntry.action.type,
                           playerId: logEntry.action.playerId,
                           turnNumber: logEntry.turnNumber,

@@ -25,10 +25,12 @@ import {
     DEBUG_PUSH_CHANNEL,
 } from '@chimera/shared/constants.js';
 import {
+    createInspectorWindow,
     startDebugBridge,
     type DebugBridge,
     type DebugInvokeEvent,
     type DebugWebContentsLike,
+    type InspectorWindowOptions,
     type StartDebugBridgeOptions,
 } from './debug-bridge.js';
 import type { HostSessionDebugPort } from './runtime/HostSessionPipeline.js';
@@ -38,7 +40,11 @@ import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import type { ActionHistoryEntry } from '@chimera/simulation/engine/UndoManager.js';
 import type { PlayerSnapshot, StateProjector } from '@chimera/simulation/projection/index.js';
-import { FakeInspectorWindow, FakeWebContents } from './__test-support__/debug-fakes.js';
+import {
+    FakeFullInspectorWindow,
+    FakeInspectorWindow,
+    FakeWebContents,
+} from './__test-support__/debug-fakes.js';
 
 // The bridge statically imports `electron` for its default window factory;
 // tests always inject a fake factory, so a stub module suffices.
@@ -942,5 +948,133 @@ describe('debug-bridge — stop', () => {
         expect(h.ipc.handlers.has(DEBUG_CHANNEL)).toBe(false);
         expect(h.ipc.listeners.get(DEBUG_TOGGLE_INSPECTOR_CHANNEL) ?? []).toHaveLength(0);
         expect(win.closeCalls).toBe(1);
+    });
+});
+
+// ─── Default Inspector window construction (#701) ─────────────────────────────
+//
+// The default factory was previously untested: it shipped without a
+// backgroundColor (white flash / white-on-failure window) and silently showed
+// the bare protocol 404 ("Not found") when the renderer static export predates
+// the /debug route. Tests written FIRST (red).
+
+describe('debug-bridge — default Inspector window construction', () => {
+    interface FactoryHarness {
+        readonly window: FakeFullInspectorWindow;
+        readonly capturedOptions: InspectorWindowOptions[];
+        readonly logger: Logger;
+    }
+
+    function makeInspectorWindow(): FactoryHarness {
+        const capturedOptions: InspectorWindowOptions[] = [];
+        const window = new FakeFullInspectorWindow();
+        const logger = makeSpyLogger();
+        const created = createInspectorWindow({
+            newWindow: (options) => {
+                capturedOptions.push(options);
+                return window;
+            },
+            debugPreloadPath: '/tmp/debug-api.js',
+            logger,
+        });
+        expect(created).toBe(window);
+        return { window, capturedOptions, logger };
+    }
+
+    it('paints the bootstrap surface colour instead of default white', () => {
+        const h = makeInspectorWindow();
+        expect(h.capturedOptions[0]?.backgroundColor).toBe('#111113');
+    });
+
+    it('preserves the hardened webPreferences posture', () => {
+        const h = makeInspectorWindow();
+        expect(h.capturedOptions[0]?.webPreferences).toEqual({
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            webSecurity: true,
+            preload: '/tmp/debug-api.js',
+        });
+    });
+
+    it('loads the Inspector route on creation', () => {
+        const h = makeInspectorWindow();
+        expect(h.window.webContents.loadedUrls).toEqual(['chimera://renderer/debug/']);
+    });
+
+    it('replaces a failed document load (HTTP >= 400) with the dark diagnostic page', () => {
+        const h = makeInspectorWindow();
+
+        h.window.webContents.emitDidNavigate('chimera://renderer/debug/', 404, 'Not Found');
+
+        const fallbackUrl = h.window.webContents.loadedUrls[1];
+        expect(fallbackUrl).toMatch(/^data:text\/html/);
+        const html = decodeURIComponent(fallbackUrl ?? '');
+        expect(html).toContain('404');
+        expect(html).toContain('chimera://renderer/debug/');
+        expect(html).toContain('pnpm build:renderer');
+        expect(html).toContain('#111113');
+        expect(h.logger.warn).toHaveBeenCalled();
+    });
+
+    it('a successful document load keeps the Inspector page', () => {
+        const h = makeInspectorWindow();
+
+        h.window.webContents.emitDidNavigate('chimera://renderer/debug/', 200, 'OK');
+
+        expect(h.window.webContents.loadedUrls).toHaveLength(1);
+        expect(h.logger.warn).not.toHaveBeenCalled();
+    });
+
+    it('falls back on a main-frame did-fail-load and names the failure', () => {
+        const h = makeInspectorWindow();
+
+        h.window.webContents.emitDidFailLoad(
+            -6,
+            'ERR_FILE_NOT_FOUND',
+            'chimera://renderer/debug/',
+            true,
+        );
+
+        const fallbackUrl = h.window.webContents.loadedUrls[1];
+        expect(fallbackUrl).toMatch(/^data:text\/html/);
+        expect(decodeURIComponent(fallbackUrl ?? '')).toContain('ERR_FILE_NOT_FOUND');
+        expect(h.logger.warn).toHaveBeenCalled();
+    });
+
+    it('ignores subframe and aborted-navigation load failures', () => {
+        const h = makeInspectorWindow();
+
+        h.window.webContents.emitDidFailLoad(-6, 'ERR_FILE_NOT_FOUND', 'chimera://x/', false);
+        h.window.webContents.emitDidFailLoad(-3, 'ERR_ABORTED', 'chimera://renderer/debug/', true);
+
+        expect(h.window.webContents.loadedUrls).toHaveLength(1);
+    });
+
+    it('the diagnostic page can never re-trigger itself', () => {
+        const h = makeInspectorWindow();
+
+        h.window.webContents.emitDidNavigate('chimera://renderer/debug/', 404, 'Not Found');
+        const fallbackUrl = h.window.webContents.loadedUrls[1] ?? '';
+        h.window.webContents.emitDidFailLoad(-2, 'ERR_FAILED', fallbackUrl, true);
+
+        expect(h.window.webContents.loadedUrls).toHaveLength(2);
+    });
+
+    it('does not load into destroyed web contents', () => {
+        const h = makeInspectorWindow();
+        h.window.webContents.destroyed = true;
+
+        h.window.webContents.emitDidNavigate('chimera://renderer/debug/', 404, 'Not Found');
+
+        expect(h.window.webContents.loadedUrls).toHaveLength(1);
+    });
+
+    it('denies popups and blocks navigation outside the renderer protocol', () => {
+        const h = makeInspectorWindow();
+
+        expect(h.window.webContents.windowOpenHandler?.()).toEqual({ action: 'deny' });
+        expect(h.window.webContents.emitWillNavigate('https://example.com/')).toBe(true);
+        expect(h.window.webContents.emitWillNavigate('chimera://renderer/debug/')).toBe(false);
     });
 });

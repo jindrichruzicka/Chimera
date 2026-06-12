@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -191,6 +191,170 @@ describe('DiffViewPanel', () => {
 
         expect(await screen.findByText('{"amount":"10n"}')).toBeInTheDocument();
         expect(screen.getByText('"3n"')).toBeInTheDocument();
+    });
+
+    it('excludes unresolvable ticks from the pickers and seeding', async () => {
+        // The boot action log lists the first action's pre-action tick, but
+        // no snapshot can resolve it — offering it would seed a diff that is
+        // guaranteed to fail with TickNotAvailableError.
+        const diff = vi.fn((fromTick: number, toTick: number) =>
+            Promise.resolve(makeSampleDiff(fromTick, toTick)),
+        );
+        const api = createDebugApiMock({
+            listTicks: vi.fn(() =>
+                Promise.resolve<readonly TickEntry[]>([
+                    makeTickEntry({ tick: 0, resolvable: false }),
+                    makeTickEntry({ tick: 1 }),
+                    makeTickEntry({ tick: 2 }),
+                ]),
+            ),
+            diff,
+        });
+        render(<DiffViewPanel api={api} selectedTick={null} />);
+
+        await waitFor(() => {
+            expect(diff).toHaveBeenCalledWith(1, 2);
+        });
+        expect(
+            within(screen.getByLabelText('From tick')).queryByRole('option', { name: '0' }),
+        ).not.toBeInTheDocument();
+    });
+
+    it('needs two resolvable ticks, not merely two listed ticks', async () => {
+        const api = createDebugApiMock({
+            listTicks: vi.fn(() =>
+                Promise.resolve<readonly TickEntry[]>([
+                    makeTickEntry({ tick: 0, resolvable: false }),
+                    makeTickEntry({ tick: 1 }),
+                ]),
+            ),
+        });
+        render(<DiffViewPanel api={api} selectedTick={null} />);
+
+        await waitFor(() => {
+            expect(
+                screen.getByText('Need at least two recorded ticks to diff.'),
+            ).toBeInTheDocument();
+        });
+        expect(api.diff).not.toHaveBeenCalled();
+    });
+
+    it('Refresh re-fetches the tick list so newly recorded ticks become selectable', async () => {
+        const user = userEvent.setup();
+        const diff = vi.fn((fromTick: number, toTick: number) =>
+            Promise.resolve(makeSampleDiff(fromTick, toTick)),
+        );
+        const listTicks = vi
+            .fn(() =>
+                Promise.resolve<readonly TickEntry[]>([
+                    ...THREE_TICKS,
+                    makeTickEntry({ tick: 12 }),
+                ]),
+            )
+            .mockResolvedValueOnce(THREE_TICKS);
+        const api = createDebugApiMock({ listTicks, diff });
+        render(<DiffViewPanel api={api} selectedTick={9} />);
+
+        await waitFor(() => {
+            expect(diff).toHaveBeenCalledWith(5, 9);
+        });
+
+        await user.click(screen.getByRole('button', { name: 'Refresh' }));
+
+        const toPicker = await screen.findByLabelText('To tick');
+        await waitFor(() => {
+            expect(within(toPicker).getByRole('option', { name: '12' })).toBeInTheDocument();
+        });
+        // An explicit Refresh must not stomp the in-progress comparison.
+        expect(screen.getByLabelText('From tick')).toHaveValue('5');
+        expect(toPicker).toHaveValue('9');
+
+        await user.selectOptions(toPicker, '12');
+        await waitFor(() => {
+            expect(diff).toHaveBeenCalledWith(5, 12);
+        });
+    });
+
+    it('Refresh re-seeds the pair when a previously picked tick left the ring buffer', async () => {
+        const user = userEvent.setup();
+        const diff = vi.fn((fromTick: number, toTick: number) =>
+            Promise.resolve(makeSampleDiff(fromTick, toTick)),
+        );
+        const listTicks = vi
+            .fn(() =>
+                Promise.resolve<readonly TickEntry[]>([
+                    makeTickEntry({ tick: 9 }),
+                    makeTickEntry({ tick: 12 }),
+                    makeTickEntry({ tick: 15 }),
+                ]),
+            )
+            .mockResolvedValueOnce(THREE_TICKS);
+        const api = createDebugApiMock({ listTicks, diff });
+        render(<DiffViewPanel api={api} selectedTick={9} />);
+
+        await waitFor(() => {
+            expect(diff).toHaveBeenCalledWith(5, 9);
+        });
+
+        // Tick 5 was evicted: the stale pair cannot survive the refresh.
+        await user.click(screen.getByRole('button', { name: 'Refresh' }));
+
+        await waitFor(() => {
+            expect(diff).toHaveBeenCalledWith(9, 12);
+        });
+        expect(screen.getByLabelText('From tick')).toHaveValue('9');
+        expect(screen.getByLabelText('To tick')).toHaveValue('12');
+    });
+
+    it('Refresh is available with fewer than two ticks and seeds the pickers once enough exist', async () => {
+        const user = userEvent.setup();
+        const diff = vi.fn((fromTick: number, toTick: number) =>
+            Promise.resolve(makeSampleDiff(fromTick, toTick)),
+        );
+        const listTicks = vi
+            .fn(() =>
+                Promise.resolve<readonly TickEntry[]>([
+                    makeTickEntry({ tick: 1 }),
+                    makeTickEntry({ tick: 5 }),
+                ]),
+            )
+            .mockResolvedValueOnce([makeTickEntry({ tick: 1 })]);
+        const api = createDebugApiMock({ listTicks, diff });
+        render(<DiffViewPanel api={api} selectedTick={null} />);
+
+        await waitFor(() => {
+            expect(
+                screen.getByText('Need at least two recorded ticks to diff.'),
+            ).toBeInTheDocument();
+        });
+
+        await user.click(screen.getByRole('button', { name: 'Refresh' }));
+
+        await waitFor(() => {
+            expect(diff).toHaveBeenCalledWith(1, 5);
+        });
+    });
+
+    it('Refresh retries after a failed tick list fetch', async () => {
+        const user = userEvent.setup();
+        const diff = vi.fn((fromTick: number, toTick: number) =>
+            Promise.resolve(makeSampleDiff(fromTick, toTick)),
+        );
+        const listTicks = vi
+            .fn(() => Promise.resolve<readonly TickEntry[]>(THREE_TICKS))
+            .mockRejectedValueOnce(new Error('bridge unavailable'));
+        const api = createDebugApiMock({ listTicks, diff });
+        render(<DiffViewPanel api={api} selectedTick={9} />);
+
+        await waitFor(() => {
+            expect(screen.getByRole('alert')).toHaveTextContent('bridge unavailable');
+        });
+
+        await user.click(screen.getByRole('button', { name: 'Refresh' }));
+
+        await waitFor(() => {
+            expect(diff).toHaveBeenCalledWith(5, 9);
+        });
     });
 
     it('reports when two ticks have no differences', async () => {

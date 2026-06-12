@@ -216,6 +216,7 @@ describe('SnapshotInspector — listTicks()', () => {
         expect(byTick.get(3)).toEqual({
             tick: 3,
             inRingBuffer: false,
+            resolvable: true,
             actionType: 'test:add',
             playerId: p1,
             turnNumber: 0,
@@ -223,6 +224,7 @@ describe('SnapshotInspector — listTicks()', () => {
         expect(byTick.get(7)).toEqual({
             tick: 7,
             inRingBuffer: true,
+            resolvable: true,
             actionType: 'test:add',
             playerId: p1,
             turnNumber: 1,
@@ -233,7 +235,7 @@ describe('SnapshotInspector — listTicks()', () => {
         const { inspector } = makeScenario();
         // Tick 10 is the post-state of entry 9 — no log entry has tickApplied 10.
         const last = inspector.listTicks().at(-1);
-        expect(last).toEqual({ tick: 10, inRingBuffer: true });
+        expect(last).toEqual({ tick: 10, inRingBuffer: true, resolvable: true });
         expect(last).not.toHaveProperty('actionType');
         expect(last).not.toHaveProperty('playerId');
         expect(last).not.toHaveProperty('turnNumber');
@@ -243,8 +245,40 @@ describe('SnapshotInspector — listTicks()', () => {
         const { inspector } = makeScenario({ log: (all) => all.slice(8) });
         const ticks = inspector.listTicks();
         expect(ticks.map((entry) => entry.tick)).toEqual([7, 8, 9, 10]);
-        expect(ticks[0]).toEqual({ tick: 7, inRingBuffer: true });
+        expect(ticks[0]).toEqual({ tick: 7, inRingBuffer: true, resolvable: true });
         expect(ticks[1]?.actionType).toBe('test:add');
+    });
+
+    it('marks every tick resolvable when mementos cover the whole timeline', () => {
+        // Default scenario: mementos at ticks 0 and 5 — every listed tick is
+        // either buffer-resident or reconstructable.
+        const { inspector } = makeScenario();
+        expect(inspector.listTicks().every((entry) => entry.resolvable)).toBe(true);
+    });
+
+    it('marks ticks before the earliest memento and outside the buffer unresolvable', () => {
+        // Live boot shape: the log records the first action's pre-action
+        // tick, but no post-action snapshot nor memento can ever resolve it.
+        const { inspector } = makeScenario({
+            mementos: [{ tickAtTurnStart: 5, snapshotAtTurnStart: makeSnapshot({ tick: 5 }) }],
+        });
+        const byTick = new Map(
+            inspector.listTicks().map((entry) => [entry.tick, entry.resolvable]),
+        );
+        expect(byTick.get(0)).toBe(false);
+        expect(byTick.get(4)).toBe(false);
+        expect(byTick.get(5)).toBe(true); // the memento itself
+        expect(byTick.get(6)).toBe(true); // replayable from the tick-5 memento
+        expect(byTick.get(7)).toBe(true); // buffer-resident
+    });
+
+    it('marks buffer-resident ticks resolvable even with no mementos at all', () => {
+        const { inspector } = makeScenario({ mementos: [] });
+        const byTick = new Map(
+            inspector.listTicks().map((entry) => [entry.tick, entry.resolvable]),
+        );
+        expect(byTick.get(6)).toBe(false);
+        expect(byTick.get(7)).toBe(true);
     });
 
     it('returns [] when both the log and the buffer are empty', () => {

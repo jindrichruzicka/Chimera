@@ -38,6 +38,14 @@ export interface TickEntry {
      * (O(1) retrieval; highlighted in the Timeline panel).
      */
     readonly inRingBuffer: boolean;
+    /**
+     * True when `getSnapshot(tick)` can resolve this tick: buffer-resident
+     * or covered by a memento at-or-before it. The pre-action tick of the
+     * very first action is listed (the log records it) but resolvable by
+     * neither path — pickers must not offer it as a diff endpoint.
+     * Best-effort: a pruned replay window can still fail reconstruction.
+     */
+    readonly resolvable: boolean;
     /** Type of the action that entered the pipeline at this tick. */
     readonly actionType?: string;
     /** Issuer of that action, when known from the action log. */

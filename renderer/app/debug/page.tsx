@@ -10,25 +10,31 @@
  * `getDebugBridge()` accessor in a mount effect so the static-export pass
  * (no `window`) and first client render agree.
  *
- * The selected tick is shared across all panels; live mode follows the
- * newest tick in the Timeline and pauses when the user scrolls away or
- * picks a row. `Tabs` keeps every panel mounted (hidden, not unmounted),
- * so the Timeline's live subscription survives tab switches.
+ * The selected tick is shared across all panels; it is seeded to the
+ * newest tick from the Action Log backfill and re-pointed by
+ * double-clicking a log row. `Tabs` keeps every panel mounted (hidden,
+ * not unmounted), so the Performance panel's live subscription survives
+ * tab switches.
+ *
+ * The page is height-constrained to the viewport (no document scrollbar):
+ * the Tabs flex-fill it, the active tabpanel takes the remaining height,
+ * and each panel's own scroll region stretches to the window bottom.
  *
  * Engine shell page: imports no `games/*` or `electron/` runtime modules
  * (Invariants #94/#1); design tokens only (Invariant #91).
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import type { ChimeraDebugApi, TickEntry } from '@chimera/electron/preload/debug-api-types.js';
+import type {
+    ActionHistoryEntry,
+    ChimeraDebugApi,
+} from '@chimera/electron/preload/debug-api-types.js';
 import { getDebugBridge } from '../../bridge/debug-bridge';
 import { ActionLogPanel } from '../../components/debug/ActionLogPanel';
 import { DiffViewPanel } from '../../components/debug/DiffViewPanel';
 import { PerformancePanel } from '../../components/debug/PerformancePanel';
 import { ProjectionExplorerPanel } from '../../components/debug/ProjectionExplorerPanel';
-import { SnapshotInspectorPanel } from '../../components/debug/SnapshotInspectorPanel';
-import { TimelinePanel } from '../../components/debug/TimelinePanel';
-import { Caption, Heading, Tabs } from '../../components/ui';
+import { Caption, Tabs } from '../../components/ui';
 
 type BridgeState =
     | { readonly kind: 'pending' }
@@ -36,37 +42,50 @@ type BridgeState =
     | { readonly kind: 'ready'; readonly api: ChimeraDebugApi };
 
 const pageStyle: React.CSSProperties = {
+    blockSize: '100vh',
+    boxSizing: 'border-box',
     color: 'var(--ch-color-text-primary)',
     display: 'flex',
     flexDirection: 'column',
     fontFamily: 'var(--ch-font-ui)',
     gap: 'var(--ch-space-md)',
-    minBlockSize: '100vh',
+    overflow: 'hidden',
     padding: 'var(--ch-space-md)',
+};
+
+const tabsStyle: React.CSSProperties = {
+    flex: '1 1 auto',
+    minBlockSize: 0,
 };
 
 export default function DebugInspectorPage(): React.ReactElement {
     const [bridge, setBridge] = useState<BridgeState>({ kind: 'pending' });
     const [selectedTick, setSelectedTick] = useState<number | null>(null);
-    const [liveMode, setLiveMode] = useState(true);
+    const [activeTab, setActiveTab] = useState('actions');
 
     useEffect(() => {
         const api = getDebugBridge();
         setBridge(api ? { kind: 'ready', api } : { kind: 'unavailable' });
     }, []);
 
-    // Default the shared selection to the newest backfilled tick, once; a
-    // functional update keeps this race-free against an earlier user click.
-    const handleTicksLoaded = useCallback((ticks: readonly TickEntry[]) => {
-        setSelectedTick((prev) => prev ?? ticks[ticks.length - 1]?.tick ?? null);
+    // Default the shared selection to the state the newest logged action
+    // produced, once; a functional update keeps this race-free against an
+    // earlier user click. The log records pre-action ticks, so the newest
+    // resolvable state is tickApplied + 1 — the pre-action tick of the very
+    // first action is never captured by the post-action ring buffer.
+    const handleEntriesLoaded = useCallback((entries: readonly ActionHistoryEntry[]) => {
+        const newest = entries[entries.length - 1];
+        setSelectedTick((prev) => prev ?? (newest === undefined ? null : newest.tickApplied + 1));
+    }, []);
+
+    // Double-click in the Action Log → jump to the Snapshot tab at that tick.
+    const handleNavigateToSnapshot = useCallback((tick: number) => {
+        setSelectedTick(tick);
+        setActiveTab('snapshot');
     }, []);
 
     return (
         <main data-testid="debug-inspector-page" style={pageStyle}>
-            <Heading level={1} size="lg">
-                Debug Inspector
-            </Heading>
-
             {bridge.kind === 'pending' && <Caption tone="muted">Connecting…</Caption>}
 
             {bridge.kind === 'unavailable' && (
@@ -78,18 +97,19 @@ export default function DebugInspectorPage(): React.ReactElement {
 
             {bridge.kind === 'ready' && (
                 <Tabs
+                    activeTabId={activeTab}
                     ariaLabel="Inspector panels"
+                    onActiveTabChange={setActiveTab}
+                    style={tabsStyle}
                     tabs={[
                         {
-                            id: 'timeline',
-                            label: 'Timeline',
+                            id: 'actions',
+                            label: 'Action Log',
                             panel: (
-                                <TimelinePanel
+                                <ActionLogPanel
                                     api={bridge.api}
-                                    liveMode={liveMode}
-                                    onLiveModeChange={setLiveMode}
-                                    onSelectTick={setSelectedTick}
-                                    onTicksLoaded={handleTicksLoaded}
+                                    onEntriesLoaded={handleEntriesLoaded}
+                                    onNavigateToSnapshot={handleNavigateToSnapshot}
                                     selectedTick={selectedTick}
                                 />
                             ),
@@ -97,21 +117,6 @@ export default function DebugInspectorPage(): React.ReactElement {
                         {
                             id: 'snapshot',
                             label: 'Snapshot',
-                            panel: (
-                                <SnapshotInspectorPanel
-                                    api={bridge.api}
-                                    selectedTick={selectedTick}
-                                />
-                            ),
-                        },
-                        {
-                            id: 'actions',
-                            label: 'Action Log',
-                            panel: <ActionLogPanel api={bridge.api} selectedTick={selectedTick} />,
-                        },
-                        {
-                            id: 'projection',
-                            label: 'Projection',
                             panel: (
                                 <ProjectionExplorerPanel
                                     api={bridge.api}

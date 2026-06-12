@@ -189,7 +189,7 @@ describe('DebugProtocol — DebugResponse union', () => {
 
     it('narrows every response variant through an exhaustive switch', () => {
         const responses: DebugResponse[] = [
-            { type: 'TICK_LIST', ticks: [{ tick: 1, inRingBuffer: true }] },
+            { type: 'TICK_LIST', ticks: [{ tick: 1, inRingBuffer: true, resolvable: true }] },
             { type: 'SNAPSHOT', tick: 4, snapshot: makeSnapshot(4) },
             { type: 'PROJECTION', tick: 4, playerId: p1, snapshot: makePlayerSnapshot(4) },
             { type: 'DIFF', diff: makeDiff() },
@@ -239,6 +239,7 @@ describe('DebugProtocol — TickEntry and PerfStats shapes', () => {
         const entry: TickEntry = {
             tick: 3,
             inRingBuffer: false,
+            resolvable: true,
             actionType: 'test:add',
             playerId: p1,
             turnNumber: 1,
@@ -248,7 +249,7 @@ describe('DebugProtocol — TickEntry and PerfStats shapes', () => {
     });
 
     it('TickEntry action fields are omittable for ring-buffer-only ticks', () => {
-        const entry: TickEntry = { tick: 8, inRingBuffer: true };
+        const entry: TickEntry = { tick: 8, inRingBuffer: true, resolvable: true };
         expect(entry).not.toHaveProperty('actionType');
         expect(entry).not.toHaveProperty('playerId');
         expect(entry).not.toHaveProperty('turnNumber');

@@ -95,8 +95,19 @@ export const DEBUG_MEMENTO_RETENTION = 8;
 const INSPECTOR_WINDOW_WIDTH = 1100;
 const INSPECTOR_WINDOW_HEIGHT = 800;
 
+/**
+ * Same dark bootstrap surface as the main window (`BOOTSTRAP_BACKGROUND_COLOR`
+ * in `index.ts`) and the `--ch-color-surface` fallback in
+ * `renderer/app/layout.tsx` — without it the window paints default white
+ * while loading and stays white when the load fails (#701).
+ */
+const INSPECTOR_WINDOW_BACKGROUND_COLOR = '#111113';
+
 /** Route served by the chimera:// renderer protocol (page ships in F47 T8). */
 const INSPECTOR_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/debug/`;
+
+/** Chromium net error for a superseded navigation — never a real failure. */
+const ERR_ABORTED = -3;
 
 // ─── Narrow DI interfaces (precedent: CleanExitIpcMain in index.ts) ───────────
 
@@ -118,6 +129,55 @@ export interface DebugWindowLike {
     on(event: 'closed', handler: () => void): void;
     close(): void;
     isDestroyed(): boolean;
+}
+
+/** Web-contents surface the default Inspector window factory wires up. */
+export interface InspectorWebContentsLike extends DebugWebContentsLike {
+    setWindowOpenHandler(handler: () => { action: 'deny' }): void;
+    on(
+        event: 'will-navigate',
+        listener: (event: { preventDefault(): void }, url: string) => void,
+    ): void;
+    on(
+        event: 'did-navigate',
+        listener: (
+            event: unknown,
+            url: string,
+            httpResponseCode: number,
+            httpStatusText: string,
+        ) => void,
+    ): void;
+    on(
+        event: 'did-fail-load',
+        listener: (
+            event: unknown,
+            errorCode: number,
+            errorDescription: string,
+            validatedUrl: string,
+            isMainFrame: boolean,
+        ) => void,
+    ): void;
+    loadURL(url: string): Promise<void>;
+}
+
+/** `DebugWindowLike` whose web contents carries the full Inspector surface. */
+export interface InspectorWindowLike extends DebugWindowLike {
+    readonly webContents: InspectorWebContentsLike;
+}
+
+/** Plain-object constructor options for the Inspector `BrowserWindow`. */
+export interface InspectorWindowOptions {
+    readonly width: number;
+    readonly height: number;
+    readonly show: boolean;
+    readonly backgroundColor: string;
+    readonly webPreferences: {
+        readonly nodeIntegration: boolean;
+        readonly contextIsolation: boolean;
+        readonly sandbox: boolean;
+        readonly webSecurity: boolean;
+        readonly preload: string;
+    };
 }
 
 /** Subset of `Electron.IpcMain` the bridge registers on. */
@@ -201,6 +261,108 @@ const debugRequestSchema = z.discriminatedUnion('type', [
     z.object({ type: z.literal('UNSUBSCRIBE_LIVE') }).strict(),
 ]);
 
+// ─── Default Inspector window factory ─────────────────────────────────────────
+
+const escapeHtml = (value: string): string =>
+    value
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+
+/**
+ * Dark in-window diagnostic shown instead of the bare protocol 404 / load
+ * error. The dominant cause is a stale renderer static export: the bridge can
+ * exist while `renderer/out` predates the `/debug` route (F47 T8), in which
+ * case the chimera:// protocol serves a blank "Not found" page (#701).
+ */
+function buildInspectorLoadFallbackUrl(failedUrl: string, detail: string): string {
+    const html =
+        '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">' +
+        '<title>Debug Inspector</title></head>' +
+        `<body style="background-color:${INSPECTOR_WINDOW_BACKGROUND_COLOR};` +
+        'color:#f4f4f5;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;' +
+        'padding:24px;line-height:1.6">' +
+        '<h1 style="font-size:18px;margin:0 0 12px">Debug Inspector page failed to load</h1>' +
+        `<p style="margin:0 0 12px"><code>${escapeHtml(failedUrl)}</code> — ${escapeHtml(detail)}</p>` +
+        '<p style="margin:0">The renderer build is likely stale and missing the /debug route. ' +
+        'Rebuild it with <code>pnpm build:renderer</code>, then press F9 twice to reopen ' +
+        'this window.</p>' +
+        '</body></html>';
+    return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
+}
+
+export interface CreateInspectorWindowOptions {
+    /** Window constructor — production passes `new BrowserWindow(...)`. */
+    readonly newWindow: (options: InspectorWindowOptions) => InspectorWindowLike;
+    readonly debugPreloadPath: string;
+    readonly logger: Logger;
+}
+
+/**
+ * Creates the Inspector `BrowserWindow`, hardened like `createMainWindow`
+ * (WARN-2/WARN-3: no popups, no navigation outside the renderer protocol),
+ * painted with the dark bootstrap surface, and self-diagnosing: a failed
+ * document load (protocol 404 or net error) is replaced with an actionable
+ * dark fallback page instead of a silent white window (#701).
+ */
+export function createInspectorWindow(options: CreateInspectorWindowOptions): InspectorWindowLike {
+    const { logger } = options;
+    const window = options.newWindow({
+        width: INSPECTOR_WINDOW_WIDTH,
+        height: INSPECTOR_WINDOW_HEIGHT,
+        show: true,
+        backgroundColor: INSPECTOR_WINDOW_BACKGROUND_COLOR,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true,
+            sandbox: true,
+            webSecurity: true,
+            preload: options.debugPreloadPath,
+        },
+    });
+    const { webContents } = window;
+
+    const loadDiagnosticPage = (failedUrl: string, detail: string): void => {
+        logger.warn(`[chimera] debug inspector failed to load: ${detail}`, { url: failedUrl });
+        // A data: URL here is the diagnostic page itself — never re-enter.
+        if (failedUrl.startsWith('data:') || webContents.isDestroyed()) {
+            return;
+        }
+        webContents.loadURL(buildInspectorLoadFallbackUrl(failedUrl, detail)).catch(() => {
+            // A rejected fallback load re-surfaces via did-fail-load, where
+            // the data: guard above stops the recursion.
+        });
+    };
+
+    webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    webContents.on('will-navigate', (event, url) => {
+        if (!url.startsWith(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/`)) {
+            event.preventDefault();
+        }
+    });
+    // The chimera:// protocol answers a missing route with an HTTP-style 404,
+    // which `did-fail-load` does NOT report — inspect the navigation status.
+    webContents.on('did-navigate', (_event, url, httpResponseCode, httpStatusText) => {
+        if (httpResponseCode >= 400) {
+            loadDiagnosticPage(url, `HTTP ${httpResponseCode} ${httpStatusText}`);
+        }
+    });
+    webContents.on(
+        'did-fail-load',
+        (_event, errorCode, errorDescription, validatedUrl, isMainFrame) => {
+            if (!isMainFrame || errorCode === ERR_ABORTED) {
+                return;
+            }
+            loadDiagnosticPage(validatedUrl, `${errorDescription} (${errorCode})`);
+        },
+    );
+    webContents.loadURL(INSPECTOR_URL).catch(() => {
+        // Load failures surface through did-fail-load above.
+    });
+    return window;
+}
+
 // ─── Implementation ───────────────────────────────────────────────────────────
 
 interface SessionState {
@@ -247,35 +409,12 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
     };
 
     // ── Inspector window lifecycle ─────────────────────────────────────────
-    const defaultCreateWindow = (): DebugWindowLike => {
-        const window = new BrowserWindow({
-            width: INSPECTOR_WINDOW_WIDTH,
-            height: INSPECTOR_WINDOW_HEIGHT,
-            show: true,
-            webPreferences: {
-                nodeIntegration: false,
-                contextIsolation: true,
-                sandbox: true,
-                webSecurity: true,
-                preload: options.debugPreloadPath,
-            },
+    const defaultCreateWindow = (): DebugWindowLike =>
+        createInspectorWindow({
+            newWindow: (windowOptions) => new BrowserWindow(windowOptions),
+            debugPreloadPath: options.debugPreloadPath,
+            logger,
         });
-        // Same hardening as createMainWindow (WARN-2/WARN-3): no popups, no
-        // in-page navigation outside the renderer app protocol.
-        window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-        window.webContents.on('will-navigate', (event, url) => {
-            if (!url.startsWith(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/`)) {
-                event.preventDefault();
-            }
-        });
-        window.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
-            logger.warn(
-                `[chimera] debug inspector failed to load: ${errorCode} ${errorDescription}`,
-            );
-        });
-        void window.loadURL(INSPECTOR_URL);
-        return window;
-    };
     const createWindow = options.createWindow ?? defaultCreateWindow;
 
     const handleToggle = (): void => {

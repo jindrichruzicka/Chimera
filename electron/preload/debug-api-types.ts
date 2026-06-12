@@ -67,7 +67,7 @@ export type LiveTickEvent = Omit<Extract<DebugResponse, { type: 'LIVE_TICK' }>, 
  * the preload converts into promise rejections.
  */
 export interface ChimeraDebugApi {
-    /** Timeline rows: union of action-log ticks and buffered ticks, ascending. */
+    /** Diff View tick pickers: union of action-log ticks and buffered ticks, ascending. */
     listTicks(): Promise<readonly TickEntry[]>;
     /** Full authoritative snapshot at `tick` ("full truth — debug only"). */
     getSnapshot(tick: number): Promise<SnapshotResult>;

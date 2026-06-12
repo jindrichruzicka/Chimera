@@ -11,7 +11,6 @@ import {
     makePerfStats,
 } from './__test-support__/DebugApiStubs';
 import { PerformancePanel } from './PerformancePanel';
-import { TimelinePanel } from './TimelinePanel';
 
 afterEach(() => {
     cleanup();
@@ -121,32 +120,27 @@ describe('PerformancePanel', () => {
         expect(getPerfStats).toHaveBeenCalledTimes(3);
     });
 
-    it('shares the window-scoped live subscription with the Timeline panel', async () => {
+    it('shares the window-scoped live subscription across Inspector panels', async () => {
         // Main-side subscription state is one slot per window
         // (debug-bridge.ts), so two panels must subscribe once between them
-        // and unsubscribe only when the last one unmounts.
+        // and unsubscribe only when the last one unmounts — the panel has to
+        // route through the refcounted acquireLiveSubscription helper rather
+        // than calling subscribeLive directly.
         const api = createDebugApiMock({
             getPerfStats: vi.fn(() => Promise.resolve(makePerfStats())),
         });
-        const timeline = render(
-            <TimelinePanel
-                api={api}
-                liveMode={false}
-                onLiveModeChange={vi.fn()}
-                onSelectTick={vi.fn()}
-                onTicksLoaded={vi.fn()}
-                selectedTick={null}
-            />,
-        );
-        const performance = render(<PerformancePanel api={api} />);
-        await screen.findByTestId('stat-avg');
+        const first = render(<PerformancePanel api={api} />);
+        const second = render(<PerformancePanel api={api} />);
+        await waitFor(() => {
+            expect(screen.getAllByTestId('stat-avg')).toHaveLength(2);
+        });
 
         expect(api.subscribeLive).toHaveBeenCalledTimes(1);
 
-        performance.unmount();
+        first.unmount();
         expect(api.unsubscribeLive).not.toHaveBeenCalled();
 
-        timeline.unmount();
+        second.unmount();
         expect(api.unsubscribeLive).toHaveBeenCalledTimes(1);
     });
 

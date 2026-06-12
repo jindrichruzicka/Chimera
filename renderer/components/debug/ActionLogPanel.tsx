@@ -23,8 +23,12 @@ import styles from './ActionLogPanel.module.css';
 
 export interface ActionLogPanelProps {
     readonly api: ChimeraDebugApi;
-    /** Shared Timeline selection; the matching row is visually marked. */
+    /** Shared Inspector selection; the matching row is visually marked. */
     readonly selectedTick: number | null;
+    /** Double-click on a row — navigate to the Snapshot tab at that tick. */
+    readonly onNavigateToSnapshot?: (tick: number) => void;
+    /** Fires with the unfiltered entries after every successful fetch. */
+    readonly onEntriesLoaded?: (entries: readonly ActionHistoryEntry[]) => void;
 }
 
 type LogState =
@@ -51,7 +55,12 @@ function payloadPreview(payload: Readonly<Record<string, unknown>>): string {
         : json;
 }
 
-export function ActionLogPanel({ api, selectedTick }: ActionLogPanelProps): React.ReactElement {
+export function ActionLogPanel({
+    api,
+    selectedTick,
+    onNavigateToSnapshot,
+    onEntriesLoaded,
+}: ActionLogPanelProps): React.ReactElement {
     const [state, setState] = useState<LogState>({ kind: 'loading' });
     const [refreshNonce, setRefreshNonce] = useState(0);
     const [playerFilter, setPlayerFilter] = useState('');
@@ -66,6 +75,7 @@ export function ActionLogPanel({ api, selectedTick }: ActionLogPanelProps): Reac
             .then((entries) => {
                 if (active) {
                     setState({ kind: 'ready', entries });
+                    onEntriesLoaded?.(entries);
                 }
             })
             .catch((error: unknown) => {
@@ -80,6 +90,8 @@ export function ActionLogPanel({ api, selectedTick }: ActionLogPanelProps): Reac
         return () => {
             active = false;
         };
+        // onEntriesLoaded is intentionally not a dependency: the fetch must
+        // not re-run when the parent re-creates the callback.
     }, [api, refreshNonce]);
 
     const entries = state.kind === 'ready' ? state.entries : [];
@@ -182,6 +194,11 @@ export function ActionLogPanel({ api, selectedTick }: ActionLogPanelProps): Reac
                                     data-selected={String(entry.tickApplied === selectedTick)}
                                     data-testid={`action-row-${entry.tickApplied}`}
                                     key={entry.tickApplied}
+                                    onDoubleClick={
+                                        onNavigateToSnapshot
+                                            ? () => onNavigateToSnapshot(entry.tickApplied)
+                                            : undefined
+                                    }
                                 >
                                     <td className={styles['tick']}>{entry.tickApplied}</td>
                                     <td>{entry.turnNumber}</td>

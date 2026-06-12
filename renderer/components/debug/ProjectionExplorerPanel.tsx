@@ -147,9 +147,9 @@ export function ProjectionExplorerPanel({
     );
 
     return (
-        <div className={styles['root']} data-testid="projection-panel">
+        <div className={styles['root']} data-testid="snapshot-panel">
             {full.kind === 'idle' && (
-                <Caption tone="muted">Select a tick to explore its projection.</Caption>
+                <Caption tone="muted">Select a tick to explore its snapshot.</Caption>
             )}
 
             {full.kind === 'loading' && <Spinner label="Loading full snapshot" />}
@@ -165,71 +165,62 @@ export function ProjectionExplorerPanel({
             )}
 
             {full.kind === 'ready' && full.playerIds.length > 0 && (
-                <>
-                    <div className={styles['controls']}>
+                <div className={styles['columns']}>
+                    <section className={styles['column']}>
                         <Select
                             label="Player"
                             onValueChange={setSelectedPlayer}
                             options={full.playerIds.map((id) => ({ label: id, value: id }))}
                             value={selectedPlayer ?? ''}
                         />
+
+                        {projection.kind === 'loading' && <Spinner label="Loading projection" />}
+
+                        {projection.kind === 'error' && (
+                            <p className={styles['error']} role="alert">
+                                {projection.message}
+                            </p>
+                        )}
+
+                        {projection.kind === 'ready' && (
+                            <>
+                                <Caption tone="muted">
+                                    {`Projection for ${projection.viewer}`}
+                                </Caption>
+                                <ScrollArea
+                                    aria-label="Projection tree"
+                                    className={styles['scroll']}
+                                >
+                                    <JsonTree
+                                        defaultExpandedDepth={2}
+                                        highlights={diff?.projectionHighlights}
+                                        label="projection"
+                                        value={projection.snapshot}
+                                    />
+                                </ScrollArea>
+                            </>
+                        )}
+                    </section>
+
+                    <section className={styles['column']}>
                         <div aria-hidden="true" className={styles['legend']}>
                             <Badge variant="error">hidden</Badge>
                             <Badge variant="warning">masked</Badge>
                             <Badge variant="success">projection-only</Badge>
                         </div>
-                    </div>
-
-                    <div className={styles['columns']}>
-                        <section className={styles['column']}>
-                            <Caption tone="muted">
-                                {`Full snapshot (debug truth) — tick ${full.tick}`}
-                            </Caption>
-                            <ScrollArea
-                                aria-label="Full snapshot tree"
-                                className={styles['scroll']}
-                            >
-                                <JsonTree
-                                    defaultExpandedDepth={2}
-                                    highlights={diff?.fullHighlights}
-                                    label="full"
-                                    value={full.snapshot}
-                                />
-                            </ScrollArea>
-                        </section>
-
-                        <section className={styles['column']}>
-                            {projection.kind === 'loading' && (
-                                <Spinner label="Loading projection" />
-                            )}
-
-                            {projection.kind === 'error' && (
-                                <p className={styles['error']} role="alert">
-                                    {projection.message}
-                                </p>
-                            )}
-
-                            {projection.kind === 'ready' && (
-                                <>
-                                    <Caption tone="muted">
-                                        {`Projection for ${projection.viewer}`}
-                                    </Caption>
-                                    <ScrollArea
-                                        aria-label="Projection tree"
-                                        className={styles['scroll']}
-                                    >
-                                        <JsonTree
-                                            defaultExpandedDepth={2}
-                                            highlights={diff?.projectionHighlights}
-                                            label="projection"
-                                            value={projection.snapshot}
-                                        />
-                                    </ScrollArea>
-                                </>
-                            )}
-                        </section>
-                    </div>
-                </>
+                        <Caption tone="muted">
+                            {`Full snapshot (debug truth) — tick ${full.tick}`}
+                        </Caption>
+                        <ScrollArea aria-label="Full snapshot tree" className={styles['scroll']}>
+                            <JsonTree
+                                defaultExpandedDepth={2}
+                                highlights={diff?.fullHighlights}
+                                label="full"
+                                value={full.snapshot}
+                            />
+                        </ScrollArea>
+                    </section>
+                </div>
             )}
         </div>
     );

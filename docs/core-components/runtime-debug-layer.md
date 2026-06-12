@@ -198,7 +198,7 @@ context.debugObserver?.(nextState.tick, nextState);
 
 `debugObserver` is `undefined` in production — zero overhead.
 
-The stage-3 undo/redo intercept (which short-circuits stages 4–5) fires the same callback with the reconstructed state, so the Inspector timeline sees undo/redo transitions and the ring buffer never holds a stale entry for a reconstructed tick.
+The stage-3 undo/redo intercept (which short-circuits stages 4–5) fires the same callback with the reconstructed state, so the Inspector sees undo/redo transitions and the ring buffer never holds a stale entry for a reconstructed tick.
 
 The observer fires once per `process()` invocation, outer and nested dispatches alike, so consumers (e.g. a `LIVE_TICK` push from `onRecord`) may receive several intermediate states for the same tick; the final same-tick record supersedes the intermediates via the ring buffer's in-place replacement.
 
@@ -208,14 +208,14 @@ The observer fires once per `process()` invocation, outer and nested dispatches 
 
 ## Inspector Window UI Panels
 
-| Panel                   | Description                                                                           |
-| ----------------------- | ------------------------------------------------------------------------------------- |
-| **Timeline**            | Scrollable tick list; ring-buffered ticks highlighted (O(1)). Live mode auto-scrolls. |
-| **Snapshot Inspector**  | JSON tree of full `GameSnapshot` at selected tick — no projection applied.            |
-| **Projection Explorer** | PlayerId dropdown + side-by-side diff of full vs. projected snapshot per player.      |
-| **Diff View**           | Compare any two ticks; flat list of changed paths with before/after values.           |
-| **Action Log**          | Filterable table of `ActionHistoryEntry` rows; filter by playerId, type, tick range.  |
-| **Performance**         | Tick duration graph, avg/max tick time, ring buffer fill level, total action count.   |
+| Panel           | Description                                                                                                                          |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| **Action Log**  | Filterable table of `ActionHistoryEntry` rows; filter by playerId, type, tick range. Default tab.                                    |
+| **Snapshot**    | JSON tree of full `GameSnapshot` at the selected tick plus a playerId dropdown with the side-by-side projected view for that player. |
+| **Diff View**   | Compare any two ticks; flat list of changed paths with before/after values.                                                          |
+| **Performance** | Tick duration graph, avg/max tick time, ring buffer fill level, total action count. Refreshes live on pushed ticks.                  |
+
+Tick selection is driven by the Action Log: on open it is seeded to the state produced by the newest logged action (`tickApplied + 1` — the log records pre-action ticks), and double-clicking a log row re-points the shared selection to that row's `tickApplied` and jumps to the Snapshot tab.
 
 ---
 
