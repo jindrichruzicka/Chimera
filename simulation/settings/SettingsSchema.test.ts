@@ -8,7 +8,11 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
 import type { DeepPartial, EngineSettings, GameSettingsSchema } from './SettingsSchema.js';
-import { SettingsNamespaceCollisionError, engineSettingsZodShape } from './SettingsSchema.js';
+import {
+    ENGINE_DEFAULTS,
+    SettingsNamespaceCollisionError,
+    engineSettingsZodShape,
+} from './SettingsSchema.js';
 
 describe('engineSettingsZodShape (WARN-1)', () => {
     it('is exported from the module', () => {
@@ -123,6 +127,19 @@ describe('GameSettingsSchema<T>.schema field', () => {
         };
         expect(gameSettingsSchema.schema).toBeDefined();
         expect(gameSettingsSchema.gameId).toBe('test-game');
+    });
+});
+
+describe('ENGINE_DEFAULTS controls bindings', () => {
+    it('includes the F9 debug inspector binding (Invariant #66)', () => {
+        expect(ENGINE_DEFAULTS.controls.bindings['engine:toggle-debug-inspector']).toEqual({
+            primary: 'F9',
+        });
+    });
+
+    it('parses against the engine Zod shape', () => {
+        const result = z.object(engineSettingsZodShape).safeParse(ENGINE_DEFAULTS);
+        expect(result.success).toBe(true);
     });
 });
 

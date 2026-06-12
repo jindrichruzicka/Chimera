@@ -37,6 +37,12 @@ const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
         category: 'Engine',
         oneShot: true,
     },
+    {
+        id: 'engine:toggle-debug-inspector',
+        description: 'Toggle debug inspector',
+        category: 'Engine',
+        oneShot: true,
+    },
 ];
 
 export interface ProvidersProps {

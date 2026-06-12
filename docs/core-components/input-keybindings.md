@@ -70,12 +70,15 @@ export type GameBindingSchema<T> = T extends { readonly [K in keyof T]: KeyBindi
 
 ### Engine Default Bindings
 
-| Action                   | Default key  |
-| ------------------------ | ------------ |
-| `engine:undo`            | Ctrl+Z       |
-| `engine:redo`            | Ctrl+Shift+Z |
-| `engine:toggle-menu`     | Escape       |
-| `engine:toggle-perf-hud` | F3           |
+| Action                          | Default key  |
+| ------------------------------- | ------------ |
+| `engine:undo`                   | Ctrl+Z       |
+| `engine:redo`                   | Ctrl+Shift+Z |
+| `engine:toggle-menu`            | Escape       |
+| `engine:toggle-perf-hud`        | F3           |
+| `engine:toggle-debug-inspector` | F9           |
+
+`engine:toggle-debug-inspector` toggles the Debug Inspector window (§4.12 — Runtime Debug Layer); in production builds the underlying IPC send is a no-op.
 
 ---
 

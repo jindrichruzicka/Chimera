@@ -218,10 +218,12 @@ chimera/
 │   │   │   ├── TransitionOverlay.tsx  # Fixed full-screen fade overlay; see §4.19
 │   │   │   ├── RootErrorBoundary.tsx  # Top-level React error boundary; see §4.27
 │   │   │   ├── ToastHost.tsx        # Renders transient notifications; see §4.30
-│   │   │   └── perf/                # Performance HUD — toggled with F3; see §4.16
-│   │   │       ├── PerfHud.tsx
-│   │   │       ├── PerfProbe.tsx
-│   │   │       └── perfStore.ts
+│   │   │   ├── perf/                # Performance HUD — toggled with F3; see §4.16
+│   │   │   │   ├── PerfHud.tsx
+│   │   │   │   ├── PerfProbe.tsx
+│   │   │   │   └── perfStore.ts
+│   │   │   └── debug/               # Debug Inspector F9 toggle — headless; see §4.12
+│   │   │       └── DebugInspectorToggle.tsx
 │   │   ├── audio/                   # Event-driven audio playback components (e.g. EventAudioPlayer)
 │   │   ├── chat/                    # PUBLIC chat component (Tier 2); barrel: @chimera/renderer/components/chat; mounted by game HUDs only; see §4.35.1
 │   │   │   ├── index.ts             # Public barrel

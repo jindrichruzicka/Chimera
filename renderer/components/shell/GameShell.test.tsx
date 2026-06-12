@@ -38,6 +38,11 @@ vi.mock('./perf/PerfHud.js', () => ({
     PerfHud: () => <div data-testid="perf-hud-mock" />,
 }));
 
+// Mock DebugInspectorToggle for the same reason — it subscribes via useInputAction.
+vi.mock('./debug/DebugInspectorToggle.js', () => ({
+    DebugInspectorToggle: () => <div data-testid="debug-inspector-toggle-mock" />,
+}));
+
 const TEST_AUDIO_REF = 'tactics/audio/sfx/test-hit.ogg' as AssetRef<AudioClipAsset>;
 
 afterEach(() => {
@@ -634,6 +639,11 @@ describe('GameShell page object locators', () => {
     it('mounts PerfHud inside the game shell frame', () => {
         render(<GameShell tick={1} canUndo={false} canRedo={false} />);
         expect(screen.getByTestId('perf-hud-mock')).toBeTruthy();
+    });
+
+    it('mounts DebugInspectorToggle inside the game shell frame', () => {
+        render(<GameShell tick={1} canUndo={false} canRedo={false} />);
+        expect(screen.getByTestId('debug-inspector-toggle-mock')).toBeTruthy();
     });
 
     it('shows the resolved result banner while the active screen is the board', () => {

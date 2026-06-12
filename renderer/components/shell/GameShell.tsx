@@ -26,6 +26,7 @@ import { useActiveScreen } from '../../state/uiStore.js';
 import { EventAudioPlayer } from '../audio/EventAudioPlayer.js';
 import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
+import { DebugInspectorToggle } from './debug/DebugInspectorToggle.js';
 import { FadeProvider } from './FadeContext.js';
 import { PerfHud } from './perf/PerfHud.js';
 
@@ -344,6 +345,7 @@ function GameShellFrame(
             </section>
             {hud}
             <PerfHud />
+            <DebugInspectorToggle />
         </main>
     );
 }

@@ -73,6 +73,7 @@ export const ENGINE_DEFAULTS: EngineSettings = {
             'engine:redo': { primary: 'KeyZ', modifiers: ['Ctrl', 'Shift'] },
             'engine:toggle-menu': { primary: 'Escape' },
             'engine:toggle-perf-hud': { primary: 'F3' },
+            'engine:toggle-debug-inspector': { primary: 'F9' },
         },
     },
 } as const;

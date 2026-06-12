@@ -316,11 +316,37 @@ describe('Providers — InputManager lifecycle', () => {
             readonly mock: { readonly calls: readonly [readonly InputAction[]][] };
         };
         const seededActions = createRegistryMock.mock.calls[0]?.[0] ?? [];
-        expect(seededActions.map((action) => action.id)).toEqual([
-            'engine:undo',
-            'engine:redo',
-            'engine:toggle-menu',
-            'engine:toggle-perf-hud',
+        expect(seededActions).toEqual([
+            {
+                id: 'engine:undo',
+                description: 'Undo last action',
+                category: 'Engine',
+                oneShot: true,
+            },
+            {
+                id: 'engine:redo',
+                description: 'Redo last undone action',
+                category: 'Engine',
+                oneShot: true,
+            },
+            {
+                id: 'engine:toggle-menu',
+                description: 'Toggle game menu',
+                category: 'Engine',
+                oneShot: true,
+            },
+            {
+                id: 'engine:toggle-perf-hud',
+                description: 'Toggle performance HUD',
+                category: 'Engine',
+                oneShot: true,
+            },
+            {
+                id: 'engine:toggle-debug-inspector',
+                description: 'Toggle debug inspector',
+                category: 'Engine',
+                oneShot: true,
+            },
         ]);
     });
 
