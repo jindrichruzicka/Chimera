@@ -1,9 +1,9 @@
 import { expect, type Locator, type Page } from '@playwright/test';
 import {
     analyzeCanvasPixels,
+    decodePngToRgbaFrame,
     formatCanvasPixelStats,
     type CanvasPixelStats,
-    type CanvasRgbaFrame,
 } from '../helpers/canvas-pixels';
 
 interface TacticsGridPoint {
@@ -48,8 +48,11 @@ export const TACTICS_REVEAL_CENTER_X = 1;
 const TACTICS_MOVE_RETRY_ATTEMPTS = 3;
 const TACTICS_ATTACK_RETRY_ATTEMPTS = 3;
 const PROJECTED_SNAPSHOT_TIMEOUT_MS = 30_000;
-const TACTICS_CANVAS_PIXEL_TIMEOUT_MS = 15_000;
-const TACTICS_CANVAS_PIXEL_SAMPLE_MAX_DIMENSION = 320;
+// One pixel read = rAF settle + locator.screenshot(); on CI runners (2-core,
+// Xvfb + software GL) a single screenshot alone was measured at 6–11s, so the
+// poll budget must fit several worst-case iterations or the predicate never
+// gets evaluated at all.
+const TACTICS_CANVAS_PIXEL_TIMEOUT_MS = 45_000;
 const TACTICS_MIN_NONBLANK_PIXEL_RATIO = 0.05;
 const TACTICS_MIN_COLOR_PIXEL_RATIO = 0.0001;
 const TACTICS_MIN_COLOR_PIXELS = 2;
@@ -447,138 +450,11 @@ export class GamePage {
     private async readTacticsCanvasPixelStats(): Promise<CanvasPixelStats> {
         await this.waitForCanvasInteractionFrame();
         const screenshot = await this.tacticsCanvas.screenshot({ type: 'png' });
-        const frame = await this.decodeCanvasScreenshot(screenshot.toString('base64'));
-        return analyzeCanvasPixels(frame);
-    }
-
-    private async decodeCanvasScreenshot(encodedPng: string): Promise<CanvasRgbaFrame> {
-        return this.page.evaluate(
-            async ({ encodedPng: encodedImage, maxDimension }) => {
-                type BrowserBlob = object;
-
-                interface BrowserImageSource {
-                    readonly width: number;
-                    readonly height: number;
-                    close?: () => void;
-                }
-
-                interface BrowserImageElement extends BrowserImageSource {
-                    onload: (() => void) | null;
-                    onerror: (() => void) | null;
-                    src: string;
-                }
-
-                interface BrowserImageData {
-                    readonly data: ArrayLike<number>;
-                }
-
-                interface BrowserCanvasRenderingContext {
-                    imageSmoothingEnabled: boolean;
-                    imageSmoothingQuality: 'low' | 'medium' | 'high';
-                    drawImage(
-                        image: BrowserImageSource,
-                        x: number,
-                        y: number,
-                        width: number,
-                        height: number,
-                    ): void;
-                    getImageData(
-                        x: number,
-                        y: number,
-                        width: number,
-                        height: number,
-                    ): BrowserImageData;
-                }
-
-                interface BrowserCanvasElement {
-                    width: number;
-                    height: number;
-                    getContext(
-                        type: '2d',
-                        options: { readonly willReadFrequently: true },
-                    ): BrowserCanvasRenderingContext | null;
-                }
-
-                interface BrowserDocument {
-                    createElement(tagName: 'canvas'): BrowserCanvasElement;
-                }
-
-                interface BrowserCanvasGlobal {
-                    readonly Blob: new (
-                        parts: readonly Uint8Array[],
-                        options: { readonly type: string },
-                    ) => BrowserBlob;
-                    readonly Image: new () => BrowserImageElement;
-                    readonly atob: (value: string) => string;
-                    readonly createImageBitmap?: (blob: BrowserBlob) => Promise<BrowserImageSource>;
-                    readonly document: BrowserDocument;
-                }
-
-                // @chimera-review: page.evaluate runs in a real browser context; these DOM APIs exist there.
-                const browser = globalThis as unknown as BrowserCanvasGlobal;
-                const binary = browser.atob(encodedImage);
-                const bytes = new Uint8Array(binary.length);
-                for (let byteIndex = 0; byteIndex < binary.length; byteIndex += 1) {
-                    bytes[byteIndex] = binary.charCodeAt(byteIndex);
-                }
-
-                const blob = new browser.Blob([bytes], { type: 'image/png' });
-                const image = await decodePngBlob(browser, blob, encodedImage);
-                try {
-                    const sourceWidth = image.width;
-                    const sourceHeight = image.height;
-                    if (sourceWidth <= 0 || sourceHeight <= 0) {
-                        throw new Error('Decoded tactics canvas screenshot has no pixel area.');
-                    }
-
-                    const scale = Math.min(1, maxDimension / Math.max(sourceWidth, sourceHeight));
-                    const width = Math.max(1, Math.round(sourceWidth * scale));
-                    const height = Math.max(1, Math.round(sourceHeight * scale));
-                    const sampleCanvas = browser.document.createElement('canvas');
-                    sampleCanvas.width = width;
-                    sampleCanvas.height = height;
-
-                    const context = sampleCanvas.getContext('2d', { willReadFrequently: true });
-                    if (context === null) {
-                        throw new Error('Could not create 2D context for tactics canvas sampling.');
-                    }
-
-                    context.imageSmoothingEnabled = true;
-                    context.imageSmoothingQuality = 'high';
-                    context.drawImage(image, 0, 0, width, height);
-                    const imageData = context.getImageData(0, 0, width, height);
-
-                    return {
-                        width,
-                        height,
-                        rgba: Array.from(imageData.data),
-                    };
-                } finally {
-                    if (typeof image.close === 'function') {
-                        image.close();
-                    }
-                }
-
-                async function decodePngBlob(
-                    browser: BrowserCanvasGlobal,
-                    blob: BrowserBlob,
-                    encodedImage: string,
-                ): Promise<BrowserImageSource> {
-                    if (browser.createImageBitmap !== undefined) {
-                        return browser.createImageBitmap(blob);
-                    }
-
-                    return new Promise<BrowserImageElement>((resolve, reject) => {
-                        const loadedImage = new browser.Image();
-                        loadedImage.onload = () => resolve(loadedImage);
-                        loadedImage.onerror = () =>
-                            reject(new Error('Could not decode tactics canvas screenshot.'));
-                        loadedImage.src = `data:image/png;base64,${encodedImage}`;
-                    });
-                }
-            },
-            { encodedPng, maxDimension: TACTICS_CANVAS_PIXEL_SAMPLE_MAX_DIMENSION },
-        );
+        // Decode and analyze in the test process (pngjs) — never via
+        // page.evaluate. On CI the renderer main thread is saturated by
+        // software-GL R3F rendering, and a CDP round-trip with the decoded
+        // pixel payload was measured at ~8s per read, blowing the poll budget.
+        return analyzeCanvasPixels(decodePngToRgbaFrame(screenshot));
     }
 
     private async waitForVisibleAdjacentOpponent(): Promise<void> {

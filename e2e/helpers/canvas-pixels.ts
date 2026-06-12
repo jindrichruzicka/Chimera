@@ -1,7 +1,10 @@
+import { PNG } from 'pngjs';
+
 export interface CanvasRgbaFrame {
     readonly width: number;
     readonly height: number;
-    readonly rgba: readonly number[];
+    /** Tightly packed RGBA bytes; accepts plain arrays as well as Buffer/Uint8Array. */
+    readonly rgba: ArrayLike<number>;
 }
 
 export interface CanvasPixelStats {
@@ -55,6 +58,18 @@ export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
         bluePixels,
         redPixels,
     };
+}
+
+/**
+ * Decode a PNG screenshot buffer into a full-resolution RGBA frame entirely in
+ * the test process. Pixel reads must never round-trip through the renderer:
+ * on CI runners the software-GL renderer main thread is the contended
+ * resource, and shipping decoded pixels over CDP cost seconds per read
+ * (the original cause of the tactics-3d-render CI failures).
+ */
+export function decodePngToRgbaFrame(encodedPng: Buffer): CanvasRgbaFrame {
+    const png = PNG.sync.read(encodedPng);
+    return { width: png.width, height: png.height, rgba: png.data };
 }
 
 export function formatCanvasPixelStats(stats: CanvasPixelStats): string {

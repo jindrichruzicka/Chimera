@@ -17,7 +17,9 @@ jobs:
   e2e:
     name: Playwright e2e — electron-e2e
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # The suite alone takes ~16min on the 2-core runner; the slow-marked
+    # tactics-3d-render and chat-cap tests may add a few more on a bad day.
+    timeout-minutes: 30
 
     steps:
       - name: Checkout

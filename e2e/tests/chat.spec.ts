@@ -221,6 +221,10 @@ gameTest.describe('Tactics chat — in-match', () => {
     gameTest(
         'the rolling buffer caps at 500 entries (oldest dropped)',
         async ({ hostApp, hostWindow }) => {
+            // CI renderers (2-core, software GL) need well over the default
+            // budgets to chew through 520 IPC pushes that each re-render the
+            // growing message list; locally this completes in a few seconds.
+            gameTest.slow();
             const hostChat = new ChatPanelPage(hostWindow);
             // Open the drawer first: ChatPanel subscribes to the push channel on
             // mount, and the cap is asserted on rendered message rows.
@@ -245,7 +249,10 @@ gameTest.describe('Tactics chat — in-match', () => {
                 }
             });
 
-            await expect.poll(() => hostChat.messageCount(), { timeout: 15_000 }).toBe(500);
+            // The CI trace for this test showed a single locator.count() call
+            // queued for 26s+ behind renderer work, so the budget must absorb
+            // the full chew-through, not just one query.
+            await expect.poll(() => hostChat.messageCount(), { timeout: 120_000 }).toBe(500);
         },
     );
 

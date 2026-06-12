@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { Locator, Page } from '@playwright/test';
+import { PNG } from 'pngjs';
 import type { CanvasRgbaFrame } from '../helpers/canvas-pixels';
 import {
     TACTICS_CAMERA_POSITION,
@@ -31,32 +32,12 @@ interface KeyboardDownFailure {
 
 interface BuildPageDoubleOptions {
     readonly canvasBox?: LocatorBox | null;
+    /** Served as PNG-encoded `locator.screenshot()` results, in call order. */
     readonly canvasRgbaFrames?: readonly CanvasRgbaFrame[];
     readonly canvasScreenshots?: readonly Buffer[];
-    readonly executeCanvasRgbaDecode?: boolean;
     readonly keyboardDownFailure?: KeyboardDownFailure;
     readonly locatorCounts?: readonly LocatorCountBySelector[];
     readonly snapshots?: readonly unknown[];
-}
-
-interface BrowserCanvasDecodeStubOptions {
-    readonly imageWidth: number;
-    readonly imageHeight: number;
-    readonly rgba: readonly number[];
-    readonly useImageFallback?: boolean;
-}
-
-interface BrowserCanvasDecodeStubs {
-    readonly canvas: { width: number; height: number };
-    readonly context: {
-        imageSmoothingEnabled: boolean;
-        imageSmoothingQuality: 'low' | 'medium' | 'high';
-        drawImage: ReturnType<typeof vi.fn>;
-        getImageData: ReturnType<typeof vi.fn>;
-    };
-    readonly createImageBitmap: ReturnType<typeof vi.fn> | null;
-    readonly closeImage: ReturnType<typeof vi.fn>;
-    readonly imageSrcs: string[];
 }
 
 interface BuildPageDoubleResult {
@@ -88,10 +69,12 @@ const buildPageDouble = (
     let screenshotCalls = 0;
     const activeModifiers: string[] = [];
     const snapshots = options.snapshots ?? [snapshot];
-    const canvasRgbaFrames = options.canvasRgbaFrames ?? [];
-    const canvasScreenshots = options.canvasScreenshots ?? [Buffer.from('stable-canvas')];
+    const canvasScreenshots =
+        options.canvasScreenshots ??
+        (options.canvasRgbaFrames === undefined
+            ? [Buffer.from('stable-canvas')]
+            : options.canvasRgbaFrames.map(encodeFrameToPngScreenshot));
     let evaluateCallCount = 0;
-    let canvasRgbaFrameCallCount = 0;
     const canvasBox =
         options.canvasBox === undefined
             ? {
@@ -181,24 +164,7 @@ const buildPageDouble = (
         return {} as Awaited<ReturnType<Page['waitForFunction']>>;
     }) as Page['waitForFunction'];
 
-    page.evaluate = (async (
-        _pageFunction: Parameters<Page['evaluate']>[0],
-        arg?: Parameters<Page['evaluate']>[1],
-    ): Promise<unknown> => {
-        if (isCanvasRgbaDecodeRequest(arg)) {
-            if (options.executeCanvasRgbaDecode && typeof _pageFunction === 'function') {
-                return (_pageFunction as (value: unknown) => Promise<unknown>)(arg);
-            }
-
-            const fallbackFrame = canvasRgbaFrames[canvasRgbaFrames.length - 1];
-            const nextFrame = canvasRgbaFrames[canvasRgbaFrameCallCount] ?? fallbackFrame;
-            canvasRgbaFrameCallCount += 1;
-            if (nextFrame === undefined) {
-                throw new Error('No canvas RGBA frame was configured for the page double.');
-            }
-            return nextFrame;
-        }
-
+    page.evaluate = (async (): Promise<unknown> => {
         const fallbackSnapshot = snapshots[snapshots.length - 1] ?? snapshot;
         const nextSnapshot = snapshots[evaluateCallCount] ?? fallbackSnapshot;
         evaluateCallCount += 1;
@@ -217,14 +183,6 @@ const buildPageDouble = (
         clickCalls,
     };
 };
-
-function isCanvasRgbaDecodeRequest(value: unknown): boolean {
-    return (
-        typeof value === 'object' &&
-        value !== null &&
-        typeof (value as Readonly<Record<string, unknown>>)['encodedPng'] === 'string'
-    );
-}
 
 afterEach(() => {
     vi.doUnmock('@playwright/test');
@@ -270,75 +228,11 @@ function makeCanvasRgbaFrame(
     };
 }
 
-function installBrowserCanvasDecodeStubs(
-    options: BrowserCanvasDecodeStubOptions,
-): BrowserCanvasDecodeStubs {
-    const imageSrcs: string[] = [];
-    const closeImage = vi.fn();
-    const imageSource = {
-        width: options.imageWidth,
-        height: options.imageHeight,
-        close: closeImage,
-    };
-    const context = {
-        imageSmoothingEnabled: false,
-        imageSmoothingQuality: 'low' as 'low' | 'medium' | 'high',
-        drawImage: vi.fn(),
-        getImageData: vi.fn(() => ({ data: options.rgba })),
-    };
-    const canvas = {
-        width: 0,
-        height: 0,
-        getContext: vi.fn(() => context),
-    };
-
-    vi.stubGlobal(
-        'Blob',
-        vi.fn(function FakeBlob(
-            this: { parts: readonly Uint8Array[]; options: { readonly type: string } },
-            parts: readonly Uint8Array[],
-            blobOptions: { readonly type: string },
-        ): void {
-            this.parts = parts;
-            this.options = blobOptions;
-        }),
-    );
-    vi.stubGlobal(
-        'atob',
-        vi.fn(() => 'png'),
-    );
-    vi.stubGlobal('document', {
-        createElement: vi.fn(() => canvas),
-    });
-
-    if (options.useImageFallback === true) {
-        class FakeImage {
-            public readonly width = options.imageWidth;
-            public readonly height = options.imageHeight;
-            public readonly close = closeImage;
-            public onload: (() => void) | null = null;
-            public onerror: (() => void) | null = null;
-            private currentSrc = '';
-
-            public set src(value: string) {
-                this.currentSrc = value;
-                imageSrcs.push(value);
-                this.onload?.();
-            }
-
-            public get src(): string {
-                return this.currentSrc;
-            }
-        }
-
-        vi.stubGlobal('createImageBitmap', undefined);
-        vi.stubGlobal('Image', FakeImage);
-        return { canvas, context, createImageBitmap: null, closeImage, imageSrcs };
-    }
-
-    const createImageBitmap = vi.fn(async () => imageSource);
-    vi.stubGlobal('createImageBitmap', createImageBitmap);
-    return { canvas, context, createImageBitmap, closeImage, imageSrcs };
+/** Encode a frame the way `locator.screenshot({ type: 'png' })` returns it. */
+function encodeFrameToPngScreenshot(frame: CanvasRgbaFrame): Buffer {
+    const png = new PNG({ width: frame.width, height: frame.height });
+    png.data = Buffer.from(Array.from(frame.rgba));
+    return PNG.sync.write(png);
 }
 
 describe('GamePage', () => {
@@ -497,54 +391,20 @@ describe('GamePage', () => {
         }
     });
 
-    it('decodes canvas screenshots through createImageBitmap before pixel analysis', async () => {
-        const stubs = installBrowserCanvasDecodeStubs({
-            imageWidth: 4,
-            imageHeight: 2,
-            rgba: [
-                37, 99, 235, 255, 20, 70, 180, 255, 63, 63, 70, 255, 245, 245, 245, 255, 0, 0, 0, 0,
-                63, 63, 70, 255, 245, 245, 245, 255, 0, 0, 0, 0,
+    it('decodes PNG screenshots in the test process without a renderer round-trip', async () => {
+        // The page double's evaluate() only serves projected snapshots — if
+        // GamePage still decoded pixels via page.evaluate, this would fail.
+        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
+            canvasRgbaFrames: [
+                makeCanvasRgbaFrame([
+                    [37, 99, 235, 255],
+                    [20, 70, 180, 255],
+                ]),
             ],
         });
-        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
-            executeCanvasRgbaDecode: true,
-        });
         const gamePage = new GamePage(page);
 
         await expect(gamePage.assertTacticsCanvasHasBluePrimitive()).resolves.toBeUndefined();
-
-        expect(stubs.createImageBitmap).toHaveBeenCalledTimes(1);
-        expect(stubs.canvas).toMatchObject({ width: 4, height: 2 });
-        expect(stubs.context.imageSmoothingEnabled).toBe(true);
-        expect(stubs.context.imageSmoothingQuality).toBe('high');
-        expect(stubs.context.drawImage).toHaveBeenCalledWith(
-            expect.objectContaining({ width: 4, height: 2 }),
-            0,
-            0,
-            4,
-            2,
-        );
-        expect(stubs.closeImage).toHaveBeenCalledTimes(1);
-    });
-
-    it('falls back to Image when createImageBitmap is unavailable during canvas decode', async () => {
-        const screenshot = Buffer.from('fallback-canvas');
-        const stubs = installBrowserCanvasDecodeStubs({
-            imageWidth: 2,
-            imageHeight: 1,
-            rgba: [37, 99, 235, 255, 20, 70, 180, 255],
-            useImageFallback: true,
-        });
-        const { page } = buildPageDouble('0', makeProjectedSnapshot({ localX: 0 }), {
-            canvasScreenshots: [screenshot],
-            executeCanvasRgbaDecode: true,
-        });
-        const gamePage = new GamePage(page);
-
-        await expect(gamePage.assertTacticsCanvasHasBluePrimitive()).resolves.toBeUndefined();
-
-        expect(stubs.imageSrcs).toEqual([`data:image/png;base64,${screenshot.toString('base64')}`]);
-        expect(stubs.closeImage).toHaveBeenCalledTimes(1);
     });
 
     it('throws when red pixels are detected before reveal', async () => {

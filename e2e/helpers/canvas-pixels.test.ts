@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { analyzeCanvasPixels, formatCanvasPixelStats } from './canvas-pixels';
+import { PNG } from 'pngjs';
+import { analyzeCanvasPixels, decodePngToRgbaFrame, formatCanvasPixelStats } from './canvas-pixels';
 
 describe('analyzeCanvasPixels', () => {
     it('throws when width is not a positive integer', () => {
@@ -46,6 +47,27 @@ describe('analyzeCanvasPixels', () => {
             nonBlankPixels: 5,
             bluePixels: 2,
             redPixels: 1,
+        });
+    });
+
+    it('decodes a PNG buffer into a full-resolution RGBA frame analyzable in-process', () => {
+        const png = new PNG({ width: 2, height: 1 });
+        // Pixel 0: opaque blue primitive; pixel 1: transparent blank.
+        png.data = Buffer.from([37, 99, 235, 255, 0, 0, 0, 0]);
+        const encoded = PNG.sync.write(png);
+
+        const frame = decodePngToRgbaFrame(encoded);
+
+        expect(frame.width).toBe(2);
+        expect(frame.height).toBe(1);
+        expect(Array.from(frame.rgba)).toEqual([37, 99, 235, 255, 0, 0, 0, 0]);
+        expect(analyzeCanvasPixels(frame)).toEqual({
+            width: 2,
+            height: 1,
+            totalPixels: 2,
+            nonBlankPixels: 1,
+            bluePixels: 1,
+            redPixels: 0,
         });
     });
 

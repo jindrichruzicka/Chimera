@@ -20,6 +20,11 @@ test.describe('Tactics 3D render validation', () => {
     test('renders blue local primitive before reveal and red opponent primitive after reveal', async ({
         hostWindow,
     }) => {
+        // Five pixel assertions, each costing one canvas screenshot. On CI
+        // (Xvfb + software GL) a single screenshot was measured at 6–11s, so
+        // the default 90s test budget is too tight; locally this runs in
+        // seconds. test.slow() triples the timeout.
+        test.slow();
         const game = new GamePage(hostWindow);
 
         await expect(game.canvas).toBeVisible({ timeout: 15_000 });
