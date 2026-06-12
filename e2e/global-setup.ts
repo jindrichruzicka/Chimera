@@ -8,6 +8,9 @@ import { buildSync } from 'esbuild';
  * 1. Compiles the renderer bundle so tests can load the real UI.
  * 2. Bundles electron/main/index.ts → .e2e-build/electron/main/index.js  (main process)
  * 3. Bundles electron/preload/api.ts → .e2e-build/electron/preload/api.js (preload script)
+ * 4. Bundles electron/preload/debug-api.ts → .e2e-build/electron/preload/debug-api.js
+ *    (Inspector window preload — the debug bridge resolves it as a sibling of
+ *    the main preload, so debug-mode specs need it next to api.js)
  *
  * @chimera/* path aliases are resolved here to real workspace-relative paths
  * because the Electron process itself has no tsconfig-paths support at runtime.
@@ -54,6 +57,20 @@ export default function globalSetup(): void {
     buildSync({
         entryPoints: [path.join(root, 'electron/preload/api.ts')],
         outfile: preloadOutfile,
+        bundle: true,
+        platform: 'node',
+        format: 'cjs',
+        target: 'node20',
+        external: ['electron'],
+        alias,
+    });
+
+    // Inspector window preload — the debug bridge (electron/main/debug-bridge.ts)
+    // loads it from path.dirname(<main preload>)/debug-api.js, so it must sit
+    // next to api.js for debug-mode (CHIMERA_DEBUG=1) launches.
+    buildSync({
+        entryPoints: [path.join(root, 'electron/preload/debug-api.ts')],
+        outfile: path.join(path.dirname(preloadOutfile), 'debug-api.js'),
         bundle: true,
         platform: 'node',
         format: 'cjs',

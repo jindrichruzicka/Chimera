@@ -41,6 +41,8 @@ export interface DirectGameFixtureOptions {
     readonly hostInitialRoute: E2eInitialRoute;
     readonly clientInitialRoute: E2eInitialRoute;
     readonly waitForGameStarted: boolean;
+    /** Launch the host in Runtime Debug Layer mode (`CHIMERA_DEBUG=1`, §4.12). */
+    readonly debugMode: boolean;
 }
 
 export interface DirectGameFixtures {
@@ -122,14 +124,16 @@ export const test = electronTest.extend<
     hostInitialRoute: ['/game', { option: true }],
     clientInitialRoute: ['/game', { option: true }],
     waitForGameStarted: [true, { option: true }],
+    debugMode: [false, { option: true }],
 
-    hostApp: async ({ firstPlayer, passAndPlay, hostInitialRoute }, use) => {
+    hostApp: async ({ firstPlayer, passAndPlay, hostInitialRoute, debugMode }, use) => {
         const app = await launchE2eElectronApplication({
             port: DIRECT_GAME_PORT,
             role: 'host',
             directGameRole: 'host',
             initialRoute: hostInitialRoute,
             passAndPlay,
+            debugMode,
         });
         try {
             await configureFirstPlayer(app, firstPlayer);

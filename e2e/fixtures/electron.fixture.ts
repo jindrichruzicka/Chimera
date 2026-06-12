@@ -41,6 +41,13 @@ export interface E2eElectronLaunchOptions {
      * `directGameRole === 'client'`.
      */
     readonly directGameJoinAddress?: string;
+    /**
+     * Launch the process in Runtime Debug Layer mode (`CHIMERA_DEBUG=1`),
+     * enabling the debug bridge and the F9 Inspector window (Invariant #27:
+     * debug mode is env-gated and never appears in production packaging —
+     * NODE_ENV=test here keeps the gate satisfiable).
+     */
+    readonly debugMode?: boolean;
 }
 
 export interface E2eElectronLaunchConfig {
@@ -134,6 +141,10 @@ export function createE2eElectronLaunchConfig(
 
     if (options.passAndPlay === true) {
         env['CHIMERA_E2E_PASS_AND_PLAY'] = '1';
+    }
+
+    if (options.debugMode === true) {
+        env['CHIMERA_DEBUG'] = '1';
     }
 
     return {

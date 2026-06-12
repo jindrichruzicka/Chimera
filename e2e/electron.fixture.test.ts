@@ -70,6 +70,18 @@ describe('electron.fixture', () => {
         expect(config.env['CHIMERA_E2E_FIRST_PLAYER']).toBeUndefined();
     });
 
+    it('sets CHIMERA_DEBUG=1 when debugMode is enabled', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7779', debugMode: true });
+
+        expect(config.env['CHIMERA_DEBUG']).toBe('1');
+    });
+
+    it('omits CHIMERA_DEBUG by default so launches stay non-debug', () => {
+        const config = createE2eElectronLaunchConfig({ port: '7779' });
+
+        expect(config.env['CHIMERA_DEBUG']).toBeUndefined();
+    });
+
     it('assigns a fresh isolated Electron userData directory to each launch', () => {
         const hostConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'host' });
         const clientConfig = createE2eElectronLaunchConfig({ port: '7779', role: 'client' });
