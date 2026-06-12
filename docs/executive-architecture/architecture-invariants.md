@@ -88,7 +88,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **27.** `CHIMERA_DEBUG` must never appear in the production packaging configuration. The production build must assert `IS_DEBUG_MODE === false` at startup and refuse to start if `process.env.CHIMERA_DEBUG` is set in a `NODE_ENV=production` process.
 
-**28.** `window.__chimeraDebug` is exposed only by `debug-api.ts` and only to the Inspector Window. The game renderer's `api.ts` preload must never expose any debug surface.
+**28.** `window.__chimeraDebug` is exposed only by `debug-api.ts` and only to the Inspector Window. The game renderer's `api.ts` preload must never expose any debug **data** surface — no snapshots, projections, diffs, action logs, or perf stats. The data-free Inspector-window toggle (`system.toggleDebugInspector()`, a payload-less send on `chimera:debug:toggle-inspector`) is explicitly permitted; outside debug mode no listener is registered and the send is a no-op.
 
 **29.** The debug `ipcMain` handler (`chimera:debug`) must validate `event.sender.id` against the Inspector Window's `webContents.id` on every request. Any request from a different sender returns `{ type: 'ERROR' }` immediately.
 

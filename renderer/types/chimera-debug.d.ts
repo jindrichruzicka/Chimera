@@ -10,8 +10,9 @@
 //
 // The property is OPTIONAL: only the Inspector `BrowserWindow` (preload
 // `debug-api.ts`) populates it. In the game renderer window it is always
-// `undefined` — the game preload exposes no debug surface (Invariant #28) —
-// so the debug page must guard for absence rather than assume it.
+// `undefined` — the game preload exposes no debug data surface, only the
+// data-free Inspector toggle (Invariant #28) — so the debug page must
+// guard for absence rather than assume it.
 
 import type { ChimeraDebugApi } from '@chimera/electron/preload/debug-api-types.js';
 

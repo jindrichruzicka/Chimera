@@ -57,7 +57,9 @@ Implement `toastStore`, `ToastHost.tsx` (stacked, animated, `reducedMotion`-awar
 
 ## F47 — Debug Inspector `§4.12`
 
-Implement `SnapshotRingBuffer`, `SnapshotInspector`, `SnapshotDiff`, `DebugProtocol`, `debug-bridge.ts`, and `debug-api.ts`. Launch Inspector `BrowserWindow` when `CHIMERA_DEBUG=1`. Build all six Inspector panels (Timeline, Snapshot Inspector, Projection Explorer, Diff View, Action Log, Performance). Enforce `IS_DEBUG_MODE` production guard.
+Implement `SnapshotRingBuffer`, `SnapshotInspector`, `SnapshotDiff`, `DebugProtocol`, `debug-bridge.ts`, and `debug-api.ts`. `CHIMERA_DEBUG=1` starts only the debug bridge (the ring buffer is instantiated per attached session); the Inspector `BrowserWindow` is closed by default and lazily created/closed via **F9** (`engine:toggle-debug-inspector`, rebindable) over the data-free `chimera:debug:toggle-inspector` IPC. Build all six Inspector panels (Timeline, Snapshot Inspector, Projection Explorer, Diff View, Action Log, Performance). Enforce `IS_DEBUG_MODE` production guard.
+
+**GitHub**: [F47 — #689](https://github.com/jindrichruzicka/Chimera/issues/689)
 
 ---
 

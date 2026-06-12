@@ -5,8 +5,9 @@
 // `electron/preload/debug-api.js`) as the preload of the Inspector
 // `BrowserWindow` created by `electron/main/debug-bridge.ts` — and of no
 // other window. The side effect at the bottom is the one and only call to
-// `contextBridge.exposeInMainWorld` for `__chimeraDebug` (Invariant 28: the
-// game renderer's `api.ts` must never expose any debug surface).
+// `contextBridge.exposeInMainWorld` for `__chimeraDebug` (Invariant #28: the
+// game renderer's `api.ts` must never expose any debug data surface; only
+// the data-free `system.toggleDebugInspector()` send is permitted).
 //
 // The full type surface of `window.__chimeraDebug` lives in
 // `electron/preload/debug-api-types.ts`; this module owns only the runtime

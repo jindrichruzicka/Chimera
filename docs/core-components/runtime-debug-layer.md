@@ -55,6 +55,8 @@ const debugPort = debugBridge?.attachSession({
 
 `startDebugBridge` registers the IPC surface immediately but creates **no** Inspector window — the window is lazily created on the first `chimera:debug:toggle-inspector` send and closed on the next. `attachSession` resets the ring buffer, inspector, action log, and mementos for each freshly hosted session (live subscribers and the window survive re-attach).
 
+The toggle is driven by the `engine:toggle-debug-inspector` InputAction (default **F9**, rebindable — see [Input & Keybindings](input-keybindings.md)): the game renderer dispatches it through `window.__chimera.system.toggleDebugInspector()`, a fire-and-forget, payload-less send on `chimera:debug:toggle-inspector`. In production builds no listener is registered on the channel, so the send is a true no-op.
+
 > **Invariant #27** — `CHIMERA_DEBUG` must never appear in production packaging. The production build asserts `IS_DEBUG_MODE === false` at startup.
 
 ---
@@ -75,7 +77,9 @@ Host Machine (CHIMERA_DEBUG=1)
       NO access to window.__chimera
 ```
 
-> **Invariant #28** — `window.__chimeraDebug` is exposed only by `debug-api.ts` and only to the Inspector Window.
+The Inspector Window is **closed by default**: it does not exist at bridge startup, is created on the first F9 toggle, and is destroyed on the next. The debug bridge and its IPC surface run from startup; the ring buffer is instantiated per attached session (`attachSession`, Invariant #31) and records whether or not the window exists.
+
+> **Invariant #28** — `window.__chimeraDebug` is exposed only by `debug-api.ts` and only to the Inspector Window. The game preload exposes no debug **data** surface; its data-free Inspector-window toggle is explicitly permitted.
 > **Invariant #29** — `chimera:debug` ipcMain handler validates `event.sender.id` against Inspector Window's `webContents.id` on every request.
 
 ---
@@ -219,4 +223,5 @@ The observer fires once per `process()` invocation, outer and nested dispatches 
 
 - [Simulation Core](simulation-core-action-pipeline.md) — `PipelineContext.debugObserver`
 - [State Projection](state-projection-interfaces.md) — `StateProjector.project()` used in Projection Explorer
+- [Input & Keybindings](input-keybindings.md) — `engine:toggle-debug-inspector` InputAction (default F9)
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — Invariants #27–31
