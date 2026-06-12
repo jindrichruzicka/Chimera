@@ -1,0 +1,63 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-sm);
+    min-block-size: 0;
+}
+
+.toolbar {
+    align-items: flex-end;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+}
+
+.filter {
+    flex: 1 1 auto;
+}
+
+.tickBound {
+    inline-size: calc(var(--ch-space-xl) * 2);
+}
+
+.scroll {
+    max-block-size: calc(var(--ch-space-xl) * 12);
+}
+
+.table {
+    border-collapse: collapse;
+    font-size: var(--ch-font-size-sm);
+    inline-size: 100%;
+}
+
+.table th {
+    color: var(--ch-color-text-secondary);
+    font-weight: normal;
+    text-align: start;
+}
+
+.table th,
+.table td {
+    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-subtle);
+    padding: var(--ch-space-xs) var(--ch-space-sm);
+}
+
+.table tr[data-selected='true'] td {
+    background: var(--ch-color-surface-raised);
+    box-shadow: inset var(--ch-border-width-md) 0 0 var(--ch-color-accent);
+}
+
+.tick,
+.type,
+.payload {
+    font-family: var(--ch-font-mono);
+}
+
+.payload {
+    overflow-wrap: anywhere;
+}
+
+.error {
+    color: var(--ch-color-error-text-muted);
+    margin: var(--ch-space-none);
+}

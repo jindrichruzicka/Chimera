@@ -1,0 +1,60 @@
+.tree,
+.children {
+    font-family: var(--ch-font-mono);
+    font-size: var(--ch-font-size-sm);
+    line-height: var(--ch-line-height-relaxed);
+    list-style: none;
+    margin: var(--ch-space-none);
+}
+
+.tree {
+    color: var(--ch-color-text-primary);
+    padding-inline-start: var(--ch-space-none);
+}
+
+.children {
+    padding-inline-start: var(--ch-space-md);
+}
+
+.leaf {
+    display: flex;
+    gap: var(--ch-space-xs);
+}
+
+.key {
+    color: var(--ch-color-accent);
+}
+
+.key::after {
+    content: ':';
+    color: var(--ch-color-text-secondary);
+}
+
+.value {
+    color: var(--ch-color-text-primary);
+    overflow-wrap: anywhere;
+}
+
+.summary {
+    color: var(--ch-color-text-secondary);
+}
+
+.toggle {
+    background: none;
+    border: none;
+    color: inherit;
+    cursor: pointer;
+    display: inline-flex;
+    font: inherit;
+    gap: var(--ch-space-xs);
+    padding: var(--ch-space-none);
+}
+
+.toggle::before {
+    content: '▸';
+    color: var(--ch-color-text-secondary);
+}
+
+.toggle[aria-expanded='true']::before {
+    content: '▾';
+}
