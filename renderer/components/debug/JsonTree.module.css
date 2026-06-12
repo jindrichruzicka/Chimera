@@ -58,3 +58,30 @@
 .toggle[aria-expanded='true']::before {
     content: '▾';
 }
+
+.leaf[data-highlight='hidden'],
+.node[data-highlight='hidden'] {
+    --_highlight-color: var(--ch-color-error-border);
+}
+
+.leaf[data-highlight='masked'],
+.node[data-highlight='masked'] {
+    --_highlight-color: var(--ch-color-warning-border);
+}
+
+.leaf[data-highlight='extra'],
+.node[data-highlight='extra'] {
+    --_highlight-color: var(--ch-color-success-border);
+}
+
+.leaf[data-highlight] > .key,
+.leaf[data-highlight] > .value,
+.node[data-highlight] > .toggle .key,
+.node[data-highlight] > .toggle .summary {
+    color: var(--_highlight-color);
+}
+
+.node[data-contains-highlight='true'] > .toggle .summary::after {
+    content: ' ●';
+    color: var(--ch-color-warning);
+}

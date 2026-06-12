@@ -23,6 +23,9 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type { ChimeraDebugApi, TickEntry } from '@chimera/electron/preload/debug-api-types.js';
 import { getDebugBridge } from '../../bridge/debug-bridge';
 import { ActionLogPanel } from '../../components/debug/ActionLogPanel';
+import { DiffViewPanel } from '../../components/debug/DiffViewPanel';
+import { PerformancePanel } from '../../components/debug/PerformancePanel';
+import { ProjectionExplorerPanel } from '../../components/debug/ProjectionExplorerPanel';
 import { SnapshotInspectorPanel } from '../../components/debug/SnapshotInspectorPanel';
 import { TimelinePanel } from '../../components/debug/TimelinePanel';
 import { Caption, Heading, Tabs } from '../../components/ui';
@@ -105,6 +108,26 @@ export default function DebugInspectorPage(): React.ReactElement {
                             id: 'actions',
                             label: 'Action Log',
                             panel: <ActionLogPanel api={bridge.api} selectedTick={selectedTick} />,
+                        },
+                        {
+                            id: 'projection',
+                            label: 'Projection',
+                            panel: (
+                                <ProjectionExplorerPanel
+                                    api={bridge.api}
+                                    selectedTick={selectedTick}
+                                />
+                            ),
+                        },
+                        {
+                            id: 'diff',
+                            label: 'Diff',
+                            panel: <DiffViewPanel api={bridge.api} selectedTick={selectedTick} />,
+                        },
+                        {
+                            id: 'performance',
+                            label: 'Performance',
+                            panel: <PerformancePanel api={bridge.api} />,
                         },
                     ]}
                 />

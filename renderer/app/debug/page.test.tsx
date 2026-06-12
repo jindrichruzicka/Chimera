@@ -8,6 +8,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TickEntry } from '@chimera/electron/preload/debug-api-types.js';
 import {
     createDebugApiMock,
+    makePerfStats,
+    makeSnapshotDiff,
     makeTickEntry,
     type DebugApiMock,
 } from '../../components/debug/__test-support__/DebugApiStubs';
@@ -26,7 +28,13 @@ const TICKS: readonly TickEntry[] = [
 ];
 
 function installPageBridge(): DebugApiMock {
-    const api = createDebugApiMock({ listTicks: vi.fn(() => Promise.resolve(TICKS)) });
+    const api = createDebugApiMock({
+        listTicks: vi.fn(() => Promise.resolve(TICKS)),
+        diff: vi.fn((fromTick: number, toTick: number) =>
+            Promise.resolve(makeSnapshotDiff(fromTick, toTick)),
+        ),
+        getPerfStats: vi.fn(() => Promise.resolve(makePerfStats())),
+    });
     Object.defineProperty(window, '__chimeraDebug', { configurable: true, value: api });
     return api;
 }
@@ -39,7 +47,7 @@ describe('DebugInspectorPage', () => {
         expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
     });
 
-    it('renders the three Inspector tabs and mounts every panel up front', async () => {
+    it('renders the six Inspector tabs and mounts every panel up front', async () => {
         const api = installPageBridge();
         render(<DebugInspectorPage />);
 
@@ -47,12 +55,17 @@ describe('DebugInspectorPage', () => {
         expect(screen.getByRole('tab', { name: 'Timeline' })).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'Snapshot' })).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'Action Log' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Projection' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Diff' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Performance' })).toBeInTheDocument();
 
         // Tabs keep all panels mounted (hidden, not unmounted), so every
-        // panel's initial fetch fires on page mount.
+        // panel's initial fetch fires on page mount. Timeline and Diff View
+        // each own a listTicks call.
         await waitFor(() => {
-            expect(api.listTicks).toHaveBeenCalledOnce();
+            expect(api.listTicks).toHaveBeenCalledTimes(2);
             expect(api.getActionLog).toHaveBeenCalledOnce();
+            expect(api.getPerfStats).toHaveBeenCalledOnce();
         });
     });
 
@@ -66,6 +79,19 @@ describe('DebugInspectorPage', () => {
         await user.click(screen.getByRole('tab', { name: 'Action Log' }));
 
         expect(screen.getByTestId('action-log-panel')).toBeVisible();
+        expect(screen.getByTestId('timeline-panel')).not.toBeVisible();
+    });
+
+    it('reveals the Performance panel when its tab is activated', async () => {
+        const user = userEvent.setup();
+        installPageBridge();
+        render(<DebugInspectorPage />);
+
+        expect(screen.getByTestId('performance-panel')).not.toBeVisible();
+
+        await user.click(screen.getByRole('tab', { name: 'Performance' }));
+
+        expect(screen.getByTestId('performance-panel')).toBeVisible();
         expect(screen.getByTestId('timeline-panel')).not.toBeVisible();
     });
 

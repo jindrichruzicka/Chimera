@@ -1,0 +1,62 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-md);
+    min-block-size: 0;
+}
+
+.stats {
+    display: grid;
+    gap: var(--ch-space-md);
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    margin: var(--ch-space-none);
+}
+
+.stat {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+}
+
+.stat dt {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+}
+
+.stat dd {
+    font-family: var(--ch-font-mono);
+    font-size: var(--ch-font-size-lg);
+    margin: var(--ch-space-none);
+}
+
+.ringBuffer {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+}
+
+.graph {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+    margin: var(--ch-space-none);
+}
+
+.graphSvg {
+    background: var(--ch-color-surface-raised);
+    block-size: calc(var(--ch-space-xl) * 4);
+    border: var(--ch-border-width-sm) solid var(--ch-color-border-subtle);
+    border-radius: var(--ch-radius-sm);
+    inline-size: 100%;
+}
+
+.graphLine {
+    fill: none;
+    stroke: var(--ch-color-success);
+    stroke-width: var(--ch-border-width-md);
+}
+
+.error {
+    color: var(--ch-color-error-text-muted);
+    margin: var(--ch-space-none);
+}

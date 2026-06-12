@@ -5,7 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { JsonTree } from './JsonTree';
+import { JsonTree, type JsonTreeHighlightKind } from './JsonTree';
 
 afterEach(() => {
     cleanup();
@@ -85,5 +85,53 @@ describe('JsonTree', () => {
 
         expect(screen.getByText('inner')).toBeInTheDocument();
         expect(screen.getByText('1')).toBeInTheDocument();
+    });
+
+    it('marks a highlighted leaf with its highlight kind', () => {
+        const highlights = new Map<string, JsonTreeHighlightKind>([['seed', 'hidden']]);
+        render(<JsonTree highlights={highlights} value={{ seed: 42 }} />);
+
+        expect(screen.getByText('seed').closest('li')).toHaveAttribute('data-highlight', 'hidden');
+    });
+
+    it('marks a highlighted composite node with its highlight kind', () => {
+        const highlights = new Map<string, JsonTreeHighlightKind>([['entities', 'masked']]);
+        render(<JsonTree highlights={highlights} value={{ entities: { 'e-1': 1 } }} />);
+
+        expect(screen.getByRole('button', { name: /entities/ }).closest('li')).toHaveAttribute(
+            'data-highlight',
+            'masked',
+        );
+    });
+
+    it('marks a collapsed ancestor of a highlighted path', () => {
+        const highlights = new Map<string, JsonTreeHighlightKind>([['nested.secret', 'hidden']]);
+        render(<JsonTree highlights={highlights} value={{ nested: { secret: 1 } }} />);
+
+        const toggle = screen.getByRole('button', { name: /nested/ });
+        expect(toggle).toHaveAttribute('aria-expanded', 'false');
+        expect(toggle.closest('li')).toHaveAttribute('data-contains-highlight', 'true');
+    });
+
+    it('drops the ancestor marker once the node is expanded', async () => {
+        const user = userEvent.setup();
+        const highlights = new Map<string, JsonTreeHighlightKind>([['nested.secret', 'masked']]);
+        render(<JsonTree highlights={highlights} value={{ nested: { secret: 1 } }} />);
+
+        await user.click(screen.getByRole('button', { name: /nested/ }));
+
+        const node = screen.getByRole('button', { name: /nested/ }).closest('li');
+        expect(node).not.toHaveAttribute('data-contains-highlight');
+        expect(screen.getByText('secret').closest('li')).toHaveAttribute(
+            'data-highlight',
+            'masked',
+        );
+    });
+
+    it('renders no highlight attributes when the prop is omitted', () => {
+        const { container } = render(<JsonTree value={{ seed: 42, nested: { inner: 1 } }} />);
+
+        expect(container.querySelector('[data-highlight]')).toBeNull();
+        expect(container.querySelector('[data-contains-highlight]')).toBeNull();
     });
 });

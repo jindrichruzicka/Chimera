@@ -9,9 +9,16 @@
 //
 // Nodes are button-toggled (`aria-expanded`) rather than `<details>` so the
 // expansion state is fully controlled and deterministic under jsdom.
+//
+// `highlights` (F47 T9, #698) maps dot-paths (root `''`, array indices as
+// numbers-as-strings) to a highlight kind; a collapsed composite that
+// contains a highlighted descendant gets a `data-contains-highlight` marker
+// so differences stay visible in collapsed subtrees.
 
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import styles from './JsonTree.module.css';
+
+export type JsonTreeHighlightKind = 'hidden' | 'masked' | 'extra';
 
 export interface JsonTreeProps {
     /** JSON-plain value to render; composites become collapsible nodes. */
@@ -20,9 +27,13 @@ export interface JsonTreeProps {
     readonly label?: string;
     /** Nodes shallower than this start expanded; the rest start collapsed. */
     readonly defaultExpandedDepth?: number;
+    /** Dot-path → highlight kind; ancestors of a match get a collapsed marker. */
+    readonly highlights?: ReadonlyMap<string, JsonTreeHighlightKind> | undefined;
 }
 
 type Composite = Record<string, unknown> | readonly unknown[];
+
+const NO_HIGHLIGHTS: ReadonlyMap<string, JsonTreeHighlightKind> = new Map();
 
 function isComposite(value: unknown): value is Composite {
     return typeof value === 'object' && value !== null;
@@ -45,17 +56,38 @@ function entriesOf(value: Composite): readonly (readonly [string, unknown])[] {
         : Object.entries(value);
 }
 
+function ancestorsOf(highlights: ReadonlyMap<string, JsonTreeHighlightKind>): ReadonlySet<string> {
+    const ancestors = new Set<string>();
+    for (const path of highlights.keys()) {
+        let cursor = path;
+        while (cursor.includes('.')) {
+            cursor = cursor.slice(0, cursor.lastIndexOf('.'));
+            ancestors.add(cursor);
+        }
+        if (path !== '') {
+            ancestors.add('');
+        }
+    }
+    return ancestors;
+}
+
 export function JsonTree({
     value,
     label = 'root',
     defaultExpandedDepth = 1,
+    highlights = NO_HIGHLIGHTS,
 }: JsonTreeProps): React.ReactElement {
+    const ancestorPaths = useMemo(() => ancestorsOf(highlights), [highlights]);
+
     return (
         <ul className={styles['tree']} data-testid="json-tree">
             <JsonNode
+                ancestorPaths={ancestorPaths}
                 defaultExpandedDepth={defaultExpandedDepth}
                 depth={0}
+                highlights={highlights}
                 name={label}
+                path=""
                 value={value}
             />
         </ul>
@@ -67,14 +99,27 @@ interface JsonNodeProps {
     readonly value: unknown;
     readonly depth: number;
     readonly defaultExpandedDepth: number;
+    /** Dot-path of this node within the root value (root = `''`). */
+    readonly path: string;
+    readonly highlights: ReadonlyMap<string, JsonTreeHighlightKind>;
+    readonly ancestorPaths: ReadonlySet<string>;
 }
 
-function JsonNode({ name, value, depth, defaultExpandedDepth }: JsonNodeProps): React.ReactElement {
+function JsonNode({
+    name,
+    value,
+    depth,
+    defaultExpandedDepth,
+    path,
+    highlights,
+    ancestorPaths,
+}: JsonNodeProps): React.ReactElement {
     const [expanded, setExpanded] = useState(depth < defaultExpandedDepth);
+    const highlight = highlights.get(path);
 
     if (!isComposite(value)) {
         return (
-            <li className={styles['leaf']}>
+            <li className={styles['leaf']} data-highlight={highlight}>
                 <span className={styles['key']}>{name}</span>
                 <span className={styles['value']}>{formatLeaf(value)}</span>
             </li>
@@ -82,7 +127,11 @@ function JsonNode({ name, value, depth, defaultExpandedDepth }: JsonNodeProps): 
     }
 
     return (
-        <li className={styles['node']}>
+        <li
+            className={styles['node']}
+            data-contains-highlight={!expanded && ancestorPaths.has(path) ? 'true' : undefined}
+            data-highlight={highlight}
+        >
             <button
                 aria-expanded={expanded}
                 className={styles['toggle']}
@@ -98,10 +147,13 @@ function JsonNode({ name, value, depth, defaultExpandedDepth }: JsonNodeProps): 
                 <ul className={styles['children']}>
                     {entriesOf(value).map(([childName, childValue]) => (
                         <JsonNode
+                            ancestorPaths={ancestorPaths}
                             defaultExpandedDepth={defaultExpandedDepth}
                             depth={depth + 1}
+                            highlights={highlights}
                             key={childName}
                             name={childName}
+                            path={path === '' ? childName : `${path}.${childName}`}
                             value={childValue}
                         />
                     ))}

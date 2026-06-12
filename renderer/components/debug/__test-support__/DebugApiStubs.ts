@@ -15,7 +15,11 @@ import { playerId } from '@chimera/electron/preload/api-types.js';
 import type {
     ActionHistoryEntry,
     ChimeraDebugApi,
+    DiffEntry,
     LiveTickEvent,
+    PerfStats,
+    ProjectionResult,
+    SnapshotDiff,
     SnapshotResult,
     TickEntry,
 } from '@chimera/electron/preload/debug-api-types.js';
@@ -72,10 +76,65 @@ export function makeActionHistoryEntry(
     };
 }
 
+/** Projection fixture: `{ tick, playerId, snapshot }` from a JSON-plain object. */
+export function makeProjectionResult(
+    tick: number,
+    playerIdRaw = 'player-a',
+    snapshot: Record<string, unknown> = { tick, viewerId: playerIdRaw },
+): ProjectionResult {
+    return {
+        tick,
+        playerId: playerId(playerIdRaw),
+        // @chimera-review: JSON-plain stand-in for the concrete projection
+        // shape; tests only need an opaque tree, and building a full
+        // PlayerSnapshot here would couple every panel test to its fields.
+        snapshot: snapshot as unknown as ProjectionResult['snapshot'],
+    };
+}
+
+/** Diff row fixture; `before`/`after` stay absent unless provided. */
+export function makeDiffEntry(
+    overrides: Partial<DiffEntry> & Pick<DiffEntry, 'path' | 'kind'>,
+): DiffEntry {
+    return { ...overrides };
+}
+
+/** Diff fixture whose summary is computed from `entries`. */
+export function makeSnapshotDiff(
+    fromTick: number,
+    toTick: number,
+    entries: readonly DiffEntry[] = [],
+): SnapshotDiff {
+    const summary = { added: 0, removed: 0, changed: 0 };
+    for (const entry of entries) {
+        summary[entry.kind] += 1;
+    }
+    return { fromTick, toTick, entries: [...entries], summary };
+}
+
+/** Perf aggregate fixture; `sampleCount` follows `recentSamples` unless overridden. */
+export function makePerfStats(overrides: Partial<PerfStats> = {}): PerfStats {
+    const recentSamples = overrides.recentSamples ?? [
+        { tick: 1, durationMs: 1 },
+        { tick: 2, durationMs: 1.5 },
+        { tick: 3, durationMs: 2 },
+    ];
+    return {
+        avgTickDurationMs: 1.5,
+        maxTickDurationMs: 4,
+        sampleCount: recentSamples.length,
+        recentSamples,
+        ringBufferFill: { used: 3, capacity: 128 },
+        totalActionCount: 7,
+        ...overrides,
+    };
+}
+
 /**
- * Every method is a `vi.fn` with a benign default; methods outside the T8
- * panel surface (`getProjection`, `diff`, `getPerfStats`) reject so an
- * unexpected call surfaces as a test failure instead of silent data.
+ * Every method is a `vi.fn` with a benign default; `getProjection`, `diff`,
+ * and `getPerfStats` reject by default so a test that needs them must stub
+ * them explicitly — an unexpected call surfaces as a test failure instead
+ * of silent data.
  */
 export function createDebugApiMock(overrides: Partial<ChimeraDebugApi> = {}): DebugApiMock {
     const listeners = new Set<(event: LiveTickEvent) => void>();

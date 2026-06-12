@@ -20,6 +20,7 @@ import { Caption } from '../ui/Caption';
 import { ScrollArea } from '../ui/ScrollArea';
 import { Spinner } from '../ui/Spinner';
 import { ToggleButton } from '../ui/ToggleButton';
+import { acquireLiveSubscription } from './liveSubscription';
 import styles from './TimelinePanel.module.css';
 
 export interface TimelinePanelProps {
@@ -87,9 +88,9 @@ export function TimelinePanel({
                     : mergeTicks([], [...prev, { tick: event.tick, inRingBuffer: true }]),
             );
         });
-        void api.subscribeLive().catch(() => {
-            // Live pushes unavailable; the backfilled list still renders.
-        });
+        // Refcounted: the main-side subscription is one slot per window,
+        // shared with every other live panel (e.g. Performance).
+        const releaseLive = acquireLiveSubscription(api);
 
         api.listTicks()
             .then((loaded) => {
@@ -112,9 +113,7 @@ export function TimelinePanel({
         return () => {
             active = false;
             unsubscribe();
-            void api.unsubscribeLive().catch(() => {
-                // Main side cleans up on window close regardless.
-            });
+            releaseLive();
         };
         // onTicksLoaded is intentionally not a dependency: the subscription
         // must not churn when the parent re-creates the callback.
