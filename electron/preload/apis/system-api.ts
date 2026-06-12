@@ -7,8 +7,12 @@
 // Channel names live here (not in `shared/`) because they are an internal
 // preload↔main protocol detail: renderer code never references them, and the
 // main-process handler module imports these same constants to guarantee the
-// channel strings match on both sides.
+// channel strings match on both sides. Exception: the debug toggle channel
+// is imported from `shared/constants.ts` — the documented home of the
+// `chimera:debug*` channels (§4.12), shared with `debug-bridge.ts` so the
+// debug module graph never leaks into this preload (Invariant #27).
 
+import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera/shared/constants.js';
 import type { ConnectionStatus, DeviceInfo, SystemAPI, Unsubscribe } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';
@@ -112,5 +116,13 @@ export function createSystemApi(ipc: SystemApiIpcPort, notifyQuit?: QuitNotifier
                 ),
         onDeviceInfoChange: (cb: (info: DeviceInfo) => void): Unsubscribe =>
             subscribeValidatedPush(ipc, SYSTEM_DEVICE_INFO_CHANGE_CHANNEL, DeviceInfoSchema, cb),
+        toggleDebugInspector: () => {
+            // Fire-and-forget by design: in production no listener exists on
+            // this channel, and a send to an unregistered channel is a true
+            // no-op — see the SystemAPI JSDoc for why this must never be an
+            // `invoke`.
+            ipc.send(DEBUG_TOGGLE_INSPECTOR_CHANNEL);
+            return Promise.resolve();
+        },
     };
 }

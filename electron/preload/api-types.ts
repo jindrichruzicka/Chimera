@@ -981,4 +981,15 @@ export interface SystemAPI {
      * Returns an unsubscribe function (§4.17).
      */
     onDeviceInfoChange(cb: (info: DeviceInfo) => void): Unsubscribe;
+    /**
+     * Toggle the Debug Inspector window (§4.12). Data-free fire-and-forget
+     * `send` on `chimera:debug:toggle-inspector` — an `ipcMain.on` channel
+     * registered only by `debug-bridge.ts` when `IS_DEBUG_MODE` is true, so
+     * in production the send is a harmless no-op and the promise still
+     * resolves. Must never become an `invoke`: that would reject with
+     * "No handler registered" even in debug mode, where the listener is
+     * `on`, not `handle`. Invariant 28: this is the game renderer's ONLY
+     * debug-related surface, and it carries no data in either direction.
+     */
+    toggleDebugInspector(): Promise<void>;
 }

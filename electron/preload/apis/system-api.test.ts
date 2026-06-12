@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
+import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera/shared/constants.js';
 import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANNEL,
@@ -292,6 +293,28 @@ describe('createSystemApi', () => {
                 PreloadIpcValidationError,
             );
             expect(callback).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('toggleDebugInspector()', () => {
+        it('sends on the chimera:debug:toggle-inspector channel and performs no invoke', async () => {
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+
+            await api.toggleDebugInspector();
+
+            expect(stub.sends).toEqual([DEBUG_TOGGLE_INSPECTOR_CHANNEL]);
+            expect(stub.invocations).toEqual([]);
+        });
+
+        it('resolves without throwing when no IPC handler is registered (production no-op)', async () => {
+            // The stub wires no handler for the channel — exactly like
+            // production, where debug-bridge.ts never registers its
+            // ipcMain.on listener. A fire-and-forget send cannot reject.
+            const stub = makeIpcStub();
+            const api = createSystemApi(stub.port);
+
+            await expect(api.toggleDebugInspector()).resolves.toBeUndefined();
         });
     });
 });

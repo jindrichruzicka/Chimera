@@ -451,6 +451,14 @@ describe('window.__chimera.system — contract', () => {
         expect(sendCalls).toEqual([{ channel: 'chimera:system:quit', args: [] }]);
     });
 
+    it('toggleDebugInspector() sends to chimera:debug:toggle-inspector with no payload and resolves', async () => {
+        // Data-free window-management toggle (Invariant 28: no debug DATA
+        // surface on the game preload — the send carries nothing).
+        await expect(api.system.toggleDebugInspector()).resolves.toBeUndefined();
+        expect(sendCalls).toEqual([{ channel: 'chimera:debug:toggle-inspector', args: [] }]);
+        expect(invokeCalls).toEqual([]);
+    });
+
     it('onConnectionStatus() registers on chimera:system:connection-status; Unsubscribe removes it', () => {
         const calls: unknown[] = [];
         const unsubscribe = api.system.onConnectionStatus((status) => {
