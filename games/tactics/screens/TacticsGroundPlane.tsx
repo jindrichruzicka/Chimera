@@ -2,6 +2,7 @@
 
 import type { ThreeEvent } from '@react-three/fiber';
 import React from 'react';
+import { TACTICS_BOARD_HEIGHT_TILES, TACTICS_BOARD_WIDTH_TILES } from '@chimera/shared/tactics.js';
 import {
     worldToGridPoint,
     type TacticsGridPoint,
@@ -13,9 +14,11 @@ export interface TacticsGroundPlaneProps {
     readonly onRevealGridPoint: (grid: TacticsGridPoint) => void;
 }
 
+// Centre offset for the playable grid; resizing the board (shared tile counts)
+// also requires re-centring this position.
 const GROUND_POSITION = [1, -0.02, 0] as const;
 const GROUND_ROTATION = [-Math.PI / 2, 0, 0] as const;
-const GROUND_GEOMETRY_ARGS = [6, 4] as const;
+const GROUND_GEOMETRY_ARGS = [TACTICS_BOARD_WIDTH_TILES, TACTICS_BOARD_HEIGHT_TILES] as const;
 const TACTICS_GROUND_COLOR = '#3f3f46';
 
 export function TacticsGroundPlane({

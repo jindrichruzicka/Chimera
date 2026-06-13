@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+    TACTICS_BOARD_MAX_X,
+    TACTICS_BOARD_MAX_Y,
+    TACTICS_BOARD_MIN_X,
+    TACTICS_BOARD_MIN_Y,
     TACTICS_INITIAL_UNIT_SPACING_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
@@ -26,12 +30,24 @@ import {
     tacticsRevealTileDefinition,
 } from './actions.js';
 import { buildInitialTacticsEntities } from './entities.js';
+import { parseTacticsSceneUnits } from './screens/tacticsSceneModel.js';
 import { tacticsVisibilityRules } from './visibility-rules.js';
 
 const P1 = playerId('player-1');
 const P2 = playerId('player-2');
+const P3 = playerId('player-3');
+const P4 = playerId('player-4');
 const UNIT = entityId('unit-1');
 const ENEMY_UNIT = entityId('unit-2');
+
+function unitPositions(
+    entities: Record<EntityId, BaseEntityState>,
+): readonly { readonly x: number; readonly y: number }[] {
+    // Reuse the renderer's typed opaque→fields projection so the test asserts
+    // against the same narrowing the scene relies on. Non-unit or non-integer
+    // entities are dropped, so a malformed seat shows up as a missing position.
+    return parseTacticsSceneUnits(entities, undefined).map((unit) => unit.grid);
+}
 
 function makeSnapshot(
     options: {
@@ -490,5 +506,84 @@ describe('tactics move unit action', () => {
         };
 
         expect(definition?.resolveGameResult?.(defeated)).toEqual({ winnerIds: [P1] });
+    });
+});
+
+describe('buildInitialTacticsEntities start positions', () => {
+    it('places 4 players at 4 distinct, on-board positions', () => {
+        const entities = buildInitialTacticsEntities([P1, P2, P3, P4]);
+
+        expect(Object.keys(entities)).toHaveLength(4);
+
+        const positions = unitPositions(entities);
+        // Every unit lands on a valid integer grid cell of the 6×4 board.
+        for (const { x, y } of positions) {
+            expect(Number.isInteger(x)).toBe(true);
+            expect(Number.isInteger(y)).toBe(true);
+            expect(x).toBeGreaterThanOrEqual(TACTICS_BOARD_MIN_X);
+            expect(x).toBeLessThanOrEqual(TACTICS_BOARD_MAX_X);
+            expect(y).toBeGreaterThanOrEqual(TACTICS_BOARD_MIN_Y);
+            expect(y).toBeLessThanOrEqual(TACTICS_BOARD_MAX_Y);
+        }
+
+        // All four positions are pairwise distinct.
+        const distinct = new Set(positions.map(({ x, y }) => `${x},${y}`));
+        expect(distinct.size).toBe(4);
+    });
+
+    it.each([
+        { label: '1 player', roster: [P1] },
+        { label: '3 players', roster: [P1, P2, P3] },
+    ])('places $label at distinct on-board positions', ({ roster }) => {
+        const entities = buildInitialTacticsEntities(roster);
+
+        expect(Object.keys(entities)).toHaveLength(roster.length);
+
+        const positions = unitPositions(entities);
+        for (const { x, y } of positions) {
+            expect(Number.isInteger(x)).toBe(true);
+            expect(Number.isInteger(y)).toBe(true);
+            expect(x).toBeGreaterThanOrEqual(TACTICS_BOARD_MIN_X);
+            expect(x).toBeLessThanOrEqual(TACTICS_BOARD_MAX_X);
+            expect(y).toBeGreaterThanOrEqual(TACTICS_BOARD_MIN_Y);
+            expect(y).toBeLessThanOrEqual(TACTICS_BOARD_MAX_Y);
+        }
+
+        const distinct = new Set(positions.map(({ x, y }) => `${x},${y}`));
+        expect(distinct.size).toBe(roster.length);
+    });
+
+    it('keeps the legacy 2-player placement at (0,0) and (2,0)', () => {
+        const entities = buildInitialTacticsEntities([P1, P2]);
+
+        expect(entities[UNIT]).toMatchObject({ ownerId: P1, x: 0, y: 0 });
+        expect(entities[ENEMY_UNIT]).toMatchObject({ ownerId: P2, x: 2, y: 0 });
+    });
+
+    it('throws when the roster exceeds the available start positions', () => {
+        const overfullRoster = [P1, P2, P3, P4, playerId('player-5')];
+
+        expect(() => buildInitialTacticsEntities(overfullRoster)).toThrow(
+            /exceeds .* start positions/,
+        );
+    });
+
+    it('is deterministic — the same roster yields identical positions', () => {
+        const first = buildInitialTacticsEntities([P1, P2, P3, P4]);
+        const second = buildInitialTacticsEntities([P1, P2, P3, P4]);
+
+        expect(second).toEqual(first);
+    });
+
+    it('accepts an optional setup argument without changing positions', () => {
+        const setup = {
+            matchSettings: { boardColor: 'navy' },
+            playerAttributes: { [P1]: { color: 'blue' }, [P2]: { color: 'red' } },
+        };
+
+        const withSetup = buildInitialTacticsEntities([P1, P2, P3, P4], setup);
+        const withoutSetup = buildInitialTacticsEntities([P1, P2, P3, P4]);
+
+        expect(withSetup).toEqual(withoutSetup);
     });
 });
