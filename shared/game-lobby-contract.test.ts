@@ -216,19 +216,18 @@ describe('GameLobbyScreenProps', () => {
         expect(baseProps.isHost).toBe(true);
     });
 
-    it('invokes the synchronous setters with key/value pairs', () => {
-        const calls: [string, string][] = [];
+    it('invokes the synchronous setters with their key/value (and seat) args', () => {
+        const matchCalls: [string, string][] = [];
+        const attrCalls: [PlayerId, string, string][] = [];
         const props: GameLobbyScreenProps = {
             ...baseProps,
-            setMatchSetting: (key, value) => calls.push([key, value]),
-            setPlayerAttribute: (key, value) => calls.push([key, value]),
+            setMatchSetting: (key, value) => matchCalls.push([key, value]),
+            setPlayerAttribute: (playerId, key, value) => attrCalls.push([playerId, key, value]),
         };
         props.setMatchSetting('mapSize', 'large');
-        props.setPlayerAttribute('team', 'blue');
-        expect(calls).toEqual([
-            ['mapSize', 'large'],
-            ['team', 'blue'],
-        ]);
+        props.setPlayerAttribute('p1', 'team', 'blue');
+        expect(matchCalls).toEqual([['mapSize', 'large']]);
+        expect(attrCalls).toEqual([['p1', 'team', 'blue']]);
     });
 
     it('exposes async lifecycle callbacks returning promises', async () => {

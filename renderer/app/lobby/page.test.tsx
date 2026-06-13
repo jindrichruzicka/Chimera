@@ -5,7 +5,10 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
+import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import LobbyPage from './page';
 import pageCss from './page.module.css?raw';
 
@@ -37,6 +40,54 @@ interface MockLobbyUiStoreState {
 let mockLocalSeatIds: readonly string[] = [];
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
+
+// Game shell returned by the mocked registry. Defaults to an empty shell (no
+// LobbyScreen) so the engine-default ActiveLobbyPanel renders and the existing
+// tests stay green. A plain function — not vi.fn — so the global
+// `restoreMocks` does not strip its implementation between tests.
+let mockLobbyShell: Partial<LoadedRendererGameShell> = {};
+
+vi.mock('../../game/rendererGameRegistry', () => ({
+    loadRendererGameShell: () => Promise.resolve(mockLobbyShell),
+}));
+
+// Probe lobby screen: renders editable host controls (wired to the contract
+// setters) or a read-only marker for clients, proving the page delivers
+// `isHost` + the setters through GameLobbyScreenProps.
+function StubLobbyScreen({
+    isHost,
+    setMatchSetting,
+    setPlayerAttribute,
+}: GameLobbyScreenProps): React.ReactElement {
+    return (
+        <div data-testid="stub-lobby-screen">
+            {isHost ? (
+                <>
+                    <button
+                        data-testid="stub-edit-board"
+                        onClick={() => {
+                            setMatchSetting('boardColor', 'amber');
+                        }}
+                        type="button"
+                    >
+                        Board colour
+                    </button>
+                    <button
+                        data-testid="stub-edit-color"
+                        onClick={() => {
+                            setPlayerAttribute(playerId('p2'), 'color', 'blue');
+                        }}
+                        type="button"
+                    >
+                        Player colour
+                    </button>
+                </>
+            ) : (
+                <span data-testid="stub-readonly">read-only</span>
+            )}
+        </div>
+    );
+}
 
 vi.mock('../../state/lobbyStore', () => ({
     useLobbyStore: (selector: (state: MockLobbyStoreState) => unknown) =>
@@ -570,5 +621,89 @@ describe('LobbyPage chat panel', () => {
 
         expect(screen.queryByTestId('chat-panel')).toBeNull();
         expect(screen.queryByTestId('chat-unavailable')).toBeNull();
+    });
+});
+
+describe('LobbyPage game-provided lobby screen', () => {
+    let setMatchSetting: ReturnType<typeof vi.fn>;
+    let setPlayerAttribute: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        mockLocalSeatIds = [];
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: true },
+                { playerId: 'p2', displayName: 'Guest', ready: true },
+            ],
+        };
+        mockLobbyShell = { LobbyScreen: StubLobbyScreen };
+        mockPush.mockReset();
+
+        setMatchSetting = vi.fn(async () => undefined);
+        setPlayerAttribute = vi.fn(async () => undefined);
+
+        Object.defineProperty(window, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
+                    join: vi.fn(async () => ({ sessionId: 's', hostId: 'p1', gameId: 'tactics' })),
+                    getLocalPlayerId: vi.fn(async () => 'p1'),
+                    leave: vi.fn(async () => undefined),
+                    startGame: vi.fn(async () => undefined),
+                    updatePlayerReadyState: vi.fn(async () => undefined),
+                    setMatchSetting,
+                    setPlayerAttribute,
+                },
+                system: { onConnectionStatus: vi.fn(() => () => undefined) },
+            },
+        });
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+        mockLobbyShell = {};
+        delete (window as unknown as { __chimera?: unknown }).__chimera;
+    });
+
+    it('renders the game-provided LobbyScreen instead of the engine default', async () => {
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('stub-lobby-screen')).toBeTruthy();
+        expect(screen.queryByTestId('active-lobby-panel')).toBeNull();
+    });
+
+    it('falls back to the engine-default ActiveLobbyPanel when no LobbyScreen is provided', async () => {
+        mockLobbyShell = {};
+
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('active-lobby-panel')).toBeTruthy();
+        expect(screen.queryByTestId('stub-lobby-screen')).toBeNull();
+    });
+
+    it('gives the host editable controls whose edits invoke the host-authority IPC', async () => {
+        renderLobbyPage();
+
+        fireEvent.click(await screen.findByTestId('stub-edit-board'));
+        fireEvent.click(screen.getByTestId('stub-edit-color'));
+
+        await waitFor(() => {
+            expect(setMatchSetting).toHaveBeenCalledWith('boardColor', 'amber');
+            expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p2'), 'color', 'blue');
+        });
+    });
+
+    it('renders the screen read-only for a client (non-host)', async () => {
+        mockLocalPlayerId = 'p2'; // host is p1
+
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('stub-readonly')).toBeTruthy();
+        expect(screen.queryByTestId('stub-edit-board')).toBeNull();
+        expect(screen.queryByTestId('stub-edit-color')).toBeNull();
     });
 });

@@ -11,6 +11,13 @@ vi.mock('next/navigation', () => ({
     useRouter: () => ({ push: vi.fn() }),
 }));
 
+// The lobby page resolves the active game's shell via the registry; stub it with
+// an empty shell so these write-lock tests exercise the engine-default panel and
+// never trigger a real `games/*` dynamic import.
+vi.mock('../../game/rendererGameRegistry', () => ({
+    loadRendererGameShell: () => Promise.resolve({}),
+}));
+
 const host = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 const join = vi.fn(async () => ({ sessionId: 's1', hostId: 'p1', gameId: 'tactics' }));
 const leave = vi.fn(async () => undefined);

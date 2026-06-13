@@ -85,6 +85,11 @@ export interface GameSetupConfig {
  * In-flight lobby operation, or `null` when idle. Mirrors the renderer's
  * `renderer/app/lobby/lobbyTypes.ts` `PendingAction` so the renderer can later
  * collapse onto this canonical, shared definition.
+ *
+ * Note: `setPlayerAttribute` carries the target `playerId` so a host screen can
+ * author *any* seat's attribute (e.g. per-player unit colour), matching the
+ * host-authority IPC (`chimera:lobby:set-player-attribute`). Writes are
+ * host-only — `main` rejects them from a joined session (#706).
  */
 export type LobbyPendingAction =
     | 'hosting'
@@ -108,7 +113,7 @@ export interface GameLobbyScreenProps {
     readonly canStartGame: boolean;
     readonly pendingAction: LobbyPendingAction;
     readonly setMatchSetting: (key: string, value: string) => void;
-    readonly setPlayerAttribute: (key: string, value: string) => void;
+    readonly setPlayerAttribute: (playerId: PlayerId, key: string, value: string) => void;
     readonly onToggleReady: (ready: boolean) => Promise<void>;
     readonly onStartGame: () => Promise<void>;
     readonly onLeave: () => Promise<void>;

@@ -28,6 +28,10 @@ export interface LobbyApi {
     leave(): Promise<void>;
     startGame(): Promise<void>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
+    /** Host-only: set a host-authored match setting; main rejects non-host writes (#706). */
+    setMatchSetting(key: string, value: string): Promise<void>;
+    /** Host-only: set a host-authored attribute on the seat at `playerId` (#706). */
+    setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
 }
 
 const MISSING_BRIDGE_ERROR = 'Chimera API not available';
@@ -117,6 +121,24 @@ export function useLobbyApi(): LobbyApi {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
                 await bridge.lobby.updatePlayerReadyState(ready);
+            },
+            async setMatchSetting(key: string, value: string): Promise<void> {
+                const bridge = getLobbyBridge();
+                if (!bridge) {
+                    throw new Error(MISSING_BRIDGE_ERROR);
+                }
+                await bridge.lobby.setMatchSetting(key, value);
+            },
+            async setPlayerAttribute(
+                targetPlayerId: PlayerId,
+                key: string,
+                value: string,
+            ): Promise<void> {
+                const bridge = getLobbyBridge();
+                if (!bridge) {
+                    throw new Error(MISSING_BRIDGE_ERROR);
+                }
+                await bridge.lobby.setPlayerAttribute(targetPlayerId, key, value);
             },
         }),
         [],

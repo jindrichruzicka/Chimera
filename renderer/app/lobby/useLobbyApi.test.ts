@@ -306,4 +306,53 @@ describe('useLobbyApi', () => {
 
         await expect(result.current.startGame()).rejects.toThrow('Chimera API not available');
     });
+
+    it('delegates setMatchSetting and setPlayerAttribute to the bridge lobby API', async () => {
+        const setMatchSetting = vi.fn(async () => undefined);
+        const setPlayerAttribute = vi.fn(async () => undefined);
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: vi.fn(),
+                    join: vi.fn(),
+                    getLocalPlayerId: vi.fn(),
+                    leave: vi.fn(),
+                    startGame: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    setMatchSetting,
+                    setPlayerAttribute,
+                    onUpdate: vi.fn(),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(),
+                },
+            },
+        });
+
+        const { result } = renderHook(() => useLobbyApi());
+
+        await result.current.setMatchSetting('boardColor', 'amber');
+        await result.current.setPlayerAttribute(playerId('p2'), 'color', 'blue');
+
+        expect(setMatchSetting).toHaveBeenCalledWith('boardColor', 'amber');
+        expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p2'), 'color', 'blue');
+    });
+
+    it('throws when calling setMatchSetting without preload bridge', async () => {
+        const { result } = renderHook(() => useLobbyApi());
+
+        await expect(result.current.setMatchSetting('boardColor', 'amber')).rejects.toThrow(
+            'Chimera API not available',
+        );
+    });
+
+    it('throws when calling setPlayerAttribute without preload bridge', async () => {
+        const { result } = renderHook(() => useLobbyApi());
+
+        await expect(
+            result.current.setPlayerAttribute(playerId('p2'), 'color', 'blue'),
+        ).rejects.toThrow('Chimera API not available');
+    });
 });

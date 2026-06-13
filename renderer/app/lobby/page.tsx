@@ -2,10 +2,14 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
+import { playerId } from '@chimera/electron/preload/api-types.js';
 import { ActiveLobbyPanel } from './ActiveLobbyPanel';
 import { LobbyEntryTabs } from './LobbyEntryTabs';
 import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
 import { Button } from '../../components/ui/Button';
+import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
+import { loadRendererGameShell } from '../../game/rendererGameRegistry';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
@@ -15,6 +19,49 @@ import { useThemeOverride } from '../../theme/useThemeOverride';
 import { getDefaultLobbyConfig, parseLobbyConfig } from './lobbyConfig';
 import { useLobbyApi } from './useLobbyApi';
 import styles from './page.module.css';
+
+/**
+ * Load the active game's renderer shell so the lobby can render a game-provided
+ * `LobbyScreen` when one exists. Loading goes through the renderer game registry
+ * only — the lobby page never imports `games/*` directly (Invariant #94).
+ *
+ * Returns `null` while idle, loading, or on failure; a failed load is a
+ * resilient fallback to the engine-default `ActiveLobbyPanel` rather than an
+ * error. An `isActive` guard drops stale results from a superseded `gameId`.
+ */
+function useLobbyGameShell(gameId: string | null): LoadedRendererGameShell | null {
+    const [shell, setShell] = useState<LoadedRendererGameShell | null>(null);
+
+    useEffect(() => {
+        if (gameId === null) {
+            setShell(null);
+            return;
+        }
+
+        let isActive = true;
+        // Clear any previously-loaded shell so a stale screen never lingers
+        // across a game change.
+        setShell(null);
+
+        loadRendererGameShell(gameId)
+            .then((loaded) => {
+                if (isActive) {
+                    setShell(loaded);
+                }
+            })
+            .catch(() => {
+                if (isActive) {
+                    setShell(null);
+                }
+            });
+
+        return () => {
+            isActive = false;
+        };
+    }, [gameId]);
+
+    return shell;
+}
 
 export default function LobbyPage() {
     const router = useRouter();
@@ -33,6 +80,10 @@ export default function LobbyPage() {
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const previousLobbyStateRef = useRef(lobbyState);
     const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
+
+    // Load the active game's shell so a game-provided LobbyScreen can replace the
+    // engine default. Keyed on gameId so it only reloads when the game changes.
+    const gameShell = useLobbyGameShell(lobbyState?.info.gameId ?? null);
 
     useEffect(() => {
         if (previousLobbyStateRef.current !== null && lobbyState === null) {
@@ -154,6 +205,45 @@ export default function LobbyPage() {
         }
     };
 
+    const reportSetupError = (err: unknown, fallback: string): void => {
+        if (isMountedRef.current) {
+            setError(err instanceof Error ? err.message : fallback);
+        }
+    };
+
+    // A game ships a custom lobby screen when its shell exposes `LobbyScreen`;
+    // otherwise the engine-default `ActiveLobbyPanel` renders. The host-authority
+    // setters are routed to the lobby IPC via `useLobbyApi` (the contract setters
+    // are synchronous, so failures surface through the page's error banner).
+    const GameLobbyScreen = gameShell?.LobbyScreen;
+    const lobbyScreenProps: GameLobbyScreenProps | null =
+        lobbyState !== null && localPlayerId !== null
+            ? {
+                  lobbyState,
+                  localPlayerId,
+                  isHost: localPlayerId === lobbyState.info.hostId,
+                  canStartGame,
+                  pendingAction,
+                  setMatchSetting: (key, value) => {
+                      lobbyApi.setMatchSetting(key, value).catch((err: unknown) => {
+                          reportSetupError(err, 'Failed to update match setting');
+                      });
+                  },
+                  setPlayerAttribute: (attributePlayerId, key, value) => {
+                      // The shared contract's PlayerId is a plain string; brand it
+                      // for the preload API at this boundary (cf. useLobbyApi).
+                      lobbyApi
+                          .setPlayerAttribute(playerId(attributePlayerId), key, value)
+                          .catch((err: unknown) => {
+                              reportSetupError(err, 'Failed to update player attribute');
+                          });
+                  },
+                  onToggleReady: handleToggleReady,
+                  onStartGame: handleStartGame,
+                  onLeave: handleLeave,
+              }
+            : null;
+
     return (
         <ThemeProvider theme={lobbyTheme}>
             <main className={styles['page']} role="main" aria-label="Multiplayer Lobby">
@@ -176,15 +266,19 @@ export default function LobbyPage() {
                     ) : null}
 
                     {lobbyState ? (
-                        <ActiveLobbyPanel
-                            canStartGame={canStartGame}
-                            lobbyState={lobbyState}
-                            localPlayerId={localPlayerId}
-                            onLeave={handleLeave}
-                            onStartGame={handleStartGame}
-                            onToggleReady={handleToggleReady}
-                            pendingAction={pendingAction}
-                        />
+                        GameLobbyScreen && lobbyScreenProps ? (
+                            <GameLobbyScreen {...lobbyScreenProps} />
+                        ) : (
+                            <ActiveLobbyPanel
+                                canStartGame={canStartGame}
+                                lobbyState={lobbyState}
+                                localPlayerId={localPlayerId}
+                                onLeave={handleLeave}
+                                onStartGame={handleStartGame}
+                                onToggleReady={handleToggleReady}
+                                pendingAction={pendingAction}
+                            />
+                        )
                     ) : (
                         <LobbyEntryTabs
                             activeTabId={activeTabId}

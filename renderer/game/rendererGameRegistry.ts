@@ -1,4 +1,5 @@
 import type { ComponentType } from 'react';
+import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
 import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
 import type {
     GameFontFace,
@@ -15,6 +16,13 @@ export interface LoadedRendererGameShell {
     readonly menuCommands?: Partial<Record<GameMenuCommandId, () => void>>;
     readonly settings?: GameSettingsPageDefinition;
     readonly shellBackground?: ComponentType;
+    /**
+     * Optional game-provided lobby screen. When present, the lobby page renders
+     * it in place of the engine-default `ActiveLobbyPanel`, passing the
+     * {@link GameLobbyScreenProps} contract. Loaded via this registry only — the
+     * lobby page never imports `games/*` directly (Invariant #94).
+     */
+    readonly LobbyScreen?: ComponentType<GameLobbyScreenProps>;
     readonly fonts?: readonly GameFontFace[];
 }
 
