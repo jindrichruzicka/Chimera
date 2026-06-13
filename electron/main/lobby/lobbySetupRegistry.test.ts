@@ -9,6 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { playerId, type LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { tacticsLobbySetup } from '@chimera/games/tactics/lobby/lobby-setup.js';
 import {
     lobbySetupRegistry,
     resolveLobbySetup,
@@ -24,13 +25,17 @@ function makeState(overrides: Partial<LobbyState> = {}): LobbyState {
 }
 
 describe('lobbySetupRegistry', () => {
-    it('is empty until games register descriptors (no concrete game in #706)', () => {
-        expect(Object.keys(lobbySetupRegistry)).toHaveLength(0);
+    it('registers the Tactics descriptor as the first adopter (#708)', () => {
+        expect(lobbySetupRegistry['tactics']).toBe(tacticsLobbySetup);
+        expect(tacticsLobbySetup.maxPlayers).toBe(4);
     });
 
     describe('resolveLobbySetup', () => {
+        it('resolves the Tactics descriptor by gameId', () => {
+            expect(resolveLobbySetup('tactics')).toBe(tacticsLobbySetup);
+        });
+
         it('returns undefined for an unregistered gameId', () => {
-            expect(resolveLobbySetup('tactics')).toBeUndefined();
             expect(resolveLobbySetup('unknown')).toBeUndefined();
         });
     });

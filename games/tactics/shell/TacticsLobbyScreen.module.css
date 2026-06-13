@@ -1,0 +1,87 @@
+.lobby {
+    display: grid;
+    gap: var(--ch-space-md);
+}
+
+.panel {
+    background-color: var(--ch-color-surface);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-md);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    box-shadow: var(--ch-shadow-sm);
+    display: grid;
+    gap: var(--ch-space-md);
+    padding: var(--ch-space-md);
+}
+
+.heading-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+    justify-content: space-between;
+}
+
+.ready-summary {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    margin: var(--ch-space-none);
+}
+
+.roster {
+    display: grid;
+    gap: var(--ch-space-sm);
+    list-style: none;
+    margin: var(--ch-space-none);
+    padding: var(--ch-space-none);
+}
+
+.roster-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+}
+
+.swatch {
+    block-size: var(--ch-space-md);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    display: inline-block;
+    flex: none;
+    inline-size: var(--ch-space-md);
+}
+
+.player-name {
+    color: var(--ch-color-text-primary);
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+}
+
+.you {
+    color: var(--ch-color-text-secondary);
+}
+
+.action-bar {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+    justify-content: space-between;
+}
+
+.sr-only {
+    border: var(--ch-space-none);
+    block-size: var(--ch-space-screen-reader);
+    clip: rect(0, 0, 0, 0);
+    inline-size: var(--ch-space-screen-reader);
+    margin: calc(var(--ch-space-screen-reader) * -1);
+    overflow: hidden;
+    padding: var(--ch-space-none);
+    position: absolute;
+    white-space: nowrap;
+}

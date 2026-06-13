@@ -6,6 +6,7 @@ import type {
     GameMenuCommandId,
     GameSettingsPageDefinition,
 } from '@chimera/shared/game-shell-contract.js';
+import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
 import {
     getRendererGameMenuCommand,
     loadRendererGame,
@@ -49,6 +50,12 @@ describe('rendererGameRegistry', () => {
         ]);
     });
 
+    it('loads the tactics lobby screen into the shell bundle (#708)', async () => {
+        const shell = await loadRendererGameShell('tactics');
+
+        expect(shell.LobbyScreen).toBeDefined();
+    });
+
     it('rejects unknown game ids when loading a shell bundle', async () => {
         await expect(loadRendererGameShell('missing-game')).rejects.toThrow(
             UnknownRendererGameError,
@@ -89,6 +96,18 @@ describe('rendererGameRegistry', () => {
             expectTypeOf<ShellShape['fonts']>().toEqualTypeOf<
                 readonly GameFontFace[] | undefined
             >();
+        });
+
+        it('shell.LobbyScreen is typed as ComponentType<GameLobbyScreenProps> | undefined (#708)', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['LobbyScreen']>().toEqualTypeOf<
+                ComponentType<GameLobbyScreenProps> | undefined
+            >();
+        });
+
+        it('tactics loader exposes shell.LobbyScreen (#708)', async () => {
+            const game = await loadRendererGame('tactics');
+            expect(game.shell?.LobbyScreen).toBeDefined();
         });
 
         it('tactics loader exposes shell.settings (#629)', async () => {

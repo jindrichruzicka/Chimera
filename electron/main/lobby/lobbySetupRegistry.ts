@@ -8,24 +8,24 @@
  * This module is the designated *composition point* for game lobby descriptors:
  * it is the only place permitted to import `games/*` lobby-setup descriptors and
  * register them here (so `LobbyManager` stays free of game imports — Invariant
- * #2; it receives the resolver injected). The registry is intentionally EMPTY in
- * #706 (T4): the first concrete descriptor (Tactics) is registered in #708 (T6).
- * Until then every seeding path no-ops gracefully and behavior is byte-identical
- * to before this task.
+ * #2; it receives the resolver injected). Tactics is the first adopter (#708,
+ * T6); further games register their descriptors here the same way.
  *
  * Architecture: §4.14 — LobbyManager; §4.4 — Lobby State Sync
  * Task: #706 (part of #702 — Customizable Lobby)
  */
 
+import { tacticsLobbySetup } from '@chimera/games/tactics/lobby/lobby-setup.js';
 import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { GameLobbySetup, GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 
 /**
  * `gameId → GameLobbySetup`. Concrete game descriptors are registered here by
- * importing them from `games/*` (the sole module allowed to do so). Empty until
- * #708 adds the Tactics descriptor.
+ * importing them from `games/*` (the sole module allowed to do so).
  */
-export const lobbySetupRegistry: Readonly<Record<string, GameLobbySetup>> = {};
+export const lobbySetupRegistry: Readonly<Record<string, GameLobbySetup>> = {
+    tactics: tacticsLobbySetup,
+};
 
 /**
  * Resolve the lobby-setup descriptor for `gameId`, or `undefined` when the game
