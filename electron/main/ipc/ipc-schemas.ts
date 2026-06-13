@@ -220,6 +220,32 @@ export const JoinLobbyParamsSchema = z.object({
 export const LobbyReadyStateSchema = z.boolean();
 
 /**
+ * Schema for the `{key, value}` payload accepted by
+ * `chimera:lobby:set-match-setting` (host-only). `value` may be empty (e.g. a
+ * "none" option); `key` must be a non-empty setting id. `.strict()` rejects
+ * unknown keys at the boundary (§9.1).
+ */
+export const SetMatchSettingPayloadSchema = z
+    .object({
+        key: NonEmptyStringSchema,
+        value: z.string(),
+    })
+    .strict();
+
+/**
+ * Schema for the `{playerId, key, value}` payload accepted by
+ * `chimera:lobby:set-player-attribute` (host-only). `playerId` is validated and
+ * branded via {@link PlayerIdSchema} so the handler receives a typed `PlayerId`.
+ */
+export const SetPlayerAttributePayloadSchema = z
+    .object({
+        playerId: PlayerIdSchema,
+        key: NonEmptyStringSchema,
+        value: z.string(),
+    })
+    .strict();
+
+/**
  * Schema for {@link SaveRequest} accepted by `chimera:saves:save`.
  * Typed via an explicit cast — see the schema header for why `satisfies`
  * cannot be used with `exactOptionalPropertyTypes` + `.optional()`.

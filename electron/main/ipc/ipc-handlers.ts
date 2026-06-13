@@ -38,6 +38,8 @@ import {
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
+    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../../preload/apis/lobby-api.js';
 import {
@@ -122,6 +124,8 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     LobbyReadyStateSchema,
+    SetMatchSettingPayloadSchema,
+    SetPlayerAttributePayloadSchema,
     ReplayExportIntentSchema,
     ReplayPathSchema,
     ReplaySnapshotRangeSchema,
@@ -163,6 +167,8 @@ export {
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
+    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
@@ -576,6 +582,8 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             LOBBY_LEAVE_CHANNEL,
             LOBBY_START_GAME_CHANNEL,
             LOBBY_UPDATE_READY_STATE_CHANNEL,
+            LOBBY_SET_MATCH_SETTING_CHANNEL,
+            LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
         ],
     });
 
@@ -618,6 +626,24 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             ready,
         );
         return lobbyManager.updatePlayerReadyState(validated);
+    });
+
+    ipcMain.handle(LOBBY_SET_MATCH_SETTING_CHANNEL, (_event, payload) => {
+        const validated = parseInvokeRequest(
+            SetMatchSettingPayloadSchema,
+            LOBBY_SET_MATCH_SETTING_CHANNEL,
+            payload,
+        );
+        return lobbyManager.setMatchSetting(validated.key, validated.value);
+    });
+
+    ipcMain.handle(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL, (_event, payload) => {
+        const validated = parseInvokeRequest(
+            SetPlayerAttributePayloadSchema,
+            LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+            payload,
+        );
+        return lobbyManager.setPlayerAttribute(validated.playerId, validated.key, validated.value);
     });
 }
 

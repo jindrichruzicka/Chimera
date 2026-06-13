@@ -58,6 +58,7 @@ import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/apis/replay-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
+import { resolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobbySetupRegistry.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
@@ -1196,6 +1197,10 @@ export async function main(): Promise<void> {
 
     const lobbyManager = new LobbyManager(new LocalWebSocketProvider(), lobbyLogger, {
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
+        // Inject the game lobby-setup resolver from the composition-root registry
+        // so the manager can seed host-authored defaults without importing
+        // `games/*` (Invariant #2). Empty registry → no-op seeding (#706).
+        resolveLobbySetup,
         onSessionHosted: (transport, metadata) => {
             activeE2eHooks = metadata.e2eHooks;
             const agentManager = new AgentManager({ logger: lobbyLogger });
@@ -1758,6 +1763,12 @@ export async function main(): Promise<void> {
                 playerIds,
             );
 
+            // Carry the host-authored lobby setup (chosen match settings +
+            // per-player attributes) into the match (#706). Keyed by real
+            // playerId via `state.players`, so the firstPlayer turn-order reorder
+            // above does not affect it. Omitted (undefined) for games with no
+            // lobby setup, keeping the payload backward-compatible.
+            const setup = buildSetupFromLobbyState(state);
             const action: ActionEnvelope = {
                 type: 'engine:start_game',
                 playerId: state.info.hostId,
@@ -1766,6 +1777,7 @@ export async function main(): Promise<void> {
                     playerIds: allPlayerIds,
                     firstPlayerId: firstPlayer,
                     ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
+                    ...(setup !== undefined ? { setup } : {}),
                 },
             };
             sessionRuntime.applyAction(action);

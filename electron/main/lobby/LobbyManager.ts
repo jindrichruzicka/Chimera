@@ -41,6 +41,11 @@ import type { ProfileGate } from '../profile/ProfileGate.js';
 import type { ChatRelay } from '../ChatRelay.js';
 import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
 import type { E2eHooks } from '../runtime/e2e-hooks.js';
+import type { GameLobbySetup } from '@chimera/shared/game-lobby-contract.js';
+import {
+    resolveMatchSettingsDefaults,
+    resolvePlayerAttributeDefaults,
+} from '@chimera/shared/game-lobby-contract.js';
 
 export interface HostedSessionMetadata {
     readonly hostId: PlayerId;
@@ -97,6 +102,15 @@ export interface LobbyManagerOptions {
      */
     readonly onProfileRejected?: (reason: string) => void;
     readonly e2eHooks?: E2eHooks;
+    /**
+     * Resolves the host-authored lobby-setup descriptor for a `gameId`, or
+     * `undefined` when the game declares none (#706). Injected from the
+     * composition root (`electron/main/index.ts`) so the manager can seed
+     * default match settings and per-player attributes without importing
+     * `games/*` directly (Invariant #2). When omitted — or when it returns
+     * `undefined` — all seeding no-ops and behavior stays backward-compatible.
+     */
+    readonly resolveLobbySetup?: (gameId: string) => GameLobbySetup | undefined;
 }
 
 export interface AddLocalSeatOptions {
@@ -146,6 +160,7 @@ export class LobbyManager {
     private readonly onPlayerConnectionChanged: LobbyManagerOptions['onPlayerConnectionChanged'];
     private readonly onProfileRejected: LobbyManagerOptions['onProfileRejected'];
     private readonly e2eHooks: LobbyManagerOptions['e2eHooks'];
+    private readonly resolveLobbySetup: LobbyManagerOptions['resolveLobbySetup'];
     /**
      * Opponents currently in a transient-drop state (left with a non-deliberate
      * reason, not yet reconnected). Gates the "reconnected" toast so it fires
@@ -174,6 +189,52 @@ export class LobbyManager {
         this.onPlayerConnectionChanged = options.onPlayerConnectionChanged;
         this.onProfileRejected = options.onProfileRejected;
         this.e2eHooks = options.e2eHooks;
+        this.resolveLobbySetup = options.resolveLobbySetup;
+    }
+
+    /**
+     * Resolve the lobby-setup descriptor for the current session's game, or
+     * `undefined` when none is registered / no injector was wired. Read from the
+     * live `LobbyState.info.gameId` so seeding works on every join, not just at
+     * host time (#706).
+     */
+    private currentLobbySetup(): GameLobbySetup | undefined {
+        if (this.resolveLobbySetup === undefined || this.lobbyState === null) {
+            return undefined;
+        }
+        return this.resolveLobbySetup(this.lobbyState.info.gameId);
+    }
+
+    /**
+     * Return `entry` seeded with default host-authored attributes for `seatIndex`
+     * when a descriptor resolves and the entry has none yet. Used on join and
+     * local-seat add so every seat carries deterministic per-player defaults.
+     * No-ops (returns `entry` unchanged) when no descriptor resolves or the entry
+     * already carries attributes (host edits are never clobbered).
+     */
+    private seedSeatAttributes(
+        entry: LobbyPlayerEntry,
+        seatIndex: number,
+        setup: GameLobbySetup | undefined,
+    ): LobbyPlayerEntry {
+        if (setup === undefined || entry.attributes !== undefined) {
+            return entry;
+        }
+        return { ...entry, attributes: resolvePlayerAttributeDefaults(setup, seatIndex) };
+    }
+
+    /**
+     * Rebuild a full {@link LobbyState} from `base` with a new `players` roster,
+     * preserving the host-authored top-level `matchSettings` (#706). Roster
+     * mutations must funnel through here so seeded match settings survive every
+     * join / leave / ready / profile update broadcast.
+     */
+    private static withPlayers(base: LobbyState, players: readonly LobbyPlayerEntry[]): LobbyState {
+        return {
+            info: base.info,
+            players,
+            ...(base.matchSettings !== undefined ? { matchSettings: base.matchSettings } : {}),
+        };
     }
 
     private publishLobbyState(state: LobbyState): void {
@@ -301,15 +362,22 @@ export class LobbyManager {
         this.localSeatIds.clear();
         this.localSeatIds.add(info.hostId);
 
+        // Seed host-authored defaults from the game's lobby-setup descriptor
+        // (#706). The host occupies seat 0. No-ops when no descriptor resolves,
+        // leaving `matchSettings`/`attributes` absent (backward-compatible).
+        const setup = this.resolveLobbySetup?.(params.gameId);
+        const hostEntry: LobbyPlayerEntry = {
+            playerId: info.hostId,
+            displayName: info.hostId,
+            ready: false,
+            ...(setup !== undefined
+                ? { attributes: resolvePlayerAttributeDefaults(setup, 0) }
+                : {}),
+        };
         const initialState: LobbyState = {
             info,
-            players: [
-                {
-                    playerId: info.hostId,
-                    displayName: info.hostId,
-                    ready: false,
-                },
-            ],
+            players: [hostEntry],
+            ...(setup !== undefined ? { matchSettings: resolveMatchSettingsDefaults(setup) } : {}),
         };
         // Wire the profile gate BEFORE publishing the lobby state so there is
         // no window in which a client could learn the session token and JOIN
@@ -394,14 +462,14 @@ export class LobbyManager {
                 this.profileUpdateTimestamps.set(from, Date.now());
 
                 if (this.lobbyState !== null) {
-                    const nextState: LobbyState = {
-                        info: this.lobbyState.info,
-                        players: this.lobbyState.players.map((entry) =>
+                    const nextState = LobbyManager.withPlayers(
+                        this.lobbyState,
+                        this.lobbyState.players.map((entry) =>
                             entry.playerId === from
                                 ? { ...entry, displayName: result.profile.displayName }
                                 : entry,
                         ),
-                    };
+                    );
                     this.publishLobbyState(nextState);
                     this.broadcastLobbyStateIfHosted(nextState);
                 }
@@ -418,12 +486,12 @@ export class LobbyManager {
                     return;
                 }
 
-                const nextState: LobbyState = {
-                    info: this.lobbyState.info,
-                    players: this.lobbyState.players.map((entry) =>
+                const nextState = LobbyManager.withPlayers(
+                    this.lobbyState,
+                    this.lobbyState.players.map((entry) =>
                         entry.playerId === from ? { ...entry, ready } : entry,
                     ),
-                };
+                );
 
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
@@ -446,17 +514,35 @@ export class LobbyManager {
                 const existing = this.lobbyState.players.find(
                     (entry) => entry.playerId === player.playerId,
                 );
+                // A fresh join takes the next free seat and is seeded with the
+                // descriptor's default attributes for that seat index (#706). A
+                // duplicate join event for a player already in the roster
+                // preserves the host-authored attributes rather than reseeding
+                // — the transport-delivered entry never carries them, so a
+                // verbatim replace would wipe host edits.
+                const setup = this.currentLobbySetup();
                 const nextPlayers: readonly LobbyPlayerEntry[] =
                     existing === undefined
-                        ? [...this.lobbyState.players, player]
+                        ? [
+                              ...this.lobbyState.players,
+                              this.seedSeatAttributes(
+                                  player,
+                                  this.lobbyState.players.length,
+                                  setup,
+                              ),
+                          ]
                         : this.lobbyState.players.map((entry) =>
-                              entry.playerId === player.playerId ? player : entry,
+                              entry.playerId === player.playerId
+                                  ? {
+                                        ...player,
+                                        ...(existing.attributes !== undefined
+                                            ? { attributes: existing.attributes }
+                                            : {}),
+                                    }
+                                  : entry,
                           );
 
-                const nextState: LobbyState = {
-                    info: this.lobbyState.info,
-                    players: nextPlayers,
-                };
+                const nextState = LobbyManager.withPlayers(this.lobbyState, nextPlayers);
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
             }),
@@ -476,10 +562,10 @@ export class LobbyManager {
                     this.disconnectedPlayers.delete(playerId);
                 }
 
-                const nextState: LobbyState = {
-                    info: this.lobbyState.info,
-                    players: this.lobbyState.players.filter((entry) => entry.playerId !== playerId),
-                };
+                const nextState = LobbyManager.withPlayers(
+                    this.lobbyState,
+                    this.lobbyState.players.filter((entry) => entry.playerId !== playerId),
+                );
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
             }),
@@ -622,28 +708,115 @@ export class LobbyManager {
         }
 
         const existing = this.lobbyState.players.find((entry) => entry.playerId === playerId);
-        const entry: LobbyPlayerEntry = {
+        const baseEntry: LobbyPlayerEntry = {
             playerId,
             displayName: options.displayName ?? existing?.displayName ?? playerId,
             ready: options.ready ?? existing?.ready ?? false,
         };
+        // A brand-new local seat (AI / pass-and-play) is a real game seat, so it
+        // is seeded with the descriptor's default attributes for its seat index
+        // (#706). A re-add preserves any host-authored attributes already set.
+        const entry: LobbyPlayerEntry =
+            existing === undefined
+                ? this.seedSeatAttributes(
+                      baseEntry,
+                      this.lobbyState.players.length,
+                      this.currentLobbySetup(),
+                  )
+                : {
+                      ...baseEntry,
+                      ...(existing.attributes !== undefined
+                          ? { attributes: existing.attributes }
+                          : {}),
+                  };
         const wasLocal = this.localSeatIds.has(playerId);
         this.localSeatIds.add(playerId);
         if (!wasLocal) {
             this.onLocalSeatAdded?.(entry);
         }
 
-        const nextState: LobbyState = {
-            info: this.lobbyState.info,
-            players:
-                existing === undefined
-                    ? [...this.lobbyState.players, entry]
-                    : this.lobbyState.players.map((player) =>
-                          player.playerId === playerId ? entry : player,
-                      ),
-        };
+        const nextState = LobbyManager.withPlayers(
+            this.lobbyState,
+            existing === undefined
+                ? [...this.lobbyState.players, entry]
+                : this.lobbyState.players.map((player) =>
+                      player.playerId === playerId ? entry : player,
+                  ),
+        );
 
         this.publishLobbyState(nextState);
+        return Promise.resolve();
+    }
+
+    /**
+     * Set a host-authored match setting and rebroadcast the full lobby state
+     * (#706). Host-only: rejects from a joined (non-host) session — the host is
+     * the sole authority for match settings. The value is merged into the
+     * existing `matchSettings`, the renderer is re-pushed via
+     * {@link publishLobbyState}, and clients receive the full updated state.
+     */
+    setMatchSetting(key: string, value: string): Promise<void> {
+        const session = this.session;
+        if (session === null) {
+            return Promise.reject(
+                new Error('LobbyManager: setting a match setting requires an active session'),
+            );
+        }
+        if (!('close' in session)) {
+            return Promise.reject(
+                new Error('LobbyManager: only hosted sessions can set match settings'),
+            );
+        }
+        if (this.lobbyState === null) {
+            return Promise.reject(new Error('LobbyManager: lobby state is not available'));
+        }
+
+        const nextState: LobbyState = {
+            ...this.lobbyState,
+            matchSettings: { ...this.lobbyState.matchSettings, [key]: value },
+        };
+        this.publishLobbyState(nextState);
+        this.broadcastLobbyStateIfHosted(nextState);
+        return Promise.resolve();
+    }
+
+    /**
+     * Set a host-authored attribute on the player at `playerId` and rebroadcast
+     * the full lobby state (#706). Host-only: rejects from a joined (non-host)
+     * session, and rejects when `playerId` is not in the roster. The value is
+     * merged into that player's `attributes`.
+     */
+    setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void> {
+        const session = this.session;
+        if (session === null) {
+            return Promise.reject(
+                new Error('LobbyManager: setting a player attribute requires an active session'),
+            );
+        }
+        if (!('close' in session)) {
+            return Promise.reject(
+                new Error('LobbyManager: only hosted sessions can set player attributes'),
+            );
+        }
+        if (this.lobbyState === null) {
+            return Promise.reject(new Error('LobbyManager: lobby state is not available'));
+        }
+        if (!this.lobbyState.players.some((entry) => entry.playerId === playerId)) {
+            return Promise.reject(
+                new Error('LobbyManager: target player is not present in the lobby roster'),
+            );
+        }
+
+        const nextState = LobbyManager.withPlayers(
+            this.lobbyState,
+            this.lobbyState.players.map((entry) =>
+                entry.playerId === playerId
+                    ? { ...entry, attributes: { ...entry.attributes, [key]: value } }
+                    : entry,
+            ),
+        );
+        this.publishLobbyState(nextState);
+        this.broadcastLobbyStateIfHosted(nextState);
         return Promise.resolve();
     }
 
@@ -772,12 +945,12 @@ export class LobbyManager {
             throw new Error('LobbyManager: local player is not present in the lobby roster');
         }
 
-        const nextState: LobbyState = {
-            info: this.lobbyState.info,
-            players: this.lobbyState.players.map((entry) =>
+        const nextState = LobbyManager.withPlayers(
+            this.lobbyState,
+            this.lobbyState.players.map((entry) =>
                 entry.playerId === this.localPlayerId ? { ...entry, ready } : entry,
             ),
-        };
+        );
 
         this.publishLobbyState(nextState);
         session.transport.broadcastLobbyState(nextState);

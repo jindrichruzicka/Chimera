@@ -7,6 +7,8 @@ import {
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
     PlayerIdSchema,
+    SetMatchSettingPayloadSchema,
+    SetPlayerAttributePayloadSchema,
     LogEntrySchema,
     RendererLogEntrySchema,
     SaveRequestSchema,
@@ -145,6 +147,96 @@ describe('JoinLobbyParamsSchema', () => {
 
     it('rejects a non-string address', () => {
         expect(JoinLobbyParamsSchema.safeParse({ address: 42 }).success).toBe(false);
+    });
+});
+
+describe('SetMatchSettingPayloadSchema', () => {
+    it('accepts a well-formed {key, value}', () => {
+        expect(
+            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: 'red' }).success,
+        ).toBe(true);
+    });
+
+    it('accepts an empty value (e.g. "none")', () => {
+        expect(
+            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: '' }).success,
+        ).toBe(true);
+    });
+
+    it('rejects a missing or empty key', () => {
+        expect(SetMatchSettingPayloadSchema.safeParse({ value: 'red' }).success).toBe(false);
+        expect(SetMatchSettingPayloadSchema.safeParse({ key: '', value: 'red' }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects a non-string value', () => {
+        expect(
+            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: 42 }).success,
+        ).toBe(false);
+    });
+
+    it('rejects unknown keys', () => {
+        expect(
+            SetMatchSettingPayloadSchema.safeParse({ key: 'boardColor', value: 'red', extra: 1 })
+                .success,
+        ).toBe(false);
+    });
+});
+
+describe('SetPlayerAttributePayloadSchema', () => {
+    it('accepts a well-formed {playerId, key, value}', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({
+                playerId: 'p1',
+                key: 'unitColor',
+                value: 'blue',
+            }).success,
+        ).toBe(true);
+    });
+
+    it('accepts an empty value', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({
+                playerId: 'p1',
+                key: 'unitColor',
+                value: '',
+            }).success,
+        ).toBe(true);
+    });
+
+    it('rejects a missing or empty playerId', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({ key: 'unitColor', value: 'blue' }).success,
+        ).toBe(false);
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({
+                playerId: '',
+                key: 'unitColor',
+                value: 'blue',
+            }).success,
+        ).toBe(false);
+    });
+
+    it('rejects a missing or empty key', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({ playerId: 'p1', value: 'blue' }).success,
+        ).toBe(false);
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({ playerId: 'p1', key: '', value: 'blue' })
+                .success,
+        ).toBe(false);
+    });
+
+    it('rejects unknown keys', () => {
+        expect(
+            SetPlayerAttributePayloadSchema.safeParse({
+                playerId: 'p1',
+                key: 'unitColor',
+                value: 'blue',
+                extra: 1,
+            }).success,
+        ).toBe(false);
     });
 });
 

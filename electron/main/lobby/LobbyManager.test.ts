@@ -51,10 +51,39 @@ import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import { registerE2eHooks, type E2eHooks } from '../runtime/e2e-hooks.js';
 import { crc32Json } from '@chimera/shared/crc32.js';
+import type { GameLobbySetup } from '@chimera/shared/game-lobby-contract.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
 const HOST_PARAMS: HostLobbyParams = { gameId: 'tactics', maxPlayers: 2 };
+
+/**
+ * Fixture lobby-setup descriptor used to exercise host-side defaults seeding and
+ * host-only writes (#706). Seat 0 → red, seat 1 → blue (alternating).
+ */
+const SAMPLE_SETUP: GameLobbySetup = {
+    maxPlayers: 4,
+    matchSettingsDefaults: { mapSize: 'medium' },
+    matchSettingsOptions: {
+        mapSize: [
+            { value: 'small', label: 'Small' },
+            { value: 'medium', label: 'Medium' },
+        ],
+    },
+    playerAttributeOptions: {
+        team: [
+            { value: 'red', label: 'Red' },
+            { value: 'blue', label: 'Blue' },
+        ],
+    },
+    resolveDefaultPlayerAttributes: (seatIndex) => ({
+        team: seatIndex % 2 === 0 ? 'red' : 'blue',
+    }),
+};
+
+/** Resolver that returns {@link SAMPLE_SETUP} for the `tactics` fixture gameId. */
+const resolveSampleSetup = (gameId: string): GameLobbySetup | undefined =>
+    gameId === 'tactics' ? SAMPLE_SETUP : undefined;
 
 function makeProvider(): InMemoryMultiplayerProvider {
     return new InMemoryMultiplayerProvider();
@@ -2064,5 +2093,218 @@ describe('LobbyManager — profile rejection forwarding (#688)', () => {
 
         await joinManager.closeLobby();
         await hostManager.closeLobby();
+    });
+});
+
+// ── Lobby setup defaults & host-only writes (#706) ───────────────────────────────
+
+describe('LobbyManager — lobby setup defaults (#706)', () => {
+    it('seeds matchSettings and the host (seat 0) attributes from the descriptor on host', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        const info = await manager.hostLobby(HOST_PARAMS);
+
+        const state = manager.getCurrentState();
+        expect(state?.matchSettings).toEqual({ mapSize: 'medium' });
+        const host = state?.players.find((p) => p.playerId === info.hostId);
+        expect(host?.attributes).toEqual({ team: 'red' });
+
+        await manager.closeLobby();
+    });
+
+    it('seeds nothing when no resolver is injected (backward-compatible)', async () => {
+        const manager = makeManager();
+        const info = await manager.hostLobby(HOST_PARAMS);
+
+        const state = manager.getCurrentState();
+        expect(state?.matchSettings).toBeUndefined();
+        const host = state?.players.find((p) => p.playerId === info.hostId);
+        expect(host?.attributes).toBeUndefined();
+
+        await manager.closeLobby();
+    });
+
+    it('seeds nothing when the resolver has no descriptor for the gameId', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: () => undefined,
+        });
+        const info = await manager.hostLobby(HOST_PARAMS);
+
+        const state = manager.getCurrentState();
+        expect(state?.matchSettings).toBeUndefined();
+        expect(state?.players.find((p) => p.playerId === info.hostId)?.attributes).toBeUndefined();
+
+        await manager.closeLobby();
+    });
+
+    it('seeds a joining player attributes by seat index (seat 1 → blue)', async () => {
+        const ctl = makeControllableProvider();
+        const states: LobbyState[] = [];
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onLobbyStateChanged: (s) => states.push(s),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        ctl.fireHostPlayerJoined({ playerId: playerId('p2'), displayName: 'p2', ready: false });
+
+        const joined = manager
+            .getCurrentState()
+            ?.players.find((p) => p.playerId === playerId('p2'));
+        expect(joined?.attributes).toEqual({ team: 'blue' });
+
+        await manager.closeLobby();
+    });
+
+    it('does not seed joining players when no descriptor resolves', async () => {
+        const ctl = makeControllableProvider();
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            resolveLobbySetup: () => undefined,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        ctl.fireHostPlayerJoined({ playerId: playerId('p2'), displayName: 'p2', ready: false });
+
+        expect(
+            manager.getCurrentState()?.players.find((p) => p.playerId === playerId('p2'))
+                ?.attributes,
+        ).toBeUndefined();
+
+        await manager.closeLobby();
+    });
+
+    it('preserves host-authored attributes on a duplicate (rejoin) join event', async () => {
+        const ctl = makeControllableProvider();
+        const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        ctl.fireHostPlayerJoined({ playerId: playerId('p2'), displayName: 'p2', ready: false });
+        await manager.setPlayerAttribute(playerId('p2'), 'team', 'green');
+
+        // A duplicate join event for the same player (already in the roster) must
+        // NOT clobber the host's edited attributes.
+        ctl.fireHostPlayerJoined({ playerId: playerId('p2'), displayName: 'p2', ready: false });
+
+        expect(
+            manager.getCurrentState()?.players.find((p) => p.playerId === playerId('p2'))
+                ?.attributes,
+        ).toEqual({ team: 'green' });
+
+        await manager.closeLobby();
+    });
+
+    it('seeds attributes for a newly added local seat by seat index', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        await manager.addLocalSeat(playerId('seat-2'));
+
+        expect(
+            manager.getCurrentState()?.players.find((p) => p.playerId === playerId('seat-2'))
+                ?.attributes,
+        ).toEqual({ team: 'blue' });
+
+        await manager.closeLobby();
+    });
+});
+
+describe('LobbyManager — host-only setMatchSetting / setPlayerAttribute (#706)', () => {
+    it('setMatchSetting merges into matchSettings, republishes, and broadcasts', async () => {
+        let capturedTransport: HostTransport | null = null;
+        const states: LobbyState[] = [];
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onSessionHosted: (transport) => {
+                capturedTransport = transport;
+            },
+            onLobbyStateChanged: (s) => states.push(s),
+        });
+        await manager.hostLobby(HOST_PARAMS);
+        const broadcastSpy = vi.spyOn(capturedTransport!, 'broadcastLobbyState');
+
+        await manager.setMatchSetting('boardColor', 'crimson');
+
+        expect(manager.getCurrentState()?.matchSettings).toEqual({
+            mapSize: 'medium',
+            boardColor: 'crimson',
+        });
+        expect(broadcastSpy).toHaveBeenCalledOnce();
+        expect(broadcastSpy.mock.calls[0]?.[0].matchSettings).toEqual({
+            mapSize: 'medium',
+            boardColor: 'crimson',
+        });
+        expect(states[states.length - 1]?.matchSettings).toEqual({
+            mapSize: 'medium',
+            boardColor: 'crimson',
+        });
+
+        await manager.closeLobby();
+    });
+
+    it('setPlayerAttribute merges into the target player attributes, republishes, and broadcasts', async () => {
+        let capturedTransport: HostTransport | null = null;
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onSessionHosted: (transport) => {
+                capturedTransport = transport;
+            },
+        });
+        const info = await manager.hostLobby(HOST_PARAMS);
+        const broadcastSpy = vi.spyOn(capturedTransport!, 'broadcastLobbyState');
+
+        await manager.setPlayerAttribute(info.hostId, 'team', 'green');
+
+        const host = manager.getCurrentState()?.players.find((p) => p.playerId === info.hostId);
+        expect(host?.attributes).toEqual({ team: 'green' });
+        expect(broadcastSpy).toHaveBeenCalledOnce();
+
+        await manager.closeLobby();
+    });
+
+    it('rejects setMatchSetting / setPlayerAttribute without an active session', async () => {
+        const manager = makeManager();
+        await expect(manager.setMatchSetting('boardColor', 'crimson')).rejects.toThrow(
+            /active session/i,
+        );
+        await expect(manager.setPlayerAttribute(playerId('p1'), 'team', 'red')).rejects.toThrow(
+            /active session/i,
+        );
+    });
+
+    it('rejects writes from a joined (non-host) session', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        await expect(joinManager.setMatchSetting('boardColor', 'crimson')).rejects.toThrow(
+            /only hosted sessions/i,
+        );
+        await expect(
+            joinManager.setPlayerAttribute(joinManager.getLocalPlayerId()!, 'team', 'red'),
+        ).rejects.toThrow(/only hosted sessions/i);
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('rejects setPlayerAttribute for a player not in the roster', async () => {
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        await expect(manager.setPlayerAttribute(playerId('ghost'), 'team', 'red')).rejects.toThrow(
+            /not present in the lobby roster/i,
+        );
+
+        await manager.closeLobby();
     });
 });

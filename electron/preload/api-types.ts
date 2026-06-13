@@ -913,6 +913,19 @@ export interface LobbyAPI {
     getCurrentState(): Promise<LobbyState | null>;
     getLocalPlayerId(): Promise<PlayerId | null>;
     updatePlayerReadyState(ready: boolean): Promise<void>;
+    /**
+     * Host-only: set a host-authored match setting (e.g. board colour). The main
+     * process rejects this from a joined (non-host) session, then rebroadcasts
+     * the full {@link LobbyState} to every client (#706).
+     */
+    setMatchSetting(key: string, value: string): Promise<void>;
+    /**
+     * Host-only: set a host-authored attribute on the player at `playerId` (e.g.
+     * unit colour). The main process rejects this from a joined (non-host)
+     * session, then rebroadcasts the full {@link LobbyState} (#706). The explicit
+     * `playerId` lets the host author any seat's attributes.
+     */
+    setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;
     /**
      * Fires when an opponent's connection presence transitions (transient drop or

@@ -14,6 +14,8 @@ import {
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
+    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
@@ -656,6 +658,62 @@ describe('registerLobbyHandlers', () => {
         expect(() => handler?.({}, 'yes')).toThrow(IpcRequestValidationError);
     });
 
+    it('registers chimera:lobby:set-match-setting as an invoke handler that calls lobbyManager.setMatchSetting', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'setMatchSetting').mockResolvedValue(undefined);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}, { key: 'boardColor', value: 'crimson' }));
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledWith('boardColor', 'crimson');
+    });
+
+    it('rejects invalid set-match-setting payloads with IpcRequestValidationError', () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+
+        const handler = stub.handled.get(LOBBY_SET_MATCH_SETTING_CHANNEL);
+        expect(handler).toBeDefined();
+
+        expect(() => handler?.({}, { key: '', value: 'crimson' })).toThrow(
+            IpcRequestValidationError,
+        );
+        expect(() => handler?.({}, { value: 'crimson' })).toThrow(IpcRequestValidationError);
+    });
+
+    it('registers chimera:lobby:set-player-attribute as an invoke handler that calls lobbyManager.setPlayerAttribute', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'setPlayerAttribute').mockResolvedValue(undefined);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}, { playerId: 'p1', key: 'unitColor', value: 'blue' }));
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledWith(toPlayerId('p1'), 'unitColor', 'blue');
+    });
+
+    it('rejects invalid set-player-attribute payloads with IpcRequestValidationError', () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+
+        const handler = stub.handled.get(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL);
+        expect(handler).toBeDefined();
+
+        expect(() => handler?.({}, { playerId: '', key: 'unitColor', value: 'blue' })).toThrow(
+            IpcRequestValidationError,
+        );
+        expect(() => handler?.({}, { playerId: 'p1', value: 'blue' })).toThrow(
+            IpcRequestValidationError,
+        );
+    });
+
     it('rejects when lobbyManager.closeLobby throws', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -684,6 +742,8 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_LEAVE_CHANNEL,
                 LOBBY_START_GAME_CHANNEL,
                 LOBBY_UPDATE_READY_STATE_CHANNEL,
+                LOBBY_SET_MATCH_SETTING_CHANNEL,
+                LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);

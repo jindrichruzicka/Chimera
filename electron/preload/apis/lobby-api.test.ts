@@ -7,6 +7,8 @@ import {
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
+    LOBBY_SET_MATCH_SETTING_CHANNEL,
+    LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     LOBBY_PLAYER_CONNECTION_CHANNEL,
     LOBBY_PROFILE_REJECTED_CHANNEL,
@@ -264,6 +266,76 @@ describe('createLobbyApi', () => {
             const api = createLobbyApi(port);
 
             await expect(api.updatePlayerReadyState(false)).rejects.toThrow('ready update failed');
+        });
+    });
+
+    describe('setMatchSetting()', () => {
+        it('invokes chimera:lobby:set-match-setting with {key, value} and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.setMatchSetting('boardColor', 'crimson');
+
+            expect(stub.invocations).toEqual([
+                {
+                    channel: LOBBY_SET_MATCH_SETTING_CHANNEL,
+                    arg: { key: 'boardColor', value: 'crimson' },
+                },
+            ]);
+            expect(result).toBeUndefined();
+        });
+
+        it('rejects when the main-process handler rejects (e.g. non-host write)', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_SET_MATCH_SETTING_CHANNEL) {
+                        return Promise.reject(new Error('only hosted sessions'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(api.setMatchSetting('boardColor', 'crimson')).rejects.toThrow(
+                'only hosted sessions',
+            );
+        });
+    });
+
+    describe('setPlayerAttribute()', () => {
+        it('invokes chimera:lobby:set-player-attribute with {playerId, key, value} and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.setPlayerAttribute(playerId('p2'), 'unitColor', 'blue');
+
+            expect(stub.invocations).toEqual([
+                {
+                    channel: LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+                    arg: { playerId: 'p2', key: 'unitColor', value: 'blue' },
+                },
+            ]);
+            expect(result).toBeUndefined();
+        });
+
+        it('rejects when the main-process handler rejects (e.g. non-host write)', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL) {
+                        return Promise.reject(new Error('only hosted sessions'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(
+                api.setPlayerAttribute(playerId('p2'), 'unitColor', 'blue'),
+            ).rejects.toThrow('only hosted sessions');
         });
     });
 

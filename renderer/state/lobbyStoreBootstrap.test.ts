@@ -48,6 +48,8 @@ function makeLobbyApi(onUpdateImpl?: (cb: (lobby: LobbyState) => void) => Unsubs
         leave: vi.fn(),
         startGame: vi.fn(),
         updatePlayerReadyState: vi.fn(),
+        setMatchSetting: vi.fn(),
+        setPlayerAttribute: vi.fn(),
         onUpdate: vi.fn(onUpdateImpl ?? (() => vi.fn())),
         onPlayerConnectionChanged: vi.fn(() => vi.fn()),
         onProfileRejected: vi.fn(() => vi.fn()),
