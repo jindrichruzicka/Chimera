@@ -21,6 +21,8 @@ export type { ContentDatabase } from '../content/index.js';
 import type { TimerRegistry } from './GameTimer.js';
 export type { TimerRegistry } from './GameTimer.js';
 import type { Logger } from '@chimera/shared/logging.js';
+import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
+export type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 
 // ─── Primitive branded identifiers ───────────────────────────────────────────
 
@@ -222,6 +224,15 @@ export interface BaseGameSnapshot {
     readonly sceneDefaultScreen?: string;
     /** Pending two-phase scene transition, or null between transitions (§4.18). */
     readonly sceneTransition?: SceneTransitionState | null;
+    /**
+     * Public host-authored lobby setup (chosen match settings + per-player
+     * attributes) written at `engine:start_game` and carried host-local on the
+     * authoritative snapshot. Projected verbatim by `StateProjector.project()`
+     * so every client agrees on the match configuration — it holds no owner-only
+     * fields (§4.37, Invariant #1). Optional and backward-compatible: absent on
+     * pre-#705 fixtures/saves and games with no lobby setup.
+     */
+    readonly setup?: GameSetupConfig;
 }
 
 // ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────

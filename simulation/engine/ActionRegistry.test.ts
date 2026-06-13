@@ -24,7 +24,7 @@ import {
     UnknownActionTypeError,
 } from './ActionRegistry.js';
 import { makeStubRng } from './__test-support__/stubs.js';
-import type { ActionDefinition, BaseGameSnapshot } from './types.js';
+import type { ActionDefinition, BaseGameSnapshot, GameSetupConfig } from './types.js';
 import { playerId as toPlayerId } from './types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -282,6 +282,38 @@ describe('ActionRegistry game definitions', () => {
         expect(
             registry.resolveGame('tactics')?.resolveGameResult?.({} as BaseGameSnapshot),
         ).toEqual({ winnerIds: [toPlayerId('p1')] });
+    });
+
+    it('buildInitialEntities accepts an optional setup argument and can read it (#705)', () => {
+        let receivedSetup: GameSetupConfig | undefined;
+        const definition: GameDefinition<BaseGameSnapshot> = {
+            buildInitialEntities: (_playerIds, setup) => {
+                receivedSetup = setup;
+                return {};
+            },
+        };
+
+        registry.registerGame('tactics', definition);
+
+        const setup: GameSetupConfig = {
+            matchSettings: { boardColor: 'blue' },
+            playerAttributes: { [toPlayerId('p1')]: { color: 'red' } },
+        };
+        registry.resolveGame('tactics')?.buildInitialEntities?.([toPlayerId('p1')], setup);
+
+        expect(receivedSetup).toEqual(setup);
+    });
+
+    it('buildInitialEntities still works without a setup argument (backward compatible)', () => {
+        const definition: GameDefinition<BaseGameSnapshot> = {
+            buildInitialEntities: () => ({}),
+        };
+
+        registry.registerGame('tactics', definition);
+
+        expect(registry.resolveGame('tactics')?.buildInitialEntities?.([toPlayerId('p1')])).toEqual(
+            {},
+        );
     });
 
     it('keeps action definitions and game definitions in separate registries', () => {

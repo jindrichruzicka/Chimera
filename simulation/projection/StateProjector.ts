@@ -27,6 +27,7 @@ import type {
     GameEvent,
     GamePhase,
     GameResult,
+    GameSetupConfig,
     PlayerId,
     SceneId,
     SceneTransitionState,
@@ -66,6 +67,13 @@ export interface PlayerSnapshot {
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     readonly undoMeta: UndoMeta;
     readonly isMyTurn: boolean;
+    /**
+     * Public host-authored lobby setup, passed through projection verbatim so
+     * every client agrees on the match configuration. Holds only public host
+     * config — no owner-only fields cross (Invariant #1). Optional: absent on
+     * games with no lobby setup and on snapshots predating #705.
+     */
+    readonly setup?: GameSetupConfig;
 }
 
 export interface StateProjectorOptions<TState extends BaseGameSnapshot = BaseGameSnapshot> {
@@ -188,6 +196,7 @@ export class DefaultStateProjector<
             ...(fullState.sceneTransition === undefined
                 ? {}
                 : { sceneTransition: fullState.sceneTransition }),
+            ...(fullState.setup === undefined ? {} : { setup: fullState.setup }),
             players,
             entities,
             events,

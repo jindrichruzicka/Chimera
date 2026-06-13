@@ -774,6 +774,89 @@ describe('engine:start_game definition', () => {
         expect(snapshot.phase).toBe('waiting');
         expect(snapshot.players).toEqual({});
     });
+
+    // ─── host-authored lobby setup passthrough (#705) ────────────────────────
+
+    it('parsePayload parses a well-formed host-authored setup', () => {
+        expect(
+            definition().parsePayload({
+                playerIds: ['p1', 'p2'],
+                setup: {
+                    matchSettings: { boardColor: 'blue' },
+                    playerAttributes: { p1: { color: 'red' }, p2: { color: 'black' } },
+                },
+            }),
+        ).toEqual({
+            playerIds: ['p1', 'p2'],
+            setup: {
+                matchSettings: { boardColor: 'blue' },
+                playerAttributes: { p1: { color: 'red' }, p2: { color: 'black' } },
+            },
+        });
+    });
+
+    it('parsePayload omits setup when the payload has none', () => {
+        expect(definition().parsePayload({ playerIds: ['p1'] })).not.toHaveProperty('setup');
+    });
+
+    it('parsePayload rejects a setup whose matchSettings is not a string map', () => {
+        expect(() =>
+            definition().parsePayload({
+                playerIds: ['p1'],
+                setup: { matchSettings: { boardColor: 7 }, playerAttributes: {} },
+            }),
+        ).toThrow(TypeError);
+    });
+
+    it('parsePayload rejects a setup with a prototype-pollution key', () => {
+        // Built via JSON.parse so `__proto__` is a real own enumerable key, as it
+        // would be on wire-delivered input (a source literal would instead set the
+        // prototype and create no own key).
+        const setup = JSON.parse('{"matchSettings":{"__proto__":"x"},"playerAttributes":{}}');
+        expect(() => definition().parsePayload({ playerIds: ['p1'], setup })).toThrow(TypeError);
+    });
+
+    it('reduce writes snapshot.setup from the payload', () => {
+        const snapshot = makeSnapshot(hostId);
+        const setup = {
+            matchSettings: { boardColor: 'blue' },
+            playerAttributes: { [hostId]: { color: 'red' } },
+        };
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId], setup },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.setup).toEqual(setup);
+    });
+
+    it('reduce leaves setup absent when the payload omits it', () => {
+        const snapshot = makeSnapshot(hostId);
+        const next = definition().reduce(snapshot, { playerIds: [hostId] }, hostId, stubCtx);
+
+        expect(next).not.toHaveProperty('setup');
+    });
+
+    it('reduce does not mutate the input snapshot when setup is present', () => {
+        const snapshot = makeSnapshot(hostId);
+        const frozen = Object.freeze({ ...snapshot });
+
+        expect(() =>
+            definition().reduce(
+                frozen,
+                {
+                    playerIds: [hostId],
+                    setup: { matchSettings: { boardColor: 'blue' }, playerAttributes: {} },
+                },
+                hostId,
+                stubCtx,
+            ),
+        ).not.toThrow();
+        expect(frozen).not.toHaveProperty('setup');
+    });
 });
 
 // ─── registerEngineActions ────────────────────────────────────────────────────

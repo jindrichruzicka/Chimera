@@ -29,6 +29,7 @@ import type {
     BaseEntityState,
     BaseGameSnapshot,
     EntityId,
+    GameSetupConfig,
     PlayerId,
     ValidationResult,
 } from './types.js';
@@ -92,6 +93,12 @@ export interface EngineStartGamePayload {
     readonly playerIds: readonly PlayerId[];
     readonly firstPlayerId?: PlayerId;
     readonly initialEntities?: BaseGameSnapshot['entities'];
+    /**
+     * Public host-authored lobby setup (chosen match settings + per-player
+     * attributes) carried from the lobby into the snapshot at game start.
+     * Optional and backward-compatible.
+     */
+    readonly setup?: GameSetupConfig;
 }
 
 const DEFAULT_TURN_DEADLINE_MS = 30_000;
@@ -151,6 +158,77 @@ function parseInitialEntities(raw: unknown): BaseGameSnapshot['entities'] | unde
     }
 
     return parsed;
+}
+
+/**
+ * Parses a flat `Record<string, string>` from raw input, rejecting non-string
+ * values and unsafe (`__proto__` / `constructor` / `prototype`) keys. Used for
+ * both `setup.matchSettings` and each `setup.playerAttributes` entry.
+ */
+function parseStringMap(raw: unknown, context: string): Record<string, string> {
+    if (!isRecord(raw)) {
+        throw new TypeError(
+            `engine:start_game payload ${context} must be a string map when present; ` +
+                `received ${JSON.stringify(raw)}.`,
+        );
+    }
+
+    const parsed: Record<string, string> = {};
+    for (const [key, value] of Object.entries(raw)) {
+        if (key.length === 0 || isUnsafeObjectKey(key) || typeof value !== 'string') {
+            throw new TypeError(
+                `engine:start_game payload ${context} must map non-empty keys to strings; ` +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+        parsed[key] = value;
+    }
+    return parsed;
+}
+
+/**
+ * Parses the optional host-authored `setup` config from a raw `start_game`
+ * payload. Returns `undefined` when absent (backward-compatible). Defensively
+ * validates the public `GameSetupConfig` shape and rejects unsafe keys, mirroring
+ * `parseInitialEntities` — `setup` originates from the wire and crosses to every
+ * client via projection, so it must be sanitised at the engine boundary.
+ */
+function parseSetup(raw: unknown): GameSetupConfig | undefined {
+    if (raw === undefined) {
+        return undefined;
+    }
+    if (!isRecord(raw)) {
+        throw new TypeError(
+            'engine:start_game payload "setup" must be an object when present; ' +
+                `received ${JSON.stringify(raw)}.`,
+        );
+    }
+
+    const matchSettings = parseStringMap(raw['matchSettings'], '"setup.matchSettings"');
+
+    const rawPlayerAttributes = raw['playerAttributes'];
+    if (!isRecord(rawPlayerAttributes)) {
+        throw new TypeError(
+            'engine:start_game payload "setup.playerAttributes" must be an object when present; ' +
+                `received ${JSON.stringify(raw)}.`,
+        );
+    }
+
+    const playerAttributes: Record<PlayerId, Record<string, string>> = {};
+    for (const [rawPlayerId, rawAttributes] of Object.entries(rawPlayerAttributes)) {
+        if (rawPlayerId.length === 0 || isUnsafeObjectKey(rawPlayerId)) {
+            throw new TypeError(
+                'engine:start_game payload "setup.playerAttributes" must map non-empty player ' +
+                    `ids to objects; received ${JSON.stringify(raw)}.`,
+            );
+        }
+        playerAttributes[playerId(rawPlayerId)] = parseStringMap(
+            rawAttributes,
+            '"setup.playerAttributes" entries',
+        );
+    }
+
+    return { matchSettings, playerAttributes };
 }
 
 // ─── engine:tick ──────────────────────────────────────────────────────────────
@@ -358,11 +436,13 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
         const firstPlayerId =
             rawFirstPlayerId === undefined ? undefined : playerId(rawFirstPlayerId);
         const initialEntities = parseInitialEntities(raw['initialEntities']);
+        const setup = parseSetup(raw['setup']);
 
         return {
             playerIds: parsed,
             ...(firstPlayerId !== undefined ? { firstPlayerId } : {}),
             ...(initialEntities !== undefined ? { initialEntities } : {}),
+            ...(setup !== undefined ? { setup } : {}),
         };
     },
 
@@ -402,6 +482,10 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
             phase: gamePhase('playing'),
             sceneId: sceneId('engine:game'),
             sceneTransition: null,
+            // Carry host-authored lobby config onto the snapshot so projection
+            // syncs it to every client (#705). Preserve any prior `state.setup`
+            // (spread above) when the payload omits one.
+            ...(payload.setup !== undefined ? { setup: payload.setup } : {}),
         };
 
         return nextTurnClock === undefined ? nextState : { ...nextState, turnClock: nextTurnClock };

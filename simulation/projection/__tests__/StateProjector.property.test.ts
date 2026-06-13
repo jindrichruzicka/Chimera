@@ -428,3 +428,47 @@ describe('committed-scope invariant (F29/WARN-2): committed raw values appear on
         );
     });
 });
+
+// ─── setup passthrough invariant (#705) ───────────────────────────────────────
+
+describe('setup passthrough (#705): host-authored lobby config crosses verbatim to every viewer', () => {
+    /**
+     * Property: when the full snapshot carries a `setup` (public host config),
+     * `project()` emits the SAME object reference to every viewer — no masking,
+     * no copy, no per-viewer divergence — and the projection still leaks no
+     * owner-only / hidden field (`assertNoLeakedFields`). `setup` has no
+     * `__visibility` markers, so it is safe public config (Invariant #1/#8).
+     */
+    it('projected.setup is the verbatim full-state setup for every viewer across 10 000 random snapshots', () => {
+        assert(
+            property(arbitraryGameSnapshot(), (base: ArbitraryGameSnapshot) => {
+                const allPlayerIds = playerIdsOf(base);
+
+                // Derive a deterministic setup from the snapshot's roster.
+                const playerAttributes = Object.create(null) as Record<
+                    PlayerId,
+                    Record<string, string>
+                >;
+                for (const pid of allPlayerIds) {
+                    playerAttributes[pid] = { seat: pid };
+                }
+                const setup = { matchSettings: { boardColor: 'blue' }, playerAttributes };
+                const snapshot: ArbitraryGameSnapshot = { ...base, setup };
+
+                for (const viewerId of allPlayerIds) {
+                    const projected = projector.project(snapshot, viewerId);
+
+                    if (projected.setup !== setup) {
+                        throw new Error(
+                            `setup passthrough violation: viewer "${viewerId}" did not receive ` +
+                                `the verbatim full-state setup reference.`,
+                        );
+                    }
+
+                    assertNoLeakedFields(projected, viewerId, allPlayerIds);
+                }
+            }),
+            { numRuns: 10_000 },
+        );
+    }, 60_000);
+});

@@ -530,6 +530,40 @@ describe('DefaultStateProjector.project()', () => {
         });
     });
 
+    describe('setup passthrough (host-authored lobby config)', () => {
+        const setup = {
+            matchSettings: { boardColor: 'blue' },
+            playerAttributes: {
+                [P1]: { color: 'red' },
+                [P2]: { color: 'black' },
+            },
+        };
+
+        it('setup is passed through verbatim to every viewer when present', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot({ setup });
+
+            const viewP1 = projector.project(snapshot, P1);
+            const viewP2 = projector.project(snapshot, P2);
+
+            // Same shape and same reference for every viewer — public host config
+            // crosses verbatim (no owner-only fields, no masking).
+            expect(viewP1.setup).toEqual(setup);
+            expect(viewP2.setup).toEqual(setup);
+            expect(viewP1.setup).toBe(snapshot.setup);
+            expect(viewP2.setup).toBe(snapshot.setup);
+        });
+
+        it('setup is absent from the projected snapshot when the full state has none', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot(); // no setup
+
+            const view = projector.project(snapshot, P1);
+
+            expect('setup' in view).toBe(false);
+        });
+    });
+
     describe('isMyTurn (turn clock)', () => {
         it('isMyTurn is true when the viewer is the active player', () => {
             const projector = new DefaultStateProjector(fogRules);

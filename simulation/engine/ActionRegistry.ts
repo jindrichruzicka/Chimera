@@ -13,12 +13,26 @@
  *   #3 — simulation/ is side-effect-free; no Node.js or Electron imports.
  */
 
-import type { ActionDefinition, BaseGameSnapshot, GameResult, PlayerId } from './types.js';
+import type {
+    ActionDefinition,
+    BaseGameSnapshot,
+    GameResult,
+    GameSetupConfig,
+    PlayerId,
+} from './types.js';
 
 export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapshot> {
-    /** Called once by the host when a session is being created for this game.
-     * Receives an array of player IDs in insertion order. */
-    readonly buildInitialEntities?: (playerIds: readonly PlayerId[]) => TState['entities'];
+    /**
+     * Called once by the host when a session is being created for this game.
+     * Receives the player IDs in insertion order and, optionally, the
+     * host-authored lobby `setup` (chosen match settings + per-player
+     * attributes) so the game can seed starting entities from it (§4.37, #705).
+     * `setup` is optional and absent for games with no lobby config.
+     */
+    readonly buildInitialEntities?: (
+        playerIds: readonly PlayerId[],
+        setup?: GameSetupConfig,
+    ) => TState['entities'];
     /**
      * Pure post-reduce resolver for completed games (§4.38).
      * Returns `null` while the game is still active; returns a GameResult
