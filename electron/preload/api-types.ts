@@ -15,6 +15,7 @@
 import type { LogEntry } from '@chimera/shared/logging.js';
 import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
+import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 import type {
     PerspectiveReplayListBridge,
     ReplayExportBridge,
@@ -160,6 +161,11 @@ export interface PlayerSnapshot {
     readonly events: readonly GameEvent[];
     readonly gameResult: GameResult | null;
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
+    /**
+     * Public host-authored lobby setup (match settings + per-player attributes),
+     * passed through projection verbatim. Optional and backward-compatible.
+     */
+    readonly setup?: GameSetupConfig;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;
 }

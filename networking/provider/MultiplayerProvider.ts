@@ -29,6 +29,7 @@ import type {
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
 import type { CommitmentEnvelope, CommitmentId } from '@chimera/simulation/projection/index.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
+import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 import type { ChatScope, ChatRejectReason } from '@chimera/shared/chat.js';
 
 // ─── Re-export simulation primitives used by callers of this module ───────────
@@ -91,6 +92,13 @@ export interface PlayerSnapshot {
      * guard with `if (snapshot.commitments !== undefined)` before accessing.
      */
     readonly commitments?: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
+    /**
+     * Public host-authored lobby setup (match settings + per-player attributes),
+     * passed through projection verbatim so every client agrees on the match
+     * configuration. Optional for backward-compat: absent on games with no lobby
+     * setup and on older clients (Invariant #1 — only public host config crosses).
+     */
+    readonly setup?: GameSetupConfig;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;
 }
@@ -139,12 +147,22 @@ export interface LobbyPlayerEntry {
     readonly playerId: PlayerId;
     readonly displayName: string;
     readonly ready: boolean;
+    /**
+     * Host-authored per-player match attributes (e.g. unit colour). Optional and
+     * backward-compatible: absent on games with no lobby setup and on older clients.
+     */
+    readonly attributes?: Record<string, string>;
 }
 
 /** Full lobby state pushed to all clients. */
 export interface LobbyState {
     readonly info: LobbyInfo;
     readonly players: readonly LobbyPlayerEntry[];
+    /**
+     * Host-authored match settings (e.g. board colour) synced to all clients on
+     * every LobbyState broadcast. Optional and backward-compatible.
+     */
+    readonly matchSettings?: Record<string, string>;
 }
 
 /** A browsable lobby entry returned by BrowsableProvider.listLobbies(). */

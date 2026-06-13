@@ -133,11 +133,27 @@ const LobbyPlayerEntry = z.object({
     playerId: PlayerId,
     displayName: z.string(),
     ready: z.boolean(),
+    // Host-authored, per-player match attributes (e.g. unit colour). Optional and
+    // backward-compatible: absent on older clients and on games with no lobby setup.
+    attributes: z.record(z.string(), z.string()).optional(),
 });
 
 const LobbyState = z.object({
     info: LobbyInfo,
     players: z.array(LobbyPlayerEntry).readonly(),
+    // Host-authored match settings (e.g. board colour) synced to all clients on
+    // every LobbyState broadcast. Optional and backward-compatible.
+    matchSettings: z.record(z.string(), z.string()).optional(),
+});
+
+/**
+ * Synced match-setup config carried on `PlayerSnapshot.setup`. Runtime mirror of
+ * the `GameSetupConfig` interface in `shared/game-lobby-contract.ts`: the chosen
+ * match settings plus each player's attributes keyed by player id.
+ */
+const GameSetupConfig = z.object({
+    matchSettings: z.record(z.string(), z.string()),
+    playerAttributes: z.record(z.string(), z.record(z.string(), z.string())),
 });
 
 // ─── PlayerSnapshot schema ────────────────────────────────────────────────────
@@ -154,6 +170,9 @@ const PlayerSnapshot = z.object({
     events: z.array(z.object({ type: z.string() }).passthrough()),
     gameResult: GameResult.nullable(),
     commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),
+    // Public host-authored lobby setup (match settings + per-player attributes),
+    // passed through projection verbatim. Optional and backward-compatible.
+    setup: GameSetupConfig.optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
     isMyTurn: z.boolean(),
 });

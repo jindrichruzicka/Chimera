@@ -377,6 +377,135 @@ describe('ServerMessageSchema — LOBBY_STATE', () => {
         });
         expect(result.success).toBe(true);
     });
+
+    it('parses LOBBY_STATE with host-authored matchSettings and per-player attributes', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'LOBBY_STATE',
+            state: {
+                info: defaultLobbyInfo,
+                matchSettings: { boardColor: 'blue' },
+                players: [
+                    {
+                        playerId: toPlayerId('p1'),
+                        displayName: 'Alice',
+                        ready: false,
+                        attributes: { unitColor: 'red' },
+                    },
+                ],
+            },
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('parses LOBBY_STATE with matchSettings and attributes absent (backward compatible)', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'LOBBY_STATE',
+            state: {
+                info: defaultLobbyInfo,
+                players: [{ playerId: toPlayerId('p1'), displayName: 'Alice', ready: false }],
+            },
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'LOBBY_STATE') {
+            expect(result.data.state.matchSettings).toBeUndefined();
+            expect(result.data.state.players[0]?.attributes).toBeUndefined();
+        }
+    });
+
+    it('rejects LOBBY_STATE matchSettings with a non-string value', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'LOBBY_STATE',
+            state: {
+                info: defaultLobbyInfo,
+                matchSettings: { boardColor: 42 },
+                players: [{ playerId: toPlayerId('p1'), displayName: 'Alice', ready: false }],
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a player attributes entry with a non-string value', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'LOBBY_STATE',
+            state: {
+                info: defaultLobbyInfo,
+                players: [
+                    {
+                        playerId: toPlayerId('p1'),
+                        displayName: 'Alice',
+                        ready: false,
+                        attributes: { unitColor: true },
+                    },
+                ],
+            },
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ServerMessageSchema — SNAPSHOT setup (synced lobby config)', () => {
+    const baseSnapshot = {
+        tick: 1,
+        viewerId: toPlayerId('p1'),
+        players: {},
+        entities: {},
+        phase: 'game',
+        events: [],
+        gameResult: null,
+        undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
+    };
+
+    it('parses SNAPSHOT with a synced setup config', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: {
+                ...baseSnapshot,
+                setup: {
+                    matchSettings: { boardColor: 'blue' },
+                    playerAttributes: { [toPlayerId('p1')]: { unitColor: 'red' } },
+                },
+            },
+            checksum: 42,
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('parses SNAPSHOT with setup absent (backward compatible)', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: { ...baseSnapshot },
+            checksum: 42,
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'SNAPSHOT') {
+            expect(result.data.snapshot.setup).toBeUndefined();
+        }
+    });
+
+    it('rejects SNAPSHOT setup.matchSettings with a non-string value', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: {
+                ...baseSnapshot,
+                setup: { matchSettings: { boardColor: 1 }, playerAttributes: {} },
+            },
+            checksum: 42,
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects SNAPSHOT setup.playerAttributes with a non-object value', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: {
+                ...baseSnapshot,
+                setup: { matchSettings: {}, playerAttributes: { [toPlayerId('p1')]: 'red' } },
+            },
+            checksum: 42,
+        });
+        expect(result.success).toBe(false);
+    });
 });
 
 describe('ServerMessageSchema — PROFILE_REJECT', () => {
@@ -591,6 +720,63 @@ describe('ServerMessageSchema — round-trip via JSON', () => {
         expect(round.success).toBe(true);
         if (round.success && round.data.type === 'SNAPSHOT') {
             expect(round.data.snapshot.gameResult).toEqual({ winnerIds: [] });
+        }
+    });
+
+    it('LOBBY_STATE preserves host matchSettings and per-player attributes', () => {
+        const msg = {
+            type: 'LOBBY_STATE' as const,
+            state: {
+                info: defaultLobbyInfo,
+                matchSettings: { boardColor: 'blue' },
+                players: [
+                    {
+                        playerId: toPlayerId('p1'),
+                        displayName: 'Alice',
+                        ready: false,
+                        attributes: { unitColor: 'red' },
+                    },
+                ],
+            },
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'LOBBY_STATE') {
+            expect(round.data.state.matchSettings).toStrictEqual(msg.state.matchSettings);
+            expect(round.data.state.players[0]?.attributes).toStrictEqual(
+                msg.state.players[0]?.attributes,
+            );
+        }
+    });
+
+    it('SNAPSHOT preserves the synced setup config for clients', () => {
+        const msg = {
+            type: 'SNAPSHOT' as const,
+            snapshot: {
+                tick: 3,
+                viewerId: toPlayerId('p1'),
+                players: {},
+                entities: {},
+                phase: 'game',
+                events: [],
+                setup: {
+                    matchSettings: { boardColor: 'blue' },
+                    playerAttributes: { [toPlayerId('p1')]: { unitColor: 'red' } },
+                },
+                gameResult: null,
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: true,
+            },
+            checksum: 42,
+        };
+
+        const round = ServerMessageSchema.safeParse(JSON.parse(JSON.stringify(msg)));
+
+        expect(round.success).toBe(true);
+        if (round.success && round.data.type === 'SNAPSHOT') {
+            expect(round.data.snapshot.setup).toStrictEqual(msg.snapshot.setup);
         }
     });
 });
