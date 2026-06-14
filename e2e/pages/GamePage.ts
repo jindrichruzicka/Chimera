@@ -37,7 +37,20 @@ interface TacticsGridClickOptions {
 
 // Mirrors games/tactics/screens/tacticsCamera.ts without importing game rendering internals.
 // Kept in sync by GamePage.test.ts (sync-guard tests import the source-of-truth directly).
+// These are the camera frustum world bounds — used to project a grid point to a canvas
+// pixel. Since #710 widened the frustum past the board so corner units render whole, this
+// is wider than the playable board and must NOT be used to decide which tiles are clickable.
 export const TACTICS_CANVAS_WORLD_BOUNDS = {
+    left: -2.75,
+    right: 4.75,
+    top: 2.5,
+    bottom: -2.5,
+} as const;
+
+// The playable board-plane extents (TacticsGroundPlane: 6×4 centred on (1, 0)), distinct
+// from the now-wider camera frustum. Generated move targets are tested against these so they
+// stay on the board, away from the canvas margin the frustum now shows beyond the edge.
+const TACTICS_MOVE_AREA_WORLD_BOUNDS = {
     left: -2,
     right: 4,
     top: 2,
@@ -598,7 +611,7 @@ function isGridOccupiedByOtherUnit(
 }
 
 function isGridPointInsideTacticsMoveArea(grid: TacticsGridPoint): boolean {
-    const { left, right, top, bottom } = TACTICS_CANVAS_WORLD_BOUNDS;
+    const { left, right, top, bottom } = TACTICS_MOVE_AREA_WORLD_BOUNDS;
     return grid.x > left && grid.x < right && grid.y > bottom && grid.y < top;
 }
 
@@ -611,9 +624,12 @@ function projectGridPointToCanvasPosition(
     box: { readonly width: number; readonly height: number },
 ): { readonly x: number; readonly y: number } {
     const { left, right, top, bottom } = TACTICS_CANVAS_WORLD_BOUNDS;
+    // Multiply before dividing: the #710 frustum range (7.5 × 5) makes a divide-first
+    // ratio non-terminating in binary (e.g. 2.75 / 7.5), so grid points that land on exact
+    // pixels would otherwise carry float dust and fail the deep-equality assertions.
     return {
-        x: ((right - grid.x) / (right - left)) * box.width,
-        y: ((top - grid.y) / (top - bottom)) * box.height,
+        x: ((right - grid.x) * box.width) / (right - left),
+        y: ((top - grid.y) * box.height) / (top - bottom),
     };
 }
 

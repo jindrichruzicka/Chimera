@@ -77,6 +77,20 @@ export const DEFAULT_BOARD_COLOR = 'slate';
 export const DEFAULT_PLAYER_COLOR = 'blue';
 
 /**
+ * Hex for {@link DEFAULT_BOARD_COLOR} (`slate`). The guaranteed-string fallback the
+ * in-match ground plane (#710) uses when `setup` is absent or the chosen board colour
+ * is off-palette. Kept beside {@link TACTICS_BOARD_COLOR_HEX} so the two cannot drift.
+ */
+export const DEFAULT_BOARD_COLOR_HEX = '#3f3f46';
+
+/**
+ * Hex for {@link DEFAULT_PLAYER_COLOR} (`blue`). The guaranteed-string fallback for a
+ * unit's colour (#710) when `setup` is absent, the owner has no colour, or it is
+ * off-palette. Kept beside {@link TACTICS_PLAYER_COLOR_HEX} so the two cannot drift.
+ */
+export const DEFAULT_PLAYER_COLOR_HEX = '#2563eb';
+
+/**
  * Tactics' lobby-setup descriptor: 4 seats, a host-chosen board colour, and a
  * per-seat unit colour. `resolveDefaultPlayerAttributes` assigns seat `n` the
  * palette colour at index `n`, wrapping via modulo so it stays total for any

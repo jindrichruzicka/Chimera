@@ -10,6 +10,8 @@ import {
 } from './tacticsSceneModel.js';
 
 export interface TacticsGroundPlaneProps {
+    /** Host-configured board colour as a hex string; see `resolveTacticsBoardColor`. */
+    readonly color: string;
     readonly onSelectGridPoint: (grid: TacticsGridPoint) => void;
     readonly onRevealGridPoint: (grid: TacticsGridPoint) => void;
 }
@@ -19,9 +21,9 @@ export interface TacticsGroundPlaneProps {
 const GROUND_POSITION = [1, -0.02, 0] as const;
 const GROUND_ROTATION = [-Math.PI / 2, 0, 0] as const;
 const GROUND_GEOMETRY_ARGS = [TACTICS_BOARD_WIDTH_TILES, TACTICS_BOARD_HEIGHT_TILES] as const;
-const TACTICS_GROUND_COLOR = '#3f3f46';
 
 export function TacticsGroundPlane({
+    color,
     onSelectGridPoint,
     onRevealGridPoint,
 }: TacticsGroundPlaneProps): React.ReactElement {
@@ -49,7 +51,7 @@ export function TacticsGroundPlane({
             onClick={handleClick}
         >
             <planeGeometry args={GROUND_GEOMETRY_ARGS} />
-            <meshStandardMaterial color={TACTICS_GROUND_COLOR} roughness={0.95} />
+            <meshStandardMaterial color={color} roughness={0.95} />
         </mesh>
     );
 }

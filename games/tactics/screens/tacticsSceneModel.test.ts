@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 import {
     entityId,
     playerId,
@@ -9,7 +10,9 @@ import {
     gridToWorldPoint,
     parseTacticsSceneUnit,
     parseTacticsSceneUnits,
+    resolveTacticsBoardColor,
     resolveTacticsSelectionIntent,
+    resolveTacticsUnitColor,
     worldToGridPoint,
     type ProjectedTacticsEntityFields,
     type TacticsSceneUnit,
@@ -223,5 +226,66 @@ describe('tacticsSceneModel', () => {
                 target: { type: 'unit', unitId: unknownId },
             }),
         ).toEqual({ type: 'noop', reason: 'unknown-target' });
+    });
+});
+
+describe('resolveTacticsBoardColor', () => {
+    it('maps the host-configured board colour name to its hex', () => {
+        const setup: GameSetupConfig = {
+            matchSettings: { boardColor: 'navy' },
+            playerAttributes: {},
+        };
+
+        expect(resolveTacticsBoardColor(setup)).toBe('#1e293b');
+    });
+
+    it('falls back to the default slate hex when setup is absent', () => {
+        expect(resolveTacticsBoardColor(undefined)).toBe('#3f3f46');
+    });
+
+    it('falls back to the default slate hex for an off-palette board colour name', () => {
+        const setup: GameSetupConfig = {
+            matchSettings: { boardColor: 'periwinkle' },
+            playerAttributes: {},
+        };
+
+        expect(resolveTacticsBoardColor(setup)).toBe('#3f3f46');
+    });
+});
+
+describe('resolveTacticsUnitColor', () => {
+    it("maps each owner's host-assigned colour name to its hex", () => {
+        const setup: GameSetupConfig = {
+            matchSettings: {},
+            playerAttributes: {
+                [LOCAL_PLAYER]: { color: 'green' },
+                [OPPONENT_PLAYER]: { color: 'amber' },
+            },
+        };
+
+        expect(resolveTacticsUnitColor(LOCAL_PLAYER, setup)).toBe('#16a34a');
+        expect(resolveTacticsUnitColor(OPPONENT_PLAYER, setup)).toBe('#f59e0b');
+    });
+
+    it('falls back to the default blue hex when setup is absent', () => {
+        expect(resolveTacticsUnitColor(LOCAL_PLAYER, undefined)).toBe('#2563eb');
+    });
+
+    it('falls back to the default blue hex for an owner with no assigned colour', () => {
+        const setup: GameSetupConfig = {
+            matchSettings: {},
+            playerAttributes: { [LOCAL_PLAYER]: { color: 'green' } },
+        };
+
+        expect(resolveTacticsUnitColor(OPPONENT_PLAYER, setup)).toBe('#2563eb');
+    });
+
+    it('falls back to the default blue hex for an off-palette colour name', () => {
+        const setup: GameSetupConfig = {
+            matchSettings: {},
+            playerAttributes: { [LOCAL_PLAYER]: { color: 'chartreuse' } },
+        };
+
+        expect(resolveTacticsUnitColor(LOCAL_PLAYER, setup)).toBe('#2563eb');
     });
 });

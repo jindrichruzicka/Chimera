@@ -2,17 +2,38 @@
 
 import React from 'react';
 import ReactThreeTestRenderer, { type ReactThreeTest } from '@react-three/test-renderer';
+import type { Mesh, MeshStandardMaterial } from 'three';
 import { describe, expect, it, vi } from 'vitest';
 import { TacticsGroundPlane } from './TacticsGroundPlane';
 
 type TestInstance = ReactThreeTest.ReactThreeTestInstance;
 
+const BOARD_COLOR = '#1e293b';
+
 describe('TacticsGroundPlane', () => {
+    it('renders the ground material with the provided board color', async () => {
+        const renderer = await ReactThreeTestRenderer.create(
+            <TacticsGroundPlane
+                color={BOARD_COLOR}
+                onSelectGridPoint={vi.fn()}
+                onRevealGridPoint={vi.fn()}
+            />,
+        );
+
+        try {
+            const groundMesh = findThreeObject(renderer.scene, 'Mesh');
+            expect(meshMaterial(groundMesh).color.getHexString()).toBe('1e293b');
+        } finally {
+            await renderer.unmount();
+        }
+    });
+
     it('maps clicked world positions to rounded grid points', async () => {
         const onSelectGridPoint = vi.fn();
         const onRevealGridPoint = vi.fn();
         const renderer = await ReactThreeTestRenderer.create(
             <TacticsGroundPlane
+                color={BOARD_COLOR}
                 onSelectGridPoint={onSelectGridPoint}
                 onRevealGridPoint={onRevealGridPoint}
             />,
@@ -40,6 +61,7 @@ describe('TacticsGroundPlane', () => {
         const onRevealGridPoint = vi.fn();
         const renderer = await ReactThreeTestRenderer.create(
             <TacticsGroundPlane
+                color={BOARD_COLOR}
                 onSelectGridPoint={onSelectGridPoint}
                 onRevealGridPoint={onRevealGridPoint}
             />,
@@ -66,4 +88,9 @@ describe('TacticsGroundPlane', () => {
 
 function findThreeObject(scene: TestInstance, type: string): TestInstance {
     return scene.find((node) => node.instance.type === type);
+}
+
+function meshMaterial(mesh: TestInstance | undefined): MeshStandardMaterial {
+    expect(mesh?.instance.type).toBe('Mesh');
+    return (mesh?.instance as Mesh).material as MeshStandardMaterial;
 }

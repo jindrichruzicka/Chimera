@@ -301,7 +301,7 @@ describe('GamePage', () => {
 
         await gamePage.selectOwnedPrimitive();
 
-        expect(clickCalls).toEqual([{ position: { x: 410, y: 220 } }]);
+        expect(clickCalls).toEqual([{ position: { x: 390, y: 220 } }]);
     });
 
     it('asserts owned selection feedback changes the rendered canvas', async () => {
@@ -315,7 +315,7 @@ describe('GamePage', () => {
         await gamePage.assertOwnedSelectionFeedbackChangesCanvas();
 
         expect(result.screenshotCalls).toBe(2);
-        expect(result.clickCalls).toEqual([{ position: { x: 410, y: 220 } }]);
+        expect(result.clickCalls).toEqual([{ position: { x: 390, y: 220 } }]);
     });
 
     it('rejects when owned selection feedback does not change the rendered canvas', async () => {
@@ -512,7 +512,7 @@ describe('GamePage', () => {
         await gamePage.moveSelectedPrimitiveNearOpponent();
 
         expect(clickCalls).toEqual([
-            { position: { x: 410, y: 220 } },
+            { position: { x: 390, y: 220 } },
             { position: { x: 310, y: 220 } },
         ]);
     });
@@ -534,9 +534,9 @@ describe('GamePage', () => {
         await gamePage.moveSelectedPrimitiveNearOpponent();
 
         expect(clickCalls).toEqual([
-            { position: { x: 410, y: 220 } },
+            { position: { x: 390, y: 220 } },
             { position: { x: 310, y: 220 } },
-            { position: { x: 410, y: 220 } },
+            { position: { x: 390, y: 220 } },
             { position: { x: 310, y: 220 } },
         ]);
     });
@@ -555,7 +555,7 @@ describe('GamePage', () => {
         await gamePage.moveOwnedUnit();
 
         expect(clickCalls).toEqual([
-            { position: { x: 410, y: 220 } },
+            { position: { x: 390, y: 220 } },
             { position: { x: 310, y: 220 } },
         ]);
     });
@@ -583,8 +583,8 @@ describe('GamePage', () => {
         await gamePage.moveOwnedUnit();
 
         expect(clickCalls).toEqual([
-            { position: { x: 210, y: 220 } },
-            { position: { x: 410, y: 220 } },
+            { position: { x: 230, y: 220 } },
+            { position: { x: 390, y: 220 } },
         ]);
     });
 
@@ -609,8 +609,8 @@ describe('GamePage', () => {
         await gamePage.moveOwnedUnitToOpenTile();
 
         expect(clickCalls).toEqual([
-            { position: { x: 210, y: 220 } },
-            { position: { x: 110, y: 220 } },
+            { position: { x: 230, y: 220 } },
+            { position: { x: 150, y: 220 } },
         ]);
     });
 
@@ -635,8 +635,8 @@ describe('GamePage', () => {
         await gamePage.moveOwnedUnitToOpenTile();
 
         expect(clickCalls).toEqual([
-            { position: { x: 510, y: 220 } },
-            { position: { x: 510, y: 320 } },
+            { position: { x: 470, y: 220 } },
+            { position: { x: 470, y: 300 } },
         ]);
     });
 
@@ -649,7 +649,7 @@ describe('GamePage', () => {
 
         await gamePage.selectOpponentPrimitive();
 
-        expect(clickCalls).toEqual([{ position: { x: 210, y: 220 } }]);
+        expect(clickCalls).toEqual([{ position: { x: 230, y: 220 } }]);
     });
 
     it('reveals an adjacent tile by clicking the local unit grid point and the target grid point', async () => {
@@ -659,7 +659,7 @@ describe('GamePage', () => {
         await gamePage.revealAdjacentTile();
 
         expect(clickCalls).toEqual([
-            { position: { x: 410, y: 220 } },
+            { position: { x: 390, y: 220 } },
             {
                 position: { x: 310, y: 220 },
                 modifiers: ['Shift'],
@@ -678,7 +678,7 @@ describe('GamePage', () => {
         ).rejects.toThrow('keyboard down failed');
         await gamePage.clickTacticsGridPoint({ x: 0, y: 0 });
 
-        expect(clickCalls).toEqual([{ position: { x: 410, y: 220 } }]);
+        expect(clickCalls).toEqual([{ position: { x: 390, y: 220 } }]);
     });
 
     it('attacks the visible opponent by clicking local and opponent primitive grid points', async () => {
@@ -696,7 +696,7 @@ describe('GamePage', () => {
 
         expect(clickCalls).toEqual([
             { position: { x: 310, y: 220 } },
-            { position: { x: 210, y: 220 } },
+            { position: { x: 230, y: 220 } },
         ]);
     });
 
@@ -740,9 +740,9 @@ describe('GamePage', () => {
 
         expect(clickCalls).toEqual([
             { position: { x: 310, y: 220 } },
-            { position: { x: 210, y: 220 } },
+            { position: { x: 230, y: 220 } },
             { position: { x: 310, y: 220 } },
-            { position: { x: 210, y: 220 } },
+            { position: { x: 230, y: 220 } },
         ]);
     });
 
@@ -761,7 +761,7 @@ describe('GamePage', () => {
 
         expect(clickCalls).toEqual([
             { position: { x: 310, y: 220 } },
-            { position: { x: 210, y: 220 } },
+            { position: { x: 230, y: 220 } },
         ]);
     });
 

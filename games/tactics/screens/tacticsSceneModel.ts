@@ -1,4 +1,13 @@
+import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 import type { EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
+import {
+    DEFAULT_BOARD_COLOR,
+    DEFAULT_BOARD_COLOR_HEX,
+    DEFAULT_PLAYER_COLOR,
+    DEFAULT_PLAYER_COLOR_HEX,
+    TACTICS_BOARD_COLOR_HEX,
+    TACTICS_PLAYER_COLOR_HEX,
+} from '../lobby/lobby-setup.js';
 
 export interface TacticsGridPoint {
     readonly x: number;
@@ -64,6 +73,33 @@ export function classifyTacticsUnitOwnership(
     localPlayerId: PlayerId | undefined,
 ): TacticsUnitOwnership {
     return localPlayerId !== undefined && ownerId === localPlayerId ? 'own' : 'opponent';
+}
+
+/**
+ * Resolve the ground-plane material colour from the host's lobby setup, reusing
+ * the lobby's `boardColour → hex` map (single source of truth, #710). Falls back
+ * to the default slate when `setup` is absent (pre-#705 saves) or the chosen name
+ * is off-palette — slate reproduces the historic hardcoded ground colour.
+ */
+export function resolveTacticsBoardColor(setup: GameSetupConfig | undefined): string {
+    const name = setup?.matchSettings['boardColor'] ?? DEFAULT_BOARD_COLOR;
+    return TACTICS_BOARD_COLOR_HEX[name] ?? DEFAULT_BOARD_COLOR_HEX;
+}
+
+/**
+ * Resolve a unit's material colour from its owner's host-assigned lobby colour,
+ * reusing the lobby's `playerColour → hex` map (#710). The same owner renders the
+ * same colour for every viewer (Invariant #62: read from host `setup`, never from
+ * client profile data). Falls back to the default blue when `setup` is absent, the
+ * owner has no assigned colour, or the chosen name is off-palette; the persistent
+ * own-unit ring still distinguishes the local player's units in that case.
+ */
+export function resolveTacticsUnitColor(
+    ownerId: PlayerId,
+    setup: GameSetupConfig | undefined,
+): string {
+    const name = setup?.playerAttributes[ownerId]?.['color'] ?? DEFAULT_PLAYER_COLOR;
+    return TACTICS_PLAYER_COLOR_HEX[name] ?? DEFAULT_PLAYER_COLOR_HEX;
 }
 
 export function parseTacticsSceneUnit(

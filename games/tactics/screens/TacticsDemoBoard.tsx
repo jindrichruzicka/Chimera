@@ -11,7 +11,9 @@ import {
 } from '@chimera/shared/tactics.js';
 import {
     parseTacticsSceneUnits,
+    resolveTacticsBoardColor,
     resolveTacticsSelectionIntent,
+    resolveTacticsUnitColor,
     type TacticsGridPoint,
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
@@ -22,7 +24,7 @@ import {
     TACTICS_CAMERA_POSITION,
 } from './tacticsCamera.js';
 import { TacticsGroundPlane } from './TacticsGroundPlane.js';
-import { TACTICS_UNIT_COLOR_BY_OWNERSHIP, TacticsUnitPrimitive } from './TacticsUnitPrimitive.js';
+import { TacticsUnitPrimitive } from './TacticsUnitPrimitive.js';
 
 const boardSceneStyle: React.CSSProperties = {
     position: 'absolute',
@@ -168,12 +170,15 @@ export function TacticsDemoBoard({
         handleIntent({ type: 'reveal-tile', scoutId: selectedUnit.id, grid });
     };
 
+    const boardColor = resolveTacticsBoardColor(snapshot.setup);
+
     return (
         <div aria-label="Tactics board" style={boardSceneStyle}>
             <Canvas camera={camera}>
                 <ambientLight intensity={0.65} />
                 <directionalLight intensity={0.9} position={[3, 6, 4]} />
                 <TacticsGroundPlane
+                    color={boardColor}
                     onSelectGridPoint={handleGroundSelect}
                     onRevealGridPoint={handleGroundReveal}
                 />
@@ -181,7 +186,7 @@ export function TacticsDemoBoard({
                     <TacticsUnitPrimitive
                         key={unit.id}
                         unit={unit}
-                        color={TACTICS_UNIT_COLOR_BY_OWNERSHIP[unit.ownership]}
+                        color={resolveTacticsUnitColor(unit.ownerId, snapshot.setup)}
                         isSelected={isBoardInteractive && unit.id === selectedUnitId}
                         onSelect={handleUnitSelect}
                     />

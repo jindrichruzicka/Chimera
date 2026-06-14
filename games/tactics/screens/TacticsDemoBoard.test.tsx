@@ -54,15 +54,18 @@ vi.mock('@react-three/fiber', () => ({
 
 vi.mock('./TacticsGroundPlane.js', () => ({
     TacticsGroundPlane: ({
+        color,
         onSelectGridPoint,
         onRevealGridPoint,
     }: {
+        readonly color: string;
         readonly onSelectGridPoint: (grid: { readonly x: number; readonly y: number }) => void;
         readonly onRevealGridPoint: (grid: { readonly x: number; readonly y: number }) => void;
     }) => (
         <>
             <button
                 data-testid="tactics-ground-plane"
+                data-board-color={color}
                 type="button"
                 onClick={() => onSelectGridPoint({ x: 1, y: 0 })}
             >
@@ -80,10 +83,6 @@ vi.mock('./TacticsGroundPlane.js', () => ({
 }));
 
 vi.mock('./TacticsUnitPrimitive.js', () => ({
-    TACTICS_UNIT_COLOR_BY_OWNERSHIP: {
-        own: 'blue',
-        opponent: 'red',
-    },
     TacticsUnitPrimitive: ({
         unit,
         color,
@@ -117,7 +116,11 @@ afterEach(() => {
 });
 
 function makeSnapshot(
-    options: { readonly includeEnemy?: boolean; readonly isMyTurn?: boolean } = {},
+    options: {
+        readonly includeEnemy?: boolean;
+        readonly isMyTurn?: boolean;
+        readonly includeSetup?: boolean;
+    } = {},
 ): PlayerSnapshot {
     const viewerId = playerId('p1');
     const opponentId = playerId('p2');
@@ -152,6 +155,17 @@ function makeSnapshot(
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: options.isMyTurn ?? true,
+        ...(options.includeSetup
+            ? {
+                  setup: {
+                      matchSettings: { boardColor: 'navy' },
+                      playerAttributes: {
+                          [viewerId]: { color: 'green' },
+                          [opponentId]: { color: 'amber' },
+                      },
+                  },
+              }
+            : {}),
     };
 }
 
@@ -173,11 +187,16 @@ describe('TacticsDemoBoard', () => {
             height: '100%',
             position: 'absolute',
         });
+        // No host setup → board falls back to slate and every unit to the default blue.
+        expect(screen.getByTestId('tactics-ground-plane')).toHaveAttribute(
+            'data-board-color',
+            '#3f3f46',
+        );
         expect(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`)).toHaveAttribute(
             'data-color',
-            'blue',
+            '#2563eb',
         );
-        expect(screen.getByTestId('tactics-unit-unit-2')).toHaveAttribute('data-color', 'red');
+        expect(screen.getByTestId('tactics-unit-unit-2')).toHaveAttribute('data-color', '#2563eb');
         expect(screen.queryByTestId('move-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('reveal-target')).not.toBeInTheDocument();
         expect(screen.queryByTestId('attack-target')).not.toBeInTheDocument();
@@ -186,6 +205,30 @@ describe('TacticsDemoBoard', () => {
         expect(camera).toBeInstanceOf(OrthographicCamera);
         expect((camera as OrthographicCamera & { readonly manual?: boolean }).manual).toBe(true);
         expect((camera as OrthographicCamera).up.toArray()).toEqual([0, 0, 1]);
+    });
+
+    it("paints the host-configured board color and each unit's host-assigned color", () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ includeSetup: true })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        // navy board, green local units, amber opponent units — resolved from setup.
+        expect(screen.getByTestId('tactics-ground-plane')).toHaveAttribute(
+            'data-board-color',
+            '#1e293b',
+        );
+        expect(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`)).toHaveAttribute(
+            'data-color',
+            '#16a34a',
+        );
+        expect(screen.getByTestId('tactics-unit-unit-2')).toHaveAttribute('data-color', '#f59e0b');
     });
 
     it('uses renderer-local selection state to move the selected local primitive', () => {
