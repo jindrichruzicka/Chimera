@@ -232,10 +232,12 @@ function makeControllableProvider(inner: InMemoryMultiplayerProvider = makeProvi
     provider: MultiplayerProvider;
     fireHostPlayerLeft: (pid: PlayerId, reason: DisconnectReason) => void;
     fireHostPlayerJoined: (entry: LobbyPlayerEntry) => void;
+    fireHostPlayerAttributeUpdate: (from: PlayerId, key: string, value: string) => void;
     fireClientSideChannel: (msg: SideChannelMessage) => void;
 } {
     const playerLeftCbs: ((pid: PlayerId, reason: DisconnectReason) => void)[] = [];
     const playerJoinedCbs: ((entry: LobbyPlayerEntry) => void)[] = [];
+    const playerAttributeCbs: ((from: PlayerId, key: string, value: string) => void)[] = [];
     const clientSideChannelCbs: ((msg: SideChannelMessage) => void)[] = [];
 
     const provider: MultiplayerProvider = {
@@ -253,6 +255,10 @@ function makeControllableProvider(inner: InMemoryMultiplayerProvider = makeProvi
                     onPlayerJoined: (cb) => {
                         playerJoinedCbs.push(cb);
                         return t.onPlayerJoined(cb);
+                    },
+                    onPlayerAttributeUpdate: (cb) => {
+                        playerAttributeCbs.push(cb);
+                        return t.onPlayerAttributeUpdate(cb);
                     },
                 },
             };
@@ -280,6 +286,8 @@ function makeControllableProvider(inner: InMemoryMultiplayerProvider = makeProvi
         provider,
         fireHostPlayerLeft: (pid, reason) => playerLeftCbs.forEach((cb) => cb(pid, reason)),
         fireHostPlayerJoined: (entry) => playerJoinedCbs.forEach((cb) => cb(entry)),
+        fireHostPlayerAttributeUpdate: (from, key, value) =>
+            playerAttributeCbs.forEach((cb) => cb(from, key, value)),
         fireClientSideChannel: (msg) => clientSideChannelCbs.forEach((cb) => cb(msg)),
     };
 }
@@ -2174,7 +2182,7 @@ describe('LobbyManager — lobby setup defaults (#706)', () => {
         await manager.closeLobby();
     });
 
-    it('preserves host-authored attributes on a duplicate (rejoin) join event', async () => {
+    it('preserves owner-authored attributes on a duplicate (rejoin) join event', async () => {
         const ctl = makeControllableProvider();
         const manager = new LobbyManager(ctl.provider, createNoopLogger(), {
             resolveLobbySetup: resolveSampleSetup,
@@ -2182,10 +2190,12 @@ describe('LobbyManager — lobby setup defaults (#706)', () => {
         await manager.hostLobby(HOST_PARAMS);
 
         ctl.fireHostPlayerJoined({ playerId: playerId('p2'), displayName: 'p2', ready: false });
-        await manager.setPlayerAttribute(playerId('p2'), 'team', 'green');
+        // p2 authors its own seat (owner-authored, F53): the host applies the
+        // incoming update to the sender's seat.
+        ctl.fireHostPlayerAttributeUpdate(playerId('p2'), 'team', 'green');
 
         // A duplicate join event for the same player (already in the roster) must
-        // NOT clobber the host's edited attributes.
+        // NOT clobber the player's edited attributes.
         ctl.fireHostPlayerJoined({ playerId: playerId('p2'), displayName: 'p2', ready: false });
 
         expect(
@@ -2213,7 +2223,7 @@ describe('LobbyManager — lobby setup defaults (#706)', () => {
     });
 });
 
-describe('LobbyManager — host-only setMatchSetting / setPlayerAttribute (#706)', () => {
+describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerAttribute (#706, F53)', () => {
     it('setMatchSetting merges into matchSettings, republishes, and broadcasts', async () => {
         let capturedTransport: HostTransport | null = null;
         const states: LobbyState[] = [];
@@ -2276,7 +2286,7 @@ describe('LobbyManager — host-only setMatchSetting / setPlayerAttribute (#706)
         );
     });
 
-    it('rejects writes from a joined (non-host) session', async () => {
+    it('setMatchSetting still rejects from a joined (non-host) session', async () => {
         const provider = makeProvider();
         const hostManager = makeManager(provider);
         const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
@@ -2287,24 +2297,83 @@ describe('LobbyManager — host-only setMatchSetting / setPlayerAttribute (#706)
         await expect(joinManager.setMatchSetting('boardColor', 'crimson')).rejects.toThrow(
             /only hosted sessions/i,
         );
-        await expect(
-            joinManager.setPlayerAttribute(joinManager.getLocalPlayerId()!, 'team', 'red'),
-        ).rejects.toThrow(/only hosted sessions/i);
 
         await joinManager.closeLobby();
         await hostManager.closeLobby();
     });
 
-    it('rejects setPlayerAttribute for a player not in the roster', async () => {
+    it('setPlayerAttribute on the local seat from a joined session resolves (owner-authored)', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        await expect(
+            joinManager.setPlayerAttribute(joinManager.getLocalPlayerId()!, 'color', 'amber'),
+        ).resolves.toBeUndefined();
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
+    it('rejects setPlayerAttribute targeting another player than the local seat', async () => {
         const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
             resolveLobbySetup: resolveSampleSetup,
         });
         await manager.hostLobby(HOST_PARAMS);
 
-        await expect(manager.setPlayerAttribute(playerId('ghost'), 'team', 'red')).rejects.toThrow(
-            /not present in the lobby roster/i,
+        await expect(manager.setPlayerAttribute(playerId('ghost'), 'color', 'red')).rejects.toThrow(
+            /own seat/i,
         );
 
         await manager.closeLobby();
+    });
+
+    it('joined client sets its own attribute and the host applies it to that seat and broadcasts to all clients', async () => {
+        const provider = makeProvider();
+
+        let hostLobbyStateSnapshot: LobbyState | null = null;
+        let joinLobbyStateSnapshot: LobbyState | null = null;
+
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onLobbyStateChanged: (state) => {
+                hostLobbyStateSnapshot = state;
+            },
+        });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onLobbyStateChanged: (state) => {
+                joinLobbyStateSnapshot = state;
+            },
+        });
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        const joinedPlayerId = joinManager.getLocalPlayerId();
+        expect(joinedPlayerId).toBeTruthy();
+
+        // Wait for the host onPlayerJoined callback and the lobby-state broadcast.
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        await expect(
+            joinManager.setPlayerAttribute(joinedPlayerId!, 'color', 'amber'),
+        ).resolves.toBeUndefined();
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        const hostEntry = hostLobbyStateSnapshot!.players.find(
+            (entry) => entry.playerId === joinedPlayerId,
+        );
+        const joinedEntry = joinLobbyStateSnapshot!.players.find(
+            (entry) => entry.playerId === joinedPlayerId,
+        );
+
+        expect(hostEntry?.attributes?.['color']).toBe('amber');
+        expect(joinedEntry?.attributes?.['color']).toBe('amber');
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
     });
 });

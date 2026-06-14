@@ -9,11 +9,12 @@
  * panel — roster, ready toggle, and Leave/Start — plus the Tactics-specific
  * board-colour and per-player colour controls.
  *
- * Host authority: the colour selects are editable only for the host; a client
- * sees them read-only (`disabled`). Edits route through the host-authority
- * setters (`setMatchSetting` / `setPlayerAttribute`) on {@link GameLobbyScreenProps},
- * which `main` rejects from a non-host session (#706). The screen performs no
- * privileged writes itself.
+ * Authority split (F53): the board-colour select is host-authored — editable
+ * only for the host (a client sees it `disabled`) and routed through
+ * `setMatchSetting`. Each per-player colour select is owner-authored — editable
+ * only on the local player's OWN row (every other seat is `disabled`) and routed
+ * through `setPlayerAttribute`, which `main` accepts only for the caller's own
+ * seat (#706). The screen performs no privileged writes itself.
  *
  * Module boundary (§3 / Invariant #96): game shell components import the shared
  * component library only through the public `components/ui` barrel; the colour
@@ -114,7 +115,7 @@ export function TacticsLobbyScreen({
                                 </Badge>
                                 <Select
                                     data-testid={`tactics-player-color-select-${player.playerId}`}
-                                    disabled={!isHost}
+                                    disabled={!isLocal}
                                     hideLabel
                                     label={`${player.displayName} colour`}
                                     onValueChange={(value) => {

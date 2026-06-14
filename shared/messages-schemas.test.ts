@@ -14,6 +14,7 @@ import {
     ClientMessageSchema,
     ServerMessageSchema,
     WIRE_MAX_CHAT_BODY_LENGTH,
+    WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
     WIRE_MAX_PROFILE_REJECT_REASON_LENGTH,
 } from './messages-schemas.js';
 
@@ -201,6 +202,43 @@ describe('ClientMessageSchema — READY_STATE_UPDATE', () => {
         const result = ClientMessageSchema.safeParse({
             type: 'READY_STATE_UPDATE',
             ready: 'true',
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
+describe('ClientMessageSchema — PLAYER_ATTRIBUTE_UPDATE', () => {
+    it('parses a valid PLAYER_ATTRIBUTE_UPDATE message', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            key: 'color',
+            value: 'amber',
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects PLAYER_ATTRIBUTE_UPDATE with a non-string value', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            key: 'color',
+            value: 42,
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects PLAYER_ATTRIBUTE_UPDATE missing the key', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            value: 'amber',
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects PLAYER_ATTRIBUTE_UPDATE with an over-length value (coarse wire cap)', () => {
+        const result = ClientMessageSchema.safeParse({
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            key: 'color',
+            value: 'a'.repeat(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH + 1),
         });
         expect(result.success).toBe(false);
     });

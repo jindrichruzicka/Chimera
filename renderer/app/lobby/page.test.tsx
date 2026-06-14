@@ -56,35 +56,36 @@ vi.mock('../../game/rendererGameRegistry', () => ({
 // `isHost` + the setters through GameLobbyScreenProps.
 function StubLobbyScreen({
     isHost,
+    localPlayerId,
     setMatchSetting,
     setPlayerAttribute,
 }: GameLobbyScreenProps): React.ReactElement {
     return (
         <div data-testid="stub-lobby-screen">
+            {/* Board colour is host-authored. */}
             {isHost ? (
-                <>
-                    <button
-                        data-testid="stub-edit-board"
-                        onClick={() => {
-                            setMatchSetting('boardColor', 'amber');
-                        }}
-                        type="button"
-                    >
-                        Board colour
-                    </button>
-                    <button
-                        data-testid="stub-edit-color"
-                        onClick={() => {
-                            setPlayerAttribute(playerId('p2'), 'color', 'blue');
-                        }}
-                        type="button"
-                    >
-                        Player colour
-                    </button>
-                </>
+                <button
+                    data-testid="stub-edit-board"
+                    onClick={() => {
+                        setMatchSetting('boardColor', 'amber');
+                    }}
+                    type="button"
+                >
+                    Board colour
+                </button>
             ) : (
-                <span data-testid="stub-readonly">read-only</span>
+                <span data-testid="stub-readonly">read-only board</span>
             )}
+            {/* Player colour is owner-authored: every player edits its OWN seat. */}
+            <button
+                data-testid="stub-edit-color"
+                onClick={() => {
+                    setPlayerAttribute(localPlayerId, 'color', 'blue');
+                }}
+                type="button"
+            >
+                Player colour
+            </button>
         </div>
     );
 }
@@ -685,25 +686,31 @@ describe('LobbyPage game-provided lobby screen', () => {
         expect(screen.queryByTestId('stub-lobby-screen')).toBeNull();
     });
 
-    it('gives the host editable controls whose edits invoke the host-authority IPC', async () => {
-        renderLobbyPage();
+    it('forwards host-authored board and owner-authored colour edits to the lobby IPC', async () => {
+        renderLobbyPage(); // local player is the host (p1)
 
         fireEvent.click(await screen.findByTestId('stub-edit-board'));
         fireEvent.click(screen.getByTestId('stub-edit-color'));
 
         await waitFor(() => {
             expect(setMatchSetting).toHaveBeenCalledWith('boardColor', 'amber');
-            expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p2'), 'color', 'blue');
+            expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p1'), 'color', 'blue');
         });
     });
 
-    it('renders the screen read-only for a client (non-host)', async () => {
+    it('lets a non-host client forward its own colour edit but not the host-only board', async () => {
         mockLocalPlayerId = 'p2'; // host is p1
 
         renderLobbyPage();
 
+        // Board colour is host-only → read-only for the client.
         expect(await screen.findByTestId('stub-readonly')).toBeTruthy();
         expect(screen.queryByTestId('stub-edit-board')).toBeNull();
-        expect(screen.queryByTestId('stub-edit-color')).toBeNull();
+
+        // Own colour is owner-authored → the client can still author it.
+        fireEvent.click(screen.getByTestId('stub-edit-color'));
+        await waitFor(() => {
+            expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p2'), 'color', 'blue');
+        });
     });
 });

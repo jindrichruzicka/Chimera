@@ -93,10 +93,11 @@ export interface PlayerSnapshot {
      */
     readonly commitments?: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     /**
-     * Public host-authored lobby setup (match settings + per-player attributes),
-     * passed through projection verbatim so every client agrees on the match
-     * configuration. Optional for backward-compat: absent on games with no lobby
-     * setup and on older clients (Invariant #1 — only public host config crosses).
+     * Public agreed lobby setup (host-authored match settings + owner-authored
+     * per-player attributes), passed through projection verbatim so every client
+     * agrees on the match configuration. Optional for backward-compat: absent on
+     * games with no lobby setup and on older clients (Invariant #1 — only public
+     * config crosses).
      */
     readonly setup?: GameSetupConfig;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
@@ -148,8 +149,9 @@ export interface LobbyPlayerEntry {
     readonly displayName: string;
     readonly ready: boolean;
     /**
-     * Host-authored per-player match attributes (e.g. unit colour). Optional and
-     * backward-compatible: absent on games with no lobby setup and on older clients.
+     * Owner-authored per-player match attributes (e.g. unit colour): each player
+     * writes its own seat (F53). Optional and backward-compatible: absent on games
+     * with no lobby setup and on older clients.
      */
     readonly attributes?: Record<string, string>;
 }
@@ -324,6 +326,12 @@ export interface HostTransport {
     onActionReceived(cb: (from: PlayerId, action: EngineAction) => void): Unsubscribe;
     /** Subscribe to joined-client ready-state intent updates. */
     onReadyStateUpdate(cb: (from: PlayerId, ready: boolean) => void): Unsubscribe;
+    /**
+     * Subscribe to joined-client own-seat attribute intent updates (e.g. unit
+     * colour). `from` is the connection-derived PlayerId — the host applies the
+     * change to that seat and never trusts a client-supplied playerId.
+     */
+    onPlayerAttributeUpdate(cb: (from: PlayerId, key: string, value: string) => void): Unsubscribe;
     /** Subscribe to inbound side-channel messages from clients. */
     onSideChannelReceived(cb: (from: PlayerId, msg: SideChannelMessage) => void): Unsubscribe;
     /** Subscribe to player-joined notifications. */
@@ -375,6 +383,12 @@ export interface ClientTransport {
     sendAction(action: EngineAction): void;
     /** Send ready-state intent to the authoritative host. */
     sendReadyStateUpdate(ready: boolean): void;
+    /**
+     * Send an own-seat attribute intent (e.g. unit colour) to the authoritative
+     * host. The host infers the seat from this connection and rebroadcasts the
+     * merged LobbyState; it never trusts a client-supplied playerId.
+     */
+    sendPlayerAttributeUpdate(key: string, value: string): void;
     /**
      * Send a non-authoritative side-channel message to the host. Mirror of
      * HostTransport.sendSideChannel — never an EngineAction, never entered in

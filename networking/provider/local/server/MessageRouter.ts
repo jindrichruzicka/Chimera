@@ -29,6 +29,7 @@ import type { MessageBus } from './MessageBus.js';
 
 type ActionCb = (from: PlayerId, action: EngineAction) => void;
 type ReadyStateCb = (from: PlayerId, ready: boolean) => void;
+type PlayerAttributeCb = (from: PlayerId, key: string, value: string) => void;
 type SideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 
 // ─── MessageRouter ────────────────────────────────────────────────────────────
@@ -45,6 +46,7 @@ type SideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 export class MessageRouter {
     private readonly actionCbs = new Set<ActionCb>();
     private readonly readyStateCbs = new Set<ReadyStateCb>();
+    private readonly playerAttributeCbs = new Set<PlayerAttributeCb>();
     private readonly sideChannelCbs = new Set<SideChannelCb>();
     private readonly unsub: Unsubscribe;
 
@@ -70,6 +72,14 @@ export class MessageRouter {
         };
     }
 
+    /** Subscribe to PLAYER_ATTRIBUTE_UPDATE messages delivered by connected clients. */
+    onPlayerAttributeUpdate(cb: PlayerAttributeCb): Unsubscribe {
+        this.playerAttributeCbs.add(cb);
+        return (): void => {
+            this.playerAttributeCbs.delete(cb);
+        };
+    }
+
     /** Subscribe to side-channel messages (CHAT, PROFILE_UPDATE). */
     onSideChannelReceived(cb: SideChannelCb): Unsubscribe {
         this.sideChannelCbs.add(cb);
@@ -83,6 +93,7 @@ export class MessageRouter {
         this.unsub();
         this.actionCbs.clear();
         this.readyStateCbs.clear();
+        this.playerAttributeCbs.clear();
         this.sideChannelCbs.clear();
     }
 
@@ -110,6 +121,12 @@ export class MessageRouter {
             case 'READY_STATE_UPDATE':
                 for (const cb of this.readyStateCbs) {
                     cb(from, msg.ready);
+                }
+                break;
+
+            case 'PLAYER_ATTRIBUTE_UPDATE':
+                for (const cb of this.playerAttributeCbs) {
+                    cb(from, msg.key, msg.value);
                 }
                 break;
 

@@ -86,10 +86,13 @@ export interface GameSetupConfig {
  * `renderer/app/lobby/lobbyTypes.ts` `PendingAction` so the renderer can later
  * collapse onto this canonical, shared definition.
  *
- * Note: `setPlayerAttribute` carries the target `playerId` so a host screen can
- * author *any* seat's attribute (e.g. per-player unit colour), matching the
- * host-authority IPC (`chimera:lobby:set-player-attribute`). Writes are
- * host-only — `main` rejects them from a joined session (#706).
+ * Note: `setPlayerAttribute` carries the target `playerId`, but a player may
+ * only author its OWN seat's attribute (e.g. per-player unit colour) — the
+ * `playerId` must be the local player. `main` rejects a write to any other seat
+ * and, for a joined client, forwards the own-seat intent to the authoritative
+ * host (`chimera:lobby:set-player-attribute`), which applies it and rebroadcasts
+ * (owner-authored, F53). Board/match settings remain host-authored via
+ * `setMatchSetting` (#706).
  */
 export type LobbyPendingAction =
     | 'hosting'

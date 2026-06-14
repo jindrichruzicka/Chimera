@@ -40,6 +40,15 @@ type ClientMessage =
           profile: PlayerProfile; // Mid-lobby cosmetic update; see §4.24
       }
     | {
+          type: 'READY_STATE_UPDATE';
+          ready: boolean; // Owner-authored: client toggles its OWN ready; host stays authoritative
+      }
+    | {
+          type: 'PLAYER_ATTRIBUTE_UPDATE';
+          key: string; // Owner-authored: client sets an attribute on its OWN seat (e.g. 'color')
+          value: string; // Host infers the seat from the connection and rebroadcasts LOBBY_STATE (F53)
+      }
+    | {
           type: 'CHAT';
           body: string; // Capped at 500 characters before sending
           scope: ChatScope; // 'lobby' | 'team' | 'private'

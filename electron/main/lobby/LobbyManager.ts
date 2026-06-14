@@ -206,11 +206,12 @@ export class LobbyManager {
     }
 
     /**
-     * Return `entry` seeded with default host-authored attributes for `seatIndex`
-     * when a descriptor resolves and the entry has none yet. Used on join and
-     * local-seat add so every seat carries deterministic per-player defaults.
-     * No-ops (returns `entry` unchanged) when no descriptor resolves or the entry
-     * already carries attributes (host edits are never clobbered).
+     * Return `entry` seeded with the descriptor's default per-player attributes
+     * for `seatIndex` when a descriptor resolves and the entry has none yet. Used
+     * on join and local-seat add so every seat carries deterministic per-player
+     * defaults. No-ops (returns `entry` unchanged) when no descriptor resolves or
+     * the entry already carries attributes (the seat owner's edits are never
+     * clobbered).
      */
     private seedSeatAttributes(
         entry: LobbyPlayerEntry,
@@ -496,6 +497,30 @@ export class LobbyManager {
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
             }),
+            session.transport.onPlayerAttributeUpdate((from, key, value) => {
+                if (this.lobbyState === null) {
+                    return;
+                }
+
+                // Owner-authored (F53): apply the attribute to the SENDER's seat,
+                // derived from the connection — never a client-supplied playerId.
+                const hasPlayer = this.lobbyState.players.some((entry) => entry.playerId === from);
+                if (!hasPlayer) {
+                    return;
+                }
+
+                const nextState = LobbyManager.withPlayers(
+                    this.lobbyState,
+                    this.lobbyState.players.map((entry) =>
+                        entry.playerId === from
+                            ? { ...entry, attributes: { ...entry.attributes, [key]: value } }
+                            : entry,
+                    ),
+                );
+
+                this.publishLobbyState(nextState);
+                this.broadcastLobbyStateIfHosted(nextState);
+            }),
             session.transport.onPlayerJoined((player) => {
                 if (this.lobbyState === null) {
                     return;
@@ -517,9 +542,9 @@ export class LobbyManager {
                 // A fresh join takes the next free seat and is seeded with the
                 // descriptor's default attributes for that seat index (#706). A
                 // duplicate join event for a player already in the roster
-                // preserves the host-authored attributes rather than reseeding
+                // preserves the seat owner's attributes rather than reseeding
                 // — the transport-delivered entry never carries them, so a
-                // verbatim replace would wipe host edits.
+                // verbatim replace would wipe the owner's edits.
                 const setup = this.currentLobbySetup();
                 const nextPlayers: readonly LobbyPlayerEntry[] =
                     existing === undefined
@@ -715,7 +740,7 @@ export class LobbyManager {
         };
         // A brand-new local seat (AI / pass-and-play) is a real game seat, so it
         // is seeded with the descriptor's default attributes for its seat index
-        // (#706). A re-add preserves any host-authored attributes already set.
+        // (#706). A re-add preserves any owner-authored attributes already set.
         const entry: LobbyPlayerEntry =
             existing === undefined
                 ? this.seedSeatAttributes(
@@ -781,10 +806,14 @@ export class LobbyManager {
     }
 
     /**
-     * Set a host-authored attribute on the player at `playerId` and rebroadcast
-     * the full lobby state (#706). Host-only: rejects from a joined (non-host)
-     * session, and rejects when `playerId` is not in the roster. The value is
-     * merged into that player's `attributes`.
+     * Set an attribute on the local player's OWN seat (e.g. unit colour) and
+     * rebroadcast the full lobby state (#706, F53). Owner-authored: a player may
+     * only write its own seat, so `playerId` must equal {@link localPlayerId} —
+     * any other target is rejected. Mirrors {@link updatePlayerReadyState}: a
+     * joined (non-host) session forwards the intent to the authoritative host
+     * over the transport (the host infers the seat from the connection, so no
+     * playerId travels on the wire); a hosted session merges the value into its
+     * own seat's `attributes` and broadcasts to every peer.
      */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void> {
         const session = this.session;
@@ -793,17 +822,26 @@ export class LobbyManager {
                 new Error('LobbyManager: setting a player attribute requires an active session'),
             );
         }
-        if (!('close' in session)) {
+        if (playerId !== this.localPlayerId) {
             return Promise.reject(
-                new Error('LobbyManager: only hosted sessions can set player attributes'),
+                new Error('LobbyManager: a player can only set attributes on its own seat'),
             );
         }
+
+        // Joined (non-host) session: forward the own-seat intent to the host,
+        // which stays authoritative and rebroadcasts the merged LobbyState.
+        if (!('close' in session)) {
+            session.transport.sendPlayerAttributeUpdate(key, value);
+            return Promise.resolve();
+        }
+
+        // Hosted session: apply to our own seat and broadcast.
         if (this.lobbyState === null) {
             return Promise.reject(new Error('LobbyManager: lobby state is not available'));
         }
         if (!this.lobbyState.players.some((entry) => entry.playerId === playerId)) {
             return Promise.reject(
-                new Error('LobbyManager: target player is not present in the lobby roster'),
+                new Error('LobbyManager: local player is not present in the lobby roster'),
             );
         }
 

@@ -17,6 +17,7 @@
 // `electron/preload/schemas.ts`.
 
 import { z } from 'zod';
+import { WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH } from '@chimera/shared/messages-schemas.js';
 import { ChatScopeSchema } from '@chimera/shared/chat-schemas.js';
 import type { ChatScope } from '@chimera/shared/chat.js';
 import { toSlotId, playerId } from '../../preload/api-types.js';
@@ -234,14 +235,16 @@ export const SetMatchSettingPayloadSchema = z
 
 /**
  * Schema for the `{playerId, key, value}` payload accepted by
- * `chimera:lobby:set-player-attribute` (host-only). `playerId` is validated and
+ * `chimera:lobby:set-player-attribute`. Owner-authored (F53): the handler
+ * accepts only the caller's own-seat write (#706); `playerId` is validated and
  * branded via {@link PlayerIdSchema} so the handler receives a typed `PlayerId`.
+ * `key`/`value` are length-capped to match the wire frame's coarse bound.
  */
 export const SetPlayerAttributePayloadSchema = z
     .object({
         playerId: PlayerIdSchema,
-        key: NonEmptyStringSchema,
-        value: z.string(),
+        key: NonEmptyStringSchema.max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+        value: z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
     })
     .strict();
 

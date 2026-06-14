@@ -75,6 +75,14 @@ export class WsClientTransport implements ClientTransport {
         });
     }
 
+    sendPlayerAttributeUpdate(key: string, value: string): void {
+        this.connection.send({
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            key,
+            value,
+        });
+    }
+
     sendSideChannel(msg: SideChannelMessage): void {
         if (msg.kind === 'chat') {
             this.connection.send({

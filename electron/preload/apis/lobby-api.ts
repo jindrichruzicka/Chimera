@@ -67,8 +67,10 @@ export const LOBBY_UPDATE_READY_STATE_CHANNEL = 'chimera:lobby:update-ready-stat
 export const LOBBY_SET_MATCH_SETTING_CHANNEL = 'chimera:lobby:set-match-setting';
 
 /**
- * `ipcRenderer.invoke` target for {@link LobbyAPI.setPlayerAttribute}. Host-only:
- * the main-side handler rejects writes from a joined (non-host) session (#706).
+ * `ipcRenderer.invoke` target for {@link LobbyAPI.setPlayerAttribute}.
+ * Owner-authored (F53): the main-side handler accepts a write only for the
+ * caller's OWN seat; a joined client's own-seat write is forwarded to the
+ * authoritative host, which applies it and rebroadcasts (#706).
  */
 export const LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL = 'chimera:lobby:set-player-attribute';
 

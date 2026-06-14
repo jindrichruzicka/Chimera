@@ -57,6 +57,17 @@ export const WIRE_MAX_CHAT_BODY_LENGTH = 4096;
 export const WIRE_MAX_PROFILE_REJECT_REASON_LENGTH = 256;
 
 /**
+ * Coarse bound on an inbound `PLAYER_ATTRIBUTE_UPDATE` `key`/`value`, in UTF-16
+ * code units, applied at the wire boundary. The frame is owner-authored but
+ * network-derived (a joined client sends it), and the host merges the value into
+ * `LobbyPlayerEntry.attributes` and rebroadcasts it to every peer. Legitimate
+ * values are short option ids (e.g. `color` → `amber`), so this cap is generous
+ * yet well above any real value — anything past it is clearly abusive and
+ * dropped as a malformed frame.
+ */
+export const WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH = 256;
+
+/**
  * Routing scope for a CHAT frame. Reuses the canonical {@link ChatScopeSchema}
  * from `shared/chat-schemas.ts` so the wire boundary, the IPC boundary, and the
  * preload boundary all validate the same shape — the discriminated union rejects
@@ -133,8 +144,9 @@ const LobbyPlayerEntry = z.object({
     playerId: PlayerId,
     displayName: z.string(),
     ready: z.boolean(),
-    // Host-authored, per-player match attributes (e.g. unit colour). Optional and
-    // backward-compatible: absent on older clients and on games with no lobby setup.
+    // Owner-authored, per-player match attributes (e.g. unit colour): each player
+    // writes its own seat (F53). Optional and backward-compatible: absent on older
+    // clients and on games with no lobby setup.
     attributes: z.record(z.string(), z.string()).optional(),
 });
 
@@ -170,8 +182,9 @@ const PlayerSnapshot = z.object({
     events: z.array(z.object({ type: z.string() }).passthrough()),
     gameResult: GameResult.nullable(),
     commitments: z.record(z.string(), WireCommitmentEnvelope).optional(),
-    // Public host-authored lobby setup (match settings + per-player attributes),
-    // passed through projection verbatim. Optional and backward-compatible.
+    // Public agreed lobby setup (host-authored match settings + owner-authored
+    // per-player attributes), passed through projection verbatim. Optional and
+    // backward-compatible.
     setup: GameSetupConfig.optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
     isMyTurn: z.boolean(),
@@ -214,6 +227,16 @@ const ReadyStateUpdateMessage = z
     })
     .strict();
 
+const PlayerAttributeUpdateMessage = z
+    .object({
+        type: z.literal('PLAYER_ATTRIBUTE_UPDATE'),
+        // Owner-authored but network-derived: cap key/value so a hostile client
+        // cannot push unbounded strings into the broadcast lobby state.
+        key: z.string().min(1).max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+        value: z.string().max(WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH),
+    })
+    .strict();
+
 const ChatClientMessage = z
     .object({
         type: z.literal('CHAT'),
@@ -249,6 +272,7 @@ export const ClientMessageSchema = z.discriminatedUnion('type', [
     ActionMessage,
     ProfileUpdateMessage,
     ReadyStateUpdateMessage,
+    PlayerAttributeUpdateMessage,
     ChatClientMessage,
     PingMessage,
     LeaveMessage,

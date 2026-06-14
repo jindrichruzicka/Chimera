@@ -115,6 +115,7 @@ describe('WsClientTransport — implements ClientTransport', () => {
         const { transport } = await makeClientTransport();
         expect(typeof transport.sendAction).toBe('function');
         expect(typeof transport.sendReadyStateUpdate).toBe('function');
+        expect(typeof transport.sendPlayerAttributeUpdate).toBe('function');
         expect(typeof transport.sendSideChannel).toBe('function');
         expect(typeof transport.onSnapshotReceived).toBe('function');
         expect(typeof transport.onSideChannelReceived).toBe('function');
@@ -172,6 +173,27 @@ describe('WsClientTransport — sendReadyStateUpdate', () => {
         expect(receivedMessage.message.type).toBe('READY_STATE_UPDATE');
         if (receivedMessage.message.type === 'READY_STATE_UPDATE') {
             expect(receivedMessage.message.ready).toBe(true);
+        }
+    });
+});
+
+describe('WsClientTransport — sendPlayerAttributeUpdate', () => {
+    it('delivers a PLAYER_ATTRIBUTE_UPDATE message to the server', async () => {
+        const { server, playerId, transport } = await makeClientTransport();
+
+        const received = waitForServerInboundMessage(
+            server,
+            (_from, msg) => msg.type === 'PLAYER_ATTRIBUTE_UPDATE',
+        );
+
+        transport.sendPlayerAttributeUpdate('color', 'amber');
+        const receivedMessage = await received;
+
+        expect(receivedMessage.from).toBe(playerId);
+        expect(receivedMessage.message.type).toBe('PLAYER_ATTRIBUTE_UPDATE');
+        if (receivedMessage.message.type === 'PLAYER_ATTRIBUTE_UPDATE') {
+            expect(receivedMessage.message.key).toBe('color');
+            expect(receivedMessage.message.value).toBe('amber');
         }
     });
 });

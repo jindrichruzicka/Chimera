@@ -218,6 +218,23 @@ describe('MessageRouter — ready-state routing', () => {
     });
 });
 
+describe('MessageRouter — player-attribute routing', () => {
+    it('routes PLAYER_ATTRIBUTE_UPDATE messages to onPlayerAttributeUpdate callbacks', () => {
+        const bus = new FakeMessageBus();
+        const router = new MessageRouter(bus);
+        const received: {
+            readonly from: PlayerId;
+            readonly key: string;
+            readonly value: string;
+        }[] = [];
+        router.onPlayerAttributeUpdate((from, key, value) => received.push({ from, key, value }));
+
+        bus.emit(playerOne, { type: 'PLAYER_ATTRIBUTE_UPDATE', key: 'color', value: 'amber' });
+
+        expect(received).toEqual([{ from: playerOne, key: 'color', value: 'amber' }]);
+    });
+});
+
 // ─── PING → PONG ─────────────────────────────────────────────────────────────
 
 describe('MessageRouter — PING/PONG', () => {

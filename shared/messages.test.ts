@@ -86,6 +86,17 @@ describe('shared/messages — ClientMessage', () => {
         expect(msg.ready).toBe(true);
     });
 
+    it('PLAYER_ATTRIBUTE_UPDATE message carries a key/value pair', () => {
+        const msg: ClientMessage = {
+            type: 'PLAYER_ATTRIBUTE_UPDATE',
+            key: 'color',
+            value: 'amber',
+        };
+        expect(msg.type).toBe('PLAYER_ATTRIBUTE_UPDATE');
+        expect(msg.key).toBe('color');
+        expect(msg.value).toBe('amber');
+    });
+
     it('LEAVE message signals an intentional departure (no payload)', () => {
         const msg: ClientMessage = { type: 'LEAVE' };
         expect(msg.type).toBe('LEAVE');
@@ -207,6 +218,12 @@ describe('shared/messages — isClientMessage type guard', () => {
 
     it('returns true for READY_STATE_UPDATE', () => {
         expect(isClientMessage({ type: 'READY_STATE_UPDATE', ready: false })).toBe(true);
+    });
+
+    it('returns true for PLAYER_ATTRIBUTE_UPDATE', () => {
+        expect(
+            isClientMessage({ type: 'PLAYER_ATTRIBUTE_UPDATE', key: 'color', value: 'amber' }),
+        ).toBe(true);
     });
 
     it('returns true for LEAVE', () => {

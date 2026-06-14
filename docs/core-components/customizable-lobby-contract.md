@@ -1,7 +1,17 @@
 ---
 title: 'Customizable Lobby Contract'
-description: 'Declarative contract for game-customizable multiplayer lobbies (F53). Defines the GameLobbySetup descriptor, the synced GameSetupConfig, GameLobbyScreenProps, the registry-loaded LobbyScreen slot, the host-authored write path (renderer lobby API → IPC → LobbyManager), and how snapshot.setup is projected to every peer verbatim. Ratifies invariants #99, #100, #101.'
-tags: [lobby, multiplayer, customization, shell-pages, host-authority, projection, snapshot-setup]
+description: 'Declarative contract for game-customizable multiplayer lobbies (F53). Defines the GameLobbySetup descriptor, the synced GameSetupConfig, GameLobbyScreenProps, the registry-loaded LobbyScreen slot, the lobby write path (renderer lobby API → IPC → LobbyManager) with host-authored match settings and owner-authored per-player attributes, and how snapshot.setup is projected to every peer verbatim. Ratifies invariants #99, #100, #101.'
+tags:
+    [
+        lobby,
+        multiplayer,
+        customization,
+        shell-pages,
+        host-authority,
+        owner-authority,
+        projection,
+        snapshot-setup,
+    ]
 ---
 
 # Customizable Lobby Contract
@@ -20,13 +30,16 @@ colour) and per-seat _player attributes_ (e.g. unit colour). A game declares thi
 through a `GameLobbySetup` descriptor and, optionally, ships a registry-loaded `LobbyScreen` React
 component that renders those controls inside the engine dialog.
 
-The contract has one hard ownership rule: **the host authors all match config; joined clients only read
-it.** Every host edit is broadcast through `LobbyState` so all peers converge, and the agreed-upon
-configuration is carried into the match as `snapshot.setup`, projected to every viewer verbatim. Tactics
-is the first adopter (host picks a board colour and assigns each seat a unit colour).
+The contract splits authorship by scope: **match settings are host-authored** (only the host edits them;
+clients read), while **per-player attributes are owner-authored** — each player edits only its OWN seat,
+the host stays authoritative and rebroadcasts. Every accepted edit is broadcast through `LobbyState` so
+all peers converge, and the agreed-upon configuration is carried into the match as `snapshot.setup`,
+projected to every viewer verbatim. Tactics is the first adopter (the host picks a shared board colour
+and each player picks their own unit colour).
 
-This contract ratifies invariants **#99** (host-authored only), **#100** (no direct privileged writes
-from game lobby UI), and **#101** (`snapshot.setup` is public, projected verbatim).
+This contract ratifies invariants **#99** (host-authored match settings / owner-authored player
+attributes), **#100** (no direct privileged writes from game lobby UI), and **#101** (`snapshot.setup`
+is public, projected verbatim).
 
 ---
 
@@ -89,34 +102,40 @@ Both are **optional and backward-compatible** — absent on older clients and on
 
 ---
 
-## Host-Authored Write Path
+## Write Path (host-authored settings, owner-authored attributes)
 
-A host edit never touches privileged state directly. It travels engine-owned indirection from the game
-lobby screen all the way to the authoritative `LobbyManager`, then broadcasts back to every peer:
+A lobby edit never touches privileged state directly. It travels engine-owned indirection from the game
+lobby screen to the authoritative `LobbyManager`, which is the sole writer and broadcasts back to peers.
+The host authors match **settings**; each player authors only its OWN seat's **attributes**:
 
 ```
-TacticsLobbyScreen (host)                        joined clients
-  │  setMatchSetting / setPlayerAttribute              ▲
-  ▼  (GameLobbyScreenProps)                            │ read-only re-render
-useLobbyApi()  (renderer/app/lobby/useLobbyApi.ts)     │
-  ▼  ipcRenderer.invoke                                │
-chimera:lobby:set-match-setting                        │
-chimera:lobby:set-player-attribute   ── Zod-validated ─┤  (ipc-schemas.ts)
-  ▼  ipcMain.handle (ipc-handlers.ts)                  │
-LobbyManager.setMatchSetting / setPlayerAttribute      │  ← HOST-ONLY: rejects a
-  ▼  merge into LobbyState                             │     non-hosted session;
-publishLobbyState + broadcastLobbyStateIfHosted ───────┘     setPlayerAttribute also
-                                                            rejects an unknown playerId
+LobbyScreen                                          all peers
+  │  setMatchSetting (host)  setPlayerAttribute (own seat)   ▲
+  ▼  (GameLobbyScreenProps)                                  │ re-render from broadcast
+useLobbyApi()  (renderer/app/lobby/useLobbyApi.ts)           │
+  ▼  ipcRenderer.invoke                                      │
+chimera:lobby:set-match-setting                              │
+chimera:lobby:set-player-attribute   ── Zod-validated ───────┤  (ipc-schemas.ts)
+  ▼  ipcMain.handle (ipc-handlers.ts)                        │
+LobbyManager.setMatchSetting    → HOST-ONLY (rejects joined) │
+LobbyManager.setPlayerAttribute → OWN-SEAT only:            │
+  • hosted: merge own seat ────────────────────────────────┤
+  • joined: send PLAYER_ATTRIBUTE_UPDATE to host ───────────┘
+       host applies to the SENDER's seat (HostTransport.onPlayerAttributeUpdate)
+  ▼  merge into LobbyState → publishLobbyState + broadcast
 ```
 
-- **Sole write path.** The two host-only channels are the only way to author match config. The setters
-  on `LobbyManager` reject (return a rejected `Promise`) when the active session is not a hosted session;
-  `setPlayerAttribute()` additionally rejects a `playerId` absent from the roster (Invariant #99).
+- **Sole write path.** The two channels are the only way to author lobby config. `setMatchSetting()`
+  rejects (returns a rejected `Promise`) when the active session is not a hosted session.
+  `setPlayerAttribute()` rejects any `playerId` other than the caller's own seat; a joined client's
+  own-seat write is forwarded to the host, which applies it to the connection-derived sender seat —
+  never a client-supplied id (Invariant #99). This mirrors the owner-authored `ready` flow.
 - **No direct privileged writes from the game UI.** A `LobbyScreen` calls the engine-provided
   `setMatchSetting` / `setPlayerAttribute` props only. It must not write the IPC-mirrored `lobbyStore`,
   call `LobbyManager`, or open IPC channels itself (Invariant #100).
-- **Joined clients are read-only.** They render the host's `matchSettings` / `attributes` from the
-  broadcast `LobbyState`; their setter controls are disabled (`isHost === false`).
+- **Read-only where you have no authority.** A `LobbyScreen` disables the board-colour control for a
+  non-host (`isHost === false`) and disables every per-player colour control except the local player's
+  own row; all peers render the broadcast `LobbyState`.
 
 ---
 
@@ -177,9 +196,11 @@ export const tacticsLobbySetup: GameLobbySetup = {
 };
 ```
 
-The board-colour `<Select>` and per-seat unit-colour `<Select>`s are `disabled` for non-hosts. The
-4-player colour-sync end-to-end test ([`e2e/tests/tactics-lobby-color-sync.spec.ts`](../../e2e/tests/tactics-lobby-color-sync.spec.ts))
-proves the host's choices reach every peer read-only and land identically on `snapshot.setup`.
+The board-colour `<Select>` is `disabled` for non-hosts (host-authored), while each per-seat unit-colour
+`<Select>` is `disabled` on every row except the local player's own (owner-authored). The 4-player
+colour-sync end-to-end test ([`e2e/tests/tactics-lobby-color-sync.spec.ts`](../../e2e/tests/tactics-lobby-color-sync.spec.ts))
+proves each player's own-colour choice and the host's board choice reach every peer and land identically
+on `snapshot.setup`.
 
 ---
 
@@ -192,7 +213,7 @@ shared/
 electron/
 ├── main/
 │   ├── lobby/
-│   │   ├── LobbyManager.ts          # Host-only setMatchSetting / setPlayerAttribute + broadcast
+│   │   ├── LobbyManager.ts          # Host-only setMatchSetting / owner-authored setPlayerAttribute + broadcast
 │   │   └── lobbySetupRegistry.ts    # resolveLobbySetup, buildSetupFromLobbyState (games/* composition point)
 │   └── ipc/
 │       ├── ipc-handlers.ts          # chimera:lobby:set-match-setting / set-player-attribute handlers
@@ -210,20 +231,20 @@ renderer/
 games/
 └── tactics/
     ├── lobby/lobby-setup.ts         # tacticsLobbySetup descriptor + colour palettes
-    └── shell/TacticsLobbyScreen.tsx # First LobbyScreen consumer (host-only colour selects)
+    └── shell/TacticsLobbyScreen.tsx # First LobbyScreen consumer (host board colour + own-seat unit colour)
 ```
 
 ---
 
 ## Invariants
 
-| #    | Rule                                                                                                                                                                                                                                                                                                             |
-| ---- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #36  | Settings remain outside simulation state and the `ActionPipeline`. Any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup — i.e. `GameSetupConfig`, not user settings.                                                                                       |
-| #80  | The `GameScreenRegistry` is the sole coupling point between the engine renderer and a game's React code. The `LobbyScreen` slot follows the same registry indirection.                                                                                                                                           |
-| #99  | Lobby match settings and per-player attributes are **host-authored only**. `LobbyManager.setMatchSetting()` / `setPlayerAttribute()` reject a non-hosted session (`setPlayerAttribute` also rejects an unknown `playerId`); the host-only IPC channels are the sole write path; changes broadcast to every peer. |
-| #100 | Game `LobbyScreen` components perform **no privileged writes directly** — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves.                          |
-| #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is **public host config** passed through `StateProjector.project()` **verbatim** — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`.                                                                         |
+| #    | Rule                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #36  | Settings remain outside simulation state and the `ActionPipeline`. Any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup — i.e. `GameSetupConfig`, not user settings.                                                                                                                                                                                                       |
+| #80  | The `GameScreenRegistry` is the sole coupling point between the engine renderer and a game's React code. The `LobbyScreen` slot follows the same registry indirection.                                                                                                                                                                                                                                                           |
+| #99  | Lobby match settings are **host-authored**; per-player attributes are **owner-authored**. `LobbyManager.setMatchSetting()` rejects a non-hosted session; `setPlayerAttribute()` rejects any seat but the caller's own and (for a joined client) forwards the own-seat intent to the host, which applies it to the connection-derived sender seat. The two IPC channels are the sole write path; changes broadcast to every peer. |
+| #100 | Game `LobbyScreen` components perform **no privileged writes directly** — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves.                                                                                                                                          |
+| #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is **public host config** passed through `StateProjector.project()` **verbatim** — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`.                                                                                                                                                                                         |
 
 ---
 

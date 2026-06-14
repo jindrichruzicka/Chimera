@@ -79,6 +79,10 @@ export interface WireCommitmentReveal {
  * - PROFILE_UPDATE Mid-lobby cosmetic update; side-channel only (§4.24).
  * - READY_STATE_UPDATE Joined-client intent to toggle its own ready state.
  *                 Host remains authoritative and rebroadcasts LOBBY_STATE.
+ * - PLAYER_ATTRIBUTE_UPDATE Joined-client intent to set an attribute on its
+ *                 OWN seat (e.g. unit colour). The host infers the seat from the
+ *                 connection — it never trusts a client-supplied playerId —
+ *                 applies the change, and rebroadcasts LOBBY_STATE.
  * - CHAT          Player chat message; rate-limited on the server (§4.29).
  * - PING          Latency probe; server responds with PONG.
  * - LEAVE         Explicit, graceful departure sent just before the client
@@ -109,6 +113,11 @@ export type ClientMessage =
       }
     | { readonly type: 'PROFILE_UPDATE'; readonly profile: WirePlayerProfile }
     | { readonly type: 'READY_STATE_UPDATE'; readonly ready: boolean }
+    | {
+          readonly type: 'PLAYER_ATTRIBUTE_UPDATE';
+          readonly key: string;
+          readonly value: string;
+      }
     | { readonly type: 'CHAT'; readonly body: string; readonly scope: ChatScope }
     | { readonly type: 'PING'; readonly sentAt: number }
     | { readonly type: 'LEAVE' };
@@ -180,6 +189,7 @@ const CLIENT_MESSAGE_TYPES = new Set<string>([
     'ACTION',
     'PROFILE_UPDATE',
     'READY_STATE_UPDATE',
+    'PLAYER_ATTRIBUTE_UPDATE',
     'CHAT',
     'PING',
     'LEAVE',

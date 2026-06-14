@@ -44,6 +44,7 @@ import { playerId as toPlayerId, JoinRejectedError } from './MultiplayerProvider
 
 type ActionCb = (from: PlayerId, action: EngineAction) => void;
 type ReadyStateCb = (from: PlayerId, ready: boolean) => void;
+type PlayerAttributeCb = (from: PlayerId, key: string, value: string) => void;
 type HostSideChannelCb = (from: PlayerId, msg: SideChannelMessage) => void;
 type PlayerJoinedCb = (player: LobbyPlayerEntry) => void;
 type PlayerLeftCb = (playerId: PlayerId, reason: DisconnectReason) => void;
@@ -80,6 +81,7 @@ class InMemoryChannel {
     // Host-side subscriptions (client → host)
     readonly actionCbs = new Set<ActionCb>();
     readonly readyStateCbs = new Set<ReadyStateCb>();
+    readonly playerAttributeCbs = new Set<PlayerAttributeCb>();
     readonly hostSideChannelCbs = new Set<HostSideChannelCb>();
     readonly playerJoinedCbs = new Set<PlayerJoinedCb>();
     readonly playerLeftCbs = new Set<PlayerLeftCb>();
@@ -123,6 +125,7 @@ class InMemoryChannel {
         }
         this.actionCbs.clear();
         this.readyStateCbs.clear();
+        this.playerAttributeCbs.clear();
         this.hostSideChannelCbs.clear();
         this.playerJoinedCbs.clear();
         this.playerLeftCbs.clear();
@@ -214,6 +217,9 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
             onReadyStateUpdate: (cb: ReadyStateCb): Unsubscribe =>
                 addSub(channel.readyStateCbs, cb),
+
+            onPlayerAttributeUpdate: (cb: PlayerAttributeCb): Unsubscribe =>
+                addSub(channel.playerAttributeCbs, cb),
 
             onSideChannelReceived: (cb: HostSideChannelCb): Unsubscribe =>
                 addSub(channel.hostSideChannelCbs, cb),
@@ -340,6 +346,10 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
 
             sendReadyStateUpdate: (ready: boolean): void => {
                 for (const cb of channel.readyStateCbs) cb(clientPlayerId, ready);
+            },
+
+            sendPlayerAttributeUpdate: (key: string, value: string): void => {
+                for (const cb of channel.playerAttributeCbs) cb(clientPlayerId, key, value);
             },
 
             sendSideChannel: (msg: SideChannelMessage): void => {

@@ -89,6 +89,7 @@ function makeTransport(): HostTransport {
         sendReveal: vi.fn(),
         onActionReceived: vi.fn(() => () => {}),
         onReadyStateUpdate: vi.fn(() => () => {}),
+        onPlayerAttributeUpdate: vi.fn(() => () => {}),
         onSideChannelReceived: vi.fn(() => () => {}),
         onPlayerJoined: vi.fn(() => () => {}),
         onPlayerLeft: vi.fn(() => () => {}),

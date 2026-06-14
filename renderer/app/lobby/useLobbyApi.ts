@@ -30,7 +30,7 @@ export interface LobbyApi {
     updatePlayerReadyState(ready: boolean): Promise<void>;
     /** Host-only: set a host-authored match setting; main rejects non-host writes (#706). */
     setMatchSetting(key: string, value: string): Promise<void>;
-    /** Host-only: set a host-authored attribute on the seat at `playerId` (#706). */
+    /** Owner-authored: set an attribute on the local player's OWN seat (`playerId` must be local); main rejects other seats (#706, F53). */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
 }
 

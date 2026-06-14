@@ -3,19 +3,22 @@
  *
  * Issue #711 (part of #702 — Customizable Lobby; Architecture §13.8 / §4.37).
  *
- * Proves the customizable Tactics lobby syncs end-to-end:
- *   - the host picks a board colour and assigns per-player colours;
- *   - the client sees the colour selects read-only and synced;
+ * Proves the customizable Tactics lobby syncs end-to-end (F53, owner-authored
+ * player colour):
+ *   - the host picks the shared board colour (host-authored) and its OWN colour;
+ *   - the client picks its OWN colour (owner-authored);
+ *   - neither peer can edit the other's colour row, nor a client the board;
+ *   - both windows converge on every value via the broadcast LobbyState;
  *   - all ready → Start;
  *   - the board background and per-player unit colours match across host and
  *     client after the match starts.
  *
- * Parity is asserted two ways: authoritatively via the host-authored
- * `snapshot.setup` (identical on both peers, not obfuscated) and at the pixel
- * level via the reused tactics canvas pixel helpers. Per-player unit pixels are
- * fog-limited at tick 0 — each window sees only its own unit — so each window's
- * own colour is checked locally while cross-peer per-player parity rides on the
- * setup deep-equality.
+ * Parity is asserted two ways: authoritatively via the agreed `snapshot.setup`
+ * (identical on both peers, not obfuscated) and at the pixel level via the
+ * reused tactics canvas pixel helpers. Per-player unit pixels are fog-limited at
+ * tick 0 — each window sees only its own unit — so each window's own colour is
+ * checked locally while cross-peer per-player parity rides on the setup
+ * deep-equality.
  *
  * Invariant #3: reads only the projected PlayerSnapshot / lobby state, never
  * GameSnapshot. Invariant #42: the match starts through the Start button, never
@@ -41,7 +44,7 @@ const CLIENT_SWATCH_RGB = 'rgb(245, 158, 11)'; // #f59e0b — amber
 const BOARD_PARITY_TOLERANCE = 24;
 
 test.describe('Tactics lobby colour sync', () => {
-    test('host edits colours, client sees them read-only and synced, and colours match after Start', async ({
+    test('each player edits its own colour, peers see others read-only and synced, and colours match after Start', async ({
         hostWindow,
         clientWindow,
     }) => {
@@ -65,28 +68,33 @@ test.describe('Tactics lobby colour sync', () => {
         if (hostPlayerId === null) throw new Error('Could not resolve host player id');
         if (clientPlayerId === null) throw new Error('Could not resolve client player id');
 
-        // ── Host edits: board colour + both player colours (all non-default) ───
+        // ── Each player authors its own colour; host also sets the board ──────
         await hostLobby.setBoardColor(BOARD_COLOR);
         await hostLobby.setPlayerColor(hostPlayerId, HOST_COLOR);
-        await hostLobby.setPlayerColor(clientPlayerId, CLIENT_COLOR);
+        await clientLobby.setPlayerColor(clientPlayerId, CLIENT_COLOR);
 
-        // Host controls are editable and round-trip to the chosen values.
+        // Authority gating: host edits board + its own row; the client's row is
+        // read-only to the host.
         await expect(hostLobby.boardColorSelect()).toBeEnabled();
         await expect(hostLobby.playerColorSelect(hostPlayerId)).toBeEnabled();
+        await expect(hostLobby.playerColorSelect(clientPlayerId)).toBeDisabled();
+
+        // The client owns only its own row; the board (host-authored) and the
+        // host's row are read-only to the client.
+        await expect(clientLobby.boardColorSelect()).toBeDisabled();
+        await expect(clientLobby.playerColorSelect(clientPlayerId)).toBeEnabled();
+        await expect(clientLobby.playerColorSelect(hostPlayerId)).toBeDisabled();
+
+        // ── Both windows converge on every value via the broadcast LobbyState ──
         await hostLobby.expectBoardColor(BOARD_COLOR);
         await hostLobby.expectPlayerColor(hostPlayerId, HOST_COLOR);
         await hostLobby.expectPlayerColor(clientPlayerId, CLIENT_COLOR);
-
-        // ── Client sees the selects read-only and synced ──────────────────────
-        await expect(clientLobby.boardColorSelect()).toBeDisabled();
-        await expect(clientLobby.playerColorSelect(hostPlayerId)).toBeDisabled();
-        await expect(clientLobby.playerColorSelect(clientPlayerId)).toBeDisabled();
 
         await clientLobby.expectBoardColor(BOARD_COLOR);
         await clientLobby.expectPlayerColor(hostPlayerId, HOST_COLOR);
         await clientLobby.expectPlayerColor(clientPlayerId, CLIENT_COLOR);
 
-        // Swatches on the client reflect the synced colours.
+        // Swatches on the client reflect both synced colours (its own + the host's).
         await expect
             .poll(() => clientLobby.swatchBackgroundColor(hostPlayerId))
             .toBe(HOST_SWATCH_RGB);
@@ -124,8 +132,8 @@ test.describe('Tactics lobby colour sync', () => {
         await expect(clientGame.canvas).toBeVisible({ timeout: 15_000 });
 
         // ── Colour parity after Start ─────────────────────────────────────────
-        // Authoritative: the host-authored setup is identical on both peers and
-        // matches the host's lobby picks.
+        // Authoritative: the agreed setup is identical on both peers and matches
+        // each player's lobby picks (host board + each player's own colour).
         const hostSetup = await hostGame.waitForGameSetup();
         const clientSetup = await clientGame.waitForGameSetup();
 

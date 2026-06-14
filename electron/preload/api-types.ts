@@ -162,8 +162,9 @@ export interface PlayerSnapshot {
     readonly gameResult: GameResult | null;
     readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
     /**
-     * Public host-authored lobby setup (match settings + per-player attributes),
-     * passed through projection verbatim. Optional and backward-compatible.
+     * Public agreed lobby setup (host-authored match settings + owner-authored
+     * per-player attributes), passed through projection verbatim. Optional and
+     * backward-compatible.
      */
     readonly setup?: GameSetupConfig;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
@@ -920,10 +921,11 @@ export interface LobbyAPI {
      */
     setMatchSetting(key: string, value: string): Promise<void>;
     /**
-     * Host-only: set a host-authored attribute on the player at `playerId` (e.g.
-     * unit colour). The main process rejects this from a joined (non-host)
-     * session, then rebroadcasts the full {@link LobbyState} (#706). The explicit
-     * `playerId` lets the host author any seat's attributes.
+     * Owner-authored: set an attribute on the local player's OWN seat at
+     * `playerId` (e.g. unit colour); `playerId` must be the local player. The main
+     * process rejects a write to any other seat and, for a joined client, forwards
+     * the own-seat intent to the authoritative host, which applies it and
+     * rebroadcasts the full {@link LobbyState} (#706, F53).
      */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;

@@ -3,10 +3,11 @@
 /**
  * games/tactics/shell/TacticsLobbyScreen.test.tsx
  *
- * RTL coverage for the custom Tactics lobby screen: the host gets editable
- * board + per-player colour selects whose edits route through the host-authority
- * setters; a client (non-host) sees the same controls read-only. Also asserts
- * the roster reflects names, ready state, and the chosen colour swatch.
+ * RTL coverage for the custom Tactics lobby screen: the host gets an editable
+ * board-colour select (host-authored), while each player edits only their OWN
+ * per-player colour (owner-authored, F53) and sees every other seat's colour
+ * read-only. Edits route through the engine-provided setters. Also asserts the
+ * roster reflects names, ready state, and the chosen colour swatch.
  *
  * Architecture: §4.37 — Renderer Shell Pages UI Contract; §4.4 — Lobby State Sync
  * Task: #708 (T6, part of #702 — Customizable Lobby)
@@ -84,7 +85,7 @@ describe('TacticsLobbyScreen', () => {
         expect(bobRow?.textContent).toContain('(You)');
     });
 
-    describe('host (editable)', () => {
+    describe('board colour (host-authored)', () => {
         it('gives the host an editable board-colour select that routes to setMatchSetting', () => {
             const setMatchSetting = vi.fn();
             render(<TacticsLobbyScreen {...makeProps({ setMatchSetting })} />);
@@ -97,27 +98,53 @@ describe('TacticsLobbyScreen', () => {
             expect(setMatchSetting).toHaveBeenCalledWith('boardColor', 'stone');
         });
 
-        it('gives the host an editable per-player colour select that routes to setPlayerAttribute', () => {
-            const setPlayerAttribute = vi.fn();
-            render(<TacticsLobbyScreen {...makeProps({ setPlayerAttribute })} />);
-
-            const colorSelect = screen.getByTestId(`tactics-player-color-select-${CLIENT_ID}`);
-            expect(colorSelect).toBeEnabled();
-
-            fireEvent.change(colorSelect, { target: { value: 'green' } });
-            expect(setPlayerAttribute).toHaveBeenCalledWith(CLIENT_ID, 'color', 'green');
-        });
-    });
-
-    describe('client (read-only)', () => {
-        it('renders the board and per-player colour selects disabled for a non-host', () => {
+        it('renders the board-colour select disabled for a non-host client', () => {
             render(
                 <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
             );
-
             expect(screen.getByTestId('tactics-board-color-select')).toBeDisabled();
-            expect(screen.getByTestId(`tactics-player-color-select-${HOST_ID}`)).toBeDisabled();
+        });
+    });
+
+    describe('per-player colour (owner-authored)', () => {
+        it('lets the local player edit their OWN colour, routing to setPlayerAttribute', () => {
+            const setPlayerAttribute = vi.fn();
+            // Local player is the host (Alice) editing her own row.
+            render(<TacticsLobbyScreen {...makeProps({ setPlayerAttribute })} />);
+
+            const ownSelect = screen.getByTestId(`tactics-player-color-select-${HOST_ID}`);
+            expect(ownSelect).toBeEnabled();
+
+            fireEvent.change(ownSelect, { target: { value: 'green' } });
+            expect(setPlayerAttribute).toHaveBeenCalledWith(HOST_ID, 'color', 'green');
+        });
+
+        it("disables another player's colour select for the local player (even the host)", () => {
+            // Local player is the host; Bob's row must be read-only.
+            render(<TacticsLobbyScreen {...makeProps()} />);
             expect(screen.getByTestId(`tactics-player-color-select-${CLIENT_ID}`)).toBeDisabled();
+        });
+
+        it('lets a non-host client edit their OWN colour (owner-authored, not host-gated)', () => {
+            const setPlayerAttribute = vi.fn();
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({ localPlayerId: CLIENT_ID, isHost: false, setPlayerAttribute })}
+                />,
+            );
+
+            const ownSelect = screen.getByTestId(`tactics-player-color-select-${CLIENT_ID}`);
+            expect(ownSelect).toBeEnabled();
+
+            fireEvent.change(ownSelect, { target: { value: 'amber' } });
+            expect(setPlayerAttribute).toHaveBeenCalledWith(CLIENT_ID, 'color', 'amber');
+        });
+
+        it("disables a client's view of another player's colour select", () => {
+            render(
+                <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
+            );
+            expect(screen.getByTestId(`tactics-player-color-select-${HOST_ID}`)).toBeDisabled();
         });
     });
 
