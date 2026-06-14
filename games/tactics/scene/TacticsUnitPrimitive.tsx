@@ -9,12 +9,6 @@ import { TacticsSelectionRing } from './TacticsSelectionRing.js';
 const TACTICS_UNIT_INACTIVE_COLOR = '#6b7280';
 const TACTICS_UNIT_HOVER_RING_COLOR = '#facc15';
 const TACTICS_UNIT_SELECTED_RING_COLOR = '#ffffff';
-// Persistent neutral ring marking the local player's own units. Per-player colours
-// can collide in hue (the host assigns them), so ownership — not colour — is the
-// reliable "this is mine" cue (#710). Smaller than the hover/select affordance ring
-// so the two nest without z-fighting when an own unit is also afforded.
-const TACTICS_UNIT_OWN_OUTLINE_COLOR = '#cbd5e1';
-const TACTICS_UNIT_OWN_OUTLINE_RADIUS = 0.42;
 const UNIT_POSITION_Y = 0.45;
 const UNIT_GEOMETRY_ARGS = [0.3, 0.36, 0.9, 20] as const;
 const UNIT_NORMAL_SCALE = [1, 1, 1] as const;
@@ -35,7 +29,7 @@ interface TacticsMovementTween {
 }
 
 export interface TacticsUnitPrimitiveProps {
-    readonly unit: Pick<TacticsSceneUnit, 'id' | 'world' | 'ownership' | 'isAlive'>;
+    readonly unit: Pick<TacticsSceneUnit, 'id' | 'world' | 'isAlive'>;
     readonly color: string;
     readonly isSelected: boolean;
     readonly onSelect: (unitId: TacticsSceneUnit['id']) => void;
@@ -54,7 +48,6 @@ export function TacticsUnitPrimitive({
     const unitIdRef = useRef(unit.id);
     const movementTweenRef = useRef<TacticsMovementTween | null>(null);
     const isAfforded = isHovered || isSelected;
-    const isOwnUnit = unit.ownership === 'own';
     const unitColor = unit.isAlive ? color : TACTICS_UNIT_INACTIVE_COLOR;
     const ringColor = isSelected ? TACTICS_UNIT_SELECTED_RING_COLOR : TACTICS_UNIT_HOVER_RING_COLOR;
     const position = [
@@ -157,11 +150,6 @@ export function TacticsUnitPrimitive({
                 <cylinderGeometry args={UNIT_GEOMETRY_ARGS} />
                 <meshStandardMaterial color={unitColor} roughness={0.65} />
             </mesh>
-            <TacticsSelectionRing
-                color={TACTICS_UNIT_OWN_OUTLINE_COLOR}
-                isVisible={isOwnUnit}
-                radius={TACTICS_UNIT_OWN_OUTLINE_RADIUS}
-            />
             <TacticsSelectionRing color={ringColor} isVisible={isAfforded} />
         </group>
     );

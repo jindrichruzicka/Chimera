@@ -11,17 +11,10 @@ type TestInstance = ReactThreeTest.ReactThreeTestInstance;
 
 const UNIT_ID = entityId('unit-1');
 const OWN_UNIT_COLOR = '#2563eb';
-const OWN_OUTLINE_HEX = 'cbd5e1';
 const OWN_UNIT = {
     id: UNIT_ID,
     world: { x: 2, y: 0, z: -1 },
-    ownership: 'own',
     isAlive: true,
-} satisfies TacticsUnitPrimitiveProps['unit'];
-
-const OPPONENT_UNIT = {
-    ...OWN_UNIT,
-    ownership: 'opponent',
 } satisfies TacticsUnitPrimitiveProps['unit'];
 
 const MOVED_OWN_UNIT = {
@@ -34,7 +27,7 @@ afterEach(() => {
 });
 
 describe('TacticsUnitPrimitive', () => {
-    it('renders a live own unit with its color and a persistent own-unit ring', async () => {
+    it('renders a live unit at rest with only its color and no affordance ring', async () => {
         const renderer = await renderUnit({ isSelected: false });
 
         try {
@@ -44,20 +37,9 @@ describe('TacticsUnitPrimitive', () => {
             expect(group.instance.position.toArray()).toEqual([2, 0.45, -1]);
             expect(unitMesh?.instance.scale.toArray()).toEqual([1, 1, 1]);
             expect(meshMaterial(unitMesh).color.getHexString()).toBe('2563eb');
-            // Cylinder + persistent own ring; the affordance ring is absent when idle.
-            expect(findThreeObjects(renderer.scene, 'Mesh')).toHaveLength(2);
-            expect(meshColorHexes(renderer.scene)).toContain(OWN_OUTLINE_HEX);
-        } finally {
-            await renderer.unmount();
-        }
-    });
-
-    it('omits the persistent own-unit ring for opponent units', async () => {
-        const renderer = await renderUnit({ unit: OPPONENT_UNIT, isSelected: false });
-
-        try {
+            // Cylinder only; the affordance ring is absent when idle. Ownership is
+            // conveyed by the unit colour alone — no persistent own-unit ring.
             expect(findThreeObjects(renderer.scene, 'Mesh')).toHaveLength(1);
-            expect(meshColorHexes(renderer.scene)).not.toContain(OWN_OUTLINE_HEX);
         } finally {
             await renderer.unmount();
         }
@@ -174,7 +156,7 @@ describe('TacticsUnitPrimitive', () => {
             const [unitMesh] = findThreeObjects(renderer.scene, 'Mesh');
 
             expect(unitMesh?.instance.scale.toArray()).toEqual([1.12, 1.12, 1.12]);
-            expect(meshColorHexes(renderer.scene)).toEqual(['2563eb', OWN_OUTLINE_HEX, 'ffffff']);
+            expect(meshColorHexes(renderer.scene)).toEqual(['2563eb', 'ffffff']);
         } finally {
             await renderer.unmount();
         }
@@ -219,8 +201,9 @@ function findThreeObject(scene: TestInstance, type: string): TestInstance {
     return scene.find((node) => node.instance.type === type);
 }
 
-// The unit cylinder is the first mesh and carries the pointer handlers; own units
-// also render a persistent ring mesh, so a single-match `find('Mesh')` would throw.
+// The unit cylinder is the first mesh and carries the pointer handlers; an
+// afforded unit also renders the ring mesh, so a single-match `find('Mesh')`
+// would throw. Take the first match unconditionally.
 function findUnitMesh(scene: TestInstance): TestInstance {
     const [unitMesh] = findThreeObjects(scene, 'Mesh');
     expect(unitMesh).toBeDefined();
