@@ -131,6 +131,33 @@ describe('Select', () => {
         expect(select).toHaveAttribute('id', 'my-select');
     });
 
+    it('keeps the label as the accessible name while visually hiding it when hideLabel is set', () => {
+        render(<Select hideLabel label="Player colour" options={qualityOptions} value="low" />);
+
+        // The accessible name is still provided by the (now hidden) label.
+        const select = screen.getByRole('combobox', { name: 'Player colour' });
+        expect(select).toBeInTheDocument();
+
+        // The label element is rendered but carries the visually-hidden class.
+        const label = screen.getByText('Player colour');
+        expect(label.className).toContain('labelHidden');
+    });
+
+    it('renders the label visibly by default', () => {
+        render(<Select label="Texture quality" options={qualityOptions} value="low" />);
+
+        const label = screen.getByText('Texture quality');
+        expect(label.className).not.toContain('labelHidden');
+    });
+
+    it('defines a tokenized, visually-hidden label rule', () => {
+        const labelHidden = extractDeclarations(css, '.labelHidden');
+        expect(labelHidden).toContain('position: absolute');
+        expect(labelHidden).toContain('overflow: hidden');
+        expect(labelHidden).toContain('var(--ch-space-screen-reader)');
+        expectTokenizedCss(css);
+    });
+
     it('uses tokenized CSS for default, invalid, focus, and disabled states', () => {
         expectTokenizedCss(css);
         expect(css).toContain("[data-invalid='true']");

@@ -146,5 +146,63 @@ describe('TacticsLobbyScreen', () => {
             fireEvent.click(screen.getByTestId('tactics-ready-toggle'));
             expect(onToggleReady).toHaveBeenCalledWith(false);
         });
+
+        it('renders the ready control as a pressed toggle reflecting the local ready state', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
+
+            // Local player (Alice/host) is ready → the toggle is pressed.
+            const toggle = screen.getByTestId('tactics-ready-toggle');
+            expect(toggle).toHaveAttribute('aria-pressed', 'true');
+        });
+
+        it('renders the ready toggle unpressed when the local player is not ready', () => {
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({
+                            players: [
+                                {
+                                    playerId: HOST_ID,
+                                    displayName: 'Alice',
+                                    ready: false,
+                                    attributes: { color: 'blue' },
+                                },
+                                {
+                                    playerId: CLIENT_ID,
+                                    displayName: 'Bob',
+                                    ready: false,
+                                    attributes: { color: 'red' },
+                                },
+                            ],
+                        }),
+                    })}
+                />,
+            );
+
+            const toggle = screen.getByTestId('tactics-ready-toggle');
+            expect(toggle).toHaveAttribute('aria-pressed', 'false');
+        });
+    });
+
+    describe('Tactics-specific control layout', () => {
+        it('constrains the board-colour select width', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
+
+            // The select root (the field container) gets the narrow layout class.
+            const boardSelect = screen.getByTestId('tactics-board-color-select');
+            const root = boardSelect.closest('[class*="board-color-select"]');
+            expect(root).not.toBeNull();
+        });
+
+        it('visually hides the redundant per-player colour label', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
+
+            // The per-player select keeps its accessible label for a11y but hides it.
+            const colorSelect = screen.getByTestId(`tactics-player-color-select-${HOST_ID}`);
+            const label = screen.getByText('Alice colour');
+            expect(label.className).toContain('labelHidden');
+            // Accessible name preserved.
+            expect(colorSelect).toHaveAccessibleName('Alice colour');
+        });
     });
 });

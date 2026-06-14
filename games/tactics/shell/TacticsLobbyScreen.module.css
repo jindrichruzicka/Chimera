@@ -23,6 +23,13 @@
     justify-content: space-between;
 }
 
+/* The board colour has a short, fixed set of options, so a full-width field
+   reads as oversized; constrain it to half the panel. Overrides only the
+   inline size, leaving the Select root's max-inline-size cap intact. */
+.board-color-select {
+    inline-size: 50%;
+}
+
 .ready-summary {
     color: var(--ch-color-text-secondary);
     font-size: var(--ch-font-size-sm);

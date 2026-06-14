@@ -16,6 +16,20 @@
     line-height: var(--ch-line-height-tight);
 }
 
+/* Removes the label from view while leaving it in the accessibility tree, so a
+   field whose purpose is obvious from context keeps a programmatic name. */
+.labelHidden {
+    block-size: var(--ch-space-screen-reader);
+    border: var(--ch-space-none);
+    clip: rect(0, 0, 0, 0);
+    inline-size: var(--ch-space-screen-reader);
+    margin: calc(var(--ch-space-screen-reader) * -1);
+    overflow: hidden;
+    padding: var(--ch-space-none);
+    position: absolute;
+    white-space: nowrap;
+}
+
 /* The shell, not the <select>, draws the field chrome: the macOS native popup
    anchors to the <select> border-box, which is offset inside the shell (see
    the macOS rules below) so the menu lands flush with this visible box.

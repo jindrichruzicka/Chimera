@@ -14,6 +14,12 @@ export type SelectProps = Readonly<
     Omit<SelectHTMLAttributes<HTMLSelectElement>, 'children' | 'onChange' | 'style' | 'value'> & {
         readonly error?: React.ReactNode;
         readonly helperText?: React.ReactNode;
+        /**
+         * Visually hides the label while keeping it as the field's accessible
+         * name. Use when surrounding context already makes the field's purpose
+         * obvious (e.g. a per-row colour picker).
+         */
+        readonly hideLabel?: boolean;
         readonly invalid?: boolean;
         readonly label: React.ReactNode;
         readonly onValueChange?: (value: string) => void;
@@ -46,6 +52,7 @@ export function Select({
     className,
     error,
     helperText,
+    hideLabel = false,
     id,
     invalid = false,
     label,
@@ -97,7 +104,12 @@ export function Select({
 
     return (
         <div className={classNames} data-popup-anchor={popupAnchor} style={style}>
-            <label className={styles['label']} htmlFor={selectId}>
+            <label
+                className={[styles['label'], hideLabel ? styles['labelHidden'] : null]
+                    .filter(Boolean)
+                    .join(' ')}
+                htmlFor={selectId}
+            >
                 {label}
             </label>
             <span

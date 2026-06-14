@@ -24,7 +24,13 @@
  */
 
 import React from 'react';
-import { Badge, Button, Heading, Select } from '@chimera/renderer/components/ui/index.js';
+import {
+    Badge,
+    Button,
+    Heading,
+    Select,
+    ToggleButton,
+} from '@chimera/renderer/components/ui/index.js';
 import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
 import {
     DEFAULT_BOARD_COLOR,
@@ -62,6 +68,7 @@ export function TacticsLobbyScreen({
                     </Badge>
                 </div>
                 <Select
+                    className={styles['board-color-select']}
                     data-testid="tactics-board-color-select"
                     disabled={!isHost}
                     label="Board colour"
@@ -108,6 +115,7 @@ export function TacticsLobbyScreen({
                                 <Select
                                     data-testid={`tactics-player-color-select-${player.playerId}`}
                                     disabled={!isHost}
+                                    hideLabel
                                     label={`${player.displayName} colour`}
                                     onValueChange={(value) => {
                                         setPlayerAttribute(player.playerId, 'color', value);
@@ -116,16 +124,16 @@ export function TacticsLobbyScreen({
                                     value={color}
                                 />
                                 {isLocal ? (
-                                    <Button
+                                    <ToggleButton
                                         data-testid="tactics-ready-toggle"
                                         disabled={pendingAction === 'updating-ready'}
-                                        onClick={() => {
-                                            void onToggleReady(!player.ready);
+                                        onPressedChange={(next) => {
+                                            void onToggleReady(next);
                                         }}
-                                        variant="secondary"
+                                        pressed={player.ready}
                                     >
-                                        {player.ready ? 'Not Ready' : 'Ready'}
-                                    </Button>
+                                        Ready
+                                    </ToggleButton>
                                 ) : null}
                             </li>
                         );
