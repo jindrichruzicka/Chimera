@@ -52,7 +52,7 @@ vi.mock('@react-three/fiber', () => ({
     },
 }));
 
-vi.mock('./TacticsGroundPlane.js', () => ({
+vi.mock('../scene/TacticsGroundPlane.js', () => ({
     TacticsGroundPlane: ({
         color,
         onSelectGridPoint,
@@ -82,7 +82,7 @@ vi.mock('./TacticsGroundPlane.js', () => ({
     ),
 }));
 
-vi.mock('./TacticsUnitPrimitive.js', () => ({
+vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
     TacticsUnitPrimitive: ({
         unit,
         color,

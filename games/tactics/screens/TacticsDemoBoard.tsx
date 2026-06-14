@@ -17,14 +17,14 @@ import {
     type TacticsGridPoint,
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
-} from './tacticsSceneModel.js';
+} from '../scene/tacticsSceneModel.js';
 import {
     TACTICS_CAMERA_BOUNDS,
     TACTICS_CAMERA_LOOK_AT,
     TACTICS_CAMERA_POSITION,
-} from './tacticsCamera.js';
-import { TacticsGroundPlane } from './TacticsGroundPlane.js';
-import { TacticsUnitPrimitive } from './TacticsUnitPrimitive.js';
+} from '../scene/tacticsCamera.js';
+import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
+import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
 
 const boardSceneStyle: React.CSSProperties = {
     position: 'absolute',

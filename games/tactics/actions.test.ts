@@ -30,7 +30,7 @@ import {
     tacticsRevealTileDefinition,
 } from './actions.js';
 import { buildInitialTacticsEntities } from './entities.js';
-import { parseTacticsSceneUnits } from './screens/tacticsSceneModel.js';
+import { parseTacticsSceneUnits } from './scene/tacticsSceneModel.js';
 import { tacticsVisibilityRules } from './visibility-rules.js';
 
 const P1 = playerId('player-1');
