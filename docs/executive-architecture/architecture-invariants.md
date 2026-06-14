@@ -13,18 +13,18 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ## Thematic Index
 
-| Theme                                  | Invariants                                                                                                         |
-| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                                           |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95                              |
-| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                                  |
-| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                     |
-| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                             |
-| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                                         |
-| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                                     |
-| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96, 97, 99 |
-| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73                                                                                |
-| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                                     |
+| Theme                                  | Invariants                                                                                                          |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76                                                                            |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101                      |
+| **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90                                                                   |
+| **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                      |
+| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                              |
+| **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                                          |
+| **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                                      |
+| **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96, 97, 100 |
+| **Networking & multiplayer**           | 6, 8, 9, 37, 38, 39, 40, 41, 72, 73, 99                                                                             |
+| **Lifecycle & dispose**                | 21, 64, 77, 78                                                                                                      |
 
 ---
 
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–99
+## Invariants 91–101
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -245,6 +245,12 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **97.** Game-owned assets — audio, fonts, textures, models, and similar binary resources — must be committed and declared by the game package, not by `renderer/public`. Runtime renderer loading must resolve local `game-id/relative/path` references through the game-asset protocol. `GameFontFace.src` must not be an external URL, and runtime font loading must not fetch Google Fonts CSS or `fonts.gstatic.com` files; development-time downloads are allowed only through tooling that commits the resulting `.woff2` files into the game asset directory.
 
 **98.** A _perspective_ replay (`PerspectiveReplayFile`, `kind: 'perspective'`) is the privacy-preserving counterpart to the deterministic `ReplayFile` of Invariant #71: it carries only already-projected `PlayerSnapshot` frames for a single, **locked, immutable** `viewerId` — never `seed`, `gameConfig`, or `actions` — so it exposes only what one player legitimately saw. A perspective replay is malformed (rejected at parse) if `viewerId` or `frames` is missing, if any `frame.snapshot.viewerId` differs from the file's locked `viewerId`, if any `frame.tick` disagrees with its embedded `frame.snapshot.tick`, or if frame ticks are not strictly increasing (playback walks `frames` in order, so duplicate or out-of-order ticks are rejected). The `kind` discriminator distinguishes it from the deterministic `ReplayFile` (which has no `kind`); both kinds coexist on disk (§4.28, ADR F44b).
+
+**99.** Lobby match settings and per-player attributes are **host-authored only**. `LobbyManager.setMatchSetting()` and `LobbyManager.setPlayerAttribute()` reject (return a rejected `Promise`) when the active session is not a hosted session; `setPlayerAttribute()` additionally rejects a `playerId` that is absent from the roster. The host-only IPC channels `chimera:lobby:set-match-setting` and `chimera:lobby:set-player-attribute` (Zod-validated in `ipc-schemas.ts`) are the **sole** write path. The merged `LobbyState.matchSettings` and `LobbyPlayerEntry.attributes` are broadcast to every peer on each change, so no joined client can author its own match configuration — it can only read the host's. This extends the state-ownership rule of Invariant #36 to the lobby's pre-match config (§4.14, §4.37, F53).
+
+**100.** Game `LobbyScreen` components (`games/<name>/shell/*LobbyScreen.tsx`) perform **no privileged writes directly**. They receive `setMatchSetting`/`setPlayerAttribute` as `GameLobbyScreenProps` (`shared/game-lobby-contract.ts`) and call those engine-provided setters, which route through the renderer lobby API (`useLobbyApi()`) and main-process IPC to `LobbyManager`. A game lobby screen must not write the IPC-mirrored `lobbyStore`, call `LobbyManager`, or open IPC channels itself, and it is reachable only as the registry-loaded `GameScreenRegistry.LobbyScreen` slot — mirroring the registry-indirection rule of Invariant #80 (§4.37, F53).
+
+**101.** `GameSnapshot.setup` / `PlayerSnapshot.setup` (the agreed `GameSetupConfig` = match settings + per-player attributes) is **public host configuration** and is passed through `StateProjector.project()` **verbatim**: it carries no owner-only or per-viewer fields, so every viewer's projected snapshot exposes an identical `setup`. It is built from the host-authored `LobbyState` by `buildSetupFromLobbyState()` and carried into simulation via the `engine:start_game` action, keeping all peers in agreement — consistent with Invariant #36 (simulation-affecting parameters travel as match config, never as user settings) and Invariant #99 (§4.6, §4.14, §4.37, F53).
 
 ---
 

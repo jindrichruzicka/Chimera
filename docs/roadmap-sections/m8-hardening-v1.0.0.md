@@ -23,7 +23,7 @@ tags:
 # M8 — Hardening (v1.0.0)
 
 > **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified. Shell pages are fully customizable per game.
-> Architecture sections: §4.12, §4.13, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §10, §11
+> Architecture sections: §4.4, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §10, §11
 
 ---
 
@@ -95,6 +95,14 @@ Two improvements delivered together:
 
 ---
 
+## F53 — Customizable Lobby `§4.37, §4.4`
+
+Make the multiplayer lobby game-customizable while keeping its chrome engine-owned. Add the declarative `GameLobbySetup` descriptor, the synced `GameSetupConfig` (chosen match settings + per-player attributes), and `GameLobbyScreenProps` in `shared/game-lobby-contract.ts`. Sync host-authored config on `LobbyState` (`matchSettings`) and `LobbyPlayerEntry` (`attributes`), written through host-only IPC (`chimera:lobby:set-match-setting`, `chimera:lobby:set-player-attribute`) to `LobbyManager.setMatchSetting()` / `setPlayerAttribute()`, which reject non-hosted sessions and broadcast to every peer. Add a registry-loaded `GameScreenRegistry.LobbyScreen` slot rendered by `renderer/app/lobby/page.tsx`, and the main-side `lobbySetupRegistry` (`resolveLobbySetup`, `buildSetupFromLobbyState`). Carry the agreed config into the match via `engine:start_game` → `snapshot.setup`, projected to every viewer verbatim by `StateProjector`. Tactics is the first adopter (host picks a board colour and assigns each seat a unit colour), proven by a 4-player colour-sync E2E. Invariants #36, #80, #99–#101 apply.
+
+**GitHub**: [F53 — #702](https://github.com/jindrichruzicka/Chimera/issues/702)
+
+---
+
 ## Cross-References
 
 - [Logging & Crash Reporting](../core-components/logging-crash-reporting.md)
@@ -103,5 +111,6 @@ Two improvements delivered together:
 - [Toast Notification System](../core-components/toast-notification-system.md)
 - [Runtime Debug Layer](../core-components/runtime-debug-layer.md)
 - [Renderer Shell Pages UI Contract](../core-components/renderer-shell-pages-ui-contract.md)
+- [Customizable Lobby Contract](../core-components/customizable-lobby-contract.md) — F53 host-authored match config, `snapshot.setup` projection
 - [Testing Strategy](../testing/property-tests-soak.md) — soak test scenarios
 - [E2E Testing (Playwright)](../testing/e2e-testing-playwright.md) — multiplayer-soak.spec.ts, obfuscation.spec.ts

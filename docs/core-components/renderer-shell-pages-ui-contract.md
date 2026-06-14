@@ -1,6 +1,6 @@
 ---
 title: 'Renderer Shell Pages UI Contract'
-description: 'Token-based styling contract for engine shell pages (main-menu, lobby, settings, saves). Defines which pages are shell-owned vs. game-owned, how the shared Button component is consumed, how GameMainMenuDefinition customizes the main menu, how GameSettingsPageDefinition customizes the settings page, when game token overrides apply, and the invariants that prohibit inline styles on shell pages.'
+description: 'Token-based styling contract for engine shell pages (main-menu, lobby, settings, saves). Defines which pages are shell-owned vs. game-owned, how the shared Button component is consumed, how GameMainMenuDefinition customizes the main menu, how GameSettingsPageDefinition customizes the settings page, how a game contributes a customizable LobbyScreen (host-authored match config), when game token overrides apply, and the invariants that prohibit inline styles on shell pages.'
 tags:
     [
         renderer,
@@ -201,6 +201,15 @@ When `lobbyStore.lobbyState` is non-null, the entry tabs disappear. The dialog i
 session metadata, the player roster, ready-state controls, leave, and host-only start controls.
 All authoritative writes continue through `useLobbyApi()`; the route component never writes the
 IPC-mirrored `lobbyStore` directly.
+
+A game may customize the in-session surface by contributing a `LobbyScreen` component
+(`GameScreenRegistry.LobbyScreen`, loaded via the renderer game registry). When present, the engine
+renders it with `GameLobbyScreenProps` in place of the default roster UI; the host then authors
+host-only **match settings** (`LobbyState.matchSettings`) and per-seat **player attributes**
+(`LobbyPlayerEntry.attributes`) through the engine-provided `setMatchSetting` / `setPlayerAttribute`
+props. Joined clients see those values read-only. The full data and authority contract — including how
+the agreed configuration becomes `snapshot.setup` — lives in §4.37.12 below and the
+[Customizable Lobby Contract](customizable-lobby-contract.md).
 
 Lobby URLs that omit an explicit `gameId` stay on the engine-default shell background path, even
 when `LobbyConfig` defaults to a known game for host/join requests. This prevents the lobby route
@@ -679,20 +688,40 @@ games/
 
 ---
 
+## 4.37.12 Game-Customizable Lobby Screen
+
+A game customizes the in-session lobby by contributing a `LobbyScreen` React component through the
+renderer game registry (`GameScreenRegistry.LobbyScreen?: ComponentType<GameLobbyScreenProps>`), plus a
+pure `GameLobbySetup` descriptor registered on the main side. The engine renders the contributed screen
+inside its lobby dialog (§4.37.4) and routes the host's edits through `useLobbyApi()` → host-only IPC →
+`LobbyManager`; joined clients see the broadcast values read-only, and the agreed configuration is carried
+into the match as `snapshot.setup`, projected to every peer verbatim.
+
+The full data and authority contract — `GameLobbySetup` / `GameSetupConfig` / `GameLobbyScreenProps`, the
+host-authored write path, the snapshot-setup projection, the registry composition points, and the Tactics
+adopter — lives in the **[Customizable Lobby Contract](customizable-lobby-contract.md)**. It ratifies
+invariants #99 (host-authored only), #100 (no direct privileged writes from a game lobby screen), and
+#101 (`snapshot.setup` is public, projected verbatim).
+
+---
+
 ## Invariants
 
-| #   | Rule                                                                                                                                                                                                                                                                                             |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #34 | `SettingsManager.registerSchema()` must be called for a game before `getSettings()` or `updateSettings()` is called. Calling `getSettings` for an unregistered `gameId` returns only engine defaults and logs a warning; a settings page definition selects presentation fields only.            |
-| #35 | Game-defined settings keys must not shadow the engine top-level namespaces (`audio`, `display`, `gameplay`, `controls`). `game-field.path` entries must be backed by the registered game settings schema; presentation metadata never admits unregistered settings keys.                         |
-| #36 | Settings remain outside simulation state and the `ActionPipeline`. The settings page edits values through the renderer settings store and `window.__chimera.settings`; any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup.               |
-| #80 | `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders. |
-| #85 | Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation.                                                                                            |
-| #91 | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                                                                   |
-| #92 | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                                                                                                                 |
-| #93 | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                                                                                                         |
-| #94 | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                               |
-| #96 | Game renderer surfaces may import UI primitives only through the public `@chimera/renderer/components/ui` barrel; shell pages continue to receive game customization through renderer registry indirection.                                                                                      |
+| #    | Rule                                                                                                                                                                                                                                                                                             |
+| ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| #34  | `SettingsManager.registerSchema()` must be called for a game before `getSettings()` or `updateSettings()` is called. Calling `getSettings` for an unregistered `gameId` returns only engine defaults and logs a warning; a settings page definition selects presentation fields only.            |
+| #35  | Game-defined settings keys must not shadow the engine top-level namespaces (`audio`, `display`, `gameplay`, `controls`). `game-field.path` entries must be backed by the registered game settings schema; presentation metadata never admits unregistered settings keys.                         |
+| #36  | Settings remain outside simulation state and the `ActionPipeline`. The settings page edits values through the renderer settings store and `window.__chimera.settings`; any game parameter that affects simulation outcomes belongs in match config transmitted during lobby setup.               |
+| #80  | `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code. Shell-page customization follows the same registry-indirection principle through renderer registry loaders. |
+| #85  | Game token override files may only redefine tokens declared in `renderer/styles/tokens.css`. Introducing new `--ch-*` custom property names in a game's override file is a module-boundary violation.                                                                                            |
+| #91  | Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. All values must use `var(--ch-*)`.                                                                                   |
+| #92  | Shell pages must use `<Button>` from `renderer/components/ui/Button.tsx` for all interactive actions. Raw `<button>` elements with inline styles are prohibited.                                                                                                                                 |
+| #93  | Game token overrides must not be imported directly by shell page components. They enter the cascade only as side-effects of game registry initialisation (§4.35, §4.36).                                                                                                                         |
+| #94  | Shell pages (`main-menu`, `settings`, `saves`, `component-gallery`) must not import from any `games/*` path. The lobby page may import `LobbyConfig` helpers but not game-specific screen modules.                                                                                               |
+| #96  | Game renderer surfaces may import UI primitives only through the public `@chimera/renderer/components/ui` barrel; shell pages continue to receive game customization through renderer registry indirection.                                                                                      |
+| #99  | Lobby match settings and per-player attributes are host-authored only. `LobbyManager.setMatchSetting()` / `setPlayerAttribute()` reject a non-hosted session (and an unknown `playerId`); the host-only IPC channels are the sole write path; changes broadcast to every peer. (§4.37.12)        |
+| #100 | Game `LobbyScreen` components perform no privileged writes directly — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves. (§4.37.12)   |
+| #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is public host config passed through `StateProjector.project()` verbatim — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`. (§4.37.12)                                                      |
 
 ---
 
@@ -702,5 +731,6 @@ games/
 - [Settings System](settings-system.md) — §4.13 settings schema, merge, repository, and IPC lifecycle
 - [Renderer State Stores](renderer-state-stores.md) — store catalogue, `lobbyConfig`, `useLobbyApi()`
 - [Scene Transitions & Fade](scene-transitions-fade.md) — `TransitionOverlay`, `useFade()`
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94
-- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v1.0.0.md) — F51 game-customizable main menu and F52 game-customizable settings page scope
+- [Customizable Lobby Contract](customizable-lobby-contract.md) — §4.37.12 game-customizable lobby screen, host-authored match config, `snapshot.setup` projection
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94, #99–#101
+- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v1.0.0.md) — F51 game-customizable main menu, F52 game-customizable settings page, F53 customizable lobby
