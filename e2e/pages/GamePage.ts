@@ -3,8 +3,21 @@ import {
     analyzeCanvasPixels,
     decodePngToRgbaFrame,
     formatCanvasPixelStats,
+    summarizeOpaqueColor,
+    type CanvasColor,
     type CanvasPixelStats,
 } from '../helpers/canvas-pixels';
+
+/**
+ * Host-authored game setup as carried on the projected PlayerSnapshot
+ * (`snapshot.setup`). Identical for host and client (not obfuscated), so a deep
+ * comparison across both windows proves the lobby configuration synced into the
+ * match.
+ */
+export interface GameSetupProjection {
+    readonly matchSettings: Readonly<Record<string, string>>;
+    readonly playerAttributes: Readonly<Record<string, Readonly<Record<string, string>>>>;
+}
 
 interface TacticsGridPoint {
     readonly x: number;
@@ -189,6 +202,55 @@ export class GamePage {
             (stats) => stats.redPixels >= minimumColorPixels(stats),
             'Tactics canvas did not render the expected red opponent primitive pixels after reveal',
         );
+    }
+
+    public async assertTacticsCanvasHasGreenPrimitive(): Promise<void> {
+        await this.waitForTacticsCanvasPixelExpectation(
+            (stats) => stats.greenPixels >= minimumColorPixels(stats),
+            'Tactics canvas did not render the expected green primitive pixels',
+        );
+    }
+
+    public async assertTacticsCanvasHasAmberPrimitive(): Promise<void> {
+        await this.waitForTacticsCanvasPixelExpectation(
+            (stats) => stats.amberPixels >= minimumColorPixels(stats),
+            'Tactics canvas did not render the expected amber primitive pixels',
+        );
+    }
+
+    /**
+     * Mean opaque colour of the tactics canvas — a stable proxy for the rendered
+     * board colour (units occupy <1% of pixels). Used to assert board-colour
+     * parity between the host and client windows.
+     */
+    public async readTacticsCanvasBackgroundColor(): Promise<CanvasColor> {
+        await this.waitForCanvasInteractionFrame();
+        const screenshot = await this.tacticsCanvas.screenshot({ type: 'png' });
+        return summarizeOpaqueColor(decodePngToRgbaFrame(screenshot));
+    }
+
+    /**
+     * Poll the projected snapshot until its host-authored `setup` is present,
+     * returning it. After Start the first snapshot can lag the visible canvas by
+     * a frame, so this gates on `setup` rather than assuming it immediately.
+     */
+    public async waitForGameSetup(): Promise<GameSetupProjection> {
+        let lastSetup: GameSetupProjection | null = null;
+        await expect
+            .poll(
+                async () => {
+                    lastSetup = await this.readGameSetup();
+                    return lastSetup !== null;
+                },
+                { timeout: PROJECTED_SNAPSHOT_TIMEOUT_MS },
+            )
+            .toBe(true);
+
+        if (lastSetup === null) {
+            throw new Error('Projected game setup was not available before the timeout.');
+        }
+
+        return lastSetup;
     }
 
     public async moveSelectedPrimitiveNearOpponent(): Promise<void> {
@@ -519,6 +581,33 @@ export class GamePage {
 
         return snapshot;
     }
+
+    private async readGameSetup(): Promise<GameSetupProjection | null> {
+        const setup = await this.page.evaluate(async () => {
+            const gameApi = (
+                globalThis as {
+                    readonly __chimera?: {
+                        readonly game?: {
+                            readonly getCurrentSnapshot?: () => Promise<unknown>;
+                        };
+                    };
+                }
+            ).__chimera?.game;
+
+            if (typeof gameApi?.getCurrentSnapshot !== 'function') {
+                return null;
+            }
+
+            const snapshot = await gameApi.getCurrentSnapshot();
+            if (typeof snapshot !== 'object' || snapshot === null) {
+                return null;
+            }
+
+            return (snapshot as Readonly<Record<string, unknown>>)['setup'] ?? null;
+        });
+
+        return isGameSetupProjection(setup) ? setup : null;
+    }
 }
 
 function unitGridPoint(unit: TacticsUnitProjection): TacticsGridPoint {
@@ -709,6 +798,14 @@ function isTacticsSnapshotProjection(value: unknown): value is TacticsSnapshotPr
 
     const candidate = value as Readonly<Record<string, unknown>>;
     return typeof candidate['viewerId'] === 'string' && isRecord(candidate['entities']);
+}
+
+function isGameSetupProjection(value: unknown): value is GameSetupProjection {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return isRecord(value['matchSettings']) && isRecord(value['playerAttributes']);
 }
 
 function isTacticsUnitProjection(value: unknown): value is TacticsUnitProjection {

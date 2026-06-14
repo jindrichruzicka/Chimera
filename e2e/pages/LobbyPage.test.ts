@@ -16,18 +16,24 @@ interface BuildPageDoubleResult {
     readonly waitedTestIds: string[];
     readonly nthSelections: { readonly testId: string; readonly index: number }[];
     readonly attributeReads: { readonly testId: string; readonly name: string }[];
+    readonly evaluateCount: () => number;
 }
 
 const buildPageDouble = (
-    textByTestId: Readonly<Record<string, string>> = {},
-    attributesByTestId: Readonly<Record<string, Readonly<Record<string, string>>>> = {},
+    options: {
+        readonly textByTestId?: Readonly<Record<string, string>>;
+        readonly attributesByTestId?: Readonly<Record<string, Readonly<Record<string, string>>>>;
+        readonly evaluateResult?: unknown;
+    } = {},
 ): BuildPageDoubleResult => {
+    const { textByTestId = {}, attributesByTestId = {}, evaluateResult } = options;
     const requestedTestIds: string[] = [];
     const clickedTestIds: string[] = [];
     const filledValues: { readonly testId: string; readonly value: string }[] = [];
     const waitedTestIds: string[] = [];
     const nthSelections: { readonly testId: string; readonly index: number }[] = [];
     const attributeReads: { readonly testId: string; readonly name: string }[] = [];
+    const evaluateState = { count: 0 };
 
     const createLocator = (testId: string): Locator => {
         const recordNthSelection: IndexRecorder = (index: number): void => {
@@ -63,16 +69,21 @@ const buildPageDouble = (
             requestedTestIds.push(testId);
             return createLocator(testId);
         },
+        evaluate: async (): Promise<unknown> => {
+            evaluateState.count += 1;
+            return evaluateResult;
+        },
     };
 
     return {
-        page: page as Page,
+        page: page as unknown as Page,
         requestedTestIds,
         clickedTestIds,
         filledValues,
         waitedTestIds,
         nthSelections,
         attributeReads,
+        evaluateCount: (): number => evaluateState.count,
     };
 };
 
@@ -86,51 +97,65 @@ describe('LobbyPage', () => {
         expect(lobbyPage.joinButton).toBeDefined();
         expect(lobbyPage.readyButton).toBeDefined();
         expect(lobbyPage.startButton).toBeDefined();
-        expect(lobbyPage.playerList).toBeDefined();
+        expect(lobbyPage.lobbyScreen).toBeDefined();
         expect(lobbyPage.playerListItems).toBeDefined();
         expect(lobbyPage.connectionStatus).toBeDefined();
         expect(lobbyPage.addressInput).toBeDefined();
         expect(lobbyPage.confirmJoinButton).toBeDefined();
-        expect(lobbyPage.sessionId).toBeDefined();
-
         expect(lobbyPage.leaveButton).toBeDefined();
 
         expect(requestedTestIds).toEqual([
             'host-lobby',
             'join-lobby',
-            'ready-toggle',
+            'tactics-ready-toggle',
             'start-game',
-            'player-list',
-            'player-list-item',
+            'tactics-lobby-screen',
+            'tactics-lobby-player',
             'connection-status',
             'address-input',
             'confirm-join',
-            'lobby-session-id',
             'lobby-leave-btn',
         ]);
     });
 
-    it('reads the host-issued lobby code from the current lobby', async () => {
-        const { page, waitedTestIds } = buildPageDouble({
-            'lobby-session-id': '127.0.0.1:54321:abc123',
+    it('reads the host-issued lobby code from the lobby bridge', async () => {
+        const { page, evaluateCount } = buildPageDouble({
+            evaluateResult: '127.0.0.1:54321:abc123',
         });
         const lobbyPage = new LobbyPage(page);
 
         await expect(lobbyPage.lobbyCode()).resolves.toBe('127.0.0.1:54321:abc123');
-        expect(waitedTestIds).toEqual(['lobby-session-id']);
+        expect(evaluateCount()).toBe(1);
     });
 
-    it('hosts a lobby and waits for the hosted session id', async () => {
+    it('throws when no hosted lobby code is available from the bridge', async () => {
+        const { page } = buildPageDouble({ evaluateResult: null });
+        const lobbyPage = new LobbyPage(page);
+
+        await expect(lobbyPage.lobbyCode()).rejects.toThrow(
+            'Lobby code is unavailable; no active hosted lobby was found.',
+        );
+    });
+
+    it('reads the local player id from the lobby bridge', async () => {
+        const { page, evaluateCount } = buildPageDouble({ evaluateResult: 'player-7' });
+        const lobbyPage = new LobbyPage(page);
+
+        await expect(lobbyPage.localPlayerId()).resolves.toBe('player-7');
+        expect(evaluateCount()).toBe(1);
+    });
+
+    it('hosts a lobby and waits for the tactics lobby screen', async () => {
         const { page, clickedTestIds, waitedTestIds } = buildPageDouble();
         const lobbyPage = new LobbyPage(page);
 
         await lobbyPage.hostLobby();
 
         expect(clickedTestIds).toEqual(['host-lobby']);
-        expect(waitedTestIds).toEqual(['lobby-session-id']);
+        expect(waitedTestIds).toEqual(['tactics-lobby-screen']);
     });
 
-    it('joins a lobby and waits for visible connection status', async () => {
+    it('joins a lobby and waits for the tactics lobby screen', async () => {
         const { page, clickedTestIds, filledValues, waitedTestIds } = buildPageDouble();
         const lobbyPage = new LobbyPage(page);
 
@@ -138,7 +163,7 @@ describe('LobbyPage', () => {
 
         expect(clickedTestIds).toEqual(['join-lobby', 'confirm-join']);
         expect(filledValues).toEqual([{ testId: 'address-input', value: 'ws://localhost:7779' }]);
-        expect(waitedTestIds).toEqual(['connection-status']);
+        expect(waitedTestIds).toEqual(['tactics-lobby-screen']);
     });
 
     it('toggles the local player ready state from the ready button', async () => {
@@ -147,35 +172,34 @@ describe('LobbyPage', () => {
 
         await lobbyPage.toggleReady();
 
-        expect(clickedTestIds).toEqual(['ready-toggle']);
+        expect(clickedTestIds).toEqual(['tactics-ready-toggle']);
     });
 
-    it('reads the data-ready attribute from the indexed player list item', async () => {
-        const { page, waitedTestIds, nthSelections, attributeReads } = buildPageDouble(
-            {},
-            {
-                'player-list-item': {
+    it('reads the data-ready attribute from the indexed roster row', async () => {
+        const { page, waitedTestIds, nthSelections, attributeReads } = buildPageDouble({
+            attributesByTestId: {
+                'tactics-lobby-player': {
                     'data-ready': 'true',
                 },
             },
-        );
+        });
         const lobbyPage = new LobbyPage(page);
 
         await expect(lobbyPage.playerReadyStatus(1)).resolves.toBe('true');
 
-        expect(nthSelections).toEqual([{ testId: 'player-list-item', index: 1 }]);
-        expect(waitedTestIds).toEqual(['player-list-item']);
-        expect(attributeReads).toEqual([{ testId: 'player-list-item', name: 'data-ready' }]);
+        expect(nthSelections).toEqual([{ testId: 'tactics-lobby-player', index: 1 }]);
+        expect(waitedTestIds).toEqual(['tactics-lobby-player']);
+        expect(attributeReads).toEqual([{ testId: 'tactics-lobby-player', name: 'data-ready' }]);
     });
 
-    it('waits for the nth player list item to become visible', async () => {
+    it('waits for the nth roster row to become visible', async () => {
         const { page, waitedTestIds, nthSelections } = buildPageDouble();
         const lobbyPage = new LobbyPage(page);
 
         await lobbyPage.waitForPlayerCount(3);
 
-        expect(nthSelections).toEqual([{ testId: 'player-list-item', index: 2 }]);
-        expect(waitedTestIds).toEqual(['player-list-item']);
+        expect(nthSelections).toEqual([{ testId: 'tactics-lobby-player', index: 2 }]);
+        expect(waitedTestIds).toEqual(['tactics-lobby-player']);
     });
 
     it('throws when waitForPlayerCount is called with count less than 1', async () => {

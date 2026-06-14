@@ -1,12 +1,17 @@
 /**
  * Cross-reference guard: asserts every `getByTestId` string in LobbyPage.ts
  * has a matching `data-testid="..."` attribute in the renderer lobby source
- * files. Lobby locators span three renderer sources:
- *   - renderer/app/lobby/page.tsx  (host, join, address, confirm, start)
- *   - renderer/app/lobby/LobbyEntryTabs.tsx  (host, join, address, confirm)
- *   - renderer/app/lobby/ActiveLobbyPanel.tsx  (session, leave, start)
- *   - renderer/components/shell/PlayerList.tsx  (player-list, player-list-item, ready-toggle)
+ * files. Lobby locators span several sources:
+ *   - renderer/app/lobby/page.tsx  (host, confirm)
+ *   - renderer/app/lobby/LobbyEntryTabs.tsx  (join, address)
  *   - renderer/components/shell/ConnectionStatusIndicator.tsx  (connection-status)
+ *   - games/tactics/shell/TacticsLobbyScreen.tsx  (tactics-lobby-screen,
+ *     tactics-lobby-player, tactics-ready-toggle, start, leave) — the
+ *     registry-loaded lobby screen that actually renders for a Tactics lobby,
+ *     replacing the engine default for Tactics (#702).
+ *   - renderer/app/lobby/ActiveLobbyPanel.tsx  (start, leave) — the engine-default
+ *     fallback rendered only for a game that ships no custom LobbyScreen; kept in
+ *     the scan so the guard also covers that path.
  *
  * This prevents silent POM/renderer testid drift — the same class of bug that
  * caused BLOCK-1 in the F31 review (documented in
@@ -26,13 +31,13 @@ describe('LobbyPage POM — testid alignment with renderer', () => {
     it('every getByTestId call in LobbyPage.ts resolves against a data-testid in the renderer lobby sources', () => {
         const pomSource = readFileSync(path.join(workspaceRoot, 'e2e/pages/LobbyPage.ts'), 'utf-8');
 
-        // LobbyPage locators are distributed across three renderer source files.
+        // LobbyPage locators are distributed across several source files.
         const rendererSources = [
             path.join(workspaceRoot, 'renderer/app/lobby/page.tsx'),
             path.join(workspaceRoot, 'renderer/app/lobby/LobbyEntryTabs.tsx'),
             path.join(workspaceRoot, 'renderer/app/lobby/ActiveLobbyPanel.tsx'),
-            path.join(workspaceRoot, 'renderer/components/shell/PlayerList.tsx'),
             path.join(workspaceRoot, 'renderer/components/shell/ConnectionStatusIndicator.tsx'),
+            path.join(workspaceRoot, 'games/tactics/shell/TacticsLobbyScreen.tsx'),
         ]
             .map((p) => readFileSync(p, 'utf-8'))
             .join('\n');

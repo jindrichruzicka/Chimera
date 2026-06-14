@@ -14,6 +14,15 @@ export interface CanvasPixelStats {
     readonly nonBlankPixels: number;
     readonly bluePixels: number;
     readonly redPixels: number;
+    readonly greenPixels: number;
+    readonly amberPixels: number;
+}
+
+/** Mean RGB summary of a frame, used for board-colour parity assertions. */
+export interface CanvasColor {
+    readonly r: number;
+    readonly g: number;
+    readonly b: number;
 }
 
 const MIN_VISIBLE_ALPHA = 32;
@@ -24,6 +33,16 @@ const MIN_RED_CHANNEL = 100;
 const BLUE_RED_DOMINANCE_DELTA = 40;
 const BLUE_GREEN_DOMINANCE_DELTA = 30;
 const RED_CHANNEL_DOMINANCE_DELTA = 40;
+const MIN_GREEN_CHANNEL = 90;
+const GREEN_RED_DOMINANCE_DELTA = 40;
+const GREEN_BLUE_DOMINANCE_DELTA = 30;
+// Amber (#f59e0b) is an orange band: red dominant, green mid-high, blue low —
+// distinguished from pure red by a meaningful green channel.
+const MIN_AMBER_RED_CHANNEL = 140;
+const MIN_AMBER_GREEN_CHANNEL = 70;
+const MAX_AMBER_BLUE_CHANNEL = 90;
+const AMBER_RED_BLUE_DOMINANCE_DELTA = 80;
+const AMBER_GREEN_BLUE_DOMINANCE_DELTA = 30;
 
 export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
     assertValidFrame(frame);
@@ -31,6 +50,8 @@ export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
     let nonBlankPixels = 0;
     let bluePixels = 0;
     let redPixels = 0;
+    let greenPixels = 0;
+    let amberPixels = 0;
 
     for (let pixelOffset = 0; pixelOffset < frame.rgba.length; pixelOffset += 4) {
         const red = frame.rgba[pixelOffset] ?? 0;
@@ -47,6 +68,12 @@ export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
         if (isRedPrimitivePixel(red, green, blue, alpha)) {
             redPixels += 1;
         }
+        if (isGreenPrimitivePixel(red, green, blue, alpha)) {
+            greenPixels += 1;
+        }
+        if (isAmberPrimitivePixel(red, green, blue, alpha)) {
+            amberPixels += 1;
+        }
     }
 
     const totalPixels = frame.width * frame.height;
@@ -57,6 +84,45 @@ export function analyzeCanvasPixels(frame: CanvasRgbaFrame): CanvasPixelStats {
         nonBlankPixels,
         bluePixels,
         redPixels,
+        greenPixels,
+        amberPixels,
+    };
+}
+
+/**
+ * Mean RGB over sufficiently-opaque pixels. The tactics board fills the vast
+ * majority of opaque pixels (units occupy <1% of the canvas), so this is a
+ * stable representative of the rendered board colour — used to assert board
+ * parity between the host and client windows. Returns black when no pixel is
+ * opaque.
+ */
+export function summarizeOpaqueColor(frame: CanvasRgbaFrame): CanvasColor {
+    assertValidFrame(frame);
+
+    let redSum = 0;
+    let greenSum = 0;
+    let blueSum = 0;
+    let opaqueCount = 0;
+
+    for (let pixelOffset = 0; pixelOffset < frame.rgba.length; pixelOffset += 4) {
+        const alpha = frame.rgba[pixelOffset + 3] ?? 0;
+        if (alpha < MIN_VISIBLE_ALPHA) {
+            continue;
+        }
+        redSum += frame.rgba[pixelOffset] ?? 0;
+        greenSum += frame.rgba[pixelOffset + 1] ?? 0;
+        blueSum += frame.rgba[pixelOffset + 2] ?? 0;
+        opaqueCount += 1;
+    }
+
+    if (opaqueCount === 0) {
+        return { r: 0, g: 0, b: 0 };
+    }
+
+    return {
+        r: Math.round(redSum / opaqueCount),
+        g: Math.round(greenSum / opaqueCount),
+        b: Math.round(blueSum / opaqueCount),
     };
 }
 
@@ -79,6 +145,8 @@ export function formatCanvasPixelStats(stats: CanvasPixelStats): string {
         `nonblank=${stats.nonBlankPixels}`,
         `blue=${stats.bluePixels}`,
         `red=${stats.redPixels}`,
+        `green=${stats.greenPixels}`,
+        `amber=${stats.amberPixels}`,
     ].join(' ');
 }
 
@@ -116,5 +184,26 @@ function isRedPrimitivePixel(red: number, green: number, blue: number, alpha: nu
         red >= MIN_RED_CHANNEL &&
         red >= green + RED_CHANNEL_DOMINANCE_DELTA &&
         red >= blue + RED_CHANNEL_DOMINANCE_DELTA
+    );
+}
+
+function isGreenPrimitivePixel(red: number, green: number, blue: number, alpha: number): boolean {
+    return (
+        alpha >= MIN_COLOR_ALPHA &&
+        green >= MIN_GREEN_CHANNEL &&
+        green >= red + GREEN_RED_DOMINANCE_DELTA &&
+        green >= blue + GREEN_BLUE_DOMINANCE_DELTA
+    );
+}
+
+function isAmberPrimitivePixel(red: number, green: number, blue: number, alpha: number): boolean {
+    return (
+        alpha >= MIN_COLOR_ALPHA &&
+        red >= MIN_AMBER_RED_CHANNEL &&
+        green >= MIN_AMBER_GREEN_CHANNEL &&
+        green < red &&
+        blue <= MAX_AMBER_BLUE_CHANNEL &&
+        red >= blue + AMBER_RED_BLUE_DOMINANCE_DELTA &&
+        green >= blue + AMBER_GREEN_BLUE_DOMINANCE_DELTA
     );
 }
