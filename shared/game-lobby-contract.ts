@@ -26,6 +26,7 @@
  */
 
 import type { LobbyState, PlayerId } from './messages-schemas.js';
+import type { GameContent } from './game-content-contract.js';
 
 // ─── Field options ──────────────────────────────────────────────────────────────
 
@@ -112,6 +113,13 @@ export type LobbyPendingAction =
 export interface GameLobbyScreenProps {
     readonly lobbyState: LobbyState;
     readonly localPlayerId: PlayerId;
+    /**
+     * This game's content collections (§4.8), loaded in main and delivered to
+     * the renderer. Generic and game-agnostic — the engine never interprets it;
+     * the game's own screen reads the collections it authored. Optional: absent
+     * for games with no content or before the fetch resolves.
+     */
+    readonly content?: GameContent;
     readonly isHost: boolean;
     readonly canStartGame: boolean;
     readonly pendingAction: LobbyPendingAction;

@@ -18,6 +18,7 @@ import {
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
 } from '../scene/tacticsSceneModel.js';
+import { paletteFromCollections } from '../content/tacticsContent.js';
 import {
     TACTICS_CAMERA_BOUNDS,
     TACTICS_CAMERA_LOOK_AT,
@@ -48,7 +49,11 @@ export function TacticsDemoBoard({
     snapshot,
     localPlayerId,
     sendAction,
+    content,
 }: GameScreenProps): React.ReactElement | null {
+    // Interpret the generic content prop into this game's colour hex maps. Empty
+    // until content loads, so the resolvers fall back to the default hexes.
+    const palette = paletteFromCollections(content ?? {});
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
     const isBoardInteractive =
         snapshot.isMyTurn && snapshot.gameResult === null && snapshot.phase !== 'ended';
@@ -170,7 +175,7 @@ export function TacticsDemoBoard({
         handleIntent({ type: 'reveal-tile', scoutId: selectedUnit.id, grid });
     };
 
-    const boardColor = resolveTacticsBoardColor(snapshot.setup);
+    const boardColor = resolveTacticsBoardColor(snapshot.setup, palette.boardColorHex);
 
     return (
         <div aria-label="Tactics board" style={boardSceneStyle}>
@@ -186,7 +191,11 @@ export function TacticsDemoBoard({
                     <TacticsUnitPrimitive
                         key={unit.id}
                         unit={unit}
-                        color={resolveTacticsUnitColor(unit.ownerId, snapshot.setup)}
+                        color={resolveTacticsUnitColor(
+                            unit.ownerId,
+                            snapshot.setup,
+                            palette.playerColorHex,
+                        )}
                         isSelected={isBoardInteractive && unit.id === selectedUnitId}
                         onSelect={handleUnitSelect}
                     />

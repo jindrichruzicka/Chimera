@@ -44,6 +44,7 @@ import {
 import type { ActionHistoryEntry } from '@chimera/simulation/engine/UndoManager.js';
 import { DEFAULT_UNDO_POLICY } from '@chimera/simulation/engine/UndoPolicy.js';
 import type { RecordedAction, ReplayHeader } from '@chimera/simulation/replay/index.js';
+import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import type { Logger } from '../logging/logger.js';
 import { createNoopLogger } from '../logging/logger.js';
 
@@ -174,6 +175,12 @@ export interface HostSessionPipelineOptions {
      * pipeline context never carries a `debugObserver` field (Invariant #31).
      */
     readonly debugPort?: HostSessionDebugPort;
+    /**
+     * Optional immutable content database for this game (§4.8). When supplied
+     * it is wired into `PipelineContext.db` so `validate()`/`reduce()` can read
+     * game content. Absent for games that declare no content (Invariant #46).
+     */
+    readonly db?: ContentDatabase;
 }
 
 /**
@@ -297,6 +304,10 @@ export function buildHostSessionPipeline(
             history,
             broadcast: broadcastFn,
             ...(broadcastTickFn === undefined ? {} : { broadcastTick: broadcastTickFn }),
+            // Invariant #46: the `db` field is ABSENT unless this game supplied a
+            // ContentDatabase, so reducers for content-free games see `ctx.db`
+            // as undefined.
+            ...(resolvedOptions?.db === undefined ? {} : { db: resolvedOptions.db }),
             // Invariant #31: the field is ABSENT (not undefined-assigned)
             // unless the debug bridge supplied a port.
             ...(resolvedOptions?.debugPort === undefined

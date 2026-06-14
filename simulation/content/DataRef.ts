@@ -6,7 +6,7 @@
 // collection; it is erased at runtime — the value is always a plain string.
 //
 // On the wire (JSON files) a DataRef is just a plain string, e.g.:
-//   "damage-types:fire"
+//   "player-colors:blue"
 //   "abilities:taunt"
 //
 // Invariants: #1 (no renderer / DOM deps), #13 (pure type utility, no state).
@@ -43,8 +43,8 @@ export type DataRef<_T extends DataObject = DataObject> = string & {
 /**
  * Construct a `DataRef<T>` from its constituent parts.
  *
- * @param collectionType  The content collection, e.g. `"damage-types"`.
- * @param id              The item ID within that collection, e.g. `"fire"`.
+ * @param collectionType  The content collection, e.g. `"player-colors"`.
+ * @param id              The item ID within that collection, e.g. `"blue"`.
  */
 export function buildRef<T extends DataObject>(collectionType: string, id: string): DataRef<T> {
     if (collectionType.includes(':')) {

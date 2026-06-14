@@ -10,17 +10,20 @@ import { buildRef } from './DataRef';
 // ---------------------------------------------------------------------------
 // ContentDatabase — in-memory implementation
 // §4.8 — simulation/content/ContentDatabase.ts
+//
+// `player-colors` is used here only as a sample collection; the database is
+// generic and stores any `{ id, ... }` items.
 // ---------------------------------------------------------------------------
 
 // Helper: build a simple database pre-seeded with two collections
 function makeDb() {
     return createContentDatabase([
         {
-            collectionType: 'damage-types',
+            collectionType: 'player-colors',
             items: [
-                { id: 'fire', name: 'Fire' },
-                { id: 'cold', name: 'Cold' },
-                { id: 'physical', name: 'Physical' },
+                { id: 'blue', name: 'Blue' },
+                { id: 'red', name: 'Red' },
+                { id: 'green', name: 'Green' },
             ],
         },
         {
@@ -40,13 +43,13 @@ function makeDb() {
 describe('ContentDatabase.getById', () => {
     it('returns the item when the collection and id both exist', () => {
         const db = makeDb();
-        const item = db.getById('damage-types', 'fire');
-        expect(item).toEqual({ id: 'fire', name: 'Fire' });
+        const item = db.getById('player-colors', 'blue');
+        expect(item).toEqual({ id: 'blue', name: 'Blue' });
     });
 
     it('returns undefined for an unknown id in a known collection', () => {
         const db = makeDb();
-        expect(db.getById('damage-types', 'lightning')).toBeUndefined();
+        expect(db.getById('player-colors', 'teal')).toBeUndefined();
     });
 
     it('returns undefined for an unknown collection type', () => {
@@ -62,13 +65,13 @@ describe('ContentDatabase.getById', () => {
 describe('ContentDatabase.getByIdOrThrow', () => {
     it('returns the item when found', () => {
         const db = makeDb();
-        const item = db.getByIdOrThrow('damage-types', 'cold');
-        expect(item).toEqual({ id: 'cold', name: 'Cold' });
+        const item = db.getByIdOrThrow('player-colors', 'red');
+        expect(item).toEqual({ id: 'red', name: 'Red' });
     });
 
     it('throws UnknownDataRefError for an unknown id', () => {
         const db = makeDb();
-        expect(() => db.getByIdOrThrow('damage-types', 'lightning')).toThrow(UnknownDataRefError);
+        expect(() => db.getByIdOrThrow('player-colors', 'teal')).toThrow(UnknownDataRefError);
     });
 
     it('throws UnknownDataRefError for an unknown collection', () => {
@@ -78,9 +81,7 @@ describe('ContentDatabase.getByIdOrThrow', () => {
 
     it('includes the ref string in the UnknownDataRefError message', () => {
         const db = makeDb();
-        expect(() => db.getByIdOrThrow('damage-types', 'lightning')).toThrow(
-            /damage-types:lightning/,
-        );
+        expect(() => db.getByIdOrThrow('player-colors', 'teal')).toThrow(/player-colors:teal/);
     });
 });
 
@@ -91,8 +92,8 @@ describe('ContentDatabase.getByIdOrThrow', () => {
 describe('ContentDatabase.getAllIds', () => {
     it('returns all ids in a known collection', () => {
         const db = makeDb();
-        const ids = db.getAllIds('damage-types');
-        expect([...ids].sort()).toEqual(['cold', 'fire', 'physical']);
+        const ids = db.getAllIds('player-colors');
+        expect([...ids].sort()).toEqual(['blue', 'green', 'red']);
     });
 
     it('returns an empty array for an unknown collection', () => {
@@ -102,7 +103,7 @@ describe('ContentDatabase.getAllIds', () => {
 
     it('returns a readonly array', () => {
         const db = makeDb();
-        const ids = db.getAllIds('damage-types');
+        const ids = db.getAllIds('player-colors');
         // readonly — TypeScript enforces this; at runtime it is still an array
         expect(Array.isArray(ids)).toBe(true);
     });
@@ -134,14 +135,14 @@ describe('ContentDatabase.getAll', () => {
 describe('ContentDatabase.resolveRef', () => {
     it('resolves a known DataRef to its object', () => {
         const db = makeDb();
-        const ref = buildRef('damage-types', 'fire');
+        const ref = buildRef('player-colors', 'blue');
         const item = db.resolveRef(ref);
-        expect(item).toEqual({ id: 'fire', name: 'Fire' });
+        expect(item).toEqual({ id: 'blue', name: 'Blue' });
     });
 
     it('throws UnknownDataRefError for a ref pointing to a missing item', () => {
         const db = makeDb();
-        const ref = buildRef('damage-types', 'poison');
+        const ref = buildRef('player-colors', 'teal');
         expect(() => db.resolveRef(ref)).toThrow(UnknownDataRefError);
     });
 
@@ -160,7 +161,7 @@ describe('ContentDatabase.collectionTypes', () => {
     it('returns all registered collection type names', () => {
         const db = makeDb();
         const types = [...db.collectionTypes()].sort();
-        expect(types).toEqual(['abilities', 'damage-types']);
+        expect(types).toEqual(['abilities', 'player-colors']);
     });
 
     it('returns an empty array when the database has no collections', () => {
@@ -176,12 +177,12 @@ describe('ContentDatabase.collectionTypes', () => {
 describe('ContentDatabase.has', () => {
     it('returns true when the item exists', () => {
         const db = makeDb();
-        expect(db.has('damage-types', 'fire')).toBe(true);
+        expect(db.has('player-colors', 'blue')).toBe(true);
     });
 
     it('returns false for an unknown id in a known collection', () => {
         const db = makeDb();
-        expect(db.has('damage-types', 'lightning')).toBe(false);
+        expect(db.has('player-colors', 'teal')).toBe(false);
     });
 
     it('returns false for an unknown collection', () => {
@@ -221,7 +222,7 @@ describe('ContentDatabase immutability', () => {
 
     it('items retrieved via getById are frozen (invariant #13)', () => {
         const db = makeDb();
-        const item = db.getById('damage-types', 'fire');
+        const item = db.getById('player-colors', 'blue');
         expect(Object.isFrozen(item)).toBe(true);
     });
 
@@ -235,7 +236,7 @@ describe('ContentDatabase immutability', () => {
 
     it('items retrieved via resolveRef are frozen', () => {
         const db = makeDb();
-        const ref = buildRef('damage-types', 'fire');
+        const ref = buildRef('player-colors', 'blue');
         const item = db.resolveRef(ref);
         expect(Object.isFrozen(item)).toBe(true);
     });
@@ -269,10 +270,10 @@ describe('createContentDatabase', () => {
         expect(() =>
             createContentDatabase([
                 {
-                    collectionType: 'damage-types',
+                    collectionType: 'player-colors',
                     items: [
-                        { id: 'fire', name: 'Fire' },
-                        { id: 'fire', name: 'Fire (dup)' },
+                        { id: 'blue', name: 'Blue' },
+                        { id: 'blue', name: 'Blue (dup)' },
                     ],
                 },
             ]),
@@ -283,12 +284,12 @@ describe('createContentDatabase', () => {
         expect(() =>
             createContentDatabase([
                 {
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue' }],
                 },
                 {
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire (dup)' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue (dup)' }],
                 },
             ]),
         ).toThrow(ContentConflictError);
@@ -298,10 +299,10 @@ describe('createContentDatabase', () => {
         try {
             createContentDatabase([
                 {
-                    collectionType: 'damage-types',
+                    collectionType: 'player-colors',
                     items: [
-                        { id: 'fire', name: 'Fire' },
-                        { id: 'fire', name: 'Dup' },
+                        { id: 'blue', name: 'Blue' },
+                        { id: 'blue', name: 'Dup' },
                     ],
                 },
             ]);
@@ -309,8 +310,8 @@ describe('createContentDatabase', () => {
         } catch (err) {
             expect(err).toBeInstanceOf(ContentConflictError);
             const e = err as ContentConflictError;
-            expect(e.collectionType).toBe('damage-types');
-            expect(e.id).toBe('fire');
+            expect(e.collectionType).toBe('player-colors');
+            expect(e.id).toBe('blue');
         }
     });
 });
@@ -321,39 +322,39 @@ describe('createContentDatabase', () => {
 
 describe('UnknownDataRefError', () => {
     it('is an instance of Error', () => {
-        const err = new UnknownDataRefError('damage-types:lightning');
+        const err = new UnknownDataRefError('player-colors:teal');
         expect(err).toBeInstanceOf(Error);
     });
 
     it('exposes .ref', () => {
-        const err = new UnknownDataRefError('damage-types:lightning');
-        expect(err.ref).toBe('damage-types:lightning');
+        const err = new UnknownDataRefError('player-colors:teal');
+        expect(err.ref).toBe('player-colors:teal');
     });
 
     it('has the exact §4.8 message', () => {
-        const err = new UnknownDataRefError('damage-types:lightning');
+        const err = new UnknownDataRefError('player-colors:teal');
         expect(err.message).toBe(
-            "Cannot resolve DataRef 'damage-types:lightning': item not found in ContentDatabase",
+            "Cannot resolve DataRef 'player-colors:teal': item not found in ContentDatabase",
         );
     });
 });
 
 describe('ContentConflictError', () => {
     it('is an instance of Error', () => {
-        const err = new ContentConflictError('damage-types', 'fire');
+        const err = new ContentConflictError('player-colors', 'blue');
         expect(err).toBeInstanceOf(Error);
     });
 
     it('exposes .collectionType and .id', () => {
-        const err = new ContentConflictError('damage-types', 'fire');
-        expect(err.collectionType).toBe('damage-types');
-        expect(err.id).toBe('fire');
+        const err = new ContentConflictError('player-colors', 'blue');
+        expect(err.collectionType).toBe('player-colors');
+        expect(err.id).toBe('blue');
     });
 
     it('has the exact §4.8 message', () => {
-        const err = new ContentConflictError('damage-types', 'fire');
+        const err = new ContentConflictError('player-colors', 'blue');
         expect(err.message).toBe(
-            "Duplicate item id 'fire' in collection 'damage-types' across content sources",
+            "Duplicate item id 'blue' in collection 'player-colors' across content sources",
         );
     });
 });
@@ -361,32 +362,32 @@ describe('ContentConflictError', () => {
 describe('ContentSchemaError', () => {
     it('is an instance of Error', () => {
         const cause = new Error('bad schema');
-        const err = new ContentSchemaError('damage-types', 'fire', cause);
+        const err = new ContentSchemaError('player-colors', 'blue', cause);
         expect(err).toBeInstanceOf(Error);
     });
 
     it('exposes .collectionType and .id', () => {
         const cause = new Error('bad schema');
-        const err = new ContentSchemaError('damage-types', 'fire', cause);
-        expect(err.collectionType).toBe('damage-types');
-        expect(err.id).toBe('fire');
+        const err = new ContentSchemaError('player-colors', 'blue', cause);
+        expect(err.collectionType).toBe('player-colors');
+        expect(err.id).toBe('blue');
     });
 
     it('has the exact §4.8 message', () => {
         const cause = new Error('bad schema');
-        const err = new ContentSchemaError('damage-types', 'fire', cause);
-        expect(err.message).toBe("Schema validation failed for 'damage-types:fire'");
+        const err = new ContentSchemaError('player-colors', 'blue', cause);
+        expect(err.message).toBe("Schema validation failed for 'player-colors:blue'");
     });
 
     it('preserves the cause', () => {
         const cause = new Error('bad schema');
-        const err = new ContentSchemaError('damage-types', 'fire', cause);
+        const err = new ContentSchemaError('player-colors', 'blue', cause);
         expect(err.cause).toBe(cause);
     });
 
     it('cause is set via super() options and is non-enumerable (M1)', () => {
         const cause = new Error('bad schema');
-        const err = new ContentSchemaError('damage-types', 'fire', cause);
+        const err = new ContentSchemaError('player-colors', 'blue', cause);
         // When cause is passed through super(msg, { cause }), it is a non-enumerable
         // own property set by the Error constructor — not visible in Object.keys().
         expect(Object.keys(err)).not.toContain('cause');

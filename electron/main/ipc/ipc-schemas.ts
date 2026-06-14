@@ -101,6 +101,9 @@ export const NonEmptyStringSchema = z.string().min(1);
 /** Schema for a single `gameId` argument (e.g. `chimera:saves:list`). */
 export const GameIdSchema = NonEmptyStringSchema;
 
+/** Schema for the `chimera:content:get-collections` request payload (§4.8). */
+export const GetContentCollectionsParamsSchema = z.object({ gameId: GameIdSchema });
+
 /**
  * Schema for a replay file-path argument (`chimera:replay:open-in-player`,
  * `chimera:replay:delete`). Shape validation only — "is this a populated

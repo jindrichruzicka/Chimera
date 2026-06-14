@@ -9,6 +9,9 @@ import { createContentLoader } from './ContentLoader';
 // ---------------------------------------------------------------------------
 // ContentLoader — unit and integration tests
 // §4.8 — simulation/content/ContentLoader.ts
+//
+// These engine-level tests use `player-colors` purely as a sample collection;
+// the loader is generic and knows nothing about colours (callers supply schemas).
 // ---------------------------------------------------------------------------
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -21,20 +24,20 @@ describe('ContentLoader — inline source', () => {
         const db = await loader.load([
             {
                 type: 'inline',
-                collectionType: 'damage-types',
+                collectionType: 'player-colors',
                 items: [
-                    { id: 'fire', name: 'Fire' },
-                    { id: 'cold', name: 'Cold' },
+                    { id: 'blue', name: 'Blue' },
+                    { id: 'red', name: 'Red' },
                 ],
             },
         ]);
-        expect(db.getById('damage-types', 'fire')).toEqual({
-            id: 'fire',
-            name: 'Fire',
+        expect(db.getById('player-colors', 'blue')).toEqual({
+            id: 'blue',
+            name: 'Blue',
         });
-        expect(db.getById('damage-types', 'cold')).toEqual({
-            id: 'cold',
-            name: 'Cold',
+        expect(db.getById('player-colors', 'red')).toEqual({
+            id: 'red',
+            name: 'Red',
         });
     });
 
@@ -43,16 +46,16 @@ describe('ContentLoader — inline source', () => {
         const db = await loader.load([
             {
                 type: 'inline',
-                collectionType: 'damage-types',
-                items: [{ id: 'fire', name: 'Fire' }],
+                collectionType: 'player-colors',
+                items: [{ id: 'blue', name: 'Blue' }],
             },
             {
                 type: 'inline',
-                collectionType: 'damage-types',
-                items: [{ id: 'cold', name: 'Cold' }],
+                collectionType: 'player-colors',
+                items: [{ id: 'red', name: 'Red' }],
             },
         ]);
-        expect([...db.getAllIds('damage-types')].sort()).toEqual(['cold', 'fire']);
+        expect([...db.getAllIds('player-colors')].sort()).toEqual(['blue', 'red']);
     });
 
     it('merges inline sources for different collections', async () => {
@@ -60,8 +63,8 @@ describe('ContentLoader — inline source', () => {
         const db = await loader.load([
             {
                 type: 'inline',
-                collectionType: 'damage-types',
-                items: [{ id: 'fire', name: 'Fire' }],
+                collectionType: 'player-colors',
+                items: [{ id: 'blue', name: 'Blue' }],
             },
             {
                 type: 'inline',
@@ -69,7 +72,7 @@ describe('ContentLoader — inline source', () => {
                 items: [{ id: 'taunt', description: 'Force attack' }],
             },
         ]);
-        expect([...db.collectionTypes()].sort()).toEqual(['abilities', 'damage-types']);
+        expect([...db.collectionTypes()].sort()).toEqual(['abilities', 'player-colors']);
         expect(db.has('abilities', 'taunt')).toBe(true);
     });
 
@@ -79,13 +82,13 @@ describe('ContentLoader — inline source', () => {
             loader.load([
                 {
                     type: 'inline',
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue' }],
                 },
                 {
                     type: 'inline',
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire (duplicate)' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue (duplicate)' }],
                 },
             ]),
         ).rejects.toThrow(ContentConflictError);
@@ -97,16 +100,16 @@ describe('ContentLoader — inline source', () => {
             loader.load([
                 {
                     type: 'inline',
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue' }],
                 },
                 {
                     type: 'inline',
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Dup' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Dup' }],
                 },
             ]),
-        ).rejects.toThrow(/damage-types.*fire|fire.*damage-types/);
+        ).rejects.toThrow(/player-colors.*blue|blue.*player-colors/);
     });
 
     it('accepts an empty inline source list and returns an empty db', async () => {
@@ -118,16 +121,16 @@ describe('ContentLoader — inline source', () => {
     it('accepts an empty items array in inline source', async () => {
         const loader = createContentLoader();
         const db = await loader.load([
-            { type: 'inline', collectionType: 'damage-types', items: [] },
+            { type: 'inline', collectionType: 'player-colors', items: [] },
         ]);
-        expect(db.getAllIds('damage-types')).toEqual([]);
+        expect(db.getAllIds('player-colors')).toEqual([]);
     });
 });
 
 // ─── Zod schema validation ────────────────────────────────────────────────────
 
 describe('ContentLoader — schema validation', () => {
-    const DamageTypeSchema = z.object({
+    const ColorSchema = z.object({
         id: z.string(),
         name: z.string(),
     });
@@ -138,13 +141,13 @@ describe('ContentLoader — schema validation', () => {
             [
                 {
                     type: 'inline',
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue' }],
                 },
             ],
-            { schemas: { 'damage-types': DamageTypeSchema } },
+            { schemas: { 'player-colors': ColorSchema } },
         );
-        expect(db.has('damage-types', 'fire')).toBe(true);
+        expect(db.has('player-colors', 'blue')).toBe(true);
     });
 
     it('throws ContentSchemaError when an item fails schema validation', async () => {
@@ -155,11 +158,11 @@ describe('ContentLoader — schema validation', () => {
                 [
                     {
                         type: 'inline',
-                        collectionType: 'damage-types',
-                        items: [{ id: 'fire' }],
+                        collectionType: 'player-colors',
+                        items: [{ id: 'blue' }],
                     },
                 ],
-                { schemas: { 'damage-types': DamageTypeSchema } },
+                { schemas: { 'player-colors': ColorSchema } },
             ),
         ).rejects.toThrow(ContentSchemaError);
     });
@@ -171,18 +174,18 @@ describe('ContentLoader — schema validation', () => {
                 [
                     {
                         type: 'inline',
-                        collectionType: 'damage-types',
-                        items: [{ id: 'fire' }],
+                        collectionType: 'player-colors',
+                        items: [{ id: 'blue' }],
                     },
                 ],
-                { schemas: { 'damage-types': DamageTypeSchema } },
+                { schemas: { 'player-colors': ColorSchema } },
             );
             expect.fail('should have thrown');
         } catch (err) {
             expect(err).toBeInstanceOf(ContentSchemaError);
             const schemaErr = err as ContentSchemaError;
-            expect(schemaErr.collectionType).toBe('damage-types');
-            expect(schemaErr.id).toBe('fire');
+            expect(schemaErr.collectionType).toBe('player-colors');
+            expect(schemaErr.id).toBe('blue');
         }
     });
 
@@ -197,7 +200,7 @@ describe('ContentLoader — schema validation', () => {
                     items: [{ id: 'taunt', whatever: 42 }],
                 },
             ],
-            { schemas: { 'damage-types': DamageTypeSchema } },
+            { schemas: { 'player-colors': ColorSchema } },
         );
         expect(db.has('abilities', 'taunt')).toBe(true);
     });
@@ -208,12 +211,12 @@ describe('ContentLoader — schema validation', () => {
 describe('ContentLoader — ref-integrity validation', () => {
     it('validateRefs: false (default) does not throw on a dangling DataRef', async () => {
         const loader = createContentLoader();
-        // 'damage-types:poison' does not exist — but validateRefs defaults to false
+        // 'player-colors:teal' does not exist — but validateRefs defaults to false
         const db = await loader.load([
             {
                 type: 'inline',
                 collectionType: 'abilities',
-                items: [{ id: 'taunt', requiresDamageType: 'damage-types:poison' }],
+                items: [{ id: 'taunt', requiresColor: 'player-colors:teal' }],
             },
         ]);
         expect(db.has('abilities', 'taunt')).toBe(true);
@@ -221,19 +224,19 @@ describe('ContentLoader — ref-integrity validation', () => {
 
     it('validateRefs: true throws UnknownDataRefError for a dangling DataRef when collection is known', async () => {
         const loader = createContentLoader();
-        // 'damage-types' is a known collection but 'poison' does not exist in it
+        // 'player-colors' is a known collection but 'teal' does not exist in it
         await expect(
             loader.load(
                 [
                     {
                         type: 'inline',
-                        collectionType: 'damage-types',
-                        items: [{ id: 'fire', name: 'Fire' }],
+                        collectionType: 'player-colors',
+                        items: [{ id: 'blue', name: 'Blue' }],
                     },
                     {
                         type: 'inline',
                         collectionType: 'abilities',
-                        items: [{ id: 'taunt', requiresDamageType: 'damage-types:poison' }],
+                        items: [{ id: 'taunt', requiresColor: 'player-colors:teal' }],
                     },
                 ],
                 { validateRefs: true },
@@ -247,30 +250,30 @@ describe('ContentLoader — ref-integrity validation', () => {
             [
                 {
                     type: 'inline',
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue' }],
                 },
                 {
                     type: 'inline',
                     collectionType: 'abilities',
-                    items: [{ id: 'fire-strike', damageType: 'damage-types:fire' }],
+                    items: [{ id: 'blue-strike', color: 'player-colors:blue' }],
                 },
             ],
             { validateRefs: true },
         );
-        expect(db.has('abilities', 'fire-strike')).toBe(true);
+        expect(db.has('abilities', 'blue-strike')).toBe(true);
     });
 
     it('validateRefs: true checks refs nested in arrays when collection is known', async () => {
         const loader = createContentLoader();
-        // 'damage-types' is a known collection but 'cold' does not exist
+        // 'player-colors' is a known collection but 'red' does not exist
         await expect(
             loader.load(
                 [
                     {
                         type: 'inline',
-                        collectionType: 'damage-types',
-                        items: [{ id: 'fire', name: 'Fire' }],
+                        collectionType: 'player-colors',
+                        items: [{ id: 'blue', name: 'Blue' }],
                     },
                     {
                         type: 'inline',
@@ -278,7 +281,7 @@ describe('ContentLoader — ref-integrity validation', () => {
                         items: [
                             {
                                 id: 'warrior',
-                                resistances: ['damage-types:fire', 'damage-types:cold'],
+                                affinities: ['player-colors:blue', 'player-colors:red'],
                             },
                         ],
                     },
@@ -305,37 +308,34 @@ afterEach(async () => {
 
 describe('ContentLoader — directory source (one-file-per-item format)', () => {
     it('loads items from a subdirectory where each .json file is one item', async () => {
-        // Create: tmpDir/damage-types/fire.json, cold.json
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        // Create: tmpDir/player-colors/blue.json, red.json
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
-        await fs.writeFile(
-            path.join(dtDir, 'cold.json'),
-            JSON.stringify({ id: 'cold', name: 'Cold' }),
-        );
+        await fs.writeFile(path.join(dir, 'red.json'), JSON.stringify({ id: 'red', name: 'Red' }));
 
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: tmpDir }]);
 
-        expect(db.has('damage-types', 'fire')).toBe(true);
-        expect(db.has('damage-types', 'cold')).toBe(true);
-        expect(db.getById('damage-types', 'fire')).toEqual({
-            id: 'fire',
-            name: 'Fire',
+        expect(db.has('player-colors', 'blue')).toBe(true);
+        expect(db.has('player-colors', 'red')).toBe(true);
+        expect(db.getById('player-colors', 'blue')).toEqual({
+            id: 'blue',
+            name: 'Blue',
         });
     });
 
     it('loads multiple collections from different subdirectories', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
+        const colorDir = path.join(tmpDir, 'player-colors');
         const abDir = path.join(tmpDir, 'abilities');
-        await fs.mkdir(dtDir);
+        await fs.mkdir(colorDir);
         await fs.mkdir(abDir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
+            path.join(colorDir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
         await fs.writeFile(
             path.join(abDir, 'taunt.json'),
@@ -343,20 +343,20 @@ describe('ContentLoader — directory source (one-file-per-item format)', () => 
         );
 
         const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
-        expect([...db.collectionTypes()].sort()).toEqual(['abilities', 'damage-types']);
+        expect([...db.collectionTypes()].sort()).toEqual(['abilities', 'player-colors']);
     });
 
     it('ignores non-.json files in collection subdirectories', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
-        await fs.writeFile(path.join(dtDir, 'README.md'), 'ignore me');
+        await fs.writeFile(path.join(dir, 'README.md'), 'ignore me');
 
         const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
-        expect(db.getAllIds('damage-types')).toEqual(['fire']);
+        expect(db.getAllIds('player-colors')).toEqual(['blue']);
     });
 });
 
@@ -380,27 +380,27 @@ describe('ContentLoader — directory source (flat-array format)', () => {
             JSON.stringify([{ id: 'taunt', description: 'Force attack' }]),
         );
         // subdirectory format
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
 
         const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
-        expect([...db.collectionTypes()].sort()).toEqual(['abilities', 'damage-types']);
+        expect([...db.collectionTypes()].sort()).toEqual(['abilities', 'player-colors']);
         expect(db.has('abilities', 'taunt')).toBe(true);
-        expect(db.has('damage-types', 'fire')).toBe(true);
+        expect(db.has('player-colors', 'blue')).toBe(true);
     });
 });
 
 describe('ContentLoader — conflict detection across sources', () => {
     it('throws ContentConflictError for duplicate id across a directory and inline source', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
 
         const loader = createContentLoader();
@@ -409,8 +409,8 @@ describe('ContentLoader — conflict detection across sources', () => {
                 { type: 'directory', path: tmpDir },
                 {
                     type: 'inline',
-                    collectionType: 'damage-types',
-                    items: [{ id: 'fire', name: 'Fire (dup)' }],
+                    collectionType: 'player-colors',
+                    items: [{ id: 'blue', name: 'Blue (dup)' }],
                 },
             ]),
         ).rejects.toThrow(ContentConflictError);
@@ -419,15 +419,15 @@ describe('ContentLoader — conflict detection across sources', () => {
 
 describe('ContentLoader — items are frozen (M7)', () => {
     it('items loaded from a directory source are frozen in the resulting db', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
 
         const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
-        const item = db.getById('damage-types', 'fire');
+        const item = db.getById('player-colors', 'blue');
         expect(Object.isFrozen(item)).toBe(true);
     });
 
@@ -435,26 +435,26 @@ describe('ContentLoader — items are frozen (M7)', () => {
         const db = await createContentLoader().load([
             {
                 type: 'inline',
-                collectionType: 'damage-types',
-                items: [{ id: 'fire', name: 'Fire' }],
+                collectionType: 'player-colors',
+                items: [{ id: 'blue', name: 'Blue' }],
             },
         ]);
-        const item = db.getById('damage-types', 'fire');
+        const item = db.getById('player-colors', 'blue');
         expect(Object.isFrozen(item)).toBe(true);
     });
 });
 
 describe('ContentLoader — schema validation on directory source', () => {
     it('throws ContentSchemaError when a directory-loaded item fails schema', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         // Missing required 'name' field
-        await fs.writeFile(path.join(dtDir, 'fire.json'), JSON.stringify({ id: 'fire' }));
+        await fs.writeFile(path.join(dir, 'blue.json'), JSON.stringify({ id: 'blue' }));
 
-        const DamageTypeSchema = z.object({ id: z.string(), name: z.string() });
+        const ColorSchema = z.object({ id: z.string(), name: z.string() });
         await expect(
             createContentLoader().load([{ type: 'directory', path: tmpDir }], {
-                schemas: { 'damage-types': DamageTypeSchema },
+                schemas: { 'player-colors': ColorSchema },
             }),
         ).rejects.toThrow(ContentSchemaError);
     });
@@ -462,13 +462,13 @@ describe('ContentLoader — schema validation on directory source', () => {
 
 describe('ContentLoader — JSON.parse error context (H7)', () => {
     it('includes the file path in the error when a one-per-item .json file is malformed', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
-        await fs.writeFile(path.join(dtDir, 'fire.json'), '{ invalid json }');
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
+        await fs.writeFile(path.join(dir, 'blue.json'), '{ invalid json }');
 
         await expect(
             createContentLoader().load([{ type: 'directory', path: tmpDir }]),
-        ).rejects.toThrow(/fire\.json/);
+        ).rejects.toThrow(/blue\.json/);
     });
 
     it('includes the file path in the error when a flat-array .json file is malformed', async () => {
@@ -482,12 +482,12 @@ describe('ContentLoader — JSON.parse error context (H7)', () => {
 
 describe('ContentLoader — filename equals item id (H8)', () => {
     it('throws ContentSchemaError when filename stem does not match item.id', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
-        // file is fire.json but id inside is "ice"
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
+        // file is blue.json but id inside is "teal"
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'ice', name: 'Ice' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'teal', name: 'Teal' }),
         );
 
         await expect(
@@ -496,11 +496,11 @@ describe('ContentLoader — filename equals item id (H8)', () => {
     });
 
     it('ContentSchemaError from id mismatch includes collectionType and expected id', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'ice', name: 'Ice' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'teal', name: 'Teal' }),
         );
 
         try {
@@ -509,44 +509,41 @@ describe('ContentLoader — filename equals item id (H8)', () => {
         } catch (err) {
             expect(err).toBeInstanceOf(ContentSchemaError);
             const e = err as ContentSchemaError;
-            expect(e.collectionType).toBe('damage-types');
-            expect(e.id).toBe('fire');
+            expect(e.collectionType).toBe('player-colors');
+            expect(e.id).toBe('blue');
         }
     });
 
     it('does not throw when filename stem matches item.id', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
 
         const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
-        expect(db.has('damage-types', 'fire')).toBe(true);
+        expect(db.has('player-colors', 'blue')).toBe(true);
     });
 });
 
 describe('ContentLoader — deterministic load order (H6)', () => {
     it('loads subdirectory items in alphabetical order regardless of filesystem order', async () => {
-        const dtDir = path.join(tmpDir, 'damage-types');
-        await fs.mkdir(dtDir);
+        const dir = path.join(tmpDir, 'player-colors');
+        await fs.mkdir(dir);
         // Write in reverse alphabetical order
+        await fs.writeFile(path.join(dir, 'red.json'), JSON.stringify({ id: 'red', name: 'Red' }));
         await fs.writeFile(
-            path.join(dtDir, 'physical.json'),
-            JSON.stringify({ id: 'physical', name: 'Physical' }),
+            path.join(dir, 'green.json'),
+            JSON.stringify({ id: 'green', name: 'Green' }),
         );
         await fs.writeFile(
-            path.join(dtDir, 'fire.json'),
-            JSON.stringify({ id: 'fire', name: 'Fire' }),
-        );
-        await fs.writeFile(
-            path.join(dtDir, 'cold.json'),
-            JSON.stringify({ id: 'cold', name: 'Cold' }),
+            path.join(dir, 'blue.json'),
+            JSON.stringify({ id: 'blue', name: 'Blue' }),
         );
 
         const db = await createContentLoader().load([{ type: 'directory', path: tmpDir }]);
-        expect(db.getAllIds('damage-types')).toEqual(['cold', 'fire', 'physical']);
+        expect(db.getAllIds('player-colors')).toEqual(['blue', 'green', 'red']);
     });
 
     it('loads subdirectories (collections) in alphabetical order', async () => {
@@ -608,13 +605,13 @@ describe('ContentLoader — validateRefs false-positive prevention (H5)', () => 
                 [
                     {
                         type: 'inline',
-                        collectionType: 'damage-types',
-                        items: [{ id: 'fire', name: 'Fire' }],
+                        collectionType: 'player-colors',
+                        items: [{ id: 'blue', name: 'Blue' }],
                     },
                     {
                         type: 'inline',
                         collectionType: 'abilities',
-                        items: [{ id: 'strike', damageType: 'damage-types:poison' }],
+                        items: [{ id: 'strike', color: 'player-colors:teal' }],
                     },
                 ],
                 { validateRefs: true },

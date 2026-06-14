@@ -29,6 +29,7 @@ import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenu
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useUiStore } from '../../state/uiStore';
+import { useGameContent } from '../../state/useGameContent';
 import { useInputAction } from '../../input/useInputAction.js';
 import type { InputEvent } from '../../input/InputAction.js';
 
@@ -51,6 +52,7 @@ export default function GamePage(): React.ReactElement | null {
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
     const gameId = lobbyState?.info.gameId ?? null;
+    const gameContent = useGameContent(gameId);
     const loadedGame = useLoadedRendererGame(gameId);
     const assetManager = React.useMemo<AssetManager | null>(() => {
         if (loadedGame === null) {
@@ -181,6 +183,7 @@ export default function GamePage(): React.ReactElement | null {
             snapshot={snapshot}
             currentTick={currentTick}
             sendAction={sendAction}
+            {...(gameContent === undefined ? {} : { content: gameContent })}
             canEndTurn={!isTerminalSnapshot(snapshot) && snapshot.isMyTurn}
             localPlayerId={resolvedPlayerId}
             {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'

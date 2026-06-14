@@ -19,11 +19,27 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId, type LobbyState } from '@chimera/electron/preload/api-types.js';
 import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
-import { TACTICS_PLAYER_COLOR_HEX } from '../lobby/lobby-setup.js';
+import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import { TacticsLobbyScreen } from './TacticsLobbyScreen.js';
 
 const HOST_ID = playerId('host');
 const CLIENT_ID = playerId('p2');
+
+// The palette now arrives as the generic `content` prop (loaded from the content
+// database in the running app). Mirrors games/tactics/data/{player,board}-colors.
+const TACTICS_CONTENT: GameContent = {
+    'player-colors': [
+        { id: 'blue', name: 'Blue', hex: '#2563eb' },
+        { id: 'red', name: 'Red', hex: '#dc2626' },
+        { id: 'green', name: 'Green', hex: '#16a34a' },
+        { id: 'amber', name: 'Amber', hex: '#f59e0b' },
+    ],
+    'board-colors': [
+        { id: 'slate', name: 'Slate', hex: '#3f3f46' },
+        { id: 'stone', name: 'Stone', hex: '#44403c' },
+        { id: 'navy', name: 'Navy', hex: '#1e293b' },
+    ],
+};
 
 function makeLobbyState(overrides: Partial<LobbyState> = {}): LobbyState {
     return {
@@ -41,6 +57,7 @@ function makeProps(overrides: Partial<GameLobbyScreenProps> = {}): GameLobbyScre
     return {
         lobbyState: makeLobbyState(),
         localPlayerId: HOST_ID,
+        content: TACTICS_CONTENT,
         isHost: true,
         canStartGame: true,
         pendingAction: null,
@@ -74,7 +91,8 @@ describe('TacticsLobbyScreen', () => {
         );
 
         const swatch = screen.getByTestId(`tactics-player-swatch-${HOST_ID}`);
-        expect(swatch).toHaveStyle({ backgroundColor: TACTICS_PLAYER_COLOR_HEX['blue'] });
+        // Blue hex sourced from the content prop (player-colors/blue.json).
+        expect(swatch).toHaveStyle({ backgroundColor: '#2563eb' });
     });
 
     it('marks the local player with a (You) indicator', () => {

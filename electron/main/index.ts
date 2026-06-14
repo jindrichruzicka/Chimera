@@ -18,6 +18,7 @@ import { MalformedAssetRefError, parseAssetRef } from '@chimera/shared/asset-ref
 import {
     registerGameHandlers,
     registerLobbyHandlers,
+    registerContentHandlers,
     registerSavesHandlers,
     registerSettingsHandlers,
     registerSystemHandlers,
@@ -58,7 +59,10 @@ import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/apis/replay-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
-import { resolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobbySetupRegistry.js';
+import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobbySetupRegistry.js';
+import { loadAllGameContent, toGameContent } from './content/loadGameContent.js';
+import type { ContentDatabase } from '@chimera/simulation/content/index.js';
+import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
@@ -957,6 +961,33 @@ export async function main(): Promise<void> {
         sink: crashLogSink,
     });
 
+    // ── Content database load (§4.8, Invariant #14) ───────────────────────────
+    // Load every registered game's content directory into an immutable
+    // ContentDatabase before the lobby/tick loop comes up. A failure is fatal —
+    // the app must not start with invalid content. The engine stays agnostic:
+    // each game supplies its own schemas (see content/gameContentRegistry.ts).
+    let contentDbs: Map<string, ContentDatabase>;
+    try {
+        contentDbs = await loadAllGameContent(gameAssetsRoot);
+    } catch (err: unknown) {
+        logger.error(
+            'fatal: game content failed to load',
+            err instanceof Error ? err : new Error(String(err)),
+        );
+        throw err;
+    }
+
+    // Plain, agnostic accessor used by both the lobby-setup composition and the
+    // generic content IPC handler. Returns `undefined` for a game with no content.
+    const getGameContent = (gameId: string): GameContent | undefined => {
+        const db = contentDbs.get(gameId);
+        return db === undefined ? undefined : toGameContent(db);
+    };
+
+    // Game-aware resolver injected into LobbyManager: closes each game's
+    // lobby-setup builder over its loaded content (Invariant #2).
+    const resolveLobbySetup = createResolveLobbySetup(getGameContent);
+
     // The single live `SessionRuntime` for the currently-hosted session, or
     // `null` when no session is running. Declared before crash-reporter wiring
     // so crash dumps can include the current authoritative snapshot.
@@ -1163,6 +1194,9 @@ export async function main(): Promise<void> {
     // and used as the qualified slot prefix.
     const HOSTED_GAME_ID = TACTICS_GAME_ID;
     const HOSTED_GAME_VERSION = '0.1.0';
+    // Captured once so the conditional spread below narrows `db` correctly under
+    // exactOptionalPropertyTypes. Absent for a game that declares no content.
+    const hostedContentDb = contentDbs.get(HOSTED_GAME_ID);
 
     // Register E2E hooks at the wiring point so no module-level side effects
     // are needed in SimulationHost.ts (WARN-1 / §2 DIP).
@@ -1294,6 +1328,10 @@ export async function main(): Promise<void> {
                         },
                         replayPort,
                         logger: lobbyLogger,
+                        // Inject the loaded ContentDatabase into PipelineContext.db so
+                        // reducers can read this game's content (Invariant #46: absent
+                        // when the game declares none).
+                        ...(hostedContentDb === undefined ? {} : { db: hostedContentDb }),
                         ...(debugPort === undefined ? {} : { debugPort }),
                     },
                 );
@@ -1953,6 +1991,16 @@ export async function main(): Promise<void> {
         lobbyManager,
         profileManager,
         logger: logger.child({ module: 'lobby' }),
+    });
+
+    // Register the generic `chimera:content:*` channel, backed by the content
+    // databases loaded at startup. Game-agnostic: ships plain collections only.
+    registerContentHandlers({
+        ipcMain,
+        contentProvider: {
+            getCollections: (gameId: string): GameContent | null => getGameContent(gameId) ?? null,
+        },
+        logger: logger.child({ module: 'content' }),
     });
 
     // Register the `chimera:saves:*` channels backed by SaveManager.

@@ -16,6 +16,7 @@ import type { LogEntry } from '@chimera/shared/logging.js';
 import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
 import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
+import type { GameContent, GameContentItem } from '@chimera/shared/game-content-contract.js';
 import type {
     PerspectiveReplayListBridge,
     ReplayExportBridge,
@@ -828,6 +829,7 @@ export interface ChimeraExtensions {}
 export interface ChimeraAPI {
     game: GameAPI;
     lobby: LobbyAPI;
+    content: ContentAPI;
     saves: SavesAPI;
     settings: SettingsAPI;
     profile: ProfileAPI;
@@ -855,6 +857,28 @@ export interface ChimeraAPI {
      * `contextBridge.exposeInMainWorld`.
      */
     readonly extensions: Readonly<Partial<ChimeraExtensions>>;
+}
+
+// ─── content namespace ────────────────────────────────────────────────────────
+
+/**
+ * Generic, game-agnostic content delivery (§4.8). Re-exported from the shared
+ * contract so renderer code can `import type { GameContent } from
+ * '@chimera/electron/preload/api-types.js'` alongside the other API types.
+ */
+export type { GameContent, GameContentItem };
+
+/**
+ * Read a game's content collections, loaded and validated in main (§4.8). The
+ * payload is plain data keyed by collection type; the engine and renderer never
+ * interpret the item fields — only the authoring game does.
+ */
+export interface ContentAPI {
+    /**
+     * Return `gameId`'s content collections, or `null` when the game declares
+     * none. Safe to call at any time; the content is static per game.
+     */
+    getCollections(gameId: string): Promise<GameContent | null>;
 }
 
 // ─── game namespace ───────────────────────────────────────────────────────────

@@ -42,6 +42,7 @@ import {
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../../preload/apis/lobby-api.js';
+import { CONTENT_GET_COLLECTIONS_CHANNEL } from '../../preload/apis/content-api.js';
 import {
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
@@ -120,6 +121,7 @@ import {
     EngineActionSchema,
     EngineProfilePatchSchema,
     GameIdSchema,
+    GetContentCollectionsParamsSchema,
     HostLobbyParamsSchema,
     IpcRequestValidationError,
     JoinLobbyParamsSchema,
@@ -148,6 +150,7 @@ import type { LobbyManager } from '../lobby/LobbyManager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/apis/logs-api.js';
 import { RendererLogEntrySchema } from './ipc-schemas.js';
 import type { LogEntry } from '@chimera/shared/logging.js';
+import type { GameContent } from '@chimera/shared/game-content-contract.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,
@@ -644,6 +647,48 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             payload,
         );
         return lobbyManager.setPlayerAttribute(validated.playerId, validated.key, validated.value);
+    });
+}
+
+// ─── content namespace (§4.8) ──────────────────────────────────────────────────
+
+/**
+ * Narrow port supplying a game's content collections to the handler. Backed in
+ * `index.ts` by the loaded `ContentDatabase` map, flattened to plain data via
+ * `toGameContent`. Returns `null` for a game with no content. The port is
+ * game-agnostic — it never interprets the collections.
+ */
+export interface ContentProviderPort {
+    getCollections(gameId: string): GameContent | null;
+}
+
+export interface RegisterContentHandlersOptions {
+    readonly ipcMain: LobbyHandlersIpcMain;
+    readonly contentProvider: ContentProviderPort;
+    /** Injected logger (invariant 67). */
+    readonly logger?: Logger;
+}
+
+/**
+ * Register the generic `chimera:content:get-collections` channel. The request
+ * carries only a `gameId`; the response is the game's plain content collections
+ * (or `null`). Validated at the boundary with a structural schema that knows
+ * nothing about any game's data shapes (Invariant #2).
+ */
+export function registerContentHandlers(options: RegisterContentHandlersOptions): void {
+    const { ipcMain, contentProvider } = options;
+    const logger = options.logger ?? createNoopLogger();
+    logger.info('registering chimera:content:* handlers', {
+        channels: [CONTENT_GET_COLLECTIONS_CHANNEL],
+    });
+
+    ipcMain.handle(CONTENT_GET_COLLECTIONS_CHANNEL, (_event, payload) => {
+        const { gameId } = parseInvokeRequest(
+            GetContentCollectionsParamsSchema,
+            CONTENT_GET_COLLECTIONS_CHANNEL,
+            payload,
+        );
+        return contentProvider.getCollections(gameId);
     });
 }
 

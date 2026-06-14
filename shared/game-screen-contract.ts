@@ -5,6 +5,7 @@ import type {
     PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
 import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import type * as React from 'react';
 
 export type GameScreenComponent<TProps> =
@@ -20,6 +21,13 @@ export interface GameScreenProps {
     readonly snapshot: PlayerSnapshot;
     readonly localPlayerId?: PlayerId;
     readonly sendAction: SendAction;
+    /**
+     * This game's content collections (§4.8), loaded in main and delivered to
+     * the renderer. Generic and game-agnostic — only the authoring game's screen
+     * interprets it (e.g. tactics derives its colour palette). Optional: absent
+     * for games with no content or before the fetch resolves.
+     */
+    readonly content?: GameContent;
 }
 
 export interface GameHudProps extends GameScreenProps {

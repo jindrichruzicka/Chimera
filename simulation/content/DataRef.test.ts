@@ -8,8 +8,8 @@ import { MalformedRefError, type DataRef, buildRef, parseRef } from './DataRef';
 
 describe('buildRef', () => {
     it("produces a string with format 'collectionType:id'", () => {
-        const ref = buildRef('damage-types', 'fire');
-        expect(ref).toBe('damage-types:fire');
+        const ref = buildRef('player-colors', 'blue');
+        expect(ref).toBe('player-colors:blue');
     });
 
     it('accepts collection types with hyphens', () => {
@@ -23,10 +23,10 @@ describe('buildRef', () => {
     });
 
     it('round-trips through parseRef', () => {
-        const ref = buildRef('damage-types', 'cold');
+        const ref = buildRef('player-colors', 'red');
         const parsed = parseRef(ref);
-        expect(parsed.collectionType).toBe('damage-types');
-        expect(parsed.id).toBe('cold');
+        expect(parsed.collectionType).toBe('player-colors');
+        expect(parsed.id).toBe('red');
     });
 
     it('throws MalformedRefError when collectionType contains a colon (M4)', () => {

@@ -889,7 +889,7 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
 
     it('ctx.db in validate() is the ContentDatabase passed to the constructor', () => {
         const db = createContentDatabase([
-            { collectionType: 'damage-types', items: [{ id: 'fire', name: 'Fire' }] },
+            { collectionType: 'player-colors', items: [{ id: 'blue', name: 'Blue' }] },
         ]);
         const capturedCtxValues: ReduceContext['db'][] = [];
         const spyDef: ActionDefinition<Record<string, never>> = {
@@ -910,7 +910,7 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
 
     it('ctx.db in reduce() is the ContentDatabase passed to the constructor', () => {
         const db = createContentDatabase([
-            { collectionType: 'damage-types', items: [{ id: 'fire', name: 'Fire' }] },
+            { collectionType: 'player-colors', items: [{ id: 'blue', name: 'Blue' }] },
         ]);
         const capturedCtxValues: ReduceContext['db'][] = [];
         const spyDef: ActionDefinition<Record<string, never>> = {
@@ -931,16 +931,16 @@ describe('ActionPipeline — ContentDatabase forwarding (issue #102)', () => {
 
     it('db can be queried inside validate() to read content items', () => {
         const db = createContentDatabase([
-            { collectionType: 'damage-types', items: [{ id: 'fire', name: 'Fire' }] },
+            { collectionType: 'player-colors', items: [{ id: 'blue', name: 'Blue' }] },
         ]);
         const spyDef: ActionDefinition<Record<string, never>> = {
             type: 'game:query-db',
             parsePayload: () => ({}),
             validate: (_payload, _state, _playerId, ctx) => {
-                if (ctx.db?.has('damage-types', 'fire')) {
+                if (ctx.db?.has('player-colors', 'blue')) {
                     return { ok: true };
                 }
-                return { ok: false, reason: 'no_fire' };
+                return { ok: false, reason: 'no_blue' };
             },
             reduce: (state) => state,
         };

@@ -13,6 +13,7 @@ import { loadRendererGameShell } from '../../game/rendererGameRegistry';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { useGameContent } from '../../state/useGameContent';
 import { defaultTheme } from '../../theme/default-theme';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { useThemeOverride } from '../../theme/useThemeOverride';
@@ -84,6 +85,10 @@ export default function LobbyPage() {
     // Load the active game's shell so a game-provided LobbyScreen can replace the
     // engine default. Keyed on gameId so it only reloads when the game changes.
     const gameShell = useLobbyGameShell(lobbyState?.info.gameId ?? null);
+
+    // Fetch the active game's content (§4.8) so its LobbyScreen can read the
+    // collections it authored (e.g. tactics colours). Generic + game-agnostic.
+    const gameContent = useGameContent(lobbyState?.info.gameId ?? null);
 
     useEffect(() => {
         if (previousLobbyStateRef.current !== null && lobbyState === null) {
@@ -221,6 +226,7 @@ export default function LobbyPage() {
             ? {
                   lobbyState,
                   localPlayerId,
+                  ...(gameContent === undefined ? {} : { content: gameContent }),
                   isHost: localPlayerId === lobbyState.info.hostId,
                   canStartGame,
                   pendingAction,

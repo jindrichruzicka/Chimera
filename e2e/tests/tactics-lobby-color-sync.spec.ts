@@ -32,8 +32,8 @@ const BOARD_COLOR = 'navy';
 const HOST_COLOR = 'green';
 const CLIENT_COLOR = 'amber';
 
-// TACTICS_PLAYER_COLOR_HEX values rendered onto the lobby swatches, as computed
-// CSS rgb() strings.
+// player-colors hex values (from the content database) rendered onto the lobby
+// swatches, as computed CSS rgb() strings.
 const HOST_SWATCH_RGB = 'rgb(22, 163, 74)'; // #16a34a — green
 const CLIENT_SWATCH_RGB = 'rgb(245, 158, 11)'; // #f59e0b — amber
 

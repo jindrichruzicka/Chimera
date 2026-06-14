@@ -18,7 +18,8 @@
  *
  * Module boundary (§3 / Invariant #96): game shell components import the shared
  * component library only through the public `components/ui` barrel; the colour
- * palette comes from this game's own pure `lobby/lobby-setup.ts`.
+ * palette is interpreted from the generic `content` prop (loaded from the content
+ * database) by this game's own `content/tacticsContent.ts`.
  *
  * Architecture: §4.37 — Renderer Shell Pages UI Contract; §4.4 — Lobby State Sync
  * Task: #708 (T6, part of #702 — Customizable Lobby)
@@ -33,18 +34,14 @@ import {
     ToggleButton,
 } from '@chimera/renderer/components/ui/index.js';
 import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
-import {
-    DEFAULT_BOARD_COLOR,
-    DEFAULT_PLAYER_COLOR,
-    TACTICS_BOARD_COLORS,
-    TACTICS_PLAYER_COLORS,
-    TACTICS_PLAYER_COLOR_HEX,
-} from '../lobby/lobby-setup.js';
+import { DEFAULT_BOARD_COLOR, DEFAULT_PLAYER_COLOR } from '../lobby/lobby-setup.js';
+import { paletteFromCollections } from '../content/tacticsContent.js';
 import styles from './TacticsLobbyScreen.module.css';
 
 export function TacticsLobbyScreen({
     lobbyState,
     localPlayerId,
+    content,
     isHost,
     canStartGame,
     pendingAction,
@@ -54,6 +51,10 @@ export function TacticsLobbyScreen({
     onStartGame,
     onLeave,
 }: GameLobbyScreenProps): React.ReactElement {
+    // The selectable colours come from the content database (delivered as the
+    // generic `content` prop); interpret them into this game's palette. Empty
+    // until content loads, so the Selects fall back to the seeded default names.
+    const palette = paletteFromCollections(content ?? {});
     const readyCount = lobbyState.players.filter((player) => player.ready).length;
     const boardColor = lobbyState.matchSettings?.['boardColor'] ?? DEFAULT_BOARD_COLOR;
 
@@ -76,7 +77,7 @@ export function TacticsLobbyScreen({
                     onValueChange={(value) => {
                         setMatchSetting('boardColor', value);
                     }}
-                    options={TACTICS_BOARD_COLORS}
+                    options={palette.boardColors}
                     value={boardColor}
                 />
                 <p className={styles['ready-summary']}>
@@ -104,7 +105,7 @@ export function TacticsLobbyScreen({
                                     aria-hidden="true"
                                     className={styles['swatch']}
                                     data-testid={`tactics-player-swatch-${player.playerId}`}
-                                    style={{ backgroundColor: TACTICS_PLAYER_COLOR_HEX[color] }}
+                                    style={{ backgroundColor: palette.playerColorHex[color] }}
                                 />
                                 <span className={styles['player-name']}>
                                     {player.displayName}
@@ -121,7 +122,7 @@ export function TacticsLobbyScreen({
                                     onValueChange={(value) => {
                                         setPlayerAttribute(player.playerId, 'color', value);
                                     }}
-                                    options={TACTICS_PLAYER_COLORS}
+                                    options={palette.playerColors}
                                     value={color}
                                 />
                                 {isLocal ? (

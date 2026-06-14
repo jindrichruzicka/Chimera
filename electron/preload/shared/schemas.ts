@@ -131,6 +131,25 @@ export const LobbyStateSchema = z.object({
 export const NullableLobbyStateSchema =
     LobbyStateSchema.nullable() satisfies z.ZodType<LobbyState | null>;
 
+// ─── Generic game content (§4.8) ───────────────────────────────────────────────
+//
+// Structural, game-AGNOSTIC validation of the content collections returned by
+// `chimera:content:get-collections`. Each item is only guaranteed a string `id`;
+// all other fields pass through untouched (`.passthrough()`) — the engine and
+// renderer never interpret them, only the authoring game does. Deliberately not
+// annotated `z.ZodType<GameContent>`: GameContent's readonly arrays make the
+// ZodType invariance awkward, and the (mutable) inferred output assigns cleanly
+// to the readonly `GameContent` at the call site.
+
+/** One content item: a string `id` plus arbitrary passthrough JSON fields. */
+export const GameContentItemSchema = z.object({ id: z.string() }).passthrough();
+
+/** A game's collections keyed by collection type → items. */
+export const GameContentSchema = z.record(z.string(), z.array(GameContentItemSchema));
+
+/** Nullable variant for `chimera:content:get-collections` (null = game has none). */
+export const NullableGameContentSchema = GameContentSchema.nullable();
+
 /** Schema for `chimera:lobby:get-local-player-id` invoke result. */
 export const LocalPlayerIdSchema: z.ZodType<PlayerId | null> = z
     .string()

@@ -14,6 +14,7 @@ import {
     type GameResultBannerProps,
     type SendAction,
 } from '@chimera/shared/game-screen-contract.js';
+import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
@@ -68,6 +69,11 @@ interface GameShellRegistryProps {
     readonly assetManifest?: AssetManifest;
     readonly inputActions?: readonly InputAction[];
     readonly contentDatabase?: ContentDatabase | null;
+    /**
+     * This game's content collections (§4.8), delivered to the board/screens as
+     * the generic `GameScreenProps.content`. Game-agnostic plain data.
+     */
+    readonly content?: GameContent;
     readonly canEndTurn?: boolean;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
@@ -99,6 +105,7 @@ function RegistryGameShell({
     assetManifest,
     inputActions,
     contentDatabase = null,
+    content,
     canEndTurn,
     fadeOutMs,
     fadeInMs,
@@ -141,6 +148,7 @@ function RegistryGameShell({
                             snapshot={snapshot}
                             sendAction={sendAction}
                             {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                            {...(content === undefined ? {} : { content })}
                             {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
                         />

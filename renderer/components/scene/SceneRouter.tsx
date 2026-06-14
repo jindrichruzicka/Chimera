@@ -8,6 +8,7 @@ import type {
     GameScreenRegistry,
     SendAction,
 } from '@chimera/shared/game-screen-contract.js';
+import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import { useActiveScreen, useUiStore } from '../../state/uiStore.js';
 import { TransitionOverlay } from './TransitionOverlay.js';
 import { useFadeTransition } from './useFadeTransition.js';
@@ -17,6 +18,7 @@ export interface SceneRouterProps {
     readonly snapshot: PlayerSnapshot;
     readonly localPlayerId?: PlayerId;
     readonly sendAction: SendAction;
+    readonly content?: GameContent;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
 }
@@ -26,6 +28,7 @@ export function SceneRouter({
     snapshot,
     localPlayerId,
     sendAction,
+    content,
     fadeOutMs,
     fadeInMs,
 }: SceneRouterProps): React.ReactElement {
@@ -52,6 +55,7 @@ export function SceneRouter({
         snapshot,
         sendAction,
         ...(localPlayerId === undefined ? {} : { localPlayerId }),
+        ...(content === undefined ? {} : { content }),
     };
 
     return (

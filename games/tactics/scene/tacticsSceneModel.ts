@@ -5,8 +5,6 @@ import {
     DEFAULT_BOARD_COLOR_HEX,
     DEFAULT_PLAYER_COLOR,
     DEFAULT_PLAYER_COLOR_HEX,
-    TACTICS_BOARD_COLOR_HEX,
-    TACTICS_PLAYER_COLOR_HEX,
 } from '../lobby/lobby-setup.js';
 
 export interface TacticsGridPoint {
@@ -76,30 +74,36 @@ export function classifyTacticsUnitOwnership(
 }
 
 /**
- * Resolve the ground-plane material colour from the host's lobby setup, reusing
- * the lobby's `boardColour → hex` map (single source of truth, #710). Falls back
- * to the default slate when `setup` is absent (pre-#705 saves) or the chosen name
- * is off-palette — slate reproduces the historic hardcoded ground colour.
+ * Resolve the ground-plane material colour from the host's lobby setup, mapping
+ * the chosen board-colour name to its hex via the `boardColorHex` map the caller
+ * derived from content (`paletteFromCollections`). Falls back to the default
+ * slate when `setup` is absent (pre-#705 saves), the chosen name is off-palette,
+ * or content has not loaded (empty map) — slate reproduces the historic ground.
  */
-export function resolveTacticsBoardColor(setup: GameSetupConfig | undefined): string {
+export function resolveTacticsBoardColor(
+    setup: GameSetupConfig | undefined,
+    boardColorHex: Readonly<Record<string, string>>,
+): string {
     const name = setup?.matchSettings['boardColor'] ?? DEFAULT_BOARD_COLOR;
-    return TACTICS_BOARD_COLOR_HEX[name] ?? DEFAULT_BOARD_COLOR_HEX;
+    return boardColorHex[name] ?? DEFAULT_BOARD_COLOR_HEX;
 }
 
 /**
  * Resolve a unit's material colour from its owner's host-assigned lobby colour,
- * reusing the lobby's `playerColour → hex` map (#710). The same owner renders the
- * same colour for every viewer (Invariant #62: read from host `setup`, never from
- * client profile data). Falls back to the default blue when `setup` is absent, the
- * owner has no assigned colour, or the chosen name is off-palette; the persistent
- * own-unit ring still distinguishes the local player's units in that case.
+ * mapping the chosen player-colour name to its hex via the `playerColorHex` map
+ * the caller derived from content. The same owner renders the same colour for
+ * every viewer (Invariant #62: read from host `setup`, never from client profile
+ * data). Falls back to the default blue when `setup` is absent, the owner has no
+ * assigned colour, the chosen name is off-palette, or content has not loaded; the
+ * persistent own-unit ring still distinguishes the local player's units then.
  */
 export function resolveTacticsUnitColor(
     ownerId: PlayerId,
     setup: GameSetupConfig | undefined,
+    playerColorHex: Readonly<Record<string, string>>,
 ): string {
     const name = setup?.playerAttributes[ownerId]?.['color'] ?? DEFAULT_PLAYER_COLOR;
-    return TACTICS_PLAYER_COLOR_HEX[name] ?? DEFAULT_PLAYER_COLOR_HEX;
+    return playerColorHex[name] ?? DEFAULT_PLAYER_COLOR_HEX;
 }
 
 export function parseTacticsSceneUnit(

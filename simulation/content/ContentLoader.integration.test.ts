@@ -10,7 +10,8 @@
  *
  * IMPORTANT: this file must NOT import from games/tactics/ — the loader is
  * driven purely by a path string, keeping simulation/ free of games/* deps
- * (invariant #2).
+ * (invariant #2). It therefore also does not apply the tactics colour schema;
+ * it only asserts the generic load round-trips the on-disk JSON.
  */
 
 import path from 'path';
@@ -22,52 +23,52 @@ import { createContentLoader } from './ContentLoader';
 const TACTICS_DATA_DIR = path.resolve(__dirname, '../../games/tactics/data');
 
 describe('ContentLoader — games/tactics/data/ round-trip (issue #103)', () => {
-    it('loads damage-types from the tactics data directory', async () => {
+    it('loads player-colors from the tactics data directory', async () => {
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: TACTICS_DATA_DIR }]);
 
-        // Verify all three damage types are present.
-        const ids = [...db.getAllIds('damage-types')].sort();
-        expect(ids).toEqual(['cold', 'fire', 'physical']);
+        const ids = [...db.getAllIds('player-colors')].sort();
+        expect(ids).toEqual(['amber', 'blue', 'green', 'red']);
     });
 
-    it('db.getByIdOrThrow returns the correct object for "fire"', async () => {
+    it('loads board-colors from the tactics data directory', async () => {
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: TACTICS_DATA_DIR }]);
 
-        const fire = db.getByIdOrThrow('damage-types', 'fire');
-        expect(fire).toMatchObject({ id: 'fire', name: 'Fire', bypassArmor: false });
+        const ids = [...db.getAllIds('board-colors')].sort();
+        expect(ids).toEqual(['navy', 'slate', 'stone']);
     });
 
-    it('db.getByIdOrThrow returns the correct object for "cold"', async () => {
+    it('db.getByIdOrThrow returns the correct object for player-colour "blue"', async () => {
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: TACTICS_DATA_DIR }]);
 
-        const cold = db.getByIdOrThrow('damage-types', 'cold');
-        expect(cold).toMatchObject({ id: 'cold', name: 'Cold', bypassArmor: false });
+        const blue = db.getByIdOrThrow('player-colors', 'blue');
+        expect(blue).toMatchObject({ id: 'blue', name: 'Blue', hex: '#2563eb' });
     });
 
-    it('db.getByIdOrThrow returns the correct object for "physical"', async () => {
+    it('db.getByIdOrThrow returns the correct object for board-colour "slate"', async () => {
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: TACTICS_DATA_DIR }]);
 
-        const physical = db.getByIdOrThrow('damage-types', 'physical');
-        expect(physical).toMatchObject({ id: 'physical', name: 'Physical' });
+        const slate = db.getByIdOrThrow('board-colors', 'slate');
+        expect(slate).toMatchObject({ id: 'slate', name: 'Slate', hex: '#3f3f46' });
     });
 
-    it('db.has returns true for every loaded damage type', async () => {
+    it('db.has returns true for every loaded colour', async () => {
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: TACTICS_DATA_DIR }]);
 
-        expect(db.has('damage-types', 'fire')).toBe(true);
-        expect(db.has('damage-types', 'cold')).toBe(true);
-        expect(db.has('damage-types', 'physical')).toBe(true);
+        expect(db.has('player-colors', 'blue')).toBe(true);
+        expect(db.has('player-colors', 'amber')).toBe(true);
+        expect(db.has('board-colors', 'navy')).toBe(true);
     });
 
-    it('db.has returns false for a non-existent damage type', async () => {
+    it('db.has returns false for a non-existent colour', async () => {
         const loader = createContentLoader();
         const db = await loader.load([{ type: 'directory', path: TACTICS_DATA_DIR }]);
 
-        expect(db.has('damage-types', 'lightning')).toBe(false);
+        expect(db.has('player-colors', 'teal')).toBe(false);
+        expect(db.has('board-colors', 'crimson')).toBe(false);
     });
 });

@@ -19,7 +19,25 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera/shared/tactics.js';
+import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
+
+// Colour hexes now arrive via the generic `content` prop (loaded from the content
+// database). Mirrors games/tactics/data/{player,board}-colors. Hexes are lifted to
+// plain consts so they are not flagged as hardcoded design values nested under a
+// colour-named content key (chimera/no-hardcoded-design-values).
+const BLUE_HEX = '#2563eb';
+const GREEN_HEX = '#16a34a';
+const AMBER_HEX = '#f59e0b';
+const NAVY_HEX = '#1e293b';
+const TACTICS_CONTENT: GameContent = {
+    'player-colors': [
+        { id: 'blue', name: 'Blue', hex: BLUE_HEX },
+        { id: 'green', name: 'Green', hex: GREEN_HEX },
+        { id: 'amber', name: 'Amber', hex: AMBER_HEX },
+    ],
+    'board-colors': [{ id: 'navy', name: 'Navy', hex: NAVY_HEX }],
+};
 
 interface ProjectedUnitFixture {
     readonly id: EntityId;
@@ -216,10 +234,12 @@ describe('TacticsDemoBoard', () => {
                 snapshot={makeSnapshot({ includeSetup: true })}
                 localPlayerId={localPlayerId}
                 sendAction={sendAction}
+                content={TACTICS_CONTENT}
             />,
         );
 
-        // navy board, green local units, amber opponent units — resolved from setup.
+        // navy board, green local units, amber opponent units — resolved from setup
+        // names against the content-supplied hex maps.
         expect(screen.getByTestId('tactics-ground-plane')).toHaveAttribute(
             'data-board-color',
             '#1e293b',

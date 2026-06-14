@@ -1,4 +1,5 @@
 import type * as os from 'node:os';
+import type * as nodeFs from 'node:fs';
 
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -404,14 +405,21 @@ const fsMkdirSync = vi.fn<(path: string, options?: unknown) => void>();
 const fsReaddirSync = vi.fn<(path: string) => string[]>(() => []);
 const fsOpenSync = vi.fn<(path: string, flags: string) => number>(() => 42);
 
-vi.mock('node:fs', () => ({
-    existsSync: fsExistsSync,
-    writeFileSync: fsWriteFileSync,
-    unlinkSync: fsUnlinkSync,
-    mkdirSync: fsMkdirSync,
-    readdirSync: fsReaddirSync,
-    openSync: fsOpenSync,
-}));
+vi.mock('node:fs', async () => {
+    // Real fs.promises so the startup ContentDatabase load (loadAllGameContent →
+    // ContentLoader) can read the real games/ data dir; the sync surface stays
+    // mocked for the save/replay paths these tests drive.
+    const actual = await vi.importActual<typeof nodeFs>('node:fs');
+    return {
+        existsSync: fsExistsSync,
+        writeFileSync: fsWriteFileSync,
+        unlinkSync: fsUnlinkSync,
+        mkdirSync: fsMkdirSync,
+        readdirSync: fsReaddirSync,
+        openSync: fsOpenSync,
+        promises: actual.promises,
+    };
+});
 
 const {
     createMainWindow,

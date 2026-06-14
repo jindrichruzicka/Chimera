@@ -21,6 +21,7 @@ import { contextBridge, ipcRenderer } from 'electron';
 import type { ChimeraAPI } from './api-types.js';
 import { buildExtensionsApi } from './apis/extensions-api.js';
 import { createChatApi } from './apis/chat-api.js';
+import { createContentApi } from './apis/content-api.js';
 import { createGameApi } from './apis/game-api.js';
 import { createLobbyApi } from './apis/lobby-api.js';
 import { createProfileApi } from './apis/profile-api.js';
@@ -73,6 +74,7 @@ const port: IpcRendererPort = {
 const api: ChimeraAPI = {
     game: createGameApi(port),
     lobby: createLobbyApi(port),
+    content: createContentApi(port),
     saves: createSavesApi(port),
     settings: createSettingsApi(port),
     system: createSystemApi(port),

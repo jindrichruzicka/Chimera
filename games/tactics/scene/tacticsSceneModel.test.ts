@@ -229,6 +229,20 @@ describe('tacticsSceneModel', () => {
     });
 });
 
+// Hex maps as the caller would derive them from loaded content via
+// `paletteFromCollections`. The resolvers are pure and take these explicitly.
+const PLAYER_COLOR_HEX: Readonly<Record<string, string>> = {
+    blue: '#2563eb',
+    red: '#dc2626',
+    green: '#16a34a',
+    amber: '#f59e0b',
+};
+const BOARD_COLOR_HEX: Readonly<Record<string, string>> = {
+    slate: '#3f3f46',
+    stone: '#44403c',
+    navy: '#1e293b',
+};
+
 describe('resolveTacticsBoardColor', () => {
     it('maps the host-configured board colour name to its hex', () => {
         const setup: GameSetupConfig = {
@@ -236,11 +250,11 @@ describe('resolveTacticsBoardColor', () => {
             playerAttributes: {},
         };
 
-        expect(resolveTacticsBoardColor(setup)).toBe('#1e293b');
+        expect(resolveTacticsBoardColor(setup, BOARD_COLOR_HEX)).toBe('#1e293b');
     });
 
     it('falls back to the default slate hex when setup is absent', () => {
-        expect(resolveTacticsBoardColor(undefined)).toBe('#3f3f46');
+        expect(resolveTacticsBoardColor(undefined, BOARD_COLOR_HEX)).toBe('#3f3f46');
     });
 
     it('falls back to the default slate hex for an off-palette board colour name', () => {
@@ -249,7 +263,16 @@ describe('resolveTacticsBoardColor', () => {
             playerAttributes: {},
         };
 
-        expect(resolveTacticsBoardColor(setup)).toBe('#3f3f46');
+        expect(resolveTacticsBoardColor(setup, BOARD_COLOR_HEX)).toBe('#3f3f46');
+    });
+
+    it('falls back to the default slate hex when the hex map is empty (content not loaded)', () => {
+        const setup: GameSetupConfig = {
+            matchSettings: { boardColor: 'navy' },
+            playerAttributes: {},
+        };
+
+        expect(resolveTacticsBoardColor(setup, {})).toBe('#3f3f46');
     });
 });
 
@@ -263,12 +286,12 @@ describe('resolveTacticsUnitColor', () => {
             },
         };
 
-        expect(resolveTacticsUnitColor(LOCAL_PLAYER, setup)).toBe('#16a34a');
-        expect(resolveTacticsUnitColor(OPPONENT_PLAYER, setup)).toBe('#f59e0b');
+        expect(resolveTacticsUnitColor(LOCAL_PLAYER, setup, PLAYER_COLOR_HEX)).toBe('#16a34a');
+        expect(resolveTacticsUnitColor(OPPONENT_PLAYER, setup, PLAYER_COLOR_HEX)).toBe('#f59e0b');
     });
 
     it('falls back to the default blue hex when setup is absent', () => {
-        expect(resolveTacticsUnitColor(LOCAL_PLAYER, undefined)).toBe('#2563eb');
+        expect(resolveTacticsUnitColor(LOCAL_PLAYER, undefined, PLAYER_COLOR_HEX)).toBe('#2563eb');
     });
 
     it('falls back to the default blue hex for an owner with no assigned colour', () => {
@@ -277,7 +300,7 @@ describe('resolveTacticsUnitColor', () => {
             playerAttributes: { [LOCAL_PLAYER]: { color: 'green' } },
         };
 
-        expect(resolveTacticsUnitColor(OPPONENT_PLAYER, setup)).toBe('#2563eb');
+        expect(resolveTacticsUnitColor(OPPONENT_PLAYER, setup, PLAYER_COLOR_HEX)).toBe('#2563eb');
     });
 
     it('falls back to the default blue hex for an off-palette colour name', () => {
@@ -286,6 +309,15 @@ describe('resolveTacticsUnitColor', () => {
             playerAttributes: { [LOCAL_PLAYER]: { color: 'chartreuse' } },
         };
 
-        expect(resolveTacticsUnitColor(LOCAL_PLAYER, setup)).toBe('#2563eb');
+        expect(resolveTacticsUnitColor(LOCAL_PLAYER, setup, PLAYER_COLOR_HEX)).toBe('#2563eb');
+    });
+
+    it('falls back to the default blue hex when the hex map is empty (content not loaded)', () => {
+        const setup: GameSetupConfig = {
+            matchSettings: {},
+            playerAttributes: { [LOCAL_PLAYER]: { color: 'green' } },
+        };
+
+        expect(resolveTacticsUnitColor(LOCAL_PLAYER, setup, {})).toBe('#2563eb');
     });
 });
