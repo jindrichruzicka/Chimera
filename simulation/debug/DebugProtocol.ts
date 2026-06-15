@@ -83,6 +83,23 @@ export interface PerfStats {
     readonly totalActionCount: number;
 }
 
+/**
+ * Connection diagnostics for the NAT / port-forward guidance (§6, §11).
+ *
+ * Sourced in `electron/main` (network/host facts are forbidden inside
+ * `simulation/`); served by the bridge at the bridge level — i.e. without an
+ * attached game session — so it resolves while hosting in the lobby before any
+ * game is running.
+ */
+export interface NetworkDiagnostics {
+    /** Non-internal IPv4 addresses of the host's network interfaces. */
+    readonly localAddresses: readonly string[];
+    /** Active hosted port, or `null` when not hosting. */
+    readonly hostPort: number | null;
+    /** True when a lobby is currently hosted (`hostPort !== null`). */
+    readonly isHosting: boolean;
+}
+
 // ─── IPC message unions ───────────────────────────────────────────────────────
 
 /** Inspector Window → Main (requests). */
@@ -93,6 +110,7 @@ export type DebugRequest =
     | { readonly type: 'GET_DIFF'; readonly fromTick: number; readonly toTick: number }
     | { readonly type: 'GET_ACTION_LOG'; readonly fromTick?: number; readonly toTick?: number }
     | { readonly type: 'GET_PERF_STATS' }
+    | { readonly type: 'GET_NETWORK_DIAGNOSTICS' }
     | { readonly type: 'SUBSCRIBE_LIVE' }
     | { readonly type: 'UNSUBSCRIBE_LIVE' };
 
@@ -110,6 +128,7 @@ export type DebugResponse<TState extends BaseGameSnapshot = BaseGameSnapshot> =
     | { readonly type: 'DIFF'; readonly diff: SnapshotDiff }
     | { readonly type: 'ACTION_LOG'; readonly entries: readonly ActionHistoryEntry[] }
     | { readonly type: 'PERF_STATS'; readonly stats: PerfStats }
+    | { readonly type: 'NETWORK_DIAGNOSTICS'; readonly diagnostics: NetworkDiagnostics }
     | { readonly type: 'LIVE_TICK'; readonly tick: number; readonly snapshot: Readonly<TState> }
     | { readonly type: 'ERROR'; readonly message: string }
     // Data-free acknowledgement for SUBSCRIBE_LIVE / UNSUBSCRIBE_LIVE.

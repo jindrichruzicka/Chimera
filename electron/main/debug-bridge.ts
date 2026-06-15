@@ -71,6 +71,7 @@ import type {
     DebugRequest,
     DebugResponse,
     InspectorMemento,
+    NetworkDiagnostics,
 } from '@chimera/simulation/debug/index.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
@@ -200,6 +201,13 @@ export interface StartDebugBridgeOptions {
     readonly debugPreloadPath: string;
     /** Inspector window factory override — tests inject in-process fakes. */
     readonly createWindow?: () => DebugWindowLike;
+    /**
+     * Connection-diagnostics source (§6, §11). Served at the bridge level — like
+     * `SUBSCRIBE_LIVE`, before the session gate — so it resolves while hosting
+     * in the lobby with no game running. Absent (e.g. in unit harnesses) →
+     * `GET_NETWORK_DIAGNOSTICS` answers with an ERROR response.
+     */
+    readonly getNetworkDiagnostics?: () => NetworkDiagnostics;
     /** Ring buffer capacity override (Invariant #30: always explicit-fixed). */
     readonly ringBufferCapacity?: number;
     /** Action-log cap override — tests only. */
@@ -257,6 +265,7 @@ const debugRequestSchema = z.discriminatedUnion('type', [
         })
         .strict(),
     z.object({ type: z.literal('GET_PERF_STATS') }).strict(),
+    z.object({ type: z.literal('GET_NETWORK_DIAGNOSTICS') }).strict(),
     z.object({ type: z.literal('SUBSCRIBE_LIVE') }).strict(),
     z.object({ type: z.literal('UNSUBSCRIBE_LIVE') }).strict(),
 ]);
@@ -384,7 +393,7 @@ interface SessionState {
 }
 
 export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge {
-    const { ipcMain, logger } = options;
+    const { ipcMain, logger, getNetworkDiagnostics } = options;
     const actionLogCapacity = options.actionLogCapacity ?? DEBUG_ACTION_LOG_CAPACITY;
     const mementoRetention = options.mementoRetention ?? DEBUG_MEMENTO_RETENTION;
 
@@ -456,7 +465,10 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
 
     const dispatchQuery = (
         state: SessionState,
-        request: Exclude<DebugRequest, { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' }>,
+        request: Exclude<
+            DebugRequest,
+            { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' | 'GET_NETWORK_DIAGNOSTICS' }
+        >,
     ): DebugResponse => {
         const { inspector, latestTick } = state;
         switch (request.type) {
@@ -520,6 +532,15 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
             subscribers.delete(event.sender.id);
             return { type: 'ACK' };
         }
+        // Connection diagnostics are bridge-level (§6, §11): they read host/OS
+        // facts, not session state, so they resolve while hosting in the lobby
+        // before any game is running — served before the session gate below.
+        if (parsed.data.type === 'GET_NETWORK_DIAGNOSTICS') {
+            if (getNetworkDiagnostics === undefined) {
+                return { type: 'ERROR', message: 'network diagnostics unavailable' };
+            }
+            return { type: 'NETWORK_DIAGNOSTICS', diagnostics: getNetworkDiagnostics() };
+        }
         if (session === null) {
             return { type: 'ERROR', message: 'no active session' };
         }
@@ -527,7 +548,10 @@ export function startDebugBridge(options: StartDebugBridgeOptions): DebugBridge 
         // `exactOptionalPropertyTypes` rejects against the protocol's
         // exact-optional GET_ACTION_LOG fields — rebuild that member with
         // absent (not undefined-assigned) keys so no assertion is needed.
-        const request: Exclude<DebugRequest, { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' }> =
+        const request: Exclude<
+            DebugRequest,
+            { type: 'SUBSCRIBE_LIVE' | 'UNSUBSCRIBE_LIVE' | 'GET_NETWORK_DIAGNOSTICS' }
+        > =
             parsed.data.type === 'GET_ACTION_LOG'
                 ? {
                       type: 'GET_ACTION_LOG',

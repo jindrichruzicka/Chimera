@@ -21,6 +21,7 @@
 import type {
     DebugRequest,
     DebugResponse,
+    NetworkDiagnostics,
     PerfStats,
     TickDurationSample,
     TickEntry,
@@ -38,6 +39,7 @@ export type {
     DebugRequest,
     DebugResponse,
     DiffEntry,
+    NetworkDiagnostics,
     PerfStats,
     PlayerId,
     PlayerSnapshot,
@@ -79,6 +81,12 @@ export interface ChimeraDebugApi {
     getActionLog(fromTick?: number, toTick?: number): Promise<readonly ActionHistoryEntry[]>;
     /** Aggregates for the Performance panel. */
     getPerfStats(): Promise<PerfStats>;
+    /**
+     * Connection diagnostics for the NAT / port-forward guidance: non-internal
+     * IPv4 addresses and the active hosted port. Resolves at the bridge level,
+     * so it works while hosting in the lobby before any game is running.
+     */
+    getNetworkDiagnostics(): Promise<NetworkDiagnostics>;
     /** Start live-tick pushes for this window (`SUBSCRIBE_LIVE` → `ACK`). */
     subscribeLive(): Promise<void>;
     /** Stop live-tick pushes for this window (`UNSUBSCRIBE_LIVE` → `ACK`). */

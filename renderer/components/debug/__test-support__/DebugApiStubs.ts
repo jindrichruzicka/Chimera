@@ -17,6 +17,7 @@ import type {
     ChimeraDebugApi,
     DiffEntry,
     LiveTickEvent,
+    NetworkDiagnostics,
     PerfStats,
     ProjectionResult,
     SnapshotDiff,
@@ -130,6 +131,18 @@ export function makePerfStats(overrides: Partial<PerfStats> = {}): PerfStats {
     };
 }
 
+/** Connection-diagnostics fixture; not hosting unless overridden. */
+export function makeNetworkDiagnostics(
+    overrides: Partial<NetworkDiagnostics> = {},
+): NetworkDiagnostics {
+    const hostPort = overrides.hostPort ?? null;
+    return {
+        localAddresses: overrides.localAddresses ?? [],
+        hostPort,
+        isHosting: overrides.isHosting ?? hostPort !== null,
+    };
+}
+
 /**
  * Every method is a `vi.fn` with a benign default; `getProjection`, `diff`,
  * and `getPerfStats` reject by default so a test that needs them must stub
@@ -147,6 +160,7 @@ export function createDebugApiMock(overrides: Partial<ChimeraDebugApi> = {}): De
         diff: vi.fn(() => Promise.reject(new Error('diff not stubbed'))),
         getActionLog: vi.fn(() => Promise.resolve<readonly ActionHistoryEntry[]>([])),
         getPerfStats: vi.fn(() => Promise.reject(new Error('getPerfStats not stubbed'))),
+        getNetworkDiagnostics: vi.fn(() => Promise.resolve(makeNetworkDiagnostics())),
         subscribeLive: vi.fn(() => Promise.resolve()),
         unsubscribeLive: vi.fn(() => Promise.resolve()),
         onLiveTick: vi.fn((cb: (event: LiveTickEvent) => void) => {

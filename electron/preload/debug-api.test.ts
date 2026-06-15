@@ -302,6 +302,45 @@ describe('createDebugApi', () => {
         });
     });
 
+    describe('getNetworkDiagnostics()', () => {
+        it('sends GET_NETWORK_DIAGNOSTICS and unwraps the diagnostics', async () => {
+            const stub = makeIpcStub();
+            const diagnostics = {
+                localAddresses: ['192.168.0.10'],
+                hostPort: 51234,
+                isHosting: true,
+            };
+            stub.invokeResults.set(DEBUG_CHANNEL, { type: 'NETWORK_DIAGNOSTICS', diagnostics });
+            const api = createDebugApi(stub.port);
+
+            const result = await api.getNetworkDiagnostics();
+
+            expect(stub.invocations).toStrictEqual([
+                { channel: DEBUG_CHANNEL, args: [{ type: 'GET_NETWORK_DIAGNOSTICS' }] },
+            ]);
+            expect(result).toBe(diagnostics);
+        });
+
+        it('rejects, naming the request type, when main returns an ERROR response', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(DEBUG_CHANNEL, {
+                type: 'ERROR',
+                message: 'network diagnostics unavailable',
+            });
+            const api = createDebugApi(stub.port);
+
+            await expect(api.getNetworkDiagnostics()).rejects.toThrow(/GET_NETWORK_DIAGNOSTICS/);
+        });
+
+        it('rejects on a discriminant mismatch (ACK where NETWORK_DIAGNOSTICS expected)', async () => {
+            const stub = makeIpcStub();
+            stub.invokeResults.set(DEBUG_CHANNEL, { type: 'ACK' });
+            const api = createDebugApi(stub.port);
+
+            await expect(api.getNetworkDiagnostics()).rejects.toThrow(/NETWORK_DIAGNOSTICS/);
+        });
+    });
+
     describe('subscribeLive() / unsubscribeLive()', () => {
         it('subscribeLive sends SUBSCRIBE_LIVE and resolves to undefined on ACK', async () => {
             const stub = makeIpcStub();

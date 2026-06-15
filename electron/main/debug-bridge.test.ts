@@ -427,6 +427,25 @@ describe('debug-bridge — request validation', () => {
             type: 'ACK',
         });
     });
+
+    it('GET_NETWORK_DIAGNOSTICS returns the injected builder result without an attached session', async () => {
+        const diagnostics = {
+            localAddresses: ['192.168.0.10'],
+            hostPort: 51234,
+            isHosting: true,
+        } as const;
+        const h = makeBridge({ getNetworkDiagnostics: () => diagnostics });
+        const win = openInspector(h);
+        const response = await invoke(h, win.webContents, { type: 'GET_NETWORK_DIAGNOSTICS' });
+        expect(response).toEqual({ type: 'NETWORK_DIAGNOSTICS', diagnostics });
+    });
+
+    it('GET_NETWORK_DIAGNOSTICS returns ERROR when no builder is injected', async () => {
+        const h = makeBridge();
+        const win = openInspector(h);
+        const response = await invoke(h, win.webContents, { type: 'GET_NETWORK_DIAGNOSTICS' });
+        expect(response).toEqual({ type: 'ERROR', message: 'network diagnostics unavailable' });
+    });
 });
 
 // ─── Query dispatch — every DebugRequest type ─────────────────────────────────

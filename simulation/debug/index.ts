@@ -33,4 +33,5 @@ export type {
     TickEntry,
     TickDurationSample,
     PerfStats,
+    NetworkDiagnostics,
 } from './DebugProtocol.js';

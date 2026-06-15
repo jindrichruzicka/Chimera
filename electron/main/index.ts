@@ -1,6 +1,6 @@
 import * as path from 'node:path';
 import { readFile } from 'node:fs/promises';
-import { release as getOsRelease } from 'node:os';
+import { networkInterfaces, release as getOsRelease } from 'node:os';
 import {
     app,
     BrowserWindow,
@@ -1126,10 +1126,20 @@ export async function main(): Promise<void> {
     let debugBridge: DebugBridge | undefined = undefined;
     if (IS_DEBUG_MODE) {
         const { startDebugBridge } = await import('./debug-bridge.js');
+        const { buildNetworkDiagnostics } = await import('./network-diagnostics.js');
         debugBridge = startDebugBridge({
             ipcMain,
             logger: logger.child({ module: 'debug-bridge' }),
             debugPreloadPath: path.join(path.dirname(preloadPath), 'debug-api.js'),
+            // Late-bound: `lobbyManager` is constructed below, and this closure
+            // runs only at IPC-request time, by which point it is assigned. The
+            // builder reads host/OS facts, so diagnostics resolve while hosting
+            // in the lobby with no game session attached (§6, §11).
+            getNetworkDiagnostics: () =>
+                buildNetworkDiagnostics({
+                    networkInterfaces: () => networkInterfaces(),
+                    getHostPort: () => lobbyManager.getHostPort(),
+                }),
         });
     }
 

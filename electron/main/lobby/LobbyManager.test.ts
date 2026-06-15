@@ -413,6 +413,58 @@ describe('LobbyManager.hostLobby', () => {
     });
 });
 
+// ── getHostPort ────────────────────────────────────────────────────────────────
+
+/**
+ * Provider whose hosted session carries a real `127.0.0.1:PORT:TOKEN` lobbyCode
+ * (mirroring `LocalWebSocketProvider`), so `getHostPort()` has a port to parse.
+ * The plain-object {@link HostedSession} lets us restamp `lobbyCode` without
+ * losing the transport/close wiring.
+ */
+const HOSTED_PORT = 51234;
+
+class PortStampedProvider extends InMemoryMultiplayerProvider {
+    override async hostLobby(params: HostLobbyParams): Promise<HostedSession> {
+        const session = await super.hostLobby(params);
+        return { ...session, lobbyCode: `127.0.0.1:${HOSTED_PORT}:secret-token` };
+    }
+}
+
+describe('LobbyManager.getHostPort', () => {
+    it('returns null before any session is active', () => {
+        const manager = makeManager();
+        expect(manager.getHostPort()).toBeNull();
+    });
+
+    it('returns the parsed port while hosting', async () => {
+        const manager = makeManager(new PortStampedProvider());
+        await manager.hostLobby(HOST_PARAMS);
+        expect(manager.getHostPort()).toBe(HOSTED_PORT);
+        await manager.closeLobby();
+    });
+
+    it('returns null after the hosted lobby is closed', async () => {
+        const manager = makeManager(new PortStampedProvider());
+        await manager.hostLobby(HOST_PARAMS);
+        await manager.closeLobby();
+        expect(manager.getHostPort()).toBeNull();
+    });
+
+    it('returns null for a joined-client session', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        expect(joinManager.getHostPort()).toBeNull();
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+});
+
 // ── joinLobby ────────────────────────────────────────────────────────────────
 
 describe('LobbyManager.joinLobby', () => {

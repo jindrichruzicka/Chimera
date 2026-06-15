@@ -113,6 +113,8 @@ describe('DebugProtocol — DebugRequest union', () => {
                 return `action-log:${request.fromTick ?? ''}:${request.toTick ?? ''}`;
             case 'GET_PERF_STATS':
                 return 'perf-stats';
+            case 'GET_NETWORK_DIAGNOSTICS':
+                return 'network-diagnostics';
             case 'SUBSCRIBE_LIVE':
                 return 'subscribe';
             case 'UNSUBSCRIBE_LIVE':
@@ -132,6 +134,7 @@ describe('DebugProtocol — DebugRequest union', () => {
             { type: 'GET_DIFF', fromTick: 3, toTick: 7 },
             { type: 'GET_ACTION_LOG', fromTick: 3, toTick: 7 },
             { type: 'GET_PERF_STATS' },
+            { type: 'GET_NETWORK_DIAGNOSTICS' },
             { type: 'SUBSCRIBE_LIVE' },
             { type: 'UNSUBSCRIBE_LIVE' },
         ];
@@ -142,6 +145,7 @@ describe('DebugProtocol — DebugRequest union', () => {
             'diff:3:7',
             'action-log:3:7',
             'perf-stats',
+            'network-diagnostics',
             'subscribe',
             'unsubscribe',
         ]);
@@ -174,6 +178,8 @@ describe('DebugProtocol — DebugResponse union', () => {
                 return `action-log:${response.entries.length}`;
             case 'PERF_STATS':
                 return `perf-stats:${response.stats.sampleCount}`;
+            case 'NETWORK_DIAGNOSTICS':
+                return `network-diagnostics:${response.diagnostics.localAddresses.length}:${response.diagnostics.hostPort}`;
             case 'LIVE_TICK':
                 return `live:${response.tick}`;
             case 'ERROR':
@@ -195,6 +201,10 @@ describe('DebugProtocol — DebugResponse union', () => {
             { type: 'DIFF', diff: makeDiff() },
             { type: 'ACTION_LOG', entries: [makeHistoryEntry(1)] },
             { type: 'PERF_STATS', stats: makePerfStats() },
+            {
+                type: 'NETWORK_DIAGNOSTICS',
+                diagnostics: { localAddresses: ['10.0.0.5'], hostPort: 51234, isHosting: true },
+            },
             { type: 'LIVE_TICK', tick: 9, snapshot: makeSnapshot(9) },
             { type: 'ERROR', message: 'TickNotAvailableError: invalid_tick (tick 1.5)' },
             { type: 'ACK' },
@@ -206,6 +216,7 @@ describe('DebugProtocol — DebugResponse union', () => {
             'diff:1:2',
             'action-log:1',
             'perf-stats:2',
+            'network-diagnostics:1:51234',
             'live:9',
             'error:TickNotAvailableError: invalid_tick (tick 1.5)',
             'ack',

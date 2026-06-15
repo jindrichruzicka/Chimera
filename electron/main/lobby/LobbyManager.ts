@@ -335,6 +335,22 @@ export class LobbyManager {
      *
      * Returns a `LobbyInfo` for the IPC caller.
      */
+    /**
+     * Active hosted port, or `null` when not hosting. Parses the port segment
+     * of the hosted session's `lobbyCode` (`<host>:<port>:<token>`, e.g.
+     * `127.0.0.1:51234:secret`). A joined-client session (no `close`) and the
+     * absence of any session both return `null`. Surfaced to the Debug
+     * Inspector's NAT diagnostics (§6, §11) via `buildNetworkDiagnostics`.
+     */
+    getHostPort(): number | null {
+        const session = this.session;
+        if (session === null || !('close' in session)) {
+            return null;
+        }
+        const port = Number(session.lobbyCode.split(':')[1]);
+        return Number.isInteger(port) ? port : null;
+    }
+
     async hostLobby(params: HostLobbyParams): Promise<LobbyInfo> {
         this.log.info('hostLobby', { gameId: params.gameId, maxPlayers: params.maxPlayers });
 

@@ -107,6 +107,10 @@ export function createDebugApi(port: DebugApiIpcPort): ChimeraDebugApi {
             }).then((res) => res.entries),
         getPerfStats: () =>
             request(port, 'PERF_STATS', { type: 'GET_PERF_STATS' }).then((res) => res.stats),
+        getNetworkDiagnostics: () =>
+            request(port, 'NETWORK_DIAGNOSTICS', { type: 'GET_NETWORK_DIAGNOSTICS' }).then(
+                (res) => res.diagnostics,
+            ),
         subscribeLive: () => request(port, 'ACK', { type: 'SUBSCRIBE_LIVE' }).then(() => undefined),
         unsubscribeLive: () =>
             request(port, 'ACK', { type: 'UNSUBSCRIBE_LIVE' }).then(() => undefined),
