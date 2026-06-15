@@ -1,0 +1,65 @@
+.root {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-md);
+    min-block-size: 0;
+}
+
+.header {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+}
+
+.section {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+}
+
+.port {
+    align-items: center;
+    display: inline-flex;
+    gap: var(--ch-space-xs);
+}
+
+.addressList {
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+    list-style: none;
+    margin: var(--ch-space-none);
+    padding: var(--ch-space-none);
+}
+
+.addressRow {
+    align-items: center;
+    display: flex;
+    gap: var(--ch-space-sm);
+    justify-content: space-between;
+}
+
+.mono {
+    font-family: var(--ch-font-mono);
+    font-size: var(--ch-font-size-md);
+}
+
+.guideToggle {
+    align-self: flex-start;
+}
+
+.guideSteps {
+    color: var(--ch-color-text-secondary);
+    display: flex;
+    flex-direction: column;
+    gap: var(--ch-space-xs);
+    font-size: var(--ch-font-size-sm);
+    margin: var(--ch-space-none);
+    padding-inline-start: var(--ch-space-lg);
+}
+
+.error {
+    color: var(--ch-color-error-text-muted);
+    margin: var(--ch-space-none);
+}

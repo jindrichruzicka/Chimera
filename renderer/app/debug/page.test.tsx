@@ -64,7 +64,7 @@ describe('DebugInspectorPage', () => {
         expect(screen.queryByRole('heading', { name: 'Debug Inspector' })).not.toBeInTheDocument();
     });
 
-    it('renders the four Inspector tabs and mounts every panel up front', async () => {
+    it('renders the five Inspector tabs and mounts every panel up front', async () => {
         const api = installPageBridge();
         render(<DebugInspectorPage />);
 
@@ -74,6 +74,7 @@ describe('DebugInspectorPage', () => {
         expect(screen.getByRole('tab', { name: 'Action Log' })).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'Diff' })).toBeInTheDocument();
         expect(screen.getByRole('tab', { name: 'Performance' })).toBeInTheDocument();
+        expect(screen.getByRole('tab', { name: 'Network' })).toBeInTheDocument();
 
         // Tabs keep all panels mounted (hidden, not unmounted), so every
         // panel's initial fetch fires on page mount. Diff View owns the only
@@ -82,6 +83,7 @@ describe('DebugInspectorPage', () => {
             expect(api.listTicks).toHaveBeenCalledTimes(1);
             expect(api.getActionLog).toHaveBeenCalledOnce();
             expect(api.getPerfStats).toHaveBeenCalledOnce();
+            expect(api.getNetworkDiagnostics).toHaveBeenCalledOnce();
         });
     });
 
@@ -102,6 +104,19 @@ describe('DebugInspectorPage', () => {
         await user.click(screen.getByRole('tab', { name: 'Performance' }));
 
         expect(screen.getByTestId('performance-panel')).toBeVisible();
+        expect(screen.getByTestId('action-log-panel')).not.toBeVisible();
+    });
+
+    it('reveals the Network panel when its tab is activated', async () => {
+        const user = userEvent.setup();
+        installPageBridge();
+        render(<DebugInspectorPage />);
+
+        expect(screen.getByTestId('network-panel')).not.toBeVisible();
+
+        await user.click(screen.getByRole('tab', { name: 'Network' }));
+
+        expect(screen.getByTestId('network-panel')).toBeVisible();
         expect(screen.getByTestId('action-log-panel')).not.toBeVisible();
     });
 

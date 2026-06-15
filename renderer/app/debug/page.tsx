@@ -32,6 +32,7 @@ import type {
 import { getDebugBridge } from '../../bridge/debug-bridge';
 import { ActionLogPanel } from '../../components/debug/ActionLogPanel';
 import { DiffViewPanel } from '../../components/debug/DiffViewPanel';
+import { NetworkPanel } from '../../components/debug/NetworkPanel';
 import { PerformancePanel } from '../../components/debug/PerformancePanel';
 import { ProjectionExplorerPanel } from '../../components/debug/ProjectionExplorerPanel';
 import { Caption, Tabs } from '../../components/ui';
@@ -133,6 +134,11 @@ export default function DebugInspectorPage(): React.ReactElement {
                             id: 'performance',
                             label: 'Performance',
                             panel: <PerformancePanel api={bridge.api} />,
+                        },
+                        {
+                            id: 'network',
+                            label: 'Network',
+                            panel: <NetworkPanel api={bridge.api} />,
                         },
                     ]}
                 />
