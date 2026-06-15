@@ -67,6 +67,8 @@ Implement `SnapshotRingBuffer`, `SnapshotInspector`, `SnapshotDiff`, `DebugProto
 
 Run 1 000-tick, 4-client soak with checksum convergence at every step. Run 10 000-snapshot obfuscation soak asserting zero `owner-only` field leaks. Verify commitment anti-tamper (tampered `REVEAL` value and nonce detected by `verify()`).
 
+**Delivered by**: the 1 000-tick × 4-client soak and the time-series obfuscation soak live in `electron/main/__tests__/multiplayer-soak.integration.test.ts` (per-step convergence proven by two same-seed runs producing byte-identical per-viewer checksum sequences). The 10 000-snapshot obfuscation soak is `simulation/projection/__tests__/StateProjector.property.test.ts`; commitment anti-tamper (tampered value and nonce) is `simulation/projection/CommitmentScheme.test.ts`.
+
 ---
 
 ## F49 — Performance Baseline and NAT Diagnostics `§11, §6`
