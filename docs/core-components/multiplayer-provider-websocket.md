@@ -138,6 +138,17 @@ LocalWebSocketProvider.joinLobby()
 
 `LocalWebSocketProvider` is the sole owner of `networking/server/` and `networking/client/`. No code outside `networking/provider/` imports from those directories.
 
+### ServerConnection endpoint seam (#718)
+
+`ServerConnection` exposes two **optional, additive** hooks on `ServerConnectionOptions` so a future STUN/TURN/relay or WebRTC transport can be injected without editing the core connect path. Both default to today's exact `new WebSocket(url)` behaviour, so the seam ships dormant — no consumer wires it yet.
+
+| Option            | Signature                                    | Default                   | Purpose                                                                                                 |
+| ----------------- | -------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `resolveEndpoint` | `(url: string) => string \| Promise<string>` | identity                  | Rewrite the connect URL before the socket opens (e.g. resolve a lobby code → relay). May be async.      |
+| `socketFactory`   | `(url: string) => WebSocketLike`             | `(u) => new WebSocket(u)` | Construct the underlying socket from the resolved URL — return any `WebSocketLike` (relay/WebRTC shim). |
+
+`attemptConnect()` awaits `resolveEndpoint(url)` first, then passes the result to `socketFactory()`; the rest of the JOIN→WELCOME handshake is unchanged. `WebSocketLike` is the minimal structural subset of the `ws` `WebSocket` that `ServerConnection` consumes (`readyState`, `send`, `close`, and the `open`/`error`/`close`/`message` event methods); a real `ws` socket satisfies it, so the default factory needs no cast. Because the options flow straight through `LocalWebSocketProviderOptions = ServerConnectionOptions`, no provider or transport code changes to support the seam. The seam keeps `ws` confined to `networking/provider/local/` (coding-standards §9.1): it adds optional types/fields only, no new imports.
+
 ---
 
 ## SteamNetworkProvider Stub

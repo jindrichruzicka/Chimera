@@ -9,6 +9,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
+import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { DisconnectReason } from '@chimera/networking/provider/MultiplayerProvider.js';
@@ -374,6 +375,82 @@ describe('ServerConnection — PlayerId stable across reconnect (T03)', () => {
         // The assigned playerId must be stored internally so reconnect sends it
         // We verify indirectly: the conn.playerId accessor exposes it
         expect(conn.assignedPlayerId).toBe(playerId);
+        await conn.close();
+    });
+});
+
+// ─── #718: STUN/relay endpoint seam ───────────────────────────────────────────
+
+describe('ServerConnection — endpoint seam (#718)', () => {
+    // AC1 (default == direct `new WebSocket`) is proven by the "connect" suite above,
+    // which uses `new ServerConnection()` with no seam options and still WELCOMEs.
+
+    it('invokes an injected socketFactory once with the resolved URL', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const url = `ws://127.0.0.1:${server.port}`;
+        const factoryUrls: string[] = [];
+        const conn = new ServerConnection({
+            socketFactory: (u) => {
+                factoryUrls.push(u);
+                return new WebSocket(u);
+            },
+        });
+
+        const { playerId } = await conn.connect(url, server.token, defaultProfile);
+
+        expect(factoryUrls).toEqual([url]);
+        expect(playerId).toMatch(/^player-\d+$/);
+        await conn.close();
+    });
+
+    it('calls resolveEndpoint with the original URL and connects via its rewritten result', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const placeholder = 'ws://relay.invalid';
+        const real = `ws://127.0.0.1:${server.port}`;
+        const resolveUrls: string[] = [];
+        const factoryUrls: string[] = [];
+
+        const conn = new ServerConnection({
+            resolveEndpoint: (u) => {
+                resolveUrls.push(u);
+                return real;
+            },
+            socketFactory: (u) => {
+                factoryUrls.push(u);
+                return new WebSocket(u);
+            },
+        });
+
+        const { playerId } = await conn.connect(placeholder, server.token, defaultProfile);
+
+        expect(resolveUrls).toEqual([placeholder]);
+        expect(factoryUrls).toEqual([real]);
+        expect(playerId).toMatch(/^player-\d+$/);
+        await conn.close();
+    });
+
+    it('awaits an async resolveEndpoint before opening the socket', async () => {
+        const server = makeServer();
+        await server.ready();
+
+        const real = `ws://127.0.0.1:${server.port}`;
+        const factoryUrls: string[] = [];
+        const conn = new ServerConnection({
+            resolveEndpoint: (u) => Promise.resolve(u),
+            socketFactory: (u) => {
+                factoryUrls.push(u);
+                return new WebSocket(u);
+            },
+        });
+
+        const { playerId } = await conn.connect(real, server.token, defaultProfile);
+
+        expect(factoryUrls).toEqual([real]);
+        expect(playerId).toMatch(/^player-\d+$/);
         await conn.close();
     });
 });

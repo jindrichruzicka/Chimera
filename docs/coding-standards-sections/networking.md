@@ -15,6 +15,11 @@ tags: [networking, MultiplayerProvider, WebSocket, Zod, CRC32, StateBroadcaster,
 - All multiplayer code interacts through `MultiplayerProvider`, `HostTransport`, and `ClientTransport` interfaces.
 - `ws` (or any transport library) is never imported outside `networking/provider/local/`. All other modules use the provider interfaces.
 
+## 9.1.1 Extension seams within `local/`
+
+- Provider-internal transports (e.g. `ServerConnection`) expose alternative wire backends through **optional constructor options that default to today's behaviour** — never by adding cross-module imports. Example: `ServerConnection`'s `resolveEndpoint` (default identity) and `socketFactory` (default `(u) => new WebSocket(u)`) let a future STUN/TURN/relay or WebRTC transport be injected without editing the connect path.
+- Such seams type their dependency against a **minimal structural type** (e.g. `WebSocketLike`) that the default implementation satisfies, keeping `ws` the default-only dependency confined to `networking/provider/local/` (§9.1). The seam must stay additive: no new imports, and existing default behaviour proven unchanged by tests.
+
 ## 9.2 Message validation
 
 - Every incoming `ClientMessage` and `ServerMessage` is validated against its Zod schema before processing. Malformed messages from the wire are untrusted input.

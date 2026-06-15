@@ -42,6 +42,30 @@ export interface ConnectResult {
 // call sites that already depend on ServerConnection.
 export { JoinRejectedError };
 
+// ─── WebSocket seam ─────────────────────────────────────────────────────────
+
+/** Raw inbound frame payload, matching `ws`'s message event data. */
+type RawData = Buffer | ArrayBuffer | Buffer[];
+
+/**
+ * Minimal structural subset of the `ws` `WebSocket` that ServerConnection uses.
+ * A real `ws` WebSocket satisfies this supertype, so the default `socketFactory`
+ * (`(u) => new WebSocket(u)`) is assignable with no cast. Defining the seam against
+ * this structural type — rather than the concrete `ws` class — lets a future
+ * STUN/TURN/relay or WebRTC transport be injected without editing the connect path.
+ */
+export interface WebSocketLike {
+    readonly readyState: number;
+    send(data: string): void;
+    close(): void;
+    on(event: 'message', listener: (data: RawData) => void): void;
+    on(event: 'close', listener: () => void): void;
+    once(event: 'open', listener: () => void): void;
+    once(event: 'error', listener: (err: Error) => void): void;
+    once(event: 'close', listener: () => void): void;
+    off(event: 'message', listener: (data: RawData) => void): void;
+}
+
 // ─── Options ──────────────────────────────────────────────────────────────────
 
 export interface ServerConnectionOptions {
@@ -51,11 +75,31 @@ export interface ServerConnectionOptions {
     readonly baseDelayMs?: number;
     /** Optional structured logger. Logs connect/disconnect and validation failures. */
     readonly logger?: Logger;
+    /**
+     * Optional endpoint resolver applied to the connect URL before the socket is
+     * opened. Defaults to identity. A future STUN/TURN/relay transport can rewrite
+     * the URL here (e.g. resolve a lobby code to a relay address) without changing
+     * the core connect path. May be async.
+     *
+     * Failure contract: a rejection (or thrown error) rejects the in-flight
+     * `attemptConnect()` before any socket exists. On the initial `connect()` this
+     * surfaces to the caller; during an automatic reconnect it is swallowed by the
+     * backoff loop and does NOT itself schedule a further retry. A resolver that
+     * wants its transient failures to feed the reconnect path must resolve to a
+     * fallback URL rather than reject.
+     */
+    readonly resolveEndpoint?: (url: string) => string | Promise<string>;
+    /**
+     * Optional factory that creates the underlying socket from the resolved URL.
+     * Defaults to `(u) => new WebSocket(u)` — today's exact behaviour. A future
+     * WebRTC/relay transport can return any object satisfying {@link WebSocketLike}.
+     */
+    readonly socketFactory?: (url: string) => WebSocketLike;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function rawToString(raw: Buffer | ArrayBuffer | Buffer[]): string {
+function rawToString(raw: RawData): string {
     if (Array.isArray(raw)) return Buffer.concat(raw).toString('utf8');
     if (raw instanceof ArrayBuffer) return Buffer.from(raw).toString('utf8');
     return raw.toString('utf8');
@@ -82,8 +126,10 @@ export class ServerConnection {
     private readonly maxRetries: number;
     private readonly baseDelayMs: number;
     private readonly logger: Logger | undefined;
+    private readonly resolveEndpoint: (url: string) => string | Promise<string>;
+    private readonly socketFactory: (url: string) => WebSocketLike;
 
-    private ws: WebSocket | null = null;
+    private ws: WebSocketLike | null = null;
     private url = '';
     private token = '';
     private profile: Record<string, unknown> | null = null;
@@ -106,6 +152,10 @@ export class ServerConnection {
         this.maxRetries = opts?.maxRetries ?? 5;
         this.baseDelayMs = opts?.baseDelayMs ?? 250;
         this.logger = opts?.logger;
+        // Dormant by default: identity resolver + direct `new WebSocket` factory
+        // preserve today's exact connect behaviour.
+        this.resolveEndpoint = opts?.resolveEndpoint ?? ((url) => url);
+        this.socketFactory = opts?.socketFactory ?? ((u) => new WebSocket(u));
     }
 
     /** The server-assigned PlayerId, available after a successful connect(). */
@@ -188,9 +238,10 @@ export class ServerConnection {
     // ─── Internal ─────────────────────────────────────────────────────────────
 
     /** Open one WebSocket connection and resolve with ConnectResult from WELCOME. */
-    private attemptConnect(): Promise<ConnectResult> {
+    private async attemptConnect(): Promise<ConnectResult> {
+        const resolvedUrl = await this.resolveEndpoint(this.url);
         return new Promise<ConnectResult>((resolve, reject) => {
-            const ws = new WebSocket(this.url);
+            const ws = this.socketFactory(resolvedUrl);
             this.ws = ws;
 
             ws.once('open', () => {
@@ -211,7 +262,7 @@ export class ServerConnection {
 
             let welcomed = false;
 
-            const onHandshakeMessage = (raw: Buffer | ArrayBuffer | Buffer[]): void => {
+            const onHandshakeMessage = (raw: RawData): void => {
                 let msg: ServerMessage;
                 try {
                     const parsed: unknown = JSON.parse(rawToString(raw));
