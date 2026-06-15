@@ -125,6 +125,21 @@ export interface GameLobbyScreenProps {
     readonly pendingAction: LobbyPendingAction;
     readonly setMatchSetting: (key: string, value: string) => void;
     readonly setPlayerAttribute: (playerId: PlayerId, key: string, value: string) => void;
+    /**
+     * Host-only: append an AI agent slot to the lobby roster. The host assigns
+     * the slot index; `main` rejects the call from a joined (non-host) session
+     * and when the lobby is full, then rebroadcasts the synced `LobbyState`
+     * (F54 T3/T4, #723/#724). The screen renders the control for the host only.
+     * Resolves when the round-trip settles so the screen can gate double-submit.
+     */
+    readonly addAiPlayer: () => Promise<void>;
+    /**
+     * Host-only: remove the AI agent slot at `slotIndex` from the lobby roster.
+     * `main` rejects the call from a joined (non-host) session, then rebroadcasts
+     * the synced `LobbyState` (F54 T3/T4, #723/#724). Resolves when the round-trip
+     * settles so the screen can gate double-submit.
+     */
+    readonly removeAiPlayer: (slotIndex: number) => Promise<void>;
     readonly onToggleReady: (ready: boolean) => Promise<void>;
     readonly onStartGame: () => Promise<void>;
     readonly onLeave: () => Promise<void>;

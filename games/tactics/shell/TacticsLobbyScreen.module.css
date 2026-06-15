@@ -62,6 +62,20 @@
     inline-size: var(--ch-space-md);
 }
 
+.ai-badge {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    color: var(--ch-color-text-secondary);
+    flex: none;
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: 1;
+    padding: var(--ch-space-xs) var(--ch-space-sm);
+}
+
 .player-name {
     color: var(--ch-color-text-primary);
     flex: 1 1 auto;

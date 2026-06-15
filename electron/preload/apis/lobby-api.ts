@@ -75,6 +75,20 @@ export const LOBBY_SET_MATCH_SETTING_CHANNEL = 'chimera:lobby:set-match-setting'
 export const LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL = 'chimera:lobby:set-player-attribute';
 
 /**
+ * `ipcRenderer.invoke` target for {@link LobbyAPI.addAi}. Host-only: the
+ * main-side handler rejects writes from a joined (non-host) session and a full
+ * lobby, then rebroadcasts the synced {@link LobbyState} (#724).
+ */
+export const LOBBY_ADD_AI_CHANNEL = 'chimera:lobby:add-ai';
+
+/**
+ * `ipcRenderer.invoke` target for {@link LobbyAPI.removeAi}. Host-only: the
+ * main-side handler rejects writes from a joined (non-host) session, then
+ * rebroadcasts the synced {@link LobbyState} (#724).
+ */
+export const LOBBY_REMOVE_AI_CHANNEL = 'chimera:lobby:remove-ai';
+
+/**
  * `ipcRenderer.on` target for {@link LobbyAPI.onUpdate}. Main pushes the
  * full {@link LobbyState} via `webContents.send` whenever the roster,
  * readiness, or lobby metadata changes.
@@ -158,6 +172,9 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
             ipc
                 .invoke(LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL, { playerId, key, value })
                 .then(() => undefined),
+        addAi: (): Promise<void> => ipc.invoke(LOBBY_ADD_AI_CHANNEL).then(() => undefined),
+        removeAi: (slotIndex: number): Promise<void> =>
+            ipc.invoke(LOBBY_REMOVE_AI_CHANNEL, { slotIndex }).then(() => undefined),
         onUpdate: (cb: (lobby: LobbyState) => void): Unsubscribe =>
             subscribePush<LobbyState>(ipc, LOBBY_UPDATE_CHANNEL, cb),
         onPlayerConnectionChanged: (cb: (event: PlayerConnectionEvent) => void): Unsubscribe =>

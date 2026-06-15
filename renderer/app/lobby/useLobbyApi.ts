@@ -32,6 +32,10 @@ export interface LobbyApi {
     setMatchSetting(key: string, value: string): Promise<void>;
     /** Owner-authored: set an attribute on the local player's OWN seat (`playerId` must be local); main rejects other seats (#706, F53). */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
+    /** Host-only: append an AI agent slot; main rejects non-host writes and a full lobby, then rebroadcasts the synced lobby state (#724). */
+    addAiPlayer(): Promise<void>;
+    /** Host-only: remove the AI agent slot at `slotIndex`; main rejects non-host writes, then rebroadcasts the synced lobby state (#724). */
+    removeAiPlayer(slotIndex: number): Promise<void>;
 }
 
 const MISSING_BRIDGE_ERROR = 'Chimera API not available';
@@ -139,6 +143,20 @@ export function useLobbyApi(): LobbyApi {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
                 await bridge.lobby.setPlayerAttribute(targetPlayerId, key, value);
+            },
+            async addAiPlayer(): Promise<void> {
+                const bridge = getLobbyBridge();
+                if (!bridge) {
+                    throw new Error(MISSING_BRIDGE_ERROR);
+                }
+                await bridge.lobby.addAi();
+            },
+            async removeAiPlayer(slotIndex: number): Promise<void> {
+                const bridge = getLobbyBridge();
+                if (!bridge) {
+                    throw new Error(MISSING_BRIDGE_ERROR);
+                }
+                await bridge.lobby.removeAi(slotIndex);
             },
         }),
         [],

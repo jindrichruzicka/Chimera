@@ -14,7 +14,7 @@
  */
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId, type LobbyState } from '@chimera/electron/preload/api-types.js';
@@ -63,6 +63,8 @@ function makeProps(overrides: Partial<GameLobbyScreenProps> = {}): GameLobbyScre
         pendingAction: null,
         setMatchSetting: vi.fn(),
         setPlayerAttribute: vi.fn(),
+        addAiPlayer: vi.fn(async () => undefined),
+        removeAiPlayer: vi.fn(async () => undefined),
         onToggleReady: vi.fn(async () => undefined),
         onStartGame: vi.fn(async () => undefined),
         onLeave: vi.fn(async () => undefined),
@@ -163,6 +165,149 @@ describe('TacticsLobbyScreen', () => {
                 <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
             );
             expect(screen.getByTestId(`tactics-player-color-select-${HOST_ID}`)).toBeDisabled();
+        });
+    });
+
+    describe('AI players (host-only)', () => {
+        it('renders an enabled Add-AI button for the host when the lobby is not full', () => {
+            // 2 humans + 1 AI = 3 occupants < maxPlayers (4) → not full.
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({ agentSlots: [{ slotIndex: 1, kind: 'ai' }] }),
+                    })}
+                />,
+            );
+            expect(screen.getByTestId('tactics-add-ai')).toBeEnabled();
+        });
+
+        it('disables the Add-AI button when humans + AI reach maxPlayers', () => {
+            // 2 humans + 2 AI = 4 occupants = maxPlayers (4) → full.
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({
+                            agentSlots: [
+                                { slotIndex: 1, kind: 'ai' },
+                                { slotIndex: 2, kind: 'ai' },
+                            ],
+                        }),
+                    })}
+                />,
+            );
+            expect(screen.getByTestId('tactics-add-ai')).toBeDisabled();
+        });
+
+        it('renders AI players in a separate list beneath the human roster with a Remove control', () => {
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({
+                            agentSlots: [
+                                { slotIndex: 1, kind: 'ai' },
+                                { slotIndex: 3, kind: 'ai' },
+                            ],
+                        }),
+                    })}
+                />,
+            );
+
+            const aiRows = screen.getAllByTestId('tactics-lobby-ai-player');
+            expect(aiRows).toHaveLength(2);
+            expect(aiRows.map((row) => row.getAttribute('data-slot-index'))).toStrictEqual([
+                '1',
+                '3',
+            ]);
+            expect(screen.getByTestId('tactics-remove-ai-1')).toBeInTheDocument();
+            expect(screen.getByTestId('tactics-remove-ai-3')).toBeInTheDocument();
+        });
+
+        it('invokes addAiPlayer when the host clicks Add-AI', async () => {
+            const addAiPlayer = vi.fn(async () => undefined);
+            render(<TacticsLobbyScreen {...makeProps({ addAiPlayer })} />);
+
+            // `act` flushes the pending-flag reset that runs when the round-trip settles.
+            await act(async () => {
+                fireEvent.click(screen.getByTestId('tactics-add-ai'));
+            });
+            expect(addAiPlayer).toHaveBeenCalledTimes(1);
+        });
+
+        it('invokes removeAiPlayer with the slot index when the host clicks Remove', async () => {
+            const removeAiPlayer = vi.fn(async () => undefined);
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        removeAiPlayer,
+                        lobbyState: makeLobbyState({ agentSlots: [{ slotIndex: 2, kind: 'ai' }] }),
+                    })}
+                />,
+            );
+
+            await act(async () => {
+                fireEvent.click(screen.getByTestId('tactics-remove-ai-2'));
+            });
+            expect(removeAiPlayer).toHaveBeenCalledWith(2);
+        });
+
+        it('gives each Remove button a distinct accessible name', () => {
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({
+                            agentSlots: [
+                                { slotIndex: 1, kind: 'ai' },
+                                { slotIndex: 3, kind: 'ai' },
+                            ],
+                        }),
+                    })}
+                />,
+            );
+
+            // Multiple "Remove" buttons must be distinguishable to assistive tech.
+            expect(screen.getByRole('button', { name: 'Remove AI Player 1' })).toBeInTheDocument();
+            expect(screen.getByRole('button', { name: 'Remove AI Player 3' })).toBeInTheDocument();
+        });
+
+        it('disables the AI controls while an add round-trip is in flight (no double-submit)', () => {
+            // A never-settling promise keeps the action pending so the gate holds.
+            const addAiPlayer = vi.fn(() => new Promise<void>(() => undefined));
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        addAiPlayer,
+                        lobbyState: makeLobbyState({ agentSlots: [{ slotIndex: 1, kind: 'ai' }] }),
+                    })}
+                />,
+            );
+
+            const addButton = screen.getByTestId('tactics-add-ai');
+            expect(addButton).toBeEnabled();
+
+            fireEvent.click(addButton);
+
+            // One invocation, and both Add and Remove are now gated.
+            expect(addAiPlayer).toHaveBeenCalledTimes(1);
+            expect(addButton).toBeDisabled();
+            expect(screen.getByTestId('tactics-remove-ai-1')).toBeDisabled();
+        });
+
+        it('hides Add/Remove controls for a non-host and shows the AI list read-only', () => {
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        localPlayerId: CLIENT_ID,
+                        isHost: false,
+                        lobbyState: makeLobbyState({ agentSlots: [{ slotIndex: 1, kind: 'ai' }] }),
+                    })}
+                />,
+            );
+
+            // The AI roster is still visible to clients...
+            expect(screen.getAllByTestId('tactics-lobby-ai-player')).toHaveLength(1);
+            // ...but the host-only controls are absent.
+            expect(screen.queryByTestId('tactics-add-ai')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('tactics-remove-ai-1')).not.toBeInTheDocument();
         });
     });
 

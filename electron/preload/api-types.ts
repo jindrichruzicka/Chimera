@@ -952,6 +952,19 @@ export interface LobbyAPI {
      * rebroadcasts the full {@link LobbyState} (#706, F53).
      */
     setPlayerAttribute(playerId: PlayerId, key: string, value: string): Promise<void>;
+    /**
+     * Host-only: append an AI agent slot to the lobby roster. The host assigns
+     * the slot index. The main process rejects the call from a joined (non-host)
+     * session and when the lobby is full, then rebroadcasts the full
+     * {@link LobbyState} to every client (#724).
+     */
+    addAi(): Promise<void>;
+    /**
+     * Host-only: remove the AI agent slot at `slotIndex` from the lobby roster.
+     * The main process rejects the call from a joined (non-host) session, then
+     * rebroadcasts the full {@link LobbyState} to every client (#724).
+     */
+    removeAi(slotIndex: number): Promise<void>;
     onUpdate(cb: (lobby: LobbyState) => void): Unsubscribe;
     /**
      * Fires when an opponent's connection presence transitions (transient drop or

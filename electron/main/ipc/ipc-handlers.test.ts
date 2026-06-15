@@ -16,6 +16,8 @@ import {
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+    LOBBY_ADD_AI_CHANNEL,
+    LOBBY_REMOVE_AI_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
@@ -714,6 +716,44 @@ describe('registerLobbyHandlers', () => {
         );
     });
 
+    it('registers chimera:lobby:add-ai as an invoke handler that calls lobbyManager.addAi', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'addAi').mockResolvedValue(undefined);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_ADD_AI_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}));
+        expect(spy).toHaveBeenCalledOnce();
+    });
+
+    it('registers chimera:lobby:remove-ai as an invoke handler that calls lobbyManager.removeAi', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'removeAi').mockResolvedValue(undefined);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_REMOVE_AI_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}, { slotIndex: 2 }));
+        expect(spy).toHaveBeenCalledOnce();
+        expect(spy).toHaveBeenCalledWith(2);
+    });
+
+    it('rejects invalid remove-ai payloads with IpcRequestValidationError', () => {
+        const stub = makeLobbyIpcMainStub();
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+
+        const handler = stub.handled.get(LOBBY_REMOVE_AI_CHANNEL);
+        expect(handler).toBeDefined();
+
+        expect(() => handler?.({}, { slotIndex: -1 })).toThrow(IpcRequestValidationError);
+        expect(() => handler?.({}, {})).toThrow(IpcRequestValidationError);
+    });
+
     it('rejects when lobbyManager.closeLobby throws', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -744,6 +784,8 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_UPDATE_READY_STATE_CHANNEL,
                 LOBBY_SET_MATCH_SETTING_CHANNEL,
                 LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+                LOBBY_ADD_AI_CHANNEL,
+                LOBBY_REMOVE_AI_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(LOBBY_UPDATE_CHANNEL)).toBe(false);

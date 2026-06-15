@@ -340,6 +340,46 @@ describe('useLobbyApi', () => {
         expect(setPlayerAttribute).toHaveBeenCalledWith(playerId('p2'), 'color', 'blue');
     });
 
+    it('delegates addAiPlayer and removeAiPlayer to the bridge lobby API', async () => {
+        const addAi = vi.fn(async () => undefined);
+        const removeAi = vi.fn(async () => undefined);
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: vi.fn(),
+                    join: vi.fn(),
+                    getLocalPlayerId: vi.fn(),
+                    leave: vi.fn(),
+                    startGame: vi.fn(),
+                    updatePlayerReadyState: vi.fn(),
+                    addAi,
+                    removeAi,
+                    onUpdate: vi.fn(),
+                },
+                system: {
+                    onConnectionStatus: vi.fn(),
+                },
+            },
+        });
+
+        const { result } = renderHook(() => useLobbyApi());
+
+        await result.current.addAiPlayer();
+        await result.current.removeAiPlayer(2);
+
+        expect(addAi).toHaveBeenCalledTimes(1);
+        expect(removeAi).toHaveBeenCalledWith(2);
+    });
+
+    it('throws when calling addAiPlayer or removeAiPlayer without preload bridge', async () => {
+        const { result } = renderHook(() => useLobbyApi());
+
+        await expect(result.current.addAiPlayer()).rejects.toThrow('Chimera API not available');
+        await expect(result.current.removeAiPlayer(1)).rejects.toThrow('Chimera API not available');
+    });
+
     it('throws when calling setMatchSetting without preload bridge', async () => {
         const { result } = renderHook(() => useLobbyApi());
 

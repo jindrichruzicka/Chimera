@@ -150,12 +150,25 @@ const LobbyPlayerEntry = z.object({
     attributes: z.record(z.string(), z.string()).optional(),
 });
 
+// One host-configured controller slot (e.g. an AI player) carried in the synced
+// lobby roster. Mirrors `LobbyAgentSlot` in networking/electron; the renderer
+// reads it to render the AI sub-list (F54 T3, #723).
+const LobbyAgentSlot = z.object({
+    slotIndex: z.number().int().nonnegative(),
+    kind: z.enum(['human', 'ai']),
+    omniscient: z.boolean().optional(),
+});
+
 const LobbyState = z.object({
     info: LobbyInfo,
     players: z.array(LobbyPlayerEntry).readonly(),
     // Host-authored match settings (e.g. board colour) synced to all clients on
     // every LobbyState broadcast. Optional and backward-compatible.
     matchSettings: z.record(z.string(), z.string()).optional(),
+    // Host-configured AI agent slots, synced to all clients so every peer sees
+    // the AI roster (F54 T3/T4, #723/#724). Optional and backward-compatible:
+    // absent on games with no AI and on older clients.
+    agentSlots: z.array(LobbyAgentSlot).readonly().optional(),
 });
 
 /**
@@ -410,6 +423,9 @@ export type LobbyPlayerEntry = z.infer<typeof LobbyPlayerEntry>;
 
 /** Canonical shared type for lobby information. */
 export type LobbyInfo = z.infer<typeof LobbyInfo>;
+
+/** Canonical shared type for a host-configured lobby controller slot. */
+export type LobbyAgentSlot = z.infer<typeof LobbyAgentSlot>;
 
 /** Canonical shared type for the full lobby state. */
 export type LobbyState = z.infer<typeof LobbyState>;

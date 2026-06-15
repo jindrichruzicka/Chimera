@@ -244,6 +244,14 @@ export default function LobbyPage() {
                               reportSetupError(err, 'Failed to update player attribute');
                           });
                   },
+                  addAiPlayer: () =>
+                      lobbyApi.addAiPlayer().catch((err: unknown) => {
+                          reportSetupError(err, 'Failed to add AI player');
+                      }),
+                  removeAiPlayer: (slotIndex) =>
+                      lobbyApi.removeAiPlayer(slotIndex).catch((err: unknown) => {
+                          reportSetupError(err, 'Failed to remove AI player');
+                      }),
                   onToggleReady: handleToggleReady,
                   onStartGame: handleStartGame,
                   onLeave: handleLeave,

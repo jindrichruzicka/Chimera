@@ -205,6 +205,8 @@ describe('GameLobbyScreenProps', () => {
         pendingAction: null,
         setMatchSetting: () => undefined,
         setPlayerAttribute: () => undefined,
+        addAiPlayer: () => Promise.resolve(),
+        removeAiPlayer: () => Promise.resolve(),
         onToggleReady: () => Promise.resolve(),
         onStartGame: () => Promise.resolve(),
         onLeave: () => Promise.resolve(),

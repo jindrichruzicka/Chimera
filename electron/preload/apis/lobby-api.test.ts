@@ -9,6 +9,8 @@ import {
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+    LOBBY_ADD_AI_CHANNEL,
+    LOBBY_REMOVE_AI_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     LOBBY_PLAYER_CONNECTION_CHANNEL,
     LOBBY_PROFILE_REJECTED_CHANNEL,
@@ -336,6 +338,64 @@ describe('createLobbyApi', () => {
             await expect(
                 api.setPlayerAttribute(playerId('p2'), 'unitColor', 'blue'),
             ).rejects.toThrow('only hosted sessions');
+        });
+    });
+
+    describe('addAi()', () => {
+        it('invokes chimera:lobby:add-ai with no payload and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.addAi();
+
+            expect(stub.invocations).toEqual([{ channel: LOBBY_ADD_AI_CHANNEL, arg: undefined }]);
+            expect(result).toBeUndefined();
+        });
+
+        it('rejects when the main-process handler rejects (e.g. non-host or full lobby)', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_ADD_AI_CHANNEL) {
+                        return Promise.reject(new Error('only hosted sessions'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(api.addAi()).rejects.toThrow('only hosted sessions');
+        });
+    });
+
+    describe('removeAi()', () => {
+        it('invokes chimera:lobby:remove-ai with {slotIndex} and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.removeAi(2);
+
+            expect(stub.invocations).toEqual([
+                { channel: LOBBY_REMOVE_AI_CHANNEL, arg: { slotIndex: 2 } },
+            ]);
+            expect(result).toBeUndefined();
+        });
+
+        it('rejects when the main-process handler rejects (e.g. non-host write)', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_REMOVE_AI_CHANNEL) {
+                        return Promise.reject(new Error('only hosted sessions'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(api.removeAi(2)).rejects.toThrow('only hosted sessions');
         });
     });
 

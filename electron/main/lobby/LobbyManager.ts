@@ -131,6 +131,13 @@ export class LobbyManager {
     private session: HostedSession | JoinedSession | null = null;
     private localPlayerId: PlayerId | null = null;
     private lobbyState: LobbyState | null = null;
+    /**
+     * Seat cap for the active hosted session (humans + AI together), captured
+     * from `HostLobbyParams.maxPlayers` at host time. Gates the host-only
+     * add-AI fullness check and the join-overflow auto-remove (#724). Reset to
+     * `0` on close so it never bleeds across sessions.
+     */
+    private maxPlayers = 0;
     private readonly localSeatIds = new Set<PlayerId>();
     /** Active transport subscriptions; cleared and invoked on every closeLobby(). */
     private readonly subscriptions: Unsubscribe[] = [];
@@ -226,16 +233,53 @@ export class LobbyManager {
 
     /**
      * Rebuild a full {@link LobbyState} from `base` with a new `players` roster,
-     * preserving the host-authored top-level `matchSettings` (#706). Roster
-     * mutations must funnel through here so seeded match settings survive every
-     * join / leave / ready / profile update broadcast.
+     * preserving the host-authored top-level `matchSettings` (#706) and the
+     * synced AI `agentSlots` (#724). Roster mutations must funnel through here so
+     * seeded match settings and the AI roster survive every join / leave / ready
+     * / profile update broadcast.
      */
     private static withPlayers(base: LobbyState, players: readonly LobbyPlayerEntry[]): LobbyState {
         return {
             info: base.info,
             players,
             ...(base.matchSettings !== undefined ? { matchSettings: base.matchSettings } : {}),
+            ...(base.agentSlots !== undefined ? { agentSlots: base.agentSlots } : {}),
         };
+    }
+
+    /**
+     * Rebuild a full {@link LobbyState} from `base` with a new AI `agentSlots`
+     * roster, preserving `players` and host-authored `matchSettings` (#724). The
+     * key is dropped when `agentSlots` is empty so the state stays clean. Used by
+     * the host-only add/remove-AI paths and the join-overflow auto-remove.
+     */
+    private static withAgentSlots(
+        base: LobbyState,
+        agentSlots: readonly LobbyAgentSlot[],
+    ): LobbyState {
+        return {
+            info: base.info,
+            players: base.players,
+            ...(base.matchSettings !== undefined ? { matchSettings: base.matchSettings } : {}),
+            ...(agentSlots.length > 0 ? { agentSlots } : {}),
+        };
+    }
+
+    /**
+     * Lowest free AI slot index in `[1, maxPlayers)` not already taken by an
+     * existing AI slot (seat 0 is the host). Deterministic so the synthetic
+     * `ai-{slotIndex}` id and the host game-start slot resolution agree. The
+     * `maxPlayers` fallback is unreachable while {@link addAi}'s fullness guard
+     * holds.
+     */
+    private nextFreeAiSlotIndex(current: readonly LobbyAgentSlot[]): number {
+        const used = new Set(current.map((slot) => slot.slotIndex));
+        for (let slotIndex = 1; slotIndex < this.maxPlayers; slotIndex += 1) {
+            if (!used.has(slotIndex)) {
+                return slotIndex;
+            }
+        }
+        return this.maxPlayers;
     }
 
     private publishLobbyState(state: LobbyState): void {
@@ -378,6 +422,11 @@ export class LobbyManager {
         this.localPlayerId = info.hostId;
         this.localSeatIds.clear();
         this.localSeatIds.add(info.hostId);
+        // Capture the seat cap and any host-time AI slots so the synced lobby
+        // state carries the AI roster and the add-AI / overflow logic can gate
+        // on total occupancy (#724).
+        this.maxPlayers = params.maxPlayers;
+        const initialAgentSlots: readonly LobbyAgentSlot[] = params.agentSlots ?? [];
 
         // Seed host-authored defaults from the game's lobby-setup descriptor
         // (#706). The host occupies seat 0. No-ops when no descriptor resolves,
@@ -395,6 +444,7 @@ export class LobbyManager {
             info,
             players: [hostEntry],
             ...(setup !== undefined ? { matchSettings: resolveMatchSettingsDefaults(setup) } : {}),
+            ...(initialAgentSlots.length > 0 ? { agentSlots: initialAgentSlots } : {}),
         };
         // Wire the profile gate BEFORE publishing the lobby state so there is
         // no window in which a client could learn the session token and JOIN
@@ -583,7 +633,21 @@ export class LobbyManager {
                                   : entry,
                           );
 
-                const nextState = LobbyManager.withPlayers(this.lobbyState, nextPlayers);
+                // Auto-remove an AI to make room when seating a FRESH human would
+                // push total occupancy (humans + AI) past `maxPlayers` (#724).
+                // Drop the most-recently-added AI (the last appended) before the
+                // human is seated; a re-add / reconnect (existing !== undefined)
+                // adds no seat, so it never overflows.
+                const currentAgentSlots = this.lobbyState.agentSlots ?? [];
+                const nextState =
+                    existing === undefined &&
+                    currentAgentSlots.length > 0 &&
+                    nextPlayers.length + currentAgentSlots.length > this.maxPlayers
+                        ? LobbyManager.withAgentSlots(
+                              LobbyManager.withPlayers(this.lobbyState, nextPlayers),
+                              currentAgentSlots.slice(0, -1),
+                          )
+                        : LobbyManager.withPlayers(this.lobbyState, nextPlayers);
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
             }),
@@ -874,6 +938,78 @@ export class LobbyManager {
         return Promise.resolve();
     }
 
+    /**
+     * Host-only: append an AI agent slot to the lobby roster and rebroadcast the
+     * full {@link LobbyState} (#724). Mirrors {@link setMatchSetting}'s host-only
+     * guard (rejects a joined/non-host session). Rejects when the lobby is full
+     * — total occupancy (humans + AI) has reached `maxPlayers`. The host assigns
+     * the lowest free slot index in `[1, maxPlayers)`; clients observe the new
+     * AI via the synced state.
+     */
+    addAi(): Promise<void> {
+        const session = this.session;
+        if (session === null) {
+            return Promise.reject(
+                new Error('LobbyManager: adding an AI player requires an active session'),
+            );
+        }
+        if (!('close' in session)) {
+            return Promise.reject(
+                new Error('LobbyManager: only hosted sessions can add AI players'),
+            );
+        }
+        if (this.lobbyState === null) {
+            return Promise.reject(new Error('LobbyManager: lobby state is not available'));
+        }
+
+        const current = this.lobbyState.agentSlots ?? [];
+        if (this.lobbyState.players.length + current.length >= this.maxPlayers) {
+            return Promise.reject(
+                new Error('LobbyManager: cannot add an AI player — the lobby is full'),
+            );
+        }
+
+        const agentSlots: readonly LobbyAgentSlot[] = [
+            ...current,
+            { slotIndex: this.nextFreeAiSlotIndex(current), kind: 'ai' },
+        ];
+        const nextState = LobbyManager.withAgentSlots(this.lobbyState, agentSlots);
+        this.publishLobbyState(nextState);
+        this.broadcastLobbyStateIfHosted(nextState);
+        return Promise.resolve();
+    }
+
+    /**
+     * Host-only: remove the AI agent slot at `slotIndex` from the lobby roster
+     * and rebroadcast the full {@link LobbyState} (#724). Mirrors {@link addAi}'s
+     * host-only guard. A `slotIndex` with no matching AI slot is a no-op (still
+     * republishes the unchanged roster), never an error.
+     */
+    removeAi(slotIndex: number): Promise<void> {
+        const session = this.session;
+        if (session === null) {
+            return Promise.reject(
+                new Error('LobbyManager: removing an AI player requires an active session'),
+            );
+        }
+        if (!('close' in session)) {
+            return Promise.reject(
+                new Error('LobbyManager: only hosted sessions can remove AI players'),
+            );
+        }
+        if (this.lobbyState === null) {
+            return Promise.reject(new Error('LobbyManager: lobby state is not available'));
+        }
+
+        const agentSlots = (this.lobbyState.agentSlots ?? []).filter(
+            (slot) => slot.slotIndex !== slotIndex,
+        );
+        const nextState = LobbyManager.withAgentSlots(this.lobbyState, agentSlots);
+        this.publishLobbyState(nextState);
+        this.broadcastLobbyStateIfHosted(nextState);
+        return Promise.resolve();
+    }
+
     sendAction(action: EngineAction): void {
         const session = this.session;
         if (session === null) {
@@ -1048,6 +1184,7 @@ export class LobbyManager {
         this.session = null;
         this.localPlayerId = null;
         this.lobbyState = null;
+        this.maxPlayers = 0;
         this.localSeatIds.clear();
         // Clear rate-limit timestamps so they do not bleed into the next session
         // (Invariant #62).

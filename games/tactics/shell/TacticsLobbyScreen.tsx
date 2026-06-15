@@ -34,7 +34,11 @@ import {
     ToggleButton,
 } from '@chimera/renderer/components/ui/index.js';
 import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
-import { DEFAULT_BOARD_COLOR, DEFAULT_PLAYER_COLOR } from '../lobby/lobby-setup.js';
+import {
+    DEFAULT_BOARD_COLOR,
+    DEFAULT_PLAYER_COLOR,
+    TACTICS_MAX_PLAYERS,
+} from '../lobby/lobby-setup.js';
 import { paletteFromCollections } from '../content/tacticsContent.js';
 import styles from './TacticsLobbyScreen.module.css';
 
@@ -47,6 +51,8 @@ export function TacticsLobbyScreen({
     pendingAction,
     setMatchSetting,
     setPlayerAttribute,
+    addAiPlayer,
+    removeAiPlayer,
     onToggleReady,
     onStartGame,
     onLeave,
@@ -57,6 +63,25 @@ export function TacticsLobbyScreen({
     const palette = paletteFromCollections(content ?? {});
     const readyCount = lobbyState.players.filter((player) => player.ready).length;
     const boardColor = lobbyState.matchSettings?.['boardColor'] ?? DEFAULT_BOARD_COLOR;
+    // AI agent slots come synced in the lobby state (F54 T4). The lobby is "full"
+    // on total occupancy — humans + AI together against maxPlayers — matching the
+    // host's auto-remove-on-overflow rule (#724). The AI section renders for the
+    // host (to add/remove) or whenever any AI slot exists (read-only for clients).
+    const agentSlots = lobbyState.agentSlots ?? [];
+    const isFull = lobbyState.players.length + agentSlots.length >= TACTICS_MAX_PLAYERS;
+    const showAiSection = isHost || agentSlots.length > 0;
+
+    // Gate the host AI controls while an add/remove round-trip is in flight so a
+    // rapid double-click cannot fire two `addAi`/`removeAi` invocations from one
+    // gesture. The synced state arrives via the lobby update, so we clear the
+    // flag when the round-trip settles (#724, review WARN-2).
+    const [aiActionPending, setAiActionPending] = React.useState(false);
+    const runAiAction = (action: () => Promise<void>): void => {
+        setAiActionPending(true);
+        void action().finally(() => {
+            setAiActionPending(false);
+        });
+    };
 
     return (
         <div className={styles['lobby']} data-testid="tactics-lobby-screen">
@@ -142,6 +167,68 @@ export function TacticsLobbyScreen({
                     })}
                 </ul>
             </section>
+
+            {showAiSection ? (
+                <section className={styles['panel']}>
+                    <div className={styles['heading-row']}>
+                        <Heading level={3} size="md">
+                            AI Players
+                        </Heading>
+                        {isHost ? (
+                            <Button
+                                data-testid="tactics-add-ai"
+                                disabled={isFull || aiActionPending}
+                                onClick={() => {
+                                    runAiAction(addAiPlayer);
+                                }}
+                                type="button"
+                                variant="secondary"
+                            >
+                                Add AI player
+                            </Button>
+                        ) : null}
+                    </div>
+                    {agentSlots.length === 0 ? (
+                        <p className={styles['ready-summary']}>No AI players added.</p>
+                    ) : (
+                        <ul className={styles['roster']}>
+                            {agentSlots.map((slot) => (
+                                <li
+                                    className={styles['roster-row']}
+                                    data-slot-index={slot.slotIndex}
+                                    data-testid="tactics-lobby-ai-player"
+                                    key={`ai-${slot.slotIndex}`}
+                                >
+                                    <span
+                                        aria-hidden="true"
+                                        className={styles['ai-badge']}
+                                        data-testid={`tactics-ai-badge-${slot.slotIndex}`}
+                                    >
+                                        AI
+                                    </span>
+                                    <span className={styles['player-name']}>
+                                        AI Player {slot.slotIndex}
+                                    </span>
+                                    {isHost ? (
+                                        <Button
+                                            aria-label={`Remove AI Player ${slot.slotIndex}`}
+                                            data-testid={`tactics-remove-ai-${slot.slotIndex}`}
+                                            disabled={aiActionPending}
+                                            onClick={() => {
+                                                runAiAction(() => removeAiPlayer(slot.slotIndex));
+                                            }}
+                                            type="button"
+                                            variant="danger"
+                                        >
+                                            Remove
+                                        </Button>
+                                    ) : null}
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </section>
+            ) : null}
 
             <div className={styles['action-bar']} data-testid="lobby-action-bar">
                 <Button

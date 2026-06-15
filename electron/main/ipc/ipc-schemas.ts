@@ -252,6 +252,19 @@ export const SetPlayerAttributePayloadSchema = z
     .strict();
 
 /**
+ * Schema for the `{slotIndex}` payload accepted by `chimera:lobby:remove-ai`
+ * (host-only). `slotIndex` is a non-negative integer matching the slot index
+ * the host assigned when the AI was added (#724). `.strict()` rejects unknown
+ * keys at the boundary (§9.1). The companion `chimera:lobby:add-ai` channel
+ * takes no payload (the host assigns the next free slot index).
+ */
+export const RemoveAiPayloadSchema = z
+    .object({
+        slotIndex: z.number().int().nonnegative(),
+    })
+    .strict();
+
+/**
  * Schema for {@link SaveRequest} accepted by `chimera:saves:save`.
  * Typed via an explicit cast — see the schema header for why `satisfies`
  * cannot be used with `exactOptionalPropertyTypes` + `.optional()`.

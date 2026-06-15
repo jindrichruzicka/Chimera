@@ -165,6 +165,12 @@ export interface LobbyState {
      * every LobbyState broadcast. Optional and backward-compatible.
      */
     readonly matchSettings?: Record<string, string>;
+    /**
+     * Host-configured AI agent slots, synced to all clients so every peer sees
+     * the AI roster (F54 T3/T4, #723/#724). Optional and backward-compatible:
+     * absent on games with no AI and on older clients.
+     */
+    readonly agentSlots?: readonly LobbyAgentSlot[];
 }
 
 /** A browsable lobby entry returned by BrowsableProvider.listLobbies(). */

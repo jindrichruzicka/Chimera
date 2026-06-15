@@ -62,8 +62,12 @@ export const DEFAULT_BOARD_COLOR_HEX = '#3f3f46';
  */
 export const DEFAULT_PLAYER_COLOR_HEX = '#2563eb';
 
-/** Maximum seats this game's lobby admits. */
-const TACTICS_MAX_PLAYERS = 4;
+/**
+ * Maximum seats this game's lobby admits (humans + AI together). Exported so
+ * the lobby screen can gate the "Add AI player" control on total occupancy
+ * without re-hardcoding it (F54 T3, #723).
+ */
+export const TACTICS_MAX_PLAYERS = 4;
 
 /**
  * Build Tactics' lobby-setup descriptor from a loaded colour {@link palette}:

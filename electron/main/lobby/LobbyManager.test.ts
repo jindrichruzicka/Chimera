@@ -2383,6 +2383,135 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         await manager.closeLobby();
     });
 
+    describe('AI agent slots (#724)', () => {
+        it('addAi appends an AI slot to the synced lobby state and broadcasts it', async () => {
+            let capturedTransport: HostTransport | null = null;
+            const states: LobbyState[] = [];
+            const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+                onSessionHosted: (transport) => {
+                    capturedTransport = transport;
+                },
+                onLobbyStateChanged: (s) => states.push(s),
+            });
+            // maxPlayers 4 leaves room for the host (seat 0) plus AI slots.
+            await manager.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            const broadcastSpy = vi.spyOn(capturedTransport!, 'broadcastLobbyState');
+
+            await manager.addAi();
+
+            expect(manager.getCurrentState()?.agentSlots).toEqual([{ slotIndex: 1, kind: 'ai' }]);
+            expect(broadcastSpy).toHaveBeenCalledOnce();
+            expect(broadcastSpy.mock.calls[0]?.[0].agentSlots).toEqual([
+                { slotIndex: 1, kind: 'ai' },
+            ]);
+            expect(states[states.length - 1]?.agentSlots).toEqual([{ slotIndex: 1, kind: 'ai' }]);
+
+            await manager.closeLobby();
+        });
+
+        it('addAi assigns the lowest free slot index for successive AI players', async () => {
+            const manager = makeManager();
+            await manager.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            await manager.addAi();
+            await manager.addAi();
+
+            expect(manager.getCurrentState()?.agentSlots).toEqual([
+                { slotIndex: 1, kind: 'ai' },
+                { slotIndex: 2, kind: 'ai' },
+            ]);
+
+            await manager.closeLobby();
+        });
+
+        it('addAi rejects when the lobby is already full (humans + AI = maxPlayers)', async () => {
+            const manager = makeManager();
+            // maxPlayers 2: host (seat 0) + one AI fills the lobby.
+            await manager.hostLobby({ gameId: 'tactics', maxPlayers: 2 });
+
+            await manager.addAi();
+            await expect(manager.addAi()).rejects.toThrow(/full/i);
+
+            expect(manager.getCurrentState()?.agentSlots).toEqual([{ slotIndex: 1, kind: 'ai' }]);
+
+            await manager.closeLobby();
+        });
+
+        it('removeAi drops the AI slot from the synced lobby state and broadcasts it', async () => {
+            let capturedTransport: HostTransport | null = null;
+            const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+                onSessionHosted: (transport) => {
+                    capturedTransport = transport;
+                },
+            });
+            await manager.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            await manager.addAi();
+            const broadcastSpy = vi.spyOn(capturedTransport!, 'broadcastLobbyState');
+
+            await manager.removeAi(1);
+
+            // The key is dropped entirely once no AI slots remain.
+            expect(manager.getCurrentState()?.agentSlots).toBeUndefined();
+            expect(broadcastSpy).toHaveBeenCalledOnce();
+            expect(broadcastSpy.mock.calls[0]?.[0].agentSlots).toBeUndefined();
+
+            await manager.closeLobby();
+        });
+
+        it('addAi and removeAi reject from a joined (non-host) session', async () => {
+            const provider = makeProvider();
+            const hostManager = makeManager(provider);
+            const hostInfo = await hostManager.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            const joinManager = makeManager(provider);
+            await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+            await expect(joinManager.addAi()).rejects.toThrow(/only hosted sessions/i);
+            await expect(joinManager.removeAi(1)).rejects.toThrow(/only hosted sessions/i);
+
+            await joinManager.closeLobby();
+            await hostManager.closeLobby();
+        });
+
+        it('addAi and removeAi reject without an active session', async () => {
+            const manager = makeManager();
+            await expect(manager.addAi()).rejects.toThrow(/active session/i);
+            await expect(manager.removeAi(1)).rejects.toThrow(/active session/i);
+        });
+
+        it('a human join that would overflow maxPlayers auto-removes an AI, then seats the human', async () => {
+            const provider = makeProvider();
+            let hostState: LobbyState | null = null;
+            const hostManager = new LobbyManager(provider, createNoopLogger(), {
+                onLobbyStateChanged: (s) => {
+                    hostState = s;
+                },
+            });
+            // maxPlayers 2: host (seat 0) + one AI fills the lobby.
+            const hostInfo = await hostManager.hostLobby({ gameId: 'tactics', maxPlayers: 2 });
+            await hostManager.addAi();
+            expect(hostManager.getCurrentState()?.agentSlots).toEqual([
+                { slotIndex: 1, kind: 'ai' },
+            ]);
+
+            // A human joins: total would be host + human + AI = 3 > maxPlayers (2),
+            // so the most-recently-added AI is dropped before the human is seated.
+            const joinManager = makeManager(provider);
+            await joinManager.joinLobby({ address: hostInfo.sessionId });
+            const joinedId = joinManager.getLocalPlayerId();
+            // Allow the deferred host onPlayerJoined callback to fire.
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+            const finalState = hostState!;
+            expect(finalState.players.map((p) => p.playerId)).toContain(joinedId);
+            expect(finalState.players).toHaveLength(2);
+            expect(finalState.agentSlots ?? []).toEqual([]);
+
+            await joinManager.closeLobby();
+            await hostManager.closeLobby();
+        });
+    });
+
     it('joined client sets its own attribute and the host applies it to that seat and broadcasts to all clients', async () => {
         const provider = makeProvider();
 

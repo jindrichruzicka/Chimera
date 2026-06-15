@@ -123,9 +123,18 @@ const LobbyPlayerEntrySchema = z.object({
     ready: z.boolean(),
 });
 
+const LobbyAgentSlotSchema = z.object({
+    slotIndex: z.number().int().nonnegative(),
+    kind: z.enum(['human', 'ai']),
+    omniscient: z.boolean().optional(),
+});
+
 export const LobbyStateSchema = z.object({
     info: LobbyInfoSchema,
     players: z.array(LobbyPlayerEntrySchema).readonly(),
+    // Synced AI agent slots so a renderer reading the snapshot (e.g. on initial
+    // load / replay) sees the AI roster, not just the live `onUpdate` push (#724).
+    agentSlots: z.array(LobbyAgentSlotSchema).readonly().optional(),
 }) satisfies z.ZodType<LobbyState>;
 
 export const NullableLobbyStateSchema =

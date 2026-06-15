@@ -40,6 +40,8 @@ import {
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+    LOBBY_ADD_AI_CHANNEL,
+    LOBBY_REMOVE_AI_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
 } from '../../preload/apis/lobby-api.js';
 import { CONTENT_GET_COLLECTIONS_CHANNEL } from '../../preload/apis/content-api.js';
@@ -128,6 +130,7 @@ import {
     LobbyReadyStateSchema,
     SetMatchSettingPayloadSchema,
     SetPlayerAttributePayloadSchema,
+    RemoveAiPayloadSchema,
     ReplayExportIntentSchema,
     ReplayPathSchema,
     ReplaySnapshotRangeSchema,
@@ -172,6 +175,8 @@ export {
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+    LOBBY_ADD_AI_CHANNEL,
+    LOBBY_REMOVE_AI_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
@@ -587,6 +592,8 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             LOBBY_UPDATE_READY_STATE_CHANNEL,
             LOBBY_SET_MATCH_SETTING_CHANNEL,
             LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
+            LOBBY_ADD_AI_CHANNEL,
+            LOBBY_REMOVE_AI_CHANNEL,
         ],
     });
 
@@ -647,6 +654,21 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             payload,
         );
         return lobbyManager.setPlayerAttribute(validated.playerId, validated.key, validated.value);
+    });
+
+    // Host-only: append an AI agent slot. No payload — the host assigns the slot
+    // index; `LobbyManager` rejects non-host sessions and a full lobby (#724).
+    ipcMain.handle(LOBBY_ADD_AI_CHANNEL, () => {
+        return lobbyManager.addAi();
+    });
+
+    ipcMain.handle(LOBBY_REMOVE_AI_CHANNEL, (_event, payload) => {
+        const validated = parseInvokeRequest(
+            RemoveAiPayloadSchema,
+            LOBBY_REMOVE_AI_CHANNEL,
+            payload,
+        );
+        return lobbyManager.removeAi(validated.slotIndex);
     });
 }
 
