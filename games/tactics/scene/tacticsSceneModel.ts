@@ -51,6 +51,16 @@ export type TacticsSelectionIntent =
 
 export type ProjectedTacticsEntityFields = Readonly<{ readonly id: EntityId }>;
 
+/** Statically-known fields of a projected tactics player; the game-specific
+ * `stamina` field rides along at runtime and is narrowed defensively. */
+export type ProjectedTacticsPlayerFields = Readonly<{ readonly id: PlayerId }>;
+
+/** Renderer-facing stamina readout parsed from the projected player snapshot. */
+export interface TacticsStaminaReadout {
+    readonly current: number;
+    readonly max: number;
+}
+
 export interface TacticsSelectionIntentRequest {
     readonly units: readonly TacticsSceneUnit[];
     readonly localPlayerId: PlayerId | undefined;
@@ -156,6 +166,34 @@ export function parseTacticsSceneUnits(
     }
 
     return units;
+}
+
+/**
+ * Reads the viewer's own stamina from the projected `PlayerSnapshot.players`
+ * map (#721/#722). Stamina is owner-only: the projection gives the viewer their
+ * own `{ current, max }` and masks every other player to `null`. The generic
+ * projection type carries only `{ id }`, so the game-specific `stamina` field is
+ * narrowed defensively here — never recomputed from `GameSnapshot` (Invariant
+ * #3/#8). Returns `null` when the viewer has no entry, stamina is absent/masked
+ * (pre-#721 snapshots or a non-owner), or the values are malformed.
+ */
+export function parseTacticsViewerStamina(
+    players: Readonly<Record<PlayerId, ProjectedTacticsPlayerFields>>,
+    viewerId: PlayerId,
+): TacticsStaminaReadout | null {
+    const player = players[viewerId] as Readonly<Record<string, unknown>> | undefined;
+    const stamina = player?.['stamina'] as Readonly<Record<string, unknown>> | null | undefined;
+    if (stamina === null || stamina === undefined) {
+        return null;
+    }
+
+    const current = stamina['current'];
+    const max = stamina['max'];
+    if (!isInteger(current) || !isInteger(max)) {
+        return null;
+    }
+
+    return { current, max };
 }
 
 export function resolveTacticsSelectionIntent({

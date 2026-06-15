@@ -4,7 +4,12 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import {
+    gamePhase,
+    playerId,
+    type PlayerId,
+    type PlayerSnapshot,
+} from '@chimera/electron/preload/api-types.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 import { TacticsGameHud } from './TacticsGameHud';
 
@@ -30,12 +35,31 @@ afterEach(() => {
     delete (window as unknown as { __chimera?: unknown }).__chimera;
 });
 
-function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
+// The viewer's own stamina rides along on the projected player state at runtime
+// (#721). The generic `ObservedPlayerState` type is just `{ id }`, so tests cast
+// the richer projected shape into `players`, mirroring the board test's
+// `ProjectedUnitFixture` approach. `'absent'` models a pre-#721 snapshot with no
+// stamina field; `null` models a masked (non-owner) entry.
+interface ProjectedPlayerFixture {
+    readonly id: PlayerId;
+    readonly stamina?: { readonly current: number; readonly max: number } | null;
+}
+
+function makeSnapshot(
+    overrides: Partial<PlayerSnapshot> = {},
+    viewerStamina: { readonly current: number; readonly max: number } | null | 'absent' = {
+        current: 2,
+        max: 3,
+    },
+): PlayerSnapshot {
     const id = playerId('p1');
+    const player: ProjectedPlayerFixture =
+        viewerStamina === 'absent' ? { id } : { id, stamina: viewerStamina };
+    const players: Record<string, ProjectedPlayerFixture> = { [id]: player };
     return {
         tick: 7,
         viewerId: id,
-        players: { [id]: { id } },
+        players,
         entities: {},
         phase: gamePhase('playing'),
         events: [],
@@ -152,6 +176,44 @@ describe('TacticsGameHud', () => {
             'success',
         );
         expect(screen.getByTestId('tactics-turn-status')).toHaveTextContent('Your turn');
+    });
+
+    it("shows the local player's stamina as current/max while it is their turn", () => {
+        render(
+            <TacticsGameHud {...makeHudProps({ snapshot: makeSnapshot({ isMyTurn: true }) })} />,
+        );
+
+        expect(screen.getByTestId('hud-stamina')).toHaveTextContent('2/3');
+        // Active on the viewer's turn — not dimmed.
+        expect(screen.getByTestId('hud-stamina-group')).not.toHaveAttribute('data-dimmed');
+    });
+
+    it('keeps the stamina readout but dims it when it is not the local turn', () => {
+        render(
+            <TacticsGameHud
+                {...makeHudProps({
+                    snapshot: makeSnapshot({ isMyTurn: false }),
+                    endTurnDisabled: true,
+                })}
+            />,
+        );
+
+        expect(screen.getByTestId('hud-stamina')).toHaveTextContent('2/3');
+        expect(screen.getByTestId('hud-stamina-group')).toHaveAttribute('data-dimmed', 'true');
+    });
+
+    it('omits the stamina readout when the projected snapshot carries no viewer stamina', () => {
+        const { rerender } = render(
+            <TacticsGameHud {...makeHudProps({ snapshot: makeSnapshot({}, null) })} />,
+        );
+
+        // Masked (non-owner) → null stamina: nothing to show.
+        expect(screen.queryByTestId('hud-stamina')).toBeNull();
+        expect(screen.queryByTestId('hud-stamina-group')).toBeNull();
+
+        // Pre-#721 snapshot with no stamina field at all → still nothing to show.
+        rerender(<TacticsGameHud {...makeHudProps({ snapshot: makeSnapshot({}, 'absent') })} />);
+        expect(screen.queryByTestId('hud-stamina')).toBeNull();
     });
 
     it('marks the HUD as waiting when it is not the local turn', () => {

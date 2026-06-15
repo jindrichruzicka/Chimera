@@ -10,11 +10,13 @@ import {
     gridToWorldPoint,
     parseTacticsSceneUnit,
     parseTacticsSceneUnits,
+    parseTacticsViewerStamina,
     resolveTacticsBoardColor,
     resolveTacticsSelectionIntent,
     resolveTacticsUnitColor,
     worldToGridPoint,
     type ProjectedTacticsEntityFields,
+    type ProjectedTacticsPlayerFields,
     type TacticsSceneUnit,
 } from './tacticsSceneModel';
 
@@ -226,6 +228,72 @@ describe('tacticsSceneModel', () => {
                 target: { type: 'unit', unitId: unknownId },
             }),
         ).toEqual({ type: 'noop', reason: 'unknown-target' });
+    });
+});
+
+type ProjectedPlayerFixture = ProjectedTacticsPlayerFields & Readonly<Record<string, unknown>>;
+
+function projectedPlayers(
+    entries: Readonly<Record<string, unknown>>,
+): Readonly<Record<PlayerId, ProjectedTacticsPlayerFields>> {
+    return entries as Readonly<Record<PlayerId, ProjectedTacticsPlayerFields>>;
+}
+
+describe('parseTacticsViewerStamina', () => {
+    it("reads the viewer's own projected stamina as { current, max }", () => {
+        const players = projectedPlayers({
+            [LOCAL_PLAYER]: {
+                id: LOCAL_PLAYER,
+                stamina: { current: 2, max: 3 },
+            } satisfies ProjectedPlayerFixture,
+            [OPPONENT_PLAYER]: {
+                id: OPPONENT_PLAYER,
+                stamina: null,
+            } satisfies ProjectedPlayerFixture,
+        });
+
+        expect(parseTacticsViewerStamina(players, LOCAL_PLAYER)).toEqual({ current: 2, max: 3 });
+    });
+
+    it('returns null when the viewer has no entry in the projected players map', () => {
+        const players = projectedPlayers({
+            [OPPONENT_PLAYER]: {
+                id: OPPONENT_PLAYER,
+                stamina: { current: 1, max: 3 },
+            } satisfies ProjectedPlayerFixture,
+        });
+
+        expect(parseTacticsViewerStamina(players, LOCAL_PLAYER)).toBeNull();
+    });
+
+    it('returns null when stamina is masked to null or absent (non-owner / pre-#721 snapshot)', () => {
+        const masked = projectedPlayers({
+            [LOCAL_PLAYER]: { id: LOCAL_PLAYER, stamina: null } satisfies ProjectedPlayerFixture,
+        });
+        const absent = projectedPlayers({
+            [LOCAL_PLAYER]: { id: LOCAL_PLAYER } satisfies ProjectedPlayerFixture,
+        });
+
+        expect(parseTacticsViewerStamina(masked, LOCAL_PLAYER)).toBeNull();
+        expect(parseTacticsViewerStamina(absent, LOCAL_PLAYER)).toBeNull();
+    });
+
+    it('returns null for malformed stamina values instead of rendering them', () => {
+        const fractional = projectedPlayers({
+            [LOCAL_PLAYER]: {
+                id: LOCAL_PLAYER,
+                stamina: { current: 1.5, max: 3 },
+            } satisfies ProjectedPlayerFixture,
+        });
+        const nonNumeric = projectedPlayers({
+            [LOCAL_PLAYER]: {
+                id: LOCAL_PLAYER,
+                stamina: { current: 2, max: 'three' },
+            } satisfies ProjectedPlayerFixture,
+        });
+
+        expect(parseTacticsViewerStamina(fractional, LOCAL_PLAYER)).toBeNull();
+        expect(parseTacticsViewerStamina(nonNumeric, LOCAL_PLAYER)).toBeNull();
     });
 });
 

@@ -12,6 +12,7 @@ import {
     type BadgeVariant,
 } from '@chimera/renderer/components/ui/index.js';
 import { ChatPanel } from '@chimera/renderer/components/chat';
+import { parseTacticsViewerStamina } from '../scene/tacticsSceneModel.js';
 
 interface TacticsTurnStatus {
     readonly label: string;
@@ -36,6 +37,9 @@ export function TacticsGameHud({
     handleEndTurn,
 }: GameHudProps): React.ReactElement {
     const turnStatus = resolveTacticsTurnStatus(snapshot.isMyTurn);
+    // Owner-only stamina projected on the viewer's player state (#721/#722).
+    // Null when the projection carries no stamina (pre-#721 save) — render nothing.
+    const stamina = parseTacticsViewerStamina(snapshot.players, snapshot.viewerId);
     const [chatOpen, setChatOpen] = useState<boolean>(false);
 
     return (
@@ -63,6 +67,28 @@ export function TacticsGameHud({
                                     {tick}
                                 </output>
                             </div>
+                            {/* Local player's remaining stamina (current/max). Shown while
+                                it is their turn; dimmed (not hidden) otherwise so the HUD
+                                layout stays stable and the value remains readable. Absent
+                                entirely when the projection carries no stamina. */}
+                            {stamina !== null && (
+                                <div
+                                    data-dimmed={snapshot.isMyTurn ? undefined : 'true'}
+                                    data-testid="hud-stamina-group"
+                                    style={
+                                        snapshot.isMyTurn
+                                            ? tacticsHudStaminaGroupStyle
+                                            : tacticsHudStaminaGroupDimmedStyle
+                                    }
+                                >
+                                    <Caption style={tacticsHudLabelStyle} tone="muted">
+                                        Stamina
+                                    </Caption>
+                                    <output data-testid="hud-stamina" style={tacticsHudTickStyle}>
+                                        {stamina.current}/{stamina.max}
+                                    </output>
+                                </div>
+                            )}
                         </div>
                         <Divider
                             data-testid="tactics-hud-divider"
@@ -182,6 +208,17 @@ const tacticsHudTickGroupStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'baseline',
     gap: 'var(--ch-space-xs)',
+};
+
+const tacticsHudStaminaGroupStyle: React.CSSProperties = {
+    display: 'flex',
+    alignItems: 'baseline',
+    gap: 'var(--ch-space-xs)',
+};
+
+const tacticsHudStaminaGroupDimmedStyle: React.CSSProperties = {
+    ...tacticsHudStaminaGroupStyle,
+    opacity: 'var(--ch-opacity-disabled)',
 };
 
 const tacticsHudLabelStyle: React.CSSProperties = {

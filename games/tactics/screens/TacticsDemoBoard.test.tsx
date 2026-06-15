@@ -436,6 +436,42 @@ describe('TacticsDemoBoard', () => {
         expect(sendAction).not.toHaveBeenCalled();
     });
 
+    it('clears renderer-local selection when the match ends while a unit is selected', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ isMyTurn: true })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        const localUnit = screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`);
+        fireEvent.click(localUnit);
+        expect(localUnit).toHaveAttribute('data-selected', 'true');
+
+        // The board goes non-interactive on game end (result + ended phase), so the
+        // active selection must be dropped even though it is still "my turn".
+        const ended = {
+            ...makeSnapshot({ isMyTurn: true }),
+            phase: gamePhase('ended'),
+            gameResult: { winnerIds: [playerId('p2')] },
+        } satisfies PlayerSnapshot;
+        rerender(
+            <TacticsDemoBoard
+                snapshot={ended}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        expect(sendAction).not.toHaveBeenCalled();
+    });
+
     it('dispatches a reveal when the selected local primitive requests reveal on an adjacent tile', () => {
         const localPlayerId = playerId('p1');
         const sendAction = vi.fn();
