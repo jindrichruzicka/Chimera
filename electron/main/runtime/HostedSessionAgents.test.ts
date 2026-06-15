@@ -12,11 +12,17 @@ import {
     gamePhase,
     entityId,
     sceneId,
+    type ActionEnvelope,
     type BaseGameSnapshot,
 } from '@chimera/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import { DefaultStateProjector } from '@chimera/simulation/projection/index.js';
+import { createTacticsAIState } from '@chimera/ai/policies/tactics/tacticsPolicy.js';
+import { registerTacticsActions } from '@chimera/games/tactics/actions.js';
+import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
+import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,
@@ -132,6 +138,122 @@ describe('buildDefaultAIPlayerAgent', () => {
 
         // Verify we've completed a multi-turn cycle without errors
         expect(snapshot.turnNumber).toBeGreaterThanOrEqual(4);
+    });
+});
+
+describe('buildDefaultAIPlayerAgent with the tactics policy (issue #725)', () => {
+    const aiUnit = entityId('ai-unit');
+    const enemyUnit = entityId('enemy-unit');
+
+    function makeTacticsSnapshot(enemy: {
+        readonly x: number;
+        readonly y: number;
+        readonly visibleToAI: boolean;
+    }): BaseGameSnapshot {
+        const entities = {
+            [aiUnit]: {
+                id: aiUnit,
+                kind: 'unit',
+                ownerId: aiPlayerId,
+                x: 0,
+                y: 0,
+                hp: 1,
+                visibleTo: [aiPlayerId],
+            },
+            [enemyUnit]: {
+                id: enemyUnit,
+                kind: 'unit',
+                ownerId: humanPlayerId,
+                x: enemy.x,
+                y: enemy.y,
+                hp: 1,
+                visibleTo: enemy.visibleToAI ? [humanPlayerId, aiPlayerId] : [humanPlayerId],
+            },
+        } as unknown as BaseGameSnapshot['entities'];
+        return {
+            tick: 0,
+            seed: 99,
+            players: {
+                [aiPlayerId]: { id: aiPlayerId },
+                [humanPlayerId]: { id: humanPlayerId },
+            },
+            entities,
+            phase: gamePhase('playing'),
+            events: [],
+            turnNumber: 0,
+            hostPlayerId: aiPlayerId,
+            turnClock: { activePlayerId: aiPlayerId, deadlineMs: 30_000 },
+            timers: {},
+            gameResult: null,
+        };
+    }
+
+    function makeTacticsRuntime(initialSnapshot: BaseGameSnapshot): {
+        readonly runtime: SessionRuntime;
+        readonly projector: DefaultStateProjector;
+    } {
+        const registry = new ActionRegistry();
+        registerEngineActions(registry);
+        registerTacticsActions(registry);
+        const { processAction } = buildHostSessionPipeline(registry, vi.fn());
+        const runtime = new SessionRuntime({
+            gameId: 'tactics',
+            gameVersion: '0.1.0',
+            initialSnapshot,
+            applyAction: processAction,
+            now: () => 1_000,
+        });
+        return { runtime, projector: new DefaultStateProjector(tacticsVisibilityRules) };
+    }
+
+    it('attacks an adjacent visible enemy through the real host ActionPipeline', () => {
+        const { runtime, projector } = makeTacticsRuntime(
+            makeTacticsSnapshot({ x: 1, y: 0, visibleToAI: true }),
+        );
+        const agent = buildDefaultAIPlayerAgent({
+            playerId: aiPlayerId,
+            initialSnapshot: runtime.getSnapshot(),
+            dispatch: (action) => runtime.applyAction(action),
+            logger: createNoopLogger(),
+            createState: createTacticsAIState,
+        });
+
+        const projected = projector.project(runtime.getSnapshot(), aiPlayerId);
+        agent.onTick(projected, projected.tick);
+
+        const enemy = runtime.getSnapshot().entities[enemyUnit] as unknown as {
+            readonly hp: number;
+        };
+        expect(enemy.hp).toBe(0);
+    });
+
+    it('respects stamina (3 actions) then ends the turn when no enemy is in reach (AC4)', () => {
+        const { runtime, projector } = makeTacticsRuntime(
+            // Enemy parked in the far corner and not visible to the AI: it wanders.
+            makeTacticsSnapshot({ x: 3, y: -2, visibleToAI: false }),
+        );
+        const dispatched: ActionEnvelope[] = [];
+        const agent = buildDefaultAIPlayerAgent({
+            playerId: aiPlayerId,
+            initialSnapshot: runtime.getSnapshot(),
+            dispatch: (action) => {
+                dispatched.push(action);
+                runtime.applyAction(action);
+            },
+            logger: createNoopLogger(),
+            createState: createTacticsAIState,
+        });
+
+        // Drive enough idle ticks to exhaust stamina and pass the turn.
+        for (let i = 0; i < 6; i += 1) {
+            const projected = projector.project(runtime.getSnapshot(), aiPlayerId);
+            agent.onTick(projected, projected.tick);
+        }
+
+        const moves = dispatched.filter((action) => action.type === TACTICS_MOVE_UNIT_ACTION);
+        expect(moves).toHaveLength(3); // exactly the per-turn stamina budget
+        expect(dispatched.some((action) => action.type === 'engine:end_turn')).toBe(true);
+        expect(runtime.getSnapshot().turnClock?.activePlayerId).toBe(humanPlayerId);
     });
 });
 

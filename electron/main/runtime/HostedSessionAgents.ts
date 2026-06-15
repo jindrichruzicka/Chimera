@@ -49,6 +49,13 @@ export interface BuildDefaultAIPlayerAgentOptions {
     readonly dispatch: (action: ActionEnvelope) => void;
     readonly logger: Logger;
     readonly omniscient?: boolean;
+    /**
+     * Optional factory for the AI's initial state. Defaults to the generic
+     * `engine:auto-end-turn` policy; a game (via its {@link MainGameContribution})
+     * supplies a move/attack brain here. The factory comes from the pure `ai/`
+     * policy package — this composition seam never imports a game directly.
+     */
+    readonly createState?: ((playerId: PlayerId) => AIState) | undefined;
 }
 
 const DEFAULT_AI_STATE = 'engine:auto-end-turn';
@@ -138,9 +145,11 @@ export function buildDefaultAIPlayerAgent(options: BuildDefaultAIPlayerAgentOpti
     const stateMachine = new AIStateMachineImpl({ logger: options.logger });
     const scheduler = new CommandSchedulerImpl();
     const context = new CommandContextImpl(options.dispatch, () => undefined, options.logger);
-    stateMachine.registerState(createAutoEndTurnState(options.playerId));
+    const createState = options.createState ?? createAutoEndTurnState;
+    const initialState = createState(options.playerId);
+    stateMachine.registerState(initialState);
     stateMachine.setInitialState(
-        DEFAULT_AI_STATE,
+        initialState.name,
         {
             ...options.initialSnapshot,
             viewerId: options.playerId,

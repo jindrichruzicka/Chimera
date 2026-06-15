@@ -8,10 +8,19 @@ import { describe, expect, it } from 'vitest';
 
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+import { entityId, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
+import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
+import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import type { CommandContext } from '@chimera/ai/engine/CommandContext.js';
+import type { CommandScheduler } from '@chimera/ai/engine/CommandScheduler.js';
+import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
-import { TACTICS_GAME_ID, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
+import {
+    TACTICS_ATTACK_ACTION,
+    TACTICS_GAME_ID,
+    TACTICS_MOVE_UNIT_ACTION,
+} from '@chimera/shared/tactics.js';
 
 import type { SettingsManager } from '../settings/SettingsManager.js';
 import {
@@ -80,5 +89,35 @@ describe('mainGameRegistry', () => {
         expect(hostedGame.resolveFirstPlayer({ hostPlayerId: host, firstPlayer: chosen })).toBe(
             chosen,
         );
+    });
+
+    it('contributes a tactics AI state that emits tactics actions (issue #725)', () => {
+        const ai = toPlayerId('ai-x');
+        const enemy = toPlayerId('enemy-x');
+        const myUnit = entityId('u-ai');
+        const enemyUnit = entityId('u-enemy');
+        const snapshot = {
+            ...makeStubPlayerSnapshot(1),
+            viewerId: ai,
+            isMyTurn: true,
+            entities: {
+                [myUnit]: { id: myUnit, kind: 'unit', ownerId: ai, x: 0, y: 0, hp: 1 },
+                [enemyUnit]: { id: enemyUnit, kind: 'unit', ownerId: enemy, x: 1, y: 0, hp: 1 },
+            },
+            players: { [ai]: { id: ai }, [enemy]: { id: enemy } },
+        } as unknown as PlayerSnapshot;
+
+        const state = hostedGame.createAIState?.(ai);
+        expect(state?.name).toBe('tactics:auto-play');
+
+        const dispatched: EngineAction[] = [];
+        const context: CommandContext = {
+            dispatch: (action) => dispatched.push(action),
+            transitionState: () => undefined,
+        };
+        state?.onIdle(snapshot, snapshot.tick, {}, {} as unknown as CommandScheduler, context);
+
+        expect(dispatched).toHaveLength(1);
+        expect(dispatched[0]?.type).toBe(TACTICS_ATTACK_ACTION);
     });
 });

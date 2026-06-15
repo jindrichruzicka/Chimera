@@ -23,6 +23,8 @@
  * Architecture: §4.8 Content Database, §4.13 Settings, §4.6/§8 Projection.
  */
 
+import type { AIState } from '@chimera/ai/engine/AIState.js';
+import { createTacticsAIState } from '@chimera/ai/policies/tactics/tacticsPolicy.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import type { VisibilityRules } from '@chimera/simulation/projection/index.js';
@@ -57,6 +59,13 @@ export interface MainGameContribution {
     readonly visibilityRules: VisibilityRules;
     /** Resolve the first player for a new match. */
     readonly resolveFirstPlayer: (config: FirstPlayerConfig) => PlayerId;
+    /**
+     * Optional factory for the game's AI brain state. When present, hosted AI
+     * slots run this policy (composed in {@link buildDefaultAIPlayerAgent})
+     * instead of the generic `engine:auto-end-turn` fallback. The factory lives
+     * in the pure `ai/` policy package; this registry only wires it.
+     */
+    readonly createAIState?: (playerId: PlayerId) => AIState;
 }
 
 /**
@@ -70,6 +79,7 @@ const tacticsContribution: MainGameContribution = {
     registerSettings: (manager) => manager.registerSchema(tacticsSettingsSchema),
     visibilityRules: tacticsVisibilityRules,
     resolveFirstPlayer: resolveTacticsFirstPlayer,
+    createAIState: createTacticsAIState,
 };
 
 /**

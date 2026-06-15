@@ -1619,6 +1619,7 @@ export async function main(): Promise<void> {
                             },
                             logger: lobbyLogger,
                             omniscient: agentSlot.omniscient ?? false,
+                            createState: hostedGame.createAIState,
                         }),
                     );
                     return;
