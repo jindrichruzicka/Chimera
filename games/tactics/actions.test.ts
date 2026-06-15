@@ -31,6 +31,7 @@ import {
 } from './actions.js';
 import { buildInitialTacticsEntities } from './entities.js';
 import { parseTacticsSceneUnits } from './scene/tacticsSceneModel.js';
+import type { TacticsSnapshot, TacticsStaminaEntry } from './stamina.js';
 import { tacticsVisibilityRules } from './visibility-rules.js';
 
 const P1 = playerId('player-1');
@@ -506,6 +507,92 @@ describe('tactics move unit action', () => {
         };
 
         expect(definition?.resolveGameResult?.(defeated)).toEqual({ winnerIds: [P1] });
+    });
+});
+
+describe('tactics stamina cost and gating', () => {
+    function makeReduceContext(snapshot: BaseGameSnapshot): GameReduceContext {
+        return { rng: createRng(snapshot.seed, snapshot.tick), dispatchDepth: 0 };
+    }
+
+    function withStamina(
+        snapshot: BaseGameSnapshot,
+        ledger: Readonly<Record<string, TacticsStaminaEntry>>,
+    ): TacticsSnapshot {
+        return { ...snapshot, playerStamina: ledger };
+    }
+
+    function staminaOf(snapshot: BaseGameSnapshot, id: typeof P1): TacticsStaminaEntry | undefined {
+        return (snapshot as TacticsSnapshot).playerStamina?.[id];
+    }
+
+    it('move reduce spends one stamina for the acting player without mutating input', () => {
+        const snapshot = makeSnapshot();
+        const payload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 1, y: 0 });
+
+        const next = tacticsMoveUnitDefinition.reduce(
+            snapshot,
+            payload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(staminaOf(next, P1)).toEqual({ current: 2, max: 3, refreshedTurn: 0 });
+        expect(staminaOf(snapshot, P1)).toBeUndefined();
+    });
+
+    it('attack reduce spends one stamina for the acting player', () => {
+        const snapshot = makeSnapshot({ enemyVisibleToP1: true });
+        const payload = tacticsAttackDefinition.parsePayload({
+            attackerId: UNIT,
+            defenderId: ENEMY_UNIT,
+        });
+
+        const next = tacticsAttackDefinition.reduce(
+            snapshot,
+            payload,
+            P1,
+            makeReduceContext(snapshot),
+        );
+
+        expect(staminaOf(next, P1)).toEqual({ current: 2, max: 3, refreshedTurn: 0 });
+    });
+
+    it('move validate rejects with insufficient_stamina at zero stamina', () => {
+        const snapshot = withStamina(makeSnapshot(), {
+            [P1]: { current: 0, max: 3, refreshedTurn: 0 },
+        });
+        const payload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 1, y: 0 });
+
+        expect(
+            tacticsMoveUnitDefinition.validate(payload, snapshot, P1, makeReduceContext(snapshot)),
+        ).toEqual({ ok: false, reason: 'insufficient_stamina' });
+    });
+
+    it('attack validate rejects with insufficient_stamina at zero stamina', () => {
+        const snapshot = withStamina(makeSnapshot({ enemyVisibleToP1: true }), {
+            [P1]: { current: 0, max: 3, refreshedTurn: 0 },
+        });
+        const payload = tacticsAttackDefinition.parsePayload({
+            attackerId: UNIT,
+            defenderId: ENEMY_UNIT,
+        });
+
+        expect(
+            tacticsAttackDefinition.validate(payload, snapshot, P1, makeReduceContext(snapshot)),
+        ).toEqual({ ok: false, reason: 'insufficient_stamina' });
+    });
+
+    it('move validate allows the first action of a refreshed turn', () => {
+        const snapshot = withStamina(
+            { ...makeSnapshot(), turnNumber: 2 },
+            { [P1]: { current: 0, max: 3, refreshedTurn: 0 } },
+        );
+        const payload = tacticsMoveUnitDefinition.parsePayload({ unitId: UNIT, x: 1, y: 0 });
+
+        expect(
+            tacticsMoveUnitDefinition.validate(payload, snapshot, P1, makeReduceContext(snapshot)),
+        ).toEqual({ ok: true });
     });
 });
 

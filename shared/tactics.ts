@@ -3,6 +3,15 @@ export const TACTICS_MOVE_UNIT_ACTION = 'tactics:move_unit';
 export const TACTICS_ATTACK_ACTION = 'tactics:attack';
 export const TACTICS_REVEAL_TILE_ACTION = 'tactics:reveal_tile';
 export const TACTICS_DEFAULT_UNIT_ID_VALUE = 'unit-1';
+
+/**
+ * Per-player stamina budget. Each player starts a turn with this many stamina
+ * and spends 1 per `tactics:move_unit` / `tactics:attack`; `max === default`.
+ * Stamina is deterministic `GameSnapshot` state derived solely from actions
+ * (no clock/RNG — Invariant #43). Integer only.
+ */
+export const TACTICS_MAX_STAMINA = 3;
+
 export const TACTICS_PROXIMITY_REVEAL_RANGE_TILES = 1;
 export const TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED =
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES * TACTICS_PROXIMITY_REVEAL_RANGE_TILES;

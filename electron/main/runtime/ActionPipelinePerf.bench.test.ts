@@ -31,6 +31,7 @@ import type {
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 import { registerTacticsActions } from '@chimera/games/tactics/actions.js';
 import { buildInitialTacticsEntities } from '@chimera/games/tactics/entities.js';
+import { withSeededStamina } from '@chimera/games/tactics/stamina.js';
 import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
@@ -62,10 +63,22 @@ const SEATS: readonly PlayerId[] = [
     toPlayerId('p4'),
 ];
 
+/**
+ * Effectively-unbounded per-seat stamina pool for the benchmark. The move_unit
+ * run hammers one seat's unit ~12k times within a single turn — far past the
+ * 3-per-turn cap (#721) — so we seed an ample budget to isolate the heaviest
+ * reducer's cost from the stamina gate (which has its own unit tests). With no
+ * `turnClock` there is no turn-start refresh; current simply never reaches 0
+ * across the run. engine:tick/heap runs don't spend stamina, so this is inert
+ * for them. Seeded via the tactics public API — no coupling to its internal
+ * ledger shape.
+ */
+const BENCH_STAMINA = 1_000_000;
+
 /** Build the heaviest realistic tactics board: the full 4-seat roster. */
 function makeMidMatchSnapshot(): BaseGameSnapshot {
     const players = Object.fromEntries(SEATS.map((id) => [id, { id }]));
-    return {
+    const base: BaseGameSnapshot = {
         tick: 0,
         seed: 42,
         players,
@@ -76,6 +89,7 @@ function makeMidMatchSnapshot(): BaseGameSnapshot {
         timers: {},
         gameResult: null,
     };
+    return withSeededStamina(base, SEATS, BENCH_STAMINA);
 }
 
 function makePipeline(): ActionPipeline {

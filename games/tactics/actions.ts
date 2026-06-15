@@ -17,6 +17,8 @@ import type {
 } from '@chimera/simulation/engine/types.js';
 import { entityId } from '@chimera/simulation/engine/types.js';
 import { buildInitialTacticsEntities } from './entities.js';
+import type { TacticsSnapshot } from './stamina.js';
+import { consumeStamina, readStamina } from './stamina.js';
 
 export { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION, TACTICS_REVEAL_TILE_ACTION };
 
@@ -222,6 +224,9 @@ export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload,
             if (unit.ownerId !== playerId) {
                 return { ok: false, reason: 'not_unit_owner' };
             }
+            if (readStamina(state, playerId).current <= 0) {
+                return { ok: false, reason: 'insufficient_stamina' };
+            }
             return { ok: true };
         },
 
@@ -240,12 +245,14 @@ export const tacticsMoveUnitDefinition: ActionDefinition<TacticsMoveUnitPayload,
                 [payload.unitId]: movedUnit,
             };
 
-            return {
+            const next: TacticsSnapshot = {
                 ...state,
                 tick: state.tick + 1,
                 entities: revealNearbyOpponentUnits(movedEntities, movedUnit, playerId),
+                playerStamina: consumeStamina(state, playerId),
                 events: [...state.events, { type: TACTICS_MOVE_UNIT_ACTION }],
             };
+            return next;
         },
     };
 
@@ -288,16 +295,19 @@ export const tacticsAttackDefinition: ActionDefinition<TacticsAttackPayload, Bas
         if (!areAdjacent(attacker, defender)) {
             return { ok: false, reason: 'defender_not_adjacent' };
         }
+        if (readStamina(state, playerId).current <= 0) {
+            return { ok: false, reason: 'insufficient_stamina' };
+        }
         return { ok: true };
     },
 
-    reduce(state, payload): BaseGameSnapshot {
+    reduce(state, payload, playerId): BaseGameSnapshot {
         const defender = state.entities[payload.defenderId];
         if (!isTacticsUnitEntity(defender)) {
             return state;
         }
 
-        return {
+        const next: TacticsSnapshot = {
             ...state,
             tick: state.tick + 1,
             entities: {
@@ -307,8 +317,10 @@ export const tacticsAttackDefinition: ActionDefinition<TacticsAttackPayload, Bas
                     hp: defender.hp <= 0 ? 0 : defender.hp - 1,
                 },
             },
+            playerStamina: consumeStamina(state, playerId),
             events: [...state.events, { type: TACTICS_ATTACK_ACTION }],
         };
+        return next;
     },
 };
 

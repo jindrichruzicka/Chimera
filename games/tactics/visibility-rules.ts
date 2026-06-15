@@ -15,7 +15,9 @@ import type {
     BasePlayerState,
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/types.js';
+import type { ObservedEntityState, VisibilityRules } from '@chimera/simulation/projection/types.js';
+import type { TacticsObservedPlayer } from './stamina.js';
+import { readStamina } from './stamina.js';
 
 interface TacticsVisibleUnit extends BaseEntityState {
     readonly kind: 'unit';
@@ -41,7 +43,9 @@ function isTacticsVisibleUnit(entity: BaseEntityState): entity is TacticsVisible
 export const tacticsVisibilityRules: VisibilityRules<
     BaseGameSnapshot,
     BaseEntityState,
-    BasePlayerState
+    BasePlayerState,
+    ObservedEntityState<BaseEntityState>,
+    TacticsObservedPlayer
 > = {
     isEntityVisible(entity, viewer): boolean {
         if (!isTacticsVisibleUnit(entity)) {
@@ -57,8 +61,14 @@ export const tacticsVisibilityRules: VisibilityRules<
         }
         return entity;
     },
-    maskPlayerState(player): BasePlayerState {
-        return player;
+    // Owner-only stamina (#721): the viewer reads their own remaining moves so
+    // the HUD can show them; every other player's stamina is masked to null —
+    // an opponent's budget is irrelevant to the viewer and never leaves the host.
+    maskPlayerState(player, viewer, state): TacticsObservedPlayer {
+        if (player.id === viewer) {
+            return { ...player, stamina: readStamina(state, viewer) };
+        }
+        return { ...player, stamina: null };
     },
     filterEvents(events) {
         return events;

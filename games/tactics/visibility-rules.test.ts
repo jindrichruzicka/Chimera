@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TACTICS_MAX_STAMINA } from '@chimera/shared/tactics.js';
 import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import type {
     BaseEntityState,
@@ -84,8 +85,18 @@ describe('tacticsVisibilityRules', () => {
         expect(masked).not.toHaveProperty('visibleTo');
     });
 
-    it('passes player state through unchanged', () => {
-        expect(tacticsVisibilityRules.maskPlayerState(player, PLAYER_B, snapshot)).toBe(player);
+    it('exposes the viewer their own stamina', () => {
+        expect(tacticsVisibilityRules.maskPlayerState(player, PLAYER_A, snapshot)).toEqual({
+            id: PLAYER_A,
+            stamina: { current: TACTICS_MAX_STAMINA, max: TACTICS_MAX_STAMINA },
+        });
+    });
+
+    it('masks another player stamina to null (owner-only)', () => {
+        expect(tacticsVisibilityRules.maskPlayerState(player, PLAYER_B, snapshot)).toEqual({
+            id: PLAYER_A,
+            stamina: null,
+        });
     });
 
     it('does not filter current tactics events', () => {
