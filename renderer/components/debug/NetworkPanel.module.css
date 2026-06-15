@@ -35,9 +35,9 @@
 
 .addressRow {
     align-items: center;
+    align-self: flex-start;
     display: flex;
     gap: var(--ch-space-sm);
-    justify-content: space-between;
 }
 
 .mono {
