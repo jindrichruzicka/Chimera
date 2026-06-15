@@ -23,8 +23,31 @@ import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
+// F49 / #715 — §13.4 renderer-heap budget during replay playback, from the single
+// source of truth. Imported by relative path (not the @chimera/* alias, which the
+// Playwright spec runner does not resolve) so the gate can never drift;
+// shared/perf-budget.test.ts locks the canonical value. Replay reuses the live
+// ActionPipeline (Inv #42/#70), so its renderer-side heap must stay within the
+// same budget as a live match. Strict locally / under CHIMERA_PERF_STRICT=1,
+// informational on CI.
+import { RENDERER_HEAP_BUDGET_MB } from '../../shared/perf-budget';
 
 const TACTICS_GAME_ID = 'tactics';
+
+const PERF_STRICT = process.env['CHIMERA_PERF_STRICT'] === '1' || process.env['CI'] === undefined;
+
+/** Read the renderer heap in MB exactly as perfStore.readHeapMb() does. */
+async function readReplayHeapMb(window: Page): Promise<number | null> {
+    return window.evaluate(() => {
+        const mem = (performance as unknown as Record<string, unknown>)['memory'] as
+            | { usedJSHeapSize: number }
+            | undefined;
+        if (mem === undefined || typeof mem.usedJSHeapSize !== 'number') {
+            return null;
+        }
+        return mem.usedJSHeapSize / (1024 * 1024);
+    });
+}
 
 // ── Renderer bridge shapes (window.__chimera) ────────────────────────────────
 // The preload exposes these on `globalThis.__chimera`. The e2e root tsconfig is
@@ -255,5 +278,43 @@ test.describe('Tactics replay lifecycle', () => {
         );
         expect(typeof replaySnapshot.viewerId).toBe('string');
         expect(replaySnapshot.gameResult?.winnerIds).toEqual(liveResult?.winnerIds);
+    });
+
+    test('replay playback keeps the renderer heap within the §13.4 budget', async ({
+        hostWindow,
+    }) => {
+        const hostGame = new GamePage(hostWindow);
+        await playToGameOver(hostGame);
+        await goToPostGameSummary(hostWindow, hostGame);
+
+        // Open the finished match in the replay player and advance to the end, so
+        // the full action list + reconstructed snapshots are resident in the
+        // renderer — the residency the heap budget guards.
+        await hostGame.replayButton.click();
+        const player = new ReplayPlayerPage(hostWindow);
+        await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+        await player.seekToPenultimateTick();
+        await player.play();
+        await player.waitForFinalTick();
+
+        const heapMb = await readReplayHeapMb(hostWindow);
+
+        console.log(
+            `[perf] renderer heap (replay playback): ` +
+                `${heapMb === null ? 'unavailable' : `${heapMb.toFixed(1)}MB`} ` +
+                `(budget ${RENDERER_HEAP_BUDGET_MB}MB, strict=${PERF_STRICT})`,
+        );
+
+        test.skip(heapMb === null, 'performance.memory unavailable in this Chromium build');
+
+        const label = `replay renderer heap ${(heapMb ?? 0).toFixed(1)}MB ≤ ${RENDERER_HEAP_BUDGET_MB}MB`;
+        if (PERF_STRICT) {
+            expect(heapMb ?? Infinity, label).toBeLessThanOrEqual(RENDERER_HEAP_BUDGET_MB);
+        } else {
+            if ((heapMb ?? Infinity) > RENDERER_HEAP_BUDGET_MB) {
+                console.warn(`[perf][CI-informational] ${label} exceeded`);
+            }
+            expect.soft(heapMb ?? Infinity, label).toBeLessThanOrEqual(RENDERER_HEAP_BUDGET_MB);
+        }
     });
 });

@@ -32,3 +32,12 @@ tags: [performance, simulation, IPC, renderer, memory, useMemo, selectors, codin
 | ----------------- | --------------------------- |
 | Main process heap | ≤ 32 MB during active match |
 | Renderer heap     | ≤ 32 MB during active match |
+
+## 13.5 Enforcement (F49)
+
+The §13.1 and §13.4 budgets are constants in [`shared/perf-budget.ts`](../../shared/perf-budget.ts) (`TICK_BUDGET_MS`, `RENDERER_HEAP_BUDGET_MB`, `MAIN_HEAP_BUDGET_MB`) and are exercised by:
+
+- **Main-process tick + heap** — [`electron/main/runtime/ActionPipelinePerf.bench.test.ts`](../../electron/main/runtime/ActionPipelinePerf.bench.test.ts) drives `ActionPipeline.process()` (the shared live + replay hot path, Invariants #42/#70) and a long-run heap-growth check. Run with `npm run test:perf` (sets `--expose-gc` so the main-heap leak gate activates). The benchmark must live under `electron/main/`, not `simulation/`, because `performance.now` is ESLint-banned in the simulation hot path (Invariant #43).
+- **Renderer heap** — [`e2e/tests/perf-renderer-heap.spec.ts`](../../e2e/tests/perf-renderer-heap.spec.ts) (live match) and the replay-playback assertion in [`e2e/tests/replay.spec.ts`](../../e2e/tests/replay.spec.ts), both reading `performance.memory.usedJSHeapSize` the same way `perfStore.readHeapMb()` does.
+
+Gating policy: assertions are **strict locally / under `CHIMERA_PERF_STRICT=1`** and **informational on CI** (CI runners are ~an order of magnitude slower); the measured numbers are always logged so the baseline is visible on every run.
