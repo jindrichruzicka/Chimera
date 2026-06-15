@@ -338,6 +338,20 @@ export default tseslint.config(
         },
     },
 
+    // Main-process game boundary — electron/main core must stay agnostic of which
+    // games exist (packaged, multi-game builds, F18). Only the composition
+    // registries (mainGameRegistry / gameContentRegistry / lobbySetupRegistry) may
+    // import `games/*`; the rule itself exempts them and test fixtures. Mirrors
+    // `no-shell-games-import` + rendererGameRegistry on the renderer side.
+    // Rule implementation: tools/eslint-plugin-chimera/rules/no-main-games-import.ts
+    {
+        files: ['electron/main/**/*.{ts,tsx}'],
+        plugins: { chimera: chimeraPlugin },
+        rules: {
+            'chimera/no-main-games-import': 'error',
+        },
+    },
+
     // Prettier compatibility — must be last.
     prettier,
 );

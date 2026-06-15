@@ -1,18 +1,22 @@
-// electron/main/runtime/ActionPipelinePerf.bench.test.ts
+// games/tactics/__tests__/ActionPipelinePerf.bench.test.ts
 //
-// Executable §13 performance baseline for the main-process hot path.
+// Executable §13 performance baseline for the engine's action hot path,
+// exercised through the tactics reference game's fixtures.
 //
 //   §13.1 — `ActionPipeline.process()` must complete in ≤ 16 ms at 20 Hz.
-//   §13.4 — the main-process heap must not grow unbounded during a match.
+//   §13.4 — the host heap must not grow unbounded during a match.
 //
-// This file MUST live under `electron/main/` (not `simulation/`): `performance.now`
-// is ESLint-banned in `simulation/**`/`ai/**` (Invariant #43). `electron/main`
-// already times the pipeline this way (HostSessionPipeline.ts).
+// This benchmark lives WITH the game whose fixtures it drives (it imports
+// tactics actions/entities/stamina to build a representative mid-match board),
+// so `electron/main` stays free of game-specific test coupling for packaged
+// builds. It uses `performance.now`, which is ESLint-banned in `simulation/**`,
+// `ai/**`, and `games/*/actions/**` (Invariant #43) — but NOT under
+// `games/*/__tests__/`, where a perf measurement is the sanctioned exception.
 //
-// The benchmark drives the SAME `ActionPipeline.process()` that the live
-// `RealtimeTicker` and `ReplayPlayer` both call (Invariants #42/#70: replay
-// advances by exactly one `process()` per recorded action), so the per-tick
-// budget proven here covers live ticking AND replay playback.
+// The benchmark drives the SAME `ActionPipeline.process()` that the live host
+// (`HostSessionPipeline.ts`) and `ReplayPlayer` both call (Invariants #42/#70:
+// replay advances by exactly one `process()` per recorded action), so the
+// per-tick budget proven here covers live ticking AND replay playback.
 //
 // Gating policy (decided for F49): strict locally / under `CHIMERA_PERF_STRICT=1`,
 // informational on CI (CI runners are ~an order of magnitude slower). The numbers

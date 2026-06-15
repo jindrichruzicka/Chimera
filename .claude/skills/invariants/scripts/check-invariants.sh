@@ -198,6 +198,30 @@ if [[ -f "${CONSTANTS}" ]]; then
     fi
 fi
 
+# ─── Check 10: electron/main core must not import games/* (invariant 2) ──────
+# The host (main process) stays agnostic of which games exist; only the three
+# composition registries may import games/*. Mirrors the renderer-side
+# GameShell / rendererGameRegistry guard (Check 7) and the ESLint rule
+# chimera/no-main-games-import. Matches static (`import … from`, `export … from`)
+# and dynamic (`import('…')`) specifiers alike. Test files are excluded (they
+# import game fixtures), as are comment lines (jsdoc may cite a games/ path).
+if [[ -d electron/main ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            electron/main/game/mainGameRegistry.ts) ;;
+            electron/main/content/gameContentRegistry.ts) ;;
+            electron/main/lobby/lobbySetupRegistry.ts) ;;
+            *) violation "2" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
+            "(from|import\()[[:space:]]*['\"][^'\"]*games/" electron/main 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

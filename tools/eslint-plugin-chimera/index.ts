@@ -8,6 +8,8 @@
  *   - `chimera/no-hardcoded-design-values` (Invariants #86, #91)
  *   - `chimera/no-unknown-token-overrides` (Invariant #85)
  *   - `chimera/no-game-renderer-internals` (game renderer UI boundary)
+ *   - `chimera/no-shell-games-import` (Invariants #93, #94)
+ *   - `chimera/no-main-games-import` (main-process game boundary)
  *
  * Usage in eslint.config.mjs:
  *   import chimeraPlugin from './tools/eslint-plugin-chimera/index.js';
@@ -20,6 +22,7 @@ import noGameRendererInternals from './rules/no-game-renderer-internals.js';
 import noHardcodedDesignValues from './rules/no-hardcoded-design-values.js';
 import noUnknownTokenOverrides from './rules/no-unknown-token-overrides.js';
 import noShellGamesImport from './rules/no-shell-games-import.js';
+import noMainGamesImport from './rules/no-main-games-import.js';
 
 const plugin = {
     rules: {
@@ -28,6 +31,7 @@ const plugin = {
         'no-hardcoded-design-values': noHardcodedDesignValues,
         'no-unknown-token-overrides': noUnknownTokenOverrides,
         'no-shell-games-import': noShellGamesImport,
+        'no-main-games-import': noMainGamesImport,
     },
 } as const;
 

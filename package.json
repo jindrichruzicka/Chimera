@@ -14,7 +14,7 @@
         "test": "vitest run",
         "test:watch": "vitest",
         "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
-        "test:perf": "cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run electron/main/runtime/ActionPipelinePerf.bench.test.ts",
+        "test:perf": "cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run games/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
         "validate:assets": "tsx tools/validate-assets.ts",
         "format": "prettier --write .",
         "format:check": "prettier --check .",

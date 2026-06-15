@@ -50,11 +50,13 @@ import {
     JsonSaveSerializer,
     createDefaultMigrator,
 } from '@chimera/simulation/persistence/index.js';
-import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import {
-    registerTacticsActions,
-    resolveTacticsFirstPlayer,
-} from '@chimera/games/tactics/actions.js';
+    gameVersions,
+    hostedGame,
+    knownGameIds,
+    mainGameRegistry,
+    visibilityRulesByGameId,
+} from './game/mainGameRegistry.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/apis/replay-api.js';
@@ -140,7 +142,6 @@ import {
 } from '@chimera/simulation/projection/index.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
-import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
 import { SimulationHost } from './runtime/SimulationHost.js';
 import {
     registerE2eHooks,
@@ -162,7 +163,6 @@ import {
     CHIMERA_RENDERER_URL,
     type ChimeraRendererUrl,
 } from './renderer-url.js';
-import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 export {
@@ -1038,7 +1038,7 @@ export async function main(): Promise<void> {
         new ReplayMigrator(),
         {
             engineVersion: app.getVersion(),
-            gameVersions: new Map([[TACTICS_GAME_ID, '0.1.0']]),
+            gameVersions,
         },
         logger,
     );
@@ -1083,9 +1083,7 @@ export async function main(): Promise<void> {
     const { wasCleanExit, autosaveMeta } = await registerSaveManagerLifecycle({
         app,
         saveManager,
-        // 'tactics' is the only game registered at M1. When F18 adds more games,
-        // extend this array to match the registerSchema(...) calls below.
-        knownGameIds: ['tactics'],
+        knownGameIds,
     });
     const crashRecoveryStatus =
         autosaveMeta === null
@@ -1147,13 +1145,16 @@ export async function main(): Promise<void> {
     // use the same authoritative local-seat context.
     const lobbyLogger = logger.child({ module: 'lobby-manager' });
 
-    // Shared ActionRegistry for all hosted sessions.  Engine actions are
-    // always registered; game-specific actions (tactics, etc.) will be added
-    // here when F18+ lands.  The registry is immutable after this point.
+    // Shared ActionRegistry for all hosted sessions.  Engine + scene actions are
+    // always registered; each registered game contributes its own actions through
+    // the composition registry (`mainGameRegistry`).  The registry is immutable
+    // after this point.
     const gameRegistry = new ActionRegistry();
     registerEngineActions(gameRegistry);
     wireDefaultSceneActions(gameRegistry);
-    registerTacticsActions(gameRegistry);
+    for (const game of Object.values(mainGameRegistry)) {
+        game.registerActions(gameRegistry);
+    }
 
     // ProfileGate is the sole caller of ProfileSanitizer.admit().
     // Constructed here (the DIP wiring point) and injected into LobbyManager
@@ -1200,10 +1201,11 @@ export async function main(): Promise<void> {
     // simulation-layer branded types are incompatible with the preload types.
     let lastSentPlayerSnapshot: unknown = null;
 
-    // M1: only `'tactics'` is registered.  Stamped on captured save files
-    // and used as the qualified slot prefix.
-    const HOSTED_GAME_ID = TACTICS_GAME_ID;
-    const HOSTED_GAME_VERSION = '0.1.0';
+    // The single game the host runs (M1 single-game lifecycle), sourced from the
+    // game registry rather than named here.  Stamped on captured save files and
+    // used as the qualified slot prefix.
+    const HOSTED_GAME_ID = hostedGame.gameId;
+    const HOSTED_GAME_VERSION = hostedGame.gameVersion;
     // Captured once so the conditional spread below narrows `db` correctly under
     // exactOptionalPropertyTypes. Absent for a game that declares no content.
     const hostedContentDb = contentDbs.get(HOSTED_GAME_ID);
@@ -1443,7 +1445,7 @@ export async function main(): Promise<void> {
             // in the next broadcasted PlayerSnapshot (BLOCK-1 fix, §4.6 / §8).
             const sessionCommitmentRuntime = new SessionCommitmentRuntime();
 
-            const projector = new DefaultStateProjector(tacticsVisibilityRules, {
+            const projector = new DefaultStateProjector(hostedGame.visibilityRules, {
                 getUndoMeta: (viewerId) => ({
                     canUndo: undoManager.canUndo(viewerId),
                     canRedo: undoManager.canRedo(viewerId),
@@ -1796,7 +1798,7 @@ export async function main(): Promise<void> {
                 state,
                 activeE2eHooks?.firstPlayerRole ?? 'host',
             );
-            const firstPlayer = resolveTacticsFirstPlayer({
+            const firstPlayer = hostedGame.resolveFirstPlayer({
                 hostPlayerId: state.info.hostId,
                 firstPlayer: selectedFirstPlayer,
             });
@@ -2088,7 +2090,7 @@ export async function main(): Promise<void> {
     // crosses IPC (invariant #3).
     const replayPlaybackManager = new ReplayPlaybackManager(
         gameRegistry,
-        createVisibilityRulesResolver({ [TACTICS_GAME_ID]: tacticsVisibilityRules }),
+        createVisibilityRulesResolver(visibilityRulesByGameId),
         replayManager,
         logger.child({ module: 'replay-playback' }),
     );
@@ -2189,8 +2191,9 @@ export async function main(): Promise<void> {
 
     // Register the `chimera:settings:*` channels backed by SettingsManager.
     // FileSettingsRepository persists user overrides under `<userData>/settings/`.
-    // TacticsSettings schema is registered here so getSettings('tactics')
-    // returns full game defaults rather than bare engine defaults.
+    // Each registered game's settings schema is registered here so
+    // getSettings(gameId) returns full game defaults rather than bare engine
+    // defaults.
     // broadcastFn pushes chimera:settings:change to all open renderer windows
     // so multi-window coherence is maintained (BLOCK-2 fix).
     const settingsRepo = new FileSettingsRepository(path.join(userData, 'settings'));
@@ -2205,7 +2208,9 @@ export async function main(): Promise<void> {
         },
         logger.child({ module: 'settings' }),
     );
-    settingsManager.registerSchema(tacticsSettingsSchema);
+    for (const game of Object.values(mainGameRegistry)) {
+        game.registerSettings(settingsManager);
+    }
     registerSettingsHandlers({
         ipcMain,
         logger: logger.child({ module: 'settings' }),
