@@ -233,6 +233,24 @@ export interface BaseGameSnapshot {
      * pre-#705 fixtures/saves and games with no lobby setup.
      */
     readonly setup?: GameSetupConfig;
+    /**
+     * Per-player commitment status for the current turn, for turn modes that gate
+     * turn advance on every seated player having committed (commit-then-sync;
+     * §4.6/§8, F54). Maps a player ID to the `turnNumber` they last committed for;
+     * the end-turn guard treats an entry as current only when it equals the
+     * snapshot's `turnNumber`, so stale entries from prior turns auto-expire.
+     *
+     * This is the non-secret "player X has committed for turn N" marker. It is
+     * host-local: `StateProjector.project()` uses an explicit field allowlist and
+     * does NOT project `committedTurns`, so it never crosses the trust boundary —
+     * it is the snapshot-side counterpart that the pure end-turn guard reads,
+     * distinct from `PlayerSnapshot.commitments` (the separately-projected envelope
+     * hash map peers see). The player's actual buffered actions are NEVER stored
+     * here either — they stay host-local in the reveal-staging store (Invariants
+     * #3/#8). Integer values only (#42/#44). Absent for games/turn modes that do
+     * not use commitments.
+     */
+    readonly committedTurns?: Readonly<Record<PlayerId, number>>;
 }
 
 // ─── Role-specific sub-context interfaces (§4.7, ISP) ────────────────────────
@@ -486,6 +504,20 @@ export interface GameReduceContext {
         canUndo(playerId: PlayerId): boolean;
         canRedo(playerId: PlayerId): boolean;
     };
+    /**
+     * Optional per-game end-turn guard, populated by `ActionPipeline` from the
+     * active game's `GameDefinition.canEndTurn`. `engine:end_turn.validate()`
+     * consults it after its generic active-player checks so a game can reject a
+     * premature end-turn (e.g. commit-then-sync mode blocking until every seat
+     * has committed; §4.6/§8, F54) without the engine knowing the game. Absent
+     * for games that register no `canEndTurn`. Adding this field to the
+     * ISP-narrow surface is backed by a dedicated invariant (#102), as this
+     * interface's contract requires.
+     */
+    readonly endTurnGuard?: (
+        state: Readonly<BaseGameSnapshot>,
+        playerId: PlayerId,
+    ) => ValidationResult;
     /**
      * Re-entrant dispatch nesting depth. Zero for the top-level
      * `ActionPipeline.process()` call; incremented by one for each nested

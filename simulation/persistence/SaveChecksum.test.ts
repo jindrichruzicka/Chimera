@@ -31,6 +31,7 @@ function makeBody(): SaveBody {
         },
         deltaActions: [],
         pendingCommitments: {},
+        stagedReveals: {},
     };
 }
 
@@ -83,9 +84,35 @@ describe('computeBodyChecksum', () => {
             checkpoint: body.checkpoint,
             deltaActions: body.deltaActions,
             pendingCommitments: body.pendingCommitments,
+            stagedReveals: body.stagedReveals,
         };
         const checksum2 = await computeBodyChecksum(bodyWithExtra);
 
         expect(checksum1).toBe(checksum2);
+    });
+
+    it('integrity-protects a populated stagedReveals map', async () => {
+        const empty = await computeBodyChecksum(makeBody());
+        const withStaged = await computeBodyChecksum({
+            ...makeBody(),
+            stagedReveals: {
+                'env-1': { envelopeId: 'env-1', playerId: 'p1', nonce: 'n', value: { a: 1 } },
+            } as SaveBody['stagedReveals'],
+        });
+
+        expect(withStaged).not.toBe(empty);
+    });
+
+    it('treats an empty stagedReveals as absent (backward-compatible with pre-#26 checksums)', async () => {
+        // A v4 file's stored checksum was computed without the field; after the
+        // v4→v5 migration backfills `{}`, recomputing must still match.
+        const withEmpty = await computeBodyChecksum({ ...makeBody(), stagedReveals: {} });
+        const withoutField = await computeBodyChecksum({
+            checkpoint: makeBody().checkpoint,
+            deltaActions: makeBody().deltaActions,
+            pendingCommitments: makeBody().pendingCommitments,
+        } as SaveBody);
+
+        expect(withEmpty).toBe(withoutField);
     });
 });

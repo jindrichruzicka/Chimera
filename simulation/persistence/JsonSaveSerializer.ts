@@ -79,6 +79,19 @@ const SaveFileSchema = z.object({
     }),
     deltaActions: z.array(z.unknown()),
     pendingCommitments: z.record(z.string(), WireCommitmentEnvelopeSchema),
+    // Optional so pre-#26 (v4) saves parse without the field; the v4→v5 migration
+    // backfills `{}`. `value` is opaque at the persistence boundary.
+    stagedReveals: z
+        .record(
+            z.string(),
+            z.object({
+                envelopeId: z.string(),
+                playerId: z.string(),
+                nonce: z.string(),
+                value: z.unknown(),
+            }),
+        )
+        .optional(),
 });
 
 // ─── Prototype-pollution defence ─────────────────────────────────────────────

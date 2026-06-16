@@ -45,6 +45,7 @@ const FAKE_SAVE_JSON = JSON.stringify({
     },
     deltaActions: [],
     pendingCommitments: {},
+    stagedReveals: {},
 });
 
 vi.mock('fs/promises', () => {

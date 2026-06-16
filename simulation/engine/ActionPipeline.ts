@@ -247,6 +247,16 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // before any validate/reduce invocation reads them.
         // `dispatch` defaults to the forbidden stub; `process()` will replace it
         // with `#dispatchFn` when the action type is 'engine:tick'.
+        // The active game's optional end-turn guard (e.g. commit-then-sync turn
+        // modes). Resolved once — gameId and the registry are fixed for the
+        // pipeline's lifetime — and exposed on the public context so
+        // `engine:end_turn.validate()` can consult it without the engine knowing
+        // any specific game.
+        const canEndTurn =
+            this.#gameId !== undefined
+                ? this.#registry.resolveGame(this.#gameId)?.canEndTurn
+                : undefined;
+
         this.#ctx = {
             rng: createRng(0, 0),
             dispatchDepth: 0,
@@ -255,6 +265,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
             ...(this.#context?.db !== undefined ? { db: this.#context.db } : {}),
             ...(this.#context?.undoManager !== undefined
                 ? { undoManager: this.#context.undoManager }
+                : {}),
+            ...(canEndTurn !== undefined
+                ? {
+                      endTurnGuard: (state: Readonly<BaseGameSnapshot>, playerId: PlayerId) =>
+                          canEndTurn(state as TState, playerId),
+                  }
                 : {}),
         };
     }

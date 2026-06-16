@@ -525,6 +525,32 @@ describe('engine:end_turn definition', () => {
         expect(result).toEqual({ ok: false, reason: 'not_active_player' });
     });
 
+    it('validate returns the per-game endTurnGuard rejection when it blocks', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const guardCtx = {
+            ...stubCtx,
+            endTurnGuard: () => ({ ok: false as const, reason: 'awaiting_commitment' }),
+        };
+        const result = definition().validate({}, snapshot, hostId, guardCtx);
+        expect(result).toEqual({ ok: false, reason: 'awaiting_commitment' });
+    });
+
+    it('validate passes when the per-game endTurnGuard allows the end-turn', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const guardCtx = { ...stubCtx, endTurnGuard: () => ({ ok: true as const }) };
+        expect(definition().validate({}, snapshot, hostId, guardCtx).ok).toBe(true);
+    });
+
+    it('validate enforces the active-player check before consulting the guard', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const guardCtx = { ...stubCtx, endTurnGuard: () => ({ ok: true as const }) };
+        // A passing guard must not override the active-player rejection.
+        expect(definition().validate({}, snapshot, guestId, guardCtx)).toEqual({
+            ok: false,
+            reason: 'not_active_player',
+        });
+    });
+
     it('reduce advances activePlayerId in round-robin insertion order', () => {
         const snapshot = makeTurnSnapshot(hostId, 30_000);
         const next = definition().reduce(snapshot, {}, hostId, stubCtx);

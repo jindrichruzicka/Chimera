@@ -42,11 +42,13 @@ import {
 import {
     CommitmentVerificationError,
     DefaultCommitmentScheme,
+    RevealStaging,
     toCommitmentId,
     type CommitmentEnvelope,
     type CommitmentId,
     type CommitmentReveal,
     type CommitmentScheme,
+    type RevealStagingPort,
 } from '@chimera/simulation/projection/index.js';
 import type { SaveRequest } from '../../preload/api-types.js';
 
@@ -88,6 +90,20 @@ export class SessionCommitmentRuntime {
         const envelope = this.commitmentScheme.commit(value);
         this.pendingCommitments[envelope.id] = envelope;
         return envelope;
+    }
+
+    /**
+     * Like {@link commit}, but also returns the matching {@link CommitmentReveal}
+     * (carrying the nonce) so the caller can build a valid reveal later — used by
+     * the tactics commitment turn mode, where the host commits a player's bundle
+     * and must reveal it after every seat has committed. Stores the envelope in
+     * `pendingCommitments` identically to {@link commit}, so the existing
+     * `getPendingCommitments` → `PlayerSnapshot.commitments` egress is unchanged.
+     */
+    commitRevealable(value: unknown): { envelope: CommitmentEnvelope; reveal: CommitmentReveal } {
+        const { envelope, reveal } = this.commitmentScheme.commitRevealable(value);
+        this.pendingCommitments[envelope.id] = envelope;
+        return { envelope, reveal };
     }
 
     restorePendingCommitments(pendingCommitments: PendingCommitments): void {
@@ -134,6 +150,7 @@ function copyPendingCommitments(
  */
 export interface CommitmentRuntimePort {
     commit(value: unknown): CommitmentEnvelope;
+    commitRevealable(value: unknown): { envelope: CommitmentEnvelope; reveal: CommitmentReveal };
     restorePendingCommitments(pendingCommitments: PendingCommitments): void;
     capturePendingCommitments(): Record<CommitmentId, CommitmentEnvelope>;
     verifyReveal(reveal: CommitmentReveal): unknown;
@@ -198,6 +215,13 @@ export interface SessionRuntimeOptions {
      * verify commitment capture/restore without using real SHA-256 hashing.
      */
     readonly commitmentRuntime?: CommitmentRuntimePort;
+    /**
+     * Host-side reveal-staging store for tactics commitment turn mode (T8 /
+     * #728).  Defaults to `new RevealStaging()`.  Retains each committed
+     * player-turn's `{ value, nonce }` between Commit and Reveal and persists
+     * alongside `pendingCommitments` (Invariant #26).  Injectable for tests.
+     */
+    readonly revealStaging?: RevealStagingPort;
 }
 
 /**
@@ -212,6 +236,7 @@ export class SessionRuntime {
     private readonly applyActionFn: ApplyActionFn;
     private readonly now: () => number;
     private readonly commitments: CommitmentRuntimePort;
+    private readonly staging: RevealStagingPort;
 
     constructor(options: SessionRuntimeOptions) {
         this.snapshot = options.initialSnapshot;
@@ -220,6 +245,7 @@ export class SessionRuntime {
         this.applyActionFn = options.applyAction;
         this.now = options.now ?? Date.now;
         this.commitments = options.commitmentRuntime ?? new SessionCommitmentRuntime();
+        this.staging = options.revealStaging ?? new RevealStaging();
     }
 
     /** The game identifier for this session (e.g. `'tactics'`). */
@@ -321,6 +347,11 @@ export class SessionRuntime {
     applyRestoredFile(file: SaveFile): void {
         this.snapshot = file.checkpoint;
         this.commitments.restorePendingCommitments(file.pendingCommitments);
+        // Restore reveal staging together with the envelopes (Invariant #26): a
+        // mid-commit save reveals after load only because both move as a unit.
+        // `?? {}` guards an in-memory file that predates the field; the migrator
+        // guarantees on-disk presence.
+        this.staging.restore(file.stagedReveals ?? {});
     }
 
     verifyReveal(reveal: CommitmentReveal): unknown {
@@ -340,6 +371,41 @@ export class SessionRuntime {
      */
     commit(value: unknown): CommitmentEnvelope {
         return this.commitments.commit(value);
+    }
+
+    /**
+     * Commit a player's buffered turn in commit-then-sync turn mode (T8 / #728):
+     * produce + broadcast the commitment envelope and stage the matching
+     * `{ value, nonce }` so the host can reveal it after every seat has
+     * committed.  The same nonce flows into the envelope (via
+     * `pendingCommitments`) and the staged reveal because both come from one
+     * `commitRevealable` call.  `value` is opaque here — the host stays
+     * game-agnostic (Invariant #2); the committing game owns its shape and
+     * re-narrows it on reveal.  Returns the envelope for broadcast.
+     */
+    commitTurn(playerId: PlayerId, value: unknown): CommitmentEnvelope {
+        const { envelope, reveal } = this.commitments.commitRevealable(value);
+        this.staging.stage({
+            envelopeId: envelope.id,
+            playerId,
+            nonce: reveal.nonce,
+            value,
+        });
+        return envelope;
+    }
+
+    /** Whether `playerId` has a staged commitment for the current turn (T8). */
+    hasCommitted(playerId: PlayerId): boolean {
+        return this.staging.hasCommitted(playerId);
+    }
+
+    /**
+     * The players staged so far, for the End-Turn gate and the deterministic
+     * reveal order (T9). Game-specific grouping (e.g. tactics' attack-first
+     * ordering) is derived by the game from `staging.capture()`.
+     */
+    committedPlayerIds(): readonly PlayerId[] {
+        return this.staging.committedPlayerIds();
     }
 
     /**
@@ -380,6 +446,7 @@ export class SessionRuntime {
             checkpoint: snapshot,
             deltaActions: [],
             pendingCommitments: this.commitments.capturePendingCommitments(),
+            stagedReveals: this.staging.capture(),
         };
     }
 }

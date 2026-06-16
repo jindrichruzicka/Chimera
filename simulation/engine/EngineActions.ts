@@ -340,7 +340,7 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
         return { deadlineMs: raw['deadlineMs'] as number };
     },
 
-    validate(_payload, state, playerId, _ctx): ValidationResult {
+    validate(_payload, state, playerId, ctx): ValidationResult {
         if (state.turnClock !== undefined && playerId !== state.turnClock.activePlayerId) {
             return { ok: false, reason: 'not_active_player' };
         }
@@ -348,6 +348,13 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
         // indexOf would silently return -1 and reduce would pick players[0] instead.
         if (state.turnClock !== undefined && !(state.turnClock.activePlayerId in state.players)) {
             return { ok: false, reason: 'active_player_not_in_game' };
+        }
+        // Per-game end-turn gate (e.g. commit-then-sync turn modes reject until
+        // every seat has committed). Consulted after the generic active-player
+        // checks; absent for games that register no guard.
+        const guardResult = ctx.endTurnGuard?.(state, playerId);
+        if (guardResult !== undefined && !guardResult.ok) {
+            return guardResult;
         }
         return { ok: true };
     },

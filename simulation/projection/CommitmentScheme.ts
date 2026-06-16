@@ -57,6 +57,16 @@ export interface CommitmentReveal {
 
 export interface CommitmentScheme {
     commit(value: unknown): CommitmentEnvelope;
+    /**
+     * Like {@link commit}, but additionally returns the matching
+     * {@link CommitmentReveal} (carrying the nonce) so the committer can build a
+     * valid reveal later. Used by callers that own the reveal themselves — e.g.
+     * the tactics commitment turn mode, where the host commits a player's
+     * buffered bundle and must reveal it after every seat has committed. The
+     * returned `envelope` is identical in shape to {@link commit}'s output, so
+     * {@link verify} accepts the paired `reveal` unchanged.
+     */
+    commitRevealable(value: unknown): { envelope: CommitmentEnvelope; reveal: CommitmentReveal };
     verify(reveal: CommitmentReveal, envelope: CommitmentEnvelope): boolean;
 }
 
@@ -69,12 +79,18 @@ export class CommitmentVerificationError extends Error {
 
 export class DefaultCommitmentScheme implements CommitmentScheme {
     commit(value: unknown): CommitmentEnvelope {
+        // Single source of nonce/id/hash generation — drop the reveal the
+        // committed-value callers (decks, dice) do not need.
+        return this.commitRevealable(value).envelope;
+    }
+
+    commitRevealable(value: unknown): { envelope: CommitmentEnvelope; reveal: CommitmentReveal } {
         const nonce = randomBytes(NONCE_BYTE_LENGTH).toString('hex');
         const id = toCommitmentId(randomBytes(COMMITMENT_ID_BYTE_LENGTH).toString('hex'));
 
         return {
-            id,
-            commitment: computeCommitment(value, nonce),
+            envelope: { id, commitment: computeCommitment(value, nonce) },
+            reveal: { id, value, nonce },
         };
     }
 

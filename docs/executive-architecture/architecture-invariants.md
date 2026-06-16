@@ -252,6 +252,8 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **101.** `GameSnapshot.setup` / `PlayerSnapshot.setup` (the agreed `GameSetupConfig` = match settings + per-player attributes) is **public host configuration** and is passed through `StateProjector.project()` **verbatim**: it carries no owner-only or per-viewer fields, so every viewer's projected snapshot exposes an identical `setup`. It is built from the agreed `LobbyState` (host-authored match settings + owner-authored per-player attributes) by `buildSetupFromLobbyState()` and carried into simulation via the `engine:start_game` action, keeping all peers in agreement — consistent with Invariant #36 (simulation-affecting parameters travel as match config, never as user settings) and Invariant #99 (§4.6, §4.14, §4.37, F53).
 
+**102.** `GameReduceContext.endTurnGuard?` is the per-game end-turn gate, populated by `ActionPipeline` once from the active game's `GameDefinition.canEndTurn` hook (resolved via `ActionRegistry.resolveGame(gameId)`). It is consulted **only** by `engine:end_turn.validate()`, **after** the generic active-player checks, so a game can reject a premature end-turn (e.g. tactics commit-then-sync mode rejecting with `awaiting_commitment` until every seated player has committed for the current turn; §4.6/§8, F54) **without** the engine knowing any specific game. It satisfies the `GameReduceContext` JSDoc contract that adding a field to that ISP-narrow surface (Invariant #12) requires a dedicated invariant, mirroring #89 (`dispatchDepth`) and #90 (`logger`). Game reducers must not read or repurpose `endTurnGuard`; any future engine-reserved consumer must update this invariant (§4.7, F54).
+
 ---
 
 ## Cross-References

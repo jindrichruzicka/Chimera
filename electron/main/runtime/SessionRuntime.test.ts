@@ -22,7 +22,11 @@ import type {
     BaseGameSnapshot,
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId, sceneId } from '@chimera/simulation/engine/types.js';
+import { entityId, playerId as toPlayerId, sceneId } from '@chimera/simulation/engine/types.js';
+import { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
+import { tacticsGridCoordinate } from '@chimera/games/tactics/actions.js';
+import type { TacticsCommitmentEnvelopeValue } from '@chimera/games/tactics/commitment/contract.js';
+import { RevealStaging } from '@chimera/simulation/projection/index.js';
 import { CURRENT_SCHEMA_VERSION } from '@chimera/simulation/persistence/SaveMigrator.js';
 import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
 import {
@@ -334,6 +338,7 @@ describe('SessionRuntime', () => {
             checkpoint: restored,
             deltaActions: [],
             pendingCommitments: {},
+            stagedReveals: {},
         };
         const runtime = new SessionRuntime({
             gameId: 'tactics',
@@ -364,6 +369,7 @@ describe('SessionRuntime', () => {
             checkpoint: restored,
             deltaActions: [],
             pendingCommitments: makePendingCommitments(),
+            stagedReveals: {},
         };
         const runtime = new SessionRuntime({
             gameId: 'tactics',
@@ -470,6 +476,7 @@ describe('SessionRuntime', () => {
                 checkpoint: restored,
                 deltaActions: [],
                 pendingCommitments,
+                stagedReveals: {},
             });
 
             const file = runtime.captureSaveFile({
@@ -519,6 +526,7 @@ describe('SessionRuntime', () => {
                 checkpoint: makeSnapshot(0),
                 deltaActions: [],
                 pendingCommitments: maliciousCommitments,
+                stagedReveals: {},
             });
 
             // Verify that Object.prototype was not polluted
@@ -540,6 +548,7 @@ describe('SessionRuntime', () => {
                 capturePendingCommitments: vi.fn().mockReturnValue(makePendingCommitments()),
                 verifyReveal: vi.fn().mockReturnValue(COMMITTED_VALUE),
                 commit: vi.fn(),
+                commitRevealable: vi.fn(),
             };
 
             const runtime = new SessionRuntime({
@@ -602,6 +611,12 @@ describe('SessionRuntime', () => {
                         commitment: 'expected-hash',
                     };
                 },
+                commitRevealable(value: unknown) {
+                    return {
+                        envelope: { id: toCommitmentId('known-id'), commitment: 'expected-hash' },
+                        reveal: { id: toCommitmentId('known-id'), value, nonce: NONCE },
+                    };
+                },
                 verify(_reveal: CommitmentReveal, _envelope: CommitmentEnvelope) {
                     return true;
                 },
@@ -632,6 +647,7 @@ describe('SessionRuntime', () => {
                 capturePendingCommitments: vi.fn().mockReturnValue({}),
                 verifyReveal: vi.fn(),
                 commit: vi.fn().mockReturnValue(expectedEnvelope),
+                commitRevealable: vi.fn(),
             };
 
             const runtime = new SessionRuntime({
@@ -656,6 +672,139 @@ describe('SessionRuntime', () => {
             const captured = commitmentRuntime.capturePendingCommitments();
 
             expect(captured[envelope.id]).toEqual(envelope);
+        });
+
+        it('SessionCommitmentRuntime.commitRevealable() stores the envelope and returns a verifiable reveal', () => {
+            const VALUE = { dice: 4 };
+            const commitmentRuntime = new SessionCommitmentRuntime();
+
+            const { envelope, reveal } = commitmentRuntime.commitRevealable(VALUE);
+
+            expect(commitmentRuntime.capturePendingCommitments()[envelope.id]).toEqual(envelope);
+            // The retained reveal verifies and clears the pending envelope.
+            expect(commitmentRuntime.verifyReveal(reveal)).toEqual(VALUE);
+        });
+    });
+
+    describe('commitTurn() — tactics commitment mode (T8)', () => {
+        function tacticsValue(
+            player: PlayerId,
+            kind: 'attack' | 'move',
+        ): TacticsCommitmentEnvelopeValue {
+            const actions =
+                kind === 'attack'
+                    ? [
+                          {
+                              type: TACTICS_ATTACK_ACTION as typeof TACTICS_ATTACK_ACTION,
+                              payload: { attackerId: entityId('u1'), defenderId: entityId('u2') },
+                          } as const,
+                      ]
+                    : [
+                          {
+                              type: TACTICS_MOVE_UNIT_ACTION as typeof TACTICS_MOVE_UNIT_ACTION,
+                              payload: {
+                                  unitId: entityId('u1'),
+                                  x: tacticsGridCoordinate(1),
+                                  y: tacticsGridCoordinate(0),
+                              },
+                          } as const,
+                      ];
+            return { playerId: player, turnNumber: 1, actions };
+        }
+
+        function makeRuntime(): SessionRuntime {
+            return new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: makeSnapshot(0, [P1, P2]),
+                applyAction: vi.fn(),
+                now: () => 1_000,
+            });
+        }
+
+        it('produces an envelope that lands in the pending-commitments broadcast', () => {
+            const runtime = makeRuntime();
+
+            const envelope = runtime.commitTurn(P1, tacticsValue(P1, 'attack'));
+
+            expect(
+                runtime.captureSaveFile({ gameId: 'tactics' }).pendingCommitments[envelope.id],
+            ).toEqual(envelope);
+        });
+
+        it('marks the committing player as committed', () => {
+            const runtime = makeRuntime();
+
+            runtime.commitTurn(P1, tacticsValue(P1, 'attack'));
+
+            expect(runtime.hasCommitted(P1)).toBe(true);
+            expect(runtime.hasCommitted(P2)).toBe(false);
+            expect(runtime.committedPlayerIds()).toEqual([P1]);
+        });
+
+        it('tracks multiple committers independently', () => {
+            const runtime = makeRuntime();
+
+            runtime.commitTurn(P1, tacticsValue(P1, 'move'));
+            runtime.commitTurn(P2, tacticsValue(P2, 'attack'));
+
+            expect(runtime.committedPlayerIds()).toEqual([P1, P2]);
+        });
+
+        it('persists staged reveals into the save file alongside the envelope (Invariant #26)', () => {
+            const runtime = makeRuntime();
+
+            const envelope = runtime.commitTurn(P1, tacticsValue(P1, 'attack'));
+            const file = runtime.captureSaveFile({ gameId: 'tactics' });
+
+            expect(file.pendingCommitments[envelope.id]).toEqual(envelope);
+            expect(file.stagedReveals[envelope.id]).toMatchObject({
+                envelopeId: envelope.id,
+                playerId: P1,
+            });
+        });
+
+        it('restores staged reveals so a mid-commit save can still reveal (Invariant #26)', () => {
+            const source = makeRuntime();
+            const envelope = source.commitTurn(P1, tacticsValue(P1, 'attack'));
+            const file = source.captureSaveFile({ gameId: 'tactics' });
+
+            // Fresh runtime with its own staging; restore the saved file into it.
+            const restoredStaging = new RevealStaging();
+            const restored = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: makeSnapshot(0, [P1, P2]),
+                applyAction: vi.fn(),
+                revealStaging: restoredStaging,
+            });
+
+            restored.applyRestoredFile(file);
+
+            expect(restored.hasCommitted(P1)).toBe(true);
+            // The restored staging rebuilds a reveal that the restored envelope verifies.
+            const reveal = restoredStaging.buildReveal(P1);
+            expect(reveal.id).toBe(envelope.id);
+            expect(restored.verifyReveal(reveal)).toEqual(tacticsValue(P1, 'attack'));
+        });
+
+        it('does not reveal when envelopes are restored without their staging (Invariant #26)', () => {
+            const source = makeRuntime();
+            source.commitTurn(P1, tacticsValue(P1, 'attack'));
+            const file = source.captureSaveFile({ gameId: 'tactics' });
+
+            const restored = new SessionRuntime({
+                gameId: 'tactics',
+                gameVersion: '0.1.0',
+                initialSnapshot: makeSnapshot(0, [P1, P2]),
+                applyAction: vi.fn(),
+            });
+
+            // Envelopes present, staging stripped — the two must move as a unit.
+            restored.applyRestoredFile({ ...file, stagedReveals: {} });
+
+            expect(restored.hasCommitted(P1)).toBe(false);
+            expect(restored.committedPlayerIds()).toEqual([]);
         });
     });
 });

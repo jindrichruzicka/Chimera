@@ -21,6 +21,7 @@ import {
     SaveMigrator,
     SaveNotFoundError,
     SaveSchemaTooNewError,
+    stagedRevealsMigration,
 } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
 import type { GamePhase } from '../engine/types.js';
@@ -52,14 +53,15 @@ function makeFileAtVersion(schemaVersion: number): SaveFile {
         },
         deltaActions: [],
         pendingCommitments: {},
+        stagedReveals: {},
     };
 }
 
 // ─── CURRENT_SCHEMA_VERSION ───────────────────────────────────────────────────
 
 describe('CURRENT_SCHEMA_VERSION', () => {
-    it('equals 4', () => {
-        expect(CURRENT_SCHEMA_VERSION).toBe(4);
+    it('equals 5', () => {
+        expect(CURRENT_SCHEMA_VERSION).toBe(5);
     });
 });
 
@@ -120,13 +122,14 @@ describe('checkpointTurnNumberMigration (v1 → v2)', () => {
 
         const result = migrator.migrate(legacyFile);
 
-        // After applying all migrations, file should be at v4
-        expect(result.header.schemaVersion).toBe(4);
+        // After applying all migrations, file should be at the current version.
+        expect(result.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
         expect((result.checkpoint as unknown as Record<string, unknown>)['turnNumber']).toBe(0);
         expect((result.checkpoint as unknown as Record<string, unknown>)['timers']).toStrictEqual(
             {},
         );
         expect((result.checkpoint as unknown as Record<string, unknown>)['gameResult']).toBeNull();
+        expect((result as unknown as Record<string, unknown>)['stagedReveals']).toStrictEqual({});
     });
 });
 
@@ -178,7 +181,7 @@ describe('checkpointGameResultMigration (v3 → v4)', () => {
         expect(twice).toStrictEqual(once);
     });
 
-    it('SaveMigrator upgrades a v3 file without gameResult to v4 with gameResult null', () => {
+    it('SaveMigrator upgrades a v3 file without gameResult to the current version with gameResult null', () => {
         const migrator = createDefaultMigrator();
         const v3File = makeFileAtVersion(3);
         const checkpointWithoutGameResult = { ...v3File.checkpoint } as Record<string, unknown>;
@@ -190,8 +193,31 @@ describe('checkpointGameResultMigration (v3 → v4)', () => {
 
         const result = migrator.migrate(legacyFile);
 
-        expect(result.header.schemaVersion).toBe(4);
+        expect(result.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
         expect((result.checkpoint as unknown as Record<string, unknown>)['gameResult']).toBeNull();
+    });
+});
+
+// ─── stagedRevealsMigration (v4 → v5) ────────────────────────────────────────
+
+describe('stagedRevealsMigration (v4 → v5)', () => {
+    it('backfills an empty stagedReveals map when a v4 file lacks the field', () => {
+        const v4File = makeFileAtVersion(4);
+        const without = { ...v4File } as Record<string, unknown>;
+        delete without['stagedReveals'];
+
+        const result = stagedRevealsMigration.apply(without as unknown as SaveFile);
+
+        expect((result as unknown as Record<string, unknown>)['stagedReveals']).toStrictEqual({});
+    });
+
+    it('preserves existing staged reveals (idempotent)', () => {
+        const staged = { 'env-1': { envelopeId: 'env-1', playerId: 'p1', nonce: 'n', value: {} } };
+        const file = { ...makeFileAtVersion(4), stagedReveals: staged } as unknown as SaveFile;
+
+        const result = stagedRevealsMigration.apply(file);
+
+        expect((result as unknown as Record<string, unknown>)['stagedReveals']).toBe(staged);
     });
 });
 

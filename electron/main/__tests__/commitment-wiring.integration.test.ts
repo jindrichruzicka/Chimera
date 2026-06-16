@@ -115,6 +115,12 @@ describe('commitment envelope delivery pipeline (BLOCK-1 / F27)', () => {
                 commit(_v: unknown) {
                     return { id: FIXED_ID, commitment: 'fake-commitment-hash' };
                 },
+                commitRevealable(value: unknown) {
+                    return {
+                        envelope: { id: FIXED_ID, commitment: 'fake-commitment-hash' },
+                        reveal: { id: FIXED_ID, value, nonce: FIXED_NONCE },
+                    };
+                },
                 verify(_reveal: CommitmentReveal, _envelope: CommitmentEnvelope): boolean {
                     return true; // deterministic accept in this integration test
                 },
@@ -166,6 +172,12 @@ describe('commitment envelope delivery pipeline (BLOCK-1 / F27)', () => {
             const fakeScheme = {
                 commit(_v: unknown) {
                     return { id: FIXED_ID, commitment: 'hash' };
+                },
+                commitRevealable(value: unknown) {
+                    return {
+                        envelope: { id: FIXED_ID, commitment: 'hash' },
+                        reveal: { id: FIXED_ID, value, nonce: FIXED_NONCE },
+                    };
                 },
                 verify(_r: CommitmentReveal, _e: CommitmentEnvelope): boolean {
                     return true;

@@ -5,6 +5,7 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
     TACTICS_REVEAL_TILE_ACTION,
+    readTacticsTurnMode,
 } from '@chimera/shared/tactics.js';
 import type {
     ActionDefinition,
@@ -16,6 +17,7 @@ import type {
     ValidationResult,
 } from '@chimera/simulation/engine/types.js';
 import { entityId } from '@chimera/simulation/engine/types.js';
+import { tacticsCommitDefinition } from './commitment/commitAction.js';
 import { buildInitialTacticsEntities } from './entities.js';
 import type { TacticsSnapshot } from './stamina.js';
 import { consumeStamina, readStamina } from './stamina.js';
@@ -426,12 +428,36 @@ function uniquePlayerIds(playerIds: readonly PlayerId[]): PlayerId[] {
     return result;
 }
 
+/**
+ * End-turn guard for tactics (T8 / #728). In sequential mode end-turn is always
+ * allowed. In commitment mode `End Turn` is reveal-only and enabled only once
+ * every seated player has committed for the current turn — so this rejects with
+ * `awaiting_commitment` until each player in `state.players` has a
+ * `committedTurns` entry equal to the current `turnNumber` (stale entries from
+ * prior turns do not count). Pure: reads only deterministic snapshot fields.
+ */
+function tacticsCanEndTurn(
+    state: Readonly<BaseGameSnapshot>,
+    _playerId: PlayerId,
+): ValidationResult {
+    if (readTacticsTurnMode(state.setup?.matchSettings) !== 'commitment') {
+        return { ok: true };
+    }
+    const committedTurns = state.committedTurns ?? {};
+    const allCommitted = Object.keys(state.players).every(
+        (id) => committedTurns[id as PlayerId] === state.turnNumber,
+    );
+    return allCommitted ? { ok: true } : { ok: false, reason: 'awaiting_commitment' };
+}
+
 export function registerTacticsActions(registry: ActionRegistry<BaseGameSnapshot>): void {
     registry.register(tacticsMoveUnitDefinition);
     registry.register(tacticsAttackDefinition);
     registry.register(tacticsRevealTileDefinition);
+    registry.register(tacticsCommitDefinition);
     registry.registerGame('tactics', {
         buildInitialEntities: buildInitialTacticsEntities,
         resolveGameResult: resolveTacticsGameResult,
+        canEndTurn: tacticsCanEndTurn,
     });
 }

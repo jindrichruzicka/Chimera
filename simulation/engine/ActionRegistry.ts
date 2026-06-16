@@ -19,6 +19,7 @@ import type {
     GameResult,
     GameSetupConfig,
     PlayerId,
+    ValidationResult,
 } from './types.js';
 
 export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapshot> {
@@ -39,6 +40,18 @@ export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapsh
      * when the supplied snapshot satisfies the game's win/draw condition.
      */
     readonly resolveGameResult?: (snapshot: Readonly<TState>) => GameResult | null;
+    /**
+     * Optional pure guard consulted by `engine:end_turn.validate()` AFTER the
+     * generic active-player checks. Returns `{ ok: false, reason }` to block the
+     * end-turn — e.g. commit-then-sync turn modes reject until every seated
+     * player has committed for the current turn (§4.6/§8, F54). Absent ⇒ no extra
+     * gate, so sequential games and games with no turn modes are unaffected.
+     *
+     * Keeps the generic engine ignorant of any specific game: the engine consults
+     * this through `GameReduceContext.endTurnGuard` (Invariant #102), which
+     * `ActionPipeline` populates from this hook.
+     */
+    readonly canEndTurn?: (state: Readonly<TState>, playerId: PlayerId) => ValidationResult;
 }
 
 // ─── Error classes ────────────────────────────────────────────────────────────

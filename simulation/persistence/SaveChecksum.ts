@@ -22,7 +22,10 @@ import type { SaveFile } from './SaveFile.js';
  * The portion of a `SaveFile` that participates in the integrity checksum.
  * The header is excluded because `header.checksum` itself is stored there.
  */
-export type SaveBody = Pick<SaveFile, 'checkpoint' | 'deltaActions' | 'pendingCommitments'>;
+export type SaveBody = Pick<
+    SaveFile,
+    'checkpoint' | 'deltaActions' | 'pendingCommitments' | 'stagedReveals'
+>;
 
 // ─── computeBodyChecksum ──────────────────────────────────────────────────────
 
@@ -39,10 +42,17 @@ export type SaveBody = Pick<SaveFile, 'checkpoint' | 'deltaActions' | 'pendingCo
  * @returns A 64-character hex SHA-256 digest.
  */
 export async function computeBodyChecksum(body: SaveBody): Promise<string> {
+    // `stagedReveals` is included only when non-empty so that a pre-#26 save
+    // (whose stored checksum was computed over the three original fields) still
+    // verifies after the v4→v5 migration backfills `stagedReveals: {}`. An empty
+    // map is semantically "no staging", so omitting it from the hash is correct;
+    // a populated map IS integrity-protected.
+    const stagedReveals = body.stagedReveals ?? {};
     const canonical = JSON.stringify({
         checkpoint: body.checkpoint,
         deltaActions: body.deltaActions,
         pendingCommitments: body.pendingCommitments,
+        ...(Object.keys(stagedReveals).length > 0 ? { stagedReveals } : {}),
     });
 
     const encoded = new TextEncoder().encode(canonical);

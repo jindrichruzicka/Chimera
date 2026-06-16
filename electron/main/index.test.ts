@@ -189,10 +189,20 @@ vi.mock('@chimera/simulation/projection/index.js', () => ({
     DefaultStateProjector: mockDefaultStateProjectorCtor,
     DefaultCommitmentScheme: vi.fn(() => ({
         commit: vi.fn(),
+        commitRevealable: vi.fn(),
         verify: vi.fn(() => true),
     })),
     CommitmentVerificationError: MockCommitmentVerificationError,
     toCommitmentId: (raw: string): string => raw,
+    RevealStaging: vi.fn(() => ({
+        stage: vi.fn(),
+        hasCommitted: vi.fn(() => false),
+        committedPlayerIds: vi.fn(() => []),
+        buildReveal: vi.fn(),
+        clearTurn: vi.fn(),
+        capture: vi.fn(() => ({})),
+        restore: vi.fn(),
+    })),
 }));
 
 // ── Tactics visibility rules mock — verifies game-owned rules are injected ────

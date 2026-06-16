@@ -56,6 +56,7 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
         checkpoint: mergedCheckpoint,
         deltaActions: [],
         pendingCommitments: {},
+        stagedReveals: {},
         ...restOverrides,
     };
 }
@@ -154,6 +155,40 @@ describe('JsonSaveSerializer', () => {
             id: commitmentId,
             commitment: 'a'.repeat(64),
         });
+    });
+
+    it('round-trip preserves stagedReveals for commitment turn mode (Invariant #26)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const commitmentId = toCommitmentId('commitment-staged');
+        const stagedReveals = Object.create(null) as SaveFile['stagedReveals'];
+        (stagedReveals as Record<string, unknown>)[commitmentId] = {
+            envelopeId: commitmentId,
+            playerId: 'player-1',
+            nonce: 'c'.repeat(64),
+            value: { playerId: 'player-1', turnNumber: 2, actions: [] },
+        };
+        const file = makeSaveFile({ stagedReveals });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.stagedReveals[commitmentId]).toStrictEqual({
+            envelopeId: commitmentId,
+            playerId: 'player-1',
+            nonce: 'c'.repeat(64),
+            value: { playerId: 'player-1', turnNumber: 2, actions: [] },
+        });
+    });
+
+    it('parses a legacy save that predates stagedReveals (optional field)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const file = makeSaveFile();
+        const raw = await serializer.serialize(file);
+        const legacy = JSON.parse(raw) as Record<string, unknown>;
+        delete legacy['stagedReveals'];
+
+        const result = await serializer.deserialize(JSON.stringify(legacy));
+
+        expect(result.stagedReveals).toBeUndefined();
     });
 
     it('matches the projection CommitmentEnvelope shape for invariant #26 load wiring', () => {

@@ -25,3 +25,6 @@ export {
     DefaultCommitmentScheme,
     toCommitmentId,
 } from './CommitmentScheme.js';
+
+export type { RevealStagingPort, StagedReveal, StagedReveals } from './RevealStaging.js';
+export { RevealStaging, RevealStagingError } from './RevealStaging.js';

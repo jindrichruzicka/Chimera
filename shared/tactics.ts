@@ -2,6 +2,14 @@ export const TACTICS_GAME_ID = 'tactics';
 export const TACTICS_MOVE_UNIT_ACTION = 'tactics:move_unit';
 export const TACTICS_ATTACK_ACTION = 'tactics:attack';
 export const TACTICS_REVEAL_TILE_ACTION = 'tactics:reveal_tile';
+/**
+ * Marks the active player as having committed their buffered turn in commitment
+ * mode (T8 / #728). Its reducer writes only the non-secret per-turn commit
+ * marker into `snapshot.committedTurns`; the player's actual buffered actions are
+ * never carried by this action (they stay host-local in the reveal-staging
+ * store). The end-turn guard reads the marker to gate `engine:end_turn`.
+ */
+export const TACTICS_COMMIT_ACTION = 'tactics:commit';
 export const TACTICS_DEFAULT_UNIT_ID_VALUE = 'unit-1';
 
 /**

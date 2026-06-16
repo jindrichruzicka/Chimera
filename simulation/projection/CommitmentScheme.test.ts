@@ -45,6 +45,60 @@ describe('DefaultCommitmentScheme.commit()', () => {
     });
 });
 
+describe('DefaultCommitmentScheme.commitRevealable()', () => {
+    it('returns an envelope and a matching reveal that verify() accepts', () => {
+        const scheme = new DefaultCommitmentScheme();
+
+        const { envelope, reveal } = scheme.commitRevealable(COMMITTED_VALUE);
+
+        expect(envelope.id.length).toBeGreaterThan(0);
+        expect(envelope.commitment).toMatch(SHA256_HEX_PATTERN);
+        expect(reveal.id).toBe(envelope.id);
+        expect(reveal.value).toBe(COMMITTED_VALUE);
+        expect(reveal.nonce).toMatch(SHA256_HEX_PATTERN);
+        expect(scheme.verify(reveal, envelope)).toBe(true);
+    });
+
+    it('keeps the nonce only in the reveal, never on the envelope', () => {
+        const scheme = new DefaultCommitmentScheme();
+
+        const { envelope } = scheme.commitRevealable(COMMITTED_VALUE);
+
+        expect(Object.hasOwn(envelope, 'nonce')).toBe(false);
+    });
+
+    it('produces a reveal whose tampered value fails verification', () => {
+        const scheme = new DefaultCommitmentScheme();
+        const { envelope, reveal } = scheme.commitRevealable(COMMITTED_VALUE);
+
+        const tampered: CommitmentReveal = { ...reveal, value: { deck: ['z'], drawIndex: 9 } };
+
+        expect(() => scheme.verify(tampered, envelope)).toThrow(CommitmentVerificationError);
+    });
+
+    it('produces a reveal whose tampered nonce fails verification', () => {
+        const scheme = new DefaultCommitmentScheme();
+        const { envelope, reveal } = scheme.commitRevealable(COMMITTED_VALUE);
+
+        const tampered: CommitmentReveal = {
+            ...reveal,
+            nonce: 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+        };
+
+        expect(() => scheme.verify(tampered, envelope)).toThrow(CommitmentVerificationError);
+    });
+
+    it('generates a fresh nonce and id on each call', () => {
+        const scheme = new DefaultCommitmentScheme();
+
+        const first = scheme.commitRevealable(COMMITTED_VALUE);
+        const second = scheme.commitRevealable(COMMITTED_VALUE);
+
+        expect(first.reveal.nonce).not.toBe(second.reveal.nonce);
+        expect(first.envelope.id).not.toBe(second.envelope.id);
+    });
+});
+
 describe('DefaultCommitmentScheme.verify()', () => {
     it('returns true when the reveal value and nonce reproduce the commitment hash', () => {
         const scheme = new DefaultCommitmentScheme();

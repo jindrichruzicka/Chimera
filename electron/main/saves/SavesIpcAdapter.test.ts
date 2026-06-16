@@ -58,6 +58,7 @@ function makeFile(
         } as unknown as SaveFile['checkpoint'],
         deltaActions: [],
         pendingCommitments: {},
+        stagedReveals: {},
     };
 }
 

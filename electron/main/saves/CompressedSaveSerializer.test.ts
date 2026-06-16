@@ -45,6 +45,7 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
         },
         deltaActions: [],
         pendingCommitments: {},
+        stagedReveals: {},
         ...overrides,
     };
 }

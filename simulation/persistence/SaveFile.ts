@@ -17,6 +17,7 @@
 
 import type { BaseGameSnapshot, EngineAction } from '../engine/types.js';
 import type { CommitmentEnvelope, CommitmentId } from '../projection/CommitmentScheme.js';
+import type { StagedReveals } from '../projection/RevealStaging.js';
 
 // ─── SaveFileHeader ───────────────────────────────────────────────────────────
 
@@ -101,4 +102,23 @@ export interface SaveFile {
     // validation of all CommitmentId keys is deferred to the F27 commitment scheme implementation,
     // which will own a dedicated validator at the deserialization boundary.
     readonly pendingCommitments: Record<CommitmentId, CommitmentEnvelope>;
+
+    /**
+     * Host-retained staged reveals for an in-progress commitment turn (§4.6/§8,
+     * F54, Invariant #26). Carries the `{ value, nonce }` matching each pending
+     * commitment so a save taken mid-commit (some players committed, awaiting
+     * others) can still reveal after load. Moves as a unit with
+     * `pendingCommitments`: a load that restores envelopes but not staging must
+     * not apply reveals. Empty `{}` outside commitment mode and for pre-F54
+     * saves (the v4→v5 migration backfills it).
+     *
+     * Typed non-optional because every writer (`captureSaveFile`) and the
+     * migrator guarantee on-disk presence, so loaded files always carry it. The
+     * one transient gap is an in-memory file between deserialize and migrate (the
+     * serializer schema marks it `.optional()` so legacy v4 JSON still parses):
+     * the `?? {}` guards in `SessionRuntime.applyRestoredFile` and
+     * `SaveChecksum.computeBodyChecksum` cover that window before the migrator
+     * backfills it.
+     */
+    readonly stagedReveals: StagedReveals;
 }

@@ -26,7 +26,6 @@ import {
     TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera/shared/tactics.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
-import type { CommitmentId, CommitmentReveal } from '@chimera/simulation/projection/index.js';
 import type {
     TacticsAttackPayload,
     TacticsMoveUnitPayload,
@@ -137,48 +136,12 @@ export type ResolveRevealOrder = (
 ) => readonly PlayerId[];
 
 // ─── Host-side reveal staging (Phase: Commit → reveal, T8/T9) ────────────────
-
-/**
- * A single staged commitment the host retains between Commit and Reveal so it
- * can build a valid {@link CommitmentReveal} later. Required because
- * `DefaultCommitmentScheme.commit()` discards the nonce — the host must keep
- * `{ value, nonce }` itself (see design note §Nonce-retention; T8 adds the
- * additive `CommitmentScheme.commitRevealable()` that surfaces the nonce).
- *
- * Persisted alongside `SaveFile.pendingCommitments` and restored together so a
- * save taken mid-commit can still reveal (Invariant #26).
- */
-export interface PendingReveal {
-    readonly envelopeId: CommitmentId;
-    readonly playerId: PlayerId;
-    readonly nonce: string;
-    readonly value: TacticsCommitmentEnvelopeValue;
-}
-
-/** Read-only snapshot of all staged reveals, keyed by envelope id (save/restore). */
-export type StagedReveals = Readonly<Record<CommitmentId, PendingReveal>>;
-
-/**
- * Host-side store that retains staged reveals for the current commitment turn.
- * Lives next to `SessionCommitmentRuntime` in the main process; defined here as
- * the contract T8/T9 implement.
- *
- * Mirrors the `capture`/`restore` shape of the commitment runtime so the
- * staging map can ride the existing save/load path (Invariant #26).
- */
-export interface RevealStagingPort {
-    /** Record a freshly committed player-turn so it can be revealed later. */
-    stage(entry: PendingReveal): void;
-    /** Whether the given player has a staged commitment for the current turn. */
-    hasCommitted(playerId: PlayerId): boolean;
-    /** The committed turns so far, for {@link ResolveRevealOrder} and the End-Turn gate. */
-    committedTurns(): readonly CommittedTurn[];
-    /** Build the reveal payload for a staged player (id + value + retained nonce). */
-    buildReveal(playerId: PlayerId): CommitmentReveal;
-    /** Discard all staged reveals once the turn has fully revealed/applied. */
-    clearTurn(): void;
-    /** Null-prototype copy for `SaveFile` capture (mirrors `capturePendingCommitments`). */
-    capture(): StagedReveals;
-    /** Restore staged reveals from a loaded `SaveFile` (mirrors `restorePendingCommitments`). */
-    restore(staged: StagedReveals): void;
-}
+//
+// The host-side reveal-staging STORE is game-agnostic and lives next to the
+// commit/reveal primitive at `simulation/projection/RevealStaging.ts`
+// (`RevealStaging` / `RevealStagingPort` / `StagedReveal` / `StagedReveals`),
+// keyed by envelope id with an opaque `value`. The host must stay ignorant of
+// which games exist (Invariant #2), so the tactics value type is not baked into
+// the store. T9 derives the tactics-specific {@link CommittedTurn} list (with
+// `hasAttack`) and reveal order from the store's `capture()` by narrowing each
+// staged `value` to {@link TacticsCommitmentEnvelopeValue}.

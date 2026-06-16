@@ -23,7 +23,7 @@ import type { SaveFile } from './SaveFile.js';
  * of its nested types, and add a corresponding `SaveMigration` so that
  * older saves are automatically upgraded.
  */
-export const CURRENT_SCHEMA_VERSION = 4;
+export const CURRENT_SCHEMA_VERSION = 5;
 
 // ─── SaveMigration interface ──────────────────────────────────────────────────
 
@@ -302,6 +302,30 @@ export const checkpointGameResultMigration: SaveMigration = {
 };
 
 /**
+ * Migration from schema v4 to v5: ensure every save has a `stagedReveals` map.
+ *
+ * Saves written before commitment turn mode (§4.6/§8, F54, Invariant #26) have
+ * no reveal staging; they load with `stagedReveals: {}` (no in-progress
+ * commitment turn). Existing staging is preserved verbatim so the migration is
+ * additive and idempotent. The field is top-level (alongside
+ * `pendingCommitments`), not on the checkpoint.
+ */
+export const stagedRevealsMigration: SaveMigration = {
+    fromVersion: 4,
+    apply(file: SaveFile): SaveFile {
+        // Probe a widened copy: v4 saves legitimately predate `stagedReveals`,
+        // but the static `SaveFile` type asserts it is present (so `'x' in file`
+        // would narrow `file` to `never`). Widening lets us detect the field
+        // without that narrowing and without `any`.
+        const widened = file as unknown as Record<string, unknown>;
+        if ('stagedReveals' in widened) {
+            return file;
+        }
+        return { ...file, stagedReveals: {} };
+    },
+};
+
+/**
  * Returns a fresh `SaveMigrator` with all built-in schema migrations
  * pre-registered in order.
  *
@@ -313,5 +337,6 @@ export function createDefaultMigrator(): SaveMigrator {
     migrator.register(checkpointTurnNumberMigration);
     migrator.register(checkpointTimersMigration);
     migrator.register(checkpointGameResultMigration);
+    migrator.register(stagedRevealsMigration);
     return migrator;
 }
