@@ -117,6 +117,7 @@ simulation/persistence/
 ## Cross-References
 
 - [State Projection Interfaces](../core-components/state-projection-interfaces.md) — `StateProjector.project()`, `VisibilityRules`, `CommitmentScheme` interfaces
+- [Tactics Commitment-Scheme Battle Mode](tactics-commitment-battle-mode.md) — the first gameplay consumer of commit/reveal: a tactics-local commit-then-sync turn (player-authored action bundles, deterministic attack-first reveal order)
 - [IPC Security Model](ipc-security-model.md) — trust boundary table, IPC attack surface audit
 - [WebSocket Message Protocol](../core-components/websocket-message-protocol.md) — `COMMIT`/`REVEAL` wire messages
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #3, #8, #9, #26, #98

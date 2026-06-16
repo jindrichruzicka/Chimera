@@ -12,6 +12,45 @@ export const TACTICS_DEFAULT_UNIT_ID_VALUE = 'unit-1';
  */
 export const TACTICS_MAX_STAMINA = 3;
 
+/**
+ * Tactics turn mode (T6 / #726 — F54). `sequential` is today's behaviour: each
+ * action is dispatched straight to the host, reduced, and projected back.
+ * `commitment` switches the match to the cryptographic commit-then-sync turn
+ * built on the existing commit/reveal primitive — each player acts locally,
+ * commits a hidden bundle, and `End Turn` reveals & applies all bundles in a
+ * deterministic order.
+ *
+ * Design note: docs/security-trust/tactics-commitment-battle-mode.md
+ */
+export type TacticsTurnMode = 'sequential' | 'commitment';
+
+/**
+ * Key under which the turn mode lives in the synced host-authored
+ * `GameSetupConfig.matchSettings` (and therefore in `snapshot.setup`). The
+ * Battle Setup checkbox (T7) writes this through the existing
+ * `chimera:lobby:set-match-setting` path; reducers and the renderer read it via
+ * {@link readTacticsTurnMode}.
+ */
+export const TACTICS_TURN_MODE_SETTING = 'turnMode';
+
+/** Turn mode for a match with no explicit setting — commitment mode is opt-in. */
+export const TACTICS_DEFAULT_TURN_MODE: TacticsTurnMode = 'sequential';
+
+/**
+ * Pure reader for the tactics turn mode. Accepts the raw match-settings record
+ * (from the lobby's `matchSettings` or `snapshot.setup?.matchSettings`) so both
+ * the renderer and the simulation can share one decode without a cross-module
+ * type dependency. Fail-safe: anything other than the exact literal
+ * `'commitment'` resolves to {@link TACTICS_DEFAULT_TURN_MODE}.
+ */
+export function readTacticsTurnMode(
+    matchSettings: Readonly<Record<string, string>> | undefined,
+): TacticsTurnMode {
+    return matchSettings?.[TACTICS_TURN_MODE_SETTING] === 'commitment'
+        ? 'commitment'
+        : TACTICS_DEFAULT_TURN_MODE;
+}
+
 export const TACTICS_PROXIMITY_REVEAL_RANGE_TILES = 1;
 export const TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED =
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES * TACTICS_PROXIMITY_REVEAL_RANGE_TILES;
