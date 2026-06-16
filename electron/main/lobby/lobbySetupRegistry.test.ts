@@ -116,6 +116,15 @@ describe('buildSetupFromLobbyState', () => {
         expect(buildSetupFromLobbyState(state)).toBeUndefined();
     });
 
+    it('carries the host-authored turn mode through to the match setup (T7 → T8)', () => {
+        // The synced commitment battle-mode flag rides matchSettings verbatim into
+        // engine:start_game → snapshot.setup so T8 can read it via readTacticsTurnMode.
+        const result = buildSetupFromLobbyState(
+            makeState({ matchSettings: { turnMode: 'commitment' } }),
+        );
+        expect(result?.matchSettings['turnMode']).toBe('commitment');
+    });
+
     it('combines matchSettings and per-player attributes into one config', () => {
         const state = makeState({
             matchSettings: { mapSize: 'large' },

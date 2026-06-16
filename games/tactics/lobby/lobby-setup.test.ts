@@ -12,6 +12,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
+import { TACTICS_DEFAULT_TURN_MODE, TACTICS_TURN_MODE_SETTING } from '@chimera/shared/tactics.js';
 import {
     buildTacticsLobbySetup,
     DEFAULT_BOARD_COLOR,
@@ -42,9 +43,12 @@ describe('buildTacticsLobbySetup', () => {
         expect(buildTacticsLobbySetup(PALETTE).maxPlayers).toBe(4);
     });
 
-    it('defaults the board colour to slate', () => {
+    it('seeds the board colour and the off-by-default commitment turn mode', () => {
+        // turnMode is seeded to 'sequential' so the synced LobbyState carries the
+        // off-by-default commitment battle mode (T7 → snapshot.setup for T8).
         expect(buildTacticsLobbySetup(PALETTE).matchSettingsDefaults).toEqual({
             boardColor: DEFAULT_BOARD_COLOR,
+            [TACTICS_TURN_MODE_SETTING]: TACTICS_DEFAULT_TURN_MODE,
         });
     });
 

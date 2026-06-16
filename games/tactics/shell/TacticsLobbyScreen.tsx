@@ -31,9 +31,11 @@ import {
     Button,
     Heading,
     Select,
+    Toggle,
     ToggleButton,
 } from '@chimera/renderer/components/ui/index.js';
 import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
+import { readTacticsTurnMode, TACTICS_TURN_MODE_SETTING } from '@chimera/shared/tactics.js';
 import {
     DEFAULT_BOARD_COLOR,
     DEFAULT_PLAYER_COLOR,
@@ -63,6 +65,10 @@ export function TacticsLobbyScreen({
     const palette = paletteFromCollections(content ?? {});
     const readyCount = lobbyState.players.filter((player) => player.ready).length;
     const boardColor = lobbyState.matchSettings?.['boardColor'] ?? DEFAULT_BOARD_COLOR;
+    // Commitment battle mode is a host-authored synced match setting (T7, #727):
+    // the toggle writes the shared `turnMode` key, off (`sequential`) by default,
+    // and rides `snapshot.setup` into the match for T8 to read.
+    const commitmentEnabled = readTacticsTurnMode(lobbyState.matchSettings) === 'commitment';
     // AI agent slots come synced in the lobby state (F54 T4). The lobby is "full"
     // on total occupancy — humans + AI together against maxPlayers — matching the
     // host's auto-remove-on-overflow rule (#724). The AI section renders for the
@@ -104,6 +110,19 @@ export function TacticsLobbyScreen({
                     }}
                     options={palette.boardColors}
                     value={boardColor}
+                />
+                <Toggle
+                    checked={commitmentEnabled}
+                    data-testid="tactics-commitment-scheme-toggle"
+                    disabled={!isHost}
+                    helperText="Players act in secret each turn, then reveal simultaneously."
+                    label="Commitment scheme"
+                    onCheckedChange={(next) => {
+                        setMatchSetting(
+                            TACTICS_TURN_MODE_SETTING,
+                            next ? 'commitment' : 'sequential',
+                        );
+                    }}
                 />
                 <p className={styles['ready-summary']}>
                     Ready: {readyCount}/{lobbyState.players.length}

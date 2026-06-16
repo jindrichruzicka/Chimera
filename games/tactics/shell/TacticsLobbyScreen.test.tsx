@@ -126,6 +126,47 @@ describe('TacticsLobbyScreen', () => {
         });
     });
 
+    describe('commitment scheme (host-authored)', () => {
+        it('gives the host an enabled toggle, off by default, that routes to setMatchSetting', () => {
+            const setMatchSetting = vi.fn();
+            render(<TacticsLobbyScreen {...makeProps({ setMatchSetting })} />);
+
+            const toggle = screen.getByTestId('tactics-commitment-scheme-toggle');
+            expect(toggle).toBeEnabled();
+            expect(toggle).not.toBeChecked();
+
+            fireEvent.click(toggle);
+            expect(setMatchSetting).toHaveBeenCalledWith('turnMode', 'commitment');
+        });
+
+        it('reflects an enabled commitment mode and toggles back to sequential', () => {
+            const setMatchSetting = vi.fn();
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        setMatchSetting,
+                        lobbyState: makeLobbyState({
+                            matchSettings: { boardColor: 'navy', turnMode: 'commitment' },
+                        }),
+                    })}
+                />,
+            );
+
+            const toggle = screen.getByTestId('tactics-commitment-scheme-toggle');
+            expect(toggle).toBeChecked();
+
+            fireEvent.click(toggle);
+            expect(setMatchSetting).toHaveBeenCalledWith('turnMode', 'sequential');
+        });
+
+        it('renders the commitment toggle disabled (read-only) for a non-host client', () => {
+            render(
+                <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
+            );
+            expect(screen.getByTestId('tactics-commitment-scheme-toggle')).toBeDisabled();
+        });
+    });
+
     describe('per-player colour (owner-authored)', () => {
         it('lets the local player edit their OWN colour, routing to setPlayerAttribute', () => {
             const setPlayerAttribute = vi.fn();
