@@ -49,6 +49,7 @@ import {
     type CommitmentReveal,
     type CommitmentScheme,
     type RevealStagingPort,
+    type StagedReveals,
 } from '@chimera/simulation/projection/index.js';
 import type { SaveRequest } from '../../preload/api-types.js';
 
@@ -406,6 +407,33 @@ export class SessionRuntime {
      */
     committedPlayerIds(): readonly PlayerId[] {
         return this.staging.committedPlayerIds();
+    }
+
+    /**
+     * Snapshot of every staged reveal, keyed by envelope id (T9 / #729). The
+     * host's `RevealOrchestrator` reads this to derive the deterministic reveal
+     * order from the (game-opaque) staged values without touching their shape.
+     */
+    captureStagedReveals(): StagedReveals {
+        return this.staging.capture();
+    }
+
+    /**
+     * Build the reveal payload for a staged player so the host can broadcast it
+     * via `HostTransport.sendReveal` (T9). The matching envelope in
+     * `pendingCommitments` verifies it (Invariant #9). Throws
+     * `RevealStagingError` if `playerId` has no staged commitment.
+     */
+    buildReveal(playerId: PlayerId): CommitmentReveal {
+        return this.staging.buildReveal(playerId);
+    }
+
+    /**
+     * Discard the turn's staged reveals once every one has been revealed and
+     * applied (T9), so the next commitment turn starts clean.
+     */
+    clearStagedReveals(): void {
+        this.staging.clearTurn();
     }
 
     /**

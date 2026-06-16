@@ -18,7 +18,12 @@
 
 import { describe, it, expect } from 'vitest';
 import { createGameStore, useGameStore } from './gameStore.js';
-import type { EngineAction, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type {
+    CommitmentId,
+    CommitmentReveal,
+    EngineAction,
+    PlayerSnapshot,
+} from '@chimera/electron/preload/api-types.js';
 import { playerId, gamePhase } from '@chimera/electron/preload/api-types.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -249,6 +254,36 @@ describe('gameStore.confirmPrediction()', () => {
         const store = createGameStore();
 
         expect(() => store.getState().confirmPrediction(5)).not.toThrow();
+        expect(store.getState().predictedActions).toHaveLength(0);
+    });
+});
+
+// ── RevealStore.applyReveal() (F54 / T9) ──────────────────────────────────────
+
+describe('gameStore.applyReveal()', () => {
+    const reveal = (id: string): CommitmentReveal => ({
+        id: id as CommitmentId,
+        value: { playerId: 'p1' },
+        nonce: 'nonce',
+    });
+
+    it('starts with no reveal', () => {
+        expect(createGameStore().getState().lastReveal).toBeNull();
+    });
+
+    it('records the most recent reveal', () => {
+        const store = createGameStore();
+        store.getState().applyReveal(reveal('env-1'));
+        expect(store.getState().lastReveal?.id).toBe('env-1');
+        store.getState().applyReveal(reveal('env-2'));
+        expect(store.getState().lastReveal?.id).toBe('env-2');
+    });
+
+    it('does not disturb snapshot or prediction state', () => {
+        const store = createGameStore();
+        store.getState().applySnapshot(makeSnapshot(7));
+        store.getState().applyReveal(reveal('env-1'));
+        expect(store.getState().snapshot?.tick).toBe(7);
         expect(store.getState().predictedActions).toHaveLength(0);
     });
 });

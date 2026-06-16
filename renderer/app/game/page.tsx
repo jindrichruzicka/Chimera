@@ -49,6 +49,7 @@ export default function GamePage(): React.ReactElement | null {
     const router = useRouter();
     const snapshot = useGameStore((state) => state.snapshot);
     const currentTick = useGameStore((state) => state.currentTick);
+    const lastReveal = useGameStore((state) => state.lastReveal);
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
     const gameId = lobbyState?.info.gameId ?? null;
@@ -184,6 +185,7 @@ export default function GamePage(): React.ReactElement | null {
             currentTick={currentTick}
             sendAction={sendAction}
             {...(gameContent === undefined ? {} : { content: gameContent })}
+            reveal={lastReveal}
             canEndTurn={!isTerminalSnapshot(snapshot) && snapshot.isMyTurn}
             localPlayerId={resolvedPlayerId}
             {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'

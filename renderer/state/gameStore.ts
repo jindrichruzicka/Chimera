@@ -18,7 +18,11 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { EngineAction, PlayerSnapshot } from '../../electron/preload/api-types.js';
+import type {
+    CommitmentReveal,
+    EngineAction,
+    PlayerSnapshot,
+} from '../../electron/preload/api-types.js';
 
 // ── Store interfaces (§4.4 split) ─────────────────────────────────────────────
 
@@ -72,8 +76,26 @@ export interface PredictionStore {
     confirmPrediction(tick: number): void;
 }
 
+/**
+ * Verified reveal stream for commitment battle mode (F54 / T9). The main process
+ * already gated each reveal through `CommitmentScheme.verify()` (Invariant #9)
+ * before pushing it here; the store holds the most recent reveal so the active
+ * game's board can play back each revealed turn as it lands (reveals arrive
+ * one-per-player in the host's deterministic order). Game-agnostic — only the
+ * authoring game interprets the opaque `reveal.value`.
+ */
+export interface RevealStore {
+    /** The most recently received verified reveal, or null before any arrives. */
+    readonly lastReveal: CommitmentReveal | null;
+    /**
+     * Record a verified reveal. ipcClient/bootstrap only — do NOT call from
+     * components.
+     */
+    applyReveal(reveal: CommitmentReveal): void;
+}
+
 /** Convenience composition exposed to components (§4.4). */
-export type GameStore = SnapshotStore & PredictionStore;
+export type GameStore = SnapshotStore & PredictionStore & RevealStore;
 
 // ── Factory ───────────────────────────────────────────────────────────────────
 
@@ -89,6 +111,7 @@ export function createGameStore(): StoreApi<GameStore> {
         latencyMs: 0,
         canUndo: false,
         canRedo: false,
+        lastReveal: null,
 
         applySnapshot(snapshot: PlayerSnapshot): void {
             set(() => ({
@@ -97,6 +120,10 @@ export function createGameStore(): StoreApi<GameStore> {
                 canUndo: snapshot.undoMeta.canUndo,
                 canRedo: snapshot.undoMeta.canRedo,
             }));
+        },
+
+        applyReveal(reveal: CommitmentReveal): void {
+            set(() => ({ lastReveal: reveal }));
         },
 
         applyTick(tick: number): void {

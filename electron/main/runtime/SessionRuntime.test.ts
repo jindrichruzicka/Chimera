@@ -806,5 +806,41 @@ describe('SessionRuntime', () => {
             expect(restored.hasCommitted(P1)).toBe(false);
             expect(restored.committedPlayerIds()).toEqual([]);
         });
+
+        describe('reveal-sync accessors (T9)', () => {
+            it('captureStagedReveals() exposes each staged value keyed by envelope id', () => {
+                const runtime = makeRuntime();
+                const envelope = runtime.commitTurn(P1, tacticsValue(P1, 'attack'));
+
+                const staged = runtime.captureStagedReveals();
+
+                expect(staged[envelope.id]).toMatchObject({
+                    envelopeId: envelope.id,
+                    playerId: P1,
+                    value: tacticsValue(P1, 'attack'),
+                });
+            });
+
+            it('buildReveal() returns the reveal the matching envelope verifies', () => {
+                const runtime = makeRuntime();
+                const envelope = runtime.commitTurn(P1, tacticsValue(P1, 'move'));
+
+                const reveal = runtime.buildReveal(P1);
+
+                expect(reveal.id).toBe(envelope.id);
+                expect(runtime.verifyReveal(reveal)).toEqual(tacticsValue(P1, 'move'));
+            });
+
+            it('clearStagedReveals() discards the turn so nothing remains to reveal', () => {
+                const runtime = makeRuntime();
+                runtime.commitTurn(P1, tacticsValue(P1, 'attack'));
+                runtime.commitTurn(P2, tacticsValue(P2, 'move'));
+
+                runtime.clearStagedReveals();
+
+                expect(runtime.committedPlayerIds()).toEqual([]);
+                expect(runtime.captureStagedReveals()).toEqual({});
+            });
+        });
     });
 });

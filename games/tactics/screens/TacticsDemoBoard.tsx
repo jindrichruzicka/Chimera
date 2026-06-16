@@ -26,6 +26,7 @@ import {
 } from '../scene/tacticsCamera.js';
 import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
 import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
+import { parseRevealedTurn } from '../commitment/revealView.js';
 
 const boardSceneStyle: React.CSSProperties = {
     position: 'absolute',
@@ -33,6 +34,22 @@ const boardSceneStyle: React.CSSProperties = {
     width: '100%',
     height: '100%',
     minHeight: 'calc(var(--ch-space-md) * 20)',
+};
+
+/**
+ * Reveal playback overlay (F54 / T9): in commitment mode the host reveals each
+ * player's committed turn in deterministic order. The board surfaces the most
+ * recent revealed turn here — non-interactive and corner-anchored so it never
+ * occludes board clicks (cf. the chat drawer). The authoritative snapshot
+ * remains the source of truth for unit positions; this is the playback hook.
+ */
+const revealOverlayStyle: React.CSSProperties = {
+    position: 'absolute',
+    top: 'var(--ch-space-sm)',
+    right: 'var(--ch-space-sm)',
+    pointerEvents: 'none',
+    color: 'var(--ch-color-text-secondary)',
+    fontSize: 'var(--ch-font-size-sm)',
 };
 
 const boardFallbackStyle: React.CSSProperties = {
@@ -50,6 +67,7 @@ export function TacticsDemoBoard({
     localPlayerId,
     sendAction,
     content,
+    reveal,
 }: GameScreenProps): React.ReactElement | null {
     // Interpret the generic content prop into this game's colour hex maps. Empty
     // until content loads, so the resolvers fall back to the default hexes.
@@ -176,9 +194,17 @@ export function TacticsDemoBoard({
     };
 
     const boardColor = resolveTacticsBoardColor(snapshot.setup, palette.boardColorHex);
+    const revealedTurn = parseRevealedTurn(reveal);
 
     return (
         <div aria-label="Tactics board" style={boardSceneStyle}>
+            {revealedTurn !== null && (
+                <div data-testid="tactics-reveal" style={revealOverlayStyle}>
+                    {`Revealed ${revealedTurn.playerId}: ${revealedTurn.actions
+                        .map((action) => action.type)
+                        .join(', ')}`}
+                </div>
+            )}
             <Canvas camera={camera}>
                 <ambientLight intensity={0.65} />
                 <directionalLight intensity={0.9} position={[3, 6, 4]} />

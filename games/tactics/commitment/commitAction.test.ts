@@ -81,6 +81,18 @@ describe('tactics:commit validate', () => {
     });
 });
 
+describe('tactics:commit parsePayload', () => {
+    it('strips the buffer rider so the actions never reach reduce or the snapshot', () => {
+        // In commitment mode the player's buffer rides the raw `tactics:commit`
+        // envelope to the host, which stages it out-of-band (Invariants #3/#8).
+        // parsePayload must drop it so it can never land on the snapshot.
+        const parsed = tacticsCommitDefinition.parsePayload({
+            actions: [{ type: 'tactics:move_unit', payload: { unitId: 'unit-1', x: 1, y: 0 } }],
+        });
+        expect(parsed).toEqual({});
+    });
+});
+
 describe('tactics:commit reduce', () => {
     it('marks only the acting player as committed for the current turn', () => {
         const snapshot = makeSnapshot('commitment');

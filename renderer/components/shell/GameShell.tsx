@@ -3,7 +3,12 @@
 // renderer/components/shell/GameShell.tsx
 
 import React, { type ReactNode } from 'react';
-import type { GameResult, PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type {
+    CommitmentReveal,
+    GameResult,
+    PlayerId,
+    PlayerSnapshot,
+} from '@chimera/electron/preload/api-types.js';
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import {
@@ -74,6 +79,8 @@ interface GameShellRegistryProps {
      * the generic `GameScreenProps.content`. Game-agnostic plain data.
      */
     readonly content?: GameContent;
+    /** Latest verified commitment-mode reveal (F54 / T9), passed through to the board. */
+    readonly reveal?: CommitmentReveal | null;
     readonly canEndTurn?: boolean;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
@@ -106,6 +113,7 @@ function RegistryGameShell({
     inputActions,
     contentDatabase = null,
     content,
+    reveal,
     canEndTurn,
     fadeOutMs,
     fadeInMs,
@@ -149,6 +157,7 @@ function RegistryGameShell({
                             sendAction={sendAction}
                             {...(localPlayerId === undefined ? {} : { localPlayerId })}
                             {...(content === undefined ? {} : { content })}
+                            {...(reveal === undefined ? {} : { reveal })}
                             {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
                         />

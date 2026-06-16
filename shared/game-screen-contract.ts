@@ -1,4 +1,5 @@
 import type {
+    CommitmentReveal,
     EngineAction,
     GameResult,
     PlayerId,
@@ -28,6 +29,14 @@ export interface GameScreenProps {
      * for games with no content or before the fetch resolves.
      */
     readonly content?: GameContent;
+    /**
+     * The most recently received verified reveal in commitment battle mode
+     * (F54 / T9), or null/absent. Main gates it through `CommitmentScheme.verify()`
+     * (Invariant #9) before it reaches the renderer. Generic and game-agnostic —
+     * only the authoring game interprets the opaque `reveal.value` (e.g. tactics
+     * plays back the revealed turn).
+     */
+    readonly reveal?: CommitmentReveal | null;
 }
 
 export interface GameHudProps extends GameScreenProps {

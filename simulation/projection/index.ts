@@ -28,3 +28,5 @@ export {
 
 export type { RevealStagingPort, StagedReveal, StagedReveals } from './RevealStaging.js';
 export { RevealStaging, RevealStagingError } from './RevealStaging.js';
+
+export type { CommitmentTurnOrchestration } from './CommitmentOrchestration.js';

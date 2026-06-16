@@ -23,10 +23,16 @@
 
 import type { GameAPI, PlayerSnapshot, Unsubscribe } from '../../electron/preload/api-types.js';
 import { createIpcClient, type IpcPredictionStore } from '../bridge/ipcClient.js';
-import { useGameStore } from './gameStore.js';
+import { useGameStore, type RevealStore } from './gameStore.js';
 
 /** Shape of the `createIpcClient` factory; injectable for testing. */
 type IpcClientFactory = typeof createIpcClient;
+
+/**
+ * Store surface the bootstrap writes: the ipcClient snapshot/prediction surface
+ * plus `applyReveal` (reveals are wired here directly, not through ipcClient).
+ */
+type GameBootstrapStore = IpcPredictionStore & Pick<RevealStore, 'applyReveal'>;
 
 /**
  * Wire the IPC game bridge into the gameStore.
@@ -50,10 +56,10 @@ type IpcClientFactory = typeof createIpcClient;
  */
 export async function bootstrapGameStore(
     api: GameAPI,
-    store?: IpcPredictionStore,
+    store?: GameBootstrapStore,
     clientFactory: IpcClientFactory = createIpcClient,
 ): Promise<Unsubscribe> {
-    const resolvedStore: IpcPredictionStore = store ?? useGameStore.getState();
+    const resolvedStore: GameBootstrapStore = store ?? useGameStore.getState();
     let latestSnapshot = currentSnapshotFrom(resolvedStore);
     const trackedStore: IpcPredictionStore = {
         addPrediction: (action) => resolvedStore.addPrediction(action),
@@ -67,7 +73,15 @@ export async function bootstrapGameStore(
     let predictableTypes = new Set<string>();
     const predictableTypesPromise = api.getPredictableActionTypes();
     const client = clientFactory(api, trackedStore, (type: string) => predictableTypes.has(type));
-    const unsubscribe = client.bootstrap();
+    const unsubscribeClient = client.bootstrap();
+    // Commitment battle mode (F54 / T9): main pushes only reveals that already
+    // passed `CommitmentScheme.verify()` (Invariant #9). The board plays each
+    // revealed turn back from the store.
+    const unsubscribeReveal = api.onReveal((reveal) => resolvedStore.applyReveal(reveal));
+    const unsubscribe: Unsubscribe = () => {
+        unsubscribeClient();
+        unsubscribeReveal();
+    };
     predictableTypes = new Set(await predictableTypesPromise);
 
     // Replay: if a snapshot was sent before this listener was registered

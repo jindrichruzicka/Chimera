@@ -67,6 +67,7 @@ import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
+import { runRevealSync } from './runtime/RevealOrchestrator.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
 import { ReplayManager } from './replay/replay-manager.js';
 import {
@@ -1530,6 +1531,16 @@ export async function main(): Promise<void> {
                     win.webContents.send(GAME_TICK_CHANNEL, tick);
                 }
             };
+            // Push a host-verified commitment reveal to the host's own renderer
+            // (F54 / T9). The host never receives its own 'broadcast' over the
+            // transport, so the board's reveal playback needs this direct path —
+            // symmetric with the joined-client `sendRevealToRenderer` wiring.
+            const sendRevealToHostRenderer = (reveal: CommitmentReveal): void => {
+                const win = mainWindow;
+                if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+                    win.webContents.send(GAME_REVEAL_CHANNEL, reveal);
+                }
+            };
             let boundHostRendererViewerId: PlayerId | null = null;
             let unsubscribeHostRenderer: Unsubscribe = () => undefined;
             const bindHostRendererRecipient = (viewerId: PlayerId): void => {
@@ -1695,13 +1706,58 @@ export async function main(): Promise<void> {
             // autosave fire-and-forget (Issue #375).  Errors here are
             // swallowed so a single misbehaving client cannot crash the
             // host event loop; the pipeline already logs invalid actions.
+            const commitmentOrchestration = hostedGame.commitment;
             const unsubAction = transport.onActionReceived((_from, action) => {
                 try {
                     sessionRuntime.applyAction(action);
+
+                    // Commitment turn mode (F54 / T9): stage the committer's buffer
+                    // for reveal — but only AFTER the pipeline ACCEPTED the commit
+                    // (`stageOnCommit` checks the authoritative `committedTurns`
+                    // marker on the post-apply snapshot). A rejected/out-of-mode
+                    // commit therefore never stages a reveal nor projects a phantom
+                    // envelope. The buffer rode the commit envelope out-of-band; the
+                    // reducer kept it off the snapshot (#3/#8).
+                    if (commitmentOrchestration !== undefined) {
+                        const staged = commitmentOrchestration.stageOnCommit(
+                            action,
+                            sessionRuntime.getSnapshot(),
+                        );
+                        if (staged !== null) {
+                            sessionRuntime.commitTurn(staged.playerId, staged.value);
+                        }
+                    }
+
                     // Fan-out to all registered agents after the tick advances
                     // (Invariant #17: routing through SimulationHost/AgentManager).
                     simulationHost.afterTick(sessionRuntime.getSnapshot());
                     scheduleAutoLocalSeatHandoff(action);
+
+                    // On the commitment-mode End Turn (every seat has committed),
+                    // reveal + apply each staged turn in the deterministic order so
+                    // every client converges (T9). No-op for sequential turns.
+                    if (
+                        commitmentOrchestration?.shouldReveal(action, sessionRuntime.getSnapshot())
+                    ) {
+                        runRevealSync({
+                            orchestration: commitmentOrchestration,
+                            session: sessionRuntime,
+                            sendReveal: (target, wireReveal) => {
+                                transport.sendReveal(target, wireReveal);
+                                // The host's own renderer is a viewer too but never
+                                // receives its own 'broadcast' over the transport, so
+                                // push the (already host-verified) reveal to it
+                                // directly — the joined-client path is wired in
+                                // `onSessionJoined` below (T9).
+                                sendRevealToHostRenderer({
+                                    id: toCommitmentId(wireReveal.id),
+                                    value: wireReveal.value,
+                                    nonce: wireReveal.nonce,
+                                });
+                            },
+                        });
+                        simulationHost.afterTick(sessionRuntime.getSnapshot());
+                    }
                 } catch (err) {
                     lobbyLogger.warn('hosted session: applyAction threw', {
                         actionType: action.type,

@@ -27,13 +27,17 @@ import type { AIState } from '@chimera/ai/engine/AIState.js';
 import { createTacticsAIState } from '@chimera/ai/policies/tactics/tacticsPolicy.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/index.js';
+import type {
+    CommitmentTurnOrchestration,
+    VisibilityRules,
+} from '@chimera/simulation/projection/index.js';
 
 import {
     registerTacticsActions,
     resolveTacticsFirstPlayer,
     type TacticsGameInitializationConfig,
 } from '@chimera/games/tactics/actions.js';
+import { tacticsCommitmentOrchestration } from '@chimera/games/tactics/commitment/orchestration.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
 import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
@@ -66,6 +70,14 @@ export interface MainGameContribution {
      * in the pure `ai/` policy package; this registry only wires it.
      */
     readonly createAIState?: (playerId: PlayerId) => AIState;
+    /**
+     * Optional host-side commit-then-sync reveal orchestration (F54 / T9). When
+     * present, the host stages each commit and, on the commitment-mode End Turn,
+     * drives the deterministic reveal sequence through these pure hooks — staying
+     * ignorant of the game (Invariant #2). Absent ⇒ the game has no commitment
+     * turn mode and the host never reveals.
+     */
+    readonly commitment?: CommitmentTurnOrchestration;
 }
 
 /**
@@ -80,6 +92,7 @@ const tacticsContribution: MainGameContribution = {
     visibilityRules: tacticsVisibilityRules,
     resolveFirstPlayer: resolveTacticsFirstPlayer,
     createAIState: createTacticsAIState,
+    commitment: tacticsCommitmentOrchestration,
 };
 
 /**

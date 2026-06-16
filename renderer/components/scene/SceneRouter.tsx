@@ -1,7 +1,11 @@
 'use client';
 
 import React, { useEffect } from 'react';
-import type { PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type {
+    CommitmentReveal,
+    PlayerId,
+    PlayerSnapshot,
+} from '@chimera/electron/preload/api-types.js';
 import type {
     GameScreenComponent,
     GameScreenProps,
@@ -19,6 +23,7 @@ export interface SceneRouterProps {
     readonly localPlayerId?: PlayerId;
     readonly sendAction: SendAction;
     readonly content?: GameContent;
+    readonly reveal?: CommitmentReveal | null;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
 }
@@ -29,6 +34,7 @@ export function SceneRouter({
     localPlayerId,
     sendAction,
     content,
+    reveal,
     fadeOutMs,
     fadeInMs,
 }: SceneRouterProps): React.ReactElement {
@@ -56,6 +62,7 @@ export function SceneRouter({
         sendAction,
         ...(localPlayerId === undefined ? {} : { localPlayerId }),
         ...(content === undefined ? {} : { content }),
+        ...(reveal === undefined ? {} : { reveal }),
     };
 
     return (
