@@ -19,7 +19,7 @@ export interface GameSetupProjection {
     readonly playerAttributes: Readonly<Record<string, Readonly<Record<string, string>>>>;
 }
 
-interface TacticsGridPoint {
+export interface TacticsGridPoint {
     readonly x: number;
     readonly y: number;
 }
@@ -101,6 +101,10 @@ export class GamePage {
     readonly replayButton: Locator;
     readonly saveReplayButton: Locator;
     readonly replaySavedStatus: Locator;
+    readonly staminaReadout: Locator;
+    readonly turnStatus: Locator;
+    readonly commitStatus: Locator;
+    readonly revealOverlay: Locator;
 
     public constructor(
         private readonly page: Page,
@@ -122,6 +126,13 @@ export class GamePage {
         this.replayButton = page.getByTestId('post-game-replay-btn');
         this.saveReplayButton = page.getByTestId('post-game-save-replay-btn');
         this.replaySavedStatus = page.getByTestId('post-game-replay-status');
+        // Stamina / turn-gating / commitment HUD surfaces (F54). In commitment mode
+        // End Turn IS the commit; `commitStatus` is the pulsing "waiting for other
+        // player(s)" message shown only while a committed seat awaits the rest.
+        this.staminaReadout = page.getByTestId('hud-stamina');
+        this.turnStatus = page.getByTestId('tactics-turn-status');
+        this.commitStatus = page.getByTestId('tactics-commit-status');
+        this.revealOverlay = page.getByTestId('tactics-reveal');
     }
 
     public async attackAdjacentEnemy(): Promise<void> {
@@ -152,6 +163,30 @@ export class GamePage {
         const localUnit = await this.findLocalUnit();
         await this.clickTacticsGridPoint(unitGridPoint(localUnit));
         await this.waitForCanvasInteractionFrame();
+    }
+
+    /** The local unit's current grid position from the projected snapshot. */
+    public async localUnitGrid(): Promise<TacticsGridPoint> {
+        return unitGridPoint(await this.findLocalUnit());
+    }
+
+    /**
+     * Move the local unit to an explicit, caller-chosen grid tile: select it, then
+     * click the target, polling until the projected snapshot shows it arrived.
+     * Lets a spec drive deterministic moves between central, well-projected tiles
+     * (more robust than letting the unit drift toward edge tiles). Retries the
+     * select+click a few times to absorb canvas-click imprecision.
+     */
+    public async moveOwnedUnitTo(grid: TacticsGridPoint): Promise<void> {
+        for (let attempt = 0; attempt < TACTICS_MOVE_RETRY_ATTEMPTS; attempt += 1) {
+            await this.selectOwnedPrimitive();
+            await this.clickTacticsGridPoint(grid);
+            await this.waitForCanvasInteractionFrame();
+            if (await this.isProjectedOwnedUnitAt(grid)) {
+                return;
+            }
+        }
+        await this.waitForProjectedOwnedUnitAt(grid);
     }
 
     public async assertOwnedSelectionFeedbackChangesCanvas(): Promise<void> {
@@ -302,6 +337,37 @@ export class GamePage {
         await this.waitForCanvasInteractionFrame();
     }
 
+    /**
+     * Attempt to move the local unit to an adjacent open tile and assert the move
+     * is REJECTED — the unit stays at its origin. Proves a further action is
+     * blocked (e.g. a 4th move at 0 stamina). Throws if the unit moved.
+     */
+    public async expectOwnedMoveRejected(): Promise<void> {
+        const snapshot = await this.readCurrentSnapshot();
+        const localUnit = findLocalUnitInSnapshot(snapshot);
+        if (localUnit === undefined) {
+            throw new Error(`No visible local tactics unit for viewer ${snapshot.viewerId}.`);
+        }
+        const origin = { x: localUnit.x, y: localUnit.y };
+        const target =
+            tacticsOpenMoveTarget(snapshot, localUnit) ?? tacticsMoveTarget(snapshot, localUnit);
+
+        await this.selectOwnedPrimitive();
+        await this.clickTacticsGridPoint(target);
+        await this.waitForCanvasInteractionFrame();
+
+        if (await this.isProjectedOwnedUnitAt(target)) {
+            throw new Error(
+                `Expected the move to ${JSON.stringify(target)} to be rejected, but the unit moved.`,
+            );
+        }
+        if (!(await this.isProjectedOwnedUnitAt(origin))) {
+            throw new Error(
+                `Expected the unit to remain at ${JSON.stringify(origin)} after a rejected move.`,
+            );
+        }
+    }
+
     public async attackVisibleOpponent(): Promise<void> {
         const { localUnit, opponentUnit } = await this.findVisibleAttackPair();
 
@@ -321,6 +387,31 @@ export class GamePage {
     public async currentTick(): Promise<number> {
         const text = await this.hudTick.innerText();
         return parseInt(text, 10);
+    }
+
+    /** The HUD stamina readout text, e.g. `"3/3"` (commitment mode is optimistic). */
+    public async staminaText(): Promise<string> {
+        return (await this.staminaReadout.innerText()).trim();
+    }
+
+    /** The turn-status badge text, e.g. `"Your turn"` / `"Waiting"`. */
+    public async turnStatusText(): Promise<string> {
+        return (await this.turnStatus.innerText()).trim();
+    }
+
+    /** The commit status state attribute: `"pending"` | `"waiting"` | `"committed"`. */
+    public async commitStatusState(): Promise<string | null> {
+        return this.commitStatus.getAttribute('data-state');
+    }
+
+    /** The committer id shown on the latest reveal overlay (`data-player`). */
+    public async revealPlayer(): Promise<string | null> {
+        return this.revealOverlay.getAttribute('data-player');
+    }
+
+    /** Whether the latest revealed turn contained an attack (`data-has-attack`). */
+    public async revealHasAttack(): Promise<string | null> {
+        return this.revealOverlay.getAttribute('data-has-attack');
     }
 
     public async waitForTick(tick: number, timeout = 30_000): Promise<void> {

@@ -519,6 +519,21 @@ export interface GameReduceContext {
         playerId: PlayerId,
     ) => ValidationResult;
     /**
+     * Optional per-game end-turn AUTHORIZATION, populated by `ActionPipeline`
+     * from the active game's `GameDefinition.mayEndTurn`. When present it
+     * REPLACES the engine's built-in active-player check in
+     * `engine:end_turn.validate()`: the game decides which seats may end the
+     * turn. The simultaneous commit-then-sync mode uses this so any seat may
+     * fire the reveal once every seat has committed (the active-player gate
+     * would otherwise deadlock a parallel turn; §4.6/§8, F54). Returning `false`
+     * rejects with `not_active_player`. Absent ⇒ the engine keeps its default
+     * "only `turnClock.activePlayerId` may end the turn" behaviour, so
+     * sequential games are unaffected. The `endTurnGuard` (canEndTurn) is still
+     * consulted afterwards. Backed by the same ISP-narrow rationale as
+     * `endTurnGuard` (Invariant #102).
+     */
+    readonly endTurnAuthority?: (state: Readonly<BaseGameSnapshot>, playerId: PlayerId) => boolean;
+    /**
      * Re-entrant dispatch nesting depth. Zero for the top-level
      * `ActionPipeline.process()` call; incremented by one for each nested
      * `ctx.dispatch()` invocation. Bounded by `MAX_NESTED_DISPATCH` (§4.7,

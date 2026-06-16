@@ -38,6 +38,7 @@ import {
     type TacticsGameInitializationConfig,
 } from '@chimera/games/tactics/actions.js';
 import { tacticsCommitmentOrchestration } from '@chimera/games/tactics/commitment/orchestration.js';
+import { tacticsResolveIsMyTurn } from '@chimera/games/tactics/commitment/turnGate.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
 import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
@@ -78,6 +79,15 @@ export interface MainGameContribution {
      * turn mode and the host never reveals.
      */
     readonly commitment?: CommitmentTurnOrchestration;
+    /**
+     * Optional `isMyTurn` resolver fed to `StateProjectorOptions.resolveIsMyTurn`
+     * (F54 / #730). Simultaneous turn modes supply it so more than one seat can
+     * be active at once (e.g. commitment mode: every not-yet-committed seat acts
+     * in parallel). Absent ⇒ the projector keeps its single-active default, so
+     * sequential games are unaffected. Pure and host-side (may read host-local
+     * fields the projection does not cross).
+     */
+    readonly resolveIsMyTurn?: (state: Readonly<BaseGameSnapshot>, viewerId: PlayerId) => boolean;
 }
 
 /**
@@ -93,6 +103,7 @@ const tacticsContribution: MainGameContribution = {
     resolveFirstPlayer: resolveTacticsFirstPlayer,
     createAIState: createTacticsAIState,
     commitment: tacticsCommitmentOrchestration,
+    resolveIsMyTurn: tacticsResolveIsMyTurn,
 };
 
 /**

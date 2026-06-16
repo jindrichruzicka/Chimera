@@ -59,6 +59,19 @@ export interface CommitmentTurnOrchestration {
     shouldReveal(action: ActionEnvelope, snapshot: Readonly<BaseGameSnapshot>): boolean;
 
     /**
+     * Whether this just-applied action COMPLETED the commitment set so the host
+     * should advance the turn and reveal **automatically**, without a separate
+     * manual End Turn. The host synthesises an `engine:end_turn` for the active
+     * seat when this returns `true` (which then satisfies {@link shouldReveal}).
+     *
+     * Tactics returns `true` on the `tactics:commit` that makes every seated
+     * player committed for the current turn, so a player's single "End Turn" (=
+     * commit) is the only confirmation a turn needs. Optional — a game with no
+     * auto-advance simply omits it, keeping the manual {@link shouldReveal} path.
+     */
+    shouldAutoEndTurn?(action: ActionEnvelope, snapshot: Readonly<BaseGameSnapshot>): boolean;
+
+    /**
      * Derive the deterministic reveal order from the staged reveals. Pure: a
      * function of `(seed, tick)` only (Invariant #71). The game narrows each
      * staged `value` to read its grouping discriminant (e.g. attack-committers

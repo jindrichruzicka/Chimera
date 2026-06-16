@@ -89,6 +89,7 @@ describe('tacticsVisibilityRules', () => {
         expect(tacticsVisibilityRules.maskPlayerState(player, PLAYER_A, snapshot)).toEqual({
             id: PLAYER_A,
             stamina: { current: TACTICS_MAX_STAMINA, max: TACTICS_MAX_STAMINA },
+            committed: false,
         });
     });
 
@@ -96,7 +97,32 @@ describe('tacticsVisibilityRules', () => {
         expect(tacticsVisibilityRules.maskPlayerState(player, PLAYER_B, snapshot)).toEqual({
             id: PLAYER_A,
             stamina: null,
+            committed: false,
         });
+    });
+
+    it('projects committed=true for a seat that has committed this turn (any viewer)', () => {
+        // The "seat X committed" marker is non-secret — it is projected for every
+        // player to every viewer so the renderer can gate End Turn (#730, F54).
+        const committedSnapshot: BaseGameSnapshot = {
+            ...snapshot,
+            turnNumber: 2,
+            committedTurns: { [PLAYER_A]: 2 },
+        };
+        expect(
+            tacticsVisibilityRules.maskPlayerState(player, PLAYER_B, committedSnapshot).committed,
+        ).toBe(true);
+    });
+
+    it('projects committed=false for a stale commitment from a prior turn', () => {
+        const staleSnapshot: BaseGameSnapshot = {
+            ...snapshot,
+            turnNumber: 3,
+            committedTurns: { [PLAYER_A]: 2 },
+        };
+        expect(
+            tacticsVisibilityRules.maskPlayerState(player, PLAYER_A, staleSnapshot).committed,
+        ).toBe(false);
     });
 
     it('does not filter current tactics events', () => {

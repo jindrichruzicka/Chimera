@@ -40,6 +40,7 @@ import {
     type TacticsCommitmentEnvelopeValue,
 } from './contract.js';
 import { resolveRevealOrder } from './revealOrder.js';
+import { allSeatsCommitted, isTacticsCommitmentMode } from './turnGate.js';
 
 /** The engine action type that advances a turn — the commitment-mode reveal trigger. */
 const ENGINE_END_TURN = 'engine:end_turn';
@@ -84,6 +85,20 @@ export const tacticsCommitmentOrchestration: CommitmentTurnOrchestration = {
         return (
             action.type === ENGINE_END_TURN &&
             readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment'
+        );
+    },
+
+    shouldAutoEndTurn(action: ActionEnvelope, snapshot: Readonly<BaseGameSnapshot>): boolean {
+        // The `tactics:commit` that completes the set (every seat committed for the
+        // current turn) makes the player's single "End Turn" = commit the only
+        // confirmation a turn needs: the host then synthesises the `engine:end_turn`
+        // automatically. Reads the authoritative `committedTurns` marker on the
+        // post-apply snapshot, so a rejected/out-of-mode commit (no marker) returns
+        // false and never auto-advances.
+        return (
+            action.type === TACTICS_COMMIT_ACTION &&
+            isTacticsCommitmentMode(snapshot) &&
+            allSeatsCommitted(snapshot)
         );
     },
 

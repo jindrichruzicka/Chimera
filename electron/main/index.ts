@@ -1452,6 +1452,12 @@ export async function main(): Promise<void> {
                     canRedo: undoManager.canRedo(viewerId),
                 }),
                 getPendingCommitments: () => sessionCommitmentRuntime.capturePendingCommitments(),
+                // Simultaneous turn modes (e.g. a commitment battle mode) override
+                // `isMyTurn` so every not-yet-committed seat is active in parallel;
+                // absent ⇒ the projector keeps its single-active default.
+                ...(hostedGame.resolveIsMyTurn === undefined
+                    ? {}
+                    : { resolveIsMyTurn: hostedGame.resolveIsMyTurn }),
             });
             const simulationHost = new SimulationHost(agentManager, projector);
             simulationHostRef.current = simulationHost;
@@ -1597,10 +1603,93 @@ export async function main(): Promise<void> {
                     });
                 }, LOCAL_SEAT_HANDOFF_DELAY_MS);
             };
+            // Commitment battle mode side effects (F54 / T9), shared by BOTH the
+            // host's own renderer-action path (`dispatchRendererAction`) and remote
+            // clients' `transport.onActionReceived`. Without sharing, a host-
+            // triggered commit/End-Turn would never stage its buffer nor reveal —
+            // only client-triggered ones would (#730).
+            const commitmentOrchestration = hostedGame.commitment;
+            const stageCommitmentIfAccepted = (action: ActionEnvelope): void => {
+                if (commitmentOrchestration === undefined) {
+                    return;
+                }
+                // Stage ONLY a commit the pipeline accepted (`stageOnCommit` checks
+                // the authoritative `committedTurns` marker on the post-apply
+                // snapshot). A rejected/out-of-mode commit never stages a reveal nor
+                // projects a phantom envelope; the buffer stays off the snapshot
+                // (#3/#8).
+                const staged = commitmentOrchestration.stageOnCommit(
+                    action,
+                    sessionRuntime.getSnapshot(),
+                );
+                if (staged !== null) {
+                    sessionRuntime.commitTurn(staged.playerId, staged.value);
+                }
+            };
+            const revealIfCommitmentEndTurn = (action: ActionEnvelope): void => {
+                // On the commitment-mode End Turn (every seat has committed), reveal +
+                // apply each staged turn in the deterministic order so every viewer
+                // converges (T9). No-op for sequential turns.
+                if (!commitmentOrchestration?.shouldReveal(action, sessionRuntime.getSnapshot())) {
+                    return;
+                }
+                runRevealSync({
+                    orchestration: commitmentOrchestration,
+                    session: sessionRuntime,
+                    sendReveal: (target, wireReveal) => {
+                        transport.sendReveal(target, wireReveal);
+                        // The host's own renderer is a viewer too but never receives
+                        // its own 'broadcast' over the transport, so push the
+                        // (already host-verified) reveal to it directly.
+                        sendRevealToHostRenderer({
+                            id: toCommitmentId(wireReveal.id),
+                            value: wireReveal.value,
+                            nonce: wireReveal.nonce,
+                        });
+                    },
+                });
+                simulationHost.afterTick(sessionRuntime.getSnapshot());
+            };
+            const autoEndTurnIfReady = (action: ActionEnvelope): void => {
+                // A commit that completed the set (every seat committed for the turn)
+                // auto-advances the turn and reveals — the player's single End Turn
+                // (= commit) is the only confirmation a turn needs (#730 UX). The
+                // host synthesises `engine:end_turn` for the active seat, reading the
+                // LIVE post-commit snapshot: the commit already bumped the tick, and a
+                // stale tick would `StaleActionError` (mirrors `runRevealSync`). That
+                // end_turn then satisfies `shouldReveal`, so the reveal fires once.
+                if (
+                    commitmentOrchestration?.shouldAutoEndTurn?.(
+                        action,
+                        sessionRuntime.getSnapshot(),
+                    ) !== true
+                ) {
+                    return;
+                }
+                const snap = sessionRuntime.getSnapshot();
+                const activePlayerId = snap.turnClock?.activePlayerId;
+                if (activePlayerId === undefined) {
+                    return;
+                }
+                const endTurnAction: ActionEnvelope = {
+                    type: 'engine:end_turn',
+                    playerId: activePlayerId,
+                    tick: snap.tick,
+                    payload: {},
+                };
+                sessionRuntime.applyAction(endTurnAction);
+                simulationHost.afterTick(sessionRuntime.getSnapshot());
+                scheduleAutoLocalSeatHandoff(endTurnAction);
+                revealIfCommitmentEndTurn(endTurnAction);
+            };
+
             dispatchRendererAction = (action) => {
                 sessionRuntime.applyAction(action);
+                stageCommitmentIfAccepted(action);
                 simulationHost.afterTick(sessionRuntime.getSnapshot());
                 scheduleAutoLocalSeatHandoff(action);
+                revealIfCommitmentEndTurn(action);
+                autoEndTurnIfReady(action);
             };
             saveInitialTurnMemento = (playerIdForMemento) => {
                 undoManager.saveTurnMemento(sessionRuntime.getSnapshot(), playerIdForMemento);
@@ -1706,58 +1795,18 @@ export async function main(): Promise<void> {
             // autosave fire-and-forget (Issue #375).  Errors here are
             // swallowed so a single misbehaving client cannot crash the
             // host event loop; the pipeline already logs invalid actions.
-            const commitmentOrchestration = hostedGame.commitment;
             const unsubAction = transport.onActionReceived((_from, action) => {
                 try {
                     sessionRuntime.applyAction(action);
-
-                    // Commitment turn mode (F54 / T9): stage the committer's buffer
-                    // for reveal — but only AFTER the pipeline ACCEPTED the commit
-                    // (`stageOnCommit` checks the authoritative `committedTurns`
-                    // marker on the post-apply snapshot). A rejected/out-of-mode
-                    // commit therefore never stages a reveal nor projects a phantom
-                    // envelope. The buffer rode the commit envelope out-of-band; the
-                    // reducer kept it off the snapshot (#3/#8).
-                    if (commitmentOrchestration !== undefined) {
-                        const staged = commitmentOrchestration.stageOnCommit(
-                            action,
-                            sessionRuntime.getSnapshot(),
-                        );
-                        if (staged !== null) {
-                            sessionRuntime.commitTurn(staged.playerId, staged.value);
-                        }
-                    }
+                    stageCommitmentIfAccepted(action);
 
                     // Fan-out to all registered agents after the tick advances
                     // (Invariant #17: routing through SimulationHost/AgentManager).
                     simulationHost.afterTick(sessionRuntime.getSnapshot());
                     scheduleAutoLocalSeatHandoff(action);
 
-                    // On the commitment-mode End Turn (every seat has committed),
-                    // reveal + apply each staged turn in the deterministic order so
-                    // every client converges (T9). No-op for sequential turns.
-                    if (
-                        commitmentOrchestration?.shouldReveal(action, sessionRuntime.getSnapshot())
-                    ) {
-                        runRevealSync({
-                            orchestration: commitmentOrchestration,
-                            session: sessionRuntime,
-                            sendReveal: (target, wireReveal) => {
-                                transport.sendReveal(target, wireReveal);
-                                // The host's own renderer is a viewer too but never
-                                // receives its own 'broadcast' over the transport, so
-                                // push the (already host-verified) reveal to it
-                                // directly — the joined-client path is wired in
-                                // `onSessionJoined` below (T9).
-                                sendRevealToHostRenderer({
-                                    id: toCommitmentId(wireReveal.id),
-                                    value: wireReveal.value,
-                                    nonce: wireReveal.nonce,
-                                });
-                            },
-                        });
-                        simulationHost.afterTick(sessionRuntime.getSnapshot());
-                    }
+                    revealIfCommitmentEndTurn(action);
+                    autoEndTurnIfReady(action);
                 } catch (err) {
                     lobbyLogger.warn('hosted session: applyAction threw', {
                         actionType: action.type,

@@ -16,6 +16,7 @@ import type {
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
 import type { ObservedEntityState, VisibilityRules } from '@chimera/simulation/projection/types.js';
+import { hasCommittedThisTurn } from './commitment/turnGate.js';
 import type { TacticsObservedPlayer } from './stamina.js';
 import { readStamina } from './stamina.js';
 
@@ -65,10 +66,13 @@ export const tacticsVisibilityRules: VisibilityRules<
     // the HUD can show them; every other player's stamina is masked to null —
     // an opponent's budget is irrelevant to the viewer and never leaves the host.
     maskPlayerState(player, viewer, state): TacticsObservedPlayer {
+        // `committed` is the public per-turn commit marker — projected for every
+        // seat (not owner-only) so the renderer can gate the reveal-only End Turn.
+        const committed = hasCommittedThisTurn(state, player.id);
         if (player.id === viewer) {
-            return { ...player, stamina: readStamina(state, viewer) };
+            return { ...player, stamina: readStamina(state, viewer), committed };
         }
-        return { ...player, stamina: null };
+        return { ...player, stamina: null, committed };
     },
     filterEvents(events) {
         return events;

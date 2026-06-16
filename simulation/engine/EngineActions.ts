@@ -341,13 +341,23 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
     },
 
     validate(_payload, state, playerId, ctx): ValidationResult {
-        if (state.turnClock !== undefined && playerId !== state.turnClock.activePlayerId) {
-            return { ok: false, reason: 'not_active_player' };
-        }
-        // WARN-2: reject when activePlayerId has been removed from state.players.
-        // indexOf would silently return -1 and reduce would pick players[0] instead.
-        if (state.turnClock !== undefined && !(state.turnClock.activePlayerId in state.players)) {
-            return { ok: false, reason: 'active_player_not_in_game' };
+        if (state.turnClock !== undefined) {
+            // A game may OWN end-turn authorization (simultaneous commit-then-sync
+            // mode: any seat may fire the reveal once everyone has committed). When
+            // contributed, `endTurnAuthority` REPLACES the default active-player
+            // check; otherwise only the active seat may end the turn.
+            const authorized =
+                ctx.endTurnAuthority !== undefined
+                    ? ctx.endTurnAuthority(state, playerId)
+                    : playerId === state.turnClock.activePlayerId;
+            if (!authorized) {
+                return { ok: false, reason: 'not_active_player' };
+            }
+            // WARN-2: reject when activePlayerId has been removed from state.players.
+            // indexOf would silently return -1 and reduce would pick players[0] instead.
+            if (!(state.turnClock.activePlayerId in state.players)) {
+                return { ok: false, reason: 'active_player_not_in_game' };
+            }
         }
         // Per-game end-turn gate (e.g. commit-then-sync turn modes reject until
         // every seat has committed). Consulted after the generic active-player

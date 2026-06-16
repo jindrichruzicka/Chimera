@@ -52,6 +52,22 @@ export interface GameDefinition<TState extends BaseGameSnapshot = BaseGameSnapsh
      * `ActionPipeline` populates from this hook.
      */
     readonly canEndTurn?: (state: Readonly<TState>, playerId: PlayerId) => ValidationResult;
+    /**
+     * Optional pure end-turn AUTHORIZATION that REPLACES the engine's built-in
+     * active-player check in `engine:end_turn.validate()`. Returns `true` if
+     * `playerId` may end the turn from the supplied state, `false` otherwise.
+     *
+     * Sequential games omit this (the engine keeps "only the active seat may end
+     * the turn"). Simultaneous commit-then-sync mode supplies it so any seated
+     * player may fire the reveal once every seat has committed — a pure
+     * active-player gate would deadlock a parallel turn (§4.6/§8, F54). Consulted
+     * before `canEndTurn`, which still gates the reason (e.g. `awaiting_commitment`).
+     *
+     * Reaches the engine ignorant of any specific game via
+     * `GameReduceContext.endTurnAuthority` (Invariant #102), which `ActionPipeline`
+     * populates from this hook.
+     */
+    readonly mayEndTurn?: (state: Readonly<TState>, playerId: PlayerId) => boolean;
 }
 
 // ─── Error classes ────────────────────────────────────────────────────────────

@@ -21,6 +21,7 @@ import {
 } from '@chimera/shared/tactics.js';
 import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
+import { useCommitmentBuffer } from './useCommitmentBuffer';
 
 // Colour hexes now arrive via the generic `content` prop (loaded from the content
 // database). Mirrors games/tactics/data/{player,board}-colors. Hexes are lifted to
@@ -131,6 +132,7 @@ vi.mock('../scene/TacticsUnitPrimitive.js', () => ({
 afterEach(() => {
     cleanup();
     canvasCalls.length = 0;
+    useCommitmentBuffer.getState().reset();
 });
 
 function makeSnapshot(
@@ -138,6 +140,8 @@ function makeSnapshot(
         readonly includeEnemy?: boolean;
         readonly isMyTurn?: boolean;
         readonly includeSetup?: boolean;
+        readonly commitment?: boolean;
+        readonly localCommitted?: boolean;
     } = {},
 ): PlayerSnapshot {
     const viewerId = playerId('p1');
@@ -159,11 +163,16 @@ function makeSnapshot(
         };
     }
 
+    const matchSettings: Record<string, string> = {
+        ...(options.includeSetup ? { boardColor: 'navy' } : {}),
+        ...(options.commitment ? { turnMode: 'commitment' } : {}),
+    };
+
     return {
         tick: 7,
         viewerId,
         players: {
-            [viewerId]: { id: viewerId },
+            [viewerId]: { id: viewerId, ...(options.localCommitted ? { committed: true } : {}) },
             [opponentId]: { id: opponentId },
         },
         entities,
@@ -173,14 +182,16 @@ function makeSnapshot(
         commitments: {},
         undoMeta: { canUndo: false, canRedo: false },
         isMyTurn: options.isMyTurn ?? true,
-        ...(options.includeSetup
+        ...(options.includeSetup || options.commitment
             ? {
                   setup: {
-                      matchSettings: { boardColor: 'navy' },
-                      playerAttributes: {
-                          [viewerId]: { color: 'green' },
-                          [opponentId]: { color: 'amber' },
-                      },
+                      matchSettings,
+                      playerAttributes: options.includeSetup
+                          ? {
+                                [viewerId]: { color: 'green' },
+                                [opponentId]: { color: 'amber' },
+                            }
+                          : {},
                   },
               }
             : {}),
@@ -315,6 +326,75 @@ describe('TacticsDemoBoard', () => {
         expect(sendAction).toHaveBeenCalledOnce();
         expect(localUnit).toHaveAttribute('data-selected', 'false');
         expect(opponentUnit).toHaveAttribute('data-selected', 'false');
+    });
+
+    it('buffers a move locally in commitment mode instead of dispatching to the host', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ commitment: true })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+
+        // Secrecy: nothing crosses to the host until commit/reveal.
+        expect(sendAction).not.toHaveBeenCalled();
+        expect(useCommitmentBuffer.getState().buffer).toHaveLength(1);
+        expect(useCommitmentBuffer.getState().buffer[0]?.type).toBe(TACTICS_MOVE_UNIT_ACTION);
+    });
+
+    it('clears the optimistic buffer when the rendered seat changes (host hot-seat handoff)', () => {
+        const sendAction = vi.fn();
+        const { rerender } = render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ commitment: true })}
+                localPlayerId={playerId('p1')}
+                sendAction={sendAction}
+            />,
+        );
+
+        fireEvent.click(screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`));
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+        expect(useCommitmentBuffer.getState().buffer).toHaveLength(1);
+
+        // A seat handoff re-projects a different viewer WITHOUT remounting the
+        // board; the prior seat's buffer must not bleed into the new seat's view.
+        rerender(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ commitment: true })}
+                localPlayerId={playerId('p2')}
+                sendAction={sendAction}
+            />,
+        );
+        expect(useCommitmentBuffer.getState().buffer).toHaveLength(0);
+    });
+
+    it('goes inert once the local seat is committed in commitment mode', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot({ commitment: true, localCommitted: true })}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        const localUnit = screen.getByTestId(`tactics-unit-${TACTICS_DEFAULT_UNIT_ID_VALUE}`);
+        fireEvent.click(localUnit);
+        fireEvent.click(screen.getByTestId('tactics-ground-plane'));
+
+        // A committed seat's board is non-interactive: no selection, no buffering.
+        expect(localUnit).toHaveAttribute('data-selected', 'false');
+        expect(sendAction).not.toHaveBeenCalled();
+        expect(useCommitmentBuffer.getState().buffer).toHaveLength(0);
     });
 
     it('selects an opponent primitive alone without enabling move or attack dispatch', () => {

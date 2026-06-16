@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_MAX_STAMINA } from '@chimera/shared/tactics.js';
+import { TACTICS_MAX_STAMINA, TACTICS_TURN_MODE_SETTING } from '@chimera/shared/tactics.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import { gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import type { TacticsStaminaEntry, TacticsSnapshot } from './stamina.js';
@@ -13,6 +13,7 @@ function makeSnapshot(
         readonly activePlayerId?: PlayerId;
         readonly turnNumber?: number;
         readonly playerStamina?: Readonly<Record<PlayerId, TacticsStaminaEntry>>;
+        readonly turnMode?: 'commitment' | 'sequential';
     } = {},
 ): TacticsSnapshot {
     const base: BaseGameSnapshot = {
@@ -27,6 +28,14 @@ function makeSnapshot(
         turnClock: { activePlayerId: options.activePlayerId ?? P1, deadlineMs: 30_000 },
         timers: {},
         gameResult: null,
+        ...(options.turnMode === undefined
+            ? {}
+            : {
+                  setup: {
+                      matchSettings: { [TACTICS_TURN_MODE_SETTING]: options.turnMode },
+                      playerAttributes: {},
+                  },
+              }),
     };
     return options.playerStamina === undefined
         ? base
@@ -68,6 +77,32 @@ describe('readStamina', () => {
             activePlayerId: P2,
             turnNumber: 1,
             playerStamina: { [P1]: { current: 1, max: 3, refreshedTurn: 0 } },
+        });
+
+        expect(readStamina(state, P1)).toEqual({ current: 1, max: 3 });
+    });
+
+    // ── Commitment (simultaneous) mode: every seat refreshes on turn advance ──
+    // Sequential refresh keys on `turnClock.activePlayerId`, but in commitment
+    // mode all seats act in parallel and the active-seat marker is irrelevant,
+    // so a non-active seat must still refresh once a later turn begins (#730).
+    it('commitment mode: refreshes a non-active seat on a later turnNumber', () => {
+        const state = makeSnapshot({
+            turnMode: 'commitment',
+            activePlayerId: P2, // P1 is NOT the active seat
+            turnNumber: 2,
+            playerStamina: { [P1]: { current: 0, max: 3, refreshedTurn: 1 } },
+        });
+
+        expect(readStamina(state, P1)).toEqual({ current: 3, max: 3 });
+    });
+
+    it('commitment mode: does not refresh within the same turn (spent value kept)', () => {
+        const state = makeSnapshot({
+            turnMode: 'commitment',
+            activePlayerId: P2,
+            turnNumber: 2,
+            playerStamina: { [P1]: { current: 1, max: 3, refreshedTurn: 2 } },
         });
 
         expect(readStamina(state, P1)).toEqual({ current: 1, max: 3 });

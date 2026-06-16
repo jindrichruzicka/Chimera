@@ -12,7 +12,21 @@ import {
     type BadgeVariant,
 } from '@chimera/renderer/components/ui/index.js';
 import { ChatPanel } from '@chimera/renderer/components/chat';
-import { parseTacticsViewerStamina } from '../scene/tacticsSceneModel.js';
+import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/shared/tactics.js';
+import {
+    parseTacticsAllSeatsCommitted,
+    parseTacticsSeatCommitted,
+    parseTacticsViewerStamina,
+} from '../scene/tacticsSceneModel.js';
+import { applyBuffer } from '../commitment/buffer.js';
+import { readStamina } from '../stamina.js';
+import {
+    selectBuffer,
+    selectCommittedLatch,
+    toOptimisticBase,
+    useCommitmentBuffer,
+} from './useCommitmentBuffer.js';
+import styles from './TacticsGameHud.module.css';
 
 interface TacticsTurnStatus {
     readonly label: string;
@@ -28,6 +42,7 @@ type CompactButtonStyle = React.CSSProperties & {
 
 export function TacticsGameHud({
     snapshot,
+    sendAction,
     tick,
     undoDisabled,
     redoDisabled,
@@ -37,10 +52,63 @@ export function TacticsGameHud({
     handleEndTurn,
 }: GameHudProps): React.ReactElement {
     const turnStatus = resolveTacticsTurnStatus(snapshot.isMyTurn);
-    // Owner-only stamina projected on the viewer's player state (#721/#722).
-    // Null when the projection carries no stamina (pre-#721 save) — render nothing.
-    const stamina = parseTacticsViewerStamina(snapshot.players, snapshot.viewerId);
     const [chatOpen, setChatOpen] = useState<boolean>(false);
+
+    // ── Commitment battle mode (#730, F54) ──────────────────────────────────
+    // In commitment mode the HUD owns the local buffer loop: a Commit control,
+    // Undo that pops the buffer, optimistic stamina, and an End Turn that is the
+    // reveal trigger — enabled only once every seat has committed. All commitment
+    // logic lives here so the game-agnostic GameShell stays untouched.
+    const isCommitment = readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment';
+    const buffer = useCommitmentBuffer(selectBuffer);
+    const committedLatch = useCommitmentBuffer(selectCommittedLatch);
+    const undoBuffer = useCommitmentBuffer((state) => state.undo);
+    const markCommitted = useCommitmentBuffer((state) => state.markCommitted);
+
+    const localCommitted =
+        isCommitment && parseTacticsSeatCommitted(snapshot.players, snapshot.viewerId);
+    const hasCommitted = committedLatch || localCommitted;
+    const allCommitted = parseTacticsAllSeatsCommitted(snapshot.players);
+
+    // Owner-only stamina projected on the viewer's player state (#721/#722). In
+    // commitment mode the projected value lags the un-committed buffer, so compute
+    // the OPTIMISTIC remaining stamina from the buffer instead (decrements per
+    // buffered move/attack). Null when the projection carries no stamina.
+    const stamina =
+        isCommitment && !hasCommitted
+            ? readStamina(
+                  applyBuffer(toOptimisticBase(snapshot), buffer, snapshot.viewerId),
+                  snapshot.viewerId,
+              )
+            : parseTacticsViewerStamina(snapshot.players, snapshot.viewerId);
+
+    const handleCommit = (): void => {
+        // In commitment mode End Turn IS the commit (#730 UX): the buffer rides the
+        // commit action's payload out-of-band; the reducer strips it (Invariants
+        // #3/#8). markCommitted latches the local UI so the board goes inert and
+        // End Turn / Undo disable before the snapshot round-trips. Once EVERY seat
+        // has committed the host auto-advances + reveals — no second confirmation.
+        sendAction({
+            type: TACTICS_COMMIT_ACTION,
+            playerId: snapshot.viewerId,
+            tick: snapshot.tick,
+            payload: { actions: buffer },
+        });
+        markCommitted();
+    };
+
+    const resolvedUndoDisabled = isCommitment ? hasCommitted || buffer.length === 0 : undoDisabled;
+    const resolvedHandleUndo = isCommitment ? undoBuffer : handleUndo;
+    // End Turn is enabled until the viewer commits (the click commits), then
+    // disabled while waiting for the other seat(s).
+    const resolvedEndTurnDisabled = isCommitment
+        ? hasCommitted || snapshot.gameResult !== null || snapshot.phase === 'ended'
+        : endTurnDisabled;
+    const resolvedHandleEndTurn = isCommitment ? handleCommit : handleEndTurn;
+    // The pulsing "waiting" message shows once the viewer has committed and is
+    // waiting for the remaining seat(s); it clears automatically when all commit
+    // (the host reveals and starts a fresh turn).
+    const isWaitingForCommitments = isCommitment && hasCommitted && !allCommitted;
 
     return (
         <>
@@ -89,6 +157,15 @@ export function TacticsGameHud({
                                     </output>
                                 </div>
                             )}
+                            {isWaitingForCommitments && (
+                                <span
+                                    className={styles['waiting-message']}
+                                    data-state="waiting"
+                                    data-testid="tactics-commit-status"
+                                >
+                                    Waiting for other player(s)…
+                                </span>
+                            )}
                         </div>
                         <Divider
                             data-testid="tactics-hud-divider"
@@ -98,28 +175,30 @@ export function TacticsGameHud({
                         <div aria-label="Tactics actions" style={tacticsHudActionsStyle}>
                             <Button
                                 data-testid="undo"
-                                disabled={undoDisabled}
-                                onClick={handleUndo}
+                                disabled={resolvedUndoDisabled}
+                                onClick={resolvedHandleUndo}
                                 size="sm"
                                 style={tacticsHudButtonStyle}
                                 variant="secondary"
                             >
                                 Undo
                             </Button>
-                            <Button
-                                data-testid="redo"
-                                disabled={redoDisabled}
-                                onClick={handleRedo}
-                                size="sm"
-                                style={tacticsHudButtonStyle}
-                                variant="secondary"
-                            >
-                                Redo
-                            </Button>
+                            {!isCommitment && (
+                                <Button
+                                    data-testid="redo"
+                                    disabled={redoDisabled}
+                                    onClick={handleRedo}
+                                    size="sm"
+                                    style={tacticsHudButtonStyle}
+                                    variant="secondary"
+                                >
+                                    Redo
+                                </Button>
+                            )}
                             <Button
                                 data-testid="end-turn"
-                                disabled={endTurnDisabled}
-                                onClick={handleEndTurn}
+                                disabled={resolvedEndTurnDisabled}
+                                onClick={resolvedHandleEndTurn}
                                 size="sm"
                                 style={tacticsHudButtonStyle}
                                 variant="primary"

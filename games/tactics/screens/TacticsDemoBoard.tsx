@@ -8,9 +8,11 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
+    readTacticsTurnMode,
 } from '@chimera/shared/tactics.js';
 import {
     parseTacticsSceneUnits,
+    parseTacticsSeatCommitted,
     resolveTacticsBoardColor,
     resolveTacticsSelectionIntent,
     resolveTacticsUnitColor,
@@ -18,6 +20,9 @@ import {
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
 } from '../scene/tacticsSceneModel.js';
+import { tacticsGridCoordinate } from '../actions.js';
+import { applyBuffer } from '../commitment/buffer.js';
+import { bufferHasAttack, type BufferedTacticsAction } from '../commitment/contract.js';
 import { paletteFromCollections } from '../content/tacticsContent.js';
 import {
     TACTICS_CAMERA_BOUNDS,
@@ -27,6 +32,12 @@ import {
 import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
 import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
 import { parseRevealedTurn } from '../commitment/revealView.js';
+import {
+    selectBuffer,
+    selectCommittedLatch,
+    toOptimisticBase,
+    useCommitmentBuffer,
+} from './useCommitmentBuffer.js';
 
 const boardSceneStyle: React.CSSProperties = {
     position: 'absolute',
@@ -73,8 +84,30 @@ export function TacticsDemoBoard({
     // until content loads, so the resolvers fall back to the default hexes.
     const palette = paletteFromCollections(content ?? {});
     const [selectedUnitId, setSelectedUnitId] = useState<TacticsSceneUnit['id'] | null>(null);
+
+    // Commitment battle mode: move/attack/reveal selections are buffered locally
+    // (never dispatched) and shown as an optimistic view until the player commits
+    // (#730, F54). The buffer is shared with the HUD via this module store.
+    const isCommitment = readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment';
+    const buffer = useCommitmentBuffer(selectBuffer);
+    const committedLatch = useCommitmentBuffer(selectCommittedLatch);
+    const appendBufferedAction = useCommitmentBuffer((state) => state.append);
+
+    // In commitment mode both seats act in parallel; the local board stays
+    // interactive until THIS player commits, then goes inert. `localCommitted` is
+    // the projected authoritative marker; `committedLatch` covers the brief window
+    // after the Commit click before the snapshot round-trips.
+    const localCommitted =
+        isCommitment &&
+        localPlayerId !== undefined &&
+        parseTacticsSeatCommitted(snapshot.players, localPlayerId);
+    const hasCommitted = committedLatch || localCommitted;
+
     const isBoardInteractive =
-        snapshot.isMyTurn && snapshot.gameResult === null && snapshot.phase !== 'ended';
+        snapshot.isMyTurn &&
+        !hasCommitted &&
+        snapshot.gameResult === null &&
+        snapshot.phase !== 'ended';
     const [prevIsBoardInteractive, setPrevIsBoardInteractive] = useState(isBoardInteractive);
     const camera = React.useMemo(createTacticsCamera, []);
 
@@ -84,6 +117,26 @@ export function TacticsDemoBoard({
             setSelectedUnitId(null);
         }
     }
+
+    // Clear the optimistic buffer when a fresh commitment turn begins (the local
+    // commit marker clears once the reveal advances the turn), when the rendered
+    // SEAT changes (a host hot-seat handoff re-projects a new viewer without
+    // remounting the board — `electron/main` `scheduleAutoLocalSeatHandoff`), and
+    // on unmount — so a prior seat's / turn's / match's buffer never overlays the
+    // board.
+    const prevSeatRef = React.useRef(localPlayerId);
+    React.useEffect(() => {
+        const seatChanged = prevSeatRef.current !== localPlayerId;
+        prevSeatRef.current = localPlayerId;
+        if (seatChanged || !isCommitment || !localCommitted) {
+            useCommitmentBuffer.getState().reset();
+        }
+    }, [isCommitment, localCommitted, localPlayerId]);
+    React.useEffect(() => {
+        return () => {
+            useCommitmentBuffer.getState().reset();
+        };
+    }, []);
 
     if (localPlayerId === undefined) {
         return (
@@ -95,7 +148,14 @@ export function TacticsDemoBoard({
         );
     }
 
-    const units = parseTacticsSceneUnits(snapshot.entities, localPlayerId);
+    // Optimistic view: in commitment mode the board renders the local player's
+    // own units at their buffered positions. The opponent is unaffected (their
+    // moves are not dispatched pre-reveal), so secrecy holds automatically.
+    const sceneEntities =
+        isCommitment && buffer.length > 0
+            ? applyBuffer(toOptimisticBase(snapshot), buffer, localPlayerId).entities
+            : snapshot.entities;
+    const units = parseTacticsSceneUnits(sceneEntities, localPlayerId);
 
     if (units.length === 0) {
         return (
@@ -116,46 +176,31 @@ export function TacticsDemoBoard({
             setSelectedUnitId(intent.unitId);
             return;
         }
-        if (intent.type === 'move-unit') {
-            sendAction({
-                type: TACTICS_MOVE_UNIT_ACTION,
-                playerId: localPlayerId,
-                tick: snapshot.tick,
-                payload: {
-                    unitId: intent.unitId,
-                    x: intent.grid.x,
-                    y: intent.grid.y,
-                },
-            });
+
+        const buffered = bufferedActionForIntent(intent);
+        if (buffered === null) {
+            return;
+        }
+
+        if (isCommitment) {
+            // Buffer locally — never dispatched to the host until commit/reveal.
+            // The kernel re-validates against the optimistic view (stamina, etc.),
+            // so an illegal action is simply not buffered.
+            appendBufferedAction(toOptimisticBase(snapshot), buffered, localPlayerId);
             setSelectedUnitId(null);
             return;
         }
-        if (intent.type === 'attack-unit') {
-            sendAction({
-                type: TACTICS_ATTACK_ACTION,
-                playerId: localPlayerId,
-                tick: snapshot.tick,
-                payload: {
-                    attackerId: intent.attackerId,
-                    defenderId: intent.defenderId,
-                },
-            });
-            setSelectedUnitId(null);
-            return;
-        }
-        if (intent.type === 'reveal-tile') {
-            sendAction({
-                type: TACTICS_REVEAL_TILE_ACTION,
-                playerId: localPlayerId,
-                tick: snapshot.tick,
-                payload: {
-                    scoutId: intent.scoutId,
-                    x: intent.grid.x,
-                    y: intent.grid.y,
-                },
-            });
-            setSelectedUnitId(null);
-        }
+
+        // Sequential mode: dispatch straight to the host (unchanged behaviour).
+        // The buffered payload is structurally a plain object; the brand types
+        // just lack an index signature (same cast as the host re-dispatch path).
+        sendAction({
+            type: buffered.type,
+            playerId: localPlayerId,
+            tick: snapshot.tick,
+            payload: buffered.payload as unknown as Record<string, unknown>,
+        });
+        setSelectedUnitId(null);
     };
 
     const handleUnitSelect = (unitId: TacticsSceneUnit['id']): void => {
@@ -199,7 +244,12 @@ export function TacticsDemoBoard({
     return (
         <div aria-label="Tactics board" style={boardSceneStyle}>
             {revealedTurn !== null && (
-                <div data-testid="tactics-reveal" style={revealOverlayStyle}>
+                <div
+                    data-testid="tactics-reveal"
+                    data-player={revealedTurn.playerId}
+                    data-has-attack={String(bufferHasAttack(revealedTurn.actions))}
+                    style={revealOverlayStyle}
+                >
                     {`Revealed ${revealedTurn.playerId}: ${revealedTurn.actions
                         .map((action) => action.type)
                         .join(', ')}`}
@@ -229,6 +279,42 @@ export function TacticsDemoBoard({
             </Canvas>
         </div>
     );
+}
+
+/**
+ * Map a resolved board intent to its bufferable action shape (`{ type, payload }`),
+ * or `null` for non-action intents (select / noop). The same shape is buffered in
+ * commitment mode and dispatched (with playerId/tick) in sequential mode, so the
+ * two paths cannot diverge.
+ */
+function bufferedActionForIntent(intent: TacticsSelectionIntent): BufferedTacticsAction | null {
+    if (intent.type === 'move-unit') {
+        return {
+            type: TACTICS_MOVE_UNIT_ACTION,
+            payload: {
+                unitId: intent.unitId,
+                x: tacticsGridCoordinate(intent.grid.x),
+                y: tacticsGridCoordinate(intent.grid.y),
+            },
+        };
+    }
+    if (intent.type === 'attack-unit') {
+        return {
+            type: TACTICS_ATTACK_ACTION,
+            payload: { attackerId: intent.attackerId, defenderId: intent.defenderId },
+        };
+    }
+    if (intent.type === 'reveal-tile') {
+        return {
+            type: TACTICS_REVEAL_TILE_ACTION,
+            payload: {
+                scoutId: intent.scoutId,
+                x: tacticsGridCoordinate(intent.grid.x),
+                y: tacticsGridCoordinate(intent.grid.y),
+            },
+        };
+    }
+    return null;
 }
 
 function createTacticsCamera(): ManualOrthographicCamera {

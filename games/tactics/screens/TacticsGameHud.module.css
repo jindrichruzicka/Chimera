@@ -1,0 +1,27 @@
+/*
+ * TacticsGameHud.module.css
+ *
+ * The HUD itself is styled with inline `React.CSSProperties`; this module exists
+ * only for the one thing inline styles cannot express — the `@keyframes` opacity
+ * pulse on the commitment-mode "Waiting for other player(s)…" message (#730).
+ * Durations/easings come from the shared motion tokens, which collapse to
+ * `0ms`/`linear` under `prefers-reduced-motion` (renderer/styles/tokens.css), so
+ * the pulse is automatically disabled for reduced-motion users.
+ */
+
+.waiting-message {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    white-space: nowrap;
+    animation: tactics-commit-waiting-pulse calc(var(--ch-duration-slow) * 3)
+        var(--ch-easing-standard) infinite alternate;
+}
+
+@keyframes tactics-commit-waiting-pulse {
+    from {
+        opacity: var(--ch-opacity-full);
+    }
+    to {
+        opacity: 0.4;
+    }
+}

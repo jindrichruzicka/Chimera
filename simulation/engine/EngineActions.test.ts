@@ -551,6 +551,38 @@ describe('engine:end_turn definition', () => {
         });
     });
 
+    it('endTurnAuthority replaces the active-player check, authorizing a non-active seat', () => {
+        // Simultaneous-turn modes let any seat end the turn (e.g. once every seat
+        // has committed). The contributed authority owns the decision.
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const authCtx = { ...stubCtx, endTurnAuthority: () => true };
+        // guestId is NOT the active player, but the authority allows it.
+        expect(definition().validate({}, snapshot, guestId, authCtx).ok).toBe(true);
+    });
+
+    it('endTurnAuthority can reject with not_active_player', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const authCtx = { ...stubCtx, endTurnAuthority: () => false };
+        // Even the active player is rejected when the authority denies it.
+        expect(definition().validate({}, snapshot, hostId, authCtx)).toEqual({
+            ok: false,
+            reason: 'not_active_player',
+        });
+    });
+
+    it('endTurnAuthority still defers to the endTurnGuard rejection', () => {
+        const snapshot = makeTurnSnapshot(hostId, 30_000);
+        const ctx = {
+            ...stubCtx,
+            endTurnAuthority: () => true,
+            endTurnGuard: () => ({ ok: false as const, reason: 'awaiting_commitment' }),
+        };
+        expect(definition().validate({}, snapshot, guestId, ctx)).toEqual({
+            ok: false,
+            reason: 'awaiting_commitment',
+        });
+    });
+
     it('reduce advances activePlayerId in round-robin insertion order', () => {
         const snapshot = makeTurnSnapshot(hostId, 30_000);
         const next = definition().reduce(snapshot, {}, hostId, stubCtx);

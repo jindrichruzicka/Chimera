@@ -61,4 +61,48 @@ export class TacticsLobbyPage extends LobbyPage {
             return getComputedStyle(element).backgroundColor;
         });
     }
+
+    // ── Commitment scheme (host-authored Battle Setup toggle, F54) ────────────
+
+    /** The commitment-scheme toggle (`<input type=checkbox>`, host-only editable). */
+    public commitmentToggle(): Locator {
+        return this.page.getByTestId('tactics-commitment-scheme-toggle');
+    }
+
+    /** Enable the commitment battle mode (host only). */
+    public async enableCommitmentScheme(): Promise<void> {
+        await this.commitmentToggle().check();
+    }
+
+    /** Poll until the toggle reflects the round-tripped checked state. */
+    public async expectCommitmentEnabled(enabled: boolean): Promise<void> {
+        await expect.poll(() => this.commitmentToggle().isChecked()).toBe(enabled);
+    }
+
+    // ── AI players (F54) ──────────────────────────────────────────────────────
+
+    /** The "Add AI player" button (host-only; disabled when the lobby is full). */
+    public addAiButton(): Locator {
+        return this.page.getByTestId('tactics-add-ai');
+    }
+
+    /** All AI roster rows (`tactics-lobby-ai-player`). */
+    public aiPlayerRows(): Locator {
+        return this.page.getByTestId('tactics-lobby-ai-player');
+    }
+
+    /** The "Remove" button for the AI slot at `slotIndex`. */
+    public removeAiButton(slotIndex: number): Locator {
+        return this.page.getByTestId(`tactics-remove-ai-${slotIndex}`);
+    }
+
+    /** Click "Add AI player" (host only). */
+    public async addAi(): Promise<void> {
+        await this.addAiButton().click();
+    }
+
+    /** Poll until the AI roster has exactly `count` rows. */
+    public async expectAiCount(count: number): Promise<void> {
+        await expect.poll(() => this.aiPlayerRows().count()).toBe(count);
+    }
 }

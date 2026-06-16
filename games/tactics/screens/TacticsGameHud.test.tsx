@@ -10,8 +10,13 @@ import {
     type PlayerId,
     type PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
+import { TACTICS_COMMIT_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
+import { entityId } from '@chimera/electron/preload/api-types.js';
+import { tacticsGridCoordinate } from '../actions.js';
+import type { BufferedTacticsAction } from '../commitment/contract.js';
 import { TacticsGameHud } from './TacticsGameHud';
+import { useCommitmentBuffer } from './useCommitmentBuffer';
 
 beforeEach(() => {
     // The HUD now mounts the shared ChatPanel, which resolves past its
@@ -33,7 +38,40 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     delete (window as unknown as { __chimera?: unknown }).__chimera;
+    useCommitmentBuffer.getState().reset();
 });
+
+// A commitment-mode snapshot: turnMode='commitment', a viewer-owned unit so the
+// optimistic view can apply a buffered move, and per-seat `committed` markers.
+function makeCommitmentSnapshot(
+    committed: { readonly p1?: boolean; readonly p2?: boolean } = {},
+): PlayerSnapshot {
+    const p1 = playerId('p1');
+    const p2 = playerId('p2');
+    return makeSnapshot({
+        players: {
+            [p1]: {
+                id: p1,
+                stamina: { current: 3, max: 3 },
+                ...(committed.p1 ? { committed: true } : {}),
+            },
+            [p2]: { id: p2, ...(committed.p2 ? { committed: true } : {}) },
+        } as unknown as PlayerSnapshot['players'],
+        entities: {
+            'unit-1': { id: entityId('unit-1'), kind: 'unit', ownerId: p1, x: 0, y: 0, hp: 1 },
+        } as unknown as PlayerSnapshot['entities'],
+        setup: { matchSettings: { turnMode: 'commitment' }, playerAttributes: {} },
+    });
+}
+
+const BUFFERED_MOVE: BufferedTacticsAction = {
+    type: TACTICS_MOVE_UNIT_ACTION,
+    payload: {
+        unitId: entityId('unit-1'),
+        x: tacticsGridCoordinate(0),
+        y: tacticsGridCoordinate(1),
+    },
+};
 
 // The viewer's own stamina rides along on the projected player state at runtime
 // (#721). The generic `ObservedPlayerState` type is just `{ id }`, so tests cast
@@ -262,5 +300,103 @@ describe('TacticsGameHud', () => {
         expect(handleUndo).toHaveBeenCalledOnce();
         expect(handleRedo).not.toHaveBeenCalled();
         expect(handleEndTurn).toHaveBeenCalledOnce();
+    });
+
+    describe('commitment battle mode', () => {
+        it('End Turn dispatches tactics:commit carrying the buffer (no separate Commit button)', () => {
+            useCommitmentBuffer.setState({ buffer: [BUFFERED_MOVE] });
+            const sendAction = vi.fn();
+            render(
+                <TacticsGameHud
+                    {...makeHudProps({ snapshot: makeCommitmentSnapshot(), sendAction })}
+                />,
+            );
+
+            // The Commit button and Redo are gone in commitment mode.
+            expect(screen.queryByTestId('tactics-commit')).toBeNull();
+            expect(screen.queryByTestId('redo')).toBeNull();
+
+            fireEvent.click(screen.getByTestId('end-turn'));
+
+            expect(sendAction).toHaveBeenCalledWith({
+                type: TACTICS_COMMIT_ACTION,
+                playerId: playerId('p1'),
+                tick: 7,
+                payload: { actions: [BUFFERED_MOVE] },
+            });
+        });
+
+        it('Undo pops the local buffer instead of dispatching engine undo', () => {
+            useCommitmentBuffer.setState({ buffer: [BUFFERED_MOVE] });
+            const handleUndo = vi.fn();
+            render(
+                <TacticsGameHud
+                    {...makeHudProps({ snapshot: makeCommitmentSnapshot(), handleUndo })}
+                />,
+            );
+
+            fireEvent.click(screen.getByTestId('undo'));
+
+            expect(handleUndo).not.toHaveBeenCalled(); // engine undo NOT used
+            expect(useCommitmentBuffer.getState().buffer).toHaveLength(0); // buffer popped
+        });
+
+        it('End Turn is enabled until the viewer commits, then disabled while waiting', () => {
+            const { rerender } = render(
+                <TacticsGameHud
+                    {...makeHudProps({
+                        snapshot: makeCommitmentSnapshot({ p1: false, p2: false }),
+                    })}
+                />,
+            );
+            // Not yet committed → End Turn is the commit affordance (enabled).
+            expect(screen.getByTestId('end-turn')).not.toBeDisabled();
+
+            rerender(
+                <TacticsGameHud
+                    {...makeHudProps({ snapshot: makeCommitmentSnapshot({ p1: true, p2: false }) })}
+                />,
+            );
+            // The viewer has committed → End Turn disabled while waiting for others.
+            expect(screen.getByTestId('end-turn')).toBeDisabled();
+        });
+
+        it('shows the pulsing waiting message only after the viewer commits and before all commit', () => {
+            const { rerender } = render(
+                <TacticsGameHud {...makeHudProps({ snapshot: makeCommitmentSnapshot() })} />,
+            );
+            // Not committed → no waiting message.
+            expect(screen.queryByTestId('tactics-commit-status')).toBeNull();
+
+            rerender(
+                <TacticsGameHud
+                    {...makeHudProps({ snapshot: makeCommitmentSnapshot({ p1: true, p2: false }) })}
+                />,
+            );
+            const waiting = screen.getByTestId('tactics-commit-status');
+            expect(waiting).toHaveAttribute('data-state', 'waiting');
+            expect(waiting).toHaveTextContent('Waiting for other player(s)');
+
+            rerender(
+                <TacticsGameHud
+                    {...makeHudProps({ snapshot: makeCommitmentSnapshot({ p1: true, p2: true }) })}
+                />,
+            );
+            // All committed → the message clears (the host auto-reveals and starts a fresh turn).
+            expect(screen.queryByTestId('tactics-commit-status')).toBeNull();
+        });
+
+        it('shows OPTIMISTIC stamina that decrements per buffered action', () => {
+            const { rerender } = render(
+                <TacticsGameHud {...makeHudProps({ snapshot: makeCommitmentSnapshot() })} />,
+            );
+            // Empty buffer → full stamina.
+            expect(screen.getByTestId('hud-stamina')).toHaveTextContent('3/3');
+
+            useCommitmentBuffer.setState({ buffer: [BUFFERED_MOVE] });
+            rerender(<TacticsGameHud {...makeHudProps({ snapshot: makeCommitmentSnapshot() })} />);
+            // One buffered move spent → 2/3.
+            expect(screen.getByTestId('hud-stamina')).toHaveTextContent('2/3');
+        });
     });
 });

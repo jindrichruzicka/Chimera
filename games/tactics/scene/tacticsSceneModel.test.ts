@@ -8,8 +8,10 @@ import {
 } from '@chimera/simulation/engine/types.js';
 import {
     gridToWorldPoint,
+    parseTacticsAllSeatsCommitted,
     parseTacticsSceneUnit,
     parseTacticsSceneUnits,
+    parseTacticsSeatCommitted,
     parseTacticsViewerStamina,
     resolveTacticsBoardColor,
     resolveTacticsSelectionIntent,
@@ -294,6 +296,45 @@ describe('parseTacticsViewerStamina', () => {
 
         expect(parseTacticsViewerStamina(fractional, LOCAL_PLAYER)).toBeNull();
         expect(parseTacticsViewerStamina(nonNumeric, LOCAL_PLAYER)).toBeNull();
+    });
+});
+
+describe('parseTacticsSeatCommitted / parseTacticsAllSeatsCommitted', () => {
+    it('reads the per-seat committed marker, defaulting absent to false', () => {
+        const players = projectedPlayers({
+            [LOCAL_PLAYER]: {
+                id: LOCAL_PLAYER,
+                committed: true,
+            } satisfies ProjectedPlayerFixture,
+            [OPPONENT_PLAYER]: { id: OPPONENT_PLAYER } satisfies ProjectedPlayerFixture,
+        });
+
+        expect(parseTacticsSeatCommitted(players, LOCAL_PLAYER)).toBe(true);
+        expect(parseTacticsSeatCommitted(players, OPPONENT_PLAYER)).toBe(false);
+    });
+
+    it('all-seats-committed requires every seat true', () => {
+        const partial = projectedPlayers({
+            [LOCAL_PLAYER]: { id: LOCAL_PLAYER, committed: true } satisfies ProjectedPlayerFixture,
+            [OPPONENT_PLAYER]: {
+                id: OPPONENT_PLAYER,
+                committed: false,
+            } satisfies ProjectedPlayerFixture,
+        });
+        const all = projectedPlayers({
+            [LOCAL_PLAYER]: { id: LOCAL_PLAYER, committed: true } satisfies ProjectedPlayerFixture,
+            [OPPONENT_PLAYER]: {
+                id: OPPONENT_PLAYER,
+                committed: true,
+            } satisfies ProjectedPlayerFixture,
+        });
+
+        expect(parseTacticsAllSeatsCommitted(partial)).toBe(false);
+        expect(parseTacticsAllSeatsCommitted(all)).toBe(true);
+    });
+
+    it('all-seats-committed is false for an empty players map', () => {
+        expect(parseTacticsAllSeatsCommitted(projectedPlayers({}))).toBe(false);
     });
 });
 

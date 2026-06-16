@@ -48,8 +48,9 @@ import type { ObservedEntityState, ObservedPlayerState, VisibilityRules } from '
  * - Player states are masked for non-owners.
  * - Events are filtered to the viewer.
  * - The `seed` field is absent — it is host-internal.
- * - `isMyTurn` is a derived boolean indicating if the viewer is the active player.
- *   It is computed as `turnClock?.activePlayerId === viewerId` (or `true` if no turnClock).
+ * - `isMyTurn` is a derived boolean indicating if the viewer may act this turn.
+ *   By default `turnClock?.activePlayerId === viewerId` (or `true` if no turnClock);
+ *   a simultaneous-turn game may override this via `StateProjectorOptions.resolveIsMyTurn`.
  *
  * Architecture: §4.6
  */
@@ -91,6 +92,22 @@ export interface StateProjectorOptions<TState extends BaseGameSnapshot = BaseGam
      * record (backwards-compatible default, same as the F27 stub).
      */
     readonly getPendingCommitments?: () => Readonly<Record<CommitmentId, CommitmentEnvelope>>;
+    /**
+     * Optional override for the `isMyTurn` derivation.
+     *
+     * The default derivation marks the single `turnClock.activePlayerId` as
+     * active (or every viewer when there is no turnClock). Simultaneous-turn
+     * modes — e.g. tactics commitment-scheme battle mode, where every seated,
+     * not-yet-committed player acts in parallel — supply this to make more than
+     * one viewer active at once. The override owns the decision entirely; it
+     * runs host-side with the full state, so it may read host-local fields the
+     * projection does not cross (e.g. `committedTurns`). It must stay pure and
+     * deterministic (Invariant #43). The hosting game contributes it; the
+     * projector itself names no game (Invariant #2).
+     *
+     * When absent, `isMyTurn` falls back to the turn-clock derivation unchanged.
+     */
+    readonly resolveIsMyTurn?: (fullState: Readonly<TState>, viewerId: PlayerId) => boolean;
 }
 
 // ─── StateProjector interface ─────────────────────────────────────────────────
@@ -182,8 +199,12 @@ export class DefaultStateProjector<
             (Object.create(null) as Readonly<Record<CommitmentId, CommitmentEnvelope>>);
 
         // ── 4. Compute isMyTurn ──────────────────────────────────────────────
+        // Default: the single active seat (or everyone when there is no
+        // turnClock). A simultaneous-turn game overrides this via
+        // `resolveIsMyTurn` so multiple seats can be active at once (#730, F54).
         const isMyTurn =
-            fullState.turnClock === undefined || fullState.turnClock.activePlayerId === viewerId;
+            this.#options.resolveIsMyTurn?.(fullState, viewerId) ??
+            (fullState.turnClock === undefined || fullState.turnClock.activePlayerId === viewerId);
 
         return {
             tick: fullState.tick,

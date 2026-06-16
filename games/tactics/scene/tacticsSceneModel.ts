@@ -196,6 +196,33 @@ export function parseTacticsViewerStamina(
     return { current, max };
 }
 
+/**
+ * Reads the non-secret per-seat `committed` marker from a projected player
+ * (commitment battle mode, #730). The projection sets it for every seat to every
+ * viewer (only the boolean crosses, never the buffer — Invariants #3/#8), so the
+ * renderer can gate the reveal-only End Turn. Narrowed defensively like stamina;
+ * absent/malformed ⇒ `false` (sequential mode and pre-#730 snapshots).
+ */
+export function parseTacticsSeatCommitted(
+    players: Readonly<Record<PlayerId, ProjectedTacticsPlayerFields>>,
+    playerId: PlayerId,
+): boolean {
+    const player = players[playerId] as Readonly<Record<string, unknown>> | undefined;
+    return player?.['committed'] === true;
+}
+
+/**
+ * True iff there is at least one seat and EVERY seat has committed this turn —
+ * the renderer mirror of the host's `tacticsCanEndTurn` gate. Drives whether the
+ * commitment-mode End Turn (reveal trigger) is enabled.
+ */
+export function parseTacticsAllSeatsCommitted(
+    players: Readonly<Record<PlayerId, ProjectedTacticsPlayerFields>>,
+): boolean {
+    const ids = Object.keys(players);
+    return ids.length > 0 && ids.every((id) => parseTacticsSeatCommitted(players, id as PlayerId));
+}
+
 export function resolveTacticsSelectionIntent({
     units,
     localPlayerId,

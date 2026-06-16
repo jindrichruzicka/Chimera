@@ -175,6 +175,46 @@ describe('tacticsCommitmentOrchestration.shouldReveal', () => {
     });
 });
 
+describe('tacticsCommitmentOrchestration.shouldAutoEndTurn', () => {
+    // A post-apply snapshot where EVERY seat has committed for the current turn.
+    const allCommitted = snapshot('commitment', 4, { [P1]: 4, [P2]: 4 });
+
+    it('is true for the commit that completes the set (every seat committed)', () => {
+        expect(
+            tacticsCommitmentOrchestration.shouldAutoEndTurn?.(commitAction([move]), allCommitted),
+        ).toBe(true);
+    });
+
+    it('is false while only some seats have committed', () => {
+        const partial = snapshot('commitment', 4, { [P1]: 4 }); // P2 not yet committed
+        expect(
+            tacticsCommitmentOrchestration.shouldAutoEndTurn?.(commitAction([move]), partial),
+        ).toBe(false);
+    });
+
+    it('is false in sequential mode even if markers are present', () => {
+        const seqAllCommitted = snapshot('sequential', 4, { [P1]: 4, [P2]: 4 });
+        expect(
+            tacticsCommitmentOrchestration.shouldAutoEndTurn?.(
+                commitAction([move]),
+                seqAllCommitted,
+            ),
+        ).toBe(false);
+    });
+
+    it('is false for a non-commit action', () => {
+        const endTurn: ActionEnvelope = {
+            type: 'engine:end_turn',
+            playerId: P1,
+            tick: 9,
+            payload: {},
+        };
+        expect(tacticsCommitmentOrchestration.shouldAutoEndTurn?.(endTurn, allCommitted)).toBe(
+            false,
+        );
+    });
+});
+
 describe('tacticsCommitmentOrchestration.resolveRevealOrder', () => {
     it('orders attack-committers ahead of move-only committers', () => {
         const order = tacticsCommitmentOrchestration.resolveRevealOrder(

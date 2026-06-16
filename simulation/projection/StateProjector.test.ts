@@ -608,5 +608,41 @@ describe('DefaultStateProjector.project()', () => {
             expect(viewP1.isMyTurn).toBe(true);
             expect(viewP2.isMyTurn).toBe(false);
         });
+
+        it('resolveIsMyTurn override replaces the default turn-clock derivation', () => {
+            // A simultaneous-turn game (e.g. tactics commitment mode) makes every
+            // not-yet-committed seat active at once. The override owns the decision;
+            // here it marks both viewers active despite a single-active turnClock.
+            const projector = new DefaultStateProjector(fogRules, {
+                resolveIsMyTurn: () => true,
+            });
+            const snapshot = makeSnapshot({
+                turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
+            });
+
+            expect(projector.project(snapshot, P1).isMyTurn).toBe(true);
+            expect(projector.project(snapshot, P2).isMyTurn).toBe(true);
+        });
+
+        it('resolveIsMyTurn receives the full state and viewer id', () => {
+            const seen: { readonly tick: number; readonly viewerId: PlayerId }[] = [];
+            const projector = new DefaultStateProjector(fogRules, {
+                resolveIsMyTurn: (state, viewerId) => {
+                    seen.push({ tick: state.tick, viewerId });
+                    return viewerId === P2;
+                },
+            });
+            const snapshot = makeSnapshot({
+                tick: 7,
+                turnClock: { activePlayerId: P1, deadlineMs: 30_000 },
+            });
+
+            expect(projector.project(snapshot, P1).isMyTurn).toBe(false);
+            expect(projector.project(snapshot, P2).isMyTurn).toBe(true);
+            expect(seen).toEqual([
+                { tick: 7, viewerId: P1 },
+                { tick: 7, viewerId: P2 },
+            ]);
+        });
     });
 });

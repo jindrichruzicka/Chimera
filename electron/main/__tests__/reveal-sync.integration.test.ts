@@ -113,7 +113,7 @@ interface Harness {
     runtime: SessionRuntime;
     /** Reveals broadcast during the reveal sequence, in send order. */
     sentReveals: WireCommitmentReveal[];
-    drive(action: ActionEnvelope): void;
+    drive(action: ActionEnvelope, options?: { readonly skipAutoEndTurn?: boolean }): void;
 }
 
 function buildHarness(turnMode: 'commitment' | 'sequential', hp: number): Harness {
@@ -133,10 +133,16 @@ function buildHarness(turnMode: 'commitment' | 'sequential', hp: number): Harnes
     });
     const orchestration = tacticsCommitmentOrchestration;
 
-    // Mirrors index.ts `onActionReceived`: apply first, then stage the commit only
-    // if the pipeline accepted it, then reveal on the commitment-mode end-turn. A
+    // Mirrors index.ts `onActionReceived`: apply, stage an accepted commit, reveal
+    // on a commitment-mode end-turn, and — when a commit completes the set —
+    // AUTO-advance the turn + reveal (mirrors `autoEndTurnIfReady`, #730 UX). A
     // rejected action throws out of the pipeline and is swallowed (as in production).
-    const drive = (action: ActionEnvelope): void => {
+    // `skipAutoEndTurn` stops before the auto step so a test can inspect the staged
+    // commitments after both commits but before the reveal consumes them (AC2).
+    const drive = (
+        action: ActionEnvelope,
+        options: { readonly skipAutoEndTurn?: boolean } = {},
+    ): void => {
         try {
             runtime.applyAction(action);
             const staged = orchestration.stageOnCommit(action, runtime.getSnapshot());
@@ -145,6 +151,25 @@ function buildHarness(turnMode: 'commitment' | 'sequential', hp: number): Harnes
             }
             if (orchestration.shouldReveal(action, runtime.getSnapshot())) {
                 runRevealSync({ orchestration, session: runtime, sendReveal });
+            }
+            if (
+                !options.skipAutoEndTurn &&
+                orchestration.shouldAutoEndTurn?.(action, runtime.getSnapshot()) === true
+            ) {
+                const snap = runtime.getSnapshot();
+                const activePlayerId = snap.turnClock?.activePlayerId;
+                if (activePlayerId !== undefined) {
+                    const endTurnAction: ActionEnvelope = {
+                        type: 'engine:end_turn',
+                        playerId: activePlayerId,
+                        tick: snap.tick,
+                        payload: {},
+                    };
+                    runtime.applyAction(endTurnAction);
+                    if (orchestration.shouldReveal(endTurnAction, runtime.getSnapshot())) {
+                        runRevealSync({ orchestration, session: runtime, sendReveal });
+                    }
+                }
             }
         } catch {
             // index.ts logs and continues; a single rejected action never crashes.
@@ -183,10 +208,11 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
     it('AC1: reveals are grouped-by-player with attack-committed groups first', () => {
         // hp 2 so the attack does not end the match — both groups reveal.
         const h = buildHarness('commitment', 2);
-        // P2 commits an attack (reveals first); P1 commits a two-move bundle.
+        // P2 commits an attack (reveals first); P1 commits a two-move bundle. P2's
+        // commit completes the set, so the host auto-advances + reveals — no manual
+        // End Turn (#730 UX).
         h.drive(commit(h.runtime, P1, [move(U1, 0, 1), move(U1, 0, 2)]));
         h.drive(commit(h.runtime, P2, [attack(U2, U1)]));
-        h.drive(endTurn(h.runtime, P1));
 
         // Attack-committer P2 reveals before move-only P1 (one envelope per player).
         expect(revealedPlayers(h.sentReveals)).toEqual([P2, P1]);
@@ -199,8 +225,7 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
         const runOrder = (): PlayerId[] => {
             const h = buildHarness('commitment', 2);
             h.drive(commit(h.runtime, P1, [move(U1, 0, 1)]));
-            h.drive(commit(h.runtime, P2, [attack(U2, U1)]));
-            h.drive(endTurn(h.runtime, P1));
+            h.drive(commit(h.runtime, P2, [attack(U2, U1)])); // completing commit auto-reveals
             return revealedPlayers(h.sentReveals);
         };
         // Fixed seed + actions → the same concrete order on every run (P2's attack
@@ -210,9 +235,11 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
 
         // A client that restored the broadcast envelopes verifies every reveal in
         // the host's order (Invariant #9 gate succeeds) — i.e. it converges.
+        // `skipAutoEndTurn` lets us snapshot the staged commitments after both
+        // commits but before the reveal consumes them, then trigger the reveal.
         const h = buildHarness('commitment', 2);
         h.drive(commit(h.runtime, P1, [move(U1, 0, 1)]));
-        h.drive(commit(h.runtime, P2, [attack(U2, U1)]));
+        h.drive(commit(h.runtime, P2, [attack(U2, U1)]), { skipAutoEndTurn: true });
         const envelopes = h.runtime.capturePendingCommitments(); // before reveal consumes them
         h.drive(endTurn(h.runtime, P1));
 
@@ -232,7 +259,7 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
     it('AC3: a tampered revealed action fails verify() and is dropped (Invariant #9)', () => {
         const h = buildHarness('commitment', 2);
         h.drive(commit(h.runtime, P1, [attack(U1, U2)]));
-        h.drive(commit(h.runtime, P2, [move(U2, 1, 1)]));
+        h.drive(commit(h.runtime, P2, [move(U2, 1, 1)]), { skipAutoEndTurn: true });
         const envelopes = h.runtime.capturePendingCommitments();
         h.drive(endTurn(h.runtime, P1));
 
@@ -258,11 +285,11 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
     });
 
     it('AC4: a revealed attack resolves game-end identically to sequential mode', () => {
-        // Commitment mode: P1 commits an attack that kills P2's last unit.
+        // Commitment mode: P1 commits an attack that kills P2's last unit. P2's
+        // commit completes the set → auto-reveal (no manual End Turn).
         const h = buildHarness('commitment', 1);
         h.drive(commit(h.runtime, P1, [attack(U1, U2)]));
         h.drive(commit(h.runtime, P2, [move(U2, 1, 1)]));
-        h.drive(endTurn(h.runtime, P1));
         const commitmentResult = h.runtime.getSnapshot().gameResult;
 
         // Sequential mode: dispatch the very same attack directly.
@@ -277,6 +304,56 @@ describe('reveal-sync orchestration (T9 / #729) — integration', () => {
 
         expect(commitmentResult).toEqual({ winnerIds: [P1] });
         expect(commitmentResult).toEqual(sequentialResult);
+    });
+
+    it('#730: the completing commit auto-advances the turn AND reveals — no explicit End Turn', () => {
+        // The player's single "End Turn" = commit is the only confirmation a turn
+        // needs: the second commit completes the set, so the host auto-end-turns and
+        // reveals. (The engine `mayEndTurn` any-seat authority is unit-tested in
+        // turnGate.test.ts.)
+        const h = buildHarness('commitment', 2);
+        const c1 = commit(h.runtime, P1, [move(U1, 0, 1)]);
+        h.drive(c1);
+        // shouldAutoEndTurn is false on the first (partial) commit.
+        expect(
+            tacticsCommitmentOrchestration.shouldAutoEndTurn?.(c1, h.runtime.getSnapshot()),
+        ).toBe(false);
+        const turnBefore = h.runtime.getSnapshot().turnNumber;
+        h.drive(commit(h.runtime, P2, [attack(U2, U1)]));
+
+        // No explicit endTurn() was driven, yet the reveal fired (attack-first) and
+        // the turn advanced exactly once.
+        expect(revealedPlayers(h.sentReveals)).toEqual([P2, P1]);
+        expect(h.runtime.getSnapshot().turnNumber).toBe(turnBefore + 1);
+    });
+
+    it('#730: two commitment turns in a row — markers expire and stamina refreshes for all', () => {
+        const h = buildHarness('commitment', 6);
+        // Turn 1: P1 spends ALL THREE stamina (three moves), ending at (2,2); P2
+        // commits one move so the turn can complete.
+        h.drive(commit(h.runtime, P1, [move(U1, 0, 1), move(U1, 1, 1), move(U1, 2, 2)]));
+        h.drive(commit(h.runtime, P2, [move(U2, 1, 1)])); // completing commit auto-reveals
+        expect(h.sentReveals).toHaveLength(2);
+        const u1AfterTurn1 = h.runtime.getSnapshot().entities[U1] as unknown as {
+            x: number;
+            y: number;
+        };
+        expect([u1AfterTurn1.x, u1AfterTurn1.y]).toEqual([2, 2]); // all three moves applied
+
+        // Turn 2: P1 (who hit 0 stamina last turn) commits another move. It only
+        // applies if stamina refreshed on the turn advance — proving the
+        // commitment-mode refresh covers every seat, not just the active one.
+        const turnNumberAfterTurn1 = h.runtime.getSnapshot().turnNumber;
+        h.drive(commit(h.runtime, P1, [move(U1, 3, 3)]));
+        h.drive(commit(h.runtime, P2, [move(U2, 2, 2)])); // completing commit auto-reveals
+
+        expect(h.sentReveals.length).toBeGreaterThan(2); // a second reveal fired
+        expect(h.runtime.getSnapshot().turnNumber).toBe(turnNumberAfterTurn1 + 1);
+        const u1AfterTurn2 = h.runtime.getSnapshot().entities[U1] as unknown as {
+            x: number;
+            y: number;
+        };
+        expect([u1AfterTurn2.x, u1AfterTurn2.y]).toEqual([3, 3]); // refreshed → move applied
     });
 
     it('BLOCK-1: a rejected out-of-mode commit never stages or projects an envelope', () => {

@@ -252,10 +252,10 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
         // pipeline's lifetime — and exposed on the public context so
         // `engine:end_turn.validate()` can consult it without the engine knowing
         // any specific game.
-        const canEndTurn =
-            this.#gameId !== undefined
-                ? this.#registry.resolveGame(this.#gameId)?.canEndTurn
-                : undefined;
+        const resolvedGame =
+            this.#gameId !== undefined ? this.#registry.resolveGame(this.#gameId) : undefined;
+        const canEndTurn = resolvedGame?.canEndTurn;
+        const mayEndTurn = resolvedGame?.mayEndTurn;
 
         this.#ctx = {
             rng: createRng(0, 0),
@@ -270,6 +270,12 @@ export class ActionPipeline<TState extends BaseGameSnapshot = BaseGameSnapshot> 
                 ? {
                       endTurnGuard: (state: Readonly<BaseGameSnapshot>, playerId: PlayerId) =>
                           canEndTurn(state as TState, playerId),
+                  }
+                : {}),
+            ...(mayEndTurn !== undefined
+                ? {
+                      endTurnAuthority: (state: Readonly<BaseGameSnapshot>, playerId: PlayerId) =>
+                          mayEndTurn(state as TState, playerId),
                   }
                 : {}),
         };

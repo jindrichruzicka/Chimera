@@ -255,6 +255,10 @@ describe('GamePage', () => {
         expect(gamePage.replayButton).toBeDefined();
         expect(gamePage.saveReplayButton).toBeDefined();
         expect(gamePage.replaySavedStatus).toBeDefined();
+        expect(gamePage.staminaReadout).toBeDefined();
+        expect(gamePage.turnStatus).toBeDefined();
+        expect(gamePage.commitStatus).toBeDefined();
+        expect(gamePage.revealOverlay).toBeDefined();
         expect(gamePage.selectOwnedPrimitive).toBeDefined();
         expect(gamePage.moveOwnedUnitToOpenTile).toBeDefined();
         expect(gamePage.moveSelectedPrimitiveNearOpponent).toBeDefined();
@@ -279,6 +283,10 @@ describe('GamePage', () => {
             'post-game-replay-btn',
             'post-game-save-replay-btn',
             'post-game-replay-status',
+            'hud-stamina',
+            'tactics-turn-status',
+            'tactics-commit-status',
+            'tactics-reveal',
         ]);
         expect(requestedTestIds).not.toContain('move-target');
         expect(requestedTestIds).not.toContain('reveal-target');

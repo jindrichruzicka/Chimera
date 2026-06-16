@@ -5,7 +5,6 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
     TACTICS_REVEAL_TILE_ACTION,
-    readTacticsTurnMode,
 } from '@chimera/shared/tactics.js';
 import type {
     ActionDefinition,
@@ -18,6 +17,11 @@ import type {
 } from '@chimera/simulation/engine/types.js';
 import { entityId } from '@chimera/simulation/engine/types.js';
 import { tacticsCommitDefinition } from './commitment/commitAction.js';
+import {
+    allSeatsCommitted,
+    isTacticsCommitmentMode,
+    tacticsMayEndTurn,
+} from './commitment/turnGate.js';
 import { buildInitialTacticsEntities } from './entities.js';
 import type { TacticsSnapshot } from './stamina.js';
 import { consumeStamina, readStamina } from './stamina.js';
@@ -440,14 +444,10 @@ function tacticsCanEndTurn(
     state: Readonly<BaseGameSnapshot>,
     _playerId: PlayerId,
 ): ValidationResult {
-    if (readTacticsTurnMode(state.setup?.matchSettings) !== 'commitment') {
+    if (!isTacticsCommitmentMode(state)) {
         return { ok: true };
     }
-    const committedTurns = state.committedTurns ?? {};
-    const allCommitted = Object.keys(state.players).every(
-        (id) => committedTurns[id as PlayerId] === state.turnNumber,
-    );
-    return allCommitted ? { ok: true } : { ok: false, reason: 'awaiting_commitment' };
+    return allSeatsCommitted(state) ? { ok: true } : { ok: false, reason: 'awaiting_commitment' };
 }
 
 export function registerTacticsActions(registry: ActionRegistry<BaseGameSnapshot>): void {
@@ -459,5 +459,9 @@ export function registerTacticsActions(registry: ActionRegistry<BaseGameSnapshot
         buildInitialEntities: buildInitialTacticsEntities,
         resolveGameResult: resolveTacticsGameResult,
         canEndTurn: tacticsCanEndTurn,
+        // Simultaneous commitment turns: any seat may fire the reveal-only End
+        // Turn once every seat has committed (the active-player gate would
+        // deadlock a parallel turn). Sequential mode keeps active-player-only.
+        mayEndTurn: tacticsMayEndTurn,
     });
 }
