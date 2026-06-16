@@ -71,6 +71,36 @@ This makes hidden-information games auditable without a trusted third party. A c
 
 ---
 
+## Commit-then-Sync Turns (Commitment as a Turn Mechanism)
+
+The scheme above protects **host-generated** values (a shuffled deck, a die roll). The same primitive also underpins an opt-in **simultaneous turn mode**, where the protected secret is instead **each player's chosen actions, kept hidden from peers until reveal**. A game enables this through a synced, host-authored match setting that is **off by default** (Invariant #103); the default sequential turn flow is untouched for games that do not opt in.
+
+The engine stays game-agnostic: the host drives the entire sequence through a game-supplied `CommitmentTurnOrchestration` (`simulation/projection/CommitmentOrchestration.ts`) and never branches on a specific game id.
+
+### Sequence
+
+1. **Local play** — while it is a player's turn, selections are appended to a per-instance action buffer held in that player's own main process, applied only to an _optimistic local view_ over that player's own `PlayerSnapshot`. The buffer is **never sent to the host**, so a peer cannot observe it; undo pops the buffer locally.
+2. **Commit** — the player sends the buffer to the host, which builds the committed value, calls `CommitmentScheme.commitRevealable(value)` (see below), and stores the envelope. Only the envelope **hash** then crosses the trust boundary, via `PlayerSnapshot.commitments` (Invariant #8) — peers learn _"player X committed"_, never the actions.
+3. **Reveal-only End Turn** — `End Turn` is reveal-only and enabled only once every seated participant has committed (Invariant #103). The host resolves the reveal order with the game's `resolveRevealOrder` hook — a pure, deterministic function of `(seed, tick)` (Invariant #104) — and broadcasts a `REVEAL` per player in that order.
+4. **Verify + apply** — every receiving instance runs `CommitmentScheme.verify()` (Invariant #9) before trusting the bundle; the host then re-dispatches that player's revealed actions through the normal `ActionPipeline`. Game-end resolves on a revealed action exactly as in sequential mode.
+
+### Phase → Trust Gate
+
+| Phase                    | Crosses boundary as                       | Gate                               |
+| ------------------------ | ----------------------------------------- | ---------------------------------- |
+| Local play / buffer      | nothing — stays in the player's process   | #3 (host-local truth)              |
+| Commit → envelope egress | envelope **hash** only                    | #8 (`StateProjector.project()`)    |
+| Reveal order             | host-internal `(seed, tick)`              | #104 (deterministic, host-auth.)   |
+| Reveal verify            | `CommitmentReveal { value, nonce }`       | #9 (`verify()` before trust)       |
+| Apply                    | revealed actions through `ActionPipeline` | #103 (game-supplied orchestration) |
+| Persist mid-commit       | `pendingCommitments` + reveal staging     | #26 (restore together on load)     |
+
+### Nonce Retention
+
+`commit(value)` discards the nonce, so the host could not later build a valid reveal. The additive `commitRevealable(value)` returns `{ envelope, reveal }` with the nonce inside `reveal`, and a host-side reveal-staging store (`simulation/projection/RevealStaging.ts`) retains `{ value, nonce }` keyed by player until reveal — persisted and restored alongside `pendingCommitments` (Invariant #26). The host _process_ may hold a committed bundle (it is the authority), but no **peer**, and not even the host's own renderer, sees it before reveal. See the worked example in [the commit-then-sync battle mode](tactics-commitment-battle-mode.md).
+
+---
+
 ## Obfuscation Trust Boundary
 
 ```
@@ -117,8 +147,8 @@ simulation/persistence/
 ## Cross-References
 
 - [State Projection Interfaces](../core-components/state-projection-interfaces.md) — `StateProjector.project()`, `VisibilityRules`, `CommitmentScheme` interfaces
-- [Tactics Commitment-Scheme Battle Mode](tactics-commitment-battle-mode.md) — the first gameplay consumer of commit/reveal: a tactics-local commit-then-sync turn (player-authored action bundles, deterministic attack-first reveal order)
+- [Commit-then-sync Battle Mode](tactics-commitment-battle-mode.md) — the first gameplay consumer of commit/reveal: an opt-in, game-local commit-then-sync turn (player-authored action bundles, deterministic attack-first reveal order)
 - [IPC Security Model](ipc-security-model.md) — trust boundary table, IPC attack surface audit
 - [WebSocket Message Protocol](../core-components/websocket-message-protocol.md) — `COMMIT`/`REVEAL` wire messages
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #3, #8, #9, #26, #98
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #3, #8, #9, #26, #98; commit-then-sync turns #103–#105
 - [Replay System](../core-components/replay-system.md) — `PerspectiveReplayFile`, why its frames are post-projection and information-safe

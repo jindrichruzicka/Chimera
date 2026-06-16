@@ -1,6 +1,6 @@
 ---
 title: 'M8 — Hardening (v1.0.0)'
-description: 'F43–F49, F51–F52: Crash Reporter/Error Boundaries, Replay System, Chat System, Toast Notification System, Debug Inspector, Multiplayer/Obfuscation Soak Tests, Performance Baseline/NAT Diagnostics, Game-Customizable Main Menu, and Game-Customizable Settings Page (Tabbed Redesign). Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.'
+description: 'F43–F49, F51–F54: Crash Reporter/Error Boundaries, Replay System, Chat System, Toast Notification System, Debug Inspector, Multiplayer/Obfuscation Soak Tests, Performance Baseline/NAT Diagnostics, Game-Customizable Main Menu, Game-Customizable Settings Page (Tabbed Redesign), Customizable Lobby, and Tactics-Stub Hardening (turn-gating, stamina, AI players, commitment-scheme battle mode). Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.'
 tags:
     [
         milestone,
@@ -17,13 +17,18 @@ tags:
         main-menu,
         settings,
         ui-redesign,
+        tactics,
+        stamina,
+        ai-players,
+        commitment,
+        turn-mode,
     ]
 ---
 
 # M8 — Hardening (v1.0.0)
 
-> **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified. Shell pages are fully customizable per game.
-> Architecture sections: §4.4, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §10, §11
+> **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified. Shell pages and the lobby are fully customizable per game, and the tactics stub exercises turn-gating, stamina, AI players, and an opt-in commitment-scheme battle mode.
+> Architecture sections: §4.4, §4.6, §4.9, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §8, §10, §11
 
 ---
 
@@ -105,6 +110,19 @@ Make the multiplayer lobby game-customizable while keeping its chrome engine-own
 
 ---
 
+## F54 — Tactics Stub: Turn-Gating, Stamina, AI Players & Commitment-Scheme Battle Mode `§4.4, §4.6/§8, §4.9`
+
+Harden the **tactics** demo/test game so it exercises four engine capabilities end-to-end, with E2E coverage as the deliverable. Tactics is explicitly a testing stub — the goal is to wire and prove existing engine primitives, not to ship a polished game (it is slated to move to its own package out of the engine).
+
+1. **Turn-gated selection** — units are not selectable when it is not your turn; ending your turn deselects the active unit.
+2. **Stamina** — a per-player action budget (max & default **3**) that refreshes to max at the start of each of your turns; `move`/`attack` cost 1; rejected at 0. Shown in the HUD while it is your turn — deterministic `GameSnapshot` state, projection-only (Invariant #105).
+3. **AI players** — expose the existing AI-agent infrastructure in the lobby: a host **Add AI player** control (disabled when full), AI shown as a separate sub-list, AI auto-removed when a human join would exceed `maxPlayers`; plus a tactics AI brain (random move, attack a visible enemy). See [Lobby Agent-Slot Controls](../core-components/ai-framework-agent-system.md#lobby-agent-slot-controls).
+4. **Commitment-scheme battle mode** — the first gameplay consumer of the commit/reveal primitive. A host-authored **Battle Setup** toggle (off by default) switches tactics from sequential turns to a **simultaneous commit-then-sync** turn: each player acts locally, commits, and a reveal-only `End Turn` (enabled only once every seat has committed) reveals and applies every player's actions in a deterministic, attack-first order; undo-before-commit refunds stamina. Invariants #103–#105 apply (reaffirms #2/#9/#71). See [Commit-then-sync Battle Mode](../security-trust/tactics-commitment-battle-mode.md) and [Commit-then-Sync Turns](../security-trust/fog-of-war-cryptographic-commitment.md#commit-then-sync-turns-commitment-as-a-turn-mechanism).
+
+**GitHub**: [F54 — #720](https://github.com/jindrichruzicka/Chimera/issues/720)
+
+---
+
 ## Cross-References
 
 - [Logging & Crash Reporting](../core-components/logging-crash-reporting.md)
@@ -114,5 +132,8 @@ Make the multiplayer lobby game-customizable while keeping its chrome engine-own
 - [Runtime Debug Layer](../core-components/runtime-debug-layer.md)
 - [Renderer Shell Pages UI Contract](../core-components/renderer-shell-pages-ui-contract.md)
 - [Customizable Lobby Contract](../core-components/customizable-lobby-contract.md) — F53 host-authored match config, `snapshot.setup` projection
+- [Commit-then-sync Battle Mode](../security-trust/tactics-commitment-battle-mode.md) — F54 commitment-scheme turn design + contract
+- [State Obfuscation & Fog of War](../security-trust/fog-of-war-cryptographic-commitment.md) — F54 commit-then-sync turns (engine mechanism)
+- [AI Framework and Agent System](../core-components/ai-framework-agent-system.md) — F54 lobby agent-slot controls
 - [Testing Strategy](../testing/property-tests-soak.md) — soak test scenarios
 - [E2E Testing (Playwright)](../testing/e2e-testing-playwright.md) — multiplayer-soak.spec.ts, obfuscation.spec.ts

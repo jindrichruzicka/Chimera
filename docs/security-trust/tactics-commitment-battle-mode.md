@@ -164,11 +164,12 @@ A save taken mid-commit (some players committed, awaiting others) must still be 
 - **#9** — `CommitmentScheme.verify()` (via `verifyReveal`) remains the mandatory client-side gate before any revealed bundle is trusted or applied. `commitRevealable()` does not change `verify()`.
 - **#26** — `pendingCommitments` (and now the matching reveal staging) restore from `SaveFile` on load; a loaded game without them restored must not process reveals.
 
-### New invariants drafted here (ratified in T11, #731)
+### New invariants ratified here (#103–#105, T11 / #731)
 
-- **Mode is toggle-gated.** Commitment turn mode is enabled **only** by the synced `turnMode === 'commitment'` match setting carried in `snapshot.setup`; `sequential` is the default and is unchanged.
-- **End turn is reveal-only while awaiting commitment.** In commitment mode `End Turn` triggers reveal and is enabled only once every seated player has staged a commitment for the current turn.
-- **Reveal order is deterministic.** Reveal order is derived from `(snapshot.seed, snapshot.tick)`, grouped by player, attack-committers before non-attack-committers — never host-discretionary.
+- **Mode is toggle-gated — #103.** Commitment turn mode is enabled **only** by the synced `turnMode === 'commitment'` match setting carried in `snapshot.setup`; `sequential` is the default and is unchanged. The host drives the whole loop through the game-supplied `CommitmentTurnOrchestration` and never names a game.
+- **End turn is reveal-only while awaiting commitment — #103 (engine mechanism #102).** In commitment mode `End Turn` triggers reveal and is enabled only once every seated player has staged a commitment for the current turn.
+- **Reveal order is deterministic — #104.** Reveal order is derived from `(snapshot.seed, snapshot.tick)`, grouped by player, attack-committers before non-attack-committers — never host-discretionary; `CommitmentScheme.verify()` (#9) gates every revealed bundle.
+- **Per-turn resource state is deterministic and projection-only — #105.** The stamina spent and refunded around commit (§2, §6) lives in `GameSnapshot`, is seeded/refreshed/decremented only by reducers, and reaches clients only via `StateProjector.project()`.
 
 ---
 
@@ -185,4 +186,4 @@ A save taken mid-commit (some players committed, awaiting others) must still be 
 - [Fog of War & Cryptographic Commitment](fog-of-war-cryptographic-commitment.md) — the commit/reveal primitive this mode reuses (host-generated `committed` values vs. the player-authored actions committed here).
 - [Customizable Lobby Contract](../core-components/customizable-lobby-contract.md) — F53 `matchSettings` sync + `snapshot.setup` projection the toggle rides.
 - [State Projection Interfaces](../core-components/state-projection-interfaces.md) — `PlayerSnapshot.commitments`, `StateProjector.project()`.
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — #3, #8, #9, #26, #71.
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — #3, #8, #9, #26, #71; end-turn gate #102; commit-then-sync turns #103–#105.

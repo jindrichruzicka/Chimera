@@ -79,6 +79,16 @@ interface AgentManager {
 
 ---
 
+## Lobby Agent-Slot Controls
+
+AI players are provisioned **in the lobby**, before the match starts, so the host can fill empty seats with AI and reclaim them for late-joining humans. The engine owns the slots; a game contributes only the AI brain.
+
+- `LobbyAgentSlot` (`{ slotIndex, kind, omniscient? }`) marks a seat as AI on the synced `LobbyState.agentSlots`. Adding or removing an AI is a **host-only** write (mirroring the host-authored match-setting rule, Invariant #99) and rebroadcasts to every peer, so all clients render the same roster — humans in the player list, AI in a separate sub-list. The Add-AI control is disabled when the lobby is full.
+- The host **auto-removes** an AI slot when admitting a human would otherwise exceed `maxPlayers`, so a human join never bounces off an AI-filled lobby.
+- At match start the host materialises each `agentSlot` into an `AIPlayerAgent` through `HostedSessionAgents`, wiring the game-supplied `AIBrain`; from there the agent ticks via `AgentManager` like any other AI player (honest by default — it sees only its own `PlayerSnapshot`). The simulation still works purely in `PlayerId` and never learns a seat was lobby-provisioned.
+
+---
+
 ## AIParams — Personality Parameters
 
 ```typescript
