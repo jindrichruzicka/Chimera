@@ -14,9 +14,10 @@
 // Gate: `notFound()` called in production outside E2E mode.
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render as baseRender, screen, within } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EscapeStackProvider } from '../../components/shell/EscapeStack';
 import { ToastHost } from '../../components/shell/ToastHost';
 import { useToastStore } from '../../state/toastStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
@@ -31,6 +32,11 @@ vi.mock('next/navigation', () => ({
 }));
 
 import { notFound as notFoundMock } from 'next/navigation';
+
+// The gallery renders Modal/Drawer, which route Escape through the shared overlay
+// stack; wrap every render so useEscapeLayer resolves the provider.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EscapeStackProvider });
 
 function renderGallery(): void {
     render(

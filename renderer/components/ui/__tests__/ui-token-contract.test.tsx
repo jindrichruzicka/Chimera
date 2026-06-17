@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { EscapeStackProvider } from '../../shell/EscapeStack';
 import {
     Badge,
     Card,
@@ -18,6 +19,11 @@ import {
     Spinner,
     Tooltip,
 } from '../index';
+
+// Modal/Drawer route Escape-to-close through the shared overlay stack; the
+// wrapper is applied to rerenders too, so the Modal/Drawer cases are covered.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EscapeStackProvider });
 
 afterEach(() => {
     cleanup();

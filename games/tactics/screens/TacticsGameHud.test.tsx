@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -13,10 +13,16 @@ import {
 import { TACTICS_COMMIT_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 import { entityId } from '@chimera/electron/preload/api-types.js';
+import { EscapeStackProvider } from '@chimera/renderer/components/ui/index.js';
 import { tacticsGridCoordinate } from '../actions.js';
 import type { BufferedTacticsAction } from '../commitment/contract.js';
 import { TacticsGameHud } from './TacticsGameHud';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
+
+// The HUD renders the shared Drawer (in-match chat), which routes Escape-to-close
+// through the overlay stack; wrap every render (and its rerenders) in the provider.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EscapeStackProvider });
 
 beforeEach(() => {
     // The HUD now mounts the shared ChatPanel, which resolves past its

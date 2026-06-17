@@ -16,6 +16,7 @@ import { InputActionRegistryContext } from '../input/InputActionRegistryContext.
 import { createKeyBindingRepository } from '../input/KeyBindingRepository.js';
 import { InputManagerContext } from '../input/InputManagerContext.js';
 import { DeviceInfoProvider, type DeviceInfoSystemApi } from '../device/DeviceInfoProvider.js';
+import { EscapeStackProvider } from '../components/shell/EscapeStack.js';
 
 const ENGINE_INPUT_ACTIONS: readonly InputAction[] = [
     { id: 'engine:undo', description: 'Undo last action', category: 'Engine', oneShot: true },
@@ -98,7 +99,7 @@ export function Providers({ children }: ProvidersProps): React.ReactElement {
                     <AudioManagerContext.Provider value={audioManager}>
                         <InputActionRegistryContext.Provider value={inputRegistry}>
                             <InputManagerContext.Provider value={inputManager}>
-                                {children}
+                                <EscapeStackProvider>{children}</EscapeStackProvider>
                             </InputManagerContext.Provider>
                         </InputActionRegistryContext.Provider>
                     </AudioManagerContext.Provider>

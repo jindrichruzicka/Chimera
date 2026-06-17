@@ -1,10 +1,16 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { EscapeStackProvider } from '../shell/EscapeStack';
 import { Modal } from './Modal';
+
+// Modal routes Escape-to-close through the shared overlay stack, so every render
+// must sit inside an EscapeStackProvider (useEscapeLayer throws otherwise).
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EscapeStackProvider });
 
 afterEach(() => {
     cleanup();

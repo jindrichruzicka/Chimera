@@ -2,6 +2,7 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 import type { CSSProperties, HTMLAttributes } from 'react';
+import { useEscapeLayer } from '../shell/EscapeStack';
 import { IconButton } from './IconButton';
 import styles from './Modal.module.css';
 
@@ -36,6 +37,11 @@ export function Modal({
     const titleId = useId();
     const dialogRef = useRef<HTMLDivElement | null>(null);
 
+    // Escape-to-close is routed through the shared overlay stack so a single
+    // keydown is handled exactly once and an open overlay consumes Escape before
+    // the window-level in-game menu toggle fires.
+    useEscapeLayer(onClose, open);
+
     useEffect(() => {
         if (!open) return;
 
@@ -49,12 +55,6 @@ export function Modal({
         function handleKeyDown(event: KeyboardEvent): void {
             const currentDialog = dialogRef.current;
             if (!currentDialog) return;
-
-            if (event.key === 'Escape') {
-                event.preventDefault();
-                onClose();
-                return;
-            }
 
             if (event.key !== 'Tab') return;
 
@@ -85,7 +85,7 @@ export function Modal({
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [onClose, open]);
+    }, [open]);
 
     if (!open) return null;
 

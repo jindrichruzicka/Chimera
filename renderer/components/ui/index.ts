@@ -44,3 +44,12 @@ export { ToggleButton } from './ToggleButton';
 export type { ToggleButtonProps } from './ToggleButton';
 export { Tooltip } from './Tooltip';
 export type { TooltipProps, TooltipTriggerProps } from './Tooltip';
+
+// EscapeStackProvider is the runtime contract for Modal/Drawer: both register
+// Escape-to-close on the shared overlay stack via useEscapeLayer, so any consumer
+// of these primitives must mount the provider above them (the app root does this
+// in <Providers>). Surfaced through the public ui barrel so game packages — which
+// may import only this barrel — can supply it, notably when rendering the
+// primitives in isolation under test.
+export { EscapeStackProvider, useEscapeLayer } from '../shell/EscapeStack';
+export type { EscapeStackProviderProps } from '../shell/EscapeStack';
