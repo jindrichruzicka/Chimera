@@ -33,42 +33,8 @@
     justify-self: start;
 }
 
-.heading {
-    margin: var(--ch-space-none);
-}
-
 .message {
     margin: var(--ch-space-none);
-    max-inline-size: var(--ch-button-min-width-lg);
-}
-
-.divider {
-    inline-size: 100%;
-}
-
-.metrics {
-    display: grid;
-    gap: var(--ch-space-sm);
-    grid-template-columns: repeat(auto-fit, minmax(var(--ch-button-min-width-sm), 1fr));
-}
-
-.metricCard {
-    display: grid;
-    gap: var(--ch-space-xs);
-    min-inline-size: 0;
-}
-
-.metricLabel {
-    color: var(--ch-color-text-secondary);
-    font-size: var(--ch-font-size-sm);
-    line-height: var(--ch-line-height-tight);
-}
-
-.metricValue {
-    color: var(--ch-color-text-primary);
-    font-size: var(--ch-font-size-xl);
-    font-weight: var(--ch-font-weight-semibold);
-    line-height: var(--ch-line-height-tight);
 }
 
 .actions {
@@ -76,6 +42,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--ch-space-sm);
+    justify-content: flex-end;
     margin-block-start: var(--ch-space-md);
 }
 

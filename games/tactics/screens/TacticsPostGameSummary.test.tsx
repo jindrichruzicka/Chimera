@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -85,36 +85,30 @@ describe('TacticsPostGameSummary', () => {
             'data-ch-badge-variant',
             'success',
         );
-        expect(screen.getByTestId('post-game-summary-heading')).toHaveAttribute(
-            'data-ch-heading-size',
-            'lg',
-        );
         expect(screen.getByTestId('post-game-summary-message')).toHaveAttribute(
             'data-ch-caption-tone',
             'success',
         );
     });
 
-    it('summarizes the winning battlefield state with metric cards', () => {
+    it('summarizes the outcome through the badge and message, without redundant chrome', () => {
         render(<TacticsPostGameSummary {...makeSummaryProps()} />);
 
         expect(screen.getByRole('region', { name: 'Post-Game Summary' })).toBeTruthy();
-        expect(screen.getByRole('heading', { name: 'Tactical Victory' })).toBeTruthy();
         expect(screen.getByTestId('post-game-summary-badge')).toHaveTextContent('Victory');
+        expect(screen.getByTestId('post-game-summary-message')).toHaveTextContent(
+            'Mission accomplished. Your formation controls the field.',
+        );
 
-        const tickCard = screen.getByTestId('post-game-summary-final-tick');
-        expect(tickCard).toHaveAttribute('data-ch-card-surface', 'overlay');
-        expect(within(tickCard).getByText('Final tick')).toBeTruthy();
-        expect(within(tickCard).getByText('24')).toBeTruthy();
-
-        const unitsCard = screen.getByTestId('post-game-summary-visible-units');
-        expect(unitsCard).toHaveAttribute('data-ch-card-padding', 'sm');
-        expect(within(unitsCard).getByText('Visible units')).toBeTruthy();
-        expect(within(unitsCard).getByText('2')).toBeTruthy();
-
-        const commandersCard = screen.getByTestId('post-game-summary-commanders');
-        expect(within(commandersCard).getByText('Commanders')).toBeTruthy();
-        expect(within(commandersCard).getByText('2')).toBeTruthy();
+        // The redundant outcome heading and the battlefield-metric cards were
+        // removed during the summary modernization — the badge carries the
+        // outcome on its own.
+        expect(screen.queryByTestId('post-game-summary-heading')).toBeNull();
+        expect(screen.queryByRole('heading', { name: 'Tactical Victory' })).toBeNull();
+        expect(screen.queryByTestId('post-game-summary-final-tick')).toBeNull();
+        expect(screen.queryByTestId('post-game-summary-visible-units')).toBeNull();
+        expect(screen.queryByTestId('post-game-summary-commanders')).toBeNull();
+        expect(screen.queryByRole('separator')).toBeNull();
     });
 
     it('uses defeat, draw, and unknown outcome variants', () => {
@@ -134,7 +128,7 @@ describe('TacticsPostGameSummary', () => {
             'data-ch-badge-variant',
             'error',
         );
-        expect(screen.getByRole('heading', { name: 'Tactical Defeat' })).toBeTruthy();
+        expect(screen.getByTestId('post-game-summary-badge')).toHaveTextContent('Defeat');
 
         rerender(
             <TacticsPostGameSummary
@@ -150,7 +144,7 @@ describe('TacticsPostGameSummary', () => {
             'data-ch-badge-variant',
             'warning',
         );
-        expect(screen.getByRole('heading', { name: 'Tactical Stalemate' })).toBeTruthy();
+        expect(screen.getByTestId('post-game-summary-badge')).toHaveTextContent('Stalemate');
 
         rerender(
             <TacticsPostGameSummary
@@ -165,7 +159,7 @@ describe('TacticsPostGameSummary', () => {
             'data-ch-badge-variant',
             'neutral',
         );
-        expect(screen.getByRole('heading', { name: 'Battle Concluded' })).toBeTruthy();
+        expect(screen.getByTestId('post-game-summary-badge')).toHaveTextContent('Concluded');
     });
 });
 
@@ -176,6 +170,15 @@ describe('TacticsPostGameSummary — replay actions', () => {
 
         expect(screen.getByTestId('post-game-replay-btn')).toHaveTextContent('Replay');
         expect(screen.getByTestId('post-game-save-replay-btn')).toHaveTextContent('Save Replay');
+        // Modernized summary: compact, end-aligned actions.
+        expect(screen.getByTestId('post-game-replay-btn')).toHaveAttribute(
+            'data-ch-button-size',
+            'sm',
+        );
+        expect(screen.getByTestId('post-game-save-replay-btn')).toHaveAttribute(
+            'data-ch-button-size',
+            'sm',
+        );
     });
 
     it('hides both replay actions while the match is unresolved', () => {
