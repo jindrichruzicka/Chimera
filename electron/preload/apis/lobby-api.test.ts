@@ -6,6 +6,7 @@ import {
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
+    LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
@@ -153,6 +154,36 @@ describe('createLobbyApi', () => {
             const api = createLobbyApi(port);
 
             await expect(api.leave()).rejects.toThrow('closeLobby failed');
+        });
+    });
+
+    describe('returnToLobby()', () => {
+        it('invokes chimera:lobby:return-to-lobby and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+
+            const result = await api.returnToLobby();
+
+            expect(stub.invocations).toEqual([
+                { channel: LOBBY_RETURN_TO_LOBBY_CHANNEL, arg: undefined },
+            ]);
+            expect(result).toBeUndefined();
+        });
+
+        it('rejects when the main-process handler rejects', async () => {
+            const stub = makeIpcStub();
+            const port: LobbyApiIpcPort = {
+                ...stub.port,
+                invoke: (channel) => {
+                    if (channel === LOBBY_RETURN_TO_LOBBY_CHANNEL) {
+                        return Promise.reject(new Error('returnToLobby failed'));
+                    }
+                    return stub.port.invoke(channel);
+                },
+            };
+            const api = createLobbyApi(port);
+
+            await expect(api.returnToLobby()).rejects.toThrow('returnToLobby failed');
         });
     });
 

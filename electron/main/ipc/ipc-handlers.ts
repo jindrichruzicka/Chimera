@@ -37,6 +37,7 @@ import {
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
+    LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
@@ -122,6 +123,7 @@ import {
     ChatSendRequestSchema,
     EngineActionSchema,
     EngineProfilePatchSchema,
+    EmptyPayloadSchema,
     GameIdSchema,
     GetContentCollectionsParamsSchema,
     HostLobbyParamsSchema,
@@ -173,6 +175,7 @@ export {
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
+    LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
@@ -590,6 +593,7 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
             LOBBY_JOIN_CHANNEL,
             LOBBY_LEAVE_CHANNEL,
             LOBBY_START_GAME_CHANNEL,
+            LOBBY_RETURN_TO_LOBBY_CHANNEL,
             LOBBY_UPDATE_READY_STATE_CHANNEL,
             LOBBY_SET_MATCH_SETTING_CHANNEL,
             LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
@@ -614,19 +618,31 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
         });
     });
 
-    ipcMain.handle(LOBBY_LEAVE_CHANNEL, () => {
+    ipcMain.handle(LOBBY_LEAVE_CHANNEL, (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, LOBBY_LEAVE_CHANNEL, payload);
         return lobbyManager.closeLobby();
     });
 
-    ipcMain.handle(LOBBY_START_GAME_CHANNEL, () => {
+    ipcMain.handle(LOBBY_START_GAME_CHANNEL, (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, LOBBY_START_GAME_CHANNEL, payload);
         return lobbyManager.startGame();
     });
 
-    ipcMain.handle(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, () => {
+    // Host-only: abandon the active match back to the lobby phase (reverse of
+    // start-game, #736). No payload — host identity is derived main-side; the
+    // empty boundary is still validated per §8.3 to reject any stray payload.
+    ipcMain.handle(LOBBY_RETURN_TO_LOBBY_CHANNEL, (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, LOBBY_RETURN_TO_LOBBY_CHANNEL, payload);
+        return lobbyManager.returnToLobby();
+    });
+
+    ipcMain.handle(LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL, payload);
         return lobbyManager.getLocalPlayerId();
     });
 
-    ipcMain.handle(LOBBY_GET_CURRENT_STATE_CHANNEL, () => {
+    ipcMain.handle(LOBBY_GET_CURRENT_STATE_CHANNEL, (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, LOBBY_GET_CURRENT_STATE_CHANNEL, payload);
         return lobbyManager.getCurrentState();
     });
 
@@ -659,7 +675,8 @@ export function registerLobbyHandlers(options: RegisterLobbyHandlersOptions): vo
 
     // Host-only: append an AI agent slot. No payload — the host assigns the slot
     // index; `LobbyManager` rejects non-host sessions and a full lobby (#724).
-    ipcMain.handle(LOBBY_ADD_AI_CHANNEL, () => {
+    ipcMain.handle(LOBBY_ADD_AI_CHANNEL, (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, LOBBY_ADD_AI_CHANNEL, payload);
         return lobbyManager.addAi();
     });
 

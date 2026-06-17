@@ -13,6 +13,7 @@ import {
     LOBBY_JOIN_CHANNEL,
     LOBBY_LEAVE_CHANNEL,
     LOBBY_START_GAME_CHANNEL,
+    LOBBY_RETURN_TO_LOBBY_CHANNEL,
     LOBBY_UPDATE_READY_STATE_CHANNEL,
     LOBBY_SET_MATCH_SETTING_CHANNEL,
     LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,
@@ -754,6 +755,44 @@ describe('registerLobbyHandlers', () => {
         expect(() => handler?.({}, {})).toThrow(IpcRequestValidationError);
     });
 
+    it('registers chimera:lobby:return-to-lobby as an invoke handler that calls lobbyManager.returnToLobby', async () => {
+        const stub = makeLobbyIpcMainStub();
+        const lobbyManager = makeLobbyManagerStub();
+        const spy = vi.spyOn(lobbyManager, 'returnToLobby').mockResolvedValue(undefined);
+        registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager });
+
+        const handler = stub.handled.get(LOBBY_RETURN_TO_LOBBY_CHANNEL);
+        expect(handler).toBeDefined();
+
+        await Promise.resolve(handler?.({}));
+        expect(spy).toHaveBeenCalledOnce();
+    });
+
+    // Every no-arg lobby channel validates its (empty) boundary with
+    // EmptyPayloadSchema so a stray renderer payload is rejected at the edge
+    // per §8.3 — uniform across the namespace, not just return-to-lobby.
+    it.each([
+        ['chimera:lobby:leave', LOBBY_LEAVE_CHANNEL],
+        ['chimera:lobby:start-game', LOBBY_START_GAME_CHANNEL],
+        ['chimera:lobby:get-local-player-id', LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL],
+        ['chimera:lobby:get-current-state', LOBBY_GET_CURRENT_STATE_CHANNEL],
+        ['chimera:lobby:add-ai', LOBBY_ADD_AI_CHANNEL],
+        ['chimera:lobby:return-to-lobby', LOBBY_RETURN_TO_LOBBY_CHANNEL],
+    ])(
+        'rejects a non-empty payload on the no-arg channel %s with IpcRequestValidationError',
+        (_name, channel) => {
+            const stub = makeLobbyIpcMainStub();
+            registerLobbyHandlers({ ipcMain: stub.ipcMain, lobbyManager: makeLobbyManagerStub() });
+
+            const handler = stub.handled.get(channel);
+            expect(handler).toBeDefined();
+
+            expect(() => handler?.({}, { unexpected: 'payload' })).toThrow(
+                IpcRequestValidationError,
+            );
+        },
+    );
+
     it('rejects when lobbyManager.closeLobby throws', async () => {
         const stub = makeLobbyIpcMainStub();
         const lobbyManager = makeLobbyManagerStub();
@@ -781,6 +820,7 @@ describe('registerLobbyHandlers', () => {
                 LOBBY_JOIN_CHANNEL,
                 LOBBY_LEAVE_CHANNEL,
                 LOBBY_START_GAME_CHANNEL,
+                LOBBY_RETURN_TO_LOBBY_CHANNEL,
                 LOBBY_UPDATE_READY_STATE_CHANNEL,
                 LOBBY_SET_MATCH_SETTING_CHANNEL,
                 LOBBY_SET_PLAYER_ATTRIBUTE_CHANNEL,

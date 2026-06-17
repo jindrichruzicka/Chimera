@@ -51,6 +51,15 @@ export const LOBBY_LEAVE_CHANNEL = 'chimera:lobby:leave';
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.startGame}. */
 export const LOBBY_START_GAME_CHANNEL = 'chimera:lobby:start-game';
 
+/**
+ * `ipcRenderer.invoke` target for {@link LobbyAPI.returnToLobby}. Host-only: the
+ * main-side handler rejects calls from a joined (non-host) session and abandons
+ * the active match back to the lobby phase — the reverse of
+ * {@link LobbyAPI.startGame} (#736). No payload; host identity is derived
+ * main-side.
+ */
+export const LOBBY_RETURN_TO_LOBBY_CHANNEL = 'chimera:lobby:return-to-lobby';
+
 /** `ipcRenderer.invoke` target for {@link LobbyAPI.getLocalPlayerId}. */
 export const LOBBY_GET_LOCAL_PLAYER_ID_CHANNEL = 'chimera:lobby:get-local-player-id';
 
@@ -142,6 +151,8 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
                 .then((value) => parseInvokeResponse(LobbyInfoSchema, LOBBY_JOIN_CHANNEL, value)),
         leave: (): Promise<void> => ipc.invoke(LOBBY_LEAVE_CHANNEL).then(() => undefined),
         startGame: (): Promise<void> => ipc.invoke(LOBBY_START_GAME_CHANNEL).then(() => undefined),
+        returnToLobby: (): Promise<void> =>
+            ipc.invoke(LOBBY_RETURN_TO_LOBBY_CHANNEL).then(() => undefined),
 
         getCurrentState: (): Promise<LobbyState | null> =>
             ipc

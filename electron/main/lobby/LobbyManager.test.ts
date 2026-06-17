@@ -2354,6 +2354,43 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         await hostManager.closeLobby();
     });
 
+    it('returnToLobby invokes onReturnToLobbyRequested with the current lobbyState for a hosted session', async () => {
+        const states: LobbyState[] = [];
+        const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onReturnToLobbyRequested: (s) => {
+                states.push(s);
+            },
+        });
+        await manager.hostLobby(HOST_PARAMS);
+
+        await expect(manager.returnToLobby()).resolves.toBeUndefined();
+
+        expect(states).toHaveLength(1);
+        expect(states[0]).toBe(manager.getCurrentState());
+
+        await manager.closeLobby();
+    });
+
+    it('returnToLobby rejects without an active session', async () => {
+        const manager = makeManager();
+        await expect(manager.returnToLobby()).rejects.toThrow(/active session/i);
+    });
+
+    it('returnToLobby rejects from a joined (non-host) session', async () => {
+        const provider = makeProvider();
+        const hostManager = makeManager(provider);
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = makeManager(provider);
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+
+        await expect(joinManager.returnToLobby()).rejects.toThrow(/only hosted sessions/i);
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
     it('setPlayerAttribute on the local seat from a joined session resolves (owner-authored)', async () => {
         const provider = makeProvider();
         const hostManager = makeManager(provider);

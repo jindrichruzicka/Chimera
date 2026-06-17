@@ -969,6 +969,13 @@ export interface LobbyAPI {
     leave(): Promise<void>;
     /** Requests that the current host start the game for the active lobby. */
     startGame(): Promise<void>;
+    /**
+     * Host-only: abandon the active match and return the session to the lobby
+     * phase — the reverse of {@link startGame}. The main process rejects this
+     * from a joined (non-host) session (#736). Clients observe the lobby-phase
+     * reset via the existing projected snapshot stream, not this channel.
+     */
+    returnToLobby(): Promise<void>;
     /** Returns the current lobby state, or null when no lobby session is active. */
     getCurrentState(): Promise<LobbyState | null>;
     getLocalPlayerId(): Promise<PlayerId | null>;

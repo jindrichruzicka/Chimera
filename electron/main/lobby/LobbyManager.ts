@@ -67,6 +67,15 @@ export interface LobbyManagerOptions {
     ) => (() => void) | void;
     readonly onSessionJoined?: (transport: ClientTransport) => (() => void) | void;
     readonly onGameStartRequested?: (state: LobbyState) => void | Promise<void>;
+    /**
+     * Invoked when the host requests a return to the lobby for an active hosted
+     * session (#736) — the reverse of {@link onGameStartRequested}. The wiring
+     * point (`electron/main/index.ts`, T4) dispatches an `engine:return_to_lobby`
+     * action to abandon the match and reset the session snapshot to the lobby
+     * phase. Receives the current {@link LobbyState}. When omitted, the call
+     * resolves with no side effect (plumbing-only until T4 wires it).
+     */
+    readonly onReturnToLobbyRequested?: (state: LobbyState) => void | Promise<void>;
     readonly onLobbyStateChanged?: (state: LobbyState) => void;
     readonly onLocalSeatAdded?: (player: LobbyPlayerEntry) => void;
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
@@ -156,6 +165,7 @@ export class LobbyManager {
     private readonly onSessionHosted: LobbyManagerOptions['onSessionHosted'];
     private readonly onSessionJoined: LobbyManagerOptions['onSessionJoined'];
     private readonly onGameStartRequested: LobbyManagerOptions['onGameStartRequested'];
+    private readonly onReturnToLobbyRequested: LobbyManagerOptions['onReturnToLobbyRequested'];
     private readonly onLobbyStateChanged: LobbyManagerOptions['onLobbyStateChanged'];
     private readonly onLocalSeatAdded: LobbyManagerOptions['onLocalSeatAdded'];
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
@@ -185,6 +195,7 @@ export class LobbyManager {
         this.onSessionHosted = options.onSessionHosted;
         this.onSessionJoined = options.onSessionJoined;
         this.onGameStartRequested = options.onGameStartRequested;
+        this.onReturnToLobbyRequested = options.onReturnToLobbyRequested;
         this.onLobbyStateChanged = options.onLobbyStateChanged;
         this.onLocalSeatAdded = options.onLocalSeatAdded;
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
@@ -883,6 +894,39 @@ export class LobbyManager {
         this.publishLobbyState(nextState);
         this.broadcastLobbyStateIfHosted(nextState);
         return Promise.resolve();
+    }
+
+    /**
+     * Host-only: request a return to the lobby for the active hosted session
+     * (#736) — the reverse of {@link startGame}. Mirrors {@link setMatchSetting}'s
+     * host-only guard: rejects from a joined (non-host) session or when no
+     * session is active. Fires {@link LobbyManagerOptions.onReturnToLobbyRequested}
+     * with the current {@link LobbyState}; the wiring point (T4) dispatches the
+     * `engine:return_to_lobby` action that abandons the match and resets the
+     * session snapshot to the lobby phase. The callback's result is awaited so
+     * an async dispatch propagates its outcome to the caller.
+     */
+    returnToLobby(): Promise<void> {
+        const session = this.session;
+        if (session === null) {
+            return Promise.reject(
+                new Error('LobbyManager: returning to the lobby requires an active session'),
+            );
+        }
+        if (!('close' in session)) {
+            return Promise.reject(
+                new Error('LobbyManager: only hosted sessions can return to the lobby'),
+            );
+        }
+        if (this.lobbyState === null) {
+            return Promise.reject(new Error('LobbyManager: lobby state is not available'));
+        }
+
+        // Await the callback so an async dispatch propagates its outcome, but
+        // discard its result to honor the `Promise<void>` contract.
+        return Promise.resolve(this.onReturnToLobbyRequested?.(this.lobbyState)).then(
+            () => undefined,
+        );
     }
 
     /**

@@ -98,6 +98,15 @@ export function parseInvokeRequest<T>(schema: z.ZodType<T>, channel: string, val
  */
 export const NonEmptyStringSchema = z.string().min(1);
 
+/**
+ * Schema for a no-argument invoke channel: the renderer must send no payload.
+ * `ipcRenderer.invoke(channel)` with no second argument reaches the main-side
+ * handler as `undefined`; this schema validates that emptiness so the handler
+ * still satisfies the "validate every IPC boundary" rule (§8.3) and rejects any
+ * stray payload before reaching a manager. Shared by host-only no-arg channels.
+ */
+export const EmptyPayloadSchema = z.undefined();
+
 /** Schema for a single `gameId` argument (e.g. `chimera:saves:list`). */
 export const GameIdSchema = NonEmptyStringSchema;
 
