@@ -63,6 +63,20 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
     };
 }
 
+/**
+ * Assert that `node` renders before both replay action buttons in document
+ * order — the DOM proxy for "sits to the left of the buttons", since CSS module
+ * classes don't apply under jsdom.
+ */
+function expectPrecedesButtons(node: HTMLElement): void {
+    for (const testId of ['post-game-replay-btn', 'post-game-save-replay-btn']) {
+        const button = screen.getByTestId(testId);
+        expect(
+            node.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    }
+}
+
 function makeSummaryProps(overrides: Partial<GameScreenProps> = {}): GameScreenProps {
     return {
         snapshot: makeSnapshot(),
@@ -207,6 +221,8 @@ describe('TacticsPostGameSummary — replay actions', () => {
         // 'save' intent → main raises the "Replay saved" toast (§4.30).
         expect(exportCurrentMatch).toHaveBeenCalledWith('save');
         expect(screen.queryByTestId('post-game-replay-error')).toBeNull();
+        // The status leads the actions row, so it sits to the left of the buttons.
+        expectPrecedesButtons(screen.getByTestId('post-game-replay-status'));
     });
 
     it('surfaces safe generic copy when exporting fails, never the raw bridge error', async () => {
@@ -245,5 +261,21 @@ describe('TacticsPostGameSummary — replay actions', () => {
         // 'view' intent → main suppresses the "Replay saved" toast (§4.30): the
         // export only obtains a stable on-disk path for the player.
         expect(exportCurrentMatch).toHaveBeenCalledWith('view');
+    });
+
+    it('renders the replay error to the left of the action buttons', async () => {
+        installReplayBridge({
+            openInPlayer: vi.fn(() => Promise.reject(new Error('player unavailable'))),
+        });
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps()} />);
+
+        await user.click(screen.getByTestId('post-game-replay-btn'));
+
+        const error = await screen.findByTestId('post-game-replay-error');
+        expect(error).toHaveTextContent('Could not open replay.');
+        // The error caption leads the actions row, so it renders to the left of
+        // the buttons rather than crowding their right edge.
+        expectPrecedesButtons(error);
     });
 });

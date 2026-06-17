@@ -136,24 +136,6 @@ function PostGameReplayActions(): React.ReactElement {
 
     return (
         <div className={styles['actions']} data-testid="post-game-actions">
-            <Button
-                data-testid="post-game-replay-btn"
-                disabled={busy}
-                onClick={() => void handleReplay()}
-                size="sm"
-                variant="primary"
-            >
-                Replay
-            </Button>
-            <Button
-                data-testid="post-game-save-replay-btn"
-                disabled={busy}
-                onClick={() => void handleSaveReplay()}
-                size="sm"
-                variant="secondary"
-            >
-                Save Replay
-            </Button>
             {status.kind === 'saved' && (
                 <Caption
                     className={styles['status']}
@@ -172,6 +154,24 @@ function PostGameReplayActions(): React.ReactElement {
                     {status.message}
                 </Caption>
             )}
+            <Button
+                data-testid="post-game-replay-btn"
+                disabled={busy}
+                onClick={() => void handleReplay()}
+                size="sm"
+                variant="primary"
+            >
+                Replay
+            </Button>
+            <Button
+                data-testid="post-game-save-replay-btn"
+                disabled={busy}
+                onClick={() => void handleSaveReplay()}
+                size="sm"
+                variant="secondary"
+            >
+                Save Replay
+            </Button>
         </div>
     );
 }
