@@ -18,6 +18,28 @@ export interface GameResultBannerProps {
     readonly localPlayerId?: PlayerId;
 }
 
+/**
+ * Engine capabilities handed to a game's in-game menu component (F55 / §4.33–§4.34).
+ * The menu is the Escape-toggled overlay shown during an in-progress match; the
+ * engine supplies these callbacks so the game's menu can resume play or leave
+ * without importing engine internals (Invariant #80 — the menu reaches the shell
+ * only through {@link GameScreenRegistry.inGameMenu}).
+ */
+export interface InGameMenuProps {
+    /** Close the menu and return to the match (Resume). */
+    readonly closeMenu: () => void;
+    /**
+     * Leave the in-progress match. Role-aware in the engine: a host abandons the
+     * match and returns everyone to the lobby; a client disconnects to the main
+     * menu. The menu component need only invoke it.
+     */
+    readonly leaveGame: () => void;
+    /** Whether the local player hosted this match (host vs. client copy/behaviour). */
+    readonly isHost: boolean;
+    /** The local player's id, or `undefined` for a purely local game with no lobby. */
+    readonly localPlayerId?: PlayerId;
+}
+
 export interface GameScreenProps {
     readonly snapshot: PlayerSnapshot;
     readonly localPlayerId?: PlayerId;
@@ -80,6 +102,14 @@ export interface GameScreenRegistry {
     readonly sceneDefaultScreens?: Readonly<Record<string, string>>;
     readonly transitionOverlay?: GameScreenComponent<GameScreenProps>;
     readonly gameResultBanner?: GameScreenComponent<GameResultBannerProps>;
+    /**
+     * Escape-toggled in-game menu for in-progress matches (F55). Three states:
+     * a component (game override), the string `'none'` (opt out → Escape is a
+     * no-op), or omitted (engine default Resume/Leave menu). Like every other
+     * slot, it is supplied only through this registry (Invariant #80) and is
+     * optional (Invariant #81 — `board` is the sole required slot).
+     */
+    readonly inGameMenu?: GameScreenComponent<InGameMenuProps> | 'none';
     readonly eventAudioBinding?: GameEventAudioBinding;
 }
 
