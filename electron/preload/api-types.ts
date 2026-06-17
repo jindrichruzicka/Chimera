@@ -18,6 +18,7 @@ import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/me
 import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 import type { GameContent, GameContentItem } from '@chimera/shared/game-content-contract.js';
 import type {
+    PerspectiveReplayExportBridge,
     PerspectiveReplayListBridge,
     ReplayExportBridge,
     ReplayExportIntent,
@@ -608,6 +609,25 @@ export interface PerspectiveReplayPlaybackInfo {
 }
 
 /**
+ * Replay kind carried on the shared `chimera:replay:navigate` push (§4.28). The
+ * deterministic and perspective `open-in-player` handlers reuse one push channel,
+ * so the payload names which player surface the renderer route should select.
+ */
+export type ReplayNavigateKind = 'deterministic' | 'perspective';
+
+/**
+ * Payload of the shared `chimera:replay:navigate` push (§4.28). `path` is the
+ * validated replay file path; `kind` tells {@link ReplayAPI.onNavigate} whether
+ * to open the deterministic or the perspective player (the latter via
+ * `?kind=perspective`). A perspective open must carry `'perspective'`, otherwise
+ * the route would load a perspective file through the deterministic surface.
+ */
+export interface ReplayNavigatePayload {
+    readonly path: string;
+    readonly kind: ReplayNavigateKind;
+}
+
+/**
  * Renderer surface for the replay system (§4.28). Host-only in practice — the
  * main-process handlers own recording state and the replay directory; the
  * renderer only lists, exports, opens, deletes, and drives playback.
@@ -639,10 +659,12 @@ export interface ReplayAPI extends ReplayExportBridge {
     /** Permanently delete the replay at `path`. Rejected for paths outside the replay directory. */
     delete(path: string): Promise<void>;
     /**
-     * Subscribe to replay-player navigation requests pushed by main (the
-     * payload is the replay file path). Returns an {@link Unsubscribe}.
+     * Subscribe to replay-player navigation requests pushed by main. The payload
+     * carries the replay file `path` and its {@link ReplayNavigateKind} so the
+     * route opens the matching player surface (deterministic or perspective).
+     * Returns an {@link Unsubscribe}.
      */
-    onNavigate(listener: (path: string) => void): Unsubscribe;
+    onNavigate(listener: (payload: ReplayNavigatePayload) => void): Unsubscribe;
     /**
      * Subscribe to successful replay-export notifications pushed by main after
      * `export-current-match` resolves (the payload is the saved replay path).
@@ -694,11 +716,14 @@ export interface ReplayAPI extends ReplayExportBridge {
  * `chimera:replay:navigate` push (so the renderer subscribes via
  * {@link ReplayAPI.onNavigate} for both surfaces).
  *
- * Extends {@link PerspectiveReplayListBridge} (the shared `list` slice) so the
- * `list` shape stays pinned to the one contract that game shell modules read off
- * `globalThis` — a divergence is a compile error here, not a silent drift.
+ * Extends {@link PerspectiveReplayListBridge} (the shared `list` slice) and
+ * {@link PerspectiveReplayExportBridge} (the `exportCurrent` / `openInPlayer`
+ * slice a game's post-game summary reads off `globalThis` for a joined client) so
+ * both shapes stay pinned to the one shared contract — a divergence is a compile
+ * error here, not a silent drift.
  */
-export interface PerspectiveReplayAPI extends PerspectiveReplayListBridge {
+export interface PerspectiveReplayAPI
+    extends PerspectiveReplayListBridge, PerspectiveReplayExportBridge {
     /**
      * List stored perspective-replay file paths for `gameId`, newest-first.
      * Unlike {@link ReplayAPI.list}, this returns opaque path handles — a

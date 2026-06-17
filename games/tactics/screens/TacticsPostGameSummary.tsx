@@ -14,7 +14,11 @@ import {
     type GameScreenProps,
     type GameResultOutcome,
 } from '@chimera/shared/game-screen-contract.js';
-import type { ReplayExportBridge } from '@chimera/shared/replay-bridge-contract.js';
+import type {
+    PerspectiveReplayExportBridge,
+    ReplayExportBridge,
+    ReplayExportIntent,
+} from '@chimera/shared/replay-bridge-contract.js';
 import styles from './TacticsPostGameSummary.module.css';
 
 interface SummaryCopy {
@@ -97,34 +101,88 @@ function requireReplayBridge(): ReplayExportBridge {
 }
 
 /**
+ * The perspective slice of the bridge (`window.__chimera.replay.perspective`),
+ * read off `globalThis` and typed against the shared
+ * {@link PerspectiveReplayExportBridge} — the privacy-safe replay a joined client
+ * may export (the deterministic one stays host-only, Invariants #71 / #98).
+ */
+function requirePerspectiveReplayBridge(): PerspectiveReplayExportBridge {
+    const bridge = (
+        globalThis as {
+            __chimera?: { replay?: { perspective?: PerspectiveReplayExportBridge } };
+        }
+    ).__chimera?.replay?.perspective;
+    if (bridge === undefined) {
+        throw new Error(MISSING_BRIDGE_ERROR);
+    }
+    return bridge;
+}
+
+/**
+ * Uniform export/open surface for the post-game actions, resolved by role:
+ *
+ * - **host** → the authoritative deterministic replay (`exportCurrentMatch`).
+ * - **client** → its OWN perspective replay (`perspective.exportCurrent`). The
+ *   deterministic replay re-runs the full simulation from `seed` + `actions` and
+ *   would reveal every player's hidden information, so it never reaches a client
+ *   (Invariants #71 / #98).
+ *
+ * The perspective export ignores `intent` — its channel raises no "Replay saved"
+ * toast; the summary's inline caption confirms a save instead.
+ */
+interface PostGameReplayBridge {
+    export(intent: ReplayExportIntent): Promise<string>;
+    openInPlayer(path: string): Promise<void>;
+}
+
+function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
+    if (isHost) {
+        const bridge = requireReplayBridge();
+        return {
+            export: (intent) => bridge.exportCurrentMatch(intent),
+            openInPlayer: (path) => bridge.openInPlayer(path),
+        };
+    }
+    const bridge = requirePerspectiveReplayBridge();
+    return {
+        export: () => bridge.exportCurrent(),
+        openInPlayer: (path) => bridge.openInPlayer(path),
+    };
+}
+
+/**
  * Replay / Save Replay actions (F44 / T8). Mounted only once the match has
  * resolved (`gameResult !== null`), so its `useState` hook runs unconditionally
  * within this component. Replay access reads the preload bridge off `globalThis`
  * (Invariant #96 — no renderer hook/IPC bridge import); feedback is inline,
  * with fixed user-facing copy so raw main-process error text never reaches the
  * UI, because game code may not reach the renderer toast store.
+ *
+ * `isHost` selects which replay these actions export: the host's authoritative
+ * deterministic replay, or a joined client's own perspective replay (F44b).
  */
-function PostGameReplayActions(): React.ReactElement {
+function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.ReactElement {
     const [status, setStatus] = React.useState<ReplayActionStatus>(REPLAY_ACTION_IDLE);
     const busy = status.kind === 'working';
 
     const handleSaveReplay = React.useCallback(async (): Promise<void> => {
         setStatus({ kind: 'working' });
         try {
-            await requireReplayBridge().exportCurrentMatch('save');
+            await requirePostGameReplayBridge(isHost).export('save');
             setStatus({ kind: 'saved' });
         } catch {
             setStatus({ kind: 'error', message: 'Could not save replay.' });
         }
-    }, []);
+    }, [isHost]);
 
     const handleReplay = React.useCallback(async (): Promise<void> => {
         setStatus({ kind: 'working' });
         try {
-            const bridge = requireReplayBridge();
+            const bridge = requirePostGameReplayBridge(isHost);
             // 'view' intent: export only to obtain a stable on-disk path for the
-            // player — main suppresses the "Replay saved" toast (§4.30).
-            const path = await bridge.exportCurrentMatch('view');
+            // player — main suppresses the "Replay saved" toast (§4.30). The
+            // perspective surface ignores the intent (it raises no toast).
+            const path = await bridge.export('view');
             await bridge.openInPlayer(path);
             // Success navigates to the replay player via the main-pushed
             // `chimera:replay:navigate`; the summary unmounts, so no terminal
@@ -132,7 +190,7 @@ function PostGameReplayActions(): React.ReactElement {
         } catch {
             setStatus({ kind: 'error', message: 'Could not open replay.' });
         }
-    }, []);
+    }, [isHost]);
 
     return (
         <div className={styles['actions']} data-testid="post-game-actions">
@@ -179,9 +237,13 @@ function PostGameReplayActions(): React.ReactElement {
 export function TacticsPostGameSummary({
     snapshot,
     localPlayerId,
+    isHost,
 }: GameScreenProps): React.ReactElement {
     const outcome = resolveOutcome(snapshot, localPlayerId);
     const summary = SUMMARY_COPY[outcome];
+    // An absent role means no networked lobby (a purely local game), where the
+    // local player is effectively the host that recorded the authoritative replay.
+    const isHostPlayer = isHost ?? true;
 
     return (
         <section className={styles['root']} data-testid="post-game-summary" data-outcome={outcome}>
@@ -207,7 +269,7 @@ export function TacticsPostGameSummary({
                         {summary.message}
                     </Caption>
                 </div>
-                {snapshot.gameResult !== null && <PostGameReplayActions />}
+                {snapshot.gameResult !== null && <PostGameReplayActions isHost={isHostPlayer} />}
             </Panel>
         </section>
     );

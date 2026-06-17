@@ -44,6 +44,7 @@ import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
 import { ProfileManager } from './profile/ProfileManager.js';
 import { FileProfileRepository } from './profile/FileProfileRepository.js';
 import { toSlotId } from '../preload/api-types.js';
+import type { ReplayNavigateKind, ReplayNavigatePayload } from '../preload/api-types.js';
 import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
@@ -1188,6 +1189,15 @@ export async function main(): Promise<void> {
     // finalise. Host recording is independent (scoped inside `onSessionHosted`).
     let clientPerspective: { started: boolean } | null = null;
 
+    // Whether a joined-client session is currently live. Unlike `clientPerspective`
+    // (nulled at finalise so trailing snapshots don't re-record), this stays true
+    // for the whole joined session — `onSessionJoined` sets it, the cleanup fn
+    // clears it. It gates the perspective `exportCurrent` so the client can export
+    // its OWN perspective replay from the post-game summary even after the
+    // recording has already finalised at game-over (the deterministic export
+    // remains host-only via `activeSession`).
+    let joinedSessionActive = false;
+
     // The single primary renderer window, captured when app.whenReady()
     // resolves.  Used to target IPC snapshot/reveal messages to the one
     // window that owns the game UI, instead of blasting every BrowserWindow
@@ -1864,6 +1874,7 @@ export async function main(): Promise<void> {
             // `onClientSnapshotReceived`) since the client has no session-start
             // header; the cleanup fn below aborts anything still in progress.
             clientPerspective = { started: false };
+            joinedSessionActive = true;
             const clientCommitments = new SessionCommitmentRuntime();
             const unsubSnapshotCommitments = transport.onSnapshotReceived((snapshot) => {
                 if (snapshot.commitments !== undefined) {
@@ -1890,6 +1901,10 @@ export async function main(): Promise<void> {
                     perspectiveReplayPort.abort();
                     clientPerspective = null;
                 }
+                // The joined session is over: a later perspective export has no
+                // session to draw from (the deterministic export was already
+                // host-only). Clearing this re-closes the export gate.
+                joinedSessionActive = false;
                 unsubSnapshotCommitments();
                 unsubReveal();
             };
@@ -2206,10 +2221,11 @@ export async function main(): Promise<void> {
     // deterministic and perspective `open-in-player` handlers — the renderer
     // subscribes once via `replay.onNavigate` (the perspective surface reuses
     // the same `chimera:replay:navigate` channel, F44b / T7).
-    const navigateToReplayPlayer = (replayPath: string): void => {
+    const navigateToReplayPlayer = (replayPath: string, kind: ReplayNavigateKind): void => {
+        const payload: ReplayNavigatePayload = { path: replayPath, kind };
         BrowserWindow.getAllWindows().forEach((win) => {
             if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
-                win.webContents.send(REPLAY_NAVIGATE_CHANNEL, replayPath);
+                win.webContents.send(REPLAY_NAVIGATE_CHANNEL, payload);
             }
         });
     };
@@ -2242,7 +2258,10 @@ export async function main(): Promise<void> {
             }
             return replayManager.exportCurrentMatch();
         },
-        navigateToPlayer: navigateToReplayPlayer,
+        // The deterministic surface always opens the deterministic player; the
+        // kind is bound here (the composition root knows which surface it is
+        // registering) so the handler stays a kind-agnostic `(path) => void`.
+        navigateToPlayer: (path) => navigateToReplayPlayer(path, 'deterministic'),
         notifyExported: notifyReplayExported,
     });
 
@@ -2267,17 +2286,24 @@ export async function main(): Promise<void> {
         playback: perspectiveReplayPlaybackManager,
         perspectiveReplayDir,
         exportCurrent: () => {
-            if (activeSession === null) {
+            // Perspective replays are privacy-safe (one locked viewer's already
+            // fog-filtered frames, Invariant #98), so a joined client may export
+            // its OWN perspective — unlike the deterministic replay, which stays
+            // host-only (`activeSession`). Allow either an active hosted session
+            // (host's perspective) or an active joined session (client's). The
+            // client's recording is finalised to disk at game-over, so the
+            // idempotent manager returns its saved path here.
+            if (activeSession === null && !joinedSessionActive) {
                 return Promise.reject(
                     new Error(
-                        'replay:perspective:export-current invoked with no active hosted session — ' +
-                            'start a game before exporting.',
+                        'replay:perspective:export-current invoked with no active session — ' +
+                            'start or join a game before exporting.',
                     ),
                 );
             }
             return perspectiveReplayManager.exportCurrent();
         },
-        navigateToPlayer: navigateToReplayPlayer,
+        navigateToPlayer: (path) => navigateToReplayPlayer(path, 'perspective'),
     });
 
     async function autosaveActiveSessionBeforeCrash(): Promise<void> {

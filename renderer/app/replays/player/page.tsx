@@ -40,6 +40,8 @@ import {
     type LoadedRendererGame,
 } from '@chimera/renderer/game/rendererGameRegistry';
 import { useReplayApi } from '@chimera/renderer/hooks/useReplayApi';
+import { useGameContent } from '@chimera/renderer/state/useGameContent';
+import { useUiStore } from '@chimera/renderer/state/uiStore';
 
 /** Wall-clock spacing between auto-advanced ticks at 1× playback speed. */
 const PLAYBACK_INTERVAL_MS = 1000;
@@ -127,6 +129,16 @@ function ReplayPlayerView(): React.ReactElement {
         () => (kind === 'perspective' ? replayApi.perspective : replayApi),
         [kind, replayApi],
     );
+
+    // A replay plays back recorded board frames and is never "in" the post-game
+    // summary. The uiStore screen is a module-level singleton that persists across
+    // route navigations, so opening a replay from the in-game post-game summary
+    // would otherwise inherit its stale 'summary' screen — rendering the summary
+    // (and its invalid Replay button) over the first recorded frame. Reset to the
+    // board on entry, before the board mounts, so there is no flash.
+    React.useEffect(() => {
+        useUiStore.getState().resetScreenNavigation();
+    }, [path]);
 
     const [info, setInfo] = React.useState<
         ReplayPlaybackInfo | PerspectiveReplayPlaybackInfo | null
@@ -284,6 +296,11 @@ function ReplayPlayerView(): React.ReactElement {
         () => (loadedGame === null ? null : createAssetManager(createRendererGameAssetResolver())),
         [loadedGame],
     );
+    // The game's content collections, keyed by the replay's gameId, exactly as the
+    // live game route supplies them (`renderer/app/game/page.tsx`). A game's screen
+    // interprets these (tactics derives its colour palette); without them every
+    // unit falls back to the default colour, so the replay would render all-blue.
+    const gameContent = useGameContent(info?.gameId ?? null);
 
     const handlePlay = React.useCallback(() => {
         setIsPlaying(true);
@@ -360,6 +377,7 @@ function ReplayPlayerView(): React.ReactElement {
                     {...(loadedGame.inputActions === undefined
                         ? {}
                         : { inputActions: loadedGame.inputActions })}
+                    {...(gameContent === undefined ? {} : { content: gameContent })}
                     snapshot={snapshot}
                     currentTick={currentTick}
                     sendAction={NOOP_SEND_ACTION}

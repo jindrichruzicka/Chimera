@@ -24,6 +24,7 @@ export interface SceneRouterProps {
     readonly sendAction: SendAction;
     readonly content?: GameContent;
     readonly reveal?: CommitmentReveal | null;
+    readonly isHost?: boolean;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
 }
@@ -35,6 +36,7 @@ export function SceneRouter({
     sendAction,
     content,
     reveal,
+    isHost,
     fadeOutMs,
     fadeInMs,
 }: SceneRouterProps): React.ReactElement {
@@ -63,6 +65,7 @@ export function SceneRouter({
         ...(localPlayerId === undefined ? {} : { localPlayerId }),
         ...(content === undefined ? {} : { content }),
         ...(reveal === undefined ? {} : { reveal }),
+        ...(isHost === undefined ? {} : { isHost }),
     };
 
     return (

@@ -37,6 +37,19 @@ export interface GameScreenProps {
      * plays back the revealed turn).
      */
     readonly reveal?: CommitmentReveal | null;
+    /**
+     * Whether the local player hosted this match (vs. joined as a client). The
+     * shell derives it from the lobby (`hostId === localPlayerId`). Used by the
+     * post-game summary to pick the replay it can export: the host gets the
+     * authoritative deterministic replay; a client gets only its own perspective
+     * replay (the deterministic one re-runs the full sim and would leak hidden
+     * information, so it stays host-only — Invariants #71 / #98).
+     *
+     * Optional/`undefined` when the role is unknown (e.g. a purely local game with
+     * no lobby); treat an absent value as host, since only a host records the
+     * authoritative replay.
+     */
+    readonly isHost?: boolean;
 }
 
 export interface GameHudProps extends GameScreenProps {

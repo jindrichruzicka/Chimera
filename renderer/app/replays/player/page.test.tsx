@@ -6,6 +6,7 @@ import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
+    GameContent,
     PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
     ReplayAPI,
@@ -18,10 +19,16 @@ vi.mock('@chimera/renderer/game/rendererGameRegistry', () => ({
     loadRendererGame: vi.fn(() => Promise.resolve({ registry: { screens: {} } })),
 }));
 
-// Stub GameShell — we only assert which snapshot it receives, not how it draws.
+// Stub GameShell — we assert which snapshot AND content it receives, not how it
+// draws. The game-specific board derives its colour palette from `content`, so a
+// replay that omits it renders every unit in the default colour.
 vi.mock('@chimera/renderer/components/shell/GameShell', () => ({
-    GameShell: ({ snapshot }: { snapshot?: PlayerSnapshot }) => (
-        <div data-testid="game-shell" data-tick={snapshot?.tick ?? 'none'} />
+    GameShell: ({ snapshot, content }: { snapshot?: PlayerSnapshot; content?: GameContent }) => (
+        <div
+            data-testid="game-shell"
+            data-tick={snapshot?.tick ?? 'none'}
+            data-content={content === undefined ? 'none' : JSON.stringify(content)}
+        />
     ),
 }));
 
@@ -31,6 +38,8 @@ vi.mock('next/navigation', () => ({
     useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
+import { useUiStore } from '@chimera/renderer/state/uiStore';
+import { resetGameContentCache } from '@chimera/renderer/state/useGameContent';
 import ReplayPlayerPage from './page';
 
 const PATH = '/replays/tactics/match.chimera-replay';
@@ -72,6 +81,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     Reflect.deleteProperty(window, '__chimera');
+    resetGameContentCache();
     vi.restoreAllMocks();
     vi.useRealTimers();
 });
@@ -89,6 +99,32 @@ describe('ReplayPlayerPage', () => {
         expect(bridge.openPlayback).toHaveBeenCalledWith(PATH);
         // Fetches a buffer of ticks in one round-trip, anchored at tick 0.
         expect(bridge.snapshotRange).toHaveBeenCalledWith(0, expect.any(Number));
+    });
+
+    it('hands the replay game content to GameShell so the board can resolve colours', async () => {
+        // Without content the tactics board palette is empty and every unit falls
+        // back to the default colour (all-blue). The player must fetch the replay
+        // game's content (keyed by `info.gameId`) and pass it through, exactly as
+        // the live game route does.
+        const tacticsContent = {
+            player: [{ id: 'red' }, { id: 'blue' }],
+        } as unknown as GameContent;
+        const getCollections = vi.fn(() => Promise.resolve(tacticsContent));
+        Object.defineProperty(window, '__chimera', {
+            configurable: true,
+            value: { replay: makeBridge(), content: { getCollections } },
+        });
+
+        render(<ReplayPlayerPage />);
+
+        await waitFor(() => {
+            expect(screen.getByTestId('game-shell')).toHaveAttribute(
+                'data-content',
+                JSON.stringify(tacticsContent),
+            );
+        });
+        // Fetched for the replay's own game, not hard-coded.
+        expect(getCollections).toHaveBeenCalledWith(INFO.gameId);
     });
 
     it('shows the current and total ticks from the playback info', async () => {
@@ -274,6 +310,21 @@ describe('ReplayPlayerPage', () => {
         unmount();
 
         expect(bridge.closePlayback).toHaveBeenCalled();
+    });
+
+    it('resets a stale post-game summary screen to the board on entry', async () => {
+        // Opening a replay from the in-game post-game summary carries the
+        // module-level uiStore's stale 'summary' screen into the player, which
+        // would render the summary (and its invalid Replay button) over the first
+        // recorded frame. The player must reset to the board on entry.
+        useUiStore.getState().navigateToScreen('summary');
+        expect(useUiStore.getState().activeScreenKey).toBe('summary');
+
+        installReplayBridge(makeBridge());
+        render(<ReplayPlayerPage />);
+        await screen.findByTestId('game-shell');
+
+        expect(useUiStore.getState().activeScreenKey).toBe('board');
     });
 
     describe('perspective replays (?kind=perspective)', () => {

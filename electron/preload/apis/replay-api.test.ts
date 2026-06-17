@@ -314,27 +314,31 @@ describe('createReplayApi', () => {
     });
 
     describe('onNavigate()', () => {
-        it('registers a listener on chimera:replay:navigate and forwards only the path payload', () => {
+        it('registers a listener on chimera:replay:navigate and forwards the {path, kind} payload', () => {
             const stub = makeIpcStub();
             const api = createReplayApi(stub.port);
-            const callback = vi.fn<(path: string) => void>();
+            const callback = vi.fn<(payload: { path: string; kind: string }) => void>();
 
             api.onNavigate(callback);
 
             const registered = stub.listeners.get(REPLAY_NAVIGATE_CHANNEL);
             expect(registered?.size).toBe(1);
 
+            const payload = {
+                path: '/perspective-replays/tactics/abc.chimera-perspective-replay',
+                kind: 'perspective',
+            };
             const listener = [...(registered ?? [])][0];
-            listener?.({ sender: 'fake-webcontents' }, '/replays/tactics/abc.chimera-replay');
+            listener?.({ sender: 'fake-webcontents' }, payload);
 
             expect(callback).toHaveBeenCalledOnce();
-            expect(callback).toHaveBeenCalledWith('/replays/tactics/abc.chimera-replay');
+            expect(callback).toHaveBeenCalledWith(payload);
         });
 
         it('returns an Unsubscribe that removes only the wrapped listener', () => {
             const stub = makeIpcStub();
             const api = createReplayApi(stub.port);
-            const callback = vi.fn<(path: string) => void>();
+            const callback = vi.fn<(payload: { path: string; kind: string }) => void>();
 
             const unsubscribe = api.onNavigate(callback);
             const beforeUnsub = stub.listeners.get(REPLAY_NAVIGATE_CHANNEL)?.size;

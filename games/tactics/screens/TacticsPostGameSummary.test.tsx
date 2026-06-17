@@ -12,7 +12,10 @@ import {
     type PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
 import type { GameScreenProps } from '@chimera/shared/game-screen-contract.js';
-import type { ReplayExportBridge } from '@chimera/shared/replay-bridge-contract.js';
+import type {
+    PerspectiveReplayExportBridge,
+    ReplayExportBridge,
+} from '@chimera/shared/replay-bridge-contract.js';
 import { TacticsPostGameSummary } from './TacticsPostGameSummary.js';
 
 afterEach(() => {
@@ -26,12 +29,28 @@ afterEach(() => {
  * shared {@link ReplayExportBridge} contract, so the fixture satisfies that slice
  * directly — no cast to the full preload `ReplayAPI`.
  */
-function installReplayBridge(overrides: Partial<ReplayExportBridge> = {}): ReplayExportBridge {
+type InstalledReplayBridges = ReplayExportBridge & {
+    perspective: PerspectiveReplayExportBridge;
+};
+
+function installReplayBridge(
+    overrides: Partial<ReplayExportBridge> & {
+        perspective?: Partial<PerspectiveReplayExportBridge>;
+    } = {},
+): InstalledReplayBridges {
     const exportCurrentMatch =
         overrides.exportCurrentMatch ??
         vi.fn(() => Promise.resolve('/replays/tactics/m.chimera-replay'));
     const openInPlayer = overrides.openInPlayer ?? vi.fn(() => Promise.resolve());
-    const replay: ReplayExportBridge = { exportCurrentMatch, openInPlayer };
+    const perspective: PerspectiveReplayExportBridge = {
+        exportCurrent:
+            overrides.perspective?.exportCurrent ??
+            vi.fn(() =>
+                Promise.resolve('/perspective-replays/tactics/p.chimera-perspective-replay'),
+            ),
+        openInPlayer: overrides.perspective?.openInPlayer ?? vi.fn(() => Promise.resolve()),
+    };
+    const replay: InstalledReplayBridges = { exportCurrentMatch, openInPlayer, perspective };
     Object.defineProperty(globalThis, '__chimera', { configurable: true, value: { replay } });
     return replay;
 }
@@ -277,5 +296,71 @@ describe('TacticsPostGameSummary — replay actions', () => {
         // The error caption leads the actions row, so it renders to the left of
         // the buttons rather than crowding their right edge.
         expectPrecedesButtons(error);
+    });
+});
+
+describe('TacticsPostGameSummary — client perspective replay', () => {
+    it('a client opens its OWN perspective replay, never the deterministic one', async () => {
+        const bridges = installReplayBridge();
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps({ isHost: false })} />);
+
+        await user.click(screen.getByTestId('post-game-replay-btn'));
+
+        await waitFor(() => {
+            expect(bridges.perspective.openInPlayer).toHaveBeenCalledWith(
+                '/perspective-replays/tactics/p.chimera-perspective-replay',
+            );
+        });
+        expect(bridges.perspective.exportCurrent).toHaveBeenCalledOnce();
+        // The authoritative deterministic replay re-runs the full sim and would
+        // leak hidden information, so a client must never touch it (Invariant #71).
+        expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
+    });
+
+    it('a client saves its perspective replay and sees the inline confirmation', async () => {
+        const bridges = installReplayBridge();
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps({ isHost: false })} />);
+
+        await user.click(screen.getByTestId('post-game-save-replay-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('post-game-replay-status')).toHaveTextContent('Replay saved');
+        });
+        expect(bridges.perspective.exportCurrent).toHaveBeenCalledOnce();
+        expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
+    });
+
+    it('surfaces the generic error when the client perspective open fails', async () => {
+        installReplayBridge({
+            perspective: {
+                openInPlayer: vi.fn(() => Promise.reject(new Error('player unavailable'))),
+            },
+        });
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps({ isHost: false })} />);
+
+        await user.click(screen.getByTestId('post-game-replay-btn'));
+
+        await waitFor(() => {
+            expect(screen.getByTestId('post-game-replay-error')).toHaveTextContent(
+                'Could not open replay.',
+            );
+        });
+    });
+
+    it('a host still uses the authoritative deterministic replay', async () => {
+        const bridges = installReplayBridge();
+        const user = userEvent.setup();
+        render(<TacticsPostGameSummary {...makeSummaryProps({ isHost: true })} />);
+
+        await user.click(screen.getByTestId('post-game-replay-btn'));
+
+        await waitFor(() => {
+            expect(bridges.openInPlayer).toHaveBeenCalledWith('/replays/tactics/m.chimera-replay');
+        });
+        expect(bridges.exportCurrentMatch).toHaveBeenCalledWith('view');
+        expect(bridges.perspective.exportCurrent).not.toHaveBeenCalled();
     });
 });

@@ -166,11 +166,15 @@ describe('PerspectiveReplayPlaybackManager — snapshotAt', () => {
         expect(playback.snapshotAt(9).tick).toBe(5);
     });
 
-    it('throws for a tick before the first frame', async () => {
+    it('holds the earliest frame for a tick before the first recorded frame', async () => {
+        // A joined client's perspective need not begin at tick 0, so the player
+        // can open at tick 0 and must still get a frame (the earliest recorded
+        // one) rather than an error.
         const { playback, path } = await seedPlayback([2, 3]);
         await playback.open(path);
 
-        expect(() => playback.snapshotAt(1)).toThrow();
+        expect(playback.snapshotAt(0).tick).toBe(2);
+        expect(playback.snapshotAt(1).tick).toBe(2);
     });
 
     it('throws when no session is open', () => {

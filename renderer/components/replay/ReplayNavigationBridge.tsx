@@ -27,11 +27,16 @@ export function ReplayNavigationBridge(): null {
         if (getReplayBridge() === null) {
             return;
         }
-        return replayApi.onNavigate((path: string) => {
+        return replayApi.onNavigate(({ path, kind }) => {
             // Push the canonical trailing-slash URL (next.config `trailingSlash:
-            // true`). The player reads `?path=` reactively via `useSearchParams`,
-            // so it self-corrects once this soft navigation commits the URL.
-            router.push(`/replays/player/?path=${encodeURIComponent(path)}`);
+            // true`). The player reads `?path=`/`?kind=` reactively via
+            // `useSearchParams`, so it self-corrects once this soft navigation
+            // commits the URL. `kind` selects the deterministic vs perspective
+            // player surface — a perspective replay opened without it would load
+            // through the deterministic surface and fail.
+            router.push(
+                `/replays/player/?path=${encodeURIComponent(path)}&kind=${encodeURIComponent(kind)}`,
+            );
         });
     }, [replayApi, router]);
 

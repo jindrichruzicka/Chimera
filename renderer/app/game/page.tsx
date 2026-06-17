@@ -170,6 +170,11 @@ export default function GamePage(): React.ReactElement | null {
     }
 
     const resolvedPlayerId = snapshot.viewerId;
+    // Host vs. client decides which replay the post-game summary can export: the
+    // host gets the authoritative deterministic replay; a joined client gets only
+    // its own perspective replay (Invariants #71 / #98). `lobbyState` is non-null
+    // here — `gameId` derives from it and is guarded above.
+    const isHost = lobbyState !== null && lobbyState.info.hostId === resolvedPlayerId;
 
     return (
         <GameShell
@@ -188,6 +193,7 @@ export default function GamePage(): React.ReactElement | null {
             reveal={lastReveal}
             canEndTurn={!isTerminalSnapshot(snapshot) && snapshot.isMyTurn}
             localPlayerId={resolvedPlayerId}
+            isHost={isHost}
             {...(process.env['NEXT_PUBLIC_CHIMERA_E2E'] === '1'
                 ? { fadeOutMs: 0, fadeInMs: 0 }
                 : {})}

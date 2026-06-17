@@ -81,6 +81,12 @@ interface GameShellRegistryProps {
     readonly content?: GameContent;
     /** Latest verified commitment-mode reveal (F54 / T9), passed through to the board. */
     readonly reveal?: CommitmentReveal | null;
+    /**
+     * Whether the local player hosted the match; passed through to screens as
+     * `GameScreenProps.isHost` (e.g. the post-game summary picks the deterministic
+     * vs perspective replay to export).
+     */
+    readonly isHost?: boolean;
     readonly canEndTurn?: boolean;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
@@ -114,6 +120,7 @@ function RegistryGameShell({
     contentDatabase = null,
     content,
     reveal,
+    isHost,
     canEndTurn,
     fadeOutMs,
     fadeInMs,
@@ -158,6 +165,7 @@ function RegistryGameShell({
                             {...(localPlayerId === undefined ? {} : { localPlayerId })}
                             {...(content === undefined ? {} : { content })}
                             {...(reveal === undefined ? {} : { reveal })}
+                            {...(isHost === undefined ? {} : { isHost })}
                             {...(fadeOutMs === undefined ? {} : { fadeOutMs })}
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
                         />

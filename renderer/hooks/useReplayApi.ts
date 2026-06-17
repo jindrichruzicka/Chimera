@@ -22,6 +22,7 @@ import type {
     ReplayAPI,
     ReplayExportIntent,
     ReplayListItem,
+    ReplayNavigatePayload,
     ReplayPlaybackInfo,
     Unsubscribe,
 } from '@chimera/electron/preload/api-types.js';
@@ -76,7 +77,7 @@ export interface ReplayApi {
     exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>;
     openInPlayer(path: string): Promise<void>;
     delete(path: string): Promise<void>;
-    onNavigate(listener: (path: string) => void): Unsubscribe;
+    onNavigate(listener: (payload: ReplayNavigatePayload) => void): Unsubscribe;
     /**
      * Subscribe to successful replay-export pushes (the saved path payload).
      * Drives the "Replay saved" toast (§4.30) via `ReplayExportToastBridge`.
@@ -119,7 +120,7 @@ export function useReplayApi(): ReplayApi {
                 requireBridge().exportCurrentMatch(intent),
             openInPlayer: async (path: string): Promise<void> => requireBridge().openInPlayer(path),
             delete: async (path: string): Promise<void> => requireBridge().delete(path),
-            onNavigate: (listener: (path: string) => void): Unsubscribe =>
+            onNavigate: (listener: (payload: ReplayNavigatePayload) => void): Unsubscribe =>
                 requireBridge().onNavigate(listener),
             onExported: (listener: (path: string) => void): Unsubscribe =>
                 requireBridge().onExported(listener),

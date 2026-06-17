@@ -103,19 +103,26 @@ export class PerspectiveReplayPlaybackManager {
      * scrubber lands between recorded frames. The snapshot is returned verbatim;
      * nothing is re-projected or re-simulated.
      *
-     * @throws when no playback session is open, or when `tick` precedes the first
-     *   recorded frame (there is no snapshot to display yet).
+     * A perspective recording need not begin at tick 0 — a joined client starts
+     * recording on its first received snapshot, so its first frame can be a later
+     * tick. For ticks before that first frame, the earliest recorded frame is held
+     * (rather than throwing), so the player can open at tick 0 for any recording.
+     *
+     * @throws when no playback session is open, or when the recording has no frames.
      */
     snapshotAt(tick: number): PlayerSnapshot {
         const active = this.#requireActive('snapshotAt');
-        const index = PerspectiveReplayPlaybackManager.floorIndex(active.frames, tick);
-        if (index < 0) {
+        if (active.frames.length === 0) {
             throw new Error(
-                `PerspectiveReplayPlaybackManager.snapshotAt: tick ${tick.toString()} precedes the first recorded frame`,
+                'PerspectiveReplayPlaybackManager.snapshotAt: the recording has no frames',
             );
         }
-        // Non-null: floorIndex returns a valid in-range index when >= 0.
-        return active.frames[index]!.snapshot;
+        const index = PerspectiveReplayPlaybackManager.floorIndex(active.frames, tick);
+        // floorIndex returns -1 for ticks before the first frame; hold the
+        // earliest frame in that case (frame 0) rather than erroring.
+        const heldIndex = index < 0 ? 0 : index;
+        // Non-null: heldIndex is a valid in-range index (frames is non-empty).
+        return active.frames[heldIndex]!.snapshot;
     }
 
     /**

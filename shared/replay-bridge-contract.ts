@@ -89,3 +89,39 @@ export interface ReplayExportBridge {
      */
     openInPlayer(path: string): Promise<void>;
 }
+
+/**
+ * The export / open-in-player slice of `window.__chimera.replay.perspective`
+ * (`PerspectiveReplayAPI`, §4.28 ADR F44b) that a game's *screen* module reads
+ * off `globalThis` to finalise the CLIENT's own perspective recording and hand it
+ * to the replay player from the post-game summary.
+ *
+ * Why a joined client uses this instead of {@link ReplayExportBridge}: the
+ * deterministic replay re-runs the full simulation from `seed` + `actions` and
+ * would reveal every player's hidden information (Invariant #71), so it stays
+ * host-only. A perspective replay carries only one locked viewer's already
+ * fog-filtered frames (Invariant #98), so the client may export its own.
+ *
+ * Unlike {@link ReplayExportBridge}, `exportCurrent` takes no `intent`: there is
+ * no "Replay saved" toast push on the perspective channel, so the post-game
+ * summary reflects a successful save with its own inline confirmation.
+ *
+ * Drift protection: `electron/preload/api-types.ts` declares
+ * `PerspectiveReplayAPI extends PerspectiveReplayExportBridge`, pinning the
+ * canonical preload surface to this slice — a divergent signature is a compile
+ * error in the preload layer, not a silent drift.
+ */
+export interface PerspectiveReplayExportBridge {
+    /**
+     * Finalise the in-progress perspective recording to disk and resolve with the
+     * saved file path. Rejects when no perspective recording is active (neither a
+     * hosted nor a joined-client session).
+     */
+    exportCurrent(): Promise<string>;
+    /**
+     * Ask main to open `path` in the replay player. Main validates the path is
+     * inside the perspective-replay directory, then pushes the shared
+     * `chimera:replay:navigate` with `kind: 'perspective'`.
+     */
+    openInPlayer(path: string): Promise<void>;
+}

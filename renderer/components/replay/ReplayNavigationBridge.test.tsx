@@ -25,18 +25,39 @@ afterEach(() => {
 });
 
 describe('ReplayNavigationBridge', () => {
-    it('subscribes to onNavigate and pushes the encoded player route', () => {
-        const onNavigate = vi.fn((_listener: (path: string) => void) => () => undefined);
+    it('pushes a deterministic replay to the player route with kind=deterministic', () => {
+        const onNavigate = vi.fn(
+            (_listener: (payload: { path: string; kind: string }) => void) => () => undefined,
+        );
         installReplayBridge({ onNavigate });
 
         render(<ReplayNavigationBridge />);
 
         expect(onNavigate).toHaveBeenCalledOnce();
         const listener = onNavigate.mock.calls[0]?.[0];
-        listener?.('/replays/tactics/abc.chimera-replay');
+        listener?.({ path: '/replays/tactics/abc.chimera-replay', kind: 'deterministic' });
 
         expect(mockPush).toHaveBeenCalledWith(
-            `/replays/player/?path=${encodeURIComponent('/replays/tactics/abc.chimera-replay')}`,
+            `/replays/player/?path=${encodeURIComponent('/replays/tactics/abc.chimera-replay')}&kind=deterministic`,
+        );
+    });
+
+    it('pushes a perspective replay to the player route with kind=perspective', () => {
+        const onNavigate = vi.fn(
+            (_listener: (payload: { path: string; kind: string }) => void) => () => undefined,
+        );
+        installReplayBridge({ onNavigate });
+
+        render(<ReplayNavigationBridge />);
+
+        const listener = onNavigate.mock.calls[0]?.[0];
+        listener?.({
+            path: '/perspective-replays/tactics/abc.chimera-perspective-replay',
+            kind: 'perspective',
+        });
+
+        expect(mockPush).toHaveBeenCalledWith(
+            `/replays/player/?path=${encodeURIComponent('/perspective-replays/tactics/abc.chimera-perspective-replay')}&kind=perspective`,
         );
     });
 

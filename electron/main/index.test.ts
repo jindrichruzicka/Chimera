@@ -3528,6 +3528,32 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         expect(file.viewerId).toBe(hostId);
         expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 2]);
     });
+
+    it('export-current resolves for a JOINED client (the gate opens for a joined session)', async () => {
+        await main();
+        const options = getLobbyOptions();
+        const clientId = playerId('client-export');
+
+        // Join, record, and finalise a client perspective replay at game-over.
+        options.onSessionJoined?.(makeClientTransport());
+        options.onClientSnapshotReceived?.(makeSnapshot(clientId, 0), 0);
+        options.onClientSnapshotReceived?.(makeSnapshot(clientId, 1, { winnerIds: [clientId] }), 0);
+        await flush();
+        expect(perspectiveSaves.value).toHaveLength(1);
+
+        // The injected gate must now let a joined client export its OWN finalised
+        // perspective replay (the deterministic export stays host-only). Take the
+        // latest registration since this describe does not clear ipcMain.handle.
+        const exportCurrent = [...ipcMainHandle.mock.calls]
+            .reverse()
+            .find(([channel]) => channel === PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL)?.[1] as
+            | (() => unknown)
+            | undefined;
+        expect(exportCurrent).toBeTypeOf('function');
+        await expect(Promise.resolve(exportCurrent?.())).resolves.toBe(
+            '/tmp/perspective-1.chimera-perspective-replay',
+        );
+    });
 });
 
 // ── Perspective-replay IPC wiring (F44b T7, #673) ─────────────────────────────
@@ -3566,11 +3592,11 @@ describe('main() — perspective replay IPC wiring (F44b T7)', () => {
         }
     });
 
-    it('export-current rejects when no hosted session is active', async () => {
+    it('export-current rejects when neither a hosted nor a joined session is active', async () => {
         await main();
 
         const handler = findHandler(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
         expect(handler).toBeTypeOf('function');
-        await expect(Promise.resolve(handler?.())).rejects.toThrow(/no active hosted session/);
+        await expect(Promise.resolve(handler?.())).rejects.toThrow(/no active session/);
     });
 });

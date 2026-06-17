@@ -257,6 +257,9 @@ test.describe('Tactics replay lifecycle', () => {
 
         const player = new ReplayPlayerPage(hostWindow);
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+        // Regression guard: opening from the post-game summary must not carry the
+        // summary screen into the player (it would show an invalid Replay button).
+        await expect(hostWindow.getByTestId('post-game-summary')).toHaveCount(0);
 
         const totalTicks = await player.totalTicks();
         expect(totalTicks).toBeGreaterThan(0);
@@ -278,6 +281,47 @@ test.describe('Tactics replay lifecycle', () => {
         );
         expect(typeof replaySnapshot.viewerId).toBe('string');
         expect(replaySnapshot.gameResult?.winnerIds).toEqual(liveResult?.winnerIds);
+    });
+
+    test('a joined client opens its OWN perspective replay from the post-game summary', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostGame = new GamePage(hostWindow);
+        const clientGame = new GamePage(clientWindow);
+
+        // Drive the shared two-peer match to game-over from the host; the client
+        // receives the resolved snapshot and auto-finalises its own perspective
+        // replay (waiting on that also confirms the client reached game-over).
+        await playToGameOver(hostGame);
+        await waitForPerspectiveReplaySaved(clientWindow);
+
+        // The client reaches its post-game summary and presses Replay. Before this
+        // fix the client hit the host-only deterministic export and saw
+        // "Could not open replay."; now it exports and opens its perspective replay.
+        await goToPostGameSummary(clientWindow, clientGame);
+        await expect(clientGame.replayButton).toBeVisible();
+        await clientGame.replayButton.click();
+
+        // It lands in the PERSPECTIVE player (the navigate push carried
+        // kind=perspective), never the deterministic surface — the controls group
+        // is labelled for the perspective kind.
+        const player = new ReplayPlayerPage(clientWindow);
+        await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+        await expect(
+            clientWindow.getByRole('group', { name: 'Perspective replay playback controls' }),
+        ).toBeVisible();
+        // Regression guard: the replay player must never show the post-game
+        // summary (and its invalid Replay button), even though we entered from it.
+        await expect(clientWindow.getByTestId('post-game-summary')).toHaveCount(0);
+
+        // The client's perspective plays back to its final tick.
+        const totalTicks = await player.totalTicks();
+        expect(totalTicks).toBeGreaterThan(0);
+        await player.seekToPenultimateTick();
+        await player.play();
+        await player.waitForFinalTick();
+        expect(await player.currentTick()).toBe(totalTicks);
     });
 
     test('replay playback keeps the renderer heap within the §13.4 budget', async ({

@@ -21,6 +21,7 @@ import type {
     ReplayAPI,
     ReplayExportIntent,
     ReplayListItem,
+    ReplayNavigatePayload,
     ReplayPlaybackInfo,
     Unsubscribe,
 } from '../api-types.js';
@@ -132,8 +133,8 @@ export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
         delete: async (path: string): Promise<void> => {
             await ipc.invoke(REPLAY_DELETE_CHANNEL, path);
         },
-        onNavigate: (listener: (path: string) => void): Unsubscribe =>
-            subscribePush<string>(ipc, REPLAY_NAVIGATE_CHANNEL, listener),
+        onNavigate: (listener: (payload: ReplayNavigatePayload) => void): Unsubscribe =>
+            subscribePush<ReplayNavigatePayload>(ipc, REPLAY_NAVIGATE_CHANNEL, listener),
         onExported: (listener: (path: string) => void): Unsubscribe =>
             subscribePush<string>(ipc, REPLAY_EXPORTED_CHANNEL, listener),
         openPlayback: (path: string): Promise<ReplayPlaybackInfo> =>
