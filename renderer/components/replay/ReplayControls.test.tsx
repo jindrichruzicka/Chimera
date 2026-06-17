@@ -32,6 +32,7 @@ function renderControls(
         isPlaying: boolean;
         playbackSpeed: number;
         kind: 'deterministic' | 'perspective';
+        save: { onSave: () => void; saving: boolean; saved: boolean };
     }> = {},
     handlers: Handlers = makeHandlers(),
 ): Handlers {
@@ -47,6 +48,7 @@ function renderControls(
             onStep={handlers.onStep}
             onSeek={handlers.onSeek}
             onSpeedChange={handlers.onSpeedChange}
+            {...(props.save === undefined ? {} : { save: props.save })}
         />,
     );
     return handlers;
@@ -157,6 +159,41 @@ describe('ReplayControls', () => {
 
             expect(screen.getByTestId('replay-pause-btn')).toBeInTheDocument();
             expect(screen.queryByTestId('replay-play-btn')).toBeNull();
+        });
+    });
+
+    describe('save affordance', () => {
+        it('renders no save icon when the `save` prop is absent', () => {
+            renderControls();
+            expect(screen.queryByRole('button', { name: /save replay/i })).toBeNull();
+            expect(screen.queryByTestId('replay-save-btn')).toBeNull();
+        });
+
+        it('renders a save icon and calls onSave when clicked', async () => {
+            const onSave = vi.fn();
+            renderControls({ save: { onSave, saving: false, saved: false } });
+
+            const button = screen.getByRole('button', { name: /save replay/i });
+            expect(button).toBeEnabled();
+            expect(screen.getByTestId('replay-save-btn')).toBeInTheDocument();
+
+            await userEvent.click(button);
+            expect(onSave).toHaveBeenCalledOnce();
+        });
+
+        it('disables the save icon while saving', () => {
+            renderControls({ save: { onSave: vi.fn(), saving: true, saved: false } });
+            expect(screen.getByRole('button', { name: /save replay/i })).toBeDisabled();
+        });
+
+        it('marks the icon saved and disables it once saved', () => {
+            const onSave = vi.fn();
+            renderControls({ save: { onSave, saving: false, saved: true } });
+
+            // The accessible name switches to the saved state and the control is inert.
+            const button = screen.getByRole('button', { name: /replay saved/i });
+            expect(button).toBeDisabled();
+            expect(screen.queryByRole('button', { name: /^save replay$/i })).toBeNull();
         });
     });
 

@@ -24,9 +24,10 @@ function makeReplayBridge(): ReplayAPI {
         snapshotAt: vi.fn(() => Promise.resolve({ tick: 0 } as never)),
         snapshotRange: vi.fn(() => Promise.resolve([])),
         closePlayback: vi.fn(() => Promise.resolve()),
-        // Perspective sub-namespace (F44b / T7). Present so the mock satisfies
-        // `ReplayAPI`; this hook curates the deterministic slice only, so the
-        // stubs are never invoked here.
+        // Perspective sub-namespace (F44b / T7). The hook wraps the slice the
+        // browser and player consume (`list`, `exportCurrent`, `openPlayback`,
+        // `snapshotAt`, `closePlayback`); `exportCurrent` backs the player's save
+        // icon for a perspective replay.
         perspective: {
             list: vi.fn(() => Promise.resolve([])),
             exportCurrent: vi.fn(() => Promise.resolve('/p')),
@@ -85,6 +86,19 @@ describe('useReplayApi', () => {
             expect(replay.closePlayback).toHaveBeenCalledOnce();
             expect(replay.onNavigate).toHaveBeenCalledOnce();
             expect(replay.onExported).toHaveBeenCalledOnce();
+        } finally {
+            Reflect.deleteProperty(window, '__chimera');
+        }
+    });
+
+    it('delegates perspective.exportCurrent to the bridge (player save icon)', async () => {
+        const replay = makeReplayBridge();
+        Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });
+
+        try {
+            const { result } = renderHook(() => useReplayApi());
+            await result.current.perspective.exportCurrent();
+            expect(replay.perspective.exportCurrent).toHaveBeenCalledOnce();
         } finally {
             Reflect.deleteProperty(window, '__chimera');
         }

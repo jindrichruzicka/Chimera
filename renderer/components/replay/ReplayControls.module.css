@@ -6,6 +6,15 @@
     padding: var(--ch-space-sm) var(--ch-space-md);
 }
 
+/*
+ * The save icon sits at the far left, set slightly apart from the transport
+ * controls so it reads as a distinct action rather than another transport key.
+ */
+.save {
+    flex: 0 0 auto;
+    margin-inline-end: var(--ch-space-xs);
+}
+
 .scrubber {
     flex: 1 1 auto;
     min-width: var(--ch-space-xl);

@@ -164,8 +164,8 @@ describe('ReplayManager — exportCurrentMatch', () => {
         // recording before the post-game summary can mount.
         const autoSaved = await manager.finaliseRecording();
 
-        // The post-game "Save Replay"/"Replay" button then calls exportCurrentMatch:
-        // it must resolve with the same path, not throw.
+        // The post-game Replay button / the player's save icon then call
+        // exportCurrentMatch: it must resolve with the same path, not throw.
         await expect(manager.exportCurrentMatch()).resolves.toBe(autoSaved);
         // No duplicate file is written.
         expect(await manager.list('tactics')).toStrictEqual([autoSaved]);

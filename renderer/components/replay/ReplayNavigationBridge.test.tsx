@@ -27,7 +27,9 @@ afterEach(() => {
 describe('ReplayNavigationBridge', () => {
     it('pushes a deterministic replay to the player route with kind=deterministic', () => {
         const onNavigate = vi.fn(
-            (_listener: (payload: { path: string; kind: string }) => void) => () => undefined,
+            (_listener: (payload: { path: string; kind: string; saveable: boolean }) => void) =>
+                () =>
+                    undefined,
         );
         installReplayBridge({ onNavigate });
 
@@ -35,7 +37,11 @@ describe('ReplayNavigationBridge', () => {
 
         expect(onNavigate).toHaveBeenCalledOnce();
         const listener = onNavigate.mock.calls[0]?.[0];
-        listener?.({ path: '/replays/tactics/abc.chimera-replay', kind: 'deterministic' });
+        listener?.({
+            path: '/replays/tactics/abc.chimera-replay',
+            kind: 'deterministic',
+            saveable: false,
+        });
 
         expect(mockPush).toHaveBeenCalledWith(
             `/replays/player/?path=${encodeURIComponent('/replays/tactics/abc.chimera-replay')}&kind=deterministic`,
@@ -44,7 +50,9 @@ describe('ReplayNavigationBridge', () => {
 
     it('pushes a perspective replay to the player route with kind=perspective', () => {
         const onNavigate = vi.fn(
-            (_listener: (payload: { path: string; kind: string }) => void) => () => undefined,
+            (_listener: (payload: { path: string; kind: string; saveable: boolean }) => void) =>
+                () =>
+                    undefined,
         );
         installReplayBridge({ onNavigate });
 
@@ -54,10 +62,33 @@ describe('ReplayNavigationBridge', () => {
         listener?.({
             path: '/perspective-replays/tactics/abc.chimera-perspective-replay',
             kind: 'perspective',
+            saveable: false,
         });
 
         expect(mockPush).toHaveBeenCalledWith(
             `/replays/player/?path=${encodeURIComponent('/perspective-replays/tactics/abc.chimera-perspective-replay')}&kind=perspective`,
+        );
+    });
+
+    it('forwards the saveable flag as &saveable=1 for a just-finished match', () => {
+        const onNavigate = vi.fn(
+            (_listener: (payload: { path: string; kind: string; saveable: boolean }) => void) =>
+                () =>
+                    undefined,
+        );
+        installReplayBridge({ onNavigate });
+
+        render(<ReplayNavigationBridge />);
+
+        const listener = onNavigate.mock.calls[0]?.[0];
+        listener?.({
+            path: '/replays/tactics/abc.chimera-replay',
+            kind: 'deterministic',
+            saveable: true,
+        });
+
+        expect(mockPush).toHaveBeenCalledWith(
+            `/replays/player/?path=${encodeURIComponent('/replays/tactics/abc.chimera-replay')}&kind=deterministic&saveable=1`,
         );
     });
 

@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { Button, Caption, Select, Slider, type SelectOption } from '../ui';
+import { Button, Caption, IconButton, Select, Slider, type SelectOption } from '../ui';
 import type { ReplayKind } from './replayKind';
 import styles from './ReplayControls.module.css';
 
@@ -29,6 +29,21 @@ const GROUP_LABEL: Record<ReplayKind, string> = {
     deterministic: 'Replay playback controls',
     perspective: 'Perspective replay playback controls',
 };
+
+/**
+ * Optional save affordance for the replay player. Present only when the player
+ * was opened for the just-finished match (the post-game **Replay** action); the
+ * parent owns the state so these controls stay display-only. Absent for
+ * library-opened replays, which are already on disk.
+ */
+export interface ReplaySaveControl {
+    /** Save (finalise + keep) the current match's replay. */
+    readonly onSave: () => void;
+    /** A save round-trip is in flight — the icon is disabled. */
+    readonly saving: boolean;
+    /** The replay has been saved — the icon stays disabled so it can't repeat. */
+    readonly saved: boolean;
+}
 
 export interface ReplayControlsProps {
     /**
@@ -56,6 +71,12 @@ export interface ReplayControlsProps {
     readonly onSeek: (tick: number) => void;
     /** Change the playback speed multiplier. */
     readonly onSpeedChange: (speed: number) => void;
+    /**
+     * When provided, renders a compact save icon at the far left of the bar (the
+     * just-finished match opened from the post-game summary). Omitted for
+     * library-opened replays, which render no save icon.
+     */
+    readonly save?: ReplaySaveControl;
 }
 
 export function ReplayControls({
@@ -69,12 +90,28 @@ export function ReplayControls({
     onStep,
     onSeek,
     onSpeedChange,
+    save,
 }: ReplayControlsProps): React.ReactElement {
     const atStart = currentTick <= 0;
     const atEnd = currentTick >= totalTicks;
 
     return (
         <div className={styles['root']} role="group" aria-label={GROUP_LABEL[kind]}>
+            {save !== undefined && (
+                <IconButton
+                    className={styles['save']}
+                    variant="ghost"
+                    // The accessible name doubles as the saved-state signal: a
+                    // perspective replay raises no toast, so the label switch (and
+                    // the disabled state) is the only confirmation a save landed.
+                    aria-label={save.saved ? 'Replay saved' : 'Save replay'}
+                    data-testid="replay-save-btn"
+                    disabled={save.saving || save.saved}
+                    onClick={save.onSave}
+                >
+                    <span aria-hidden="true">💾</span>
+                </IconButton>
+            )}
             <Button
                 size="sm"
                 variant="ghost"

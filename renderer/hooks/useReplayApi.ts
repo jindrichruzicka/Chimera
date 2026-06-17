@@ -55,10 +55,18 @@ export function getReplayBridge(source: unknown = globalThis): ReplayAPI | null 
  * The renderer-facing slice of the perspective replay surface
  * (`window.__chimera.replay.perspective.*`, §4.28 ADR F44b). Only the methods
  * the browser and player consume are wrapped: `list` (opaque paths),
- * `openPlayback`, the floor-lookup `snapshotAt`, and `closePlayback`.
+ * `exportCurrent`, `openPlayback`, the floor-lookup `snapshotAt`, and
+ * `closePlayback`.
  */
 export interface PerspectiveReplayApi {
     list(gameId: string): Promise<string[]>;
+    /**
+     * Finalise the joined client's in-progress perspective recording and resolve
+     * with the saved path. Idempotent (the egress path auto-finalises at
+     * game-over). Backs the replay player's save icon for a perspective replay
+     * opened from the post-game summary; rejects when no session is active.
+     */
+    exportCurrent(): Promise<string>;
     openPlayback(path: string): Promise<PerspectiveReplayPlaybackInfo>;
     snapshotAt(tick: number): Promise<PlayerSnapshot>;
     closePlayback(): Promise<void>;
@@ -134,6 +142,8 @@ export function useReplayApi(): ReplayApi {
             perspective: {
                 list: async (gameId: string): Promise<string[]> =>
                     requireBridge().perspective.list(gameId),
+                exportCurrent: async (): Promise<string> =>
+                    requireBridge().perspective.exportCurrent(),
                 openPlayback: async (path: string): Promise<PerspectiveReplayPlaybackInfo> =>
                     requireBridge().perspective.openPlayback(path),
                 snapshotAt: async (tick: number): Promise<PlayerSnapshot> =>

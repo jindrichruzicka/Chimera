@@ -147,9 +147,10 @@ export class ReplayManager {
     /**
      * Idempotent "ensure this match's replay is on disk, and give me its path".
      *
-     * Backs the post-game summary's Replay / Save Replay buttons (F44 / T8),
-     * which run only after the match has resolved — by which point the host
-     * pipeline has already auto-finalised the recording at game-over. So unlike
+     * Backs the post-game summary's Replay button and the replay player's save
+     * icon (F44 / T8), which run only after the match has resolved — by which
+     * point the host pipeline has already auto-finalised the recording at
+     * game-over. So unlike
      * the destructive {@link finaliseRecording}, this method does not require an
      * in-progress recording:
      *

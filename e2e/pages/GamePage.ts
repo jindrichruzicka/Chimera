@@ -104,8 +104,6 @@ export class GamePage {
     readonly postGameSummary: Locator;
     readonly perfHud: Locator;
     readonly replayButton: Locator;
-    readonly saveReplayButton: Locator;
-    readonly replaySavedStatus: Locator;
     readonly staminaReadout: Locator;
     readonly turnStatus: Locator;
     readonly commitStatus: Locator;
@@ -127,10 +125,9 @@ export class GamePage {
         this.transitionOverlay = page.getByTestId('transition-overlay');
         this.postGameSummary = page.getByTestId('post-game-summary');
         this.perfHud = page.getByTestId('perf-hud');
-        // Post-game summary replay actions (F44 / T8).
+        // Post-game summary replay action (F44 / T8). Saving moved into the replay
+        // player's compact save icon — see `ReplayPlayerPage.saveButton`.
         this.replayButton = page.getByTestId('post-game-replay-btn');
-        this.saveReplayButton = page.getByTestId('post-game-save-replay-btn');
-        this.replaySavedStatus = page.getByTestId('post-game-replay-status');
         // Stamina / turn-gating / commitment HUD surfaces (F54). In commitment mode
         // End Turn IS the commit; `commitStatus` is the pulsing "waiting for other
         // player(s)" message shown only while a committed seat awaits the rest.

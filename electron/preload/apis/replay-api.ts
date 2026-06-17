@@ -127,8 +127,11 @@ export function createReplayApi(ipc: ReplayApiIpcPort): ReplayAPI {
                         value,
                     ),
                 ),
-        openInPlayer: async (path: string): Promise<void> => {
-            await ipc.invoke(REPLAY_OPEN_IN_PLAYER_CHANNEL, path);
+        // `saveable` defaults here so the wire always carries a concrete boolean;
+        // main also fail-safe-defaults to `false`, giving defence in depth against
+        // an omitted argument.
+        openInPlayer: async (path: string, saveable = false): Promise<void> => {
+            await ipc.invoke(REPLAY_OPEN_IN_PLAYER_CHANNEL, path, saveable);
         },
         delete: async (path: string): Promise<void> => {
             await ipc.invoke(REPLAY_DELETE_CHANNEL, path);

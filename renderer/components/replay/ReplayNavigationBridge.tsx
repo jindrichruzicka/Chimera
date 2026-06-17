@@ -27,15 +27,17 @@ export function ReplayNavigationBridge(): null {
         if (getReplayBridge() === null) {
             return;
         }
-        return replayApi.onNavigate(({ path, kind }) => {
+        return replayApi.onNavigate(({ path, kind, saveable }) => {
             // Push the canonical trailing-slash URL (next.config `trailingSlash:
-            // true`). The player reads `?path=`/`?kind=` reactively via
-            // `useSearchParams`, so it self-corrects once this soft navigation
+            // true`). The player reads `?path=`/`?kind=`/`?saveable=` reactively
+            // via `useSearchParams`, so it self-corrects once this soft navigation
             // commits the URL. `kind` selects the deterministic vs perspective
             // player surface — a perspective replay opened without it would load
-            // through the deterministic surface and fail.
+            // through the deterministic surface and fail. `saveable=1` (only for a
+            // just-finished match) tells the player to show its save icon.
+            const saveableQuery = saveable ? '&saveable=1' : '';
             router.push(
-                `/replays/player/?path=${encodeURIComponent(path)}&kind=${encodeURIComponent(kind)}`,
+                `/replays/player/?path=${encodeURIComponent(path)}&kind=${encodeURIComponent(kind)}${saveableQuery}`,
             );
         });
     }, [replayApi, router]);

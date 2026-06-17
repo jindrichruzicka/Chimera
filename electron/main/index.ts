@@ -2221,8 +2221,12 @@ export async function main(): Promise<void> {
     // deterministic and perspective `open-in-player` handlers — the renderer
     // subscribes once via `replay.onNavigate` (the perspective surface reuses
     // the same `chimera:replay:navigate` channel, F44b / T7).
-    const navigateToReplayPlayer = (replayPath: string, kind: ReplayNavigateKind): void => {
-        const payload: ReplayNavigatePayload = { path: replayPath, kind };
+    const navigateToReplayPlayer = (
+        replayPath: string,
+        kind: ReplayNavigateKind,
+        saveable: boolean,
+    ): void => {
+        const payload: ReplayNavigatePayload = { path: replayPath, kind, saveable };
         BrowserWindow.getAllWindows().forEach((win) => {
             if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
                 win.webContents.send(REPLAY_NAVIGATE_CHANNEL, payload);
@@ -2260,8 +2264,9 @@ export async function main(): Promise<void> {
         },
         // The deterministic surface always opens the deterministic player; the
         // kind is bound here (the composition root knows which surface it is
-        // registering) so the handler stays a kind-agnostic `(path) => void`.
-        navigateToPlayer: (path) => navigateToReplayPlayer(path, 'deterministic'),
+        // registering) so the handler stays kind-agnostic.
+        navigateToPlayer: (path, saveable) =>
+            navigateToReplayPlayer(path, 'deterministic', saveable),
         notifyExported: notifyReplayExported,
     });
 
@@ -2303,7 +2308,7 @@ export async function main(): Promise<void> {
             }
             return perspectiveReplayManager.exportCurrent();
         },
-        navigateToPlayer: (path) => navigateToReplayPlayer(path, 'perspective'),
+        navigateToPlayer: (path, saveable) => navigateToReplayPlayer(path, 'perspective', saveable),
     });
 
     async function autosaveActiveSessionBeforeCrash(): Promise<void> {

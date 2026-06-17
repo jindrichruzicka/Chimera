@@ -14,12 +14,18 @@ export class ReplayPlayerPage {
     readonly speedSelect: Locator;
     readonly seekToEndButton: Locator;
     readonly stepBackButton: Locator;
+    readonly saveButton: Locator;
 
     public constructor(private readonly page: Page) {
         this.playButton = page.getByTestId('replay-play-btn');
         this.pauseButton = page.getByTestId('replay-pause-btn');
         this.tickCounter = page.getByTestId('replay-tick-counter');
         this.scrubber = page.getByTestId('replay-scrubber');
+        // Compact save icon at the far left of the bar — present only when the
+        // player was opened for the just-finished match (`?saveable=1`). The same
+        // element stays after a save (its aria-label flips to "Replay saved" and it
+        // disables), so it is located by test id rather than accessible name.
+        this.saveButton = page.getByTestId('replay-save-btn');
         // Native <select> labelled "Playback speed" — the engine Select primitive
         // associates its label via `htmlFor`, so locate it by accessible name.
         this.speedSelect = page.getByLabel('Playback speed');
@@ -78,6 +84,15 @@ export class ReplayPlayerPage {
     /** Start auto-advancing playback. */
     public async play(): Promise<void> {
         await this.playButton.click();
+    }
+
+    /**
+     * Save the just-finished match via the compact save icon, then wait for the
+     * icon to disable — the saved state that prevents a repeat save.
+     */
+    public async save(): Promise<void> {
+        await this.saveButton.click();
+        await expect(this.saveButton).toBeDisabled();
     }
 
     /**

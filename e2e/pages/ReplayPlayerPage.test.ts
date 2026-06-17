@@ -52,11 +52,13 @@ describe('ReplayPlayerPage', () => {
         expect(player.speedSelect).toBeDefined();
         expect(player.seekToEndButton).toBeDefined();
         expect(player.stepBackButton).toBeDefined();
+        expect(player.saveButton).toBeDefined();
         expect(requestedTestIds).toEqual([
             'replay-play-btn',
             'replay-pause-btn',
             'replay-tick-counter',
             'replay-scrubber',
+            'replay-save-btn',
         ]);
         expect(requestedLabels).toEqual(['Playback speed']);
         expect(requestedRoles).toEqual(['button[Seek to end]', 'button[Step back]']);

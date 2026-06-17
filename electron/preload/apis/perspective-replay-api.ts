@@ -99,8 +99,10 @@ export function createPerspectiveReplayApi(ipc: PerspectiveReplayApiIpcPort): Pe
                         value,
                     ),
                 ),
-        openInPlayer: async (path: string): Promise<void> => {
-            await ipc.invoke(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL, path);
+        // `saveable` defaults here so the wire always carries a concrete boolean;
+        // main also fail-safe-defaults to `false` (mirrors `replay-api.ts`).
+        openInPlayer: async (path: string, saveable = false): Promise<void> => {
+            await ipc.invoke(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL, path, saveable);
         },
         delete: async (path: string): Promise<void> => {
             await ipc.invoke(PERSPECTIVE_REPLAY_DELETE_CHANNEL, path);

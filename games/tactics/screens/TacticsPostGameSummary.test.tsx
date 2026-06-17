@@ -83,17 +83,13 @@ function makeSnapshot(overrides: Partial<PlayerSnapshot> = {}): PlayerSnapshot {
 }
 
 /**
- * Assert that `node` renders before both replay action buttons in document
- * order — the DOM proxy for "sits to the left of the buttons", since CSS module
- * classes don't apply under jsdom.
+ * Assert that `node` renders before the Replay action button in document order —
+ * the DOM proxy for "sits to the left of the button", since CSS module classes
+ * don't apply under jsdom.
  */
 function expectPrecedesButtons(node: HTMLElement): void {
-    for (const testId of ['post-game-replay-btn', 'post-game-save-replay-btn']) {
-        const button = screen.getByTestId(testId);
-        expect(
-            node.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
-        ).toBeTruthy();
-    }
+    const button = screen.getByTestId('post-game-replay-btn');
+    expect(node.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
 }
 
 function makeSummaryProps(overrides: Partial<GameScreenProps> = {}): GameScreenProps {
@@ -197,24 +193,23 @@ describe('TacticsPostGameSummary', () => {
 });
 
 describe('TacticsPostGameSummary — replay actions', () => {
-    it('renders Replay and Save Replay buttons once the match has ended', () => {
+    it('renders the Replay button once the match has ended, and no Save Replay button', () => {
         installReplayBridge();
         render(<TacticsPostGameSummary {...makeSummaryProps()} />);
 
         expect(screen.getByTestId('post-game-replay-btn')).toHaveTextContent('Replay');
-        expect(screen.getByTestId('post-game-save-replay-btn')).toHaveTextContent('Save Replay');
-        // Modernized summary: compact, end-aligned actions.
+        // Saving moved into the replay player's compact icon — the summary no
+        // longer carries a Save Replay button.
+        expect(screen.queryByTestId('post-game-save-replay-btn')).toBeNull();
+        expect(screen.queryByRole('button', { name: /save replay/i })).toBeNull();
+        // Modernized summary: compact, end-aligned action.
         expect(screen.getByTestId('post-game-replay-btn')).toHaveAttribute(
-            'data-ch-button-size',
-            'sm',
-        );
-        expect(screen.getByTestId('post-game-save-replay-btn')).toHaveAttribute(
             'data-ch-button-size',
             'sm',
         );
     });
 
-    it('hides both replay actions while the match is unresolved', () => {
+    it('hides the Replay action while the match is unresolved', () => {
         installReplayBridge();
         render(
             <TacticsPostGameSummary
@@ -223,47 +218,9 @@ describe('TacticsPostGameSummary — replay actions', () => {
         );
 
         expect(screen.queryByTestId('post-game-replay-btn')).toBeNull();
-        expect(screen.queryByTestId('post-game-save-replay-btn')).toBeNull();
     });
 
-    it('exports the current match and confirms when Save Replay is clicked', async () => {
-        const { exportCurrentMatch } = installReplayBridge();
-        const user = userEvent.setup();
-        render(<TacticsPostGameSummary {...makeSummaryProps()} />);
-
-        await user.click(screen.getByTestId('post-game-save-replay-btn'));
-
-        await waitFor(() => {
-            expect(screen.getByTestId('post-game-replay-status')).toHaveTextContent('Replay saved');
-        });
-        expect(exportCurrentMatch).toHaveBeenCalledOnce();
-        // 'save' intent → main raises the "Replay saved" toast (§4.30).
-        expect(exportCurrentMatch).toHaveBeenCalledWith('save');
-        expect(screen.queryByTestId('post-game-replay-error')).toBeNull();
-        // The status leads the actions row, so it sits to the left of the buttons.
-        expectPrecedesButtons(screen.getByTestId('post-game-replay-status'));
-    });
-
-    it('surfaces safe generic copy when exporting fails, never the raw bridge error', async () => {
-        installReplayBridge({
-            exportCurrentMatch: vi.fn(() => Promise.reject(new Error('no active hosted session'))),
-        });
-        const user = userEvent.setup();
-        render(<TacticsPostGameSummary {...makeSummaryProps()} />);
-
-        await user.click(screen.getByTestId('post-game-save-replay-btn'));
-
-        await waitFor(() => {
-            expect(screen.getByTestId('post-game-replay-error')).toHaveTextContent(
-                'Could not save replay.',
-            );
-        });
-        // Raw main-process error text must not reach the game UI.
-        expect(screen.queryByText(/no active hosted session/)).toBeNull();
-        expect(screen.queryByTestId('post-game-replay-status')).toBeNull();
-    });
-
-    it('exports then opens the player when Replay is clicked', async () => {
+    it('exports for a path then opens the player as saveable when Replay is clicked', async () => {
         const exportCurrentMatch = vi.fn(() =>
             Promise.resolve('/replays/tactics/done.chimera-replay'),
         );
@@ -274,7 +231,8 @@ describe('TacticsPostGameSummary — replay actions', () => {
         await user.click(screen.getByTestId('post-game-replay-btn'));
 
         await waitFor(() => {
-            expect(openInPlayer).toHaveBeenCalledWith('/replays/tactics/done.chimera-replay');
+            // `true` marks the just-finished match so the player shows its save icon.
+            expect(openInPlayer).toHaveBeenCalledWith('/replays/tactics/done.chimera-replay', true);
         });
         expect(exportCurrentMatch).toHaveBeenCalledOnce();
         // 'view' intent → main suppresses the "Replay saved" toast (§4.30): the
@@ -310,25 +268,12 @@ describe('TacticsPostGameSummary — client perspective replay', () => {
         await waitFor(() => {
             expect(bridges.perspective.openInPlayer).toHaveBeenCalledWith(
                 '/perspective-replays/tactics/p.chimera-perspective-replay',
+                true,
             );
         });
         expect(bridges.perspective.exportCurrent).toHaveBeenCalledOnce();
         // The authoritative deterministic replay re-runs the full sim and would
         // leak hidden information, so a client must never touch it (Invariant #71).
-        expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
-    });
-
-    it('a client saves its perspective replay and sees the inline confirmation', async () => {
-        const bridges = installReplayBridge();
-        const user = userEvent.setup();
-        render(<TacticsPostGameSummary {...makeSummaryProps({ isHost: false })} />);
-
-        await user.click(screen.getByTestId('post-game-save-replay-btn'));
-
-        await waitFor(() => {
-            expect(screen.getByTestId('post-game-replay-status')).toHaveTextContent('Replay saved');
-        });
-        expect(bridges.perspective.exportCurrent).toHaveBeenCalledOnce();
         expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
     });
 
@@ -358,7 +303,10 @@ describe('TacticsPostGameSummary — client perspective replay', () => {
         await user.click(screen.getByTestId('post-game-replay-btn'));
 
         await waitFor(() => {
-            expect(bridges.openInPlayer).toHaveBeenCalledWith('/replays/tactics/m.chimera-replay');
+            expect(bridges.openInPlayer).toHaveBeenCalledWith(
+                '/replays/tactics/m.chimera-replay',
+                true,
+            );
         });
         expect(bridges.exportCurrentMatch).toHaveBeenCalledWith('view');
         expect(bridges.perspective.exportCurrent).not.toHaveBeenCalled();

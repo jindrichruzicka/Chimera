@@ -150,7 +150,7 @@ describe('createReplayApi', () => {
     });
 
     describe('openInPlayer()', () => {
-        it('invokes chimera:replay:open-in-player with the path and resolves to void', async () => {
+        it('invokes chimera:replay:open-in-player with the path and a default saveable=false', async () => {
             const stub = makeIpcStub();
             const api = createReplayApi(stub.port);
 
@@ -160,7 +160,22 @@ describe('createReplayApi', () => {
             expect(stub.invocations).toEqual([
                 {
                     channel: REPLAY_OPEN_IN_PLAYER_CHANNEL,
-                    args: ['/replays/tactics/abc.chimera-replay'],
+                    args: ['/replays/tactics/abc.chimera-replay', false],
+                },
+            ]);
+        });
+
+        it('forwards saveable=true for a just-finished match', async () => {
+            const stub = makeIpcStub();
+            const api = createReplayApi(stub.port);
+
+            await expect(
+                api.openInPlayer('/replays/tactics/abc.chimera-replay', true),
+            ).resolves.toBeUndefined();
+            expect(stub.invocations).toEqual([
+                {
+                    channel: REPLAY_OPEN_IN_PLAYER_CHANNEL,
+                    args: ['/replays/tactics/abc.chimera-replay', true],
                 },
             ]);
         });

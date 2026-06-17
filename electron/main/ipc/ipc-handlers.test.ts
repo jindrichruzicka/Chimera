@@ -2422,7 +2422,7 @@ function registerReplay(overrides: {
     replay?: ReplayIpcPort;
     playback?: ReplayPlaybackPort;
     exportCurrentMatch?: () => Promise<string>;
-    navigateToPlayer?: (path: string) => void;
+    navigateToPlayer?: (path: string, saveable: boolean) => void;
     notifyExported?: (path: string) => void;
     replayDir?: string;
 }): void {
@@ -2601,22 +2601,35 @@ describe('registerReplayHandlers', () => {
     });
 
     describe('chimera:replay:open-in-player', () => {
-        it('validates the path is inside the replay dir, then navigates the renderer', () => {
+        it('validates the path is inside the replay dir, then navigates the renderer (default not saveable)', () => {
             const stub = makeReplayIpcMainStub();
-            const navigateToPlayer = vi.fn<(path: string) => void>();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
             registerReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
 
             const target = nodePath.join(REPLAY_DIR, 'tactics', 'abc.chimera-replay');
             const handler = stub.handled.get(REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            // An omitted saveable flag fails safe to `false` (a library open).
             handler?.({}, target);
 
             expect(navigateToPlayer).toHaveBeenCalledOnce();
-            expect(navigateToPlayer).toHaveBeenCalledWith(target);
+            expect(navigateToPlayer).toHaveBeenCalledWith(target, false);
+        });
+
+        it('forwards saveable=true for a just-finished match', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
+            registerReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const target = nodePath.join(REPLAY_DIR, 'tactics', 'abc.chimera-replay');
+            const handler = stub.handled.get(REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            handler?.({}, target, true);
+
+            expect(navigateToPlayer).toHaveBeenCalledWith(target, true);
         });
 
         it('rejects a path that escapes the replay dir and never navigates', () => {
             const stub = makeReplayIpcMainStub();
-            const navigateToPlayer = vi.fn<(path: string) => void>();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
             registerReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
 
             const traversal = nodePath.join(REPLAY_DIR, '..', '..', 'etc', 'passwd');
@@ -2903,7 +2916,7 @@ function registerPerspectiveReplay(overrides: {
     replay?: PerspectiveReplayIpcPort;
     playback?: PerspectiveReplayPlaybackPort;
     exportCurrent?: () => Promise<string>;
-    navigateToPlayer?: (path: string) => void;
+    navigateToPlayer?: (path: string, saveable: boolean) => void;
     perspectiveReplayDir?: string;
 }): void {
     registerPerspectiveReplayHandlers({
@@ -3008,9 +3021,9 @@ describe('registerPerspectiveReplayHandlers', () => {
     });
 
     describe('chimera:replay:perspective:open-in-player', () => {
-        it('validates the path is inside the perspective dir, then navigates the renderer', () => {
+        it('validates the path is inside the perspective dir, then navigates the renderer (default not saveable)', () => {
             const stub = makeReplayIpcMainStub();
-            const navigateToPlayer = vi.fn<(path: string) => void>();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
             registerPerspectiveReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
 
             const target = nodePath.join(
@@ -3022,12 +3035,28 @@ describe('registerPerspectiveReplayHandlers', () => {
             handler?.({}, target);
 
             expect(navigateToPlayer).toHaveBeenCalledOnce();
-            expect(navigateToPlayer).toHaveBeenCalledWith(target);
+            expect(navigateToPlayer).toHaveBeenCalledWith(target, false);
+        });
+
+        it('forwards saveable=true for a just-finished perspective match', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
+            registerPerspectiveReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const target = nodePath.join(
+                PERSPECTIVE_REPLAY_DIR,
+                'tactics',
+                'abc.chimera-perspective-replay',
+            );
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            handler?.({}, target, true);
+
+            expect(navigateToPlayer).toHaveBeenCalledWith(target, true);
         });
 
         it('rejects a path that escapes the perspective dir and never navigates', () => {
             const stub = makeReplayIpcMainStub();
-            const navigateToPlayer = vi.fn<(path: string) => void>();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
             registerPerspectiveReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
 
             const traversal = nodePath.join(PERSPECTIVE_REPLAY_DIR, '..', '..', 'etc', 'passwd');

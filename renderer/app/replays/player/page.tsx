@@ -119,6 +119,11 @@ function ReplayPlayerView(): React.ReactElement {
     const params = useSearchParams();
     const path = params.get('path');
     const kind = React.useMemo(() => parseReplayKind(params.get('kind')), [params]);
+    // `saveable=1` is set only when the player was opened for the just-finished
+    // match (the post-game **Replay** action, via the navigate push). It gates the
+    // compact save icon: a library-opened replay is already on disk, and the
+    // current-match export is session-gated to the live match, so it never applies.
+    const saveable = params.get('saveable') === '1';
 
     // The playback session methods (`openPlayback`/`snapshotAt`/`closePlayback`)
     // are shared by both surfaces; selecting here keeps the rest of the page
@@ -138,6 +143,8 @@ function ReplayPlayerView(): React.ReactElement {
     // board on entry, before the board mounts, so there is no flash.
     React.useEffect(() => {
         useUiStore.getState().resetScreenNavigation();
+        // A new replay starts unsaved, so the save icon resets with it.
+        setSaveState('idle');
     }, [path]);
 
     const [info, setInfo] = React.useState<
@@ -148,6 +155,11 @@ function ReplayPlayerView(): React.ReactElement {
     const [isPlaying, setIsPlaying] = React.useState(false);
     const [playbackSpeed, setPlaybackSpeed] = React.useState(1);
     const [error, setError] = React.useState<string | null>(null);
+    // Save-icon state, owned here so `ReplayControls` stays display-only. The icon
+    // disables while `saving` and stays disabled once `saved`, so the same replay
+    // cannot be saved repeatedly. A failed save returns to `idle` (retryable) and
+    // never replaces the player view — that whole-view error is for playback only.
+    const [saveState, setSaveState] = React.useState<'idle' | 'saving' | 'saved'>('idle');
 
     // In-memory snapshot buffer (tick → projected snapshot) plus a version
     // counter so a resolved prefetch re-runs the display effect. `inFlightRef`
@@ -326,6 +338,26 @@ function ReplayPlayerView(): React.ReactElement {
         setPlaybackSpeed(speed);
     }, []);
 
+    // Save the just-finished match's replay. Idempotent on the main side (the
+    // recording auto-finalised at game-over), so this is really a "keep + confirm":
+    // the deterministic export raises the "Replay saved" toast, while the
+    // perspective export raises none — the disabled "saved" icon is its only
+    // confirmation. Each surface uses its own export so the deterministic replay
+    // stays host-only (Invariants #71 / #98).
+    const handleSaveReplay = React.useCallback(async (): Promise<void> => {
+        setSaveState('saving');
+        try {
+            if (kind === 'perspective') {
+                await replayApi.perspective.exportCurrent();
+            } else {
+                await replayApi.exportCurrentMatch('save');
+            }
+            setSaveState('saved');
+        } catch {
+            setSaveState('idle');
+        }
+    }, [kind, replayApi]);
+
     if (error !== null) {
         return (
             <main style={pageStyle}>
@@ -366,6 +398,15 @@ function ReplayPlayerView(): React.ReactElement {
                 onStep={handleStep}
                 onSeek={handleSeek}
                 onSpeedChange={handleSpeedChange}
+                {...(saveable
+                    ? {
+                          save: {
+                              onSave: () => void handleSaveReplay(),
+                              saving: saveState === 'saving',
+                              saved: saveState === 'saved',
+                          },
+                      }
+                    : {})}
             />
             <div style={boardStyle}>
                 <GameShell

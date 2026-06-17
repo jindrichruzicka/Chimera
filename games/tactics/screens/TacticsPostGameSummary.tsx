@@ -66,15 +66,15 @@ function resolveOutcome(
 }
 
 /**
- * Async status for the post-game replay actions. Modelled as a discriminated
- * union so no impossible intermediate state can be represented: the buttons are
- * disabled while `working`, and exactly one of the terminal `saved`/`error`
- * surfaces renders.
+ * Async status for the post-game **Replay** action. Modelled as a discriminated
+ * union so no impossible intermediate state can be represented: the button is
+ * disabled while `working` (the brief export-then-navigate round-trip), and the
+ * terminal `error` surface renders only if that fails. Saving has moved into the
+ * replay player's own compact save icon, so there is no `saved` state here.
  */
 type ReplayActionStatus =
     | { readonly kind: 'idle' }
     | { readonly kind: 'working' }
-    | { readonly kind: 'saved' }
     | { readonly kind: 'error'; readonly message: string };
 
 const REPLAY_ACTION_IDLE: ReplayActionStatus = { kind: 'idle' };
@@ -132,7 +132,7 @@ function requirePerspectiveReplayBridge(): PerspectiveReplayExportBridge {
  */
 interface PostGameReplayBridge {
     export(intent: ReplayExportIntent): Promise<string>;
-    openInPlayer(path: string): Promise<void>;
+    openInPlayer(path: string, saveable: boolean): Promise<void>;
 }
 
 function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
@@ -140,40 +140,33 @@ function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
         const bridge = requireReplayBridge();
         return {
             export: (intent) => bridge.exportCurrentMatch(intent),
-            openInPlayer: (path) => bridge.openInPlayer(path),
+            openInPlayer: (path, saveable) => bridge.openInPlayer(path, saveable),
         };
     }
     const bridge = requirePerspectiveReplayBridge();
     return {
         export: () => bridge.exportCurrent(),
-        openInPlayer: (path) => bridge.openInPlayer(path),
+        openInPlayer: (path, saveable) => bridge.openInPlayer(path, saveable),
     };
 }
 
 /**
- * Replay / Save Replay actions (F44 / T8). Mounted only once the match has
- * resolved (`gameResult !== null`), so its `useState` hook runs unconditionally
- * within this component. Replay access reads the preload bridge off `globalThis`
- * (Invariant #96 — no renderer hook/IPC bridge import); feedback is inline,
- * with fixed user-facing copy so raw main-process error text never reaches the
- * UI, because game code may not reach the renderer toast store.
+ * Replay action (F44 / T8). Mounted only once the match has resolved
+ * (`gameResult !== null`), so its `useState` hook runs unconditionally within
+ * this component. Replay access reads the preload bridge off `globalThis`
+ * (Invariant #96 — no renderer hook/IPC bridge import); feedback is inline, with
+ * fixed user-facing copy so raw main-process error text never reaches the UI,
+ * because game code may not reach the renderer toast store.
  *
- * `isHost` selects which replay these actions export: the host's authoritative
- * deterministic replay, or a joined client's own perspective replay (F44b).
+ * Saving is no longer a button here: **Replay** opens the player with
+ * `saveable = true`, and the player itself surfaces a compact save icon for the
+ * just-finished match. `isHost` selects which replay opens — the host's
+ * authoritative deterministic replay, or a joined client's own perspective
+ * replay (F44b).
  */
 function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.ReactElement {
     const [status, setStatus] = React.useState<ReplayActionStatus>(REPLAY_ACTION_IDLE);
     const busy = status.kind === 'working';
-
-    const handleSaveReplay = React.useCallback(async (): Promise<void> => {
-        setStatus({ kind: 'working' });
-        try {
-            await requirePostGameReplayBridge(isHost).export('save');
-            setStatus({ kind: 'saved' });
-        } catch {
-            setStatus({ kind: 'error', message: 'Could not save replay.' });
-        }
-    }, [isHost]);
 
     const handleReplay = React.useCallback(async (): Promise<void> => {
         setStatus({ kind: 'working' });
@@ -183,7 +176,9 @@ function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.
             // player — main suppresses the "Replay saved" toast (§4.30). The
             // perspective surface ignores the intent (it raises no toast).
             const path = await bridge.export('view');
-            await bridge.openInPlayer(path);
+            // `saveable = true`: this is the just-finished match, so the player
+            // shows its save icon (the navigate push forwards the flag).
+            await bridge.openInPlayer(path, true);
             // Success navigates to the replay player via the main-pushed
             // `chimera:replay:navigate`; the summary unmounts, so no terminal
             // status is set here.
@@ -194,15 +189,6 @@ function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.
 
     return (
         <div className={styles['actions']} data-testid="post-game-actions">
-            {status.kind === 'saved' && (
-                <Caption
-                    className={styles['status']}
-                    data-testid="post-game-replay-status"
-                    tone="success"
-                >
-                    Replay saved
-                </Caption>
-            )}
             {status.kind === 'error' && (
                 <Caption
                     className={styles['status']}
@@ -220,15 +206,6 @@ function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.
                 variant="primary"
             >
                 Replay
-            </Button>
-            <Button
-                data-testid="post-game-save-replay-btn"
-                disabled={busy}
-                onClick={() => void handleSaveReplay()}
-                size="sm"
-                variant="secondary"
-            >
-                Save Replay
             </Button>
         </div>
     );

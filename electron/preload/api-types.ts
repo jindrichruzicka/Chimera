@@ -621,10 +621,17 @@ export type ReplayNavigateKind = 'deterministic' | 'perspective';
  * to open the deterministic or the perspective player (the latter via
  * `?kind=perspective`). A perspective open must carry `'perspective'`, otherwise
  * the route would load a perspective file through the deterministic surface.
+ *
+ * `saveable` marks the just-finished match (opened from the post-game summary's
+ * **Replay** action) so the player surfaces its compact save icon; the
+ * navigation bridge forwards it as a `&saveable=1` query flag. Library-opened
+ * replays carry `false` — they are already on disk and the current-match export
+ * is session-gated to the live match (see {@link ReplayAPI.openInPlayer}).
  */
 export interface ReplayNavigatePayload {
     readonly path: string;
     readonly kind: ReplayNavigateKind;
+    readonly saveable: boolean;
 }
 
 /**
@@ -653,9 +660,10 @@ export interface ReplayAPI extends ReplayExportBridge {
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the replay directory, then pushes `chimera:replay:navigate`; the
-     * renderer route reacts via {@link ReplayAPI.onNavigate}.
+     * renderer route reacts via {@link ReplayAPI.onNavigate}. `saveable` (default
+     * `false`) marks the just-finished match so the player shows its save icon.
      */
-    openInPlayer(path: string): Promise<void>;
+    openInPlayer(path: string, saveable?: boolean): Promise<void>;
     /** Permanently delete the replay at `path`. Rejected for paths outside the replay directory. */
     delete(path: string): Promise<void>;
     /**
@@ -743,8 +751,10 @@ export interface PerspectiveReplayAPI
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the perspective-replay directory, then pushes the shared
      * `chimera:replay:navigate`; the renderer reacts via {@link ReplayAPI.onNavigate}.
+     * `saveable` (default `false`) marks the just-finished match so the player
+     * shows its save icon.
      */
-    openInPlayer(path: string): Promise<void>;
+    openInPlayer(path: string, saveable?: boolean): Promise<void>;
     /** Permanently delete the perspective replay at `path`. Rejected for paths outside the perspective-replay directory. */
     delete(path: string): Promise<void>;
     /**

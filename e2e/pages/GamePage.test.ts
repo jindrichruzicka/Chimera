@@ -253,8 +253,6 @@ describe('GamePage', () => {
         expect(gamePage.postGameSummary).toBeDefined();
         expect(gamePage.perfHud).toBeDefined();
         expect(gamePage.replayButton).toBeDefined();
-        expect(gamePage.saveReplayButton).toBeDefined();
-        expect(gamePage.replaySavedStatus).toBeDefined();
         expect(gamePage.staminaReadout).toBeDefined();
         expect(gamePage.turnStatus).toBeDefined();
         expect(gamePage.commitStatus).toBeDefined();
@@ -281,8 +279,6 @@ describe('GamePage', () => {
             'post-game-summary',
             'perf-hud',
             'post-game-replay-btn',
-            'post-game-save-replay-btn',
-            'post-game-replay-status',
             'hud-stamina',
             'tactics-turn-status',
             'tactics-commit-status',

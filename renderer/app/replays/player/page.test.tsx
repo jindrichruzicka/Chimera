@@ -327,6 +327,40 @@ describe('ReplayPlayerPage', () => {
         expect(useUiStore.getState().activeScreenKey).toBe('board');
     });
 
+    describe('save affordance (?saveable=1)', () => {
+        it('renders no save icon for a library-opened replay (no saveable flag)', async () => {
+            installReplayBridge(makeBridge());
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            expect(screen.queryByTestId('replay-save-btn')).toBeNull();
+        });
+
+        it('saves the current match and disables the icon (deterministic)', async () => {
+            window.history.replaceState(
+                {},
+                '',
+                `/replays/player?path=${encodeURIComponent(PATH)}&saveable=1`,
+            );
+            const exportCurrentMatch = vi.fn(() => Promise.resolve(PATH));
+            installReplayBridge(makeBridge({ exportCurrentMatch }));
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            const save = screen.getByTestId('replay-save-btn');
+            expect(save).toBeEnabled();
+
+            await userEvent.click(save);
+
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /replay saved/i })).toBeDisabled();
+            });
+            expect(exportCurrentMatch).toHaveBeenCalledWith('save');
+        });
+    });
+
     describe('perspective replays (?kind=perspective)', () => {
         const PERSPECTIVE_INFO: PerspectiveReplayPlaybackInfo = {
             gameId: 'tactics',
@@ -422,6 +456,43 @@ describe('ReplayPlayerPage', () => {
             unmount();
 
             expect(perspective.closePlayback).toHaveBeenCalled();
+        });
+
+        it('saves via perspective.exportCurrent when saveable, never the deterministic export', async () => {
+            window.history.replaceState(
+                {},
+                '',
+                `/replays/player?path=${encodeURIComponent(PATH)}&kind=perspective&saveable=1`,
+            );
+            const exportCurrent = vi.fn(() => Promise.resolve(PATH));
+            const exportCurrentMatch = vi.fn(() => Promise.resolve(PATH));
+            Object.defineProperty(window, '__chimera', {
+                configurable: true,
+                value: {
+                    replay: {
+                        openPlayback: vi.fn(() => Promise.resolve(INFO)),
+                        exportCurrentMatch,
+                        perspective: {
+                            openPlayback: vi.fn(() => Promise.resolve(PERSPECTIVE_INFO)),
+                            snapshotAt: vi.fn(() => Promise.resolve(snapshotAtTick(0))),
+                            closePlayback: vi.fn(() => Promise.resolve()),
+                            exportCurrent,
+                        },
+                    },
+                },
+            });
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            await userEvent.click(screen.getByTestId('replay-save-btn'));
+
+            await waitFor(() => {
+                expect(screen.getByRole('button', { name: /replay saved/i })).toBeDisabled();
+            });
+            // The deterministic replay stays host-only (Invariants #71 / #98).
+            expect(exportCurrent).toHaveBeenCalledTimes(1);
+            expect(exportCurrentMatch).not.toHaveBeenCalled();
         });
     });
 });

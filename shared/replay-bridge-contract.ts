@@ -57,13 +57,13 @@ export interface PerspectiveReplayListBridge {
  * in the preload layer, not a silent drift.
  */
 /**
- * Why the post-game summary is finalising the recording:
+ * Why the recording is being finalised:
  *
- * - `'save'` — the user pressed **Save Replay**. Main raises the "Replay saved"
- *   toast (§4.30) once the export resolves.
- * - `'view'` — the user pressed **Replay**. The recording is exported only to
- *   obtain a stable on-disk path for `openInPlayer`; raising a "Replay saved"
- *   toast then would be misleading, so main suppresses the
+ * - `'save'` — the user pressed the replay player's **save icon**. Main raises the
+ *   "Replay saved" toast (§4.30) once the export resolves.
+ * - `'view'` — the user pressed the post-game **Replay** button. The recording is
+ *   exported only to obtain a stable on-disk path for `openInPlayer`; raising a
+ *   "Replay saved" toast then would be misleading, so main suppresses the
  *   `chimera:replay:exported` push for this intent.
  *
  * Defaults to `'save'` everywhere it is optional, so the historical
@@ -86,8 +86,13 @@ export interface ReplayExportBridge {
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the replay directory, then pushes `chimera:replay:navigate`.
+     *
+     * `saveable` (default `false`) marks the opened replay as the just-finished
+     * match, so the player surfaces its compact save affordance; it travels on
+     * the navigate push as a query flag. Library-opened replays pass `false` (the
+     * current-match export is session-gated and would not apply to them).
      */
-    openInPlayer(path: string): Promise<void>;
+    openInPlayer(path: string, saveable?: boolean): Promise<void>;
 }
 
 /**
@@ -122,6 +127,10 @@ export interface PerspectiveReplayExportBridge {
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the perspective-replay directory, then pushes the shared
      * `chimera:replay:navigate` with `kind: 'perspective'`.
+     *
+     * `saveable` (default `false`) marks the opened replay as the just-finished
+     * match so the player surfaces its compact save affordance — see
+     * {@link ReplayExportBridge.openInPlayer}.
      */
-    openInPlayer(path: string): Promise<void>;
+    openInPlayer(path: string, saveable?: boolean): Promise<void>;
 }

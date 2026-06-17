@@ -143,10 +143,10 @@ export const ReplaySnapshotRangeSchema = z
 
 /**
  * Schema for the optional `intent` argument of
- * `chimera:replay:export-current-match`. `'save'` (the user pressed
- * **Save Replay**) raises the §4.30 "Replay saved" toast; `'view'` (**Replay**)
- * exports only to obtain a stable on-disk path for `openInPlayer` and suppresses
- * the toast.
+ * `chimera:replay:export-current-match`. `'save'` (the user pressed the replay
+ * player's **save icon**) raises the §4.30 "Replay saved" toast; `'view'` (the
+ * post-game **Replay** button) exports only to obtain a stable on-disk path for
+ * `openInPlayer` and suppresses the toast.
  *
  * Unlike the other replay schemas this one is deliberately **non-throwing**:
  * `.catch('save')` coerces an absent, `undefined`, or otherwise malformed value
@@ -158,6 +158,19 @@ export const ReplaySnapshotRangeSchema = z
 export const ReplayExportIntentSchema: z.ZodType<ReplayExportIntent> = z
     .enum(['save', 'view'])
     .catch('save');
+
+/**
+ * Schema for the optional `saveable` flag of `chimera:replay:open-in-player`
+ * (and its perspective twin). `true` marks the just-finished match so the player
+ * surfaces its compact save icon; `false` (the default) is a library-opened
+ * replay, already on disk.
+ *
+ * Like {@link ReplayExportIntentSchema} this is deliberately **non-throwing**:
+ * `.catch(false)` coerces an absent, `undefined`, or malformed value to `false`.
+ * The flag only governs whether a (harmless, idempotent) save affordance is
+ * shown, so failing safe to "not saveable" can never break navigation itself.
+ */
+export const ReplaySaveableFlagSchema: z.ZodType<boolean> = z.boolean().catch(false);
 
 /**
  * Pattern for a single slot-ID component (`gameId` or `slotName`).

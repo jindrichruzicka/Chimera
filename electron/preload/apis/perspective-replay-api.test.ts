@@ -93,7 +93,7 @@ describe('createPerspectiveReplayApi', () => {
     });
 
     describe('openInPlayer()', () => {
-        it('invokes chimera:replay:perspective:open-in-player with the path and resolves to void', async () => {
+        it('invokes chimera:replay:perspective:open-in-player with the path and a default saveable=false', async () => {
             const stub = makeIpcStub();
             const api = createPerspectiveReplayApi(stub.port);
 
@@ -103,7 +103,22 @@ describe('createPerspectiveReplayApi', () => {
             expect(stub.invocations).toEqual([
                 {
                     channel: PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
-                    args: ['/perspective-replays/tactics/a.chimera-perspective-replay'],
+                    args: ['/perspective-replays/tactics/a.chimera-perspective-replay', false],
+                },
+            ]);
+        });
+
+        it('forwards saveable=true for a just-finished match', async () => {
+            const stub = makeIpcStub();
+            const api = createPerspectiveReplayApi(stub.port);
+
+            await expect(
+                api.openInPlayer('/perspective-replays/tactics/a.chimera-perspective-replay', true),
+            ).resolves.toBeUndefined();
+            expect(stub.invocations).toEqual([
+                {
+                    channel: PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+                    args: ['/perspective-replays/tactics/a.chimera-perspective-replay', true],
                 },
             ]);
         });

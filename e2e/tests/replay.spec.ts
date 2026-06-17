@@ -3,8 +3,8 @@
  *
  * End-to-end coverage of the Tactics replay lifecycle in the packaged app,
  * exercised through the real renderer + main IPC path (not mocks):
- *   1. the post-game summary surfaces the Replay / Save Replay buttons;
- *   2. Save Replay confirms success and a deterministic replay is persisted;
+ *   1. the post-game summary surfaces the Replay button (saving moved to the player);
+ *   2. the replay player's save icon confirms success and persists a deterministic replay;
  *   3. the main-menu Replays button is disabled with no replays;
  *   4. it enables after a match and opens the replay browser;
  *   5. replaying a finished match plays back to its final tick.
@@ -174,24 +174,31 @@ function readReplayFileShape(filePath: string): {
 // ── Tests ──────────────────────────────────────────────────────────────────
 
 test.describe('Tactics replay lifecycle', () => {
-    test('post-game summary shows the Replay and Save Replay buttons', async ({ hostWindow }) => {
-        const hostGame = new GamePage(hostWindow);
-        await playToGameOver(hostGame);
-        await goToPostGameSummary(hostWindow, hostGame);
-
-        await expect(hostGame.replayButton).toBeVisible();
-        await expect(hostGame.saveReplayButton).toBeVisible();
-    });
-
-    test('Save Replay confirms success and persists a replay with seed + actions', async ({
+    test('post-game summary shows the Replay button and no Save Replay button', async ({
         hostWindow,
     }) => {
         const hostGame = new GamePage(hostWindow);
         await playToGameOver(hostGame);
         await goToPostGameSummary(hostWindow, hostGame);
 
-        await hostGame.saveReplayButton.click();
-        await expect(hostGame.replaySavedStatus).toHaveText('Replay saved');
+        await expect(hostGame.replayButton).toBeVisible();
+        // Saving moved into the replay player's compact icon.
+        await expect(hostWindow.getByTestId('post-game-save-replay-btn')).toHaveCount(0);
+    });
+
+    test('the player save icon confirms success and persists a replay with seed + actions', async ({
+        hostWindow,
+    }) => {
+        const hostGame = new GamePage(hostWindow);
+        await playToGameOver(hostGame);
+        await goToPostGameSummary(hostWindow, hostGame);
+
+        // Open the finished match in the player (saveable), then save via its icon.
+        await hostGame.replayButton.click();
+        const player = new ReplayPlayerPage(hostWindow);
+        await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+        await expect(player.saveButton).toBeEnabled();
+        await player.save();
 
         const replays = await listDeterministicReplays(hostWindow);
         expect(replays.length).toBeGreaterThan(0);

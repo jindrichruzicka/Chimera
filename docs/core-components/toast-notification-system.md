@@ -89,7 +89,7 @@ Engine systems push toasts via `toastStore.push()` automatically without game co
 | Chat rate-limited          | `warning` | "Sending messages too quickly" |
 | Profile admission rejected | `error`   | "Profile rejected: {reason}"   |
 
-The replay-exported toast (`chimera:replay:exported`) fires only when the post-game **Save Replay** action is taken (`exportCurrentMatch('save')`). The **Replay** action calls `exportCurrentMatch('view')` purely to obtain a stable on-disk path for `openInPlayer`; the main handler suppresses the push for the `'view'` intent so no misleading "Replay saved" toast appears (§4.28 / Invariant #74).
+The replay-exported toast (`chimera:replay:exported`) fires only when the replay player's **save icon** is used (`exportCurrentMatch('save')`). The post-game **Replay** action calls `exportCurrentMatch('view')` purely to obtain a stable on-disk path for `openInPlayer`; the main handler suppresses the push for the `'view'` intent so no misleading "Replay saved" toast appears (§4.28 / Invariant #74).
 
 ---
 

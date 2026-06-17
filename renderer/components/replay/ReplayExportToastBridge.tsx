@@ -4,11 +4,12 @@
  * renderer/components/replay/ReplayExportToastBridge.tsx (§4.30, F46 / #646).
  *
  * App-wide listener that turns a main-process replay-export-completed push into
- * a "Replay saved" toast. The in-match "Save Replay" button lives in game code
- * (`games/<name>/screens/*`), which may not reach the renderer toast store
- * (Invariant #96); main therefore pushes `chimera:replay:exported` after a
- * successful `export-current-match`, and this bridge — a renderer module that
- * *is* allowed to use `toastStore` — raises the toast.
+ * a "Replay saved" toast. The save affordance is the replay player's compact save
+ * icon (a `'save'`-intent `export-current-match`); main pushes
+ * `chimera:replay:exported` once that export resolves, and this bridge — a
+ * renderer module that *is* allowed to use `toastStore` — raises the toast. The
+ * toast is engine-wired this way (rather than fired optimistically by the player)
+ * so it confirms the authoritative on-disk save, not just the click (§4.30).
  *
  * Mounted once in `AppShell` (sibling of `ReplayNavigationBridge`) so the push
  * is never missed. Renders nothing.

@@ -271,12 +271,25 @@ gameTest.describe('Tactics chat — in-match', () => {
             const tickAfter = await getSimulationTick(hostApp);
             expect(tickAfter).toBe(tickBefore);
 
-            // Resolve the match through the real pipeline and save the
-            // deterministic replay, then assert no chat ever entered ActionHistory.
+            // Resolve the match through the real pipeline, then assert no chat ever
+            // entered ActionHistory. The deterministic replay auto-finalises at
+            // game-over (fire-and-forget), so wait until it is on disk rather than
+            // pressing a save button (saving now lives in the replay player).
             await playToGameOver(hostGame);
             await goToPostGameSummary(hostWindow, hostGame);
-            await hostGame.saveReplayButton.click();
-            await expect(hostGame.replaySavedStatus).toHaveText('Replay saved');
+            await expect
+                .poll(
+                    () =>
+                        hostWindow.evaluate(
+                            (gameId) =>
+                                (globalThis as unknown as ChimeraReplayGlobal).__chimera.replay
+                                    .list(gameId)
+                                    .then((r) => r.length),
+                            TACTICS_GAME_ID,
+                        ),
+                    { timeout: 15_000 },
+                )
+                .toBeGreaterThan(0);
 
             const replays = await hostWindow.evaluate(
                 (gameId) =>

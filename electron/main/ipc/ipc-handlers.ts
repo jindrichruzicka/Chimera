@@ -133,6 +133,7 @@ import {
     RemoveAiPayloadSchema,
     ReplayExportIntentSchema,
     ReplayPathSchema,
+    ReplaySaveableFlagSchema,
     ReplaySnapshotRangeSchema,
     ReplayTickSchema,
     SaveRequestSchema,
@@ -960,8 +961,10 @@ export interface RegisterReplayHandlersOptions {
     /**
      * Push the validated replay path to the renderer (via
      * `chimera:replay:navigate`) so it can switch to the replay player route.
+     * `saveable` rides along on the push so the player shows its save icon for a
+     * just-finished match.
      */
-    readonly navigateToPlayer: (path: string) => void;
+    readonly navigateToPlayer: (path: string, saveable: boolean) => void;
     /**
      * Notify the renderer that a replay was exported successfully (via
      * `chimera:replay:exported`, the saved path as payload) so a renderer
@@ -1041,18 +1044,23 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
         return path;
     });
 
-    ipcMain.handle(REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath) => {
+    ipcMain.handle(REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath, saveable) => {
         const validated = parseInvokeRequest(
             ReplayPathSchema,
             REPLAY_OPEN_IN_PLAYER_CHANNEL,
             replayPath,
+        );
+        const validatedSaveable = parseInvokeRequest(
+            ReplaySaveableFlagSchema,
+            REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            saveable,
         );
         if (!isInsidePath(replayDir, validated)) {
             throw new Error(
                 `replay:open-in-player: path ${JSON.stringify(validated)} escapes the replay directory`,
             );
         }
-        navigateToPlayer(validated);
+        navigateToPlayer(validated, validatedSaveable);
         return undefined;
     });
 
@@ -1173,9 +1181,10 @@ export interface RegisterPerspectiveReplayHandlersOptions {
     /**
      * Push the validated replay path to the renderer (via the shared
      * `chimera:replay:navigate`) so it can switch to the replay player route.
-     * Reuses the deterministic surface's push channel.
+     * Reuses the deterministic surface's push channel. `saveable` rides along so
+     * the player shows its save icon for a just-finished match.
      */
-    readonly navigateToPlayer: (path: string) => void;
+    readonly navigateToPlayer: (path: string, saveable: boolean) => void;
 }
 
 /**
@@ -1218,18 +1227,23 @@ export function registerPerspectiveReplayHandlers(
 
     ipcMain.handle(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, () => exportCurrent());
 
-    ipcMain.handle(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath) => {
+    ipcMain.handle(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath, saveable) => {
         const validated = parseInvokeRequest(
             ReplayPathSchema,
             PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
             replayPath,
+        );
+        const validatedSaveable = parseInvokeRequest(
+            ReplaySaveableFlagSchema,
+            PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            saveable,
         );
         if (!isInsidePath(perspectiveReplayDir, validated)) {
             throw new Error(
                 `replay:perspective:open-in-player: path ${JSON.stringify(validated)} escapes the perspective replay directory`,
             );
         }
-        navigateToPlayer(validated);
+        navigateToPlayer(validated, validatedSaveable);
         return undefined;
     });
 
