@@ -100,11 +100,11 @@ test.describe('Tactics commitment battle mode (headline)', () => {
         const hostTarget = centralNeighbor(hostStart);
         await expect.poll(() => host.staminaText(), { timeout: 20_000 }).toBe('3/3');
 
-        await host.selectOwnedPrimitive();
-        await host.clickTacticsGridPoint(hostTarget);
         // Buffered locally: stamina drops optimistically but the move is NOT
         // dispatched, so the host's projected unit stays at its origin (secrecy).
-        await expect.poll(() => host.staminaText(), { timeout: 20_000 }).toBe('2/3');
+        // The helper retries the select+click until the optimistic stamina reflects
+        // the buffer — the projected position never changes, so it can't be polled.
+        await host.bufferOptimisticMoveTo(hostTarget, '2/3');
         await expect.poll(() => host.localUnitGrid(), { timeout: 20_000 }).toEqual(hostStart);
 
         // Undo before commit pops the buffer and refunds the stamina.
@@ -112,9 +112,7 @@ test.describe('Tactics commitment battle mode (headline)', () => {
         await expect.poll(() => host.staminaText(), { timeout: 20_000 }).toBe('3/3');
 
         // ── Re-buffer and COMMIT via End Turn (host) ──────────────────────────
-        await host.selectOwnedPrimitive();
-        await host.clickTacticsGridPoint(hostTarget);
-        await expect.poll(() => host.staminaText(), { timeout: 20_000 }).toBe('2/3');
+        await host.bufferOptimisticMoveTo(hostTarget, '2/3');
         await host.endTurnButton.click(); // End Turn = commit
 
         // Host has committed: End Turn disables and the pulsing waiting message shows.
@@ -124,9 +122,7 @@ test.describe('Tactics commitment battle mode (headline)', () => {
 
         // ── Client commits via End Turn → reveal happens AUTOMATICALLY ─────────
         const clientStart = await client.localUnitGrid();
-        await client.selectOwnedPrimitive();
-        await client.clickTacticsGridPoint(centralNeighbor(clientStart));
-        await expect.poll(() => client.staminaText(), { timeout: 20_000 }).toBe('2/3');
+        await client.bufferOptimisticMoveTo(centralNeighbor(clientStart), '2/3');
         await client.endTurnButton.click(); // completing the set; no second confirmation
 
         // With NO further click, the host auto-advances + reveals: the host's

@@ -74,6 +74,11 @@ export const TACTICS_REVEAL_CENTER_X = 1;
 const TACTICS_MOVE_RETRY_ATTEMPTS = 3;
 const TACTICS_ATTACK_RETRY_ATTEMPTS = 3;
 const PROJECTED_SNAPSHOT_TIMEOUT_MS = 30_000;
+// Commitment mode: a buffered move updates the optimistic HUD stamina via a local
+// (synchronous) store write, so a registered click is reflected within a frame.
+// This window only needs to outlast canvas/render settle on a slow CI runner; it
+// is the per-attempt budget for detecting whether a select+click actually buffered.
+const TACTICS_OPTIMISTIC_BUFFER_TIMEOUT_MS = 10_000;
 // One pixel read = rAF settle + locator.screenshot(); on CI runners (2-core,
 // Xvfb + software GL) a single screenshot alone was measured at 6–11s, so the
 // poll budget must fit several worst-case iterations or the predicate never
@@ -187,6 +192,63 @@ export class GamePage {
             }
         }
         await this.waitForProjectedOwnedUnitAt(grid);
+    }
+
+    /**
+     * Commitment mode: buffer an optimistic move onto `grid` and confirm it
+     * registered by waiting for the HUD stamina readout to reach `expectedStamina`.
+     *
+     * A buffered move is NEVER dispatched to the host — the projected snapshot keeps
+     * the unit at its origin (secrecy), so the position-polling retry used by
+     * {@link moveOwnedUnitTo} cannot detect it. The only observable signal is the
+     * optimistic stamina decrement (a local store write), so this retries the
+     * select+click until that stamina value appears, absorbing canvas-click
+     * imprecision the same way the projected-move helpers do.
+     *
+     * The top-of-loop guard makes the retry safe against double-buffering: once the
+     * stamina already shows `expectedStamina`, no further click is issued.
+     */
+    public async bufferOptimisticMoveTo(
+        grid: TacticsGridPoint,
+        expectedStamina: string,
+    ): Promise<void> {
+        for (let attempt = 0; attempt < TACTICS_MOVE_RETRY_ATTEMPTS; attempt += 1) {
+            // Guard: a prior attempt may already have buffered the move. Never
+            // click again once stamina reflects it, or we'd buffer a second move.
+            if ((await this.staminaText()) === expectedStamina) {
+                return;
+            }
+            await this.selectOwnedPrimitive();
+            await this.clickTacticsGridPoint(grid);
+            await this.waitForCanvasInteractionFrame();
+            if (await this.staminaSettlesTo(expectedStamina)) {
+                return;
+            }
+        }
+
+        // Every attempt missed: assert once more for a clean failure that reports
+        // the actual stamina value rather than a bare retry-exhausted error.
+        await expect
+            .poll(() => this.staminaText(), { timeout: TACTICS_OPTIMISTIC_BUFFER_TIMEOUT_MS })
+            .toBe(expectedStamina);
+    }
+
+    /**
+     * Poll the HUD stamina readout until it equals `expected`, returning whether it
+     * settled within {@link TACTICS_OPTIMISTIC_BUFFER_TIMEOUT_MS}. Never throws — the
+     * caller decides whether a miss warrants a retry.
+     */
+    private async staminaSettlesTo(expected: string): Promise<boolean> {
+        try {
+            await expect
+                .poll(() => this.staminaText(), {
+                    timeout: TACTICS_OPTIMISTIC_BUFFER_TIMEOUT_MS,
+                })
+                .toBe(expected);
+            return true;
+        } catch {
+            return false;
+        }
     }
 
     public async assertOwnedSelectionFeedbackChangesCanvas(): Promise<void> {
