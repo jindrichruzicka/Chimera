@@ -17,17 +17,28 @@ export interface LobbyUiStoreState {
     /** Local pass-and-play seat IDs available on this device. */
     readonly localSeatIds: readonly PlayerId[];
 
+    /**
+     * Renderer-only intent: the local player is leaving the active match for the
+     * main menu (client leave path). Routing consumes and resets this flag after
+     * navigating; it is independent of the IPC-mirrored lobby state.
+     */
+    readonly leavingToMainMenu: boolean;
+
     /** Set local-only player and seat metadata after a successful host/join intent. */
     setLocalLobbyContext(localPlayerId: PlayerId | null, localSeatIds: readonly PlayerId[]): void;
 
     /** Clear local-only metadata when leaving or disconnecting from a lobby. */
     clearLocalLobbyContext(): void;
+
+    /** Set the leaving-to-main-menu intent flag (set on client leave, reset by routing). */
+    setLeavingToMainMenu(leaving: boolean): void;
 }
 
 export function createLobbyUiStore(): StoreApi<LobbyUiStoreState> {
     return createStore<LobbyUiStoreState>()((set) => ({
         localPlayerId: null,
         localSeatIds: [],
+        leavingToMainMenu: false,
 
         setLocalLobbyContext(
             localPlayerId: PlayerId | null,
@@ -43,6 +54,12 @@ export function createLobbyUiStore(): StoreApi<LobbyUiStoreState> {
             set(() => ({
                 localPlayerId: null,
                 localSeatIds: [],
+            }));
+        },
+
+        setLeavingToMainMenu(leaving: boolean): void {
+            set(() => ({
+                leavingToMainMenu: leaving,
             }));
         },
     }));

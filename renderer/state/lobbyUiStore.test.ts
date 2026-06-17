@@ -27,4 +27,20 @@ describe('lobbyUiStore', () => {
         expect(store.getState().localPlayerId).toBeNull();
         expect(store.getState().localSeatIds).toEqual([]);
     });
+
+    it('initializes with the leaving-to-main-menu intent flag cleared', () => {
+        const store = createLobbyUiStore();
+
+        expect(store.getState().leavingToMainMenu).toBe(false);
+    });
+
+    it('sets and resets the leaving-to-main-menu intent flag', () => {
+        const store = createLobbyUiStore();
+
+        store.getState().setLeavingToMainMenu(true);
+        expect(store.getState().leavingToMainMenu).toBe(true);
+
+        store.getState().setLeavingToMainMenu(false);
+        expect(store.getState().leavingToMainMenu).toBe(false);
+    });
 });
