@@ -27,6 +27,7 @@ import {
     engineRedoDefinition,
     engineSyncRequestDefinition,
     engineStartGameDefinition,
+    engineReturnToLobbyDefinition,
 } from './EngineActions.js';
 import { makeStubRng } from './__test-support__/stubs.js';
 import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
@@ -79,8 +80,8 @@ describe('EngineActions array', () => {
         expect(EngineActions.length).toBeGreaterThan(0);
     });
 
-    it('contains exactly eight definitions', () => {
-        expect(EngineActions).toHaveLength(8);
+    it('contains exactly nine definitions', () => {
+        expect(EngineActions).toHaveLength(9);
     });
 
     it('contains an engine:tick definition', () => {
@@ -120,6 +121,11 @@ describe('EngineActions array', () => {
 
     it('contains an engine:start_game definition', () => {
         const definition = EngineActions.find((d) => d.type === 'engine:start_game');
+        expect(definition).toBeDefined();
+    });
+
+    it('contains an engine:return_to_lobby definition', () => {
+        const definition = EngineActions.find((d) => d.type === 'engine:return_to_lobby');
         expect(definition).toBeDefined();
     });
 });
@@ -917,6 +923,101 @@ describe('engine:start_game definition', () => {
     });
 });
 
+// ─── engine:return_to_lobby definition ──────────────────────────────────────
+
+describe('engine:return_to_lobby definition', () => {
+    const definition = () => {
+        const d = EngineActions.find((d) => d.type === 'engine:return_to_lobby');
+        if (!d) throw new Error('engine:return_to_lobby not found');
+        return d;
+    };
+
+    const unit = entityId('unit-return-lobby');
+    const setup = {
+        matchSettings: { boardColor: 'blue' },
+        playerAttributes: { [hostId]: { color: 'red' } },
+    };
+
+    // An in-progress match snapshot: host set, populated entities/turnClock, and a
+    // (deliberately non-null) gameResult so the "clears" assertions are meaningful.
+    const makePlayingSnapshot = (): BaseGameSnapshot =>
+        ({
+            ...makeSnapshot(hostId),
+            seed: 123,
+            phase: 'playing' as BaseGameSnapshot['phase'],
+            sceneId: sceneId('engine:game'),
+            sceneTransition: null,
+            players: { [hostId]: { id: hostId }, [guestId]: { id: guestId } },
+            entities: { [unit]: { id: unit } },
+            turnClock: { activePlayerId: hostId, deadlineMs: 30_000 },
+            gameResult: { winnerIds: [hostId] },
+            setup,
+        }) satisfies BaseGameSnapshot;
+
+    it('has type string "engine:return_to_lobby"', () => {
+        expect(definition().type).toBe('engine:return_to_lobby');
+    });
+
+    it('parsePayload returns an empty payload', () => {
+        expect(definition().parsePayload({})).toEqual({});
+    });
+
+    it('validate accepts the host player', () => {
+        const result = definition().validate({}, makePlayingSnapshot(), hostId, stubCtx);
+        expect(result).toEqual({ ok: true });
+    });
+
+    it('validate rejects a non-host player with host_only', () => {
+        const result = definition().validate({}, makePlayingSnapshot(), guestId, stubCtx);
+        expect(result).toEqual({ ok: false, reason: 'host_only' });
+    });
+
+    it('validate rejects when no host is set', () => {
+        const result = definition().validate({}, makeSnapshot(), hostId, stubCtx);
+        expect(result).toEqual({ ok: false, reason: 'host_only' });
+    });
+
+    it('reduce flips the phase to lobby, enters the lobby scene, and advances tick exactly once', () => {
+        const snapshot = makePlayingSnapshot();
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+
+        expect(next).not.toBe(snapshot);
+        expect(next.tick).toBe(snapshot.tick + 1);
+        expect(next.phase).toBe('lobby');
+        expect(next.sceneId).toBe(sceneId('engine:lobby'));
+        expect(next.sceneTransition).toBeNull();
+    });
+
+    it('reduce clears entities, turnClock, and gameResult (abandon, not a finished match)', () => {
+        const next = definition().reduce(makePlayingSnapshot(), {}, hostId, stubCtx);
+
+        expect(next.entities).toEqual({});
+        expect(next.turnClock).toBeUndefined();
+        expect(next.gameResult).toBeNull();
+    });
+
+    it('reduce preserves the lobby roster, seed, host, and setup', () => {
+        const snapshot = makePlayingSnapshot();
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+
+        expect(next.players).toEqual(snapshot.players);
+        expect(next.seed).toBe(snapshot.seed);
+        expect(next.hostPlayerId).toBe(hostId);
+        expect(next.setup).toEqual(setup);
+    });
+
+    it('reduce does not mutate the input snapshot', () => {
+        const snapshot = makePlayingSnapshot();
+        const frozen = Object.freeze(snapshot);
+
+        expect(() => definition().reduce(frozen, {}, hostId, stubCtx)).not.toThrow();
+        expect(snapshot.phase).toBe('playing');
+        expect(snapshot.entities).toEqual({ [unit]: { id: unit } });
+        expect(snapshot.turnClock).toEqual({ activePlayerId: hostId, deadlineMs: 30_000 });
+        expect(snapshot.gameResult).toEqual({ winnerIds: [hostId] });
+    });
+});
+
 // ─── registerEngineActions ────────────────────────────────────────────────────
 
 describe('registerEngineActions', () => {
@@ -992,7 +1093,18 @@ describe('registerEngineActions', () => {
         expect(registry.has('engine:load')).toBe(true);
     });
 
-    it('all eight engine: types appear in registeredTypes()', () => {
+    it('registers engine:return_to_lobby without throwing', () => {
+        registerEngineActions(registry);
+        expect(registry.has('engine:return_to_lobby')).toBe(true);
+    });
+
+    it('registry can resolve engine:return_to_lobby definition after registration', () => {
+        registerEngineActions(registry);
+        const def = registry.resolve('engine:return_to_lobby');
+        expect(def.type).toBe('engine:return_to_lobby');
+    });
+
+    it('all nine engine: types appear in registeredTypes()', () => {
         registerEngineActions(registry);
         const types = registry.registeredTypes();
         expect(types).toContain('engine:save');
@@ -1001,6 +1113,7 @@ describe('registerEngineActions', () => {
         expect(types).toContain('engine:redo');
         expect(types).toContain('engine:sync_request');
         expect(types).toContain('engine:start_game');
+        expect(types).toContain('engine:return_to_lobby');
     });
 });
 
@@ -1439,6 +1552,10 @@ describe('individual engine action definition named exports', () => {
         expect(engineStartGameDefinition.type).toBe('engine:start_game');
     });
 
+    it('engineReturnToLobbyDefinition is a named export with type engine:return_to_lobby', () => {
+        expect(engineReturnToLobbyDefinition.type).toBe('engine:return_to_lobby');
+    });
+
     it('all individually exported definitions are in the EngineActions array', () => {
         const individualDefs = [
             engineTickDefinition,
@@ -1449,6 +1566,7 @@ describe('individual engine action definition named exports', () => {
             engineRedoDefinition,
             engineSyncRequestDefinition,
             engineStartGameDefinition,
+            engineReturnToLobbyDefinition,
         ];
         for (const def of individualDefs) {
             expect(EngineActions.some((d) => d === def)).toBe(true);

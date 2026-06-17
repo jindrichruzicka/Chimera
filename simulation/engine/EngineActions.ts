@@ -3,10 +3,11 @@
  *
  * Reserved engine action definitions for the Chimera simulation core.
  *
- * Defines `ActionDefinition` entries for the seven M1/M3-required engine-reserved
- * action types: `engine:tick`, `engine:end_turn`, `engine:save`, `engine:load`,
- * `engine:undo`, `engine:redo`, and `engine:sync_request`. These are the only
- * callers of the engine-internal `registerEngineAction()` bypass on `ActionRegistry`.
+ * Defines `ActionDefinition` entries for the engine-reserved action types:
+ * `engine:tick`, `engine:end_turn`, `engine:start_game`, `engine:return_to_lobby`,
+ * `engine:save`, `engine:load`, `engine:undo`, `engine:redo`, and
+ * `engine:sync_request`. These are the only callers of the engine-internal
+ * `registerEngineAction()` bypass on `ActionRegistry`.
  *
  * Architecture reference: §4.2, §4.7
  * Task: F03 / T4 (issue #27), issue #350
@@ -100,6 +101,13 @@ export interface EngineStartGamePayload {
      */
     readonly setup?: GameSetupConfig;
 }
+
+/**
+ * Payload for `engine:return_to_lobby`.
+ * No payload fields — abandons the active match and returns the session snapshot
+ * to the lobby phase (the reverse of `engine:start_game`).
+ */
+export type EngineReturnToLobbyPayload = Record<string, never>;
 
 const DEFAULT_TURN_DEADLINE_MS = 30_000;
 
@@ -509,6 +517,53 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
     },
 } satisfies ActionDefinition<EngineStartGamePayload>;
 
+// ─── engine:return_to_lobby ──────────────────────────────────────────────────
+
+/**
+ * `ActionDefinition` for `engine:return_to_lobby` — the reverse of
+ * `engine:start_game`.
+ *
+ * Abandons the active match and returns the session snapshot to the lobby phase
+ * so a new match can be started. Host-only (invariant #25), flows through the
+ * normal `ActionPipeline`. This is an *abandon*, distinct from a finished match:
+ * it does NOT set `gameResult` and must NOT trigger any game-end path.
+ *
+ * The reducer resets the match while preserving the lobby roster (`players`),
+ * `seed`, `hostPlayerId`, and `setup` so a fresh match can be started again.
+ */
+export const engineReturnToLobbyDefinition: ActionDefinition<EngineReturnToLobbyPayload> = {
+    type: 'engine:return_to_lobby',
+
+    parsePayload(_raw: Readonly<Record<string, unknown>>): EngineReturnToLobbyPayload {
+        return {};
+    },
+
+    validate(_payload, state, dispatcherId): ValidationResult {
+        if (state.hostPlayerId === undefined || dispatcherId !== state.hostPlayerId) {
+            return { ok: false, reason: 'host_only' };
+        }
+        return { ok: true };
+    },
+
+    reduce(state: Readonly<BaseGameSnapshot>): BaseGameSnapshot {
+        // Drop `turnClock` via rest-destructure: `exactOptionalPropertyTypes`
+        // forbids assigning `undefined` to an optional property, so the key must
+        // be omitted rather than set.
+        const { turnClock: _turnClock, ...rest } = state;
+        return {
+            // `rest` preserves the lobby roster, seed, hostPlayerId, and setup so a
+            // new match can be started from the same lobby.
+            ...rest,
+            tick: state.tick + 1,
+            phase: gamePhase('lobby'),
+            sceneId: sceneId('engine:lobby'),
+            sceneTransition: null,
+            gameResult: null,
+            entities: {},
+        };
+    },
+} satisfies ActionDefinition<EngineReturnToLobbyPayload>;
+
 // ─── engine:save ─────────────────────────────────────────────────────────────
 
 /**
@@ -730,6 +785,7 @@ export const EngineActions: readonly ActionDefinition<object>[] = [
     engineTickDefinition,
     engineEndTurnDefinition,
     engineStartGameDefinition,
+    engineReturnToLobbyDefinition,
     engineSaveDefinition,
     engineLoadDefinition,
     engineUndoDefinition,
