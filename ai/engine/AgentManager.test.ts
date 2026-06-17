@@ -131,6 +131,46 @@ describe('AgentManager', () => {
         });
     });
 
+    // ── clear ───────────────────────────────────────────────────────────────
+
+    describe('clear', () => {
+        it('drops all registered agents so subsequent fan-out reaches none', () => {
+            const projector = makeProjector();
+            const agent1 = makeAiAgent(p1);
+            const agent2 = makeAiAgent(p2);
+            manager.registerAgent(agent1);
+            manager.registerAgent(agent2);
+
+            manager.clear();
+            manager.tickAll(makeFullState(), 1, projector);
+            manager.onGameStart(makeFullState(), projector);
+
+            expect(projector.project).not.toHaveBeenCalled();
+            expect(agent1.onTick).not.toHaveBeenCalled();
+            expect(agent2.onTick).not.toHaveBeenCalled();
+            expect(agent1.onGameStart).not.toHaveBeenCalled();
+        });
+
+        it('allows re-registering the same playerId after clear (no dedup no-op)', () => {
+            const projector = makeProjector();
+            const original = makeAiAgent(p1);
+            const replacement = makeAiAgent(p1);
+            manager.registerAgent(original);
+
+            manager.clear();
+            manager.registerAgent(replacement);
+            manager.tickAll(makeFullState(), 1, projector);
+
+            // The replacement is now the live entry; the original is gone.
+            expect(replacement.onTick).toHaveBeenCalledOnce();
+            expect(original.onTick).not.toHaveBeenCalled();
+        });
+
+        it('is a no-op when no agents are registered', () => {
+            expect(() => manager.clear()).not.toThrow();
+        });
+    });
+
     // ── tickAll ───────────────────────────────────────────────────────────────
 
     describe('tickAll', () => {

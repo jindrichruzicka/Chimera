@@ -220,9 +220,13 @@ vi.mock('@chimera/games/tactics/visibility-rules.js', () => ({
 }));
 
 // ── AgentManager mock — captures constructor args for logger wiring tests ─────
-const { mockAgentManagerCtor } = vi.hoisted(() => ({
-    mockAgentManagerCtor: vi.fn(() => ({})),
-}));
+const { mockAgentManagerCtor, mockAgentManagerInstance } = vi.hoisted(() => {
+    const instance = { clear: vi.fn<() => void>() };
+    return {
+        mockAgentManagerInstance: instance,
+        mockAgentManagerCtor: vi.fn(() => instance),
+    };
+});
 
 vi.mock('@chimera/ai/engine/AgentManager.js', () => ({
     AgentManager: mockAgentManagerCtor,
@@ -470,6 +474,9 @@ const { createNoopLogger } = await import('./logging/logger.js');
 const { ActionRegistry } = await import('@chimera/simulation/engine/ActionRegistry.js');
 const { entityId, playerId } = await import('@chimera/simulation/engine/types.js');
 const { ProfileManager } = await import('./profile/ProfileManager.js');
+const { SessionRuntime, SessionCommitmentRuntime } = await import('./runtime/SessionRuntime.js');
+const { ReplayManager } = await import('./replay/replay-manager.js');
+const { PerspectiveReplayManager } = await import('./replay/PerspectiveReplayManager.js');
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
@@ -3598,5 +3605,263 @@ describe('main() — perspective replay IPC wiring (F44b T7)', () => {
         const handler = findHandler(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
         expect(handler).toBeTypeOf('function');
         await expect(Promise.resolve(handler?.())).rejects.toThrow(/no active session/);
+    });
+});
+
+// ── Host return-to-lobby orchestration (#737) ─────────────────────────────────
+// Covers the onReturnToLobbyRequested wiring in main(): dispatching
+// engine:return_to_lobby into the live session (broadcasting phase:'lobby' to the
+// host + every client) and the host-local match-state resets that make the lobby
+// restartable — undo history, replay/perspective recordings, staged commitment
+// state, the gameStarted one-shot guard, and AI agent re-registration. This is an
+// *abandon* (gameResult stays null): it must NOT fire the match-end / replay-
+// finalise path.
+describe('main() — host return-to-lobby orchestration (#737)', () => {
+    interface RtlTransport {
+        onPlayerJoined: ReturnType<typeof vi.fn>;
+        onPlayerLeft: ReturnType<typeof vi.fn>;
+        onActionReceived: ReturnType<typeof vi.fn>;
+    }
+    interface RtlLobbyState {
+        readonly info: {
+            readonly sessionId: string;
+            readonly hostId: ReturnType<typeof playerId>;
+            readonly gameId: string;
+        };
+        readonly players: readonly {
+            readonly playerId: ReturnType<typeof playerId>;
+            readonly displayName: string;
+            readonly ready: boolean;
+        }[];
+    }
+    interface RtlOptions {
+        onSessionHosted?: (
+            transport: RtlTransport,
+            metadata: { readonly hostId: ReturnType<typeof playerId>; readonly maxPlayers: number },
+        ) => (() => void) | void;
+        onGameStartRequested?: (state: RtlLobbyState) => void;
+        onReturnToLobbyRequested?: (state: RtlLobbyState) => void;
+    }
+
+    const hostId = playerId('rtl-host');
+    const guestId = playerId('rtl-guest');
+
+    let capturedJoin:
+        | ((entry: { readonly playerId: ReturnType<typeof playerId> }) => void)
+        | undefined;
+    let capturedAction: ((from: string, action: unknown) => void) | undefined;
+
+    const makeTransport = (): RtlTransport => {
+        capturedJoin = undefined;
+        capturedAction = undefined;
+        return {
+            onPlayerJoined: vi.fn(
+                (cb: (entry: { readonly playerId: ReturnType<typeof playerId> }) => void) => {
+                    capturedJoin = cb;
+                    return () => {};
+                },
+            ),
+            onPlayerLeft: vi.fn(() => () => {}),
+            onActionReceived: vi.fn((cb: (from: string, action: unknown) => void) => {
+                capturedAction = cb;
+                return () => {};
+            }),
+        };
+    };
+
+    const makeLobbyState = (): RtlLobbyState => ({
+        info: { sessionId: 'rtl-session', hostId, gameId: 'tactics' },
+        players: [
+            { playerId: hostId, displayName: 'Host', ready: true },
+            { playerId: guestId, displayName: 'Guest', ready: true },
+        ],
+    });
+
+    const getOptions = (): RtlOptions => mockLobbyManagerCtor.mock.calls[0]?.[2] as RtlOptions;
+
+    /** Boot a hosted, started 2-player match with both players present. */
+    const startHostedMatch = async (): Promise<RtlOptions> => {
+        await main();
+        const options = getOptions();
+        options.onSessionHosted?.(makeTransport(), { hostId, maxPlayers: 2 });
+        capturedJoin?.({ playerId: guestId }); // both present → onGameStart fires once
+        options.onGameStartRequested?.(makeLobbyState());
+        return options;
+    };
+
+    /** Snapshots broadcast with the given phase, paired with their viewerId. */
+    const broadcastsWithPhase = (phase: string): unknown[] =>
+        mockStateBroadcasterInstance.broadcast.mock.calls
+            .filter(([snap]) => (snap as { phase?: string }).phase === phase)
+            .map(([, viewerId]) => viewerId);
+
+    beforeEach(() => {
+        browserWindowInstances.length = 0;
+        appOn.mockClear();
+        appWhenReady.mockClear();
+        appWhenReady.mockImplementation(() => Promise.resolve());
+        appGetPath.mockClear();
+        appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
+        ipcMainHandle.mockClear();
+        fsExistsSync.mockClear();
+        mockSaveManagerClearFlag.mockClear();
+        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
+        mockSaveManagerCheckCrash.mockClear();
+        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
+        mockRegisterCrashReporter.mockClear();
+        mockLobbyManagerCtor.mockClear();
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        mockSimulationHostInstance.registerAgent.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+        mockSimulationHostInstance.onGameEnd.mockClear();
+        mockAgentManagerInstance.clear.mockClear();
+        perspectiveSaves.value = [];
+    });
+
+    it('wires onReturnToLobbyRequested as a function', async () => {
+        await main();
+        expect(getOptions().onReturnToLobbyRequested).toBeTypeOf('function');
+    });
+
+    it('broadcasts a phase:lobby snapshot to the host and every client', async () => {
+        const options = await startHostedMatch();
+        mockStateBroadcasterInstance.broadcast.mockClear();
+
+        options.onReturnToLobbyRequested?.(makeLobbyState());
+
+        const lobbyViewers = broadcastsWithPhase('lobby');
+        expect(lobbyViewers).toContain(hostId);
+        expect(lobbyViewers).toContain(guestId);
+    });
+
+    it('clears undo history so no seat can undo into the abandoned match', async () => {
+        const options = await startHostedMatch();
+        // Host takes its turn — it now has a turn-start memento (canUndo: true).
+        capturedAction?.(hostId, {
+            type: 'tactics:move_unit',
+            playerId: hostId,
+            tick: 1,
+            payload: { unitId: 'unit-1', x: 1, y: 0 },
+        });
+        const projectorOptions = capturedDefaultStateProjectorOptions.current!;
+        expect(projectorOptions.getUndoMeta?.(hostId)).toEqual({ canUndo: true, canRedo: false });
+
+        options.onReturnToLobbyRequested?.(makeLobbyState());
+
+        expect(projectorOptions.getUndoMeta?.(hostId)).toEqual({ canUndo: false, canRedo: false });
+    });
+
+    it('abandons the match without firing the match-end / replay-finalise path', async () => {
+        const options = await startHostedMatch();
+        mockSimulationHostInstance.onGameEnd.mockClear();
+
+        options.onReturnToLobbyRequested?.(makeLobbyState());
+        await new Promise((resolve) => setTimeout(resolve, 0)); // flush fire-and-forget finalise
+
+        expect(mockSimulationHostInstance.onGameEnd).not.toHaveBeenCalled();
+        expect(perspectiveSaves.value).toHaveLength(0);
+    });
+
+    it('clears staged commitment state via the session runtime', async () => {
+        const clearStagedSpy = vi.spyOn(SessionRuntime.prototype, 'clearStagedReveals');
+        const restoreSpy = vi.spyOn(
+            SessionCommitmentRuntime.prototype,
+            'restorePendingCommitments',
+        );
+        try {
+            const options = await startHostedMatch();
+            clearStagedSpy.mockClear();
+            restoreSpy.mockClear();
+
+            options.onReturnToLobbyRequested?.(makeLobbyState());
+
+            expect(clearStagedSpy).toHaveBeenCalled();
+            expect(restoreSpy).toHaveBeenCalledWith({});
+        } finally {
+            clearStagedSpy.mockRestore();
+            restoreSpy.mockRestore();
+        }
+    });
+
+    it('re-registers AI agents and re-fires onGameStart so the match is restartable', async () => {
+        const options = await startHostedMatch();
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
+        mockSimulationHostInstance.registerAgent.mockClear();
+        mockSimulationHostInstance.onGameStart.mockClear();
+
+        options.onReturnToLobbyRequested?.(makeLobbyState());
+
+        expect(mockAgentManagerInstance.clear).toHaveBeenCalledOnce();
+        // Both seats are re-registered against the lobby snapshot before the
+        // re-fired onGameStart (mirrors the original session-host ordering).
+        expect(mockSimulationHostInstance.registerAgent.mock.calls.length).toBeGreaterThanOrEqual(
+            2,
+        );
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledOnce();
+    });
+
+    it('is restartable — a subsequent engine:start_game broadcasts phase:playing', async () => {
+        const options = await startHostedMatch();
+        options.onReturnToLobbyRequested?.(makeLobbyState());
+        mockStateBroadcasterInstance.broadcast.mockClear();
+
+        options.onGameStartRequested?.(makeLobbyState());
+
+        expect(broadcastsWithPhase('playing').length).toBeGreaterThan(0);
+    });
+
+    it('re-arms replay and perspective recording so the restarted match records', async () => {
+        const replayStartSpy = vi.spyOn(ReplayManager.prototype, 'startRecording');
+        const replayAbortSpy = vi.spyOn(ReplayManager.prototype, 'abortRecording');
+        const perspStartSpy = vi.spyOn(PerspectiveReplayManager.prototype, 'start');
+        const perspAbortSpy = vi.spyOn(PerspectiveReplayManager.prototype, 'abort');
+        try {
+            const options = await startHostedMatch();
+            // Each recording was armed exactly once at host time.
+            const replayStartsBefore = replayStartSpy.mock.calls.length;
+            const perspStartsBefore = perspStartSpy.mock.calls.length;
+
+            options.onReturnToLobbyRequested?.(makeLobbyState());
+
+            // The abandoned recordings are discarded, then fresh ones armed for
+            // the next match (re-arm, not finalise).
+            expect(replayAbortSpy).toHaveBeenCalled();
+            expect(perspAbortSpy).toHaveBeenCalled();
+            expect(replayStartSpy.mock.calls.length).toBe(replayStartsBefore + 1);
+            expect(perspStartSpy.mock.calls.length).toBe(perspStartsBefore + 1);
+        } finally {
+            replayStartSpy.mockRestore();
+            replayAbortSpy.mockRestore();
+            perspStartSpy.mockRestore();
+            perspAbortSpy.mockRestore();
+        }
+    });
+
+    it('is fail-loud and runs no reset when the action is rejected (non-host dispatcher)', async () => {
+        const options = await startHostedMatch();
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        mockAgentManagerInstance.clear.mockClear();
+
+        // A return-to-lobby whose dispatcher is not the session host fails the
+        // reducer's host-only guard. `applyAction` throws `ActionUnauthorizedError`,
+        // so the callback throws (returnToLobby rejects) and the host-local reset
+        // below it never runs — no lobby broadcast, no agent clear. Unreachable in
+        // the normal flow (the dispatcher is always the session host).
+        expect(() =>
+            options.onReturnToLobbyRequested?.({
+                info: {
+                    sessionId: 'rtl-session',
+                    hostId: playerId('not-the-host'),
+                    gameId: 'tactics',
+                },
+                players: [
+                    { playerId: hostId, displayName: 'Host', ready: true },
+                    { playerId: guestId, displayName: 'Guest', ready: true },
+                ],
+            }),
+        ).toThrow();
+
+        expect(broadcastsWithPhase('lobby')).toHaveLength(0);
+        expect(mockAgentManagerInstance.clear).not.toHaveBeenCalled();
     });
 });

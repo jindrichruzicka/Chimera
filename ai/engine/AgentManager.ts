@@ -70,6 +70,19 @@ export class AgentManager {
     }
 
     /**
+     * Drop every registered agent.
+     *
+     * Used by the host when abandoning a match back to the lobby
+     * (`engine:return_to_lobby`): the per-session agents carry state-machine
+     * and scheduler state that must not bleed into the next match, and
+     * {@link registerAgent} dedups by `playerId`, so a clean restart requires
+     * clearing first and then re-registering fresh agents.
+     */
+    public clear(): void {
+        this.agents.clear();
+    }
+
+    /**
      * Compute isMyTurn for a given player based on turn clock state.
      * This matches the logic in StateProjector.project().
      */

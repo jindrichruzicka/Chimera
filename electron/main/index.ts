@@ -1179,6 +1179,11 @@ export async function main(): Promise<void> {
     let saveInitialTurnMemento: ((playerId: PlayerId) => void) | null = null;
     let handleHostedLocalSeatAdded: ((entry: LobbyPlayerEntry) => void) | null = null;
     let broadcastRestoredSnapshot: (() => void) | null = null;
+    // Host-local match-state reset for return-to-lobby (#737). Assigned inside
+    // `onSessionHosted` (the `saveInitialTurnMemento` pattern) so the sibling
+    // `onReturnToLobbyRequested` callback can reuse that scope's closures; null
+    // when no hosted session is live.
+    let resetActiveSessionToLobby: (() => void) | null = null;
 
     // Joined-client perspective recording state (F44b T5). Non-null only inside a
     // joined session: `onSessionJoined` arms it, the cleanup fn disarms it, and
@@ -1359,97 +1364,111 @@ export async function main(): Promise<void> {
                     },
                 );
 
-            // Begin recording now that `seed` and `gameConfig` are resolved. The
-            // gameConfig mirrors the inputs to `buildInitialHostedSessionSnapshot`
-            // so a replay can reconstruct the same initial snapshot from seed +
-            // config (see `createBaseReplayInitialSnapshot`). Recording finalises
-            // on match end (in the pipeline) or is discarded on session close
-            // (in the teardown below). A startup failure must not break hosting.
+            // Renderer-egress gate for the host's *perspective* recording (F44b
+            // T5): `sendHostedRendererSnapshot` appends a frame only while this is
+            // true. Declared here so `startSessionRecordings` can re-arm it.
+            let hostPerspectiveActive = false;
+
+            // Begin (or re-arm) both host-side recordings. Extracted so
+            // return-to-lobby (#737) can restart recording for a fresh match —
+            // otherwise the restarted match would run with no replay and no host
+            // perspective recording. Called once now that `seed` and `gameConfig`
+            // are resolved, and again from `resetActiveSessionToLobby`.
+            //
+            // The replay `gameConfig` mirrors the inputs to
+            // `buildInitialHostedSessionSnapshot` so a replay can reconstruct the
+            // same initial snapshot from seed + config (see
+            // `createBaseReplayInitialSnapshot`). Recording finalises on match end
+            // (in the pipeline) or is discarded on session close / return-to-lobby.
+            // A startup failure must not break hosting (each recorder has its own
+            // try/catch so one's failure never suppresses the other).
             //
             // Intentional trade-off: a single `replayManager` is shared across all
             // hosted sessions, and `finaliseRecording` is fire-and-forget (it clears
             // `recording` only after the async `repository.save` resolves). If a new
-            // session's `startRecording` were to fire before a slow finalise resolved,
+            // `startRecording` were to fire before a slow finalise resolved,
             // `startRecording` would throw "a recording is already in progress"; the
-            // catch below keeps hosting alive and that session's replay is dropped
-            // rather than corrupting the in-flight one. The teardown's
-            // `abortRecording()` clears state between sessions, so this only bites on
-            // a back-to-back host with a still-saving prior replay. We accept that
-            // narrow, gracefully-degrading loss over blocking session startup on a
-            // disk write; the live transport path must never wait on replay I/O.
-            const playerDirectorySnapshot = playerDirectory.snapshot();
-            try {
-                replayPort.startRecording({
-                    engineVersion: app.getVersion(),
-                    gameId: HOSTED_GAME_ID,
-                    gameVersion: HOSTED_GAME_VERSION,
-                    gameConfig: {
-                        hostPlayerId: metadata.hostId,
-                        playerIds: initialPlayerIds,
-                        phase: 'lobby',
-                        ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
-                    },
-                    seed: sessionSeed,
-                    recordedAt: new Date().toISOString(),
-                    // Source display names from the host PlayerDirectory (all
-                    // connected clients' sanitised profiles). Synthetic AI slots
-                    // and not-yet-registered clients fall back to the stringified
-                    // playerId — cosmetic replay metadata only, never gameplay
-                    // state (invariant #59 unaffected).
-                    players: buildReplayPlayers(
-                        initialPlayerSlots,
-                        (id) => playerDirectorySnapshot[id]?.displayName,
-                    ),
-                });
-            } catch (err: unknown) {
-                lobbyLogger.error(
-                    'replay startRecording failed',
-                    err instanceof Error ? err : new Error(String(err)),
-                    { gameId: HOSTED_GAME_ID },
-                );
-            }
-
-            // Begin the host's *perspective* recording (F44b T5), locked to the
-            // seat the renderer is bound to at start (`metadata.hostId`, see
-            // `bindHostRendererRecipient` below). Frames are appended in
-            // `sendHostedRendererSnapshot`; after a pass-and-play handoff that
-            // egress sees snapshots for other seats, which the manager skips by
-            // the lock (invariant #98). Recorded in its own try/catch so neither
-            // recorder's startup failure suppresses the other or breaks hosting.
-            let hostPerspectiveActive = false;
-            if (perspectiveReplayPort.isRecording()) {
-                // Host/joined-client exclusion violated: another recording is
-                // already live. Skip rather than start over it (which would throw
-                // inside the manager) so the assumption fails loudly, not silently.
-                lobbyLogger.error(
-                    'perspective replay overlap: a recording was already in progress at host start',
-                    new Error('host/joined-client perspective recording mutual-exclusion violated'),
-                    { gameId: HOSTED_GAME_ID },
-                );
-            } else {
+            // catch below keeps hosting alive and that recording is dropped rather
+            // than corrupting the in-flight one. `abortRecording()` (teardown and
+            // the return-to-lobby reset) clears state between matches, so this only
+            // bites on a back-to-back start with a still-saving prior replay. We
+            // accept that narrow, gracefully-degrading loss over blocking startup on
+            // a disk write; the live transport path must never wait on replay I/O.
+            const startSessionRecordings = (): void => {
+                const playerDirectorySnapshot = playerDirectory.snapshot();
                 try {
-                    perspectiveReplayPort.start({
-                        formatVersion: 1,
-                        kind: 'perspective',
+                    replayPort.startRecording({
                         engineVersion: app.getVersion(),
                         gameId: HOSTED_GAME_ID,
                         gameVersion: HOSTED_GAME_VERSION,
-                        viewerId: metadata.hostId,
+                        gameConfig: {
+                            hostPlayerId: metadata.hostId,
+                            playerIds: initialPlayerIds,
+                            phase: 'lobby',
+                            ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
+                        },
+                        seed: sessionSeed,
                         recordedAt: new Date().toISOString(),
+                        // Source display names from the host PlayerDirectory (all
+                        // connected clients' sanitised profiles). Synthetic AI slots
+                        // and not-yet-registered clients fall back to the stringified
+                        // playerId — cosmetic replay metadata only, never gameplay
+                        // state (invariant #59 unaffected).
                         players: buildReplayPlayers(
                             initialPlayerSlots,
                             (id) => playerDirectorySnapshot[id]?.displayName,
                         ),
                     });
-                    hostPerspectiveActive = true;
                 } catch (err: unknown) {
                     lobbyLogger.error(
-                        'perspective replay start failed',
+                        'replay startRecording failed',
                         err instanceof Error ? err : new Error(String(err)),
                         { gameId: HOSTED_GAME_ID },
                     );
                 }
-            }
+
+                // The host's *perspective* recording is locked to the seat the
+                // renderer is bound to at start (`metadata.hostId`, see
+                // `bindHostRendererRecipient` below); after a pass-and-play handoff
+                // the egress sees snapshots for other seats, which the manager skips
+                // by the lock (invariant #98).
+                if (perspectiveReplayPort.isRecording()) {
+                    // Host/joined-client exclusion violated: another recording is
+                    // already live. Skip rather than start over it (which would
+                    // throw inside the manager) so the assumption fails loudly.
+                    lobbyLogger.error(
+                        'perspective replay overlap: a recording was already in progress at host start',
+                        new Error(
+                            'host/joined-client perspective recording mutual-exclusion violated',
+                        ),
+                        { gameId: HOSTED_GAME_ID },
+                    );
+                } else {
+                    try {
+                        perspectiveReplayPort.start({
+                            formatVersion: 1,
+                            kind: 'perspective',
+                            engineVersion: app.getVersion(),
+                            gameId: HOSTED_GAME_ID,
+                            gameVersion: HOSTED_GAME_VERSION,
+                            viewerId: metadata.hostId,
+                            recordedAt: new Date().toISOString(),
+                            players: buildReplayPlayers(
+                                initialPlayerSlots,
+                                (id) => playerDirectorySnapshot[id]?.displayName,
+                            ),
+                        });
+                        hostPerspectiveActive = true;
+                    } catch (err: unknown) {
+                        lobbyLogger.error(
+                            'perspective replay start failed',
+                            err instanceof Error ? err : new Error(String(err)),
+                            { gameId: HOSTED_GAME_ID },
+                        );
+                    }
+                }
+            };
+            startSessionRecordings();
 
             // Per-session commitment runtime shared between the projector and
             // SessionRuntime so `commit()` envelopes are automatically included
@@ -1713,11 +1732,16 @@ export async function main(): Promise<void> {
             const assignedSlotIndexes = new Set<number>(
                 initialPlayerSlots.map((slot) => slot.slotIndex),
             );
+            // Records each player's slot index as it is registered so the
+            // return-to-lobby reset (#737) can rebuild fresh agents for the exact
+            // current roster after `agentManager.clear()`.
+            const playerSlotIndexById = new Map<PlayerId, number>();
             // Guard: onGameStart must fire exactly once per session regardless
             // of player churn (WARN-1 fix — `>=` would re-fire on leave+rejoin).
             let gameStarted = false;
 
             const registerSlotAgent = (pid: PlayerId, slotIndex: number): void => {
+                playerSlotIndexById.set(pid, slotIndex);
                 const agentSlot = resolveAgentSlot(metadata, slotIndex);
                 if (agentSlot.kind === 'ai') {
                     simulationHost.registerAgent(
@@ -1755,6 +1779,47 @@ export async function main(): Promise<void> {
                     gameStarted = true;
                     simulationHost.onGameStart(sessionRuntime.getSnapshot());
                 }
+            };
+
+            // Host-local match-state reset for return-to-lobby (#737). The
+            // `engine:return_to_lobby` dispatch (in `onReturnToLobbyRequested`)
+            // already reset the *snapshot* to the lobby phase and broadcast it;
+            // this releases the per-session host state so the lobby is cleanly
+            // restartable. It must NOT close the lobby or fire the match-end /
+            // replay-finalise path (the action keeps `gameResult` null).
+            resetActiveSessionToLobby = (): void => {
+                // Per-session host-local state must not bleed into the next
+                // match (host-local state-ownership theme, Invariant #3).
+                clearUndoHistory([...activePlayers]);
+                // Discard, don't finalise: an abandoned match produces no replay
+                // file (a finished match already finalised+cleared its recording).
+                replayManager.abortRecording();
+                if (hostPerspectiveActive) {
+                    hostPerspectiveActive = false;
+                    perspectiveReplayPort.abort();
+                }
+                // Re-arm both recordings for the next match so a restarted match
+                // records a fresh replay + host perspective rather than running
+                // dark. Safe after the aborts above: the prior recording is cleared
+                // (or, for a just-finished match whose fire-and-forget finalise is
+                // still saving, gracefully dropped — see `startSessionRecordings`).
+                startSessionRecordings();
+                // Clear any staged commitment-mode state so a restart starts clean.
+                sessionRuntime.clearStagedReveals();
+                sessionCommitmentRuntime.restorePendingCommitments({});
+                // Re-arm the one-shot guard and rebuild fresh agents for the next
+                // match: AgentManager dedups by playerId and the AI brains carry
+                // state-machine/scheduler state from the abandoned match, so a
+                // clean restart requires clear-then-re-register. `tryStartGame`
+                // then re-fires `onGameStart` with the lobby snapshot once every
+                // expected seat is present — mirroring the original session start.
+                gameStarted = false;
+                agentManager.clear();
+                // Copy the entries first: `registerSlotAgent` re-writes the map.
+                for (const [pid, slotIndex] of [...playerSlotIndexById]) {
+                    registerSlotAgent(pid, slotIndex);
+                }
+                tryStartGame();
             };
 
             const broadcastCurrentGameSnapshot = (viewerId: PlayerId): void => {
@@ -1862,6 +1927,7 @@ export async function main(): Promise<void> {
                     saveInitialTurnMemento = null;
                     handleHostedLocalSeatAdded = null;
                     broadcastRestoredSnapshot = null;
+                    resetActiveSessionToLobby = null;
                 }
             };
         },
@@ -1959,6 +2025,32 @@ export async function main(): Promise<void> {
             // Non-active players receive their memento when engine:end_turn fires and
             // their turn begins.
             saveInitialTurnMemento?.(firstPlayer);
+        },
+        onReturnToLobbyRequested: (state) => {
+            // Reverse of `onGameStartRequested` (#737): abandon the live match
+            // back to the lobby. Dispatch `engine:return_to_lobby` into the
+            // active session — its pipeline broadcast carries the resulting
+            // `phase:'lobby'` snapshot to every client and the host's own
+            // renderer (Invariant #1/#3: clients follow via the projected
+            // PlayerSnapshot, not a side channel) — then run the host-local
+            // match-state resets that make the lobby restartable.
+            const sessionRuntime = activeSession;
+            if (sessionRuntime === null) {
+                throw new Error('LobbyManager: no hosted session runtime is available');
+            }
+            // A rejected dispatch (the reducer's host-only guard) throws
+            // `ActionUnauthorizedError` out of `applyAction`, so the host-local
+            // reset below never runs and `returnToLobby()` rejects — fail-loud,
+            // mirroring `onGameStartRequested`. In the normal flow the dispatcher
+            // is always the host (`state.info.hostId` === `snapshot.hostPlayerId`),
+            // so the action is accepted and the reset proceeds.
+            sessionRuntime.applyAction({
+                type: 'engine:return_to_lobby',
+                playerId: state.info.hostId,
+                tick: sessionRuntime.getSnapshot().tick,
+                payload: {},
+            });
+            resetActiveSessionToLobby?.();
         },
         onLobbyStateChanged: (state) => {
             BrowserWindow.getAllWindows().forEach((win) => {
