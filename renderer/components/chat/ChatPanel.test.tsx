@@ -12,7 +12,6 @@ import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { useToastStore } from '../../state/toastStore';
 import type { ChatMessage } from '@chimera/shared/chat.js';
-import type { LobbyState } from '@chimera/shared/messages-schemas.js';
 import type { PlayerId } from '@chimera/electron/preload/api-types.js';
 
 // ─── Test helpers ───────────────────────────────────────────────────────────
@@ -42,13 +41,6 @@ function makeMessage(overrides: Partial<ChatMessage> = {}): ChatMessage {
         body: 'hello',
         serverTime: 1,
         ...overrides,
-    };
-}
-
-function makeLobby(players: LobbyState['players']): LobbyState {
-    return {
-        info: { sessionId: 'session-1', hostId: pid('player-self'), gameId: 'tactics' },
-        players,
     };
 }
 
@@ -122,6 +114,30 @@ describe('ChatPanel', () => {
         expect(screen.queryByTestId('chat-loading')).not.toBeInTheDocument();
     });
 
+    // ── Caption (accessible label) ──────────────────────────────────────────────
+
+    it("defaults the panel's accessible label to 'Chat'", async () => {
+        render(<ChatPanel />);
+        await waitUntilReady();
+
+        expect(screen.getByTestId('chat-panel')).toHaveAttribute('aria-label', 'Chat');
+    });
+
+    it('uses the provided title as the panel accessible label', async () => {
+        render(<ChatPanel title="Match chat" />);
+        await waitUntilReady();
+
+        expect(screen.getByTestId('chat-panel')).toHaveAttribute('aria-label', 'Match chat');
+    });
+
+    it('applies the title to the unavailable placeholder too', () => {
+        delete (window as unknown as { __chimera?: unknown }).__chimera;
+
+        render(<ChatPanel title="Match chat" />);
+
+        expect(screen.getByTestId('chat-unavailable')).toHaveAttribute('aria-label', 'Match chat');
+    });
+
     // ── Resolved + muted filtering ────────────────────────────────────────────
 
     it('renders buffered messages from the store once history resolves', async () => {
@@ -137,22 +153,6 @@ describe('ChatPanel', () => {
         await waitUntilReady();
 
         expect(screen.getByText('from A')).toBeInTheDocument();
-        expect(screen.getByText('from B')).toBeInTheDocument();
-    });
-
-    it('hides messages from muted senders at render time', async () => {
-        useChatStore.setState({
-            messages: [
-                makeMessage({ id: 'm-1', fromPlayerId: pid('player-a'), body: 'from A' }),
-                makeMessage({ id: 'm-2', fromPlayerId: pid('player-b'), body: 'from B' }),
-            ],
-            muted: new Set<PlayerId>([pid('player-a')]),
-        });
-
-        render(<ChatPanel />);
-        await waitUntilReady();
-
-        expect(screen.queryByText('from A')).not.toBeInTheDocument();
         expect(screen.getByText('from B')).toBeInTheDocument();
     });
 
@@ -276,32 +276,6 @@ describe('ChatPanel', () => {
         await waitFor(() => expect(input).toHaveValue(''));
     });
 
-    it('sends a private-scoped message to the selected recipient', async () => {
-        useLobbyUiStore.getState().setLocalLobbyContext(pid('player-self'), [pid('player-self')]);
-        useLobbyStore.getState().applyLobbyState(
-            makeLobby([
-                { playerId: pid('player-self'), displayName: 'Me', ready: true },
-                { playerId: pid('player-b'), displayName: 'Bob', ready: true },
-            ]),
-        );
-
-        render(<ChatPanel />);
-        await waitUntilReady();
-
-        fireEvent.change(screen.getByTestId('chat-scope-select'), { target: { value: 'private' } });
-        fireEvent.change(screen.getByTestId('chat-recipient-select'), {
-            target: { value: 'player-b' },
-        });
-        const input = screen.getByTestId('chat-body-input');
-        fireEvent.change(input, { target: { value: 'psst' } });
-        pressEnter(input);
-
-        expect(chatMock.send).toHaveBeenCalledWith('psst', {
-            kind: 'private',
-            toPlayerId: 'player-b',
-        });
-    });
-
     it('does not dispatch when the body is empty', async () => {
         render(<ChatPanel />);
         await waitUntilReady();
@@ -363,16 +337,6 @@ describe('ChatPanel', () => {
         expect(useToastStore.getState().queue).toHaveLength(0);
     });
 
-    // ── Scope selector ─────────────────────────────────────────────────────────
-
-    it('renders the team scope option as disabled', async () => {
-        render(<ChatPanel />);
-        await waitUntilReady();
-
-        const teamOption = screen.getByRole('option', { name: /team/i });
-        expect(teamOption).toBeDisabled();
-    });
-
     // ── Auto-scroll ────────────────────────────────────────────────────────────
 
     it('scrolls the message list to the bottom when a new message arrives', async () => {
@@ -416,50 +380,5 @@ describe('ChatPanel', () => {
         expect(extractDeclarations(chatPanelCss, '.messages .scroll')).toContain(
             'max-block-size: 100%',
         );
-    });
-
-    // ── Mute toggle ──────────────────────────────────────────────────────────
-
-    it('mutes a sender from the message list, hiding their messages', async () => {
-        useChatStore.setState({
-            messages: [
-                makeMessage({ id: 'm-1', fromPlayerId: pid('player-a'), body: 'from A' }),
-                makeMessage({ id: 'm-2', fromPlayerId: pid('player-b'), body: 'from B' }),
-            ],
-            muted: new Set<PlayerId>(),
-        });
-
-        render(<ChatPanel />);
-        await waitUntilReady();
-
-        expect(screen.getByText('from A')).toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('chat-mute-player-a'));
-
-        expect(screen.queryByText('from A')).not.toBeInTheDocument();
-        expect(screen.getByText('from B')).toBeInTheDocument();
-        expect(useChatStore.getState().muted.has(pid('player-a'))).toBe(true);
-        // Mute also propagates to the main-process ChatHub over IPC so it
-        // suppresses further delivery and filters history() — not only a
-        // renderer-side render filter.
-        expect(chatMock.mute).toHaveBeenCalledWith(pid('player-a'));
-    });
-
-    it('unmutes a sender from the muted strip, restoring their messages', async () => {
-        useChatStore.setState({
-            messages: [makeMessage({ id: 'm-1', fromPlayerId: pid('player-a'), body: 'from A' })],
-            muted: new Set<PlayerId>([pid('player-a')]),
-        });
-
-        render(<ChatPanel />);
-        await waitUntilReady();
-
-        expect(screen.queryByText('from A')).not.toBeInTheDocument();
-        fireEvent.click(screen.getByTestId('chat-unmute-player-a'));
-
-        expect(screen.getByText('from A')).toBeInTheDocument();
-        expect(useChatStore.getState().muted.has(pid('player-a'))).toBe(false);
-        // Unmute is mirrored to the main-process ChatHub over IPC so delivery
-        // and history() are restored there too.
-        expect(chatMock.unmute).toHaveBeenCalledWith(pid('player-a'));
     });
 });

@@ -50,7 +50,7 @@
     align-items: baseline;
     column-gap: var(--ch-space-sm);
     display: grid;
-    grid-template-columns: max-content minmax(var(--ch-space-none), 1fr) max-content;
+    grid-template-columns: max-content minmax(var(--ch-space-none), 1fr);
 }
 
 .author {
@@ -67,52 +67,10 @@
     overflow-wrap: anywhere;
 }
 
-.mutedStrip {
-    align-items: center;
-    border-color: var(--ch-color-border-muted);
-    border-radius: var(--ch-radius-md);
-    border-style: solid;
-    border-width: var(--ch-border-width-sm);
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ch-space-xs);
-    padding: var(--ch-space-xs);
-}
-
-.mutedLabel {
-    color: var(--ch-color-text-secondary);
-    font-size: var(--ch-font-size-sm);
-}
-
-.mutedChip {
-    align-items: center;
-    color: var(--ch-color-text-primary);
-    display: inline-flex;
-    font-size: var(--ch-font-size-sm);
-    gap: var(--ch-space-xs);
-}
-
 .composer {
     display: flex;
     flex-direction: column;
     gap: var(--ch-space-sm);
-}
-
-/*
- * Scope (+ recipient) share one row above the message input. Keeping the
- * selectors on their own row means the message input always sits on the row
- * below at full width — it never shifts when the recipient picker toggles in
- * and out for the `private` scope.
- */
-.selectors {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ch-space-sm);
-}
-
-.selector {
-    flex: 1 1 var(--ch-space-none);
-    min-inline-size: 0;
 }
 
 .error {

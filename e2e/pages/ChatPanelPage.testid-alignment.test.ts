@@ -3,12 +3,8 @@
  * ChatPanelPage.ts has a matching `data-testid="..."` attribute in the renderer
  * chat sources. ChatPanelPage locators span two sources:
  *   - renderer/components/chat/ChatPanel.tsx  (panel, messages, body input,
- *     scope/recipient selects, send error, muted strip, empty/loading)
+ *     send error, empty/loading)
  *   - games/tactics/screens/TacticsGameHud.tsx  (in-match toggle + drawer)
- *
- * Dynamic per-sender locators (`chat-mute-${id}` / `chat-unmute-${id}`) use
- * template literals, not the single-quote `getByTestId('...')` form, so they are
- * intentionally excluded from this literal alignment scan.
  *
  * Prevents silent POM/renderer test-id drift (cf. LobbyPage.testid-alignment.test.ts).
  *

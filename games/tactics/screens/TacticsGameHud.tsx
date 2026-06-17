@@ -239,15 +239,19 @@ export function TacticsGameHud({
                 }}
                 open={chatOpen}
                 placement="right"
-                title="Match chat"
+                title={TACTICS_CHAT_TITLE}
             >
-                <ChatPanel />
+                <ChatPanel title={TACTICS_CHAT_TITLE} />
             </Drawer>
         </>
     );
 }
 
 const TACTICS_CHAT_DRAWER_ID = 'tactics-chat-drawer';
+
+/** Caption for the in-match chat: the visible Drawer title and the ChatPanel's
+ *  accessible label, kept in sync from a single source. */
+const TACTICS_CHAT_TITLE = 'Match chat';
 
 function resolveTacticsTurnStatus(isMyTurn: boolean): TacticsTurnStatus {
     if (isMyTurn) {

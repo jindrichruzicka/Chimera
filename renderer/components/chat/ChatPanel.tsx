@@ -3,53 +3,40 @@
 // renderer/components/chat/ChatPanel.tsx
 //
 // Shared chat UI (§4.29 — Chat System). Renders the renderer `chatStore`
-// rolling buffer, hides muted senders at render time, subscribes to the host
-// push channel (`window.__chimera.chat.onMessage`) and feeds it into the store,
-// and provides a send box with a scope selector.
+// rolling buffer, subscribes to the host push channel
+// (`window.__chimera.chat.onMessage`) and feeds it into the store, and provides
+// a send box. Every message is lobby-scoped.
 //
-// Mute/unmute is dual-written: the renderer `chatStore` gives an instant local
-// view filter (and reveals already-buffered messages on unmute), while the same
-// action is mirrored to the host-side `ChatHub` via `window.__chimera.chat.mute`
-// /`unmute` so the main process also suppresses delivery and filters `history()`
-// backfill — the IPC mute surface is not a dead path.
+// For the initial release the per-message scope selector and the mute/unmute
+// controls were intentionally removed from this panel — it is now a single
+// lobby-scoped send/receive surface. The underlying API is untouched and stays
+// available for a future UI: the host relay still routes by `ChatScope`
+// (Invariant #73), `window.__chimera.chat.mute`/`unmute` still suppress
+// host-side delivery and filter `history()` backfill, and the renderer
+// `chatStore` still tracks the `muted` set.
 //
 // This is a game-agnostic shared component: it imports nothing from `games/*` and
 // never derives content from authoritative simulation state. Chat is a cosmetic
 // side channel (Invariant #72) and is routed through the host relay (Invariant
 // #73) — this component never messages peers directly.
 //
-// Scope selector:
-//   - lobby   → sends directly.
-//   - private → reveals a recipient picker built from the lobby roster (minus
-//               self); the selection resolves to a branded `PlayerId`.
-//   - team    → shown but disabled: no team-membership model exists in the
-//               renderer yet and host-side `teamOf` defaults to "no team".
+// The `title` prop sets the panel's accessible label (default `'Chat'`); games
+// override it to name the panel for their context (Tactics → `'Match chat'`). It
+// is the accessible name, not a visible heading — a host wrapper (e.g. `Drawer`)
+// renders its own visible caption.
 //
 // Task: F45 / T05 (issue #683)
 
-import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { IconButton } from '../ui/IconButton';
+import React, { useEffect, useRef, useState } from 'react';
 import { ScrollArea } from '../ui/ScrollArea';
-import { Select } from '../ui/Select';
-import type { SelectOption } from '../ui/Select';
 import { TextInput } from '../ui/TextInput';
 import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
-import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { useToastStore } from '../../state/toastStore';
 import type { ChatMessage, ChatRejectReason } from '@chimera/shared/chat.js';
 import type { LobbyState } from '@chimera/shared/messages-schemas.js';
-import { playerId, type ChatScope, type PlayerId } from '@chimera/electron/preload/api-types.js';
+import type { ChatScope, PlayerId } from '@chimera/electron/preload/api-types.js';
 import styles from './ChatPanel.module.css';
-
-type ScopeKind = ChatScope['kind'];
-
-/** Scope-selector options; `team` is disabled until team membership is modelled. */
-const SCOPE_OPTIONS: readonly SelectOption[] = [
-    { value: 'lobby', label: 'Lobby' },
-    { value: 'team', label: 'Team (coming soon)', disabled: true },
-    { value: 'private', label: 'Private' },
-];
 
 /**
  * Friendly, inline copy for a relay rejection. Shown next to the composer for
@@ -68,34 +55,26 @@ const REJECT_REASON_LABELS: Record<ChatRejectReason, string> = {
 /** Stable empty roster reference so the selector default keeps a steady identity. */
 const EMPTY_ROSTER: LobbyState['players'] = [];
 
-/**
- * Mute a sender. Updates the renderer `chatStore` (the instant local view
- * filter) AND mirrors the mute to the host-side `ChatHub` over the IPC bridge,
- * so the main process suppresses further delivery of that sender's messages and
- * filters them from `history()` backfill — not merely a render-time filter.
- */
-function muteSender(id: PlayerId): void {
-    useChatStore.getState().mute(id);
-    window.__chimera?.chat?.mute(id);
+/** Every message sent from this panel is lobby-scoped (stable identity). */
+const LOBBY_SCOPE: ChatScope = { kind: 'lobby' };
+
+export interface ChatPanelProps {
+    /**
+     * Accessible label for the panel's root region. Defaults to `'Chat'`. Games
+     * override it to name the panel for their context (e.g. Tactics →
+     * `'Match chat'`); this is the panel's accessible name, not a visible
+     * heading — a host that wraps the panel (e.g. in a `Drawer`) renders its own
+     * visible caption.
+     */
+    readonly title?: string;
 }
 
-/** Reverse {@link muteSender}: restore the renderer view and the host-side
- *  `ChatHub` delivery/history filter. */
-function unmuteSender(id: PlayerId): void {
-    useChatStore.getState().unmute(id);
-    window.__chimera?.chat?.unmute(id);
-}
-
-export function ChatPanel(): React.ReactElement {
+export function ChatPanel({ title = 'Chat' }: ChatPanelProps = {}): React.ReactElement {
     const messages = useChatStore((state) => state.messages);
-    const muted = useChatStore((state) => state.muted);
     const roster = useLobbyStore((state) => state.lobbyState?.players ?? EMPTY_ROSTER);
-    const localPlayerId = useLobbyUiStore((state) => state.localPlayerId);
 
     const bridgeAvailable = Boolean(window.__chimera?.chat);
     const [isLoading, setIsLoading] = useState<boolean>(bridgeAvailable);
-    const [scopeKind, setScopeKind] = useState<ScopeKind>('lobby');
-    const [recipientId, setRecipientId] = useState<string>('');
     const [body, setBody] = useState<string>('');
     const [sendError, setSendError] = useState<string | null>(null);
 
@@ -167,53 +146,18 @@ export function ChatPanel(): React.ReactElement {
     const displayNameOf = (id: PlayerId): string =>
         roster.find((player) => player.playerId === id)?.displayName ?? id;
 
-    const recipientOptions = useMemo<readonly SelectOption[]>(() => {
-        const others = roster.filter((player) => player.playerId !== localPlayerId);
-        return [
-            {
-                value: '',
-                label: others.length === 0 ? 'No recipients available' : 'Select recipient…',
-                disabled: true,
-            },
-            ...others.map((player) => ({
-                value: player.playerId,
-                label: player.displayName || player.playerId,
-            })),
-        ];
-    }, [roster, localPlayerId]);
-
-    const visibleMessages = useMemo(
-        () => messages.filter((message) => !muted.has(message.fromPlayerId)),
-        [messages, muted],
-    );
-    const mutedSenders = useMemo(() => Array.from(muted), [muted]);
-
-    // Pin the view to the newest message: whenever one lands (live push, history
-    // backfill, or an unmute reveal), scroll the message region to the bottom.
+    // Pin the view to the newest message: whenever one lands (live push or
+    // history backfill), scroll the message region to the bottom.
     const messageListRef = useRef<HTMLUListElement | null>(null);
-    const lastVisibleMessageId = visibleMessages[visibleMessages.length - 1]?.id;
+    const lastMessageId = messages[messages.length - 1]?.id;
     useEffect(() => {
         const scroller = messageListRef.current?.closest('[data-ch-scroll-area]');
         if (scroller instanceof HTMLElement) {
             scroller.scrollTop = scroller.scrollHeight;
         }
-    }, [lastVisibleMessageId]);
-
-    function buildScope(): ChatScope | null {
-        if (scopeKind === 'lobby') {
-            return { kind: 'lobby' };
-        }
-        if (scopeKind === 'private') {
-            const recipient = roster.find((player) => player.playerId === recipientId);
-            // Roster `playerId` is a raw string (lobby Zod schema); promote it to
-            // the branded `PlayerId` the scope requires via the authorised cast site.
-            return recipient ? { kind: 'private', toPlayerId: playerId(recipient.playerId) } : null;
-        }
-        return null; // team is disabled / not yet routable
-    }
+    }, [lastMessageId]);
 
     const trimmedBody = body.trim();
-    const scope = buildScope();
 
     function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
         event.preventDefault();
@@ -222,7 +166,7 @@ export function ChatPanel(): React.ReactElement {
 
     // Enter sends the message (there is no Send button). Route through the form's
     // submit handler so there is a single send path; skip while an IME candidate
-    // is being composed. `submit()` guards empty/unaddressed messages internally.
+    // is being composed. `submit()` guards empty messages internally.
     function handleBodyKeyDown(event: React.KeyboardEvent<HTMLInputElement>): void {
         if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
             event.preventDefault();
@@ -232,11 +176,11 @@ export function ChatPanel(): React.ReactElement {
 
     async function submit(): Promise<void> {
         const chat = window.__chimera?.chat;
-        if (!chat || trimmedBody === '' || scope === null) {
+        if (!chat || trimmedBody === '') {
             return;
         }
         setSendError(null);
-        const result = await chat.send(trimmedBody, scope);
+        const result = await chat.send(trimmedBody, LOBBY_SCOPE);
         if (result.ok) {
             setBody('');
         } else {
@@ -253,34 +197,31 @@ export function ChatPanel(): React.ReactElement {
 
     if (!bridgeAvailable) {
         return (
-            <section aria-label="Chat" className={styles['root']} data-testid="chat-unavailable">
+            <section aria-label={title} className={styles['root']} data-testid="chat-unavailable">
                 <p className={styles['placeholder']}>Chat is unavailable.</p>
             </section>
         );
     }
 
     return (
-        <section aria-label="Chat" className={styles['root']} data-testid="chat-panel">
+        <section aria-label={title} className={styles['root']} data-testid="chat-panel">
             <div className={styles['messages']} data-testid="chat-messages">
                 {isLoading ? (
                     <p className={styles['placeholder']} data-testid="chat-loading">
                         Loading messages…
                     </p>
-                ) : visibleMessages.length === 0 ? (
+                ) : messages.length === 0 ? (
                     <p className={styles['placeholder']} data-testid="chat-empty">
                         No messages yet.
                     </p>
                 ) : (
                     <ScrollArea aria-label="Chat messages" className={styles['scroll']}>
                         <ul className={styles['list']} ref={messageListRef}>
-                            {visibleMessages.map((message) => (
+                            {messages.map((message) => (
                                 <ChatMessageRow
                                     key={message.id}
                                     message={message}
                                     senderName={displayNameOf(message.fromPlayerId)}
-                                    onMute={() => {
-                                        muteSender(message.fromPlayerId);
-                                    }}
                                 />
                             ))}
                         </ul>
@@ -288,50 +229,7 @@ export function ChatPanel(): React.ReactElement {
                 )}
             </div>
 
-            {mutedSenders.length > 0 ? (
-                <div className={styles['mutedStrip']} data-testid="chat-muted-strip">
-                    <span className={styles['mutedLabel']}>Muted:</span>
-                    {mutedSenders.map((id) => (
-                        <span className={styles['mutedChip']} key={id}>
-                            {displayNameOf(id)}
-                            <IconButton
-                                aria-label={`Unmute ${displayNameOf(id)}`}
-                                data-testid={`chat-unmute-${id}`}
-                                onClick={() => {
-                                    unmuteSender(id);
-                                }}
-                                variant="ghost"
-                            >
-                                Unmute
-                            </IconButton>
-                        </span>
-                    ))}
-                </div>
-            ) : null}
-
             <form className={styles['composer']} onSubmit={handleSubmit}>
-                <div className={styles['selectors']}>
-                    <Select
-                        className={styles['selector']}
-                        data-testid="chat-scope-select"
-                        label="Scope"
-                        onValueChange={(value) => {
-                            setScopeKind(value as ScopeKind);
-                        }}
-                        options={SCOPE_OPTIONS}
-                        value={scopeKind}
-                    />
-                    {scopeKind === 'private' ? (
-                        <Select
-                            className={styles['selector']}
-                            data-testid="chat-recipient-select"
-                            label="Recipient"
-                            onValueChange={setRecipientId}
-                            options={recipientOptions}
-                            value={recipientId}
-                        />
-                    ) : null}
-                </div>
                 {/* The error sits above the input, not below it, so the input
                     keeps its bottom-anchored position when an error appears. */}
                 {sendError ? (
@@ -356,10 +254,9 @@ export function ChatPanel(): React.ReactElement {
 interface ChatMessageRowProps {
     readonly message: ChatMessage;
     readonly senderName: string;
-    readonly onMute: () => void;
 }
 
-function ChatMessageRow({ message, senderName, onMute }: ChatMessageRowProps): React.ReactElement {
+function ChatMessageRow({ message, senderName }: ChatMessageRowProps): React.ReactElement {
     return (
         <li
             className={styles['message']}
@@ -368,14 +265,6 @@ function ChatMessageRow({ message, senderName, onMute }: ChatMessageRowProps): R
         >
             <span className={styles['author']}>{senderName}</span>
             <span className={styles['body']}>{message.body}</span>
-            <IconButton
-                aria-label={`Mute ${senderName}`}
-                data-testid={`chat-mute-${message.fromPlayerId}`}
-                onClick={onMute}
-                variant="ghost"
-            >
-                Mute
-            </IconButton>
         </li>
     );
 }

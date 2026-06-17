@@ -7,7 +7,6 @@
  * the lobby screen mounts no chat UI — so all UI-driven cases run in a live
  * match through the collapsed-by-default chat drawer:
  *   - in-match send/receive across host and client (chat drawer);
- *   - mute hides a sender's messages, unmute restores them;
  *   - the 500-entry rolling-buffer cap;
  *   - rate-limit rejection once messagesPerMinute is exceeded (sent through the
  *     IPC bridge from a hosted lobby session — the relay is UI-independent);
@@ -186,35 +185,6 @@ gameTest.describe('Tactics chat — in-match', () => {
 
             await hostChat.sendLobby('gg from host');
             await clientChat.waitForMessage('gg from host');
-        },
-    );
-
-    gameTest(
-        'muting a sender hides their messages; unmuting restores them',
-        async ({ hostWindow, clientWindow }) => {
-            const hostChat = new ChatPanelPage(hostWindow);
-            const clientChat = new ChatPanelPage(clientWindow);
-            await hostChat.openInMatchChat();
-            await clientChat.openInMatchChat();
-
-            await clientChat.sendLobby('mute me please');
-            await hostChat.waitForMessage('mute me please');
-
-            // Resolve the client's PlayerId from the delivered row's `data-from`
-            // (the lobby roster UI is no longer on screen once the match starts).
-            const clientId = await hostChat
-                .withText('mute me please')
-                .first()
-                .getAttribute('data-from');
-            if (!clientId) {
-                throw new Error('delivered chat row is missing its data-from sender id');
-            }
-
-            await hostChat.muteSender(clientId);
-            await expect.poll(() => hostChat.messagesFrom(clientId).count()).toBe(0);
-
-            await hostChat.unmuteSender(clientId);
-            await hostChat.waitForMessage('mute me please');
         },
     );
 
