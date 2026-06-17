@@ -43,12 +43,25 @@ vi.mock('./debug/DebugInspectorToggle.js', () => ({
     DebugInspectorToggle: () => <div data-testid="debug-inspector-toggle-mock" />,
 }));
 
+const inGameMenuHostSpy = vi.fn((_props: Record<string, unknown>) => null);
+
+// Mock InGameMenuHost — it subscribes via useInputAction and registers an
+// Escape-stack layer, both needing app-level providers. Mocking keeps these unit
+// tests hermetic while letting us assert RegistryGameShell forwards the slot.
+vi.mock('./InGameMenuHost.js', () => ({
+    InGameMenuHost: (props: Record<string, unknown>) => {
+        inGameMenuHostSpy(props);
+        return null;
+    },
+}));
+
 const TEST_AUDIO_REF = 'tactics/audio/sfx/test-hit.ogg' as AssetRef<AudioClipAsset>;
 
 afterEach(() => {
     cleanup();
     vi.restoreAllMocks();
     eventAudioPlayerSpy.mockReset();
+    inGameMenuHostSpy.mockReset();
     // uiStore is a module singleton; restore the default 'board' screen so the
     // banner-visibility tests are independent of execution order.
     useUiStore.getState().resetScreenNavigation();
@@ -113,6 +126,49 @@ describe('GameShell page object locators', () => {
         expect(
             (await screen.findByTestId('audio-context-board')).getAttribute('data-audio-manager'),
         ).toBe('provided');
+    });
+
+    it('mounts InGameMenuHost and forwards the inGameMenu slot, isHost, and localPlayerId', () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+        const InGameMenu = (): React.ReactElement => <div />;
+
+        renderWithAudio(
+            <GameShell
+                registry={{
+                    board: () => <div data-testid="registry-board">Registry board</div>,
+                    inGameMenu: InGameMenu,
+                }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                isHost
+            />,
+        );
+
+        expect(inGameMenuHostSpy).toHaveBeenCalledWith({
+            inGameMenu: InGameMenu,
+            isHost: true,
+            localPlayerId: playerId('p1'),
+        });
+    });
+
+    it('omits the inGameMenu prop so the host shows the engine default when the slot is absent', () => {
+        const snapshot = makePlayerSnapshot({ sceneId: makeSceneId('engine:game') });
+
+        renderWithAudio(
+            <GameShell
+                registry={{ board: () => <div data-testid="registry-board" /> }}
+                snapshot={snapshot}
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+            />,
+        );
+
+        expect(inGameMenuHostSpy).toHaveBeenCalledTimes(1);
+        const props = inGameMenuHostSpy.mock.calls[0]?.[0] ?? {};
+        expect(props).not.toHaveProperty('inGameMenu');
+        expect(props).not.toHaveProperty('isHost');
+        expect(props['localPlayerId']).toBe(playerId('p1'));
     });
 
     it('stops all audio when the registry match phase ends', () => {

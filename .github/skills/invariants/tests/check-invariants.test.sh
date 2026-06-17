@@ -341,6 +341,51 @@ test_clean_gameshell_passes() {
     fi
 }
 
+# Test 11b: import from games/ inside InGameMenuHost.tsx → violation [invariant-48/80]
+# Invariant #80 names InGameMenuHost alongside GameShell as a coupling surface.
+test_games_import_in_ingamemenuhost_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/components/shell/InGameMenuHost.tsx" \
+        "import { TacticsMenu } from '../../../games/tactics/screens/Menu';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-48/80\]'; then
+            pass "games/ import in InGameMenuHost.tsx detected as [invariant-48/80]"
+        else
+            fail "InGameMenuHost games/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "games/ import in InGameMenuHost.tsx not detected (exit 0)"
+    fi
+}
+
+# Test 12b: clean InGameMenuHost.tsx (engine-internal import only) → NOT flagged
+test_clean_ingamemenuhost_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/components/shell/InGameMenuHost.tsx" \
+        "import { Modal } from '../ui/Modal.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "clean InGameMenuHost.tsx (engine-internal import) not flagged"
+    else
+        fail "clean InGameMenuHost.tsx wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # Test 13: CHIMERA_DEBUG in package.json → violation [invariant-27]
 test_chimera_debug_in_package_json_detected() {
     local tmp
@@ -712,6 +757,8 @@ test_eslint_fixture_not_flagged
 test_production_still_flagged_alongside_test_mention
 test_games_import_in_gameshell_detected
 test_clean_gameshell_passes
+test_games_import_in_ingamemenuhost_detected
+test_clean_ingamemenuhost_passes
 test_chimera_debug_in_package_json_detected
 test_bracket_access_chimera_debug_detected
 test_bracket_access_node_env_detected

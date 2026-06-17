@@ -200,7 +200,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 **79.** All `registerExtension()` calls must complete before `api.ts` is loaded. `buildExtensionsApi()` is called exactly once, immediately before `contextBridge.exposeInMainWorld`. A late registration after `buildExtensionsApi()` has run will mutate the internal registry but the frozen copy already handed to `exposeInMainWorld` will not reflect it.
 
-**80.** `GameShell.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code.
+**80.** `GameShell.tsx` and `InGameMenuHost.tsx` must never import from any `games/*` path. The `GameScreenRegistry` passed as a prop is the sole coupling point between the engine renderer and a game's React code; the `inGameMenu` slot reaches `InGameMenuHost` only through that registry (F55).
 
 ---
 

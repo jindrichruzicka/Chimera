@@ -104,19 +104,25 @@ check_grep "3" \
     'GameSnapshot' \
     electron/preload renderer
 
-# ─── Check 7: GameShell.tsx must not import from games/ (invariants 48 & 80) ──
-# GameShell stays game-agnostic; the GameScreenRegistry passed as a prop is the
-# sole coupling point between the engine renderer and a game's React code.
-GAMESHELL="renderer/components/shell/GameShell.tsx"
-if [[ -f "${GAMESHELL}" ]]; then
+# ─── Check 7: GameShell / InGameMenuHost must not import games/ (inv 48 & 80) ─
+# These engine-renderer shell components stay game-agnostic; the
+# GameScreenRegistry passed as a prop is the sole coupling point between the
+# engine renderer and a game's React code. Invariant #80 names both GameShell
+# and InGameMenuHost as the engine↔game-React coupling surfaces.
+SHELL_GAME_AGNOSTIC_FILES=(
+    "renderer/components/shell/GameShell.tsx"
+    "renderer/components/shell/InGameMenuHost.tsx"
+)
+for shell_file in "${SHELL_GAME_AGNOSTIC_FILES[@]}"; do
+    [[ -f "${shell_file}" ]] || continue
     while IFS= read -r match; do
-        violation "48/80" "${match}"
+        violation "48/80" "${shell_file}:${match}"
     done < <(
-        grep -nE "from ['\"].*games/" "${GAMESHELL}" \
+        grep -nE "from ['\"].*games/" "${shell_file}" \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         || true
     )
-fi
+done
 
 # ─── Check 8: CHIMERA_DEBUG never appears in packaging config (invariant 27) ──
 # Production packaging must never be able to set the debug flag. The scan

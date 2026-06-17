@@ -34,6 +34,7 @@ import { SceneRouter } from '../scene/SceneRouter.js';
 import { ContentDatabaseProvider } from './ContentDatabaseContext.js';
 import { DebugInspectorToggle } from './debug/DebugInspectorToggle.js';
 import { FadeProvider } from './FadeContext.js';
+import { InGameMenuHost } from './InGameMenuHost.js';
 import { PerfHud } from './perf/PerfHud.js';
 
 interface GameShellBaseProps {
@@ -170,6 +171,13 @@ function RegistryGameShell({
                             {...(fadeInMs === undefined ? {} : { fadeInMs })}
                         />
                     </GameShellFrame>
+                    <InGameMenuHost
+                        {...(registry.inGameMenu === undefined
+                            ? {}
+                            : { inGameMenu: registry.inGameMenu })}
+                        {...(isHost === undefined ? {} : { isHost })}
+                        {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                    />
                 </FadeProvider>
             </ContentDatabaseProvider>
         </AssetManagerContext.Provider>
