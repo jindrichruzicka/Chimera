@@ -30,6 +30,7 @@ import {
     Badge,
     Button,
     Heading,
+    IconButton,
     Select,
     Toggle,
     ToggleButton,
@@ -43,6 +44,15 @@ import {
 } from '../lobby/lobby-setup.js';
 import { paletteFromCollections } from '../content/tacticsContent.js';
 import styles from './TacticsLobbyScreen.module.css';
+
+/**
+ * Copy the joinable lobby address to the clipboard so the host can paste it to
+ * the other player. Mirrors `NetworkPanel`'s copy affordance; the optional chain
+ * keeps the call a no-op where `navigator.clipboard` is absent (e.g. jsdom).
+ */
+function copyLobbyAddress(value: string): void {
+    void navigator.clipboard?.writeText(value);
+}
 
 export function TacticsLobbyScreen({
     lobbyState,
@@ -100,6 +110,25 @@ export function TacticsLobbyScreen({
                         {isHost ? 'Host' : 'Player'}
                     </Badge>
                 </div>
+                {isHost ? (
+                    <div className={styles['address']}>
+                        <span className={styles['address-label']}>Lobby address</span>
+                        <div className={styles['address-row']}>
+                            <code className={styles['address-code']} data-testid="lobby-address">
+                                {lobbyState.info.sessionId}
+                            </code>
+                            <IconButton
+                                aria-label="Copy lobby address"
+                                data-testid="lobby-address-copy"
+                                onClick={() => {
+                                    copyLobbyAddress(lobbyState.info.sessionId);
+                                }}
+                            >
+                                ⧉
+                            </IconButton>
+                        </div>
+                    </div>
+                ) : null}
                 <Select
                     className={styles['board-color-select']}
                     data-testid="tactics-board-color-select"
@@ -115,8 +144,7 @@ export function TacticsLobbyScreen({
                     checked={commitmentEnabled}
                     data-testid="tactics-commitment-scheme-toggle"
                     disabled={!isHost}
-                    helperText="Players act in secret each turn, then reveal simultaneously."
-                    label="Commitment scheme"
+                    label="Simultaneous turns"
                     onCheckedChange={(next) => {
                         setMatchSetting(
                             TACTICS_TURN_MODE_SETTING,
@@ -194,7 +222,8 @@ export function TacticsLobbyScreen({
                             AI Players
                         </Heading>
                         {isHost ? (
-                            <Button
+                            <IconButton
+                                aria-label="Add AI player"
                                 data-testid="tactics-add-ai"
                                 disabled={isFull || aiActionPending}
                                 onClick={() => {
@@ -203,8 +232,8 @@ export function TacticsLobbyScreen({
                                 type="button"
                                 variant="secondary"
                             >
-                                Add AI player
-                            </Button>
+                                +
+                            </IconButton>
                         ) : null}
                     </div>
                     {agentSlots.length === 0 ? (
@@ -229,7 +258,7 @@ export function TacticsLobbyScreen({
                                         AI Player {slot.slotIndex}
                                     </span>
                                     {isHost ? (
-                                        <Button
+                                        <IconButton
                                             aria-label={`Remove AI Player ${slot.slotIndex}`}
                                             data-testid={`tactics-remove-ai-${slot.slotIndex}`}
                                             disabled={aiActionPending}
@@ -239,8 +268,8 @@ export function TacticsLobbyScreen({
                                             type="button"
                                             variant="danger"
                                         >
-                                            Remove
-                                        </Button>
+                                            −
+                                        </IconButton>
                                     ) : null}
                                 </li>
                             ))}

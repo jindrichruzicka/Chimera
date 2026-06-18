@@ -74,7 +74,16 @@ function makeProps(overrides: Partial<GameLobbyScreenProps> = {}): GameLobbyScre
 
 afterEach(() => {
     cleanup();
+    Reflect.deleteProperty(navigator, 'clipboard');
+    vi.restoreAllMocks();
 });
+
+/** Install a clipboard spy; jsdom leaves `navigator.clipboard` undefined. */
+function stubClipboard(): ReturnType<typeof vi.fn> {
+    const writeText = vi.fn(() => Promise.resolve());
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    return writeText;
+}
 
 describe('TacticsLobbyScreen', () => {
     it('renders one roster row per player with name, ready badge, and colour swatch', () => {
@@ -105,6 +114,55 @@ describe('TacticsLobbyScreen', () => {
         expect(bobRow?.textContent).toContain('(You)');
     });
 
+    describe('lobby address sharing (host-only)', () => {
+        it('shows the host the joinable lobby address so it can be shared', () => {
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({
+                            info: {
+                                sessionId: '127.0.0.1:7777:abc123',
+                                hostId: HOST_ID,
+                                gameId: 'tactics',
+                            },
+                        }),
+                    })}
+                />,
+            );
+
+            expect(screen.getByTestId('lobby-address')).toHaveTextContent('127.0.0.1:7777:abc123');
+        });
+
+        it('does not show the lobby address to a non-host client', () => {
+            render(
+                <TacticsLobbyScreen {...makeProps({ localPlayerId: CLIENT_ID, isHost: false })} />,
+            );
+
+            expect(screen.queryByTestId('lobby-address')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('lobby-address-copy')).not.toBeInTheDocument();
+        });
+
+        it('copies the lobby address to the clipboard when the host clicks copy', () => {
+            const writeText = stubClipboard();
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({
+                            info: {
+                                sessionId: '127.0.0.1:7777:abc123',
+                                hostId: HOST_ID,
+                                gameId: 'tactics',
+                            },
+                        }),
+                    })}
+                />,
+            );
+
+            fireEvent.click(screen.getByTestId('lobby-address-copy'));
+            expect(writeText).toHaveBeenCalledWith('127.0.0.1:7777:abc123');
+        });
+    });
+
     describe('board colour (host-authored)', () => {
         it('gives the host an editable board-colour select that routes to setMatchSetting', () => {
             const setMatchSetting = vi.fn();
@@ -127,6 +185,15 @@ describe('TacticsLobbyScreen', () => {
     });
 
     describe('commitment scheme (host-authored)', () => {
+        it('labels the toggle "Simultaneous turns" with no helper text', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
+
+            const toggle = screen.getByTestId('tactics-commitment-scheme-toggle');
+            expect(toggle).toHaveAccessibleName('Simultaneous turns');
+            // The explanatory helper line was removed to save vertical space.
+            expect(screen.queryByText(/act in secret/i)).not.toBeInTheDocument();
+        });
+
         it('gives the host an enabled toggle, off by default, that routes to setMatchSetting', () => {
             const setMatchSetting = vi.fn();
             render(<TacticsLobbyScreen {...makeProps({ setMatchSetting })} />);
@@ -210,6 +277,28 @@ describe('TacticsLobbyScreen', () => {
     });
 
     describe('AI players (host-only)', () => {
+        it('renders icon-only Add/Remove controls with +/− glyphs and accessible names', () => {
+            render(
+                <TacticsLobbyScreen
+                    {...makeProps({
+                        lobbyState: makeLobbyState({ agentSlots: [{ slotIndex: 1, kind: 'ai' }] }),
+                    })}
+                />,
+            );
+
+            // Icon button: a "+" glyph, full accessible name carried by aria-label.
+            const addButton = screen.getByTestId('tactics-add-ai');
+            expect(addButton).toHaveTextContent('+');
+            expect(addButton).toHaveAccessibleName('Add AI player');
+            expect(addButton).toHaveAttribute('data-ch-icon-button-variant');
+
+            // Remove is a "−" icon button keeping its distinct accessible name.
+            const removeButton = screen.getByTestId('tactics-remove-ai-1');
+            expect(removeButton).toHaveTextContent('−');
+            expect(removeButton).toHaveAccessibleName('Remove AI Player 1');
+            expect(removeButton).toHaveAttribute('data-ch-icon-button-variant');
+        });
+
         it('renders an enabled Add-AI button for the host when the lobby is not full', () => {
             // 2 humans + 1 AI = 3 occupants < maxPlayers (4) → not full.
             render(

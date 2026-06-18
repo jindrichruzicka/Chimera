@@ -62,6 +62,18 @@ export class TacticsLobbyPage extends LobbyPage {
         });
     }
 
+    // ── Lobby address sharing (host-only Battle Setup affordance) ─────────────
+
+    /** The host-only joinable lobby address (`lobby-address`). */
+    public lobbyAddress(): Locator {
+        return this.page.getByTestId('lobby-address');
+    }
+
+    /** The host-only "copy lobby address" affordance (`lobby-address-copy`). */
+    public copyAddressButton(): Locator {
+        return this.page.getByTestId('lobby-address-copy');
+    }
+
     // ── Commitment scheme (host-authored Battle Setup toggle, F54) ────────────
 
     /** The commitment-scheme toggle (`<input type=checkbox>`, host-only editable). */

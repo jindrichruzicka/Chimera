@@ -36,6 +36,42 @@
     margin: var(--ch-space-none);
 }
 
+/* Host-only lobby address share: a label, a short hint, and the joinable code
+   alongside a copy affordance. */
+.address {
+    display: grid;
+    gap: var(--ch-space-xs);
+}
+
+.address-label {
+    color: var(--ch-color-text-secondary);
+    font-size: var(--ch-font-size-sm);
+    font-weight: var(--ch-font-weight-semibold);
+    line-height: var(--ch-line-height-tight);
+}
+
+.address-row {
+    align-items: center;
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-sm);
+}
+
+.address-code {
+    background-color: var(--ch-color-surface-raised);
+    border-color: var(--ch-color-border);
+    border-radius: var(--ch-radius-sm);
+    border-style: solid;
+    border-width: var(--ch-border-width-sm);
+    color: var(--ch-color-text-primary);
+    flex: 1 1 auto;
+    font-family: var(--ch-font-mono);
+    font-size: var(--ch-font-size-sm);
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    padding: var(--ch-space-xs) var(--ch-space-sm);
+}
+
 .roster {
     display: grid;
     gap: var(--ch-space-sm);

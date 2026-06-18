@@ -160,4 +160,28 @@ test.describe('Tactics lobby colour sync', () => {
         // board colour is asserted authoritatively above via snapshot.setup.
         expect(hostBoard.b).toBeGreaterThanOrEqual(hostBoard.r);
     });
+
+    test('host Battle Setup surfaces the joinable lobby address; the client does not', async ({
+        hostWindow,
+        clientWindow,
+    }) => {
+        const hostLobby = new TacticsLobbyPage(hostWindow);
+        const clientLobby = new TacticsLobbyPage(clientWindow);
+
+        await hostLobby.hostLobby();
+        const lobbyCode = await hostLobby.lobbyCode();
+        await clientLobby.joinLobby(lobbyCode);
+
+        await hostLobby.waitForPlayerCount(2);
+        await clientLobby.waitForPlayerCount(2);
+
+        // The host's Battle Setup shows the joinable address (== the lobby code it
+        // shared) with a copy affordance, so it can be sent to the other player.
+        await expect(hostLobby.lobbyAddress()).toHaveText(lobbyCode);
+        await expect(hostLobby.copyAddressButton()).toBeVisible();
+
+        // The non-host client never sees the host-only address-share affordance.
+        await expect(clientLobby.lobbyAddress()).toHaveCount(0);
+        await expect(clientLobby.copyAddressButton()).toHaveCount(0);
+    });
 });
