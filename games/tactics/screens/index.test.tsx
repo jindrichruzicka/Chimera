@@ -33,4 +33,14 @@ describe('TacticsGameScreenRegistry', () => {
         expect(typeof summary).toBe('object');
         expect(summary).not.toBeNull();
     });
+
+    it('registers a lazy in-game menu on inGameMenu (F55 · Invariant #87)', () => {
+        const menu = TacticsGameScreenRegistry.inGameMenu;
+        expect(menu).toBeDefined();
+        // Not the `'none'` opt-out and not the omitted engine-default fallback.
+        expect(menu).not.toBe('none');
+        // React.lazy components are exotic objects, not plain functions.
+        expect(typeof menu).toBe('object');
+        expect(menu).not.toBeNull();
+    });
 });

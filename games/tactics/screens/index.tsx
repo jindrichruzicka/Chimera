@@ -13,6 +13,7 @@ import '../styles/register-token-overrides.js';
 const TacticsDemoBoard = React.lazy(() => import('./TacticsDemoBoard.js'));
 const TacticsGameHud = React.lazy(() => import('./TacticsGameHud.js'));
 const TacticsGameResultBanner = React.lazy(() => import('./TacticsGameResultBanner.js'));
+const TacticsInGameMenu = React.lazy(() => import('./TacticsInGameMenu.js'));
 // Invariant #87: every screen registered here must be wrapped in React.lazy.
 const TacticsPostGameSummary = React.lazy(() => import('./TacticsPostGameSummary.js'));
 
@@ -41,6 +42,7 @@ export const TACTICS_INPUT_ACTIONS = [
 export const TacticsGameScreenRegistry: GameScreenRegistry = {
     board: TacticsDemoBoard,
     hud: TacticsGameHud,
+    inGameMenu: TacticsInGameMenu,
     eventAudioBinding: TACTICS_EVENT_AUDIO_BINDING,
     screens: {
         summary: TacticsPostGameSummary,
