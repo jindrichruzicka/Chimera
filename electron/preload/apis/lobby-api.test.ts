@@ -14,6 +14,7 @@ import {
     LOBBY_REMOVE_AI_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
     LOBBY_PLAYER_CONNECTION_CHANNEL,
+    LOBBY_PLAYER_LEFT_CHANNEL,
     LOBBY_PROFILE_REJECTED_CHANNEL,
     createLobbyApi,
     type LobbyApiIpcPort,
@@ -27,6 +28,7 @@ import type {
     LobbyInfo,
     LobbyState,
     PlayerConnectionEvent,
+    PlayerLeftMatchEvent,
     ProfileRejection,
 } from '../api-types.js';
 
@@ -525,6 +527,40 @@ describe('createLobbyApi', () => {
             expect(stub.listeners.get(LOBBY_PLAYER_CONNECTION_CHANNEL)?.size).toBe(1);
             unsubscribe();
             expect(stub.listeners.get(LOBBY_PLAYER_CONNECTION_CHANNEL)?.size).toBe(0);
+        });
+    });
+
+    describe('onOpponentLeftMatch()', () => {
+        it('registers a listener on chimera:lobby:player-left and forwards only the event payload', () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+            const callback = vi.fn<(event: PlayerLeftMatchEvent) => void>();
+
+            api.onOpponentLeftMatch(callback);
+
+            const registered = stub.listeners.get(LOBBY_PLAYER_LEFT_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const event: PlayerLeftMatchEvent = {
+                playerId: playerId('p2'),
+                displayName: 'Bob',
+            };
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, event);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(event);
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createLobbyApi(stub.port);
+            const callback = vi.fn<(event: PlayerLeftMatchEvent) => void>();
+
+            const unsubscribe = api.onOpponentLeftMatch(callback);
+            expect(stub.listeners.get(LOBBY_PLAYER_LEFT_CHANNEL)?.size).toBe(1);
+            unsubscribe();
+            expect(stub.listeners.get(LOBBY_PLAYER_LEFT_CHANNEL)?.size).toBe(0);
         });
     });
 

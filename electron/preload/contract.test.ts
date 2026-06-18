@@ -325,6 +325,21 @@ describe('window.__chimera.lobby — contract', () => {
         expect(listeners.get('chimera:lobby:player-connection')?.size).toBe(0);
     });
 
+    it('onOpponentLeftMatch() registers on chimera:lobby:player-left; Unsubscribe removes the listener', () => {
+        const calls: unknown[] = [];
+        const unsubscribe = api.lobby.onOpponentLeftMatch((event) => {
+            calls.push(event);
+        });
+        expect(listeners.get('chimera:lobby:player-left')?.size).toBe(1);
+
+        const event = { playerId: 'p2', displayName: 'Bob' };
+        emit('chimera:lobby:player-left', event);
+        expect(calls).toEqual([event]);
+
+        unsubscribe();
+        expect(listeners.get('chimera:lobby:player-left')?.size).toBe(0);
+    });
+
     it('onProfileRejected() registers on chimera:lobby:profile-rejected; Unsubscribe removes the listener', () => {
         const calls: unknown[] = [];
         const unsubscribe = api.lobby.onProfileRejected((rejection) => {

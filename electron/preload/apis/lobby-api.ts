@@ -27,6 +27,7 @@ import type {
     LobbyState,
     PlayerId,
     PlayerConnectionEvent,
+    PlayerLeftMatchEvent,
     ProfileRejection,
     Unsubscribe,
 } from '../api-types.js';
@@ -112,6 +113,13 @@ export const LOBBY_UPDATE_CHANNEL = 'chimera:lobby:update';
 export const LOBBY_PLAYER_CONNECTION_CHANNEL = 'chimera:lobby:player-connection';
 
 /**
+ * `ipcRenderer.on` target for {@link LobbyAPI.onOpponentLeftMatch}. Main pushes a
+ * {@link PlayerLeftMatchEvent} when an opponent deliberately leaves an in-progress
+ * match, driving the §4.30 "{displayName} left game." toast.
+ */
+export const LOBBY_PLAYER_LEFT_CHANNEL = 'chimera:lobby:player-left';
+
+/**
  * `ipcRenderer.on` target for {@link LobbyAPI.onProfileRejected}. Main pushes a
  * {@link ProfileRejection} when this client's profile is rejected at JOIN or for
  * a mid-session PROFILE_UPDATE, driving the §4.30 "Profile rejected" toast (#688).
@@ -190,6 +198,8 @@ export function createLobbyApi(ipc: LobbyApiIpcPort): LobbyAPI {
             subscribePush<LobbyState>(ipc, LOBBY_UPDATE_CHANNEL, cb),
         onPlayerConnectionChanged: (cb: (event: PlayerConnectionEvent) => void): Unsubscribe =>
             subscribePush<PlayerConnectionEvent>(ipc, LOBBY_PLAYER_CONNECTION_CHANNEL, cb),
+        onOpponentLeftMatch: (cb: (event: PlayerLeftMatchEvent) => void): Unsubscribe =>
+            subscribePush<PlayerLeftMatchEvent>(ipc, LOBBY_PLAYER_LEFT_CHANNEL, cb),
         onProfileRejected: (cb: (rejection: ProfileRejection) => void): Unsubscribe =>
             subscribePush<ProfileRejection>(ipc, LOBBY_PROFILE_REJECTED_CHANNEL, cb),
     };

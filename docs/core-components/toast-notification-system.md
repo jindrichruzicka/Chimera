@@ -84,10 +84,19 @@ Engine systems push toasts via `toastStore.push()` automatically without game co
 | -------------------------- | --------- | ------------------------------ |
 | Opponent disconnected      | `warning` | "Player disconnected"          |
 | Opponent reconnected       | `info`    | "Player reconnected"           |
+| Opponent left (in-match)   | `warning` | "{displayName} left game."     |
 | Save failed                | `error`   | "Save failed"                  |
 | Replay saved (save intent) | `success` | "Replay saved"                 |
 | Chat rate-limited          | `warning` | "Sending messages too quickly" |
 | Profile admission rejected | `error`   | "Profile rejected: {reason}"   |
+
+The opponent-disconnected/reconnected toasts cover _transient_ presence transitions
+(`chimera:lobby:player-connection`, #687) and never fire for a deliberate leave. The
+distinct "{displayName} left game." toast (`chimera:lobby:player-left`) fires only when
+an opponent _deliberately_ leaves while a match is in progress — the in-battle
+counterpart, raised on the host. `displayName` is lobby-scoped cosmetic data
+(Invariant #59), so it is not derived from `GameSnapshot`/`PlayerSnapshot`/`SaveFile`
+and is permitted under Invariant #74.
 
 The replay-exported toast (`chimera:replay:exported`) fires only when the replay player's **save icon** is used (`exportCurrentMatch('save')`). The post-game **Replay** action calls `exportCurrentMatch('view')` purely to obtain a stable on-disk path for `openInPlayer`; the main handler suppresses the push for the `'view'` intent so no misleading "Replay saved" toast appears (§4.28 / Invariant #74).
 

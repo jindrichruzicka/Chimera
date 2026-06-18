@@ -1,6 +1,7 @@
 import React, { type ReactNode } from 'react';
 import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
 import { PlayerConnectionToastBridge } from '../components/lobby/PlayerConnectionToastBridge';
+import { PlayerLeftToastBridge } from '../components/lobby/PlayerLeftToastBridge';
 import { ProfileRejectedToastBridge } from '../components/lobby/ProfileRejectedToastBridge';
 import { ReplayExportToastBridge } from '../components/replay/ReplayExportToastBridge';
 import { ReplayNavigationBridge } from '../components/replay/ReplayNavigationBridge';
@@ -28,6 +29,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                 <ReplayNavigationBridge />
                 <ReplayExportToastBridge />
                 <PlayerConnectionToastBridge />
+                <PlayerLeftToastBridge />
                 <ProfileRejectedToastBridge />
                 <React.Suspense fallback={null}>
                     <ShellBackgroundHost />

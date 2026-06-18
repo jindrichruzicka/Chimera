@@ -44,7 +44,11 @@ import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
 import { ProfileManager } from './profile/ProfileManager.js';
 import { FileProfileRepository } from './profile/FileProfileRepository.js';
 import { toSlotId } from '../preload/api-types.js';
-import type { ReplayNavigateKind, ReplayNavigatePayload } from '../preload/api-types.js';
+import type {
+    PlayerLeftMatchEvent,
+    ReplayNavigateKind,
+    ReplayNavigatePayload,
+} from '../preload/api-types.js';
 import { SettingsManager } from './settings/SettingsManager.js';
 import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
@@ -115,6 +119,7 @@ import {
 import {
     LOBBY_UPDATE_CHANNEL,
     LOBBY_PLAYER_CONNECTION_CHANNEL,
+    LOBBY_PLAYER_LEFT_CHANNEL,
     LOBBY_PROFILE_REJECTED_CHANNEL,
 } from '../preload/apis/lobby-api.js';
 import { CHAT_MESSAGE_CHANNEL } from '../preload/apis/chat-api.js';
@@ -1860,8 +1865,29 @@ export async function main(): Promise<void> {
                     broadcastCurrentGameSnapshot(pid);
                 }
             });
-            const unsubLeft = transport.onPlayerLeft((pid) => {
+            const unsubLeft = transport.onPlayerLeft((pid, reason) => {
                 activePlayers.delete(pid);
+                // In-battle only: notify the host when an opponent *deliberately*
+                // leaves a live match → "{name} left game." toast (§4.30). A
+                // transient drop ('timeout'/'error') keeps the #687 "Player
+                // disconnected" presence toast; a lobby-phase leave stays silent
+                // (the roster update is already visible). The display name is the
+                // lobby-scoped cosmetic name from the host PlayerDirectory
+                // (Invariant #59/#60 — not snapshot/save state, #74-safe).
+                if (
+                    reason === 'normal' &&
+                    sessionRuntime.getSnapshot().phase !== gamePhase('lobby')
+                ) {
+                    const event: PlayerLeftMatchEvent = {
+                        playerId: pid,
+                        displayName: playerDirectory.snapshot()[pid]?.displayName ?? String(pid),
+                    };
+                    BrowserWindow.getAllWindows().forEach((win) => {
+                        if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                            win.webContents.send(LOBBY_PLAYER_LEFT_CHANNEL, event);
+                        }
+                    });
+                }
             });
 
             // Drive the pipeline with every received `EngineAction`.  Each

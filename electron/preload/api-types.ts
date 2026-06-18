@@ -265,6 +265,20 @@ export interface PlayerConnectionEvent {
 }
 
 /**
+ * Payload of the `chimera:lobby:player-left` push (§4.30). Fires only when an
+ * opponent *deliberately* leaves during an active match (the in-battle
+ * counterpart to {@link PlayerConnectionEvent}, which never fires for an
+ * intentional leave). Drives the host's "{displayName} left game." toast.
+ * `displayName` is lobby-scoped cosmetic data (Invariant #59) — never derived
+ * from `GameSnapshot`/`PlayerSnapshot`/`SaveFile`, so it is toast-safe under
+ * Invariant #74.
+ */
+export interface PlayerLeftMatchEvent {
+    readonly playerId: PlayerId;
+    readonly displayName: string;
+}
+
+/**
  * Structured profile-admission rejection, pushed host→renderer so the renderer
  * can raise the §4.30 "Profile rejected: {reason}" toast (#688). `reason` is the
  * raw gate code — `'profile:<AdmissionRejection>'` or `'rate_limit'` — never a
@@ -1014,6 +1028,13 @@ export interface LobbyAPI {
      * toasts (#687). Never fires for an intentional leave or a first-time join.
      */
     onPlayerConnectionChanged(cb: (event: PlayerConnectionEvent) => void): Unsubscribe;
+    /**
+     * Fires when an opponent *deliberately* leaves while a match is in progress
+     * (the in-battle counterpart to {@link onPlayerConnectionChanged}, which is
+     * silent for intentional leaves). Drives the host's §4.30 "{displayName} left
+     * game." toast. Never fires for a transient drop or a lobby-phase leave.
+     */
+    onOpponentLeftMatch(cb: (event: PlayerLeftMatchEvent) => void): Unsubscribe;
     /**
      * Fires when this client's profile is rejected — at JOIN or for a mid-session
      * PROFILE_UPDATE. Drives the §4.30 "Profile rejected: {reason}" toast (#688).

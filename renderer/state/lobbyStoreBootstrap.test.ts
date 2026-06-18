@@ -55,6 +55,7 @@ function makeLobbyApi(onUpdateImpl?: (cb: (lobby: LobbyState) => void) => Unsubs
         removeAi: vi.fn(),
         onUpdate: vi.fn(onUpdateImpl ?? (() => vi.fn())),
         onPlayerConnectionChanged: vi.fn(() => vi.fn()),
+        onOpponentLeftMatch: vi.fn(() => vi.fn()),
         onProfileRejected: vi.fn(() => vi.fn()),
     };
 }
