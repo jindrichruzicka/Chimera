@@ -3,23 +3,33 @@
 import React from 'react';
 import { Tabs } from '../../components/ui/Tabs';
 import { TextInput } from '../../components/ui/TextInput';
-import type { LobbyConfig } from './lobbyConfig';
 import type { LobbyEntryTabId } from './lobbyTypes';
 import styles from './page.module.css';
 
 export interface LobbyEntryTabsProps {
     readonly activeTabId: LobbyEntryTabId;
-    readonly config: LobbyConfig;
     readonly lobbyCode: string;
     readonly onLobbyCodeChange: (value: string) => void;
+    /** Host-set lobby password (F56). Blank hosts an open lobby. */
+    readonly hostPassword: string;
+    readonly onHostPasswordChange: (value: string) => void;
+    /** Password the joining client presents to the host (F56). */
+    readonly joinPassword: string;
+    readonly onJoinPasswordChange: (value: string) => void;
+    /** Marks the join password field invalid (red) after a wrong-password rejection. */
+    readonly joinPasswordInvalid: boolean;
     readonly onTabChange: (tabId: LobbyEntryTabId) => void;
 }
 
 export function LobbyEntryTabs({
     activeTabId,
-    config,
     lobbyCode,
     onLobbyCodeChange,
+    hostPassword,
+    onHostPasswordChange,
+    joinPassword,
+    onJoinPasswordChange,
+    joinPasswordInvalid,
     onTabChange,
 }: LobbyEntryTabsProps): React.ReactElement {
     return (
@@ -38,16 +48,16 @@ export function LobbyEntryTabs({
                     label: 'Host',
                     panel: (
                         <div className={styles['entry-panel']}>
-                            <dl className={styles['compact-details']}>
-                                <div className={styles['detail-row']}>
-                                    <dt>Game</dt>
-                                    <dd>{config.gameId}</dd>
-                                </div>
-                                <div className={styles['detail-row']}>
-                                    <dt>Seats</dt>
-                                    <dd>{config.maxPlayers}</dd>
-                                </div>
-                            </dl>
+                            <TextInput
+                                autoComplete="off"
+                                className={styles['entry-field']}
+                                data-testid="host-password-input"
+                                id="lobby-host-password-input"
+                                label="Password (optional):"
+                                onValueChange={onHostPasswordChange}
+                                placeholder="Leave blank for an open lobby"
+                                value={hostPassword}
+                            />
                         </div>
                     ),
                 },
@@ -58,12 +68,24 @@ export function LobbyEntryTabs({
                         <div className={styles['entry-panel']}>
                             <TextInput
                                 autoComplete="off"
+                                className={styles['entry-field']}
                                 data-testid="address-input"
                                 id="lobby-code-input"
                                 label="Lobby Code:"
                                 onValueChange={onLobbyCodeChange}
                                 placeholder="127.0.0.1:7777"
                                 value={lobbyCode}
+                            />
+                            <TextInput
+                                autoComplete="off"
+                                className={styles['entry-field']}
+                                data-testid="join-password-input"
+                                id="lobby-join-password-input"
+                                invalid={joinPasswordInvalid}
+                                label="Password:"
+                                onValueChange={onJoinPasswordChange}
+                                placeholder="Required only if the host set one"
+                                value={joinPassword}
                             />
                         </div>
                     ),

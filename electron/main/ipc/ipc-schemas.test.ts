@@ -131,6 +131,35 @@ describe('HostLobbyParamsSchema', () => {
     it('rejects an empty gameId', () => {
         expect(HostLobbyParamsSchema.safeParse({ gameId: '', maxPlayers: 4 }).success).toBe(false);
     });
+
+    it('accepts and carries through an optional password (F56)', () => {
+        const result = HostLobbyParamsSchema.safeParse({
+            gameId: 'sample-game',
+            maxPlayers: 4,
+            password: 's3cret',
+        });
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.password).toBe('s3cret');
+    });
+
+    it('omits password when absent (open lobby unchanged)', () => {
+        const result = HostLobbyParamsSchema.safeParse({ gameId: 'sample-game', maxPlayers: 4 });
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.password).toBeUndefined();
+    });
+
+    it('rejects an empty or over-length password', () => {
+        expect(
+            HostLobbyParamsSchema.safeParse({ gameId: 'g', maxPlayers: 4, password: '' }).success,
+        ).toBe(false);
+        expect(
+            HostLobbyParamsSchema.safeParse({
+                gameId: 'g',
+                maxPlayers: 4,
+                password: 'x'.repeat(129),
+            }).success,
+        ).toBe(false);
+    });
 });
 
 describe('JoinLobbyParamsSchema', () => {
@@ -147,6 +176,24 @@ describe('JoinLobbyParamsSchema', () => {
 
     it('rejects a non-string address', () => {
         expect(JoinLobbyParamsSchema.safeParse({ address: 42 }).success).toBe(false);
+    });
+
+    it('accepts and carries through an optional password (F56)', () => {
+        const result = JoinLobbyParamsSchema.safeParse({
+            address: 'ws://127.0.0.1:7777',
+            password: 's3cret',
+        });
+        expect(result.success).toBe(true);
+        if (result.success) expect(result.data.password).toBe('s3cret');
+    });
+
+    it('rejects an over-length password', () => {
+        expect(
+            JoinLobbyParamsSchema.safeParse({
+                address: 'ws://127.0.0.1:7777',
+                password: 'x'.repeat(129),
+            }).success,
+        ).toBe(false);
     });
 });
 

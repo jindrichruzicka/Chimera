@@ -155,6 +155,67 @@ describe('LocalWebSocketProvider — joinLobby', () => {
     });
 });
 
+// ─── password gate (F56) ───────────────────────────────────────────────────────
+
+describe('LocalWebSocketProvider — password gate (F56)', () => {
+    it('admits a join that presents the correct host password', async () => {
+        provider = new LocalWebSocketProvider();
+        const hosted = await provider.hostLobby({
+            gameId: 'tactics',
+            maxPlayers: 4,
+            password: 'open-sesame',
+        });
+        sessions.push(hosted);
+
+        const joined = await provider.joinLobby({
+            address: hosted.lobbyCode,
+            password: 'open-sesame',
+        });
+        sessions.push(joined);
+
+        expect(joined.lobbyInfo.gameId).toBe('tactics');
+    });
+
+    it('rejects a join with the wrong password', async () => {
+        provider = new LocalWebSocketProvider();
+        const hosted = await provider.hostLobby({
+            gameId: 'tactics',
+            maxPlayers: 4,
+            password: 'open-sesame',
+        });
+        sessions.push(hosted);
+
+        await expect(
+            provider.joinLobby({ address: hosted.lobbyCode, password: 'wrong' }),
+        ).rejects.toThrow(/invalid_password/);
+    });
+
+    it('rejects a join that omits the password when the host requires one', async () => {
+        provider = new LocalWebSocketProvider();
+        const hosted = await provider.hostLobby({
+            gameId: 'tactics',
+            maxPlayers: 4,
+            password: 'open-sesame',
+        });
+        sessions.push(hosted);
+
+        await expect(provider.joinLobby({ address: hosted.lobbyCode })).rejects.toThrow(
+            /invalid_password/,
+        );
+    });
+
+    it('admits a join with no password when the host set none (open lobby)', async () => {
+        provider = new LocalWebSocketProvider();
+        const hosted = await provider.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+        sessions.push(hosted);
+
+        const joined = await provider.joinLobby({ address: hosted.lobbyCode });
+        sessions.push(joined);
+
+        expect(joined.lobbyInfo.gameId).toBe('tactics');
+    });
+});
+
 // ─── dispose ──────────────────────────────────────────────────────────────────
 
 describe('LocalWebSocketProvider — dispose', () => {

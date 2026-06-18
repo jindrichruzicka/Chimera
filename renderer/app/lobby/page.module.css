@@ -49,7 +49,12 @@
     gap: var(--ch-space-md);
 }
 
-.compact-details,
+/* Constrain the host/join entry fields to half the panel width so the inputs
+   don't stretch the full dialog. */
+.entry-field {
+    inline-size: 50%;
+}
+
 .session-details {
     display: grid;
     gap: var(--ch-space-sm);

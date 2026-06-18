@@ -69,10 +69,44 @@ afterEach(async () => {
     servers.length = 0;
 });
 
-function makeServer(opts?: { maxPlayers?: number }): LobbyServer {
-    const s = new LobbyServer({ port: 0, gameId: 'test', maxPlayers: opts?.maxPlayers ?? 4 });
+function makeServer(opts?: { maxPlayers?: number; password?: string }): LobbyServer {
+    const s = new LobbyServer({
+        port: 0,
+        gameId: 'test',
+        maxPlayers: opts?.maxPlayers ?? 4,
+        ...(opts?.password === undefined ? {} : { password: opts.password }),
+    });
     servers.push(s);
     return s;
+}
+
+/**
+ * Open one socket, send a single JOIN (optionally with a password), and resolve
+ * with the first ServerMessage the host returns (WELCOME or REJECT). Used by the
+ * password-gate tests (F56) which assert on the handshake outcome rather than a
+ * fully established connection.
+ */
+function joinExpectingResponse(
+    server: LobbyServer,
+    opts: { token?: string; password?: string } = {},
+): Promise<ServerMessage> {
+    return new Promise((resolve, reject) => {
+        const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+        ws.on('error', reject);
+        ws.on('open', () => {
+            const join: ClientMessage = {
+                type: 'JOIN',
+                token: opts.token ?? server.token,
+                profile: { playerId: toPlayerId('pending'), displayName: 'PW' },
+                ...(opts.password === undefined ? {} : { password: opts.password }),
+            };
+            ws.send(JSON.stringify(join));
+        });
+        ws.on('message', (raw) => {
+            resolve(JSON.parse(rawToString(raw)) as ServerMessage);
+            ws.close();
+        });
+    });
 }
 
 // ─── Construction & lifecycle ────────────────────────────────────────────────
@@ -188,6 +222,55 @@ describe('LobbyServer — JOIN handshake', () => {
         });
         expect(rejected.type).toBe('REJECT');
         first.ws.close();
+    });
+});
+
+// ─── Password gate (F56) ──────────────────────────────────────────────────────
+
+describe('LobbyServer — password gate (F56)', () => {
+    it('admits a JOIN that presents the correct password', async () => {
+        const server = makeServer({ password: 's3cret' });
+        await server.ready();
+        const msg = await joinExpectingResponse(server, { password: 's3cret' });
+        expect(msg.type).toBe('WELCOME');
+    });
+
+    it('rejects a JOIN with the wrong password as invalid_password', async () => {
+        const server = makeServer({ password: 's3cret' });
+        await server.ready();
+        const msg = await joinExpectingResponse(server, { password: 'nope' });
+        expect(msg.type).toBe('REJECT');
+        if (msg.type === 'REJECT') expect(msg.reason).toBe('invalid_password');
+    });
+
+    it('rejects a JOIN that omits the password when one is required', async () => {
+        const server = makeServer({ password: 's3cret' });
+        await server.ready();
+        const msg = await joinExpectingResponse(server);
+        expect(msg.type).toBe('REJECT');
+        if (msg.type === 'REJECT') expect(msg.reason).toBe('invalid_password');
+    });
+
+    it('admits any JOIN when no password is configured (open lobby unchanged)', async () => {
+        const server = makeServer();
+        await server.ready();
+        const msg = await joinExpectingResponse(server);
+        expect(msg.type).toBe('WELCOME');
+    });
+
+    it('ignores a client-supplied password when the lobby has none', async () => {
+        const server = makeServer();
+        await server.ready();
+        const msg = await joinExpectingResponse(server, { password: 'whatever' });
+        expect(msg.type).toBe('WELCOME');
+    });
+
+    it('never echoes the password into the WELCOME payload', async () => {
+        const server = makeServer({ password: 'leak-check-123' });
+        await server.ready();
+        const msg = await joinExpectingResponse(server, { password: 'leak-check-123' });
+        expect(msg.type).toBe('WELCOME');
+        expect(JSON.stringify(msg)).not.toContain('leak-check-123');
     });
 });
 

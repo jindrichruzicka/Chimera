@@ -121,6 +121,13 @@ export interface HostLobbyParams {
     readonly gameId: string;
     readonly maxPlayers: number;
     readonly agentSlots?: readonly LobbyAgentSlot[];
+    /**
+     * Optional lobby password (F56). When set, joining clients must present a
+     * matching password in their JOIN handshake or be rejected; when absent or
+     * empty the lobby is open (current behaviour). Server-side only — never
+     * broadcast in `LobbyState`/`LobbyInfo` or logged.
+     */
+    readonly password?: string;
 }
 
 /** Parameters for joining an existing lobby session. */
@@ -128,6 +135,12 @@ export interface JoinLobbyParams {
     readonly address: string;
     /** Provider-assigned player identity to reclaim after a disconnect. */
     readonly reconnectPlayerId?: PlayerId;
+    /**
+     * Optional lobby password (F56) presented to the host's password gate.
+     * Required only when the host set one; a mismatch/absence is rejected with
+     * `JoinRejectedError('invalid_password')`.
+     */
+    readonly password?: string;
     /**
      * Raw profile attestation to present to the host's profile gate.
      * Typed as `unknown` here; the host validates it via `ProfileSanitizer.admit()`

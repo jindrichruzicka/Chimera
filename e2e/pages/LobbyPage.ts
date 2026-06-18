@@ -22,6 +22,9 @@ export class LobbyPage {
     readonly playerListItems: Locator;
     readonly connectionStatus: Locator;
     readonly addressInput: Locator;
+    readonly hostPasswordInput: Locator;
+    readonly joinPasswordInput: Locator;
+    readonly errorBanner: Locator;
     readonly confirmJoinButton: Locator;
     readonly leaveButton: Locator;
 
@@ -34,20 +37,44 @@ export class LobbyPage {
         this.playerListItems = page.getByTestId('tactics-lobby-player');
         this.connectionStatus = page.getByTestId('connection-status');
         this.addressInput = page.getByTestId('address-input');
+        this.hostPasswordInput = page.getByTestId('host-password-input');
+        this.joinPasswordInput = page.getByTestId('join-password-input');
+        this.errorBanner = page.getByTestId('lobby-error');
         this.confirmJoinButton = page.getByTestId('confirm-join');
         this.leaveButton = page.getByTestId('lobby-leave-btn');
     }
 
-    public async hostLobby(): Promise<void> {
+    /** Host a lobby, optionally protecting it with a password (F56). */
+    public async hostLobby(password?: string): Promise<void> {
+        if (password !== undefined) {
+            await this.hostPasswordInput.fill(password);
+        }
         await this.hostButton.click();
         await this.lobbyScreen.waitFor({ state: 'visible' });
     }
 
-    public async joinLobby(address: string): Promise<void> {
-        await this.joinButton.click();
-        await this.addressInput.fill(address);
+    /** Join a lobby and wait for the lobby screen (the join is expected to succeed). */
+    public async joinLobby(address: string, password?: string): Promise<void> {
+        await this.fillJoinForm(address, password);
         await this.confirmJoinButton.click();
         await this.lobbyScreen.waitFor({ state: 'visible' });
+    }
+
+    /**
+     * Submit a join without waiting for success (F56). Use when the join may be
+     * rejected — the caller asserts on the error banner / pre-lobby screen.
+     */
+    public async attemptJoin(address: string, password?: string): Promise<void> {
+        await this.fillJoinForm(address, password);
+        await this.confirmJoinButton.click();
+    }
+
+    private async fillJoinForm(address: string, password?: string): Promise<void> {
+        await this.joinButton.click();
+        await this.addressInput.fill(address);
+        if (password !== undefined) {
+            await this.joinPasswordInput.fill(password);
+        }
     }
 
     public async toggleReady(): Promise<void> {

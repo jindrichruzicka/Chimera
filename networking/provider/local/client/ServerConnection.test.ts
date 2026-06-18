@@ -377,6 +377,62 @@ describe('ServerConnection — PlayerId stable across reconnect (T03)', () => {
         expect(conn.assignedPlayerId).toBe(playerId);
         await conn.close();
     });
+
+    // F56: the password is stored on connect() and must ride EVERY JOIN — including
+    // the auto-reconnect JOIN — exactly like the token/PlayerId resend (WARN-1). The
+    // socketFactory seam captures each outbound JOIN frame; an unexpected socket drop
+    // drives one backoff reconnect, whose JOIN frame must still carry the password.
+    it('re-sends the lobby password on a reconnect JOIN (F56)', async () => {
+        const server = new LobbyServer({
+            port: 0,
+            gameId: 'test',
+            maxPlayers: 4,
+            password: 'reconnect-pw',
+        });
+        servers.push(server);
+        await server.ready();
+
+        const joinFrames: Record<string, unknown>[] = [];
+        const sockets: WebSocket[] = [];
+        const conn = new ServerConnection({
+            baseDelayMs: 10,
+            socketFactory: (u) => {
+                const ws = new WebSocket(u);
+                sockets.push(ws);
+                const realSend = ws.send.bind(ws);
+                (ws as unknown as { send: (data: string) => void }).send = (data: string): void => {
+                    try {
+                        const parsed = JSON.parse(data) as Record<string, unknown>;
+                        if (parsed['type'] === 'JOIN') joinFrames.push(parsed);
+                    } catch {
+                        // non-JSON frame — ignore for capture purposes
+                    }
+                    realSend(data);
+                };
+                return ws;
+            },
+        });
+
+        const { playerId } = await conn.connect(
+            `ws://127.0.0.1:${server.port}`,
+            server.token,
+            defaultProfile,
+            undefined,
+            'reconnect-pw',
+        );
+        expect(playerId).toMatch(/^player-\d+$/);
+        expect(joinFrames).toHaveLength(1);
+        expect(joinFrames[0]?.['password']).toBe('reconnect-pw');
+
+        // Force an unexpected drop (not conn.close()) so the backoff reconnect fires.
+        sockets[0]?.close();
+
+        // The reconnect JOIN must re-present the same password.
+        await expect.poll(() => joinFrames.length).toBeGreaterThanOrEqual(2);
+        expect(joinFrames[1]?.['password']).toBe('reconnect-pw');
+
+        await conn.close();
+    });
 });
 
 // ─── #718: STUN/relay endpoint seam ───────────────────────────────────────────

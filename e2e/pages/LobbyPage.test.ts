@@ -101,6 +101,9 @@ describe('LobbyPage', () => {
         expect(lobbyPage.playerListItems).toBeDefined();
         expect(lobbyPage.connectionStatus).toBeDefined();
         expect(lobbyPage.addressInput).toBeDefined();
+        expect(lobbyPage.hostPasswordInput).toBeDefined();
+        expect(lobbyPage.joinPasswordInput).toBeDefined();
+        expect(lobbyPage.errorBanner).toBeDefined();
         expect(lobbyPage.confirmJoinButton).toBeDefined();
         expect(lobbyPage.leaveButton).toBeDefined();
 
@@ -113,6 +116,9 @@ describe('LobbyPage', () => {
             'tactics-lobby-player',
             'connection-status',
             'address-input',
+            'host-password-input',
+            'join-password-input',
+            'lobby-error',
             'confirm-join',
             'lobby-leave-btn',
         ]);

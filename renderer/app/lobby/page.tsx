@@ -67,6 +67,11 @@ function useLobbyGameShell(gameId: string | null): LoadedRendererGameShell | nul
 export default function LobbyPage() {
     const router = useRouter();
     const [lobbyCode, setLobbyCode] = useState('');
+    const [hostPassword, setHostPassword] = useState('');
+    const [joinPassword, setJoinPassword] = useState('');
+    // A wrong/absent password marks the join password field invalid (red) — no
+    // message text; the invalid state alone is the cue (F56).
+    const [joinPasswordInvalid, setJoinPasswordInvalid] = useState(false);
     const [activeTabId, setActiveTabId] = useState<LobbyEntryTabId>('host');
     const [pendingAction, setPendingAction] = useState<PendingAction>(null);
     const [error, setError] = useState<string | null>(null);
@@ -118,9 +123,12 @@ export default function LobbyPage() {
         try {
             setPendingAction('hosting');
             setError(null);
+            // F56: a blank password hosts an open lobby (omit the field entirely).
+            const trimmedPassword = hostPassword.trim();
             await lobbyApi.host({
                 gameId,
                 maxPlayers,
+                ...(trimmedPassword ? { password: trimmedPassword } : {}),
             });
         } catch (err) {
             if (isMountedRef.current) {
@@ -142,12 +150,25 @@ export default function LobbyPage() {
         try {
             setPendingAction('joining');
             setError(null);
+            setJoinPasswordInvalid(false);
+            const trimmedPassword = joinPassword.trim();
             await lobbyApi.join({
                 address: lobbyCode.trim(),
+                ...(trimmedPassword ? { password: trimmedPassword } : {}),
             });
         } catch (err) {
             if (isMountedRef.current) {
-                setError(err instanceof Error ? err.message : 'Failed to join lobby');
+                // The host rejects a wrong/absent password with the structured
+                // reason `invalid_password`; that string is the only signal that
+                // survives the IPC boundary (the JoinRejectedError class does not),
+                // so flag the password field invalid (F56). Any other failure
+                // stays in the top-level banner.
+                const message = err instanceof Error ? err.message : 'Failed to join lobby';
+                if (message.includes('invalid_password')) {
+                    setJoinPasswordInvalid(true);
+                } else {
+                    setError(message);
+                }
             }
         } finally {
             if (isMountedRef.current) {
@@ -170,6 +191,12 @@ export default function LobbyPage() {
                 setPendingAction(null);
             }
         }
+    };
+
+    const handleJoinPasswordChange = (value: string): void => {
+        setJoinPassword(value);
+        // Clear the invalid state as soon as the user edits the field.
+        setJoinPasswordInvalid(false);
     };
 
     const handleClose = (): void => {
@@ -274,7 +301,7 @@ export default function LobbyPage() {
                     role="dialog"
                 >
                     {error ? (
-                        <div className={styles['error']} role="alert">
+                        <div className={styles['error']} data-testid="lobby-error" role="alert">
                             Error: {error}
                         </div>
                     ) : null}
@@ -296,8 +323,12 @@ export default function LobbyPage() {
                     ) : (
                         <LobbyEntryTabs
                             activeTabId={activeTabId}
-                            config={lobbyConfig}
+                            hostPassword={hostPassword}
+                            joinPassword={joinPassword}
+                            joinPasswordInvalid={joinPasswordInvalid}
                             lobbyCode={lobbyCode}
+                            onHostPasswordChange={setHostPassword}
+                            onJoinPasswordChange={handleJoinPasswordChange}
                             onLobbyCodeChange={setLobbyCode}
                             onTabChange={setActiveTabId}
                         />

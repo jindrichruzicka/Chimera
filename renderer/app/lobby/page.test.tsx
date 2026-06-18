@@ -437,6 +437,12 @@ describe('LobbyPage pending actions', () => {
         expect(dialogRule).toContain('padding: var(--ch-space-lg)');
     });
 
+    it('constrains the host/join entry fields to half the panel width (F56)', () => {
+        const fieldRule = /\.entry-field\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+
+        expect(fieldRule).toContain('inline-size: 50%');
+    });
+
     it('uses shared Typography primitives for shell copy', () => {
         renderLobbyPage();
 
@@ -622,6 +628,149 @@ describe('LobbyPage chat panel', () => {
 
         expect(screen.queryByTestId('chat-panel')).toBeNull();
         expect(screen.queryByTestId('chat-unavailable')).toBeNull();
+    });
+});
+
+describe('LobbyPage password (F56)', () => {
+    let hostFn: ReturnType<typeof vi.fn>;
+    let joinFn: ReturnType<typeof vi.fn>;
+
+    beforeEach(() => {
+        mockLocalSeatIds = [];
+        mockLocalPlayerId = null;
+        mockLobbyState = null;
+        mockPush.mockReset();
+
+        hostFn = vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' }));
+        joinFn = vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' }));
+
+        Object.defineProperty(window, '__chimera', {
+            configurable: true,
+            value: {
+                lobby: {
+                    host: hostFn,
+                    join: joinFn,
+                    getLocalPlayerId: vi.fn(async () => 'p2'),
+                    leave: vi.fn(async () => undefined),
+                    startGame: vi.fn(async () => undefined),
+                    updatePlayerReadyState: vi.fn(async () => undefined),
+                },
+                system: { onConnectionStatus: vi.fn(() => () => undefined) },
+            },
+        });
+    });
+
+    afterEach(() => {
+        cleanup();
+        vi.restoreAllMocks();
+        delete (window as unknown as { __chimera?: unknown }).__chimera;
+    });
+
+    it('renders a password field on the Host tab instead of the Game/Seats panel', () => {
+        renderLobbyPage();
+
+        expect(screen.getByTestId('host-password-input')).toBeVisible();
+        // The old Game/Seats definition list is gone.
+        expect(screen.queryByText('Seats')).toBeNull();
+        expect(screen.queryByText('Game')).toBeNull();
+    });
+
+    it('renders a password field on the Join tab', () => {
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+
+        expect(screen.getByTestId('join-password-input')).toBeVisible();
+    });
+
+    it('forwards a trimmed host password when one is entered', async () => {
+        renderLobbyPage();
+
+        fireEvent.change(screen.getByTestId('host-password-input'), {
+            target: { value: '  hunter2  ' },
+        });
+        fireEvent.click(screen.getByTestId('host-lobby'));
+
+        await waitFor(() => {
+            expect(hostFn).toHaveBeenCalledWith({
+                gameId: 'tactics',
+                maxPlayers: 4,
+                password: 'hunter2',
+            });
+        });
+    });
+
+    it('omits the password when the host field is left blank', async () => {
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByTestId('host-lobby'));
+
+        await waitFor(() => {
+            expect(hostFn).toHaveBeenCalledWith({ gameId: 'tactics', maxPlayers: 4 });
+        });
+    });
+
+    it('forwards a trimmed join password when one is entered', async () => {
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+        fireEvent.change(screen.getByTestId('address-input'), {
+            target: { value: '127.0.0.1:7777:tok' },
+        });
+        fireEvent.change(screen.getByTestId('join-password-input'), {
+            target: { value: ' s3cret ' },
+        });
+        fireEvent.click(screen.getByTestId('confirm-join'));
+
+        await waitFor(() => {
+            expect(joinFn).toHaveBeenCalledWith({
+                address: '127.0.0.1:7777:tok',
+                password: 's3cret',
+            });
+        });
+    });
+
+    it('marks the join password field invalid on rejection without any message text', async () => {
+        joinFn.mockRejectedValueOnce(
+            new Error("Error invoking remote method 'chimera:lobby:join': Error: invalid_password"),
+        );
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+        fireEvent.change(screen.getByTestId('address-input'), {
+            target: { value: '127.0.0.1:7777:tok' },
+        });
+        fireEvent.click(screen.getByTestId('confirm-join'));
+
+        const passwordInput = screen.getByTestId('join-password-input');
+        await waitFor(() => {
+            expect(passwordInput).toHaveAttribute('aria-invalid', 'true');
+        });
+        // The red invalid state is the only cue — no message text, no top banner.
+        expect(screen.queryByText('Incorrect password.')).toBeNull();
+        expect(screen.queryByTestId('lobby-error')).toBeNull();
+    });
+
+    it('clears the invalid state once the field is edited', async () => {
+        joinFn.mockRejectedValueOnce(
+            new Error("Error invoking remote method 'chimera:lobby:join': Error: invalid_password"),
+        );
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByRole('tab', { name: 'Join' }));
+        fireEvent.change(screen.getByTestId('address-input'), {
+            target: { value: '127.0.0.1:7777:tok' },
+        });
+        fireEvent.click(screen.getByTestId('confirm-join'));
+
+        const passwordInput = screen.getByTestId('join-password-input');
+        await waitFor(() => {
+            expect(passwordInput).toHaveAttribute('aria-invalid', 'true');
+        });
+
+        fireEvent.change(passwordInput, { target: { value: 'retry' } });
+
+        expect(passwordInput).not.toHaveAttribute('aria-invalid');
     });
 });
 

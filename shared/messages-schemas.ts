@@ -214,6 +214,8 @@ const JoinMessage = z
         // (Invariant #61). Using a strict sub-schema here would prevent full
         // EngineProfile payloads from reaching the gate.
         profile: z.record(z.string(), z.unknown()),
+        // Optional lobby password (F56) — validated timing-safe by the host.
+        password: z.string().optional(),
     })
     .strict();
 

@@ -232,11 +232,19 @@ export interface HostLobbyParams {
     readonly gameId: string;
     readonly maxPlayers: number;
     readonly agentSlots?: readonly LobbyAgentSlot[];
+    /**
+     * Optional lobby password (F56). When set, joining clients must present a
+     * matching password; when absent/blank the lobby is open. Server-side only —
+     * never broadcast or logged.
+     */
+    readonly password?: string;
 }
 
 /** Parameters for joining an existing lobby session. */
 export interface JoinLobbyParams {
     readonly address: string;
+    /** Optional lobby password (F56) presented to the host's password gate. */
+    readonly password?: string;
 }
 
 /** Metadata returned when a lobby is successfully hosted or joined. */

@@ -133,6 +133,12 @@ export class ServerConnection {
     private url = '';
     private token = '';
     private profile: Record<string, unknown> | null = null;
+    /**
+     * Optional lobby password (F56) presented in every JOIN, including
+     * auto-reconnect attempts. Stored alongside the token so a transient drop
+     * re-authenticates against a password-protected host without re-prompting.
+     */
+    private password: string | undefined = undefined;
     // profile is typed Record<string,unknown> internally; connect() widens to unknown so
     // callers never need a cast — the server-side Zod schema validates the shape on receipt.
 
@@ -176,9 +182,11 @@ export class ServerConnection {
         token: string,
         profile: unknown,
         reconnectPlayerId?: PlayerId,
+        password?: string,
     ): Promise<ConnectResult> {
         this.url = url;
         this.token = token;
+        this.password = password;
         this._assignedPlayerId = reconnectPlayerId ?? this._assignedPlayerId;
         // Cast: caller-supplied profile is unknown; server-side Zod schema (ClientMessageSchema)
         // validates the record structure on receipt — widening here is safe.
@@ -253,6 +261,7 @@ export class ServerConnection {
                             ? {}
                             : { reconnectPlayerId: this._assignedPlayerId }),
                         profile: this.profile!, // profile is always set before attemptConnect
+                        ...(this.password === undefined ? {} : { password: this.password }),
                     } satisfies ClientMessage),
                 );
             });

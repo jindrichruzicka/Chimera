@@ -57,6 +57,8 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             port: 0,
             gameId: params.gameId,
             maxPlayers: params.maxPlayers,
+            // F56: an empty/whitespace host password leaves the lobby open.
+            ...(params.password !== undefined ? { password: params.password } : {}),
         });
 
         // Add to openServers only AFTER ready() succeeds to avoid resource leaks (W-1)
@@ -103,6 +105,7 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
                 displayName: 'Player',
             },
             params.reconnectPlayerId,
+            params.password,
         );
 
         const transport = new WsClientTransport(conn, assignedPlayerId);

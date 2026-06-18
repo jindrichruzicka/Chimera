@@ -221,6 +221,10 @@ export const HostLobbyParamsSchema = z
         gameId: NonEmptyStringSchema,
         maxPlayers: z.number().int().positive(),
         agentSlots: z.array(LobbyAgentSlotSchema).readonly().optional(),
+        // Optional lobby password (F56). Bounded to avoid unbounded payloads;
+        // a present password must be non-empty (an empty/whitespace password is
+        // treated as "no password" at the call site, not sent over IPC).
+        password: z.string().min(1).max(128).optional(),
     })
     .transform((value): HostLobbyParams => {
         const agentSlots = value.agentSlots?.map((slot): LobbyAgentSlot => {
@@ -230,17 +234,34 @@ export const HostLobbyParamsSchema = z
             return { slotIndex: slot.slotIndex, kind: slot.kind, omniscient: slot.omniscient };
         });
 
+        const base = {
+            gameId: value.gameId,
+            maxPlayers: value.maxPlayers,
+            ...(value.password !== undefined ? { password: value.password } : {}),
+        };
+
         if (agentSlots === undefined) {
-            return { gameId: value.gameId, maxPlayers: value.maxPlayers };
+            return base;
         }
 
-        return { gameId: value.gameId, maxPlayers: value.maxPlayers, agentSlots };
+        return { ...base, agentSlots };
     });
 
 /** Schema for {@link JoinLobbyParams} accepted by `chimera:lobby:join`. */
-export const JoinLobbyParamsSchema = z.object({
-    address: NonEmptyStringSchema,
-}) satisfies z.ZodType<JoinLobbyParams>;
+export const JoinLobbyParamsSchema = z
+    .object({
+        address: NonEmptyStringSchema,
+        // Optional lobby password (F56) — bounded; absent on open lobbies.
+        password: z.string().max(128).optional(),
+    })
+    // Map to the explicit type so an absent password is omitted rather than set
+    // to `undefined` (the repo runs with `exactOptionalPropertyTypes`).
+    .transform((value): JoinLobbyParams => {
+        if (value.password === undefined) {
+            return { address: value.address };
+        }
+        return { address: value.address, password: value.password };
+    });
 
 /** Schema for `ready` payload accepted by `chimera:lobby:update-ready-state`. */
 export const LobbyReadyStateSchema = z.boolean();

@@ -50,6 +50,13 @@ export interface LobbyServerOptions {
     readonly port: number;
     readonly gameId: string;
     readonly maxPlayers: number;
+    /**
+     * Optional host-set lobby password (F56). When non-empty, every JOIN must
+     * present a matching `password` (compared timing-safe) or is rejected with
+     * `REJECT 'invalid_password'`. When undefined/empty the lobby is open. The
+     * secret stays here — it is never written to `LobbyState` or logged.
+     */
+    readonly password?: string;
     /** Optional structured logger. Logs join/leave events and validation failures. */
     readonly logger?: Logger;
 }
@@ -290,6 +297,28 @@ export class LobbyServer implements MessageBus {
                         JSON.stringify({
                             type: 'REJECT',
                             reason: 'invalid_token',
+                            tick: 0,
+                        } satisfies ServerMessage),
+                    );
+                    ws.close();
+                    return;
+                }
+
+                // Validate lobby password — timing-safe, only when the host set
+                // one (F56). An empty/undefined host password leaves the lobby
+                // open (unchanged behaviour). A missing or mismatched client
+                // password is rejected before WELCOME; the secret is never
+                // echoed back to the client.
+                const requiredPassword = this.opts.password;
+                if (
+                    requiredPassword !== undefined &&
+                    requiredPassword.length > 0 &&
+                    !timingSafeTokenEqual(msg.password ?? '', requiredPassword)
+                ) {
+                    ws.send(
+                        JSON.stringify({
+                            type: 'REJECT',
+                            reason: 'invalid_password',
                             tick: 0,
                         } satisfies ServerMessage),
                     );

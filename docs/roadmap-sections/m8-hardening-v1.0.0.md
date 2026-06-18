@@ -1,6 +1,6 @@
 ---
 title: 'M8 — Hardening (v1.0.0)'
-description: 'F43–F49, F51–F55: Crash Reporter/Error Boundaries, Replay System, Chat System, Toast Notification System, Debug Inspector, Multiplayer/Obfuscation Soak Tests, Performance Baseline/NAT Diagnostics, Game-Customizable Main Menu, Game-Customizable Settings Page (Tabbed Redesign), Customizable Lobby, Tactics-Stub Hardening (turn-gating, stamina, AI players, commitment-scheme battle mode), and In-Game Menu / Role-Aware Leave Game. Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.'
+description: 'F43–F49, F51–F56: Crash Reporter/Error Boundaries, Replay System, Chat System, Toast Notification System, Debug Inspector, Multiplayer/Obfuscation Soak Tests, Performance Baseline/NAT Diagnostics, Game-Customizable Main Menu, Game-Customizable Settings Page (Tabbed Redesign), Customizable Lobby, Tactics-Stub Hardening (turn-gating, stamina, AI players, commitment-scheme battle mode), In-Game Menu / Role-Aware Leave Game, and Lobby Password. Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.'
 tags:
     [
         milestone,
@@ -22,6 +22,7 @@ tags:
         ai-players,
         commitment,
         turn-mode,
+        lobby-password,
     ]
 ---
 
@@ -128,6 +129,14 @@ Harden the **tactics** demo/test game so it exercises four engine capabilities e
 Add an Escape-toggled in-game menu and a role-aware **Leave game** capability for matches in progress (today a match can only be left before it starts or after it ends). Games provide an `inGameMenu` component via `GameScreenRegistry` (a component override, `'none'` to opt out, or omitted for the engine default); the engine ships a default Resume/Leave menu so every game gets a working Escape→leave for free. A new host-only `engine:return_to_lobby` action (the reverse of `engine:start_game`) and a `chimera:lobby:return-to-lobby` IPC abandon the match and reset the live session to `phase: 'lobby'` **without closing it**, so the host and all connected clients return to a restartable lobby (clients follow via the existing snapshot stream); a client instead disconnects to the main menu via the existing `chimera:lobby:leave`. A renderer Escape/overlay stack provides layered Escape (an open transient overlay such as the chat drawer consumes Escape first). Tactics is the first adopter, with a Leave-game confirmation dialog (host vs client copy). Invariants #80, #43, #1/#3, #62/#73 apply.
 
 **GitHub**: [F55 — #733](https://github.com/jindrichruzicka/Chimera/issues/733)
+
+---
+
+## F56 — Lobby Password (Host-Set Join Secret) `§4.14, §4.4`
+
+Let the host optionally protect a multiplayer lobby with a password so only invited players can join. Replace the pre-host **Host** tab's read-only Game/Seats info panel with an optional password field, and add a password field to the **Join** tab. The password threads through the existing `JOIN` handshake exactly like the session token: an optional field added to the `JOIN` `ClientMessage` and its Zod schema, to `HostLobbyParams`/`JoinLobbyParams` (provider abstraction + preload mirrors), passed into `LobbyServer` as config (the host chooses it; the token is server-generated), and validated timing-safe in `LobbyServer.handleConnection` reusing the existing token-comparison helper. A missing or mismatched password is rejected with `REJECT 'invalid_password'` before WELCOME — surfaced to the joining client as a friendly "Incorrect password." error — while a blank host password preserves today's open-lobby behaviour (fully backward-compatible, since every new field is optional). The secret is server-side only: validated at the handshake and never written to `LobbyState`, `LobbyInfo`, any broadcast, or any log line. The IPC boundary (`chimera:lobby:host` / `chimera:lobby:join`) validates the new field with a bounded Zod schema. Invariant #6 (network messages validated before they reach the simulation) and the security standards' no-secret-logging rule apply.
+
+**GitHub**: [F56 — #744](https://github.com/jindrichruzicka/Chimera/issues/744)
 
 ---
 

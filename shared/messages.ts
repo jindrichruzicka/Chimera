@@ -104,6 +104,13 @@ export type ClientMessage =
            * `ProfileSanitizer.admit()` first (Invariant #61).
            */
           readonly profile: Record<string, unknown>;
+          /**
+           * Optional lobby password presented by the joining client (F56). Only
+           * sent when the joiner supplied one; the host compares it timing-safe
+           * against its host-set password and rejects a mismatch/absence with
+           * `REJECT 'invalid_password'`. Absent on open lobbies and older clients.
+           */
+          readonly password?: string;
       }
     | {
           readonly type: 'ACTION';
