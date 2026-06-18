@@ -238,6 +238,28 @@ describe('InGameMenuHost', () => {
         expect(useLobbyUiStore.getState().leavingToMainMenu).toBe(true);
     });
 
+    it('acts only on the key-down: the key-up dispatch must not re-close a freshly opened menu', () => {
+        renderHost(<InGameMenuHost />);
+
+        // A physical Escape tap dispatches engine:toggle-menu twice — pressed on
+        // key-down, released on key-up (oneShot suppresses key-repeat, not the
+        // key-up). The host must act only on the key-down, mirroring the
+        // engine:toggle-perf-hud handler, or the tap would open then instantly
+        // close and the menu could never be opened from the keyboard.
+        act(() => {
+            manager.triggerAction('engine:toggle-menu', makeEvent('engine:toggle-menu'));
+        });
+        expect(screen.getByRole('dialog')).toBeTruthy();
+
+        act(() => {
+            manager.triggerAction('engine:toggle-menu', {
+                ...makeEvent('engine:toggle-menu'),
+                pressed: false,
+            });
+        });
+        expect(screen.getByRole('dialog')).toBeTruthy();
+    });
+
     it('closes on Resume and reopens on a second toggle', () => {
         renderHost(<InGameMenuHost />);
         toggleMenu();

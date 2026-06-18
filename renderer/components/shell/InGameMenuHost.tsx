@@ -55,7 +55,13 @@ export function InGameMenuHost({
     // empty Escape stack lets Escape fall through to the InputManager and toggle
     // here; when open, the base layer below closes it (InputManager suppressed),
     // so there is no double-toggle.
-    useInputAction('engine:toggle-menu', () => {
+    //
+    // Act only on the key-down (`pressed`): `engine:toggle-menu` is oneShot, but
+    // the InputManager still dispatches the key-up — without this guard a single
+    // Escape tap would toggle open then immediately closed. Mirrors the
+    // `engine:toggle-perf-hud` handler in PerfHud.
+    useInputAction('engine:toggle-menu', (event) => {
+        if (!event.pressed) return;
         if (!enabled) return;
         setOpen((current) => !current);
     });

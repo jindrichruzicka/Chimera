@@ -2372,6 +2372,64 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
         await manager.closeLobby();
     });
 
+    it('returnToLobby resets every player ready flag, preserves attributes, and propagates to clients', async () => {
+        const provider = makeProvider();
+
+        let hostState: LobbyState | null = null;
+        let joinState: LobbyState | null = null;
+
+        const hostManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onLobbyStateChanged: (s) => {
+                hostState = s;
+            },
+        });
+        const hostInfo = await hostManager.hostLobby(HOST_PARAMS);
+
+        const joinManager = new LobbyManager(provider, createNoopLogger(), {
+            resolveLobbySetup: resolveSampleSetup,
+            onLobbyStateChanged: (s) => {
+                joinState = s;
+            },
+        });
+        await joinManager.joinLobby({ address: hostInfo.sessionId });
+        const joinId = joinManager.getLocalPlayerId();
+        expect(joinId).toBeTruthy();
+        await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+        // Both players ready; the client authors a colour attribute on its seat.
+        await hostManager.updatePlayerReadyState(true);
+        await joinManager.updatePlayerReadyState(true);
+        await joinManager.setPlayerAttribute(joinId!, 'color', 'amber');
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        // Precondition: every seat ready, colour applied and synced to the host.
+        expect(hostState!.players).toHaveLength(2);
+        expect(hostState!.players.every((p) => p.ready)).toBe(true);
+        expect(hostState!.players.find((p) => p.playerId === joinId)?.attributes?.['color']).toBe(
+            'amber',
+        );
+
+        // Returning to the lobby clears every ready flag …
+        await expect(hostManager.returnToLobby()).resolves.toBeUndefined();
+        await new Promise<void>((resolve) => setTimeout(resolve, 30));
+
+        // … on the host's own view and on the broadcast that reaches the client …
+        expect(hostState!.players.every((p) => !p.ready)).toBe(true);
+        expect(joinState!.players.every((p) => !p.ready)).toBe(true);
+
+        // … while per-player attributes (colour) survive the reset.
+        expect(hostState!.players.find((p) => p.playerId === joinId)?.attributes?.['color']).toBe(
+            'amber',
+        );
+        expect(joinState!.players.find((p) => p.playerId === joinId)?.attributes?.['color']).toBe(
+            'amber',
+        );
+
+        await joinManager.closeLobby();
+        await hostManager.closeLobby();
+    });
+
     it('returnToLobby rejects without an active session', async () => {
         const manager = makeManager();
         await expect(manager.returnToLobby()).rejects.toThrow(/active session/i);

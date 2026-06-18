@@ -1,8 +1,7 @@
 import type { ElectronApplication, Page } from '@playwright/test';
-import { expect } from '@playwright/test';
 import { test as lobbyTest } from './lobby.fixture';
 import { LobbyPage } from '../pages/LobbyPage';
-import { GamePage } from '../pages/GamePage';
+import { readyAndStart } from '../helpers/lobby-match';
 
 export type E2eFirstPlayer = 'host' | 'client';
 
@@ -66,33 +65,8 @@ async function advanceToGame(
     await hostLobby.waitForPlayerCount(2);
     await clientLobby.waitForPlayerCount(2);
 
-    await hostLobby.toggleReady();
-    await clientLobby.toggleReady();
-
-    const hostPlayerId = await hostLobby.localPlayerId();
-    const clientPlayerId = await clientLobby.localPlayerId();
-    if (!hostPlayerId) throw new Error('Could not determine host player ID');
-    if (!clientPlayerId) throw new Error('Could not determine client player ID');
-
-    await expect
-        .poll(() =>
-            Promise.all([
-                hostLobby.playerReadyStatusById(hostPlayerId),
-                hostLobby.playerReadyStatusById(clientPlayerId),
-            ]),
-        )
-        .toEqual(['true', 'true']);
-
-    await hostLobby.startButton.click();
-
-    // Under the custom Electron protocol used in E2E, route transitions can
-    // render the Match screen before the URL reflects `/game`. Gate on
-    // visible match UI instead of URL assertions.
-
-    const hostGame = new GamePage(hostWindow);
-    const clientGame = new GamePage(clientWindow);
-    await hostGame.canvas.waitFor({ state: 'visible' });
-    await clientGame.canvas.waitFor({ state: 'visible' });
+    // Ready both seats, host-start, and wait for both match canvases.
+    await readyAndStart(hostLobby, clientLobby, hostWindow, clientWindow);
 }
 
 /**

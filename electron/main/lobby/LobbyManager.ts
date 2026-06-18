@@ -900,8 +900,10 @@ export class LobbyManager {
      * Host-only: request a return to the lobby for the active hosted session
      * (#736) — the reverse of {@link startGame}. Mirrors {@link setMatchSetting}'s
      * host-only guard: rejects from a joined (non-host) session or when no
-     * session is active. Fires {@link LobbyManagerOptions.onReturnToLobbyRequested}
-     * with the current {@link LobbyState}; the wiring point (T4) dispatches the
+     * session is active. Clears every player's `ready` flag first (the reverse of
+     * startGame's all-ready gate) so the returned-to lobby is a clean slate, then
+     * fires {@link LobbyManagerOptions.onReturnToLobbyRequested} with the current
+     * {@link LobbyState}; the wiring point (T4) dispatches the
      * `engine:return_to_lobby` action that abandons the match and resets the
      * session snapshot to the lobby phase. The callback's result is awaited so
      * an async dispatch propagates its outcome to the caller.
@@ -921,6 +923,18 @@ export class LobbyManager {
         if (this.lobbyState === null) {
             return Promise.reject(new Error('LobbyManager: lobby state is not available'));
         }
+
+        // Reset every player's ready flag so the returned-to lobby starts a fresh
+        // ready round. Only `ready` changes — per-player attributes (colour, F53),
+        // displayName, matchSettings and agentSlots are preserved (withPlayers).
+        // Publish to the host renderer and broadcast to clients via the live
+        // LobbyState push (not a side channel), mirroring setMatchSetting.
+        const resetState = LobbyManager.withPlayers(
+            this.lobbyState,
+            this.lobbyState.players.map((entry) => ({ ...entry, ready: false })),
+        );
+        this.publishLobbyState(resetState);
+        this.broadcastLobbyStateIfHosted(resetState);
 
         // Await the callback so an async dispatch propagates its outcome, but
         // discard its result to honor the `Promise<void>` contract.
