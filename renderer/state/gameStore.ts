@@ -43,6 +43,14 @@ export interface SnapshotStore {
     applySnapshot(snapshot: PlayerSnapshot): void;
     /** Apply an authoritative tick-only update without replacing snapshot. */
     applyTick(tick: number): void;
+
+    /**
+     * Drop the current match snapshot and all derived in-match state back to
+     * initial. Routing/lifecycle only — called by navigation effects on a
+     * match → lobby or match → main-menu transition (issue #741), NOT from
+     * render. Distinct from the `// ipcClient only` mutators above.
+     */
+    reset(): void;
 }
 
 /**
@@ -128,6 +136,18 @@ export function createGameStore(): StoreApi<GameStore> {
 
         applyTick(tick: number): void {
             set(() => ({ currentTick: tick }));
+        },
+
+        reset(): void {
+            set(() => ({
+                snapshot: null,
+                currentTick: 0,
+                predictedActions: [],
+                latencyMs: 0,
+                canUndo: false,
+                canRedo: false,
+                lastReveal: null,
+            }));
         },
 
         addPrediction(action: EngineAction): void {

@@ -28,6 +28,7 @@ import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGa
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
+import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { useUiStore } from '../../state/uiStore';
 import { useGameContent } from '../../state/useGameContent';
 import { useInputAction } from '../../input/useInputAction.js';
@@ -52,6 +53,8 @@ export default function GamePage(): React.ReactElement | null {
     const lastReveal = useGameStore((state) => state.lastReveal);
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
+    const leavingToMainMenu = useLobbyUiStore((state) => state.leavingToMainMenu);
+    const leavingRef = React.useRef(false);
     const gameId = lobbyState?.info.gameId ?? null;
     const gameContent = useGameContent(gameId);
     const loadedGame = useLoadedRendererGame(gameId);
@@ -75,7 +78,23 @@ export default function GamePage(): React.ReactElement | null {
         [currentTick, sendActionToHost, snapshot],
     );
 
+    // Client leave-to-main-menu (#741). useLeaveGame() sets this flag before the
+    // disconnect lands; routing owns the navigation + stale-snapshot reset. Latch
+    // the in-flight leave in a ref so the direct-boot effect below cannot hijack
+    // it to /lobby once the disconnect nulls both snapshot and lobbyState
+    // (lobbyStoreBootstrap applies lobbyState=null on 'disconnected'). The flag is
+    // consumed (reset to false) right after navigating.
     useEffect(() => {
+        if (leavingToMainMenu && !leavingRef.current) {
+            leavingRef.current = true;
+            useGameStore.getState().reset();
+            useLobbyUiStore.getState().setLeavingToMainMenu(false);
+            router.replace('/main-menu');
+        }
+    }, [leavingToMainMenu, router]);
+
+    useEffect(() => {
+        if (leavingRef.current) return; // a leave-to-main-menu hop is in flight
         if (snapshot === null && hasLoadedInitialLobbyState && lobbyState === null) {
             const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
             router.replace(withShellGameId('/lobby', explicitGameId));

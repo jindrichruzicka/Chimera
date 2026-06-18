@@ -288,6 +288,55 @@ describe('gameStore.applyReveal()', () => {
     });
 });
 
+// ── gameStore.reset() (issue #741) ────────────────────────────────────────────
+
+describe('gameStore.reset()', () => {
+    const reveal = (id: string): CommitmentReveal => ({
+        id: id as CommitmentId,
+        value: { playerId: 'p1' },
+        nonce: 'nonce',
+    });
+
+    it('clears the stale snapshot back to null', () => {
+        const store = createGameStore();
+        store.getState().applySnapshot(makeSnapshot(7));
+
+        store.getState().reset();
+
+        expect(store.getState().snapshot).toBeNull();
+    });
+
+    it('returns currentTick to 0', () => {
+        const store = createGameStore();
+        store.getState().applySnapshot(makeSnapshot(11));
+
+        store.getState().reset();
+
+        expect(store.getState().currentTick).toBe(0);
+    });
+
+    it('clears predictions and undo/redo and reveal back to initial', () => {
+        const store = createGameStore();
+        store.getState().applySnapshot(makeSnapshot(3, true, true));
+        store.getState().addPrediction(makeAction(4));
+        store.getState().applyReveal(reveal('env-1'));
+
+        store.getState().reset();
+
+        expect(store.getState().predictedActions).toEqual([]);
+        expect(store.getState().canUndo).toBe(false);
+        expect(store.getState().canRedo).toBe(false);
+        expect(store.getState().lastReveal).toBeNull();
+    });
+
+    it('is idempotent on an already-empty store', () => {
+        const store = createGameStore();
+
+        expect(() => store.getState().reset()).not.toThrow();
+        expect(store.getState().snapshot).toBeNull();
+    });
+});
+
 // ── singleton useGameStore ────────────────────────────────────────────────────
 
 describe('useGameStore singleton', () => {

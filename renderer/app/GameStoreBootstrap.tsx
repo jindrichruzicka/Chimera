@@ -47,6 +47,23 @@ export function GameStoreBootstrap(): null {
         }
     }, [snapshot, router, pathname]);
 
+    // Symmetric reverse of the /lobby → /game redirect above: when a
+    // phase:'lobby' snapshot arrives on /game (host return-to-lobby plus every
+    // following client — both receive the broadcast lobby snapshot, #737), drop
+    // the stale match snapshot and return to /lobby. Reset first so the
+    // /lobby → /game effect above does not immediately bounce back to /game on
+    // /lobby. Invariant #1: only PlayerSnapshot.phase drives this decision.
+    useEffect(() => {
+        if (
+            snapshot !== null &&
+            snapshot.phase === 'lobby' &&
+            isGamePath(currentBrowserPathname(pathname))
+        ) {
+            useGameStore.getState().reset();
+            router.push('/lobby');
+        }
+    }, [snapshot, router, pathname]);
+
     useEffect(() => {
         const chimera = (globalThis as { __chimera?: { game: GameAPI } }).__chimera;
         if (!chimera?.game) return;
@@ -97,6 +114,10 @@ export function GameStoreBootstrap(): null {
 
 function isLobbyPath(pathname: string | null): boolean {
     return pathname === '/lobby' || pathname === '/lobby/' || pathname === '/lobby/index.html';
+}
+
+function isGamePath(pathname: string | null): boolean {
+    return pathname === '/game' || pathname === '/game/' || pathname === '/game/index.html';
 }
 
 function currentBrowserPathname(pathname: string | null): string | null {

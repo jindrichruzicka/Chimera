@@ -39,9 +39,13 @@ import GamePage from './page';
 
 const mockReplace = vi.fn();
 const mockSendAction = vi.fn();
+const mockReset = vi.fn();
+const mockSetLeavingToMainMenu = vi.fn();
+const mockClearLocalLobbyContext = vi.fn();
 let mockSnapshot: PlayerSnapshot | null = null;
 let mockCurrentTick: number | undefined = undefined;
 let mockLocalPlayerId: string | null = null;
+let mockLeavingToMainMenu = false;
 let mockLobbyState: LobbyState | null = null;
 let mockHasLoadedInitialLobbyState = true;
 const loadRendererGameMock = vi.hoisted(() => vi.fn());
@@ -51,17 +55,36 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('../../state/gameStore', () => ({
-    useGameStore: (
-        selector: (state: {
-            readonly snapshot: PlayerSnapshot | null;
-            readonly currentTick: number | undefined;
-        }) => unknown,
-    ) => selector({ snapshot: mockSnapshot, currentTick: mockCurrentTick }),
+    useGameStore: Object.assign(
+        (
+            selector: (state: {
+                readonly snapshot: PlayerSnapshot | null;
+                readonly currentTick: number | undefined;
+            }) => unknown,
+        ) => selector({ snapshot: mockSnapshot, currentTick: mockCurrentTick }),
+        { getState: () => ({ reset: mockReset }) },
+    ),
 }));
 
 vi.mock('../../state/lobbyUiStore', () => ({
-    useLobbyUiStore: (selector: (state: { readonly localPlayerId: string | null }) => unknown) =>
-        selector({ localPlayerId: mockLocalPlayerId }),
+    useLobbyUiStore: Object.assign(
+        (
+            selector: (state: {
+                readonly localPlayerId: string | null;
+                readonly leavingToMainMenu: boolean;
+            }) => unknown,
+        ) =>
+            selector({
+                localPlayerId: mockLocalPlayerId,
+                leavingToMainMenu: mockLeavingToMainMenu,
+            }),
+        {
+            getState: () => ({
+                setLeavingToMainMenu: mockSetLeavingToMainMenu,
+                clearLocalLobbyContext: mockClearLocalLobbyContext,
+            }),
+        },
+    ),
 }));
 
 vi.mock('../../state/lobbyStore', () => ({
@@ -222,10 +245,14 @@ beforeEach(() => {
     mockSnapshot = null;
     mockCurrentTick = undefined;
     mockLocalPlayerId = null;
+    mockLeavingToMainMenu = false;
     mockLobbyState = makeLobbyState();
     mockHasLoadedInitialLobbyState = true;
     mockSendAction.mockReset();
     mockReplace.mockReset();
+    mockReset.mockReset();
+    mockSetLeavingToMainMenu.mockReset();
+    mockClearLocalLobbyContext.mockReset();
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
     inputActionCallbacks.clear();
@@ -301,6 +328,52 @@ describe('GamePage — redirect', () => {
         renderGamePage();
         await screen.findByTestId('game-canvas');
         expect(mockReplace).not.toHaveBeenCalled();
+    });
+});
+
+describe('GamePage — client leave-to-main-menu (#741)', () => {
+    it('routes /game → /main-menu when the leaving-intent flag is set', () => {
+        mockLeavingToMainMenu = true;
+        mockSnapshot = null;
+        mockLobbyState = null;
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/main-menu');
+    });
+
+    it('drops the stale snapshot and consumes the flag on the leave transition', () => {
+        mockLeavingToMainMenu = true;
+        mockSnapshot = makeSnapshot();
+
+        renderGamePage();
+
+        expect(mockReset).toHaveBeenCalledTimes(1);
+        expect(mockSetLeavingToMainMenu).toHaveBeenCalledWith(false);
+    });
+
+    it('preempts the direct-boot /lobby redirect (leave wins over no-session)', () => {
+        // snapshot + lobbyState both null would normally direct-boot to /lobby;
+        // the in-flight leave must win and never push /lobby.
+        mockLeavingToMainMenu = true;
+        mockSnapshot = null;
+        mockLobbyState = null;
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/main-menu');
+        expect(mockReplace).not.toHaveBeenCalledWith('/lobby');
+    });
+
+    it('does not route to /main-menu when the flag is not set (direct boot still goes to /lobby)', () => {
+        mockLeavingToMainMenu = false;
+        mockSnapshot = null;
+        mockLobbyState = null;
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/lobby');
+        expect(mockReplace).not.toHaveBeenCalledWith('/main-menu');
     });
 });
 
