@@ -87,6 +87,32 @@ export function collectInitialPlayerSlots(
 }
 
 /**
+ * Derive the synthetic AI player slots for a match start from the LIVE lobby
+ * `agentSlots`.
+ *
+ * Unlike {@link collectInitialPlayerSlots} — which runs at host time off the
+ * host-time `metadata.agentSlots` and includes the host seat — this is called at
+ * game-start with the current lobby roster, so AI seats added *after* hosting
+ * (the only way the UI adds them) are picked up. Order-preserving; human slots
+ * are ignored. The host (slot 0) and joined humans are seated separately from the
+ * live `players` roster, so this returns AI seats only.
+ */
+export function collectGameStartAiPlayerSlots(
+    agentSlots: readonly LobbyAgentSlot[] | undefined,
+): readonly HostedSessionPlayerSlot[] {
+    const slots: HostedSessionPlayerSlot[] = [];
+    for (const slot of agentSlots ?? []) {
+        if (slot.kind === 'ai') {
+            slots.push({
+                slotIndex: slot.slotIndex,
+                playerId: createSyntheticAIPlayerId(slot.slotIndex),
+            });
+        }
+    }
+    return slots;
+}
+
+/**
  * Maps the resolved player slots to replay `players` metadata, sourcing each
  * display name from `resolveDisplayName` (typically the host `PlayerDirectory`).
  *

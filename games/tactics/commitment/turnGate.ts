@@ -20,7 +20,7 @@
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §2, §4
  */
 
-import { readTacticsTurnMode } from '@chimera/shared/tactics.js';
+import { readTacticsTurnMode } from '@chimera/games/tactics/constants.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 
 /** True iff this match runs the commitment (simultaneous) turn mode. */

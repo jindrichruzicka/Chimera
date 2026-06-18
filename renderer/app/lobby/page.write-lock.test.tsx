@@ -15,6 +15,7 @@ vi.mock('next/navigation', () => ({
 // an empty shell so these write-lock tests exercise the engine-default panel and
 // never trigger a real `games/*` dynamic import.
 vi.mock('../../game/rendererGameRegistry', () => ({
+    DEFAULT_RENDERER_GAME_ID: 'tactics',
     loadRendererGameShell: () => Promise.resolve({}),
 }));
 

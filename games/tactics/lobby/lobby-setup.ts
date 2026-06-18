@@ -13,16 +13,19 @@
  * absent `setup`, an off-palette name, or a game with no loaded content — they
  * are NOT a fallback for a failed content load (which is fatal, Invariant #14).
  *
- * Module boundary (§3): a `games/*` descriptor may import only `shared/`. The
- * sole runtime import is the dependency-free turn-mode constants from
- * `shared/tactics.ts`; every other import is `import type`, erased at build — so
- * the module stays safe to load in both `main` and renderer.
+ * Module boundary (§3): this descriptor must stay load-safe in both `main` and
+ * renderer. Its sole runtime import is the dependency-free turn-mode constants
+ * from its own package (`games/tactics/constants.ts`); every other import is
+ * `import type`, erased at build — so the module stays safe to load anywhere.
  *
  * Architecture: §4.37 — Renderer Shell Pages UI Contract; §4.4 — Lobby State Sync
  * Task: #708 (T6, part of #702 — Customizable Lobby)
  */
 
-import { TACTICS_DEFAULT_TURN_MODE, TACTICS_TURN_MODE_SETTING } from '@chimera/shared/tactics.js';
+import {
+    TACTICS_DEFAULT_TURN_MODE,
+    TACTICS_TURN_MODE_SETTING,
+} from '@chimera/games/tactics/constants.js';
 import type { GameLobbySetup, LobbyFieldOption } from '@chimera/shared/game-lobby-contract.js';
 
 /**

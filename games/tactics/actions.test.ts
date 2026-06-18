@@ -7,7 +7,7 @@ import {
     TACTICS_INITIAL_UNIT_SPACING_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
-} from '@chimera/shared/tactics.js';
+} from '@chimera/games/tactics/constants.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { createRng } from '@chimera/simulation/engine/DeterministicRng.js';
 import type {

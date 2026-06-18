@@ -1,7 +1,8 @@
 /**
- * ai/policies/tactics/tacticsPolicy.ts
+ * games/tactics/ai/tacticsPolicy.ts
  *
- * Tactics AI policy (issue #725). A pure `ai/` package policy: it reads the
+ * Tactics AI policy (issue #725). A game-owned policy: it lives in the tactics
+ * game package and is built on the game-agnostic `ai/` framework. It reads the
  * viewer-safe `PlayerSnapshot` and emits the same `tactics:move_unit` /
  * `tactics:attack` / `engine:end_turn` EngineActions a human would, through the
  * normal command-dispatch path.
@@ -15,8 +16,11 @@
  *     (which makes the unit adjacent), then attack next idle tick.
  *   - Otherwise step toward the nearest visible enemy, reducing Manhattan distance.
  *   - With no visible enemy, wander to a legal adjacent tile.
- *   - Spend stamina like a human (1 per action); end the turn at 0 stamina or
- *     when no useful action remains.
+ *   - Spend stamina like a human (1 per action); close the turn at 0 stamina or
+ *     when no useful action remains — via `engine:end_turn` in sequential mode,
+ *     or `tactics:commit` in commitment (simultaneous) mode (see
+ *     {@link finishTurnAction}). The turn mode is read off the projected
+ *     `setup.matchSettings`, so the decision stays a pure function of the snapshot.
  *
  * Honest vs omniscient (Invariant #17): the policy is built for the honest,
  * projected snapshot (the only shipping path — `omniscient` is opt-in and off by
@@ -29,9 +33,10 @@
  * snapshot. The only "random" choice — which way to wander — is derived from
  * `snapshot.tick`, a deterministic engine input, preserving replay guarantees.
  *
- * Boundaries (§3): imports only `shared/`, `simulation/`, and `ai/`. It never
- * imports `games/*` — the action strings and board extents live in
- * `shared/tactics.ts`, so this stays a pure policy package.
+ * Boundaries (§3): a game package module — it imports its own game's constants
+ * (`games/tactics/constants.ts`: action strings, board extents, stamina), the
+ * game-agnostic `ai/` framework (`ai/engine/*`), and `simulation/` types only.
+ * The pure `ai/` framework holds zero tactics-specific code (Invariants #106/#107).
  *
  * Invariants upheld:
  *   #16 — only emits EngineActions (dispatched through ActionPipeline); no direct
@@ -46,9 +51,11 @@ import {
     TACTICS_BOARD_MAX_Y,
     TACTICS_BOARD_MIN_X,
     TACTICS_BOARD_MIN_Y,
+    TACTICS_COMMIT_ACTION,
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/shared/tactics.js';
+    readTacticsTurnMode,
+} from '@chimera/games/tactics/constants.js';
 import type { EngineAction, EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
 import type { AIState } from '@chimera/ai/engine/AIState.js';
 import type { PlayerSnapshot } from '@chimera/ai/engine/AITypes.js';
@@ -214,6 +221,33 @@ function endTurnAction(viewerId: PlayerId, tick: number): EngineAction {
     return { type: ENGINE_END_TURN_ACTION, playerId: viewerId, tick, payload: {} };
 }
 
+function commitAction(viewerId: PlayerId, tick: number): EngineAction {
+    return { type: TACTICS_COMMIT_ACTION, playerId: viewerId, tick, payload: {} };
+}
+
+/**
+ * The action that closes the AI's turn for the current turn mode.
+ *
+ * Sequential mode ends the turn directly (`engine:end_turn`). Commitment
+ * (simultaneous) mode instead emits `tactics:commit`: there `engine:end_turn` is
+ * the reveal trigger gated until every seat has committed, so a non-committing AI
+ * would deadlock the turn. The host auto-synthesises the reveal End Turn once the
+ * commit set completes (`tacticsCommitmentOrchestration.shouldAutoEndTurn`), and
+ * after committing the AI's projected `isMyTurn` flips false — so it stops acting
+ * and never double-commits. The mode is read from the projected
+ * `setup.matchSettings` (projected verbatim by the StateProjector), keeping this a
+ * pure `shared/`-only decision with no host-local field.
+ */
+function finishTurnAction(
+    snapshot: PlayerSnapshot,
+    viewerId: PlayerId,
+    tick: number,
+): EngineAction {
+    return readTacticsTurnMode(snapshot.setup?.matchSettings) === 'commitment'
+        ? commitAction(viewerId, tick)
+        : endTurnAction(viewerId, tick);
+}
+
 /**
  * Decide the AI's next single action for the tactics game, or `null` when it is
  * not the AI's turn (nothing to do). Pure and deterministic given the snapshot.
@@ -228,7 +262,7 @@ export function decideTacticsAction(
 
     const tick = snapshot.tick;
     if (readViewerStamina(snapshot, viewerId) <= 0) {
-        return endTurnAction(viewerId, tick);
+        return finishTurnAction(snapshot, viewerId, tick);
     }
 
     const units: TacticsUnitView[] = [];
@@ -241,7 +275,7 @@ export function decideTacticsAction(
 
     const actingUnit = units.filter((unit) => unit.ownerId === viewerId).sort(byEntityId)[0];
     if (actingUnit === undefined) {
-        return endTurnAction(viewerId, tick);
+        return finishTurnAction(snapshot, viewerId, tick);
     }
 
     const target = units
@@ -267,7 +301,7 @@ export function decideTacticsAction(
             const tile = adjacentTiles[0];
             return tile !== undefined
                 ? moveAction(viewerId, tick, actingUnit.id, tile)
-                : endTurnAction(viewerId, tick);
+                : finishTurnAction(snapshot, viewerId, tick);
         }
 
         // Distant → step toward the target, reducing Manhattan distance.
@@ -291,7 +325,7 @@ export function decideTacticsAction(
         }
     }
 
-    return endTurnAction(viewerId, tick);
+    return finishTurnAction(snapshot, viewerId, tick);
 }
 
 /**

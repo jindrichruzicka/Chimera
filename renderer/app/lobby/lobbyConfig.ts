@@ -1,4 +1,4 @@
-import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
+import { DEFAULT_RENDERER_GAME_ID } from '../../game/rendererGameRegistry';
 import { themeId as makeThemeId } from '../../theme/types';
 import type { ThemeId } from '../../theme/types';
 
@@ -8,7 +8,7 @@ export interface LobbyConfig {
     readonly themeId?: ThemeId;
 }
 
-const DEFAULT_GAME_ID = TACTICS_GAME_ID;
+const DEFAULT_GAME_ID = DEFAULT_RENDERER_GAME_ID;
 const DEFAULT_MAX_PLAYERS = 4;
 const MIN_MAX_PLAYERS = 2;
 const MAX_MAX_PLAYERS = 16;

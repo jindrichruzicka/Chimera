@@ -23,7 +23,10 @@ import type {
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
 import { entityId, playerId as toPlayerId, sceneId } from '@chimera/simulation/engine/types.js';
-import { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
+import {
+    TACTICS_ATTACK_ACTION,
+    TACTICS_MOVE_UNIT_ACTION,
+} from '@chimera/games/tactics/constants.js';
 import { tacticsGridCoordinate } from '@chimera/games/tactics/actions.js';
 import type { TacticsCommitmentEnvelopeValue } from '@chimera/games/tactics/commitment/contract.js';
 import { RevealStaging } from '@chimera/simulation/projection/index.js';

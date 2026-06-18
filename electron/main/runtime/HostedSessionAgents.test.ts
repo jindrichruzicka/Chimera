@@ -19,14 +19,16 @@ import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProject
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
 import { DefaultStateProjector } from '@chimera/simulation/projection/index.js';
-import { createTacticsAIState } from '@chimera/ai/policies/tactics/tacticsPolicy.js';
+import { createTacticsAIState } from '@chimera/games/tactics/ai/tacticsPolicy.js';
 import { registerTacticsActions } from '@chimera/games/tactics/actions.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
-import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/shared/tactics.js';
+import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/games/tactics/constants.js';
+import type { LobbyAgentSlot } from '@chimera/networking/provider/MultiplayerProvider.js';
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,
     buildReplayPlayers,
+    collectGameStartAiPlayerSlots,
 } from './HostedSessionAgents.js';
 import { buildHostSessionPipeline } from './HostSessionPipeline.js';
 import { SessionRuntime } from './SessionRuntime.js';
@@ -320,6 +322,37 @@ describe('buildInitialHostedSessionSnapshot', () => {
 
         expect(snapshot.sceneId).toBe(sceneId('engine:lobby'));
         expect(snapshot.sceneTransition).toBeNull();
+    });
+});
+
+describe('collectGameStartAiPlayerSlots', () => {
+    // The seating fix (#730 follow-up): a lobby-added AI seat must be derived from
+    // the LIVE lobby `agentSlots` at game-start, since the host-time metadata
+    // captured by `collectInitialPlayerSlots` is empty (AI is added after hosting).
+    it('returns no slots when there are no agent slots', () => {
+        expect(collectGameStartAiPlayerSlots(undefined)).toEqual([]);
+        expect(collectGameStartAiPlayerSlots([])).toEqual([]);
+    });
+
+    it('maps an AI slot to its synthetic player id, preserving the slot index', () => {
+        const slots: readonly LobbyAgentSlot[] = [{ slotIndex: 1, kind: 'ai' }];
+
+        expect(collectGameStartAiPlayerSlots(slots)).toEqual([
+            { slotIndex: 1, playerId: playerId('ai-1') },
+        ]);
+    });
+
+    it('ignores human slots and preserves AI order', () => {
+        const slots: readonly LobbyAgentSlot[] = [
+            { slotIndex: 1, kind: 'ai' },
+            { slotIndex: 2, kind: 'human' },
+            { slotIndex: 3, kind: 'ai' },
+        ];
+
+        expect(collectGameStartAiPlayerSlots(slots)).toEqual([
+            { slotIndex: 1, playerId: playerId('ai-1') },
+            { slotIndex: 3, playerId: playerId('ai-3') },
+        ]);
     });
 });
 

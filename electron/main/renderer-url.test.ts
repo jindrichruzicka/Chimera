@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
+import { TACTICS_GAME_ID } from '@chimera/games/tactics/constants.js';
 import {
     buildRendererGameLaunchUrl,
     CHIMERA_RENDERER_HOST,

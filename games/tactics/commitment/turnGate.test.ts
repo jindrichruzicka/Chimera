@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_TURN_MODE_SETTING } from '@chimera/shared/tactics.js';
+import { TACTICS_TURN_MODE_SETTING } from '@chimera/games/tactics/constants.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import { gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import {

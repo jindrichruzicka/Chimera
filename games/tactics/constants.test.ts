@@ -1,4 +1,4 @@
-// shared/tactics.test.ts
+// games/tactics/constants.test.ts
 //
 // Unit tests for the tactics commitment battle-mode turn-mode match setting
 // (T6 / #726). `readTacticsTurnMode` is the single pure reader both the lobby
@@ -14,7 +14,7 @@ import {
     TACTICS_DEFAULT_TURN_MODE,
     TACTICS_TURN_MODE_SETTING,
     readTacticsTurnMode,
-} from './tactics.js';
+} from './constants.js';
 
 describe('readTacticsTurnMode (T6 / #726 — commitment battle-mode toggle)', () => {
     it('defaults to sequential when match settings are absent', () => {

@@ -5,8 +5,9 @@
  *   - "Add AI" is disabled once the lobby is full (humans + AI === max seats);
  *   - an added AI appears in the AI sub-list with its badge;
  *   - a human join that would overflow auto-removes an AI to make room (#724);
- *   - a hosted match that includes an AI seat plays a legal turn automatically
- *     (the AI moves and ends its turn), with no manual tick-driving.
+ *   - a hosted match seats a lobby-added AI, and the host-side AI drive plays the
+ *     AI's whole turn so control returns to the host — in both sequential and
+ *     simultaneous (commitment) turn modes.
  *
  * Asserts on observable lobby roster state and the in-match HUD only. CI runs
  * ~an order slower; every wait is polled with a generous budget.
@@ -47,20 +48,12 @@ test.describe('Tactics AI players', () => {
         await hostLobby.expectAiCount(MAX_SEATS - 2);
     });
 
-    // KNOWN GAP (separate from the F54 commitment work): a lobby-added AI is not
-    // seated as a match player at start. The hosted session captures `agentSlots`
-    // at HOST time (empty) and drives all seat/agent/maxPlayers machinery from
-    // that snapshot (electron/main/index.ts `onSessionHosted` →
-    // `collectInitialPlayerSlots` / `registerSlotAgent`), while
-    // `onGameStartRequested` seeds `engine:start_game` from human `state.players`
-    // only. So an AI added after hosting is never seated nor registered as an
-    // agent — the AI runner exists but has no seat to drive. Seating it without
-    // also registering its agent would only stall the turn on the AI. Re-deriving
-    // and registering AI seats from the current lobby `agentSlots` at start is a
-    // session-bootstrap refactor outside the commitment scope; track + fix
-    // separately, then unskip. The AI add/remove/overflow lobby behaviour above is
-    // fully covered and passing.
-    test.fixme('an AI seat takes a legal turn automatically once the match starts', async ({
+    // A hosted match with one AI seat: the host hands the turn over, the host-side
+    // AI drive plays the AI's whole turn (tactics has no wall-clock tick loop, so
+    // the host pumps the agent), and control returns to the host — or the AI's
+    // attack ended the match, a valid smoke outcome (the human lost). Asserts on
+    // the in-match HUD only. CI runs ~an order slower; every wait is polled.
+    test('an AI seat plays its turn automatically and hands control back (sequential)', async ({
         hostWindow,
     }) => {
         test.slow();
@@ -79,15 +72,62 @@ test.describe('Tactics AI players', () => {
         await expect(host.canvas).toBeVisible({ timeout: 15_000 });
         await expect.poll(() => host.turnStatusText(), { timeout: 20_000 }).toBe('Your turn');
 
-        // Hand the turn to the AI. It decides and dispatches on every tick (no manual
-        // tick-driver), so its moves advance the tick beyond the lone end-turn, and
-        // it then ends its own turn — control returns to the host.
+        // Hand the turn to the AI. The host drives it to the end of its turn, so its
+        // moves advance the tick past the lone end-turn before control returns.
         const tickBeforeAi = await host.currentTick();
         await host.endTurnButton.click();
 
         await expect
             .poll(() => host.currentTick(), { timeout: 45_000 })
             .toBeGreaterThan(tickBeforeAi + 1);
-        await expect.poll(() => host.turnStatusText(), { timeout: 45_000 }).toBe('Your turn');
+        await expect.poll(() => turnReturnedOrGameOver(host), { timeout: 45_000 }).toBe(true);
+    });
+
+    // Same smoke, but with "Simultaneous turns" (commitment mode) enabled: both
+    // seats are active at once. The host commits (an empty commit is legal); the
+    // host-side AI drive makes the AI commit too, the completing commit
+    // auto-reveals, and a fresh simultaneous turn begins — proving the AI is not
+    // stuck waiting to commit.
+    test('an AI seat commits and the simultaneous turn resolves (commitment mode)', async ({
+        hostWindow,
+    }) => {
+        test.slow();
+        const hostLobby = new TacticsLobbyPage(hostWindow);
+
+        await hostLobby.hostLobby();
+        await hostLobby.enableCommitmentScheme();
+        await hostLobby.expectCommitmentEnabled(true);
+        await hostLobby.addAi();
+        await hostLobby.expectAiCount(1);
+
+        await hostLobby.toggleReady();
+        await expect(hostLobby.startButton).toBeEnabled({ timeout: 20_000 });
+        await hostLobby.startButton.click();
+
+        const host = new GamePage(hostWindow);
+        await expect(host.canvas).toBeVisible({ timeout: 15_000 });
+        // Commitment mode: every not-yet-committed seat is active simultaneously.
+        await expect.poll(() => host.turnStatusText(), { timeout: 20_000 }).toBe('Your turn');
+
+        const tickBeforeCommit = await host.currentTick();
+        await host.endTurnButton.click();
+
+        // The host's commit + the AI's commit + the reveal each advance the tick.
+        await expect
+            .poll(() => host.currentTick(), { timeout: 45_000 })
+            .toBeGreaterThan(tickBeforeCommit);
+        await expect.poll(() => turnReturnedOrGameOver(host), { timeout: 45_000 }).toBe(true);
     });
 });
+
+/**
+ * A valid post-AI-turn smoke outcome: control is back with the host for a fresh
+ * turn, or the match concluded (the result banner is up). Either proves the AI
+ * advanced the game rather than stalling.
+ */
+async function turnReturnedOrGameOver(host: GamePage): Promise<boolean> {
+    if (await host.gameResultBanner.isVisible()) {
+        return true;
+    }
+    return (await host.turnStatusText()) === 'Your turn';
+}

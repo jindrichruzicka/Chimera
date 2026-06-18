@@ -12,7 +12,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { TACTICS_DEFAULT_TURN_MODE, TACTICS_TURN_MODE_SETTING } from '@chimera/shared/tactics.js';
+import {
+    TACTICS_DEFAULT_TURN_MODE,
+    TACTICS_TURN_MODE_SETTING,
+} from '@chimera/games/tactics/constants.js';
 import {
     buildTacticsLobbySetup,
     DEFAULT_BOARD_COLOR,

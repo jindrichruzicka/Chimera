@@ -73,7 +73,7 @@ A fully peer-trustless variant (client-side commit so even the host process neve
 
 The mode is a **synced, host-authored match setting**, off by default. It rides the F53 customizable-lobby plumbing with no new IPC:
 
-- Key `TACTICS_TURN_MODE_SETTING = 'turnMode'` on `GameSetupConfig.matchSettings`, union `TacticsTurnMode = 'sequential' | 'commitment'`, default `'sequential'` (`TACTICS_DEFAULT_TURN_MODE`). Defined in [`shared/tactics.ts`](../../shared/tactics.ts).
+- Key `TACTICS_TURN_MODE_SETTING = 'turnMode'` on `GameSetupConfig.matchSettings`, union `TacticsTurnMode = 'sequential' | 'commitment'`, default `'sequential'` (`TACTICS_DEFAULT_TURN_MODE`). Defined in [`games/tactics/constants.ts`](../../games/tactics/constants.ts).
 - T7 adds a host-only Battle Setup checkbox in `TacticsLobbyScreen.tsx` (same gating as `boardColor`), written through the existing `chimera:lobby:set-match-setting` → `LobbyManager.setMatchSetting()` path; every accepted change rebroadcasts to all peers.
 - The agreed config is carried into the match by `engine:start_game` → `snapshot.setup` and projected verbatim by `StateProjector`. Reducers and the renderer decode it with the single pure reader `readTacticsTurnMode(matchSettings)` — fail-safe: anything but the exact literal `'commitment'` is `'sequential'`.
 
@@ -175,7 +175,7 @@ A save taken mid-commit (some players committed, awaiting others) must still be 
 
 ## Acceptance criteria → where addressed
 
-- Design note + contract types committed; T7/T8/T9 implementable with no open design question → this note + [`shared/tactics.ts`](../../shared/tactics.ts) + [`games/tactics/commitment/contract.ts`](../../games/tactics/commitment/contract.ts).
+- Design note + contract types committed; T7/T8/T9 implementable with no open design question → this note + [`games/tactics/constants.ts`](../../games/tactics/constants.ts) + [`games/tactics/commitment/contract.ts`](../../games/tactics/commitment/contract.ts).
 - Each phase mapped to a concrete existing primitive → [§Phase → primitive map](#phase--existing-primitive-map).
 - Reveal ordering specified deterministically → [§Reveal ordering](#reveal-ordering).
 - Undo-before-commit + stamina refund specified → [§6](#6-undo-before-commit--stamina-refund-t8).

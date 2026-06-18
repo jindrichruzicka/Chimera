@@ -2,7 +2,10 @@
 
 import type { ThreeEvent } from '@react-three/fiber';
 import React from 'react';
-import { TACTICS_BOARD_HEIGHT_TILES, TACTICS_BOARD_WIDTH_TILES } from '@chimera/shared/tactics.js';
+import {
+    TACTICS_BOARD_HEIGHT_TILES,
+    TACTICS_BOARD_WIDTH_TILES,
+} from '@chimera/games/tactics/constants.js';
 import {
     worldToGridPoint,
     type TacticsGridPoint,

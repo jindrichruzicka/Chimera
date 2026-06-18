@@ -12,7 +12,7 @@ import {
     type BadgeVariant,
 } from '@chimera/renderer/components/ui/index.js';
 import { ChatPanel } from '@chimera/renderer/components/chat';
-import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/shared/tactics.js';
+import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/games/tactics/constants.js';
 import {
     parseTacticsAllSeatsCommitted,
     parseTacticsSeatCommitted,

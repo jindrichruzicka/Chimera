@@ -228,6 +228,28 @@ if [[ -d electron/main ]]; then
     )
 fi
 
+# ─── Check 11: ai/ holds only the game-agnostic framework (invariant 106) ─────
+# The pure AI framework package must contain no game-specific subtree (e.g. a
+# re-introduced policies/<game>/). Game-specific AI belongs in games/<name>/ai/.
+# Only the framework directories below are allowed as immediate children of ai/.
+if [[ -d ai ]]; then
+    while IFS= read -r dir; do
+        case "$(basename "${dir}")" in
+            engine|__tests__) ;;
+            *) violation "106" "${dir}/  (non-framework dir under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
+        esac
+    done < <(find ai -mindepth 1 -maxdepth 1 -type d | sort)
+fi
+
+# ─── Check 12: no game-specific tokens in game-agnostic packages (inv 107) ────
+# ai/ and shared/ are game-agnostic — they must not define per-game gameplay
+# tokens. Game constants live in games/<name>/. Today tactics is the only game;
+# extend the alternation as games are added (e.g. <GAME>_ constants and
+# '<gameId>:' action-string namespaces). Comments/tests are excluded by check_grep.
+check_grep "107" \
+    'TACTICS_|tactics:' \
+    ai shared
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

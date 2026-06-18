@@ -14,7 +14,7 @@
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §3, §4
  */
 
-import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/shared/tactics.js';
+import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/games/tactics/constants.js';
 import type {
     ActionDefinition,
     BaseGameSnapshot,

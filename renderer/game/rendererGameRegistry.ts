@@ -43,8 +43,18 @@ export class UnknownRendererGameError extends Error {
 type RendererGameLoader = () => Promise<LoadedRendererGame>;
 type RendererGameShellLoader = () => Promise<LoadedRendererGameShell>;
 
+/**
+ * The renderer's default game id — selected by the lobby/menus when no explicit
+ * `gameId` is supplied. This registry is the renderer-owned source of truth for
+ * which games exist (it alone may import `games/*`), so game-agnostic shell pages
+ * read the default from here instead of importing a game package directly
+ * (Invariant #94). Currently tactics is both the only registered game and the
+ * default.
+ */
+export const DEFAULT_RENDERER_GAME_ID = 'tactics';
+
 const rendererGameLoaders: Readonly<Record<string, RendererGameLoader>> = {
-    tactics: loadTacticsRendererGame,
+    [DEFAULT_RENDERER_GAME_ID]: loadTacticsRendererGame,
 };
 
 const rendererGameShellLoaders: Readonly<Record<string, RendererGameShellLoader>> = {

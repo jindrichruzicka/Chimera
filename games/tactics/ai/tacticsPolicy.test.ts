@@ -1,9 +1,9 @@
 /**
- * ai/policies/tactics/tacticsPolicy.test.ts
+ * games/tactics/ai/tacticsPolicy.test.ts
  *
  * Unit tests for the tactics AI policy (issue #725).
  *
- * Architecture reference: §4 — AI Framework; pure `ai/` policy package.
+ * Architecture reference: §4 — AI Framework; game-owned policy built on `ai/`.
  * Tests written first (TDD — red confirmed before implementation).
  *
  * Invariants upheld:
@@ -21,9 +21,11 @@ import {
     TACTICS_BOARD_MAX_Y,
     TACTICS_BOARD_MIN_X,
     TACTICS_BOARD_MIN_Y,
+    TACTICS_COMMIT_ACTION,
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/shared/tactics.js';
+    TACTICS_TURN_MODE_SETTING,
+} from '@chimera/games/tactics/constants.js';
 import type { EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
 import { entityId, playerId } from '@chimera/simulation/engine/types.js';
 import type { PlayerSnapshot } from '@chimera/ai/engine/AITypes.js';
@@ -53,6 +55,7 @@ function makeSnapshot(opts: {
     readonly isMyTurn?: boolean;
     readonly stamina?: number | null;
     readonly units?: readonly UnitSpec[];
+    readonly turnMode?: 'sequential' | 'commitment';
 }): PlayerSnapshot {
     const entities: Record<string, unknown> = {};
     for (const unit of opts.units ?? []) {
@@ -80,6 +83,14 @@ function makeSnapshot(opts: {
         isMyTurn: opts.isMyTurn ?? true,
         entities: entities as PlayerSnapshot['entities'],
         players: players as PlayerSnapshot['players'],
+        ...(opts.turnMode === undefined
+            ? {}
+            : {
+                  setup: {
+                      matchSettings: { [TACTICS_TURN_MODE_SETTING]: opts.turnMode },
+                      playerAttributes: {},
+                  },
+              }),
     };
 }
 
@@ -208,6 +219,75 @@ describe('decideTacticsAction', () => {
             makeSnapshot({ tick: 7, units: [{ id: MY_UNIT, ownerId: VIEWER, x: 1, y: 0 }] });
 
         expect(decideTacticsAction(build(), VIEWER)).toEqual(decideTacticsAction(build(), VIEWER));
+    });
+});
+
+// ─── decideTacticsAction — commitment (simultaneous) turn mode ──────────────────
+
+/**
+ * In commitment mode End Turn is gated until every seat commits, so the AI must
+ * end its turn by emitting `tactics:commit` (the host then auto-synthesises the
+ * reveal End Turn once the set completes). Sequential mode is unchanged. The AI
+ * reads the mode off the projected `setup.matchSettings` (projected verbatim by
+ * the StateProjector), so it never needs a host-local field.
+ */
+describe('decideTacticsAction — commitment (simultaneous) turn mode', () => {
+    it('commits instead of ending the turn when stamina is exhausted', () => {
+        const snapshot = makeSnapshot({
+            turnMode: 'commitment',
+            stamina: 0,
+            units: [
+                { id: MY_UNIT, ownerId: VIEWER, x: 0, y: 0 },
+                { id: ENEMY_UNIT, ownerId: ENEMY, x: 1, y: 0 },
+            ],
+        });
+
+        const action = decideTacticsAction(snapshot, VIEWER);
+
+        expect(action?.type).toBe(TACTICS_COMMIT_ACTION);
+        expect(action?.playerId).toBe(VIEWER);
+    });
+
+    it('commits when the AI owns no actable unit', () => {
+        const snapshot = makeSnapshot({
+            turnMode: 'commitment',
+            units: [{ id: ENEMY_UNIT, ownerId: ENEMY, x: 1, y: 0 }],
+        });
+
+        expect(decideTacticsAction(snapshot, VIEWER)?.type).toBe(TACTICS_COMMIT_ACTION);
+    });
+
+    it('still moves/attacks while it has stamina (commit only replaces the end-turn step)', () => {
+        const snapshot = makeSnapshot({
+            turnMode: 'commitment',
+            units: [
+                { id: MY_UNIT, ownerId: VIEWER, x: 0, y: 0 },
+                { id: ENEMY_UNIT, ownerId: ENEMY, x: 1, y: 0 },
+            ],
+        });
+
+        expect(decideTacticsAction(snapshot, VIEWER)?.type).toBe(TACTICS_ATTACK_ACTION);
+    });
+
+    it('returns null once it has committed (isMyTurn flips false after the commit)', () => {
+        const snapshot = makeSnapshot({
+            turnMode: 'commitment',
+            isMyTurn: false,
+            stamina: 0,
+            units: [{ id: MY_UNIT, ownerId: VIEWER, x: 0, y: 0 }],
+        });
+
+        expect(decideTacticsAction(snapshot, VIEWER)).toBeNull();
+    });
+
+    it('still emits engine:end_turn (not commit) in sequential mode', () => {
+        const snapshot = makeSnapshot({
+            turnMode: 'sequential',
+            stamina: 0,
+            units: [{ id: MY_UNIT, ownerId: VIEWER, x: 0, y: 0 }],
+        });
+
+        expect(decideTacticsAction(snapshot, VIEWER)?.type).toBe('engine:end_turn');
     });
 });
 

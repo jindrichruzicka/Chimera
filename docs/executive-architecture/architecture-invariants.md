@@ -15,7 +15,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 | Theme                                  | Invariants                                                                                                          |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76, 104, 105                                                                  |
+| **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76, 104, 105, 106, 107                                                        |
 | **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101, 103, 105            |
 | **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90, 103                                                              |
 | **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                      |
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–101
+## Invariants 91–107
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -259,6 +259,10 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **104.** The reveal order returned by a game's `resolveRevealOrder` hook is a **pure, deterministic function of `(snapshot.seed, snapshot.tick)`** and is applied by the host **verbatim** — never host-discretionary — so a commit-then-sync turn reproduces under deterministic replay (reaffirms Invariant #71). `CommitmentScheme.verify()` (Invariant #9) remains the mandatory client-side gate run on every `REVEAL` before any revealed action is trusted or re-dispatched through `ActionPipeline` (§4.6, §8, F54).
 
 **105.** Game-defined per-turn resource state (action budgets and similar) lives in `GameSnapshot`, is **seeded, refreshed, and decremented solely by the game's own reducers** (deterministic — Invariant #2), and reaches clients only through `StateProjector.project()` (Invariant #8). Such resources are never user settings (Invariant #36) and are never client-authored; they remain host-local truth like all other `GameSnapshot` state (Invariant #3) (§4.6, F54).
+
+**106.** The `ai/` package is the **game-agnostic AI framework only** — its sole top-level members are `engine/` (the reusable state-machine / command / scheduler primitives), `__tests__/`, `index.ts`, and `CLAUDE.md`. Game-specific AI (concrete `AIState`/`AICommand`/policy implementations) lives in `games/<name>/ai/` (which **may** import `ai/`, `simulation/`, and `shared/`), never inside `ai/` itself. A re-introduced `ai/policies/<game>/` (or any other game-named subtree under `ai/`) is a module-boundary violation, mirroring the import-direction rule of Invariant #47 (`ai/` must not import from `games/*`) with a containment rule (§3, mechanical check 11).
+
+**107.** The game-agnostic packages `ai/` and `shared/` must not **define** game-specific gameplay tokens — per-game constants (`<GAME>_*`, e.g. `TACTICS_*`) or per-game action-string namespaces (`'<gameId>:*'`, e.g. `'tactics:move_unit'`). Such constants are owned by their game and live in `games/<name>/` (e.g. `games/tactics/constants.ts`); the `engine:` namespace (Invariant #11) is the only reserved cross-cutting namespace. This keeps the pure engine packages free of any single game's vocabulary as the monolith is decomposed (§3, mechanical check 12).
 
 ---
 

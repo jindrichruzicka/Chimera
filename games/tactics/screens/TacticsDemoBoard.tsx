@@ -9,7 +9,7 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
     readTacticsTurnMode,
-} from '@chimera/shared/tactics.js';
+} from '@chimera/games/tactics/constants.js';
 import {
     parseTacticsSceneUnits,
     parseTacticsSeatCommitted,

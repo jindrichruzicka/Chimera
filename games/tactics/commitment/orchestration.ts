@@ -22,7 +22,7 @@
  * Module boundary: imports only `shared/`, `simulation/`, and own files.
  */
 
-import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/shared/tactics.js';
+import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/games/tactics/constants.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,

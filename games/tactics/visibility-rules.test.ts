@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_MAX_STAMINA } from '@chimera/shared/tactics.js';
+import { TACTICS_MAX_STAMINA } from '@chimera/games/tactics/constants.js';
 import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
 import type {
     BaseEntityState,

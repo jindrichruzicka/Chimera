@@ -40,7 +40,7 @@ import {
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera/shared/tactics.js';
+} from '@chimera/games/tactics/constants.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
 import {
     registerTacticsActions,

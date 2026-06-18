@@ -90,6 +90,7 @@ import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,
     buildReplayPlayers,
+    collectGameStartAiPlayerSlots,
     collectInitialPlayerSlots,
     resolveAgentSlot,
 } from './runtime/HostedSessionAgents.js';
@@ -106,6 +107,7 @@ import { ChatHub } from './ChatHub.js';
 import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
 import type {
     ClientTransport,
+    LobbyAgentSlot,
     LobbyPlayerEntry,
     LobbyState,
     Unsubscribe,
@@ -1189,6 +1191,15 @@ export async function main(): Promise<void> {
     // `onReturnToLobbyRequested` callback can reuse that scope's closures; null
     // when no hosted session is live.
     let resetActiveSessionToLobby: (() => void) | null = null;
+    // Seats lobby-added AI agents from the LIVE lobby `agentSlots` at game-start
+    // (#730 follow-up). Assigned inside `onSessionHosted` (the
+    // `saveInitialTurnMemento` pattern) so `onGameStartRequested` can register the
+    // AI agents and learn their synthetic player ids; null when no hosted session
+    // is live. AI is added to the lobby AFTER hosting, so the host-time
+    // `metadata.agentSlots` is empty — this re-derives the roster at start.
+    let seatLobbyAgentsForGameStart:
+        | ((agentSlots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
+        | null = null;
 
     // Joined-client perspective recording state (F44b T5). Non-null only inside a
     // joined session: `onSessionJoined` arms it, the cleanup fn disarms it, and
@@ -1717,13 +1728,57 @@ export async function main(): Promise<void> {
                 revealIfCommitmentEndTurn(endTurnAction);
             };
 
-            dispatchRendererAction = (action) => {
+            // The host-side per-action fan-out, shared by the host's own renderer
+            // actions (`dispatchRendererAction`), remote clients
+            // (`transport.onActionReceived`), and AI seats (`dispatchAiAction`).
+            // `afterTick` re-ticks every registered agent, so an AI seat made
+            // active by `action` decides and dispatches its own next action here.
+            const runHostAction = (action: ActionEnvelope): void => {
                 sessionRuntime.applyAction(action);
                 stageCommitmentIfAccepted(action);
                 simulationHost.afterTick(sessionRuntime.getSnapshot());
                 scheduleAutoLocalSeatHandoff(action);
                 revealIfCommitmentEndTurn(action);
                 autoEndTurnIfReady(action);
+            };
+            dispatchRendererAction = runHostAction;
+
+            // Drive an active AI seat to the end of its turn (#730 follow-up).
+            // Tactics is turn-based with an action-driven clock — there is no
+            // wall-clock tick loop — so nothing pumps an AI agent once it becomes
+            // active: it would act once per human action and stall mid-turn.
+            // Routing the AI's dispatched actions back through `runHostAction`
+            // re-runs the fan-out (`afterTick` → `tickAll`), re-ticking the AI so
+            // it spends its whole turn (and, in commitment mode, fires the
+            // commit/reveal hooks) before control returns. The recursion is bounded
+            // — the policy terminates each turn (stamina-capped; commits once) and
+            // an AI seat is the last-iterated agent for the shipping 1-AI roster —
+            // and the depth cap is a safety net against a non-terminating policy.
+            //
+            // Commitment-mode limitation: an AI seat dispatches its move/attack
+            // actions straight through the pipeline (it has no local buffer like the
+            // renderer), so they apply and broadcast immediately rather than staying
+            // hidden until reveal. The single authoritative snapshot stays
+            // consistent and the AI still commits and advances the turn, but
+            // commitment SECRECY is not enforced for AI seats. Host-side AI
+            // buffering is a follow-up beyond this smoke scope.
+            const AI_DRIVE_MAX_DEPTH = 512;
+            let aiDriveDepth = 0;
+            const dispatchAiAction = (action: ActionEnvelope): void => {
+                if (aiDriveDepth >= AI_DRIVE_MAX_DEPTH) {
+                    lobbyLogger.error(
+                        'hosted session: AI drive depth cap hit; dropping action',
+                        new Error('AI drive depth cap exceeded'),
+                        { actionType: action.type },
+                    );
+                    return;
+                }
+                aiDriveDepth += 1;
+                try {
+                    runHostAction(action);
+                } finally {
+                    aiDriveDepth -= 1;
+                }
             };
             saveInitialTurnMemento = (playerIdForMemento) => {
                 undoManager.saveTurnMemento(sessionRuntime.getSnapshot(), playerIdForMemento);
@@ -1745,17 +1800,24 @@ export async function main(): Promise<void> {
             // of player churn (WARN-1 fix — `>=` would re-fire on leave+rejoin).
             let gameStarted = false;
 
+            // The live AI roster for this session. Seeded from the (host-time,
+            // usually empty) `metadata.agentSlots` and re-pointed at the current
+            // lobby `agentSlots` when the game starts (#730 follow-up). Slot/agent
+            // resolution below consults this so a return-to-lobby restart re-seats
+            // the same AI roster.
+            let currentAgentSlots: readonly LobbyAgentSlot[] = metadata.agentSlots ?? [];
+            const resolveLiveAgentSlot = (slotIndex: number): LobbyAgentSlot =>
+                resolveAgentSlot({ ...metadata, agentSlots: currentAgentSlots }, slotIndex);
+
             const registerSlotAgent = (pid: PlayerId, slotIndex: number): void => {
                 playerSlotIndexById.set(pid, slotIndex);
-                const agentSlot = resolveAgentSlot(metadata, slotIndex);
+                const agentSlot = resolveLiveAgentSlot(slotIndex);
                 if (agentSlot.kind === 'ai') {
                     simulationHost.registerAgent(
                         buildDefaultAIPlayerAgent({
                             playerId: pid,
                             initialSnapshot: sessionRuntime.getSnapshot(),
-                            dispatch: (action) => {
-                                sessionRuntime.applyAction(action);
-                            },
+                            dispatch: dispatchAiAction,
                             logger: lobbyLogger,
                             omniscient: agentSlot.omniscient ?? false,
                             createState: hostedGame.createAIState,
@@ -1771,7 +1833,7 @@ export async function main(): Promise<void> {
                     if (assignedSlotIndexes.has(slotIndex)) {
                         continue;
                     }
-                    if (resolveAgentSlot(metadata, slotIndex).kind === 'human') {
+                    if (resolveLiveAgentSlot(slotIndex).kind === 'human') {
                         assignedSlotIndexes.add(slotIndex);
                         return slotIndex;
                     }
@@ -1841,6 +1903,28 @@ export async function main(): Promise<void> {
                 tryStartGame();
             };
 
+            // Seat the lobby-added AI roster at game-start (#730 follow-up). The UI
+            // adds AI AFTER hosting, so the host-time `metadata.agentSlots` is empty
+            // and `collectInitialPlayerSlots` above never seated them. Re-point the
+            // live roster at the current lobby `agentSlots`, register a fresh AI
+            // agent for each (idempotent — `AgentManager` dedups by playerId and we
+            // skip seats already active, so a return-to-lobby restart is safe), and
+            // return the synthetic ids so `onGameStartRequested` can seed them into
+            // `engine:start_game` (units + players-map seat + turn rotation).
+            seatLobbyAgentsForGameStart = (liveAgentSlots): readonly PlayerId[] => {
+                currentAgentSlots = liveAgentSlots;
+                const aiSlots = collectGameStartAiPlayerSlots(liveAgentSlots);
+                for (const slot of aiSlots) {
+                    if (activePlayers.has(slot.playerId)) {
+                        continue;
+                    }
+                    activePlayers.add(slot.playerId);
+                    assignedSlotIndexes.add(slot.slotIndex);
+                    registerSlotAgent(slot.playerId, slot.slotIndex);
+                }
+                return aiSlots.map((slot) => slot.playerId);
+            };
+
             const registeredPlayers = new Set<PlayerId>(initialPlayerIds);
             for (const slot of initialPlayerSlots) {
                 registerSlotAgent(slot.playerId, slot.slotIndex);
@@ -1898,16 +1982,10 @@ export async function main(): Promise<void> {
             // host event loop; the pipeline already logs invalid actions.
             const unsubAction = transport.onActionReceived((_from, action) => {
                 try {
-                    sessionRuntime.applyAction(action);
-                    stageCommitmentIfAccepted(action);
-
-                    // Fan-out to all registered agents after the tick advances
-                    // (Invariant #17: routing through SimulationHost/AgentManager).
-                    simulationHost.afterTick(sessionRuntime.getSnapshot());
-                    scheduleAutoLocalSeatHandoff(action);
-
-                    revealIfCommitmentEndTurn(action);
-                    autoEndTurnIfReady(action);
+                    // Same fan-out as the host's own actions (Invariant #17:
+                    // routing through SimulationHost/AgentManager), so a remote
+                    // human's action also drives any AI seat made active by it.
+                    runHostAction(action);
                 } catch (err) {
                     lobbyLogger.warn('hosted session: applyAction threw', {
                         actionType: action.type,
@@ -1952,6 +2030,7 @@ export async function main(): Promise<void> {
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
                     handleHostedLocalSeatAdded = null;
+                    seatLobbyAgentsForGameStart = null;
                     broadcastRestoredSnapshot = null;
                     resetActiveSessionToLobby = null;
                 }
@@ -2016,8 +2095,18 @@ export async function main(): Promise<void> {
                 firstPlayer: selectedFirstPlayer,
             });
 
+            // Seat the lobby-added AI roster (#730 follow-up): register their agents
+            // and fold their synthetic ids into the start roster so each AI gets a
+            // unit, a players-map seat, and a place in the turn rotation. Appended
+            // AFTER the human ids so the (always-human) first player keeps
+            // unit-assignment index 0.
+            const aiPlayerIds = seatLobbyAgentsForGameStart?.(state.agentSlots ?? []) ?? [];
+
             // Reorder playerIds so the first player is at index 0 for unit assignment
-            const allPlayerIds = state.players.map((player) => player.playerId);
+            const allPlayerIds = [
+                ...state.players.map((player) => player.playerId),
+                ...aiPlayerIds,
+            ];
             const playerIds = [firstPlayer, ...allPlayerIds.filter((id) => id !== firstPlayer)];
 
             const initialEntities = resolveInitialEntitiesForGame(

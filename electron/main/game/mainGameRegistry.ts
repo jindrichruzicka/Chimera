@@ -24,7 +24,7 @@
  */
 
 import type { AIState } from '@chimera/ai/engine/AIState.js';
-import { createTacticsAIState } from '@chimera/ai/policies/tactics/tacticsPolicy.js';
+import { createTacticsAIState } from '@chimera/games/tactics/ai/tacticsPolicy.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import type {
@@ -41,7 +41,7 @@ import { tacticsCommitmentOrchestration } from '@chimera/games/tactics/commitmen
 import { tacticsResolveIsMyTurn } from '@chimera/games/tactics/commitment/turnGate.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
-import { TACTICS_GAME_ID } from '@chimera/shared/tactics.js';
+import { TACTICS_GAME_ID } from '@chimera/games/tactics/constants.js';
 
 import type { SettingsManager } from '../settings/SettingsManager.js';
 
