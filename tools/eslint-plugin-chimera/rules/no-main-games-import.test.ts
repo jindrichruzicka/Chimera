@@ -29,24 +29,24 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         // The composition registries are the sole coupling points (exempt).
         {
             filename: 'electron/main/game/mainGameRegistry.ts',
-            code: `import { registerTacticsActions } from '@chimera/games/tactics/actions.js';`,
+            code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
         },
         {
             filename: 'electron/main/content/gameContentRegistry.ts',
-            code: `import { TACTICS_CONTENT_SCHEMAS } from '@chimera/games/tactics/content/tacticsContent.js';`,
+            code: `import { TACTICS_CONTENT_SCHEMAS } from '@chimera/tactics/content/tacticsContent.js';`,
         },
         {
             filename: 'electron/main/lobby/lobbySetupRegistry.ts',
-            code: `import { buildTacticsLobbySetup } from '@chimera/games/tactics/lobby/lobby-setup.js';`,
+            code: `import { buildTacticsLobbySetup } from '@chimera/tactics/lobby/lobby-setup.js';`,
         },
         // Test files import game modules as fixtures (exempt).
         {
             filename: 'electron/main/index.test.ts',
-            code: `import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';`,
+            code: `import { tacticsVisibilityRules } from '@chimera/tactics/visibility-rules.js';`,
         },
         {
             filename: 'electron/main/content/loadGameContent.test.ts',
-            code: `import { paletteFromCollections } from '@chimera/games/tactics/content/tacticsContent.js';`,
+            code: `import { paletteFromCollections } from '@chimera/tactics/content/tacticsContent.js';`,
         },
         // electron/main core importing non-games modules is fine.
         {
@@ -57,10 +57,29 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             filename: 'electron/main/index.ts',
             code: `import { ActionPipeline } from '@chimera/simulation/engine/ActionPipeline.js';`,
         },
+        // Engine packages (the allowlist) share the @chimera/* scope with games
+        // but are always importable by main — detection is by package name, not
+        // by a `/games/` path substring.
+        {
+            filename: 'electron/main/index.ts',
+            code: `import { logger } from '@chimera/shared/logging.js';`,
+        },
+        {
+            filename: 'electron/main/index.ts',
+            code: `import { playerId } from '@chimera/electron/preload/api-types.js';`,
+        },
+        {
+            filename: 'electron/main/index.ts',
+            code: `import { MultiplayerProvider } from '@chimera/networking/provider/MultiplayerProvider.js';`,
+        },
+        {
+            filename: 'electron/main/index.ts',
+            code: `import { createScheduler } from '@chimera/ai/engine/index.js';`,
+        },
         // The rule only guards electron/main — other layers are out of scope here.
         {
             filename: 'renderer/game/rendererGameRegistry.ts',
-            code: `import { TacticsGameScreenRegistry } from '@chimera/games/tactics/screens/index.js';`,
+            code: `import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
         },
         // Dynamic import of a non-games module is fine.
         {
@@ -70,7 +89,7 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         // Dynamic import of a games module IS allowed inside a composition registry.
         {
             filename: 'electron/main/game/mainGameRegistry.ts',
-            code: `const m = import('@chimera/games/tactics/actions.js');`,
+            code: `const m = import('@chimera/tactics/actions.js');`,
         },
         // A computed dynamic specifier cannot be resolved statically — not flagged.
         {
@@ -89,13 +108,13 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         // Core bootstrap importing a game directly (the original violation).
         {
             filename: 'electron/main/index.ts',
-            code: `import { registerTacticsActions } from '@chimera/games/tactics/actions.js';`,
+            code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
         // A non-registry main module importing a game.
         {
             filename: 'electron/main/renderer-url.ts',
-            code: `import { TACTICS_GAME_ID } from '@chimera/games/tactics/index.js';`,
+            code: `import { TACTICS_GAME_ID } from '@chimera/tactics/index.js';`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
         // Relative path navigating into games/.
@@ -113,19 +132,19 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         // Dynamic import() of a games module in a non-allowlisted main file.
         {
             filename: 'electron/main/index.ts',
-            code: `const m = import('@chimera/games/tactics/actions.js');`,
+            code: `const m = import('@chimera/tactics/actions.js');`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
         // Re-export from a games module.
         {
             filename: 'electron/main/index.ts',
-            code: `export { registerTacticsActions } from '@chimera/games/tactics/actions.js';`,
+            code: `export { registerTacticsActions } from '@chimera/tactics/actions.js';`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
         // Export-all from a games module.
         {
             filename: 'electron/main/index.ts',
-            code: `export * from '@chimera/games/tactics/actions.js';`,
+            code: `export * from '@chimera/tactics/actions.js';`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
     ],

@@ -215,7 +215,7 @@ const { mockTacticsVisibilityRules } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@chimera/games/tactics/visibility-rules.js', () => ({
+vi.mock('@chimera/tactics/visibility-rules.js', () => ({
     tacticsVisibilityRules: mockTacticsVisibilityRules,
 }));
 

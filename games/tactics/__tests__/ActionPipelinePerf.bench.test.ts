@@ -33,13 +33,13 @@ import type {
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import { registerTacticsActions } from '@chimera/games/tactics/actions.js';
-import { buildInitialTacticsEntities } from '@chimera/games/tactics/entities.js';
-import { withSeededStamina } from '@chimera/games/tactics/stamina.js';
+import { registerTacticsActions } from '@chimera/tactics/actions.js';
+import { buildInitialTacticsEntities } from '@chimera/tactics/entities.js';
+import { withSeededStamina } from '@chimera/tactics/stamina.js';
 import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 import { MAIN_HEAP_BUDGET_MB, TICK_BUDGET_MS } from '@chimera/shared/perf-budget.js';
 
 // ─── Gating policy ──────────────────────────────────────────────────────────

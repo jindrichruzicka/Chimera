@@ -10,10 +10,7 @@ import {
     type PlayerId,
     type PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
-import {
-    TACTICS_COMMIT_ACTION,
-    TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/games/tactics/constants.js';
+import { TACTICS_COMMIT_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
 import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
 import { entityId } from '@chimera/electron/preload/api-types.js';
 import { EscapeStackProvider } from '@chimera/renderer/components/ui/index.js';

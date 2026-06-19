@@ -65,12 +65,29 @@ check_grep() {
         grep -rn \
             --include="*.ts" --include="*.tsx" --include="*.js" \
             --exclude="*.test.ts" --exclude="*.test.tsx" \
-            --exclude-dir="fixtures" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
             -E "${pattern}" "${existing_dirs[@]}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         || true
     )
 }
+
+# Game-import detection (engine allowlist).
+#
+# Games are now first-class `@chimera/<game>` packages (F57: `@chimera/tactics`
+# replaces the old `@chimera/games/tactics` alias) and will leave `games/`
+# entirely in F63 (→ `apps/tactics`). A `@chimera/<game>` specifier carries no
+# `/games/` substring and is indistinguishable from an engine package by shape,
+# so a game is identified by exclusion: any `@chimera/<pkg>` import whose `<pkg>`
+# is NOT an engine package, plus any relative/bare `games/*` path.
+#
+# Usage in a pipeline: match a candidate-import RE below, then drop engine
+# packages with `grep -vE "${ENGINE_PKG_EXCLUDE_RE}"`.
+ENGINE_PKG_EXCLUDE_RE="@chimera/(shared|simulation|ai|networking|renderer|electron)[/'\"]"
+# Static `import … from`/`export … from` of a games/ path or any @chimera/ pkg.
+GAME_IMPORT_STATIC_RE="from ['\"][^'\"]*(games/|@chimera/)"
+# Static + dynamic `import('…')` of a games/ path or any @chimera/ pkg.
+GAME_IMPORT_ANY_RE="(from|import\()[[:space:]]*['\"][^'\"]*(games/|@chimera/)"
 
 # ─── Check 1 & 43: no Math.random / Date.now / performance.now in simulation or ai ───
 # Covers both invariant 2 (purity) and invariant 43 (no non-deterministic APIs).
@@ -88,10 +105,24 @@ check_grep "1" \
     "from ['\"].*electron/" \
     simulation ai
 
-# ─── Check 4: simulation/ must not import from games/ ────────────────────────
-check_grep "47" \
-    "from ['\"].*games/" \
-    simulation ai
+# ─── Check 4: simulation/ and ai/ must not import a game ─────────────────────
+# A game is a relative/bare games/ path or a non-engine @chimera/<game> package
+# (e.g. @chimera/tactics); engine @chimera/* imports are filtered back out.
+for games_guard_dir in simulation ai; do
+    [[ -d "${games_guard_dir}" ]] || continue
+    while IFS= read -r match; do
+        violation "47" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            "${GAME_IMPORT_STATIC_RE}" "${games_guard_dir}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
+        || true
+    )
+done
 
 # ─── Check 5: renderer/ must not import from electron/main/ ──────────────────
 check_grep "1" \
@@ -118,8 +149,9 @@ for shell_file in "${SHELL_GAME_AGNOSTIC_FILES[@]}"; do
     while IFS= read -r match; do
         violation "48/80" "${shell_file}:${match}"
     done < <(
-        grep -nE "from ['\"].*games/" "${shell_file}" \
+        grep -nE "${GAME_IMPORT_STATIC_RE}" "${shell_file}" \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
         || true
     )
 done
@@ -222,8 +254,10 @@ if [[ -d electron/main ]]; then
         esac
     done < <(
         grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
-            "(from|import\()[[:space:]]*['\"][^'\"]*games/" electron/main 2>/dev/null \
+            --exclude-dir="node_modules" \
+            "${GAME_IMPORT_ANY_RE}" electron/main 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
         || true
     )
 fi
@@ -238,7 +272,7 @@ if [[ -d ai ]]; then
             engine|__tests__) ;;
             *) violation "106" "${dir}/  (non-framework dir under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
         esac
-    done < <(find ai -mindepth 1 -maxdepth 1 -type d | sort)
+    done < <(find ai -mindepth 1 -maxdepth 1 -type d ! -name node_modules | sort)
 fi
 
 # ─── Check 12: no game-specific tokens in game-agnostic packages (inv 107) ────

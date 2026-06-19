@@ -15,13 +15,13 @@ import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProject
 import type { CommandContext } from '@chimera/ai/engine/CommandContext.js';
 import type { CommandScheduler } from '@chimera/ai/engine/CommandScheduler.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
-import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
-import { tacticsManifest } from '@chimera/games/tactics/manifest.js';
+import { tacticsVisibilityRules } from '@chimera/tactics/visibility-rules.js';
+import { tacticsManifest } from '@chimera/tactics/manifest.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_GAME_ID,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 
 import type { SettingsManager } from '../settings/SettingsManager.js';
 import {

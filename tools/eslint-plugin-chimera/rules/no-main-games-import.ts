@@ -19,8 +19,10 @@
  * and the renderer's single-composition-point pattern (rendererGameRegistry.ts).
  *
  * Glob-based `no-restricted-imports` is unreliable for deep `games/*` paths, so
- * this rule matches the import source by substring (as no-shell-games-import
- * does). It covers every static and dynamic form that can pull in a module:
+ * this rule classifies the import source directly (as no-shell-games-import
+ * does): any relative/bare `games/*` path, or any `@chimera/<pkg>` package that
+ * is not on the engine allowlist (i.e. a game such as `@chimera/tactics`). It
+ * covers every static and dynamic form that can pull in a module:
  * `import`, `export … from`, `export * from`, and dynamic `import('…')` with a
  * string-literal specifier — so the boundary cannot be bypassed by a lazy load.
  */
@@ -54,12 +56,39 @@ function isGuardedMainFile(filename: string): boolean {
 }
 
 /**
- * True if `source` imports from any `games/*` path — bare module specifiers
- * (`games/…`, `@chimera/games/…`) and relative paths into a `games/` directory.
+ * Engine packages — game-agnostic, always importable by the host. Every other
+ * `@chimera/*` package is a game (e.g. `@chimera/tactics`) and is forbidden.
+ */
+const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
+    'shared',
+    'simulation',
+    'ai',
+    'networking',
+    'renderer',
+    'electron',
+]);
+
+/**
+ * True if `source` imports from a game (rather than an engine package):
+ *   - a relative/bare `games/*` path (`games/…`, `…/games/…`), or
+ *   - a `@chimera/<pkg>` package whose `<pkg>` is NOT an engine package
+ *     (e.g. `@chimera/tactics`).
+ *
+ * Detecting games by the engine allowlist — rather than the legacy `/games/`
+ * directory substring — keeps the guard correct now that games are first-class
+ * `@chimera/<game>` packages (F57) and once they move out of `games/` (F63).
  */
 function isGamesImport(source: string): boolean {
     const n = source.replace(/\\/gu, '/');
-    return n.startsWith('games/') || n.includes('/games/');
+    if (n.startsWith('games/') || n.includes('/games/')) {
+        return true;
+    }
+    const scoped = /^@chimera\/([^/]+)/u.exec(n);
+    if (scoped === null) {
+        return false;
+    }
+    const pkg = scoped[1];
+    return pkg !== undefined && !ENGINE_PACKAGES.has(pkg);
 }
 
 const rule: Rule.RuleModule = {

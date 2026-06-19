@@ -20,16 +20,7 @@
         "skipLibCheck": true,
         "forceConsistentCasingInFileNames": true,
         "noEmit": true,
-        "baseUrl": ".",
-        "paths": {
-            "@chimera/shared/*": ["shared/*"],
-            "@chimera/simulation/*": ["simulation/*"],
-            "@chimera/ai/*": ["ai/*"],
-            "@chimera/renderer/*": ["renderer/*"],
-            "@chimera/electron/*": ["electron/*"],
-            "@chimera/games/*": ["games/*"],
-            "@chimera/networking/*": ["networking/*"]
-        }
+        "baseUrl": "."
     },
     "include": [
         "electron/**/*.ts",

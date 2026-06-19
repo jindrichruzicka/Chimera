@@ -9,7 +9,7 @@ import { tacticsGridCoordinate } from './actions.js';
 import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_START_POSITIONS,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 
 /**
  * Builds the initial entity set for a tactics match — one movable unit per

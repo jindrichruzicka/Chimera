@@ -88,8 +88,8 @@ export function getRendererGameMenuCommand(
 
 async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     const [screenModule, assetManifestModule, shell] = await Promise.all([
-        import('@chimera/games/tactics/screens/index.js'),
-        import('@chimera/games/tactics/asset-manifest.js'),
+        import('@chimera/tactics/screens/index.js'),
+        import('@chimera/tactics/asset-manifest.js'),
         loadTacticsRendererGameShell(),
     ]);
 
@@ -102,15 +102,15 @@ async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
 }
 
 async function loadTacticsRendererGameShell(): Promise<LoadedRendererGameShell> {
-    await import('@chimera/games/tactics/styles/register-token-overrides.js');
+    await import('@chimera/tactics/styles/register-token-overrides.js');
 
     const [mainMenuModule, settingsPageModule, backgroundModule, lobbyScreenModule, fontsModule] =
         await Promise.all([
-            import('@chimera/games/tactics/shell/main-menu.js'),
-            import('@chimera/games/tactics/shell/settings-page.js'),
-            import('@chimera/games/tactics/shell/TacticsShellBackground.js'),
-            import('@chimera/games/tactics/shell/TacticsLobbyScreen.js'),
-            import('@chimera/games/tactics/shell/fonts.js'),
+            import('@chimera/tactics/shell/main-menu.js'),
+            import('@chimera/tactics/shell/settings-page.js'),
+            import('@chimera/tactics/shell/TacticsShellBackground.js'),
+            import('@chimera/tactics/shell/TacticsLobbyScreen.js'),
+            import('@chimera/tactics/shell/fonts.js'),
         ]);
 
     await loadGameFonts(fontsModule.tacticsFonts);

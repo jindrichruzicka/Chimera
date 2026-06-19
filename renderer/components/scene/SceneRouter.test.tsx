@@ -5,7 +5,7 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import type { GameScreenProps, GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
-import { TacticsGameScreenRegistry } from '@chimera/games/tactics/screens/index.js';
+import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';
 import { useUiStore } from '../../state/uiStore.js';
 import { FadeProvider } from '../shell/FadeContext.js';
 import { SceneRouter } from './SceneRouter.js';

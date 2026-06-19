@@ -37,7 +37,8 @@ export default function globalSetup(): void {
         '@chimera/simulation': path.join(root, 'simulation'),
         '@chimera/ai': path.join(root, 'ai'),
         '@chimera/networking': path.join(root, 'networking'),
-        '@chimera/games': path.join(root, 'games'),
+        '@chimera/renderer': path.join(root, 'renderer'),
+        '@chimera/tactics': path.join(root, 'games/tactics'),
     };
 
     // Main process — runs in Node.js (Electron's main context).

@@ -55,7 +55,7 @@ import {
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
     readTacticsTurnMode,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 import type { EngineAction, EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
 import type { AIState } from '@chimera/ai/engine/AIState.js';
 import type { PlayerSnapshot } from '@chimera/ai/engine/AITypes.js';

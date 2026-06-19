@@ -1,0 +1,26 @@
+{
+    // Playwright-runner resolution shim ONLY (referenced by playwright.config.ts
+    // `tsconfig`). F57 (#752) removed the `@chimera/*` `paths` from the root
+    // tsconfig so production `tsc` resolves through real workspace deps. But the
+    // Playwright test transform loads electron main/preload source (which imports
+    // `@chimera/*`) and resolves bare specifiers ONLY via tsconfig paths — it has
+    // no webpack/vite-style alias hook like next.config.ts / vitest.config.mts /
+    // global-setup.ts. These paths restore resolution for the runner without
+    // reintroducing an alias into any production/typecheck tsconfig (root +
+    // renderer stay alias-free; `pnpm typecheck` does not use this file).
+    // Transitional: removed once F58 ships package `exports` maps or F63 moves
+    // the e2e suite into apps/tactics.
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "baseUrl": "..",
+        "paths": {
+            "@chimera/shared/*": ["shared/*"],
+            "@chimera/simulation/*": ["simulation/*"],
+            "@chimera/ai/*": ["ai/*"],
+            "@chimera/renderer/*": ["renderer/*"],
+            "@chimera/electron/*": ["electron/*"],
+            "@chimera/networking/*": ["networking/*"],
+            "@chimera/tactics/*": ["games/tactics/*"]
+        }
+    }
+}

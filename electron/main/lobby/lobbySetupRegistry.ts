@@ -18,8 +18,8 @@
  * Task: #706 (part of #702 — Customizable Lobby)
  */
 
-import { buildTacticsLobbySetup } from '@chimera/games/tactics/lobby/lobby-setup.js';
-import { paletteFromCollections } from '@chimera/games/tactics/content/tacticsContent.js';
+import { buildTacticsLobbySetup } from '@chimera/tactics/lobby/lobby-setup.js';
+import { paletteFromCollections } from '@chimera/tactics/content/tacticsContent.js';
 import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import type { GameLobbySetup, GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';

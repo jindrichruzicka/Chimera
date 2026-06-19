@@ -1,5 +1,12 @@
 {
     "name": "@chimera/electron",
     "version": "0.9.0",
-    "private": true
+    "private": true,
+    "dependencies": {
+        "@chimera/simulation": "workspace:*",
+        "@chimera/ai": "workspace:*",
+        "@chimera/networking": "workspace:*",
+        "@chimera/renderer": "workspace:*",
+        "@chimera/shared": "workspace:*"
+    }
 }

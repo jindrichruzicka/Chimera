@@ -5,7 +5,7 @@ import type { CanvasRgbaFrame } from '../helpers/canvas-pixels';
 import {
     TACTICS_CAMERA_POSITION,
     TACTICS_CAMERA_WORLD_BOUNDS,
-} from '@chimera/games/tactics/scene/tacticsCamera.js';
+} from '@chimera/tactics/scene/tacticsCamera.js';
 import { GamePage, TACTICS_CANVAS_WORLD_BOUNDS, TACTICS_REVEAL_CENTER_X } from './GamePage';
 
 interface WaitForFunctionCall {

@@ -62,6 +62,13 @@
         "vitest": "^3.2.4"
     },
     "dependencies": {
+        "@chimera/ai": "workspace:*",
+        "@chimera/electron": "workspace:*",
+        "@chimera/networking": "workspace:*",
+        "@chimera/renderer": "workspace:*",
+        "@chimera/shared": "workspace:*",
+        "@chimera/simulation": "workspace:*",
+        "@chimera/tactics": "workspace:*",
         "@react-three/fiber": "^9.6.1",
         "@types/ws": "^8.18.1",
         "pino": "^10.3.1",

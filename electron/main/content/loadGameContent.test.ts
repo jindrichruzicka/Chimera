@@ -8,7 +8,7 @@
 
 import path from 'path';
 import { describe, expect, it } from 'vitest';
-import { paletteFromCollections } from '@chimera/games/tactics/content/tacticsContent.js';
+import { paletteFromCollections } from '@chimera/tactics/content/tacticsContent.js';
 import { loadAllGameContent, toGameContent } from './loadGameContent.js';
 
 // Repo `games/` dir: electron/main/content → up 3 → repo root → games.

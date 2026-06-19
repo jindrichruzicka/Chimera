@@ -5,7 +5,7 @@ import React from 'react';
 import {
     TACTICS_BOARD_HEIGHT_TILES,
     TACTICS_BOARD_WIDTH_TILES,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 import {
     worldToGridPoint,
     type TacticsGridPoint,

@@ -39,22 +39,50 @@ function isShellPage(filename: string): boolean {
 }
 
 /**
- * Returns true if `source` references a `tokens-override.css` file from any
- * `games/*` package (both bare module specifiers and relative paths).
+ * Engine packages — game-agnostic, importable by shell pages. Every other
+ * `@chimera/*` package is a game (e.g. `@chimera/tactics`) and is forbidden.
  */
-function isTokensOverrideImport(source: string): boolean {
-    return /(?:^|[\\/])games[\\/][^/\\]+[\\/]styles[\\/]tokens-override\.css$/.test(
-        source.replace(/\\/gu, '/'),
-    );
-}
+const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
+    'shared',
+    'simulation',
+    'ai',
+    'networking',
+    'renderer',
+    'electron',
+]);
 
 /**
- * Returns true if `source` is an import from any `games/*` path (bare module
- * specifiers and relative paths that navigate into a `games/` directory).
+ * Returns true if `source` is an import from a game (rather than an engine
+ * package):
+ *   - a relative/bare `games/*` path (`games/…`, `…/games/…`), or
+ *   - a `@chimera/<pkg>` package whose `<pkg>` is NOT an engine package
+ *     (e.g. `@chimera/tactics`).
+ *
+ * Detecting games by the engine allowlist — rather than the legacy `/games/`
+ * directory substring — keeps the guard correct now that games are first-class
+ * `@chimera/<game>` packages (F57) and once they move out of `games/` (F63).
  */
 function isGamesImport(source: string): boolean {
     const n = source.replace(/\\/gu, '/');
-    return n.startsWith('games/') || n.includes('/games/');
+    if (n.startsWith('games/') || n.includes('/games/')) {
+        return true;
+    }
+    const scoped = /^@chimera\/([^/]+)/u.exec(n);
+    if (scoped === null) {
+        return false;
+    }
+    const pkg = scoped[1];
+    return pkg !== undefined && !ENGINE_PACKAGES.has(pkg);
+}
+
+/**
+ * Returns true if `source` references a game's `styles/tokens-override.css` —
+ * via either a relative/bare `games/*` path or a `@chimera/<game>` package
+ * specifier.
+ */
+function isTokensOverrideImport(source: string): boolean {
+    const n = source.replace(/\\/gu, '/');
+    return /(?:^|\/)styles\/tokens-override\.css$/u.test(n) && isGamesImport(n);
 }
 
 // ── Rule ─────────────────────────────────────────────────────────────────────
@@ -81,7 +109,10 @@ const rule: Rule.RuleModule = {
             return {};
         }
 
-        function checkImport(node: Rule.Node, source: string): void {
+        function checkImport(node: Rule.Node, source: unknown): void {
+            if (typeof source !== 'string') {
+                return;
+            }
             if (isTokensOverrideImport(source)) {
                 context.report({ node, messageId: 'shellGamesTokenOverrideImport' });
             } else if (isGamesImport(source)) {
@@ -89,15 +120,29 @@ const rule: Rule.RuleModule = {
             }
         }
 
-        return {
-            ImportDeclaration(node: Rule.Node) {
-                const n = node as Rule.Node & { source: { value: string } };
+        // `import …` (incl. side-effect `import '…'`), `export … from`, and
+        // `export * from` all carry a string `source` (null for a re-export-less
+        // `export { x }`, hence the guard). Mirrors chimera/no-main-games-import
+        // so the boundary cannot be bypassed by a re-export or a lazy load.
+        function checkStaticSource(node: Rule.Node): void {
+            const n = node as Rule.Node & { source: { value: unknown } | null };
+            if (n.source !== null) {
                 checkImport(node, n.source.value);
-            },
+            }
+        }
 
-            // Side-effect imports: import 'path'
-            // These are also ImportDeclaration nodes but with no specifiers.
-            // The ImportDeclaration handler above already covers them.
+        return {
+            ImportDeclaration: checkStaticSource,
+            ExportNamedDeclaration: checkStaticSource,
+            ExportAllDeclaration: checkStaticSource,
+            // Dynamic `import('…')` — flag only string-literal specifiers; a
+            // computed specifier cannot be statically resolved to a games path.
+            ImportExpression(node: Rule.Node) {
+                const n = node as Rule.Node & { source: { type: string; value?: unknown } };
+                if (n.source.type === 'Literal') {
+                    checkImport(node, n.source.value);
+                }
+            },
         };
     },
 };

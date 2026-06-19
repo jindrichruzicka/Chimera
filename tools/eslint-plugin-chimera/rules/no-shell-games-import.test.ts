@@ -71,6 +71,26 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
             filename: 'renderer/app/component-gallery/ComponentGalleryClient.tsx',
             code: `import { Tabs } from '../../components/ui/Tabs';`,
         },
+        // Engine packages share the @chimera/* scope with games but are allowed
+        // on shell pages — detection is by package name, not a `/games/` path.
+        {
+            filename: 'renderer/app/game/page.tsx',
+            code: `import { applyAction } from '@chimera/simulation/engine/types.js';`,
+        },
+        {
+            filename: 'renderer/app/lobby/page.tsx',
+            code: `import { playerId } from '@chimera/electron/preload/api-types.js';`,
+        },
+        // Re-export from an engine package is allowed (engine, not a game).
+        {
+            filename: 'renderer/app/game/page.tsx',
+            code: `export { playerId } from '@chimera/simulation/engine/types.js';`,
+        },
+        // Dynamic import of a non-game module is allowed.
+        {
+            filename: 'renderer/app/game/page.tsx',
+            code: `const m = import('../../game/rendererGameRegistry.js');`,
+        },
     ],
 
     // ── Invalid — rule must fire ─────────────────────────────────────────────
@@ -133,6 +153,37 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         {
             filename: 'renderer/app/component-gallery/page.tsx',
             code: `import { TacticsBoard } from 'games/tactics/screens/TacticsBoard';`,
+            errors: [{ messageId: 'shellGamesImport' }],
+        },
+        // Invariant #94: shell page importing the game as a @chimera/* package
+        // (the post-F57 specifier form — no `/games/` substring).
+        {
+            filename: 'renderer/app/game/page.tsx',
+            code: `import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
+            errors: [{ messageId: 'shellGamesImport' }],
+        },
+        // Invariant #93: shell page importing the game's tokens-override.css via
+        // its @chimera/* package specifier.
+        {
+            filename: 'renderer/app/main-menu/page.tsx',
+            code: `import '@chimera/tactics/styles/tokens-override.css';`,
+            errors: [{ messageId: 'shellGamesTokenOverrideImport' }],
+        },
+        // Invariant #94: the boundary cannot be bypassed by re-export or a lazy
+        // dynamic import — mirrors chimera/no-main-games-import parity.
+        {
+            filename: 'renderer/app/game/page.tsx',
+            code: `export { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
+            errors: [{ messageId: 'shellGamesImport' }],
+        },
+        {
+            filename: 'renderer/app/settings/page.tsx',
+            code: `export * from 'games/tactics/settings-schema';`,
+            errors: [{ messageId: 'shellGamesImport' }],
+        },
+        {
+            filename: 'renderer/app/lobby/page.tsx',
+            code: `const m = import('@chimera/tactics/screens/index.js');`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
     ],

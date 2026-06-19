@@ -24,7 +24,7 @@
  */
 
 import type { AIState } from '@chimera/ai/engine/AIState.js';
-import { createTacticsAIState } from '@chimera/games/tactics/ai/tacticsPolicy.js';
+import { createTacticsAIState } from '@chimera/tactics/ai/tacticsPolicy.js';
 import type { GameManifest } from '@chimera/shared/game-manifest-contract.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
@@ -37,13 +37,13 @@ import {
     registerTacticsActions,
     resolveTacticsFirstPlayer,
     type TacticsGameInitializationConfig,
-} from '@chimera/games/tactics/actions.js';
-import { tacticsManifest } from '@chimera/games/tactics/manifest.js';
-import { tacticsCommitmentOrchestration } from '@chimera/games/tactics/commitment/orchestration.js';
-import { tacticsResolveIsMyTurn } from '@chimera/games/tactics/commitment/turnGate.js';
-import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
-import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
-import { TACTICS_GAME_ID } from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/actions.js';
+import { tacticsManifest } from '@chimera/tactics/manifest.js';
+import { tacticsCommitmentOrchestration } from '@chimera/tactics/commitment/orchestration.js';
+import { tacticsResolveIsMyTurn } from '@chimera/tactics/commitment/turnGate.js';
+import { tacticsSettingsSchema } from '@chimera/tactics/settings-schema.js';
+import { tacticsVisibilityRules } from '@chimera/tactics/visibility-rules.js';
+import { TACTICS_GAME_ID } from '@chimera/tactics/constants.js';
 
 import type { SettingsManager } from '../settings/SettingsManager.js';
 

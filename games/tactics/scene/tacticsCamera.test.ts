@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_START_POSITIONS } from '@chimera/games/tactics/constants.js';
+import { TACTICS_START_POSITIONS } from '@chimera/tactics/constants.js';
 import { TACTICS_CAMERA_WORLD_BOUNDS } from './tacticsCamera';
 
 // Cylinder base radius (0.36) grown by the affordance scale (×1.12 ≈ 0.40); when a

@@ -8,6 +8,27 @@ importers:
 
   .:
     dependencies:
+      '@chimera/ai':
+        specifier: workspace:*
+        version: link:ai
+      '@chimera/electron':
+        specifier: workspace:*
+        version: link:electron
+      '@chimera/networking':
+        specifier: workspace:*
+        version: link:networking
+      '@chimera/renderer':
+        specifier: workspace:*
+        version: link:renderer
+      '@chimera/shared':
+        specifier: workspace:*
+        version: link:shared
+      '@chimera/simulation':
+        specifier: workspace:*
+        version: link:simulation
+      '@chimera/tactics':
+        specifier: workspace:*
+        version: link:games/tactics
       '@react-three/fiber':
         specifier: ^9.6.1
         version: 9.6.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0)
@@ -133,15 +154,65 @@ importers:
         specifier: ^3.2.4
         version: 3.2.4(@types/node@22.19.17)(@vitest/browser@4.1.5)(jsdom@29.0.2)
 
-  ai: {}
+  ai:
+    dependencies:
+      '@chimera/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@chimera/simulation':
+        specifier: workspace:*
+        version: link:../simulation
 
-  electron: {}
+  electron:
+    dependencies:
+      '@chimera/ai':
+        specifier: workspace:*
+        version: link:../ai
+      '@chimera/networking':
+        specifier: workspace:*
+        version: link:../networking
+      '@chimera/renderer':
+        specifier: workspace:*
+        version: link:../renderer
+      '@chimera/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@chimera/simulation':
+        specifier: workspace:*
+        version: link:../simulation
 
-  games/tactics: {}
+  games/tactics:
+    dependencies:
+      '@chimera/ai':
+        specifier: workspace:*
+        version: link:../../ai
+      '@chimera/renderer':
+        specifier: workspace:*
+        version: link:../../renderer
+      '@chimera/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      '@chimera/simulation':
+        specifier: workspace:*
+        version: link:../../simulation
 
-  networking: {}
+  networking:
+    dependencies:
+      '@chimera/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@chimera/simulation':
+        specifier: workspace:*
+        version: link:../simulation
 
-  renderer: {}
+  renderer:
+    dependencies:
+      '@chimera/shared':
+        specifier: workspace:*
+        version: link:../shared
+      '@chimera/simulation':
+        specifier: workspace:*
+        version: link:../simulation
 
   shared: {}
 

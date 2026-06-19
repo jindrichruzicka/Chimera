@@ -23,12 +23,9 @@ import type {
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
 import { entityId, playerId as toPlayerId, sceneId } from '@chimera/simulation/engine/types.js';
-import {
-    TACTICS_ATTACK_ACTION,
-    TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/games/tactics/constants.js';
-import { tacticsGridCoordinate } from '@chimera/games/tactics/actions.js';
-import type { TacticsCommitmentEnvelopeValue } from '@chimera/games/tactics/commitment/contract.js';
+import { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
+import { tacticsGridCoordinate } from '@chimera/tactics/actions.js';
+import type { TacticsCommitmentEnvelopeValue } from '@chimera/tactics/commitment/contract.js';
 import { RevealStaging } from '@chimera/simulation/projection/index.js';
 import { CURRENT_SCHEMA_VERSION } from '@chimera/simulation/persistence/SaveMigrator.js';
 import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';

@@ -16,7 +16,7 @@
  */
 
 import type { ZodType } from 'zod';
-import { TACTICS_CONTENT_SCHEMAS } from '@chimera/games/tactics/content/tacticsContent.js';
+import { TACTICS_CONTENT_SCHEMAS } from '@chimera/tactics/content/tacticsContent.js';
 
 /** What a game declares about its content for the loader. */
 export interface GameContentRegistration {

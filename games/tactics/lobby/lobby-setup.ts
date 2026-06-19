@@ -25,7 +25,7 @@
 import {
     TACTICS_DEFAULT_TURN_MODE,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 import type { GameLobbySetup, LobbyFieldOption } from '@chimera/shared/game-lobby-contract.js';
 
 /**

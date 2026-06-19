@@ -36,10 +36,7 @@ import {
     ToggleButton,
 } from '@chimera/renderer/components/ui/index.js';
 import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
-import {
-    readTacticsTurnMode,
-    TACTICS_TURN_MODE_SETTING,
-} from '@chimera/games/tactics/constants.js';
+import { readTacticsTurnMode, TACTICS_TURN_MODE_SETTING } from '@chimera/tactics/constants.js';
 import {
     DEFAULT_BOARD_COLOR,
     DEFAULT_PLAYER_COLOR,

@@ -14,7 +14,7 @@ import {
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 import type { ActionEnvelope, BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import { entityId, gamePhase, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 import { toCommitmentId, type StagedReveals } from '@chimera/simulation/projection/index.js';

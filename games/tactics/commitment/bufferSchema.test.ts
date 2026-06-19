@@ -8,7 +8,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera/games/tactics/constants.js';
+} from '@chimera/tactics/constants.js';
 import { describe, expect, it } from 'vitest';
 
 import {

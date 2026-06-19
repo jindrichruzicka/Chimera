@@ -1,7 +1,6 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
-import tsconfigPaths from 'vite-tsconfig-paths';
 import { createPreferTypeScriptSourceResolver } from './tools/vitest-resolver-plugin';
 
 const workspaceRoot = import.meta.dirname;
@@ -38,8 +37,11 @@ export default defineConfig({
                 return `export default ${JSON.stringify(content)}`;
             },
         },
+        // Resolves both relative `.js`→`.ts` specifiers and bare `@chimera/*`
+        // workspace packages onto in-tree TypeScript source. Replaces
+        // vite-tsconfig-paths, which read the `@chimera/*` tsconfig `paths`
+        // aliases removed in F57 (#752).
         createPreferTypeScriptSourceResolver(workspaceRoot),
-        tsconfigPaths(),
     ],
     test: {
         name: 'chimera',

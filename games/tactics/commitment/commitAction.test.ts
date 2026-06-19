@@ -6,7 +6,7 @@
 // host-local in the reveal-staging store (Invariants #3/#8). The end-turn guard
 // reads the marker to gate `engine:end_turn` until every seat has committed.
 
-import { TACTICS_TURN_MODE_SETTING } from '@chimera/games/tactics/constants.js';
+import { TACTICS_TURN_MODE_SETTING } from '@chimera/tactics/constants.js';
 import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type {
     BaseEntityState,
