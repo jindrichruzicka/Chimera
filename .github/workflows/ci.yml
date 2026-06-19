@@ -41,14 +41,26 @@ jobs:
       - name: Format check
         run: pnpm format:check
 
-      - name: Lint
-        run: pnpm lint
+      - name: Lint (workspace packages)
+        run: pnpm -r lint
+
+      - name: Lint (tools, e2e, root configs)
+        run: pnpm exec eslint tools e2e eslint.config.mjs vitest.config.mts
 
       - name: Typecheck
         run: pnpm typecheck
 
+      # No-op today (no package defines build/typecheck — flat per F57; project
+      # references land in F58). --if-present keeps the recursive call exit-0 so
+      # the wiring is proven and lights up automatically when F58 adds the scripts.
+      - name: Verify recursive build/typecheck resolve
+        run: pnpm -r --if-present build && pnpm -r --if-present typecheck
+
       - name: Validate assets
         run: pnpm validate:assets
 
-      - name: Test
-        run: pnpm test
+      - name: Test (workspace packages)
+        run: pnpm -r test
+
+      - name: Test (tools, e2e)
+        run: pnpm exec vitest run --dir tools && pnpm exec vitest run --dir e2e

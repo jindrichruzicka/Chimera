@@ -12,7 +12,8 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import type { Rule } from 'eslint';
 
 interface SourceCodeLike {
@@ -21,6 +22,14 @@ interface SourceCodeLike {
 
 const RULE_NAME = 'chimera/no-unknown-token-overrides';
 const TOKEN_DECLARATION_PATTERN = /(?:^|[\s{;])(--ch-[\w-]+)\s*:/gmu;
+
+// Resolve the canonical token file relative to this rule's own location rather
+// than process.cwd(), so the rule works when ESLint runs from any directory —
+// e.g. `pnpm -r lint` runs `eslint .` with cwd set to each workspace package.
+const TOKENS_CSS_PATH = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    '../../../renderer/styles/tokens.css',
+);
 
 let cachedDeclaredTokens: ReadonlySet<string> | undefined;
 
@@ -43,11 +52,7 @@ function extractDeclaredTokens(css: string): ReadonlySet<string> {
 }
 
 function loadDeclaredTokens(): ReadonlySet<string> {
-    if (!cachedDeclaredTokens) {
-        const tokenFile = resolve(process.cwd(), 'renderer/styles/tokens.css');
-        cachedDeclaredTokens = extractDeclaredTokens(readFileSync(tokenFile, 'utf8'));
-    }
-
+    cachedDeclaredTokens ??= extractDeclaredTokens(readFileSync(TOKENS_CSS_PATH, 'utf8'));
     return cachedDeclaredTokens;
 }
 
