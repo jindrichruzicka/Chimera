@@ -39,15 +39,18 @@ pnpm build:renderer  # next build renderer → renderer/out/index.html
 - Host-authoritative architecture; local Node.js WebSocket server in Electron main.
 - Pluggable `MultiplayerProvider` (LAN default; Steam / others plug in unchanged).
 - Per-player state projection (`StateProjector` + `VisibilityRules`) with fog-of-war by construction.
-- Commitment scheme for hidden-info anti-cheat (shuffles, dice, hidden cards).
+- Commitment scheme for hidden-info anti-cheat (shuffles, dice, hidden cards), plus opt-in commit-then-sync simultaneous turns.
 - CRC32-checksummed actions; sanitised profile / chat side-channels parallel to the action pipeline.
 - Client-side prediction with server reconciliation; reconnect + resync flow.
+- Connection diagnostics UI (local IP, port-forward guide); STUN relay extension point.
 
 **Identity & lobby**
 
 - Client-attested player profiles (avatar, display name, locale) with host-side sanitiser.
 - `PlayerDirectory` aggregates all lobby participants; pass-and-play handoff follows projected turn ownership.
 - Lobby browse/discovery capability (optional, provider-specific).
+- Optional host-set lobby password — validated timing-safe at the handshake, never persisted, broadcast, or logged.
+- Lobby AI players: host-added agent seats driven through the same action pipeline as humans.
 
 **Input & UI**
 
@@ -58,6 +61,8 @@ pnpm build:renderer  # next build renderer → renderer/out/index.html
 - Scene router with two-phase transitions + full-screen fade overlay.
 - Curves + `useTween` hook for pure-renderer animations.
 - Toast notifications, chat panel, performance HUD (F3), settings UI.
+- Game-customizable shell: declarative main menu, tabbed settings page, and lobby setup contributed per game; the engine renders all controls from design-system primitives.
+- Escape-toggled in-game menu with a layered overlay stack and role-aware leave / return-to-lobby.
 
 **Assets & audio**
 
@@ -96,4 +101,3 @@ pnpm build:renderer  # next build renderer → renderer/out/index.html
 - Vitest + fast-check + React Testing Library unit/integration tests; Playwright E2E.
 - Custom ESLint rules (`chimera/no-fromfloat-in-simulation`, `no-context-null-bang`).
 - Debug mode (`CHIMERA_DEBUG=1`) guarded against production builds.
-  s

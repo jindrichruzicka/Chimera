@@ -7,6 +7,27 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-06-19
+
+### Added
+
+- Crash Reporter and Error Boundaries — `crash-reporter.ts` (`uncaughtException`, `unhandledRejection`, `render-process-gone` handlers); autosave-before-crash-dump with atomic dump write; `ToastHost` / `RootErrorBoundary` sibling mount ordering; `rendererLogger` → main forwarding via `window.__chimera.logs`; Pino daily log rotation with retention in `userData/logs/` (F43)
+- Replay System — `ReplayFile`, `ReplaySerializer` (JSON + compressed), `ReplayPlayer` (reuses the live `ActionPipeline`), `ReplayManager` (record, finalise, load, list); `window.__chimera.replay` IPC surface; cross-version compatibility guard (F44)
+- Chat System — `ChatRelay` (token-bucket rate limiting, length cap, scope filter), `chatStore` (500-entry rolling buffer), `ChatPanel.tsx`, `window.__chimera.chat` IPC surface, and mute/unmute; `CHAT` carried as a `SideChannelMessage`, not an `EngineAction` (F45)
+- Toast Notification System — `toastStore`, `ToastHost.tsx` (stacked, animated, `reducedMotion`-aware), auto-dismiss durations, and engine-wired sources (disconnect, save failure, replay export, chat rate-limit, profile rejection) (F46)
+- Debug Inspector — `SnapshotRingBuffer`, `SnapshotInspector`, `SnapshotDiff`, `DebugProtocol`, `debug-bridge.ts`, `debug-api.ts`, and the four Inspector panels (Action Log, Snapshot, Diff View, Performance); `CHIMERA_DEBUG=1` starts only the debug bridge, the Inspector window is lazily toggled via `engine:toggle-debug-inspector` over data-free `chimera:debug:toggle-inspector` IPC; `IS_DEBUG_MODE` production guard (F47)
+- Multiplayer and Obfuscation Soak Tests — 1 000-tick × 4-client soak with per-step checksum convergence (`multiplayer-soak.integration.test.ts`); 10 000-snapshot obfuscation soak asserting zero `owner-only` field leaks (`StateProjector.property.test.ts`); commitment anti-tamper coverage for tampered value and nonce (`CommitmentScheme.test.ts`) (F48)
+- Performance Baseline and NAT Diagnostics — gated main-process tick ≤ 16 ms at 20 Hz and renderer heap ≤ 32 MB; connection diagnostics UI (local IP, port-forward guide); STUN relay extension point in `ServerConnection.ts` without core changes (F49)
+- Game-Customizable Main Menu — declarative `GameMainMenuDefinition` (layout + `GameMainMenuButton` array + discriminated `GameMainMenuAction` union: `navigate | quit | open-lobby | command`); `GameMenuCommand` registry via `LoadedRendererGame.shell.menuCommands`; `renderMainMenuDefinition.tsx`; engine default expressed as a definition (F51)
+- Customizable Lobby — declarative `GameLobbySetup`, synced `GameSetupConfig`, and `GameLobbyScreenProps`; host-authored match settings and owner-authored per-player attributes synced over `chimera:lobby:set-match-setting` / `chimera:lobby:set-player-attribute`; registry-loaded `GameScreenRegistry.LobbyScreen` slot; agreed config carried into the match via `engine:start_game` → `snapshot.setup` and projected verbatim to every viewer (F53)
+- Tactics Stub Hardening — turn-gated unit selection; per-player stamina (max/default 3, refreshes at turn start, `move`/`attack` cost 1, rejected at 0); lobby AI players (host Add-AI control, AI sub-list, auto-removal when a human join would overflow, random tactics brain); opt-in commit-then-sync battle mode (host-authored Battle Setup toggle, reveal-only End Turn enabled once all seats commit, deterministic attack-first resolution, undo-before-commit stamina refund) (F54)
+- In-Game Menu and Role-Aware Leave Game — Escape-toggled in-game menu via `GameScreenRegistry` (component override / `'none'` / engine default Resume-Leave); host-only `engine:return_to_lobby` action + `chimera:lobby:return-to-lobby` IPC resetting the live session to `phase: 'lobby'` without closing it; clients leave to the main menu via `chimera:lobby:leave`; layered renderer Escape/overlay stack (F55)
+- Lobby Password — optional host-set join secret threaded through the `JOIN` handshake (`ClientMessage` + Zod schema, `HostLobbyParams` / `JoinLobbyParams`, `LobbyServer` config), validated timing-safe with `REJECT 'invalid_password'` before WELCOME; server-side only — never written to `LobbyState`, `LobbyInfo`, broadcasts, or logs; blank host password preserves open-lobby behaviour (F56)
+
+### Changed
+
+- Settings Page redesign — rebuilt `renderer/app/settings/page.tsx` with a tabbed layout (Audio, Display, Gameplay, Controls) replacing the single scrolling page, and replaced the generic `JSON.stringify` game-specific section with a declarative `GameSettingsPageDefinition` (`SettingsTabDefinition` / `SettingsSectionDefinition` / `SettingsItemDefinition` / `SettingsControlDefinition`, `EngineSettingsFieldId` validated fail-fast at load) (F52)
+
 ## [0.7.0] — 2026-05-30
 
 ### Added
@@ -94,6 +115,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover
 - Crash dump write guarded against circular refs and oversized payloads; `process.exit(1)` after fatal crash dump
 
+[0.8.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.8.0
 [0.7.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.7.0
 [0.6.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.6.0
 [0.5.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.5.0
@@ -101,4 +123,4 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 [0.3.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.3.0
 [0.2.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.2.0
 [0.1.0]: https://github.com/jindrichruzicka/Chimera/releases/tag/v0.1.0
-[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/jindrichruzicka/Chimera/compare/v0.8.0...HEAD
