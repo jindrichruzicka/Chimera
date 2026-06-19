@@ -1,6 +1,6 @@
 ---
 title: 'M9 — Package Extraction & Game Scaffolding (v0.9.0)'
-description: 'F57–F66: pnpm Workspace Foundation, Extract @chimera/simulation, @chimera/ai, @chimera/networking, @chimera/renderer, @chimera/electron, Tactics Standalone Consumer App + E2E Migration, Package Build/Link/Update Pipeline, create-chimera-game CLI + Blank Template, and Engine Package Publishing. Executes Appendix C — from a single-package monorepo to a published package hierarchy — and adds a CLI that scaffolds new games from a template.'
+description: 'F57–F67: pnpm Workspace Foundation, Extract @chimera/simulation, @chimera/ai, @chimera/networking, @chimera/renderer, @chimera/electron, Tactics Standalone Consumer App + E2E Migration, Package Build/Link/Update Pipeline, create-chimera-game CLI + Blank Template, Engine Package Publishing, and App Icon & Per-Game Branding. Executes Appendix C — from a single-package monorepo to a published package hierarchy — and adds a CLI that scaffolds new games from a template.'
 tags:
     [
         milestone,
@@ -21,6 +21,8 @@ tags:
         templates,
         publishing,
         semver,
+        branding,
+        icons,
     ]
 ---
 
@@ -88,6 +90,12 @@ A platform-independent Node CLI in `tools/create-chimera-game/` that scaffolds a
 ## F66 — Engine Package Publishing & Release Pipeline `Appendix C.4`
 
 Publish `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, `@chimera/renderer`, and `@chimera/electron` to a registry (default: public npm, scoped `@chimera/*`) with independent semantic versioning and per-package changelogs — `@chimera/simulation` breaking changes are major bumps. Add a CI release workflow that, on a version tag, builds, runs `verify:pack`, and publishes the packages. Document the `@chimera/<domain>` extension-library on-ramp (e.g. `@chimera/cards` with `peerDependencies` on `@chimera/simulation`) as the external-adopter pattern from Appendix C.6.
+
+---
+
+## F67 — App Icon & Per-Game Branding `Appendix C.4, C.6`
+
+Replace the stock Electron icon with the Chimera logo as the default application and window icon, overridable per game through the `GameManifest` `icon` field (the same manifest that drives the per-game window title and the `realtime` heartbeat flag). Two layers ship together: (1) **runtime** — `createMainWindow` sets the `BrowserWindow` `icon` and, on macOS, calls `app.dock.setIcon`, resolving either the bundled default Chimera icon asset or a game's manifest override at window creation; (2) **packaging** — generate the platform icon set (`.icns` / `.ico` / PNG) from the Chimera logo source and wire it into the electron build configuration introduced by the build/release pipeline (**F64** / **F66**) so distributed bundles carry the icon, not just the dev runtime. Tactics keeps the default (no manifest override); a scaffolded game (**F65**) drops one icon path into its manifest to rebrand both window and dock. Deferred out of the initial game-manifest work — which delivers `displayName` / window title and the `realtime` flag — because a true installer icon depends on the packaging pipeline this milestone introduces.
 
 ---
 
