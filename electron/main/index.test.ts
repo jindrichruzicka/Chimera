@@ -295,6 +295,7 @@ interface FakeWebPreferences {
 
 interface FakeBrowserWindowOptions {
     readonly backgroundColor?: string;
+    readonly title?: string;
     readonly webPreferences?: FakeWebPreferences;
 }
 
@@ -315,6 +316,7 @@ class FakeBrowserWindow {
     public readonly loadFile = vi.fn();
     public readonly loadURL = vi.fn();
     public readonly reload = vi.fn<() => void>();
+    public readonly setTitle = vi.fn<(title: string) => void>();
     public readonly webContents = new FakeWebContents();
     public readonly isDestroyed = vi.fn<() => boolean>(() => false);
     public readonly getContentSize = vi.fn<() => [number, number]>(() => [1280, 720]);
@@ -735,6 +737,55 @@ describe('createMainWindow', () => {
         expect(mockLogger.warn).toHaveBeenCalledWith(
             '[chimera] renderer failed to load: 500 ERR_INVALID_URL',
         );
+    });
+
+    it('sets the supplied windowTitle as the BrowserWindow title', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+            windowTitle: 'Tactics',
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.title).toBe('Tactics');
+    });
+
+    it('defaults the window title to "Chimera" when no windowTitle is supplied', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.title).toBe('Chimera');
+    });
+
+    it('pins the window title against the static page <title> via page-title-updated', () => {
+        const win = createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+            windowTitle: 'Tactics',
+        }) as unknown as FakeBrowserWindow;
+
+        const onCalls = win.webContents.on.mock.calls as readonly (readonly [
+            string,
+            ...unknown[],
+        ])[];
+        const titleCall = onCalls.find(([event]) => event === 'page-title-updated');
+        expect(titleCall).toBeDefined();
+
+        const preventDefault = vi.fn();
+        const handler = titleCall?.[1] as (event: { preventDefault(): void }) => void;
+        handler({ preventDefault });
+
+        expect(preventDefault).toHaveBeenCalledTimes(1);
+        expect(win.setTitle).toHaveBeenCalledWith('Tactics');
     });
 
     it('throws when initialUrl has a non-chimera protocol (WARN-1 depth-of-defence)', () => {

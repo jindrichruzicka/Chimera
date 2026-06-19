@@ -292,7 +292,7 @@ Three non-negotiable rules make the simulation bit-identical on every machine th
 
 `GameSnapshot.tick` increments by exactly **1 per action applied** by `ActionPipeline.process()`. It is a logical counter, never a timestamp. `SimulationClock.now()` returns `snapshot.tick`; it never reads `Date.now()` or `performance.now()`.
 
-Real-time games wrap a host-side `RealtimeTicker` (lives in `electron/main/` — outside deterministic core) that dispatches `engine:tick` actions at a fixed wall-clock cadence. Each `engine:tick` advances the counter by 1.
+Whether a game runs a wall-clock heartbeat is declared by its **`GameManifest`** (`shared/game-manifest-contract.ts` — a pure-data, cross-layer contract; the same manifest sets the OS window title and the renderer's display name). When `manifest.realtime` is `true`, the host wraps a `RealtimeTicker` (lives in `electron/main/` — outside the deterministic core, since `setInterval` is host I/O) that dispatches `engine:tick` actions at `manifest.tickRateMs` (converted to Hz via `resolveTickerHz`; default `50 ms` ≈ 20 Hz, the per-tick perf-budget baseline). Each `engine:tick` advances the counter by 1, and its per-tick `seed` is taken from the snapshot — never from wall-clock time. The host starts the ticker when the match begins and stops it on session teardown and return-to-lobby; its dispatch is **lean** (`applyAction` + agent re-tick via `SimulationHost.afterTick`) so a heartbeat never triggers turn-based follow-ups (auto-end-turn, commitment reveal). Turn-based games (`manifest.realtime: false`, e.g. tactics) run no ticker — the host dispatches `engine:tick` explicitly at defined moments instead, leaving their behaviour unchanged.
 
 ### Rule 2 — Deterministic RNG Only
 

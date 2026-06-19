@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { TacticsShellBackground } from './TacticsShellBackground';
+import { tacticsManifest } from '../manifest';
 
 const { navigationState } = vi.hoisted(() => ({
     navigationState: {
@@ -82,6 +83,7 @@ describe('TacticsShellBackground', () => {
 
         const title = screen.getByTestId('tactics-shell-background-title');
         expect(title).toBeTruthy();
+        expect(title.textContent).toBe(tacticsManifest.displayName);
         expect(title.textContent).toBe('Tactics');
 
         const subtitle = screen.getByTestId('tactics-shell-background-subtitle');
@@ -110,7 +112,9 @@ describe('TacticsShellBackground', () => {
 
         render(<TacticsShellBackground />);
 
-        expect(screen.getByTestId('tactics-shell-background-title').textContent).toBe('Tactics');
+        expect(screen.getByTestId('tactics-shell-background-title').textContent).toBe(
+            tacticsManifest.displayName,
+        );
         expect(screen.getByTestId('tactics-shell-background-subtitle').textContent).toBe(
             'Chimera testing stub',
         );

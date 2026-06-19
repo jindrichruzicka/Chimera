@@ -70,7 +70,13 @@ import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobby
 import { loadAllGameContent, toGameContent } from './content/loadGameContent.js';
 import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import {
+    DEFAULT_WINDOW_TITLE,
+    resolveTickerHz,
+    resolveWindowTitle,
+} from '@chimera/shared/game-manifest-contract.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
+import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
 import { runRevealSync } from './runtime/RevealOrchestrator.js';
 import { FileReplayRepository } from './replay/FileReplayRepository.js';
@@ -358,6 +364,11 @@ export interface CreateMainWindowOptions {
     readonly env: ChimeraEnv;
     /** Logger for did-fail-load events; always provided in production main() (Invariant #67). */
     readonly logger: Logger;
+    /**
+     * OS window title. Resolved from the hosted game's manifest
+     * ({@link resolveWindowTitle}); defaults to {@link DEFAULT_WINDOW_TITLE}.
+     */
+    readonly windowTitle?: string;
 }
 
 export interface RegisterAppLifecycleOptions {
@@ -830,10 +841,12 @@ export function sanitiseE2eInitialUrl(raw: string | undefined): ChimeraRendererU
  * `additionalArguments` so the renderer can read it from `process.argv`.
  */
 export function createMainWindow(options: CreateMainWindowOptions): BrowserWindow {
+    const resolvedTitle = options.windowTitle ?? DEFAULT_WINDOW_TITLE;
     const window = new BrowserWindow({
         width: DEFAULT_WINDOW_WIDTH,
         height: DEFAULT_WINDOW_HEIGHT,
         backgroundColor: BOOTSTRAP_BACKGROUND_COLOR,
+        title: resolvedTitle,
         show: true,
         webPreferences: {
             nodeIntegration: false,
@@ -869,6 +882,15 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         if (!url.startsWith(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/`)) {
             event.preventDefault();
         }
+    });
+
+    // Pin the OS window title to the resolved (manifest-driven) title. The
+    // static Next.js export bakes a `<title>Chimera</title>` (renderer/app/
+    // layout.tsx); without this, Chromium's `page-title-updated` would overwrite
+    // our title with the page's on every load/navigation.
+    window.webContents.on('page-title-updated', (event) => {
+        event.preventDefault();
+        window.setTitle(resolvedTitle);
     });
 
     // WARN-6: log renderer load failures so silent white-screen bugs are diagnosable
@@ -1548,6 +1570,37 @@ export async function main(): Promise<void> {
                 };
             }
 
+            // Real-time heartbeat (§4.2.1, #89). A game whose manifest opts into
+            // `realtime` is driven by a wall-clock RealtimeTicker that dispatches
+            // `engine:tick` through the normal pipeline at the manifest's
+            // tickRateMs (converted to Hz); a turn-/action-driven game (e.g.
+            // tactics, realtime:false) gets a null ticker and is unchanged.
+            //
+            // The dispatch is LEAN — applyAction + afterTick only — so it never
+            // runs runHostAction's turn-based follow-ups (auto-end-turn,
+            // commitment reveal) on every heartbeat. An AI seat made active by a
+            // tick still decides via afterTick → tickAll and routes its own
+            // actions back through runHostAction. The envelope mirrors
+            // SessionRuntime.dispatchTick exactly: the per-tick seed comes from
+            // the snapshot, never wall-clock time (determinism, Invariant #2).
+            const tickerHz = resolveTickerHz(hostedGame.manifest);
+            const realtimeTicker =
+                tickerHz === null
+                    ? null
+                    : new RealtimeTicker({
+                          hz: tickerHz,
+                          getEnvelope: () => ({
+                              type: 'engine:tick',
+                              playerId: metadata.hostId,
+                              tick: sessionRuntime.getSnapshot().tick,
+                              payload: { seed: sessionRuntime.getSnapshot().seed },
+                          }),
+                          dispatch: (envelope) => {
+                              sessionRuntime.applyAction(envelope);
+                              simulationHost.afterTick(sessionRuntime.getSnapshot());
+                          },
+                      });
+
             const sendHostedRendererSnapshot = (snapshot: PlayerSnapshot): void => {
                 lastSentPlayerSnapshot = snapshot;
                 // Live egress first: recording must never break the renderer IPC
@@ -1845,6 +1898,9 @@ export async function main(): Promise<void> {
                 if (!gameStarted && activePlayers.size >= metadata.maxPlayers) {
                     gameStarted = true;
                     simulationHost.onGameStart(sessionRuntime.getSnapshot());
+                    // Begin the wall-clock heartbeat for real-time games (no-op for
+                    // turn-based games, whose ticker is null). Idempotent start().
+                    realtimeTicker?.start();
                 }
             };
 
@@ -1855,6 +1911,9 @@ export async function main(): Promise<void> {
             // restartable. It must NOT close the lobby or fire the match-end /
             // replay-finalise path (the action keeps `gameResult` null).
             resetActiveSessionToLobby = (): void => {
+                // Halt the heartbeat while returning to lobby; `tryStartGame` at
+                // the end of this reset re-starts it once every seat re-joins.
+                realtimeTicker?.stop();
                 // Per-session host-local state must not bleed into the next
                 // match (host-local state-ownership theme, Invariant #3).
                 clearUndoHistory([...activePlayers]);
@@ -1995,6 +2054,8 @@ export async function main(): Promise<void> {
             });
 
             return () => {
+                // Stop the heartbeat first so no tick fires during teardown.
+                realtimeTicker?.stop();
                 const finalSnapshot = sessionRuntime.getSnapshot();
                 if (finalSnapshot.gameResult === null) {
                     simulationHost.onGameEnd(finalSnapshot, { winnerIds: [] });
@@ -2610,6 +2671,7 @@ export async function main(): Promise<void> {
                     : CHIMERA_RENDERER_LAUNCH_URL,
             env,
             logger,
+            windowTitle: resolveWindowTitle(hostedGame.manifest),
         });
         mainWindow = createdWindow;
         createdWindow.webContents.on(

@@ -16,6 +16,7 @@ import type { CommandContext } from '@chimera/ai/engine/CommandContext.js';
 import type { CommandScheduler } from '@chimera/ai/engine/CommandScheduler.js';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import { tacticsVisibilityRules } from '@chimera/games/tactics/visibility-rules.js';
+import { tacticsManifest } from '@chimera/games/tactics/manifest.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_GAME_ID,
@@ -28,6 +29,7 @@ import {
     hostedGame,
     knownGameIds,
     mainGameRegistry,
+    manifestsByGameId,
     visibilityRulesByGameId,
 } from './mainGameRegistry.js';
 
@@ -57,6 +59,17 @@ describe('mainGameRegistry', () => {
 
     it('derives the gameId → visibility rules map for the projection resolver', () => {
         expect(visibilityRulesByGameId[TACTICS_GAME_ID]).toBe(tacticsVisibilityRules);
+    });
+
+    it('contributes the tactics game manifest (display name, turn-based loop)', () => {
+        expect(mainGameRegistry[TACTICS_GAME_ID]?.manifest).toBe(tacticsManifest);
+        expect(hostedGame.manifest.displayName).toBe('Tactics');
+        expect(hostedGame.manifest.realtime).toBe(false);
+    });
+
+    it('derives the gameId → manifest map', () => {
+        expect(manifestsByGameId[TACTICS_GAME_ID]).toBe(tacticsManifest);
+        expect(Object.keys(manifestsByGameId)).toEqual(knownGameIds);
     });
 
     it('registerActions wires the game reducers into a shared ActionRegistry', () => {

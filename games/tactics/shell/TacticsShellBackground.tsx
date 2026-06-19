@@ -1,6 +1,8 @@
 import React from 'react';
 import { usePathname } from 'next/navigation';
 
+import { tacticsManifest } from '../manifest';
+
 const menuBackgroundStyles = `
 .menu-bg {
     position: absolute;
@@ -65,7 +67,7 @@ export function TacticsShellBackground(): React.ReactElement {
                     className="main-menu-overlay"
                 >
                     <h1 data-testid="tactics-shell-background-title" className="game-title">
-                        Tactics
+                        {tacticsManifest.displayName}
                     </h1>
                     <p data-testid="tactics-shell-background-subtitle" className="subtitle">
                         Chimera testing stub

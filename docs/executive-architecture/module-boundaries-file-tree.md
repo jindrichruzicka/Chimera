@@ -53,7 +53,7 @@ chimera/
 │   │   │   └── LobbyManager.ts      # Owns the active MultiplayerProvider; lifecycle + IPC wiring
 │   │   ├── runtime/                 # Simulation host and live-game runtime infrastructure
 │   │   │   ├── SimulationHost.ts    # Hosts sim tick loop; calls AgentManager.tickAll() after each tick
-│   │   │   ├── RealtimeTicker.ts    # SetInterval-based clock; runs game loop at specified Hz
+│   │   │   ├── RealtimeTicker.ts    # SetInterval clock for manifest.realtime games; host starts/stops per match (§4.2.1)
 │   │   │   ├── SessionRuntime.ts    # Manages session lifecycle: setup, teardown, player assignment
 │   │   │   ├── HostSessionPipeline.ts # Orchestrates pings, broadcasts, heartbeat loop during active session
 │   │   │   └── StateBroadcaster.ts  # Per-player snapshot projection via commitment scheme; network dispatch
@@ -188,6 +188,7 @@ chimera/
 │       │   ├── fonts.ts             # GameFontFace[] self-hosted font declarations
 │       │   └── *.tsx                # React shell contributions may use public renderer UI barrel only
 │       ├── asset-manifest.ts        # Declares every AssetRef this game owns + priority (critical|deferred)
+│       ├── manifest.ts              # GameManifest: displayName/window title, realtime + tickRateMs, optional icon
 │       ├── settings-schema.ts       # Zod schema extending EngineSettings with game-specific fields
 │       └── index.ts                 # Game entry: creates ActionRegistry, registers actions, loads content
 │
@@ -276,6 +277,7 @@ chimera/
 │   ├── messages.ts                  # Typed WS message shapes (client ↔ server)
 │   ├── snapshot.ts                  # GameSnapshot (full truth) + PlayerSnapshot (projected view)
 │   ├── logging.ts                   # LogLevel, LogEntry; see §4.27
+│   ├── game-manifest-contract.ts    # GameManifest (display name, window title, realtime/tickRateMs) + resolvers (§4.2.1)
 │   └── constants.ts
 │
 ├── tools/

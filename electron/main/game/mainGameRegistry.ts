@@ -25,6 +25,7 @@
 
 import type { AIState } from '@chimera/ai/engine/AIState.js';
 import { createTacticsAIState } from '@chimera/games/tactics/ai/tacticsPolicy.js';
+import type { GameManifest } from '@chimera/shared/game-manifest-contract.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import type {
@@ -37,6 +38,7 @@ import {
     resolveTacticsFirstPlayer,
     type TacticsGameInitializationConfig,
 } from '@chimera/games/tactics/actions.js';
+import { tacticsManifest } from '@chimera/games/tactics/manifest.js';
 import { tacticsCommitmentOrchestration } from '@chimera/games/tactics/commitment/orchestration.js';
 import { tacticsResolveIsMyTurn } from '@chimera/games/tactics/commitment/turnGate.js';
 import { tacticsSettingsSchema } from '@chimera/games/tactics/settings-schema.js';
@@ -52,6 +54,13 @@ export type FirstPlayerConfig = TacticsGameInitializationConfig;
 export interface MainGameContribution {
     readonly gameId: string;
     readonly gameVersion: string;
+    /**
+     * The game's self-description (display name, window title, real-time loop
+     * mode, optional icon). Pure shared data — the renderer reads the same
+     * manifest for its shell title; the host reads `realtime`/`tickRateMs` to
+     * decide whether to drive a {@link RealtimeTicker}.
+     */
+    readonly manifest: GameManifest;
     /** Register the game's action reducers into the shared engine registry. */
     readonly registerActions: (registry: ActionRegistry<BaseGameSnapshot>) => void;
     /**
@@ -97,6 +106,7 @@ export interface MainGameContribution {
 const tacticsContribution: MainGameContribution = {
     gameId: TACTICS_GAME_ID,
     gameVersion: '0.1.0',
+    manifest: tacticsManifest,
     registerActions: registerTacticsActions,
     registerSettings: (manager) => manager.registerSchema(tacticsSettingsSchema),
     visibilityRules: tacticsVisibilityRules,
@@ -134,3 +144,8 @@ export const visibilityRulesByGameId: Readonly<Record<string, VisibilityRules>> 
     Object.fromEntries(
         Object.values(mainGameRegistry).map((game) => [game.gameId, game.visibilityRules]),
     );
+
+/** `gameId → manifest` — drives window title + real-time ticker selection. */
+export const manifestsByGameId: Readonly<Record<string, GameManifest>> = Object.fromEntries(
+    Object.values(mainGameRegistry).map((game) => [game.gameId, game.manifest]),
+);

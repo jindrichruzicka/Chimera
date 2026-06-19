@@ -138,8 +138,8 @@ return { ...state, timers: newTimers };
 ## Determinism Rules
 
 - Timers are driven by integer `tick` — **never** by `Date.now()` or `performance.now()`.
-- Turn-based games: `engine:tick` dispatched explicitly by host at defined moments (end of turn, resolution phase).
-- Real-time games: `engine:tick` dispatched by `RealtimeTicker` (§4.2.1).
+- Turn-based games (manifest `realtime: false`): `engine:tick` dispatched explicitly by host at defined moments (end of turn, resolution phase).
+- Real-time games (manifest `realtime: true`): `engine:tick` dispatched automatically by the host-driven `RealtimeTicker` at `tickRateMs` (§4.2.1).
 - Timer IDs must be deterministic (derived from entity IDs + action type, not random UUIDs) so replays produce identical timer maps.
 
 ---
