@@ -35,13 +35,17 @@ tags:
 
 ## F57 — Monorepo pnpm Workspace Foundation `Appendix C.5, §3`
 
-Introduce `pnpm-workspace.yaml` and restructure the repository into `packages/` (engine), `apps/` (consumer games), `tools/` (CLI), and `templates/` (scaffolding sources) — a true monorepo in one git history. Replace the `tsconfig` path aliases (`@chimera/*`) with real workspace `package.json` dependencies and wire `tsc --build` project references for incremental, dependency-ordered compilation. Root scripts (`build`, `test`, `lint`, `typecheck`) run recursively via `pnpm -r`. This is pure restructuring — no logic changes; the full unit and E2E suites stay green as the acceptance gate.
+Introduce `pnpm-workspace.yaml` and restructure the repository into `packages/` (engine), `apps/` (consumer games), `tools/` (CLI), and `templates/` (scaffolding sources) — a true monorepo in one git history. Replace the `tsconfig` path aliases (`@chimera/*`) with real workspace `package.json` dependencies. Root scripts (`build`, `test`, `lint`, `typecheck`) run recursively via `pnpm -r`. This is pure restructuring — no logic changes; the full unit and E2E suites stay green as the acceptance gate.
+
+> **Deferred to F58 — `tsc --build` project references.** Wiring composite per-package `tsconfig` project references was originally part of F57, but the current source contains import cycles that make `tsc --build` abort with a reference-cycle error (TS6202): `shared ↔ simulation`, `shared ↔ networking`, and `shared → electron` (see the **Sequencing note** at the foot of this milestone). The reference graph cannot be acyclic until **F58** makes `@chimera/shared` a true zero-dep leaf, so the project-reference wiring moves to F58 (tracked in [#756](https://github.com/jindrichruzicka/Chimera/issues/756), superseding the deferred [#753](https://github.com/jindrichruzicka/Chimera/issues/753)).
 
 ---
 
 ## F58 — Extract `@chimera/simulation` `Appendix C.3, §C.4, §3`
 
 Establish the reusable per-package pattern on the core leaf: a `package.json` with `exports`/`types`, a side-effect-free `index.ts` barrel exposing contract types only, a `dist/` build, and import-boundary lint. Per Appendix C.3, `@chimera/simulation` absorbs `shared/`, exposing contracts through a side-effect-free subpath so `renderer`/`networking` consume contract types without pulling simulation runtime (preserves Invariant #1 purity). Extract `SimulationHost` out of `electron/main/simulation-host.ts` into the package (making the host composable outside Electron) and add `ActionRegistry.mergeFrom(definitions)` to enable extension/game action registration (Appendix C.4). The package has zero runtime dependencies.
+
+As part of this absorption, **eliminate the `shared → simulation`/`networking`/`electron` back-edges** so `@chimera/shared` (or the contract subpath that replaces it) becomes a true zero-dep foundational leaf — e.g. relocate the brand/contract types `PlayerId`/`EngineAction`/`GameResult`/`AssetRef`/`AudioClipAsset` and the lobby/screen-contract types into the foundation layer, re-exporting from their old homes for compatibility. With the core dependency graph made acyclic (`shared` ← `simulation` ← {`ai`, `networking`}; `shared` ← {`ai`, `networking`}), **wire the `tsc --build` project references deferred from F57** ([#756](https://github.com/jindrichruzicka/Chimera/issues/756)).
 
 ---
 
@@ -96,6 +100,20 @@ Publish `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, `@chimera/r
 ## F67 — App Icon & Per-Game Branding `Appendix C.4, C.6`
 
 Replace the stock Electron icon with the Chimera logo as the default application and window icon, overridable per game through the `GameManifest` `icon` field (the same manifest that drives the per-game window title and the `realtime` heartbeat flag). Two layers ship together: (1) **runtime** — `createMainWindow` sets the `BrowserWindow` `icon` and, on macOS, calls `app.dock.setIcon`, resolving either the bundled default Chimera icon asset or a game's manifest override at window creation; (2) **packaging** — generate the platform icon set (`.icns` / `.ico` / PNG) from the Chimera logo source and wire it into the electron build configuration introduced by the build/release pipeline (**F64** / **F66**) so distributed bundles carry the icon, not just the dev runtime. Tactics keeps the default (no manifest override); a scaffolded game (**F65**) drops one icon path into its manifest to rebrand both window and dock. Deferred out of the initial game-manifest work — which delivers `displayName` / window title and the `realtime` flag — because a true installer icon depends on the packaging pipeline this milestone introduces.
+
+---
+
+## Sequencing note — `tsc --build` project references deferred to F58
+
+**Decision (2026-06-19):** wiring `tsc --build` project references was descoped from **F57** and moved to **F58**, because the source does not yet form the acyclic inward DAG that project references require.
+
+Although the `workspace:*` manifests declare a clean DAG (`@chimera/shared` and `@chimera/simulation` each declare zero deps), the actual TypeScript imports cross those boundaries in both directions:
+
+- **`shared ↔ simulation`** — `simulation/content/AssetRef.ts` imports the value `MalformedAssetRefError` from `@chimera/shared`, while `shared/messages.ts`, `shared/chat.ts`, and `shared/game-screen-contract.ts` import `PlayerId`/`EngineAction`/`GameResult`/`AssetRef` types from `@chimera/simulation`.
+- **`shared ↔ networking`** — `networking/` imports `crc32Json`/schemas/message types from `@chimera/shared`, while `shared/messages.ts` imports from `@chimera/networking/provider/MultiplayerProvider`.
+- **`shared → electron`** — `shared/game-screen-contract.ts` imports types from `@chimera/electron/preload/api-types`.
+
+TypeScript project references resolve at the file/program level — even `import type` forces a `references` entry — so the `shared ↔ simulation` 2-cycle has no acyclic subgraph and `tsc --build` aborts with **TS6202 (reference cycle)**. The fix is exactly what **F58** already plans: have `@chimera/simulation` absorb `shared/` and expose contracts through a side-effect-free subpath, making the foundation layer a true zero-dep leaf. Once that lands, the project references become wireable. Tracking: [#756](https://github.com/jindrichruzicka/Chimera/issues/756) (the correctly-sequenced task) supersedes the deferred [#753](https://github.com/jindrichruzicka/Chimera/issues/753); F57 ([#750](https://github.com/jindrichruzicka/Chimera/issues/750)) completes on real `workspace:*` deps + recursive `pnpm -r` scripts without the references.
 
 ---
 
