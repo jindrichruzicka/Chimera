@@ -255,4 +255,4 @@ games/
 - [Renderer State Stores](renderer-state-stores.md) — §4.4 `lobbyStore`, `useLobbyApi()`
 - [State Projection Interfaces](state-projection-interfaces.md) — §4.6 `StateProjector.project()`
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #36, #80, #99–#101
-- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v1.0.0.md) — F53 customizable lobby
+- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v0.8.0.md) — F53 customizable lobby

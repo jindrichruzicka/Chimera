@@ -1,5 +1,5 @@
 ---
-title: 'M8 — Hardening (v1.0.0)'
+title: 'M8 — Hardening (v0.8.0)'
 description: 'F43–F49, F51–F56: Crash Reporter/Error Boundaries, Replay System, Chat System, Toast Notification System, Debug Inspector, Multiplayer/Obfuscation Soak Tests, Performance Baseline/NAT Diagnostics, Game-Customizable Main Menu, Game-Customizable Settings Page (Tabbed Redesign), Customizable Lobby, Tactics-Stub Hardening (turn-gating, stamina, AI players, commitment-scheme battle mode), In-Game Menu / Role-Aware Leave Game, and Lobby Password. Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified.'
 tags:
     [
@@ -26,7 +26,7 @@ tags:
     ]
 ---
 
-# M8 — Hardening (v1.0.0)
+# M8 — Hardening (v0.8.0)
 
 > **Goal**: Production-grade quality: soak tests pass, Debug Inspector ships, performance baseline met, commitment anti-tamper verified. Shell pages and the lobby are fully customizable per game, and the tactics stub exercises turn-gating, stamina, AI players, and an opt-in commitment-scheme battle mode.
 > Architecture sections: §4.4, §4.6, §4.9, §4.12, §4.13, §4.14, §4.27, §4.28, §4.29, §4.30, §4.33, §4.37, §8, §10, §11

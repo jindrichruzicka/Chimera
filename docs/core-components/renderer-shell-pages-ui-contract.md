@@ -735,4 +735,4 @@ a game lobby screen), and #101 (`snapshot.setup` is public, projected verbatim).
 - [Scene Transitions & Fade](scene-transitions-fade.md) — `TransitionOverlay`, `useFade()`
 - [Customizable Lobby Contract](customizable-lobby-contract.md) — §4.37.12 game-customizable lobby screen, host-authored match config, `snapshot.setup` projection
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94, #99–#101
-- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v1.0.0.md) — F51 game-customizable main menu, F52 game-customizable settings page, F53 customizable lobby
+- [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v0.8.0.md) — F51 game-customizable main menu, F52 game-customizable settings page, F53 customizable lobby
