@@ -160,7 +160,7 @@ import {
 } from '@chimera/simulation/projection/index.js';
 import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
-import { SimulationHost } from './runtime/SimulationHost.js';
+import { SimulationHost } from '@chimera/simulation/host';
 import {
     registerE2eHooks,
     getE2eHooks,

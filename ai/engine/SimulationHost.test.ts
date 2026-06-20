@@ -1,13 +1,20 @@
 /**
- * electron/main/runtime/SimulationHost.test.ts
+ * ai/engine/SimulationHost.test.ts
  *
- * Unit tests for SimulationHost — the AgentManager wiring layer that sits
- * between the simulation tick loop and the AI/human player agents.
+ * Integration tests for the composable `SimulationHost` driven by the real
+ * `AgentManager` (its production `AgentCoordinator` implementation).
+ *
+ * Relocated from `electron/main/runtime/SimulationHost.test.ts` when the host
+ * moved into `@chimera/simulation/host` (issue #760, feature F58). The host
+ * itself can no longer live with a test that imports `@chimera/ai`
+ * (`simulation/**` is the zero-dependency leaf), so the real-collaborator
+ * assertions live here in `ai/`, where importing both the host and the
+ * `AgentManager` is legal (`ai → simulation`). The host's own delegation
+ * contract is unit-tested in `simulation/host/SimulationHost.test.ts` against a
+ * stub coordinator.
  *
  * Architecture reference: §4.9 — AI Framework and Agent System
- * Issue: #414
- *
- * Tests written FIRST (red confirmed before implementation).
+ * Issue: #760 (feature F58), originally #414
  *
  * Invariants verified:
  *   #16 — No direct dispatch channel to agents; routing goes through AgentManager.
@@ -16,10 +23,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SimulationHost } from './SimulationHost.js';
-import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
+import { SimulationHost } from '@chimera/simulation/host';
+import { AgentManager } from './AgentManager.js';
 import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
-import type { PlayerAgent, PlayerSnapshot, GameResult } from '@chimera/ai/engine/PlayerAgent.js';
+import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
 import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
@@ -205,7 +212,7 @@ describe('SimulationHost.onGameStart', () => {
         // Register an agent AFTER onGameStart fires
         manager.registerAgent(agent);
 
-        // Per the API contract (line 82-85 in SimulationHost.ts),
+        // Per the API contract (the SimulationHost docstring),
         // onGameStart must be called AFTER agents are registered.
         // This agent was registered after the event, so it should NOT receive it.
         expect(agent.onGameStart).not.toHaveBeenCalled();
@@ -288,7 +295,7 @@ describe('SimulationHost ordering contract: register → onGameStart → afterTi
         const agent = makeMockAgent(P1);
         const host = new SimulationHost(manager, identityProjector);
 
-        // Correct order mandated by the API contract (SimulationHost.ts line 82–85):
+        // Correct order mandated by the API contract (SimulationHost docstring):
         host.registerAgent(agent);
         host.onGameStart(makeSnapshot(0));
         host.afterTick(makeSnapshot(1));

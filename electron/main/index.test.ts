@@ -242,7 +242,7 @@ const { mockSimulationHostInstance } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('./runtime/SimulationHost.js', () => ({
+vi.mock('@chimera/simulation/host', () => ({
     SimulationHost: vi.fn(() => mockSimulationHostInstance),
 }));
 

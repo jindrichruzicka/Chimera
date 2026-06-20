@@ -21,6 +21,7 @@ import type {
     StateProjector,
     PlayerSnapshot,
 } from '@chimera/simulation/projection/StateProjector.js';
+import type { AgentCoordinator } from '@chimera/simulation/host';
 import type { PlayerAgent, GameResult } from './PlayerAgent.js';
 
 // ─── AgentManager ─────────────────────────────────────────────────────────────
@@ -44,7 +45,7 @@ import type { PlayerAgent, GameResult } from './PlayerAgent.js';
  *   - `HumanPlayerAgent` lifecycle methods are no-ops, so the uniform path
  *     adds no observable behaviour for human slots.
  */
-export class AgentManager {
+export class AgentManager implements AgentCoordinator<PlayerAgent> {
     private readonly agents = new Map<PlayerId, PlayerAgent>();
     private readonly logger: Logger;
 

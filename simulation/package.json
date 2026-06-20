@@ -49,6 +49,10 @@
             "types": "./dist/debug/index.d.ts",
             "default": "./dist/debug/index.js"
         },
+        "./host": {
+            "types": "./dist/host/index.d.ts",
+            "default": "./dist/host/index.js"
+        },
         "./*.js": {
             "types": "./dist/*.d.ts",
             "default": "./dist/*.js"
