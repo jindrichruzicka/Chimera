@@ -27,17 +27,21 @@ Both must pass before landing on `main`.
 
 ## Mechanical Checks
 
-| #     | Rule                                            | Grep                                                                                                                       |
-| ----- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------- |
-| 1     | `simulation/` zero deps on React/DOM/networking | `from.*renderer/` in `simulation/`/`ai/`                                                                                   |
-| 1     | `renderer/` never imports the main process      | `from.*electron/main/` in `renderer/`                                                                                      |
-| 2     | Reducers pure — no side-effect APIs             | `Math\.random\|Date\.now\|performance\.now` in `simulation/`/`ai/`                                                         |
-| 3     | `GameSnapshot` stays in main                    | `GameSnapshot` in `electron/preload/` or `renderer/`                                                                       |
-| 27    | `CHIMERA_DEBUG` never set by packaging config   | `CHIMERA_DEBUG` in `package.json` / electron-builder / forge configs                                                       |
-| 27    | `IS_DEBUG_MODE` keeps define-replaceable shape  | dot-access `process.env.CHIMERA_DEBUG === '1'` and `process.env.NODE_ENV !== 'production'` pinned in `shared/constants.ts` |
-| 43    | `validate()`/`reduce()` deterministic           | same as #2                                                                                                                 |
-| 47    | Engine doesn't import provider-specific dirs    | `from.*games/` in `simulation/`/`ai/`                                                                                      |
-| 48/80 | `GameShell.tsx` stays game-agnostic             | `from.*games/` in `renderer/components/shell/GameShell.tsx`                                                                |
+| #     | Rule                                                         | Grep                                                                                                                       |
+| ----- | ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| 1     | `simulation/` zero deps on React/DOM/networking              | `from.*renderer/` in `simulation/`/`ai/`                                                                                   |
+| 1     | `renderer/` never imports the main process                   | `from.*electron/main/` in `renderer/`                                                                                      |
+| 1     | `shared/` is the zero-dependency foundation leaf             | `from '@chimera/(simulation\|ai\|networking\|renderer\|electron)'` in `shared/` (Check 13)                                 |
+| 2     | Reducers pure — no side-effect APIs                          | `Math\.random\|Date\.now\|performance\.now` in `simulation/`/`ai/`                                                         |
+| 2     | `electron/main` core imports no game (only the 3 registries) | `games/`/non-engine `@chimera/*` in `electron/main/` (Check 10)                                                            |
+| 3     | `GameSnapshot` stays in main                                 | `GameSnapshot` in `electron/preload/` or `renderer/`                                                                       |
+| 27    | `CHIMERA_DEBUG` never set by packaging config                | `CHIMERA_DEBUG` in `package.json` / electron-builder / forge configs                                                       |
+| 27    | `IS_DEBUG_MODE` keeps define-replaceable shape               | dot-access `process.env.CHIMERA_DEBUG === '1'` and `process.env.NODE_ENV !== 'production'` pinned in `shared/constants.ts` |
+| 43    | `validate()`/`reduce()` deterministic                        | same as #2                                                                                                                 |
+| 47    | Engine doesn't import provider-specific dirs                 | `from.*games/` in `simulation/`/`ai/`                                                                                      |
+| 48/80 | `GameShell.tsx` stays game-agnostic                          | `from.*games/` in `renderer/components/shell/GameShell.tsx`                                                                |
+| 106   | `ai/` is the game-agnostic framework only (containment)      | non-`engine`/`__tests__`/`dist` dir or non-`index.ts` `.ts`/`.tsx` file under `ai/` (Check 11)                             |
+| 107   | `ai/` defines no game tokens; only `engine:` crosses         | `TACTICS_` constant or `'<gameId>:'` namespace (≠ `engine:`) in `ai/` (Check 12)                                           |
 
 Boundary checks: `from.*electron/` and `from.*games/` inside `simulation/`/`ai/`.
 

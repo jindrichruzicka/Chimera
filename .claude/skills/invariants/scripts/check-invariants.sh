@@ -263,11 +263,18 @@ if [[ -d electron/main ]]; then
 fi
 
 # ─── Check 11: ai/ holds only the game-agnostic framework (invariant 106) ─────
-# The pure AI framework package must contain no game-specific subtree (e.g. a
-# re-introduced policies/<game>/). Game-specific AI belongs in games/<name>/ai/.
-# Only the framework directories below are allowed as immediate children of ai/.
+# The pure AI framework package's sole source top-level members are engine/,
+# __tests__/, index.ts and CLAUDE.md (issue #765). It must contain no
+# game-specific subtree (e.g. a re-introduced policies/<game>/) nor a stray
+# game source file at top level (e.g. tacticsPolicy.ts) — game-specific AI
+# belongs in games/<name>/ai/. The import-direction half of this invariant
+# (ai/ must not import games/*) is enforced by Check 4 (invariant 47).
+#
+# Directories: only the framework dirs below are allowed as immediate children.
 # `dist` is the generated build output (F59, issue #764) — it mirrors the
 # framework source and is gitignored, so it carries no game-specific subtree.
+# Files: only index.ts (the contract barrel) is an allowed top-level .ts/.tsx;
+# non-source files (CLAUDE.md, package.json, tsconfig*.json) are not matched.
 if [[ -d ai ]]; then
     while IFS= read -r dir; do
         case "$(basename "${dir}")" in
@@ -275,16 +282,46 @@ if [[ -d ai ]]; then
             *) violation "106" "${dir}/  (non-framework dir under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
         esac
     done < <(find ai -mindepth 1 -maxdepth 1 -type d ! -name node_modules | sort)
+    while IFS= read -r file; do
+        case "$(basename "${file}")" in
+            index.ts) ;;
+            *) violation "106" "${file}  (non-framework file under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
+        esac
+    done < <(find ai -mindepth 1 -maxdepth 1 -type f \( -name '*.ts' -o -name '*.tsx' \) | sort)
 fi
 
 # ─── Check 12: no game-specific tokens in game-agnostic packages (inv 107) ────
-# ai/ and shared/ are game-agnostic — they must not define per-game gameplay
-# tokens. Game constants live in games/<name>/. Today tactics is the only game;
-# extend the alternation as games are added (e.g. <GAME>_ constants and
-# '<gameId>:' action-string namespaces). Comments/tests are excluded by check_grep.
-check_grep "107" \
-    'TACTICS_|tactics:' \
-    ai shared
+# ai/ (and shared/, when present) are game-agnostic — they must not DEFINE
+# per-game gameplay tokens (issue #765):
+#   * per-game constants — <GAME>_* (e.g. TACTICS_MAX_STAMINA); and
+#   * per-game action-string namespaces — '<gameId>:*' (e.g. 'tactics:move_unit').
+# The reserved engine: namespace (Invariant #11) is the ONLY namespace allowed
+# to cross the package cut, so it is excluded below.
+#
+# The action-namespace half is generic: any quoted '<gameId>:<action>' literal
+# whose namespace is not engine: is flagged, so a second game needs no edit
+# here. The constant half stays keyed to known game prefixes (TACTICS_) — there
+# is no false-positive-free way to detect "a game's constant" generically — so
+# extend the alternation as games are added. shared/ was absorbed into
+# @chimera/simulation (#758) and is currently a no-op; it is kept for parity
+# with the invariant text should the directory reappear.
+# False-positive suppression mirrors check_grep (comments/tests/fixtures/node_modules).
+GAME_TOKEN_RE="(TACTICS_|['\"][a-z][a-z0-9_]*:[a-z])"
+for token_guard_dir in ai shared; do
+    [[ -d "${token_guard_dir}" ]] || continue
+    while IFS= read -r match; do
+        violation "107" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            "${GAME_TOKEN_RE}" "${token_guard_dir}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "['\"]engine:" \
+        || true
+    )
+done
 
 # ─── Check 13: shared/ is the zero-dependency foundation leaf (invariant 1) ───
 # `@chimera/shared` is the foundation/contract layer and must point inward only —

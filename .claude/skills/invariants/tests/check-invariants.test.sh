@@ -788,6 +788,201 @@ test_glob_string_before_assignment_passes() {
     fi
 }
 
+# ─── Checks 11 & 12: @chimera/ai boundary (invariants 106 / 107, issue #765) ───
+
+# Test 28: import from games/ inside ai/ → violation [invariant-47]
+# The import-direction half of invariant #106 is enforced by Check 4 (#47):
+# ai/ must not import from games/*.
+test_games_import_in_ai_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/engine/Bad.ts" \
+        "import { something } from 'games/tactics/data.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-47\]'; then
+            pass "games/ import in ai/ detected as [invariant-47]"
+        else
+            fail "ai/ games/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "games/ import in ai/ not detected (exit 0)"
+    fi
+}
+
+# Test 29: a game-named subtree under ai/ → violation [invariant-106]
+# The pure AI framework must contain no game-specific subtree (e.g. a
+# re-introduced policies/<game>/). Benign body isolates the containment check.
+test_game_subtree_under_ai_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/policies/tactics/policy.ts" \
+        "export const noop = 1;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-106\]'; then
+            pass "game-named subtree under ai/ detected as [invariant-106]"
+        else
+            fail "ai/ subtree detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "game-named subtree under ai/ not detected (exit 0)"
+    fi
+}
+
+# Test 30: a stray top-level source file under ai/ → violation [invariant-106]
+# The only allowed top-level source file is index.ts; a game policy dropped at
+# ai/ top level (e.g. tacticsPolicy.ts) must be flagged.
+test_stray_top_level_file_under_ai_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/tacticsPolicy.ts" \
+        "export const noop = 1;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-106\]'; then
+            pass "stray top-level file under ai/ detected as [invariant-106]"
+        else
+            fail "ai/ top-level file detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "stray top-level file under ai/ not detected (exit 0)"
+    fi
+}
+
+# Test 31: ai/ index.ts barrel at top level → NOT flagged (allowed member)
+test_ai_index_barrel_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/index.ts" \
+        "export type { PlayerAgent } from './engine/PlayerAgent.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "ai/index.ts barrel not flagged (allowed top-level member)"
+    else
+        fail "ai/index.ts barrel wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 32: a <GAME>_ constant defined in ai/ → violation [invariant-107]
+test_game_constant_token_in_ai_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/engine/Leak.ts" \
+        "export const TACTICS_MAX_STAMINA = 3;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-107\]'; then
+            pass "TACTICS_ constant in ai/ detected as [invariant-107]"
+        else
+            fail "ai/ game constant detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "TACTICS_ constant in ai/ not detected (exit 0)"
+    fi
+}
+
+# Test 33: a 'tactics:' action namespace defined in ai/ → violation [invariant-107]
+test_game_namespace_token_in_ai_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/engine/Leak.ts" \
+        "export const ACTION = 'tactics:move_unit';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-107\]'; then
+            pass "'tactics:' namespace in ai/ detected as [invariant-107]"
+        else
+            fail "ai/ game namespace detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "'tactics:' namespace in ai/ not detected (exit 0)"
+    fi
+}
+
+# Test 34: a non-tactics game namespace ('cards:') in ai/ → violation [invariant-107]
+# Proves the no-game-token check is not hardcoded to tactics — any per-game
+# action-string namespace (except the reserved engine:) is forbidden.
+test_generic_game_namespace_in_ai_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/engine/Leak.ts" \
+        "export const ACTION = 'cards:play_card';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-107\]'; then
+            pass "non-tactics game namespace in ai/ detected as [invariant-107]"
+        else
+            fail "ai/ generic game namespace detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "non-tactics game namespace in ai/ not detected (exit 0)"
+    fi
+}
+
+# Test 35: the reserved engine: namespace in ai/ → NOT flagged (allowed cut)
+# Invariant #11: engine: is the only namespace that may cross the package cut.
+test_engine_namespace_in_ai_allowed() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "ai/engine/Ok.ts" \
+        "export const ACTION = 'engine:end_turn';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "reserved engine: namespace in ai/ not flagged (allowed cut)"
+    else
+        fail "reserved engine: namespace in ai/ wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -822,6 +1017,14 @@ test_chimera_debug_in_nested_packaging_config_detected
 test_chimera_debug_in_node_modules_not_flagged
 test_url_string_in_assignment_passes
 test_glob_string_before_assignment_passes
+test_games_import_in_ai_detected
+test_game_subtree_under_ai_detected
+test_stray_top_level_file_under_ai_detected
+test_ai_index_barrel_passes
+test_game_constant_token_in_ai_detected
+test_game_namespace_token_in_ai_detected
+test_generic_game_namespace_in_ai_detected
+test_engine_namespace_in_ai_allowed
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

@@ -65,12 +65,29 @@ check_grep() {
         grep -rn \
             --include="*.ts" --include="*.tsx" --include="*.js" \
             --exclude="*.test.ts" --exclude="*.test.tsx" \
-            --exclude-dir="fixtures" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
             -E "${pattern}" "${existing_dirs[@]}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         || true
     )
 }
+
+# Game-import detection (engine allowlist).
+#
+# Games are now first-class `@chimera/<game>` packages (F57: `@chimera/tactics`
+# replaces the old `@chimera/games/tactics` alias) and will leave `games/`
+# entirely in F63 (→ `apps/tactics`). A `@chimera/<game>` specifier carries no
+# `/games/` substring and is indistinguishable from an engine package by shape,
+# so a game is identified by exclusion: any `@chimera/<pkg>` import whose `<pkg>`
+# is NOT an engine package, plus any relative/bare `games/*` path.
+#
+# Usage in a pipeline: match a candidate-import RE below, then drop engine
+# packages with `grep -vE "${ENGINE_PKG_EXCLUDE_RE}"`.
+ENGINE_PKG_EXCLUDE_RE="@chimera/(shared|simulation|ai|networking|renderer|electron)[/'\"]"
+# Static `import … from`/`export … from` of a games/ path or any @chimera/ pkg.
+GAME_IMPORT_STATIC_RE="from ['\"][^'\"]*(games/|@chimera/)"
+# Static + dynamic `import('…')` of a games/ path or any @chimera/ pkg.
+GAME_IMPORT_ANY_RE="(from|import\()[[:space:]]*['\"][^'\"]*(games/|@chimera/)"
 
 # ─── Check 1 & 43: no Math.random / Date.now / performance.now in simulation or ai ───
 # Covers both invariant 2 (purity) and invariant 43 (no non-deterministic APIs).
@@ -88,10 +105,24 @@ check_grep "1" \
     "from ['\"].*electron/" \
     simulation ai
 
-# ─── Check 4: simulation/ must not import from games/ ────────────────────────
-check_grep "47" \
-    "from ['\"].*games/" \
-    simulation ai
+# ─── Check 4: simulation/ and ai/ must not import a game ─────────────────────
+# A game is a relative/bare games/ path or a non-engine @chimera/<game> package
+# (e.g. @chimera/tactics); engine @chimera/* imports are filtered back out.
+for games_guard_dir in simulation ai; do
+    [[ -d "${games_guard_dir}" ]] || continue
+    while IFS= read -r match; do
+        violation "47" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            "${GAME_IMPORT_STATIC_RE}" "${games_guard_dir}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
+        || true
+    )
+done
 
 # ─── Check 5: renderer/ must not import from electron/main/ ──────────────────
 check_grep "1" \
@@ -118,8 +149,9 @@ for shell_file in "${SHELL_GAME_AGNOSTIC_FILES[@]}"; do
     while IFS= read -r match; do
         violation "48/80" "${shell_file}:${match}"
     done < <(
-        grep -nE "from ['\"].*games/" "${shell_file}" \
+        grep -nE "${GAME_IMPORT_STATIC_RE}" "${shell_file}" \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
         || true
     )
 done
@@ -204,7 +236,94 @@ if [[ -f "${CONSTANTS}" ]]; then
     fi
 fi
 
-# ─── Check: shared/ is the zero-dependency foundation leaf (invariant 1) ──────
+# ─── Check 10: electron/main core must not import games/* (invariant 2) ──────
+# The host (main process) stays agnostic of which games exist; only the three
+# composition registries may import games/*. Mirrors the renderer-side
+# GameShell / rendererGameRegistry guard (Check 7) and the ESLint rule
+# chimera/no-main-games-import. Matches static (`import … from`, `export … from`)
+# and dynamic (`import('…')`) specifiers alike. Test files are excluded (they
+# import game fixtures), as are comment lines (jsdoc may cite a games/ path).
+if [[ -d electron/main ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            electron/main/game/mainGameRegistry.ts) ;;
+            electron/main/content/gameContentRegistry.ts) ;;
+            electron/main/lobby/lobbySetupRegistry.ts) ;;
+            *) violation "2" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="node_modules" \
+            "${GAME_IMPORT_ANY_RE}" electron/main 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
+        || true
+    )
+fi
+
+# ─── Check 11: ai/ holds only the game-agnostic framework (invariant 106) ─────
+# The pure AI framework package's sole source top-level members are engine/,
+# __tests__/, index.ts and CLAUDE.md (issue #765). It must contain no
+# game-specific subtree (e.g. a re-introduced policies/<game>/) nor a stray
+# game source file at top level (e.g. tacticsPolicy.ts) — game-specific AI
+# belongs in games/<name>/ai/. The import-direction half of this invariant
+# (ai/ must not import games/*) is enforced by Check 4 (invariant 47).
+#
+# Directories: only the framework dirs below are allowed as immediate children.
+# `dist` is the generated build output (F59, issue #764) — it mirrors the
+# framework source and is gitignored, so it carries no game-specific subtree.
+# Files: only index.ts (the contract barrel) is an allowed top-level .ts/.tsx;
+# non-source files (CLAUDE.md, package.json, tsconfig*.json) are not matched.
+if [[ -d ai ]]; then
+    while IFS= read -r dir; do
+        case "$(basename "${dir}")" in
+            engine|__tests__|dist) ;;
+            *) violation "106" "${dir}/  (non-framework dir under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
+        esac
+    done < <(find ai -mindepth 1 -maxdepth 1 -type d ! -name node_modules | sort)
+    while IFS= read -r file; do
+        case "$(basename "${file}")" in
+            index.ts) ;;
+            *) violation "106" "${file}  (non-framework file under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
+        esac
+    done < <(find ai -mindepth 1 -maxdepth 1 -type f \( -name '*.ts' -o -name '*.tsx' \) | sort)
+fi
+
+# ─── Check 12: no game-specific tokens in game-agnostic packages (inv 107) ────
+# ai/ (and shared/, when present) are game-agnostic — they must not DEFINE
+# per-game gameplay tokens (issue #765):
+#   * per-game constants — <GAME>_* (e.g. TACTICS_MAX_STAMINA); and
+#   * per-game action-string namespaces — '<gameId>:*' (e.g. 'tactics:move_unit').
+# The reserved engine: namespace (Invariant #11) is the ONLY namespace allowed
+# to cross the package cut, so it is excluded below.
+#
+# The action-namespace half is generic: any quoted '<gameId>:<action>' literal
+# whose namespace is not engine: is flagged, so a second game needs no edit
+# here. The constant half stays keyed to known game prefixes (TACTICS_) — there
+# is no false-positive-free way to detect "a game's constant" generically — so
+# extend the alternation as games are added. shared/ was absorbed into
+# @chimera/simulation (#758) and is currently a no-op; it is kept for parity
+# with the invariant text should the directory reappear.
+# False-positive suppression mirrors check_grep (comments/tests/fixtures/node_modules).
+GAME_TOKEN_RE="(TACTICS_|['\"][a-z][a-z0-9_]*:[a-z])"
+for token_guard_dir in ai shared; do
+    [[ -d "${token_guard_dir}" ]] || continue
+    while IFS= read -r match; do
+        violation "107" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            "${GAME_TOKEN_RE}" "${token_guard_dir}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "['\"]engine:" \
+        || true
+    )
+done
+
+# ─── Check 13: shared/ is the zero-dependency foundation leaf (invariant 1) ───
 # `@chimera/shared` is the foundation/contract layer and must point inward only —
 # it must not import from simulation, ai, networking, renderer, or electron.
 # Relocate the contract type into shared and re-export from the old home instead
