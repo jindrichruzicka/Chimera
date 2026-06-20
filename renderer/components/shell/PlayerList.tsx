@@ -8,7 +8,10 @@ import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Heading } from '../ui/Heading';
 import { useLobbyStore } from '../../state/lobbyStore';
-import type { LobbyPlayerEntry, PlayerId } from '@chimera/shared/messages-schemas.js';
+import type {
+    LobbyPlayerEntry,
+    PlayerId,
+} from '@chimera/simulation/foundation/messages-schemas.js';
 import styles from './PlayerList.module.css';
 
 export interface PlayerListProps {

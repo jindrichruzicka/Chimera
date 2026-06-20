@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PlayerId } from '@chimera/shared/engine-contract.js';
+import type { PlayerId } from './engine-contract.js';
 import type { ChatScope, ChatMessage, RelayResult } from './chat.js';
 
 // shared/ is the foundation leaf, so its tests construct branded ids locally

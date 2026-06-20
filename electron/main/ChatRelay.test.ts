@@ -17,7 +17,7 @@ import { describe, expect, it } from 'vitest';
 
 import { playerId, type PlayerId } from '@chimera/simulation/engine/types.js';
 import { localProfileId, type PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
-import type { ChatMessage } from '@chimera/shared/chat.js';
+import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
 
 import { ChatRelay, type ChatDeliver, type ChatRelayOptions } from './ChatRelay.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';

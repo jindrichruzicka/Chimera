@@ -40,7 +40,7 @@ import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
 } from '@chimera/tactics/constants.js';
-import { MAIN_HEAP_BUDGET_MB, TICK_BUDGET_MS } from '@chimera/shared/perf-budget.js';
+import { MAIN_HEAP_BUDGET_MB, TICK_BUDGET_MS } from '@chimera/simulation/foundation/perf-budget.js';
 
 // ─── Gating policy ──────────────────────────────────────────────────────────
 

@@ -1839,7 +1839,7 @@ import {
     registerLogsHandlers,
     type LogsHandlersIpcMain,
 } from './ipc-handlers.js';
-import type { LogEntry } from '@chimera/shared/logging.js';
+import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
 import type { MemorySink } from '../logging/logger.js';
 
 function makeLogsIpcMainStub(): {

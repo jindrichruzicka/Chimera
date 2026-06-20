@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { buildAssetRef } from '@chimera/simulation/content/AssetRef.js';
+import { buildAssetRef } from '../content/AssetRef.js';
 import {
     gamePhase,
     playerId,
     type BaseGameSnapshot,
     type GameReduceContext,
-} from '@chimera/simulation/engine/types.js';
-import { makeStubRng } from '@chimera/simulation/engine/__test-support__/stubs.js';
+} from '../engine/types.js';
+import { makeStubRng } from '../engine/__test-support__/stubs.js';
 import {
     DuplicateSceneRegistrationError,
     SceneRegistry,

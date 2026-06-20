@@ -8,7 +8,7 @@
 //
 // Design note: docs/security-trust/tactics-commitment-battle-mode.md §5
 
-import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
+import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,

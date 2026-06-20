@@ -45,13 +45,13 @@ import {
 } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { PlayerConnectionEvent } from '../../preload/api-types.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
-import type { ChatMessage } from '@chimera/shared/chat.js';
+import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
 import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import { registerE2eHooks, type E2eHooks } from '../runtime/e2e-hooks.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
-import type { GameLobbySetup } from '@chimera/shared/game-lobby-contract.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
+import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

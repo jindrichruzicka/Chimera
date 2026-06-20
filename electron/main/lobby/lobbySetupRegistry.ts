@@ -21,8 +21,11 @@
 import { buildTacticsLobbySetup } from '@chimera/tactics/lobby/lobby-setup.js';
 import { paletteFromCollections } from '@chimera/tactics/content/tacticsContent.js';
 import type { LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
-import type { GameLobbySetup, GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
+import type {
+    GameLobbySetup,
+    GameSetupConfig,
+} from '@chimera/simulation/foundation/game-lobby-contract.js';
 
 /**
  * `gameId → lobby-setup builder`. Each builder turns the game's transmitted

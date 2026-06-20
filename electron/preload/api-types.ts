@@ -12,16 +12,23 @@
 // Invariant 28: this file must NEVER declare a `__chimeraDebug` surface —
 // the Debug Inspector preload lives elsewhere.
 
-import type { LogEntry } from '@chimera/shared/logging.js';
-import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
-import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
-import type { GameContent, GameContentItem } from '@chimera/shared/game-content-contract.js';
+import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
+import type { ChatMessage, ChatScope, RelayResult } from '@chimera/simulation/foundation/chat.js';
+import type {
+    LobbyInfo,
+    LobbyPlayerEntry,
+    LobbyState,
+} from '@chimera/simulation/foundation/messages-schemas.js';
+import type {
+    GameContent,
+    GameContentItem,
+} from '@chimera/simulation/foundation/game-content-contract.js';
 import type {
     PerspectiveReplayExportBridge,
     PerspectiveReplayListBridge,
     ReplayExportBridge,
     ReplayExportIntent,
-} from '@chimera/shared/replay-bridge-contract.js';
+} from '@chimera/simulation/foundation/replay-bridge-contract.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 import type { CommitmentId } from '@chimera/simulation/projection/index.js';
 import type {
@@ -116,7 +123,7 @@ export const toSlotId = (raw: string): SlotId => raw as SlotId;
 // The projected-snapshot contract (`PlayerSnapshot` + its `ObservedPlayerState` /
 // `ObservedEntityState` / `GameEvent` helpers) and the commit/reveal
 // envelope/reveal shapes now live in the zero-dependency foundation leaf
-// `@chimera/shared` (issue #758). They are re-exported here so the preload
+// `@chimera/simulation/foundation` (issue #758). They are re-exported here so the preload
 // contract surface — and every renderer/main consumer that imports them from
 // this module — stays unchanged.
 
@@ -125,10 +132,13 @@ import type {
     ObservedPlayerState,
     ObservedEntityState,
     GameEvent,
-} from '@chimera/shared/snapshot-contract.js';
+} from '@chimera/simulation/foundation/snapshot-contract.js';
 export type { PlayerSnapshot, ObservedPlayerState, ObservedEntityState, GameEvent };
 
-import type { CommitmentEnvelope, CommitmentReveal } from '@chimera/shared/commitment-contract.js';
+import type {
+    CommitmentEnvelope,
+    CommitmentReveal,
+} from '@chimera/simulation/foundation/commitment-contract.js';
 export type { CommitmentEnvelope, CommitmentReveal };
 
 /**

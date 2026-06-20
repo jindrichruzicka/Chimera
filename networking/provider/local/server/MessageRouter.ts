@@ -16,13 +16,13 @@
  * Task: F10 / T03 (issue #218)
  */
 
-import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
 import type {
     SideChannelMessage,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
+import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type { MessageBus } from './MessageBus.js';
 
 // ─── Callback types ───────────────────────────────────────────────────────────

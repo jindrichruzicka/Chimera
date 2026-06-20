@@ -62,7 +62,7 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         // by a `/games/` path substring.
         {
             filename: 'electron/main/index.ts',
-            code: `import { logger } from '@chimera/shared/logging.js';`,
+            code: `import { logger } from '@chimera/simulation/foundation/logging.js';`,
         },
         {
             filename: 'electron/main/index.ts',

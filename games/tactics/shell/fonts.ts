@@ -1,4 +1,4 @@
-import type { GameFontFace } from '@chimera/shared/game-shell-contract.js';
+import type { GameFontFace } from '@chimera/simulation/foundation/game-shell-contract.js';
 
 export const tacticsFonts: readonly GameFontFace[] = [
     {

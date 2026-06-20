@@ -7,7 +7,6 @@
         "lint": "eslint ."
     },
     "dependencies": {
-        "@chimera/simulation": "workspace:*",
-        "@chimera/shared": "workspace:*"
+        "@chimera/simulation": "workspace:*"
     }
 }

@@ -9,7 +9,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerId } from '@chimera/simulation/contracts';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {
     HostTransport,
@@ -18,8 +18,8 @@ import type {
     SideChannelMessage,
     LobbyPlayerEntry,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
-import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
+import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 import { LobbyServer } from './LobbyServer.js';
 import { MessageRouter } from './MessageRouter.js';
 import { WsHostTransport } from './WsHostTransport.js';

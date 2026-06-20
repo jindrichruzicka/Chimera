@@ -12,7 +12,7 @@
 // `chimera:debug*` channels (§4.12), shared with `debug-bridge.ts` so the
 // debug module graph never leaks into this preload (Invariant #27).
 
-import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera/shared/constants.js';
+import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera/simulation/foundation/constants.js';
 import type { ConnectionStatus, DeviceInfo, SystemAPI, Unsubscribe } from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
 import { subscribePush, subscribeValidatedPush } from '../shared/listener.js';

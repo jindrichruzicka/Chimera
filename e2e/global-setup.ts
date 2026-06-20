@@ -33,8 +33,6 @@ export default function globalSetup(): void {
 
     const alias: Record<string, string> = {
         '@chimera/electron': path.join(root, 'electron'),
-        '@chimera/shared': path.join(root, 'shared'),
-        '@chimera/simulation': path.join(root, 'simulation'),
         '@chimera/ai': path.join(root, 'ai'),
         '@chimera/networking': path.join(root, 'networking'),
         '@chimera/renderer': path.join(root, 'renderer'),

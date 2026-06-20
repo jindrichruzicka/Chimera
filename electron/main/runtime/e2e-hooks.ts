@@ -18,7 +18,7 @@
  */
 
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import type { ChatMessage } from '@chimera/shared/chat.js';
+import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
 import { createRingBuffer } from './ws-ring-buffer.js';
 
 /** Maximum number of WebSocket frames retained in the E2E buffer. Oldest frames are evicted when this limit is reached. */

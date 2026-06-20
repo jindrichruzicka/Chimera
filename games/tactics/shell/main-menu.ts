@@ -16,8 +16,8 @@
 import type {
     GameMainMenuDefinition,
     GameMenuCommandId,
-} from '@chimera/shared/game-shell-contract.js';
-import type { PerspectiveReplayListBridge } from '@chimera/shared/replay-bridge-contract.js';
+} from '@chimera/simulation/foundation/game-shell-contract.js';
+import type { PerspectiveReplayListBridge } from '@chimera/simulation/foundation/replay-bridge-contract.js';
 
 // ─── Replay bridge access ───────────────────────────────────────────────────────
 //

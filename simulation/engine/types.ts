@@ -20,12 +20,12 @@ import type { ContentDatabase } from '../content/index.js';
 export type { ContentDatabase } from '../content/index.js';
 import type { TimerRegistry } from './GameTimer.js';
 export type { TimerRegistry } from './GameTimer.js';
-import type { Logger } from '@chimera/shared/logging.js';
-import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
-export type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
+import type { Logger } from '../foundation/logging.js';
+import type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
+export type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
 
 // The brand/contract TYPES below now live in the zero-dependency foundation leaf
-// `@chimera/shared/engine-contract.js` (issue #758) so the foundation can
+// `../foundation/engine-contract.js` (issue #758) so the foundation can
 // describe its wire/screen contracts without importing up into simulation. They
 // are imported for local use (the brand factories cast to them) and re-exported
 // so `@chimera/simulation/engine/types.js` stays the unchanged public import path.
@@ -40,7 +40,7 @@ import type {
     TypedAction,
     ActionEnvelope,
     GameResult,
-} from '@chimera/shared/engine-contract.js';
+} from '../foundation/engine-contract.js';
 export type {
     PlayerId,
     EntityId,
@@ -119,7 +119,7 @@ export interface GameEvent {
 
 // ─── Game result ────────────────────────────────────────────────────────────
 //
-// `GameResult` is declared in the foundation leaf `@chimera/shared/engine-contract.js`
+// `GameResult` is declared in the foundation leaf `../foundation/engine-contract.js`
 // (re-exported above, issue #758). `GameResolution` — the engine-internal
 // discriminated union built on it — stays here.
 
@@ -407,7 +407,7 @@ export interface PipelineContext
 // ─── Actions ─────────────────────────────────────────────────────────────────
 //
 // `EngineAction`, `TypedAction`, and `ActionEnvelope` are declared in the
-// foundation leaf `@chimera/shared/engine-contract.js` (re-exported above, issue
+// foundation leaf `../foundation/engine-contract.js` (re-exported above, issue
 // #758) so the foundation wire/screen contracts can reference the action shape
 // without importing up into simulation.
 

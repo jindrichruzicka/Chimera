@@ -22,7 +22,7 @@
  */
 
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '../../foundation/logging.js';
 import { ActionPipeline, ForbiddenDispatchError } from '../ActionPipeline.js';
 import { ActionRegistry } from '../ActionRegistry.js';
 import { registerEngineActions } from '../EngineActions.js';

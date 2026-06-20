@@ -12,7 +12,7 @@ import { CommandContextImpl } from '@chimera/ai/engine/CommandContext.js';
 import { CommandSchedulerImpl } from '@chimera/ai/engine/CommandScheduler.js';
 import { AIPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
 import type { PlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,

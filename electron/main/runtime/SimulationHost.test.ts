@@ -21,7 +21,7 @@ import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
 import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from '@chimera/ai/engine/PlayerAgent.js';
 import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
 

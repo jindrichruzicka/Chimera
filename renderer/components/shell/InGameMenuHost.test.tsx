@@ -15,8 +15,8 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { playerId } from '@chimera/electron/preload/api-types.js';
-import type { LobbyState } from '@chimera/shared/messages-schemas.js';
-import type { InGameMenuProps } from '@chimera/shared/game-screen-contract.js';
+import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
+import type { InGameMenuProps } from '@chimera/simulation/foundation/game-screen-contract.js';
 
 import type { InputActionId, InputEvent } from '../../input/InputAction.js';
 import type { InputManager } from '../../input/InputManager.js';

@@ -22,9 +22,9 @@
  *         or any DOM API. Import-type-only from simulation/ and networking/.
  */
 
-import type { PlayerId, EngineAction, GameResult } from '@chimera/shared/engine-contract.js';
-import type { WirePlayerSnapshot as PlayerSnapshot } from '@chimera/shared/snapshot-contract.js';
-import type { LobbyState } from '@chimera/shared/lobby-contract.js';
+import type { PlayerId, EngineAction, GameResult } from './engine-contract.js';
+import type { WirePlayerSnapshot as PlayerSnapshot } from './snapshot-contract.js';
+import type { LobbyState } from './lobby-contract.js';
 import type { ChatScope } from './chat.js';
 
 // ─── Re-export for consumers in local/ ───────────────────────────────────────

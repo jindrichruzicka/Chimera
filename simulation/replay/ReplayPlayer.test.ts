@@ -16,7 +16,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '../foundation/logging.js';
 import { ActionPipeline } from '../engine/ActionPipeline.js';
 import { ActionRegistry } from '../engine/ActionRegistry.js';
 import type { ActionDefinition, BaseGameSnapshot } from '../engine/types.js';

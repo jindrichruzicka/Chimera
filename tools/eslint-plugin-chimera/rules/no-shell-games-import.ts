@@ -43,7 +43,6 @@ function isShellPage(filename: string): boolean {
  * `@chimera/*` package is a game (e.g. `@chimera/tactics`) and is forbidden.
  */
 const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
-    'shared',
     'simulation',
     'ai',
     'networking',

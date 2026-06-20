@@ -3,7 +3,7 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId } from '@chimera/electron/preload/api-types.js';
-import type { LobbyState } from '@chimera/shared/messages-schemas.js';
+import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
 import { useLeaveGame } from './useLeaveGame';
 import { useLobbyStore } from '../state/lobbyStore';
 import { useLobbyUiStore } from '../state/lobbyUiStore';

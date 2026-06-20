@@ -29,8 +29,8 @@ import type {
     SideChannelMessage,
     DisconnectReason,
 } from './MultiplayerProvider.js';
-import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
-import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
+import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
+import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

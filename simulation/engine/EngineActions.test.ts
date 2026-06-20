@@ -34,7 +34,7 @@ import type { BaseGameSnapshot, PlayerId, ReduceContext } from './types.js';
 import { entityId, playerId as toPlayerId, sceneId } from './types.js';
 import type { GameTimer, TimerId, TimerRegistry } from './GameTimer.js';
 import { ActionUnauthorizedError } from './ActionPipeline.js';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '../foundation/logging.js';
 
 // ─── Test fixtures ─────────────────────────────────────────────────────────────────
 

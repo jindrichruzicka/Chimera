@@ -1,4 +1,4 @@
-import { parseAssetRef } from '@chimera/shared/asset-ref-parse.js';
+import { parseAssetRef } from '@chimera/simulation/foundation/asset-ref-parse.js';
 import type { AssetRef } from '@chimera/simulation/content/AssetRef.js';
 
 export interface AssetResolver {

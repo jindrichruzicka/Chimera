@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { GameFontFace } from '@chimera/shared/game-shell-contract.js';
+import type { GameFontFace } from '@chimera/simulation/foundation/game-shell-contract.js';
 
 import {
     loadGameFonts,

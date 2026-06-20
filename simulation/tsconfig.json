@@ -1,0 +1,19 @@
+{
+    // Type-check / editor / ESLint project for @chimera/simulation.
+    //
+    // This is the config typescript-eslint's project service and the root
+    // `typecheck` script use for the package: it covers ALL of simulation/ —
+    // source, `*.test.ts`, and `__test-support__` doubles — on source. The
+    // package's published artifact is emitted separately by tsconfig.build.json
+    // (which excludes test files). noEmit — purely a verification/editor project.
+    //
+    // No path aliases are needed: every intra-package import is relative, so
+    // `@chimera/simulation/*` never appears inside simulation/ and the package's
+    // own exports map never redirects a same-package import to dist.
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "noEmit": true
+    },
+    "include": ["**/*.ts"],
+    "exclude": ["node_modules", "dist", "engine/__tests__/fixtures/**"]
+}

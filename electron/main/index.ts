@@ -9,12 +9,15 @@ import {
     screen as electronScreen,
     session,
 } from 'electron';
-import { CLEAN_EXIT_IPC_CHANNEL, IS_DEBUG_MODE } from '@chimera/shared/constants.js';
+import { CLEAN_EXIT_IPC_CHANNEL, IS_DEBUG_MODE } from '@chimera/simulation/foundation/constants.js';
 // Type-only import — erased at compile time, so the debug-bridge module graph
 // stays out of the production bundle (Invariant #27); the runtime import is
 // the dynamic one behind the IS_DEBUG_MODE gate in main().
 import type { DebugBridge } from './debug-bridge.js';
-import { MalformedAssetRefError, parseAssetRef } from '@chimera/shared/asset-ref-parse.js';
+import {
+    MalformedAssetRefError,
+    parseAssetRef,
+} from '@chimera/simulation/foundation/asset-ref-parse.js';
 import {
     registerGameHandlers,
     registerLobbyHandlers,
@@ -69,12 +72,12 @@ import { LobbyManager } from './lobby/LobbyManager.js';
 import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobbySetupRegistry.js';
 import { loadAllGameContent, toGameContent } from './content/loadGameContent.js';
 import type { ContentDatabase } from '@chimera/simulation/content/index.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import {
     DEFAULT_WINDOW_TITLE,
     resolveTickerHz,
     resolveWindowTitle,
-} from '@chimera/shared/game-manifest-contract.js';
+} from '@chimera/simulation/foundation/game-manifest-contract.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';

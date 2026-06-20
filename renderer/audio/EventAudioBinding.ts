@@ -1,3 +1,3 @@
-import type { GameEventAudioBinding } from '@chimera/shared/game-screen-contract.js';
+import type { GameEventAudioBinding } from '@chimera/simulation/foundation/game-screen-contract.js';
 
 export type EventAudioBinding = GameEventAudioBinding;

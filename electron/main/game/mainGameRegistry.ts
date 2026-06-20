@@ -25,7 +25,7 @@
 
 import type { AIState } from '@chimera/ai/engine/AIState.js';
 import { createTacticsAIState } from '@chimera/tactics/ai/tacticsPolicy.js';
-import type { GameManifest } from '@chimera/shared/game-manifest-contract.js';
+import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import type {

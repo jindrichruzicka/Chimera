@@ -3,7 +3,7 @@
  *
  * Foundation contract types for the lobby roster (§4.14).
  *
- * The full lobby state and its nested entries live in `@chimera/shared` — the
+ * The full lobby state and its nested entries live in `@chimera/simulation/foundation` — the
  * zero-dependency foundation leaf — so the foundation wire protocol
  * (`shared/messages.ts`) can describe the `WELCOME` / `LOBBY_STATE` frames
  * without importing *up* into `networking` (Invariant #1). The
@@ -20,7 +20,7 @@
  * under issue #758.
  */
 
-import type { PlayerId } from '@chimera/shared/engine-contract.js';
+import type { PlayerId } from './engine-contract.js';
 
 /** Configurable controller kind for a hosted lobby player slot. */
 export type LobbyAgentKind = 'human' | 'ai';

@@ -17,8 +17,11 @@ export type ResolverPlugin = Readonly<{
  * top-level. Mirrors the webpack aliases in `renderer/next.config.ts`.
  */
 const CHIMERA_PACKAGE_DIRS: Readonly<Record<string, string>> = {
-    '@chimera/shared': 'shared',
-    '@chimera/simulation': 'simulation',
+    // `@chimera/simulation` is intentionally absent: it is a built package consumed
+    // through its `exports` map onto `simulation/dist`. Leaving it out lets Vite's
+    // default resolver honour the exports map (build-before-consume), so other
+    // packages' tests exercise the packaged artefact. simulation's own tests use
+    // relative imports and therefore never hit this map.
     '@chimera/ai': 'ai',
     '@chimera/networking': 'networking',
     '@chimera/renderer': 'renderer',

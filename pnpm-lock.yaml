@@ -20,9 +20,6 @@ importers:
       '@chimera/renderer':
         specifier: workspace:*
         version: link:renderer
-      '@chimera/shared':
-        specifier: workspace:*
-        version: link:shared
       '@chimera/simulation':
         specifier: workspace:*
         version: link:simulation
@@ -156,9 +153,6 @@ importers:
 
   ai:
     dependencies:
-      '@chimera/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
@@ -174,9 +168,6 @@ importers:
       '@chimera/renderer':
         specifier: workspace:*
         version: link:../renderer
-      '@chimera/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
@@ -189,38 +180,23 @@ importers:
       '@chimera/renderer':
         specifier: workspace:*
         version: link:../../renderer
-      '@chimera/shared':
-        specifier: workspace:*
-        version: link:../../shared
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../../simulation
 
   networking:
     dependencies:
-      '@chimera/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
 
   renderer:
     dependencies:
-      '@chimera/shared':
-        specifier: workspace:*
-        version: link:../shared
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
 
-  shared: {}
-
-  simulation:
-    dependencies:
-      '@chimera/shared':
-        specifier: workspace:*
-        version: link:../shared
+  simulation: {}
 
 packages:
 

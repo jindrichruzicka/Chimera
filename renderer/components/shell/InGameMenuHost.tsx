@@ -4,7 +4,10 @@
 
 import React, { useCallback, useState } from 'react';
 import type { PlayerId } from '@chimera/electron/preload/api-types.js';
-import type { GameScreenComponent, InGameMenuProps } from '@chimera/shared/game-screen-contract.js';
+import type {
+    GameScreenComponent,
+    InGameMenuProps,
+} from '@chimera/simulation/foundation/game-screen-contract.js';
 import { useLeaveGame } from '../../bridge/useLeaveGame.js';
 import { useInputAction } from '../../input/useInputAction.js';
 import { Button } from '../ui/Button.js';

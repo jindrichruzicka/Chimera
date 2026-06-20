@@ -1,8 +1,8 @@
-import type { EngineAction, GameResult, PlayerId } from '@chimera/shared/engine-contract.js';
-import type { CommitmentReveal } from '@chimera/shared/commitment-contract.js';
-import type { PlayerSnapshot } from '@chimera/shared/snapshot-contract.js';
-import type { AssetRef, AudioClipAsset } from '@chimera/shared/asset-contract.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import type { EngineAction, GameResult, PlayerId } from './engine-contract.js';
+import type { CommitmentReveal } from './commitment-contract.js';
+import type { PlayerSnapshot } from './snapshot-contract.js';
+import type { AssetRef, AudioClipAsset } from './asset-contract.js';
+import type { GameContent } from './game-content-contract.js';
 import type * as React from 'react';
 
 export type GameScreenComponent<TProps> =

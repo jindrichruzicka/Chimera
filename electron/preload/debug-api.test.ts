@@ -19,7 +19,7 @@
 // (`GET_ACTION_LOG` bounds are "absent, not undefined").
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEBUG_CHANNEL, DEBUG_PUSH_CHANNEL } from '@chimera/shared/constants.js';
+import { DEBUG_CHANNEL, DEBUG_PUSH_CHANNEL } from '@chimera/simulation/foundation/constants.js';
 import { playerId } from './api-types.js';
 import { createDebugApi, type DebugApiIpcPort } from './debug-api.js';
 import type { ChimeraDebugApi, LiveTickEvent } from './debug-api-types.js';

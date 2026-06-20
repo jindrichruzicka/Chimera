@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
+import type { GameSetupConfig } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import {
     entityId,
     playerId,

@@ -3,7 +3,7 @@
 // games/tactics/screens/TacticsInGameMenu.tsx
 
 import React from 'react';
-import type { InGameMenuProps } from '@chimera/shared/game-screen-contract.js';
+import type { InGameMenuProps } from '@chimera/simulation/foundation/game-screen-contract.js';
 import { Button, Modal } from '@chimera/renderer/components/ui/index.js';
 
 /**

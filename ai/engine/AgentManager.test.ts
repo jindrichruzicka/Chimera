@@ -15,7 +15,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import { playerId, gamePhase } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';

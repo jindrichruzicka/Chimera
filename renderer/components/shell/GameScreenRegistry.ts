@@ -5,4 +5,4 @@ export type {
     GameScreenRegistry,
     GameResultBannerProps,
     SendAction,
-} from '@chimera/shared/game-screen-contract.js';
+} from '@chimera/simulation/foundation/game-screen-contract.js';

@@ -11,11 +11,11 @@ import {
     playerId,
     type PlayerSnapshot,
 } from '@chimera/electron/preload/api-types.js';
-import type { GameScreenProps } from '@chimera/shared/game-screen-contract.js';
+import type { GameScreenProps } from '@chimera/simulation/foundation/game-screen-contract.js';
 import type {
     PerspectiveReplayExportBridge,
     ReplayExportBridge,
-} from '@chimera/shared/replay-bridge-contract.js';
+} from '@chimera/simulation/foundation/replay-bridge-contract.js';
 import { TacticsPostGameSummary } from './TacticsPostGameSummary.js';
 
 afterEach(() => {

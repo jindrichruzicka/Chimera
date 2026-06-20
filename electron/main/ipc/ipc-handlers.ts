@@ -155,8 +155,8 @@ import type { SettingsManager } from '../settings/SettingsManager.js';
 import type { LobbyManager } from '../lobby/LobbyManager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/apis/logs-api.js';
 import { RendererLogEntrySchema } from './ipc-schemas.js';
-import type { LogEntry } from '@chimera/shared/logging.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,

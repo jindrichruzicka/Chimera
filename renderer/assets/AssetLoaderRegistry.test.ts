@@ -14,7 +14,7 @@ interface RendererTestAsset extends AssetKindBrand<'renderer:test-asset'> {
     readonly __rendererTestAsset: unique symbol;
 }
 
-declare module '@chimera/shared/asset-contract.js' {
+declare module '@chimera/simulation/foundation/asset-contract.js' {
     interface AssetKindRegistry {
         readonly 'renderer:test-asset': RendererTestAsset;
     }

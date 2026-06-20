@@ -14,8 +14,7 @@
     "compilerOptions": {
         "baseUrl": "..",
         "paths": {
-            "@chimera/shared/*": ["shared/*"],
-            "@chimera/simulation/*": ["simulation/*"],
+            "@chimera/simulation/*": ["simulation/dist/*"],
             "@chimera/ai/*": ["ai/*"],
             "@chimera/renderer/*": ["renderer/*"],
             "@chimera/electron/*": ["electron/*"],

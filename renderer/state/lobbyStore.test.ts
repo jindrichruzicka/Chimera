@@ -6,7 +6,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createLobbyStore, useLobbyStore } from './lobbyStore';
-import type { LobbyState } from '@chimera/shared/messages-schemas.js';
+import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
 
 describe('lobbyStore', () => {
     beforeEach(() => {

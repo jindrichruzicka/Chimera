@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera/shared/constants.js';
+import { DEBUG_TOGGLE_INSPECTOR_CHANNEL } from '@chimera/simulation/foundation/constants.js';
 import {
     SYSTEM_CONNECTION_STATUS_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANNEL,

@@ -7,7 +7,7 @@
 // Channel names live here; main-process ipc-handlers.ts imports them to
 // guarantee the channel strings match on both sides (invariant 5).
 
-import type { LogEntry } from '@chimera/shared/logging.js';
+import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
 import type { LogsAPI } from '../api-types.js';
 
 /** `ipcRenderer.send` target — renderer emits a log entry. */

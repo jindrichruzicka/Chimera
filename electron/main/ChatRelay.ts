@@ -27,7 +27,7 @@
 import { randomUUID } from 'node:crypto';
 
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
-import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
+import type { ChatMessage, ChatScope, RelayResult } from '@chimera/simulation/foundation/chat.js';
 
 import type { Logger } from './logging/logger.js';
 import type { PlayerDirectory } from './profile/PlayerDirectory.js';

@@ -17,7 +17,7 @@ import type {
     GameMainMenuDefinition,
     GameMainMenuLayout,
     GameMenuCommandId,
-} from '@chimera/shared/game-shell-contract.js';
+} from '@chimera/simulation/foundation/game-shell-contract.js';
 import { Button } from '../components/ui/Button';
 import { getSystemBridge } from '../bridge/system-bridge';
 import { withShellGameId } from './resolveMainMenuGameId';

@@ -8,7 +8,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,

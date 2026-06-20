@@ -39,13 +39,13 @@ import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus, PlayerConnectionEvent } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
 import type { ChatRelay } from '../ChatRelay.js';
-import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
+import type { ChatMessage, ChatScope, RelayResult } from '@chimera/simulation/foundation/chat.js';
 import type { E2eHooks } from '../runtime/e2e-hooks.js';
-import type { GameLobbySetup } from '@chimera/shared/game-lobby-contract.js';
+import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import {
     resolveMatchSettingsDefaults,
     resolvePlayerAttributeDefaults,
-} from '@chimera/shared/game-lobby-contract.js';
+} from '@chimera/simulation/foundation/game-lobby-contract.js';
 
 export interface HostedSessionMetadata {
     readonly hostId: PlayerId;

@@ -14,7 +14,7 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 // The commit/reveal CONTRACT types now live in the zero-dependency foundation
-// leaf `@chimera/shared/commitment-contract.js` (issue #758) so the projected
+// leaf `../foundation/commitment-contract.js` (issue #758) so the projected
 // snapshot/screen contracts can carry commitments without importing up into
 // simulation. They are imported for local use and re-exported so
 // `@chimera/simulation/projection` stays the unchanged public import path.
@@ -22,7 +22,7 @@ import type {
     CommitmentId,
     CommitmentEnvelope,
     CommitmentReveal,
-} from '@chimera/shared/commitment-contract.js';
+} from '../foundation/commitment-contract.js';
 export type { CommitmentId, CommitmentEnvelope, CommitmentReveal };
 
 const NONCE_BYTE_LENGTH = 32;

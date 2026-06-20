@@ -1,10 +1,6 @@
-import type { AssetRef } from '@chimera/simulation/content/AssetRef.js';
-import type {
-    BaseGameSnapshot,
-    GameReduceContext,
-    SceneId,
-} from '@chimera/simulation/engine/types.js';
-import { sceneId } from '@chimera/simulation/engine/types.js';
+import type { AssetRef } from '../content/AssetRef.js';
+import type { BaseGameSnapshot, GameReduceContext, SceneId } from '../engine/types.js';
+import { sceneId } from '../engine/types.js';
 
 export { sceneId };
 export type { SceneId };

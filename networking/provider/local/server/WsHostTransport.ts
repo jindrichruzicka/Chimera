@@ -9,7 +9,7 @@
  * Task: F10 / T03 (issue #218)
  */
 
-import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
+import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
 import type {
     HostTransport,
     PlayerSnapshot,
@@ -20,8 +20,11 @@ import type {
     Unsubscribe,
     JoinGateResult,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
-import type { ServerMessage, WireCommitmentReveal } from '@chimera/shared/messages.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
+import type {
+    ServerMessage,
+    WireCommitmentReveal,
+} from '@chimera/simulation/foundation/messages.js';
 import type { LobbyServer } from './LobbyServer.js';
 import type { MessageRouter } from './MessageRouter.js';
 

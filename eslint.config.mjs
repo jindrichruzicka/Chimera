@@ -37,8 +37,8 @@ const typescriptEslintRulesOff = Object.fromEntries(
 export default tseslint.config(
     {
         ignores: [
-            'node_modules/**',
-            'dist/**',
+            '**/node_modules/**',
+            '**/dist/**',
             'build/**',
             'coverage/**',
             'renderer/out/**',
@@ -156,6 +156,14 @@ export default tseslint.config(
                         'ActionSchemaError must only be thrown in simulation/engine/StateReducer.ts. Use StateReducer.parsePayloadOrThrow() to route schema errors through the single authoritative site.',
                 },
             ],
+        },
+    },
+
+    // AI + game-action layers: forbid importing the UI/host/game layers.
+    // (simulation/ has its own stricter zero-dependency leaf rule below.)
+    {
+        files: ['ai/**/*.{ts,tsx}', 'games/*/actions/**/*.{ts,tsx}'],
+        rules: {
             'no-restricted-imports': [
                 'error',
                 {
@@ -170,7 +178,7 @@ export default tseslint.config(
                                 '**/games/*',
                             ],
                             message:
-                                'simulation/ and ai/ must not import from renderer, electron, or games. See coding-standards.md §3.',
+                                'ai/ must not import from renderer, electron, or games. See coding-standards.md §3.',
                         },
                     ],
                 },
@@ -178,29 +186,23 @@ export default tseslint.config(
         },
     },
 
-    // Foundation leaf — `@chimera/shared` must import nothing from any other
-    // workspace package (Invariant #1: the contract layer points inward only).
-    // Test files are included on purpose — a type-only back-edge in a test still
-    // makes `shared` a non-leaf. `allowTypeImports` is intentionally NOT set:
-    // every back-edge this guards is an `import type`, so an exception would make
-    // the rule toothless. Relocate the contract type into `shared` and re-export
-    // from the old home instead (issue #758).
+    // `@chimera/simulation` is the zero-dependency engine leaf (Invariant #1): it
+    // must not import ANY sibling workspace package — not ai, networking,
+    // renderer, electron, or games. The foundation it absorbed (formerly
+    // `@chimera/shared`) now lives at `@chimera/simulation/foundation`, so the
+    // package declares no runtime dependencies; only the reserved `engine:`
+    // namespace crosses cuts (Invariant #107). Test files are included on
+    // purpose — a type-only back-edge in a test still makes the leaf non-pure.
+    // See issue #759.
     {
-        files: ['shared/**/*.{ts,tsx}'],
+        files: ['simulation/**/*.{ts,tsx}'],
         rules: {
             'no-restricted-imports': [
                 'error',
                 {
                     patterns: [
                         {
-                            group: ['../../../*'],
-                            message:
-                                'Do not reach across package boundaries with deep relative paths. Use @chimera/* aliases.',
-                        },
-                        {
                             group: [
-                                '@chimera/simulation',
-                                '@chimera/simulation/*',
                                 '@chimera/ai',
                                 '@chimera/ai/*',
                                 '@chimera/networking',
@@ -209,8 +211,6 @@ export default tseslint.config(
                                 '@chimera/renderer/*',
                                 '@chimera/electron',
                                 '@chimera/electron/*',
-                                'simulation/*',
-                                '**/simulation/*',
                                 'ai/*',
                                 '**/ai/*',
                                 'networking/*',
@@ -219,9 +219,11 @@ export default tseslint.config(
                                 '**/renderer/*',
                                 'electron/*',
                                 '**/electron/*',
+                                'games/*',
+                                '**/games/*',
                             ],
                             message:
-                                '@chimera/shared is the zero-dependency foundation leaf — it must not import from simulation, ai, networking, renderer, or electron (Invariant #1). Relocate the contract type into shared and re-export from the old home. See issue #758.',
+                                '@chimera/simulation is the zero-dependency engine leaf — it must not import from ai, networking, renderer, electron, or games (Invariant #1). Keep contracts in @chimera/simulation/foundation; only the reserved engine: namespace crosses cuts (Invariant #107). See issue #759.',
                         },
                     ],
                 },

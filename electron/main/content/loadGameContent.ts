@@ -19,7 +19,10 @@
 import path from 'path';
 import { createContentLoader } from '@chimera/simulation/content/index.js';
 import type { ContentDatabase } from '@chimera/simulation/content/index.js';
-import type { GameContent, GameContentItem } from '@chimera/shared/game-content-contract.js';
+import type {
+    GameContent,
+    GameContentItem,
+} from '@chimera/simulation/foundation/game-content-contract.js';
 import { gameContentRegistry } from './gameContentRegistry.js';
 
 /**

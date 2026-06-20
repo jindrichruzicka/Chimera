@@ -43,18 +43,18 @@ const nextConfig: NextConfig = {
     },
     webpack(rawConfig): WebpackConfig {
         const config = rawConfig as WebpackConfig;
-        // Resolve every @chimera/* workspace package onto its in-tree source
-        // dir for the Next build. F57 (#752) removed the root tsconfig `paths`
-        // aliases (resolution now flows through real workspace deps for tsc),
-        // so these explicit webpack aliases are the sole @chimera/* resolver for
-        // the Next bundler while no per-package `dist/` build exists yet. All
-        // seven packages are listed; `@chimera/tactics` lives under games/.
+        // Resolve the still-in-source @chimera/* workspace packages onto their
+        // in-tree source dir for the Next build. F57 (#752) removed the root
+        // tsconfig `paths` aliases, so these webpack aliases are the bundler's
+        // @chimera/* resolver for the packages that have no `dist/` build yet.
+        // `@chimera/simulation` is intentionally NOT aliased: it is a built
+        // package (issue #759) and Next resolves it through its `exports` map
+        // onto `simulation/dist` (build-before-consume). `@chimera/tactics` lives
+        // under games/.
         config.resolve ??= { alias: {}, extensionAlias: {} };
         config.resolve.alias = {
             ...config.resolve.alias,
             '@chimera/electron': path.join(root, 'electron'),
-            '@chimera/shared': path.join(root, 'shared'),
-            '@chimera/simulation': path.join(root, 'simulation'),
             '@chimera/ai': path.join(root, 'ai'),
             '@chimera/networking': path.join(root, 'networking'),
             '@chimera/renderer': path.join(root, 'renderer'),

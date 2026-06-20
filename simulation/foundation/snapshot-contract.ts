@@ -5,7 +5,7 @@
  * boundaries (Invariant #1 — only a projected snapshot ever leaves the host;
  * `GameSnapshot` never does).
  *
- * Both shapes live in `@chimera/shared` — the zero-dependency foundation leaf —
+ * Both shapes live in `@chimera/simulation/foundation` — the zero-dependency foundation leaf —
  * so the foundation can describe the wire protocol (`shared/messages.ts`) and
  * the game-screen contract (`shared/game-screen-contract.ts`) without importing
  * *up* into `networking` or `electron`. Two distinct shapes are kept on purpose
@@ -29,9 +29,9 @@ import type {
     PlayerId,
     SceneId,
     SceneTransitionState,
-} from '@chimera/shared/engine-contract.js';
-import type { CommitmentEnvelope, CommitmentId } from '@chimera/shared/commitment-contract.js';
-import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
+} from './engine-contract.js';
+import type { CommitmentEnvelope, CommitmentId } from './commitment-contract.js';
+import type { GameSetupConfig } from './game-lobby-contract.js';
 
 // ─── Rich (renderer/screen-facing) projection ─────────────────────────────────
 

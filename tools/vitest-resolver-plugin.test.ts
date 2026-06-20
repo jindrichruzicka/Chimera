@@ -80,10 +80,20 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
         it('maps a @chimera/<engine-pkg>/sub.js import to the .ts source', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             const result = plugin.resolveId(
-                '@chimera/simulation/engine/types.js',
-                path.join(workspaceRoot, 'ai/policy.ts'),
+                '@chimera/ai/engine/AgentManager.js',
+                path.join(workspaceRoot, 'networking/provider/x.ts'),
             );
-            expect(result).toBe(path.join(workspaceRoot, 'simulation/engine/types.ts'));
+            expect(result).toBe(path.join(workspaceRoot, 'ai/engine/AgentManager.ts'));
+        });
+
+        it('returns null for @chimera/simulation — a built package resolved via its exports map, not this plugin', () => {
+            const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
+            expect(
+                plugin.resolveId(
+                    '@chimera/simulation/engine/types.js',
+                    path.join(workspaceRoot, 'ai/policy.ts'),
+                ),
+            ).toBeNull();
         });
 
         it('maps the @chimera/tactics game package onto games/tactics/', () => {
@@ -138,10 +148,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
         it('returns null when no source candidate exists on disk', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => false);
             expect(
-                plugin.resolveId(
-                    '@chimera/simulation/engine/types.js',
-                    path.join(workspaceRoot, 'a.ts'),
-                ),
+                plugin.resolveId('@chimera/ai/engine/types.js', path.join(workspaceRoot, 'a.ts')),
             ).toBeNull();
         });
     });

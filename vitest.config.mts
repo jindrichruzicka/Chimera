@@ -79,7 +79,6 @@ export default defineConfig({
                 'simulation/**/*.ts',
                 'ai/**/*.ts',
                 'renderer/**/*.ts',
-                'shared/**/*.ts',
                 'games/**/*.ts',
                 'networking/**/*.ts',
                 'tools/**/*.ts',

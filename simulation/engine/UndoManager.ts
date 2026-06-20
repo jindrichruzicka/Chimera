@@ -23,7 +23,7 @@
  *          injected caller's responsibility, enforced by test doubles.
  */
 
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '../foundation/logging.js';
 import type { BaseGameSnapshot, ActionEnvelope, PlayerId } from './types.js';
 import { DEFAULT_UNDO_POLICY } from './UndoPolicy.js';
 import type { UndoPolicy } from './UndoPolicy.js';

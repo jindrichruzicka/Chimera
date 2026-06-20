@@ -2,11 +2,64 @@
     "name": "@chimera/simulation",
     "version": "0.9.0",
     "private": true,
+    "type": "module",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./contracts": {
+            "types": "./dist/contracts/index.d.ts",
+            "default": "./dist/contracts/index.js"
+        },
+        "./engine": {
+            "types": "./dist/engine/index.d.ts",
+            "default": "./dist/engine/index.js"
+        },
+        "./scene": {
+            "types": "./dist/scene/index.d.ts",
+            "default": "./dist/scene/index.js"
+        },
+        "./content": {
+            "types": "./dist/content/index.d.ts",
+            "default": "./dist/content/index.js"
+        },
+        "./persistence": {
+            "types": "./dist/persistence/index.d.ts",
+            "default": "./dist/persistence/index.js"
+        },
+        "./profile": {
+            "types": "./dist/profile/index.d.ts",
+            "default": "./dist/profile/index.js"
+        },
+        "./projection": {
+            "types": "./dist/projection/index.d.ts",
+            "default": "./dist/projection/index.js"
+        },
+        "./replay": {
+            "types": "./dist/replay/index.d.ts",
+            "default": "./dist/replay/index.js"
+        },
+        "./settings": {
+            "types": "./dist/settings/index.d.ts",
+            "default": "./dist/settings/index.js"
+        },
+        "./debug": {
+            "types": "./dist/debug/index.d.ts",
+            "default": "./dist/debug/index.js"
+        },
+        "./*.js": {
+            "types": "./dist/*.d.ts",
+            "default": "./dist/*.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
     "scripts": {
+        "build": "tsc -p tsconfig.build.json",
         "test": "vitest run --config ../vitest.config.mts --dir .",
         "lint": "eslint ."
-    },
-    "dependencies": {
-        "@chimera/shared": "workspace:*"
     }
 }

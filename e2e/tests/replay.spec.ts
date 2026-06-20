@@ -30,7 +30,7 @@ import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
 // ActionPipeline (Inv #42/#70), so its renderer-side heap must stay within the
 // same budget as a live match. Strict locally / under CHIMERA_PERF_STRICT=1,
 // informational on CI.
-import { RENDERER_HEAP_BUDGET_MB } from '../../shared/perf-budget';
+import { RENDERER_HEAP_BUDGET_MB } from '@chimera/simulation/foundation/perf-budget.js';
 
 const TACTICS_GAME_ID = 'tactics';
 

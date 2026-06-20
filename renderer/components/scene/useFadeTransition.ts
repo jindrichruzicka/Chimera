@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef } from 'react';
 import type { PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
-import type { SendAction } from '@chimera/shared/game-screen-contract.js';
+import type { SendAction } from '@chimera/simulation/foundation/game-screen-contract.js';
 import { useFade } from '../shell/FadeContext.js';
 
 export interface UseFadeTransitionOptions {

@@ -10,7 +10,6 @@
         "@chimera/simulation": "workspace:*",
         "@chimera/ai": "workspace:*",
         "@chimera/networking": "workspace:*",
-        "@chimera/renderer": "workspace:*",
-        "@chimera/shared": "workspace:*"
+        "@chimera/renderer": "workspace:*"
     }
 }

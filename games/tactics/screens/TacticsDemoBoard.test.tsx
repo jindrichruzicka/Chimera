@@ -19,7 +19,7 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
 } from '@chimera/tactics/constants.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
 

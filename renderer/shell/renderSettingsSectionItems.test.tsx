@@ -18,7 +18,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { SettingsSectionDefinition } from '@chimera/shared/game-shell-contract.js';
+import type { SettingsSectionDefinition } from '@chimera/simulation/foundation/game-shell-contract.js';
 import { RenderSettingsSectionItems } from './renderSettingsSectionItems';
 import { useSettingsStore } from '../state/settingsStore';
 

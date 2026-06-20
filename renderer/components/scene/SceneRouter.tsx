@@ -11,8 +11,8 @@ import type {
     GameScreenProps,
     GameScreenRegistry,
     SendAction,
-} from '@chimera/shared/game-screen-contract.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+} from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import { useActiveScreen, useUiStore } from '../../state/uiStore.js';
 import { TransitionOverlay } from './TransitionOverlay.js';
 import { useFadeTransition } from './useFadeTransition.js';

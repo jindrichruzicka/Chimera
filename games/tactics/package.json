@@ -9,7 +9,6 @@
     "dependencies": {
         "@chimera/simulation": "workspace:*",
         "@chimera/ai": "workspace:*",
-        "@chimera/shared": "workspace:*",
         "@chimera/renderer": "workspace:*"
     }
 }

@@ -8,8 +8,8 @@
  */
 
 import type { Unsubscribe } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
-import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
+import type { PlayerId } from '@chimera/simulation/contracts';
+import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 
 export type MessageBusCallback = (from: PlayerId, message: ClientMessage) => void;
 

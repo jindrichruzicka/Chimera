@@ -10,11 +10,11 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerId } from '@chimera/simulation/contracts';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { DisconnectReason } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
+import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { ServerConnection, JoinRejectedError } from './ServerConnection.js';

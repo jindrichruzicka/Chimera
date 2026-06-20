@@ -19,8 +19,11 @@
  * tactics renderer surfaces (prop interpretation).
  */
 
-import type { GameContent, GameContentItem } from '@chimera/shared/game-content-contract.js';
-import type { LobbyFieldOption } from '@chimera/shared/game-lobby-contract.js';
+import type {
+    GameContent,
+    GameContentItem,
+} from '@chimera/simulation/foundation/game-content-contract.js';
+import type { LobbyFieldOption } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import type { ZodType } from 'zod';
 import { ColorItemSchema } from './colorSchemas.js';
 import type { TacticsPalette } from '../lobby/lobby-setup.js';

@@ -17,9 +17,9 @@
 // `electron/preload/schemas.ts`.
 
 import { z } from 'zod';
-import { WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH } from '@chimera/shared/messages-schemas.js';
-import { ChatScopeSchema } from '@chimera/shared/chat-schemas.js';
-import type { ChatScope } from '@chimera/shared/chat.js';
+import { WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH } from '@chimera/simulation/foundation/messages-schemas.js';
+import { ChatScopeSchema } from '@chimera/simulation/foundation/chat-schemas.js';
+import type { ChatScope } from '@chimera/simulation/foundation/chat.js';
 import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     EngineAction,

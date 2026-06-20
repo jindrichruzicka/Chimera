@@ -9,7 +9,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { playerId, type LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import {
     lobbySetupBuilders,
     createResolveLobbySetup,

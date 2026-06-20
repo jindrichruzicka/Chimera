@@ -5,7 +5,7 @@
  * NEVER import this file from production code.
  */
 import type { DeterministicRng } from '../DeterministicRng.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import type { PlayerSnapshot } from '../../projection/StateProjector.js';
 import { playerId, gamePhase } from '../types.js';
 
 /**

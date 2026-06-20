@@ -18,8 +18,8 @@ import {
     type GameScreenRegistry,
     type GameResultBannerProps,
     type SendAction,
-} from '@chimera/shared/game-screen-contract.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+} from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
@@ -531,4 +531,4 @@ export type {
     GameScreenProps,
     GameScreenRegistry,
     GameResultBannerProps,
-} from '@chimera/shared/game-screen-contract.js';
+} from '@chimera/simulation/foundation/game-screen-contract.js';

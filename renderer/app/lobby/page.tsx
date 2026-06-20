@@ -2,7 +2,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
+import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import { playerId } from '@chimera/electron/preload/api-types.js';
 import { ActiveLobbyPanel } from './ActiveLobbyPanel';
 import { LobbyEntryTabs } from './LobbyEntryTabs';

@@ -17,10 +17,10 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerId } from '@chimera/simulation/contracts';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { DisconnectReason } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { ClientMessage, ServerMessage } from '@chimera/shared/messages.js';
+import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 import { LobbyServer } from './LobbyServer.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

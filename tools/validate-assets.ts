@@ -27,7 +27,10 @@ import type {
     PropertyName,
 } from 'typescript';
 
-import { MalformedAssetRefError, parseAssetRef } from '../shared/asset-ref-parse.js';
+import {
+    MalformedAssetRefError,
+    parseAssetRef,
+} from '@chimera/simulation/foundation/asset-ref-parse.js';
 
 export interface WorkspaceFileHost {
     findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]>;

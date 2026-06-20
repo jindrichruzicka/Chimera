@@ -21,7 +21,7 @@ import { createNoopLogger } from '../logging/logger.js';
 import { GAME_SNAPSHOT_CHANNEL } from '../../preload/apis/game-api.js';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type { HostTransport, PlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import { gamePhase } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type {

@@ -25,7 +25,7 @@ import { getSimulationTick } from '../helpers/ipc-spy';
 // @chimera/* alias, which the Playwright spec runner does not resolve) so the
 // gate and the canonical budget can never drift; shared/perf-budget.test.ts
 // locks the canonical value.
-import { RENDERER_HEAP_BUDGET_MB } from '../../shared/perf-budget';
+import { RENDERER_HEAP_BUDGET_MB } from '@chimera/simulation/foundation/perf-budget.js';
 
 const TICKS_TO_DRIVE = 1000;
 

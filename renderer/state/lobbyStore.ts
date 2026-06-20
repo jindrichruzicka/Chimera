@@ -13,7 +13,7 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { LobbyState } from '@chimera/shared/messages-schemas.js';
+import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 

@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import { ColorItemSchema } from './colorSchemas.js';
 import {
     BOARD_COLORS_COLLECTION,

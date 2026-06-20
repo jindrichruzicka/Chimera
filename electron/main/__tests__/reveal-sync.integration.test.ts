@@ -41,7 +41,7 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
 } from '@chimera/tactics/constants.js';
-import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
+import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
 import {
     registerTacticsActions,
     tacticsGridCoordinate,

@@ -2,7 +2,7 @@
 
 import { act, renderHook } from '@testing-library/react';
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { ChatMessage } from '@chimera/shared/chat.js';
+import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
 import type { PlayerId } from '@chimera/electron/preload/api-types.js';
 
 import { createChatStore, MAX_CHAT_MESSAGES, useChatStore } from './chatStore';

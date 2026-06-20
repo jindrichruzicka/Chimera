@@ -1,7 +1,7 @@
 import { TextureLoader } from 'three';
 import type { Texture } from 'three';
 
-import { isTraversalUnsafe } from '@chimera/shared/asset-ref-parse.js';
+import { isTraversalUnsafe } from '@chimera/simulation/foundation/asset-ref-parse.js';
 
 import type {
     AssetKind,

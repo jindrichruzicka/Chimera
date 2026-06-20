@@ -18,8 +18,8 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { playerId, type LobbyState } from '@chimera/electron/preload/api-types.js';
-import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
-import type { GameContent } from '@chimera/shared/game-content-contract.js';
+import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import { TacticsLobbyScreen } from './TacticsLobbyScreen.js';
 
 const HOST_ID = playerId('host');

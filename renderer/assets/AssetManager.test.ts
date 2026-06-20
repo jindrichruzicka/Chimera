@@ -47,7 +47,7 @@ interface LoadedCompressedMapAsset {
     readonly cells: readonly number[];
 }
 
-declare module '@chimera/shared/asset-contract.js' {
+declare module '@chimera/simulation/foundation/asset-contract.js' {
     interface AssetKindRegistry {
         readonly 'tactics:compressed-map': CompressedMapAsset;
     }

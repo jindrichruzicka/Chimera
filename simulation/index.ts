@@ -1,24 +1,25 @@
 /**
- * Public API of the simulation package.
+ * Public contract surface of `@chimera/simulation`.
  *
- * This barrel is the exclusive re-export surface for `@chimera/simulation`.
- * Consumers import from `@chimera/simulation` (this file) or sub-paths such as
- * `@chimera/simulation/engine` — never from internal module paths directly.
+ * The package root (`.`) exposes the engine's side-effect-free CONTRACT TYPES
+ * only, re-exported from `./contracts`. Importing `@chimera/simulation`
+ * therefore evaluates no runtime module — it is the curated, tree-shakeable
+ * type barrel that downstream packages depend on without pulling the simulation
+ * runtime graph (Invariant #1).
  *
- * Populated progressively as F03 tasks land:
- *   - T2 (§4.2): domain types
- *   - T3 (§4.7): ActionRegistry
- *   - T4 (§4.7): EngineActions
- *   - T5 (§4.7): ActionPipeline + StateReducer
- *   - F26 (§8): projection types (StateProjector interface, VisibilityRules, VisibilityScope)
+ * Runtime APIs are reached through explicit subpaths, never the root:
+ *   - `@chimera/simulation/engine`       — ActionRegistry, ActionPipeline, StateReducer, …
+ *   - `@chimera/simulation/projection`   — StateProjector, visibility, commitments
+ *   - `@chimera/simulation/content`      — ContentDatabase, AssetRef factories
+ *   - `@chimera/simulation/persistence`  — save/load repositories
+ *   - `@chimera/simulation/profile`      — player profile state
+ *   - `@chimera/simulation/replay`       — replay serialization
+ *   - `@chimera/simulation/scene`        — scene registry/manager
+ *   - `@chimera/simulation/settings`     — engine settings
+ *   - `@chimera/simulation/foundation/*` — absorbed foundation modules (contracts + leaf utils)
+ *
+ * `debug/` is deliberately NOT reachable from the root barrel: it is
+ * debug-mode-only tooling (Invariant #31), imported via the
+ * `@chimera/simulation/debug` subpath so the production graph never pulls it in.
  */
-
-// debug/ is deliberately NOT re-exported here: it is debug-mode-only tooling
-// (Invariant #31), imported via the `@chimera/simulation/debug` subpath so the
-// production root barrel never pulls in its module graph.
-export * from './engine/index.js';
-export * from './scene/index.js';
-export * from './persistence/index.js';
-export * from './profile/index.js';
-export * from './projection/index.js';
-export * from './replay/index.js';
+export type * from './contracts/index.js';

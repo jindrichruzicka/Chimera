@@ -8,8 +8,8 @@
  */
 
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { crc32Json } from '@chimera/shared/crc32.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
+import type { PlayerId } from '@chimera/simulation/contracts';
 import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
 import type {
     ClientTransport,
@@ -17,7 +17,7 @@ import type {
     LobbyState,
     SideChannelMessage,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { WsHostTransport } from '../server/WsHostTransport.js';
@@ -25,7 +25,7 @@ import type {
     ClientMessage,
     ServerMessage,
     WireCommitmentReveal,
-} from '@chimera/shared/messages.js';
+} from '@chimera/simulation/foundation/messages.js';
 import { ServerConnection } from './ServerConnection.js';
 import { WsClientTransport } from './WsClientTransport.js';
 

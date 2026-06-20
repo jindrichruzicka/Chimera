@@ -15,7 +15,7 @@
  *   #71 — typed initial state is reconstructed from seed + gameConfig, never from PlayerSnapshot input
  */
 
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '../foundation/logging.js';
 import type { ActionPipeline } from '../engine/ActionPipeline.js';
 import type {
     ActionEnvelope,

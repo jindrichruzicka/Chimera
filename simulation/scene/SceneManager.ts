@@ -1,4 +1,4 @@
-import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
+import type { ActionRegistry } from '../engine/ActionRegistry.js';
 import type {
     ActionDefinition,
     BaseGameSnapshot,
@@ -7,8 +7,8 @@ import type {
     SceneId,
     SceneTransitionState,
     ValidationResult,
-} from '@chimera/simulation/engine/types.js';
-import { playerId, sceneId } from '@chimera/simulation/engine/types.js';
+} from '../engine/types.js';
+import { playerId, sceneId } from '../engine/types.js';
 import {
     DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY,
     DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,

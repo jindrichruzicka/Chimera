@@ -23,12 +23,12 @@ import {
     isTraversalUnsafe,
     MalformedAssetRefError,
     parseAssetRef as parseAssetRefBase,
-} from '@chimera/shared/asset-ref-parse.js';
+} from '../foundation/asset-ref-parse.js';
 
-export { MalformedAssetRefError } from '@chimera/shared/asset-ref-parse.js';
+export { MalformedAssetRefError } from '../foundation/asset-ref-parse.js';
 
 // The phantom asset-kind TYPES now live in the zero-dependency foundation leaf
-// `@chimera/shared/asset-contract.js` (issue #758). They are imported for local
+// `../foundation/asset-contract.js` (issue #758). They are imported for local
 // use by the runtime factories below and re-exported so
 // `@chimera/simulation/content/AssetRef.js` stays the unchanged public import path.
 import type {
@@ -42,10 +42,10 @@ import type {
     AssetKind,
     AssetKindId,
     AssetRef,
-} from '@chimera/shared/asset-contract.js';
+} from '../foundation/asset-contract.js';
 
 // ---------------------------------------------------------------------------
-// Phantom asset-kind types — declared in `@chimera/shared/asset-contract.js`
+// Phantom asset-kind types — declared in `../foundation/asset-contract.js`
 // (foundation leaf, issue #758) and re-exported here so the public import path
 // `@chimera/simulation/content/AssetRef.js` is unchanged. `AssetKindRegistry`
 // stays open for declaration merging — augment the shared module.

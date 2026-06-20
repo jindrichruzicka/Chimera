@@ -23,7 +23,7 @@ import type {
     PlayerId,
     Unsubscribe,
 } from '@chimera/networking/provider/MultiplayerProvider.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type {
     PlayerSnapshot,

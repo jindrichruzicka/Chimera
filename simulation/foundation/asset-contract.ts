@@ -2,7 +2,7 @@
 // §4.8 / §4.10 — Typed asset reference primitives (foundation layer).
 //
 // The phantom asset-kind brands, the open `AssetKindRegistry`, and the
-// `AssetRef<T>` branded string live in `@chimera/shared` — the zero-dependency
+// `AssetRef<T>` branded string live in `@chimera/simulation/foundation` — the zero-dependency
 // foundation leaf — so the foundation can describe asset-carrying contracts
 // (e.g. the game-screen `eventAudioBinding`) without importing *up* into
 // `simulation` (Invariant #1). The runtime factories `buildAssetRef` /
@@ -13,7 +13,7 @@
 //
 // `AssetKindRegistry` is open through TypeScript declaration merging so games
 // and extension packages can contribute custom asset kinds without editing
-// engine core — augment THIS module (`@chimera/shared/asset-contract.js`).
+// engine core — augment THIS module (`./asset-contract.js`).
 //
 // This module is PURE TYPE DECLARATIONS only — zero runtime code, zero
 // workspace imports. Relocated under issue #758.

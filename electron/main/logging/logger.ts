@@ -28,7 +28,7 @@ import type {
     LogLevel,
     LogSource,
     Logger,
-} from '@chimera/shared/logging.js';
+} from '@chimera/simulation/foundation/logging.js';
 
 // `Logger` is declared in `shared/logging.ts` so that `simulation/` and `ai/`
 // can accept an injected Logger without importing from `electron/`. Re-exported

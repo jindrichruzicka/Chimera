@@ -33,8 +33,8 @@ import { TextInput } from '../ui/TextInput';
 import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useToastStore } from '../../state/toastStore';
-import type { ChatMessage, ChatRejectReason } from '@chimera/shared/chat.js';
-import type { LobbyState } from '@chimera/shared/messages-schemas.js';
+import type { ChatMessage, ChatRejectReason } from '@chimera/simulation/foundation/chat.js';
+import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
 import type { ChatScope, PlayerId } from '@chimera/electron/preload/api-types.js';
 import styles from './ChatPanel.module.css';
 

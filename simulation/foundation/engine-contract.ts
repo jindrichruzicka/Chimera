@@ -4,7 +4,7 @@
  * Foundation brand/contract types for the Chimera engine.
  *
  * These are the canonical declarations of the core engine identifiers and the
- * action envelope. They live in `@chimera/shared` — the zero-dependency
+ * action envelope. They live in `@chimera/simulation/foundation` — the zero-dependency
  * foundation leaf — so that the foundation can describe wire/screen contracts
  * (messages, chat, game-screen) without importing *up* into `simulation`
  * (Invariant #1: the contract layer points inward only). `simulation/engine/`

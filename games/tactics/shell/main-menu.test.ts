@@ -10,8 +10,8 @@
 //   - games/tactics/shell/ may import from shared/ only (not renderer/)
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { GameMainMenuDefinition } from '@chimera/shared/game-shell-contract.js';
-import type { PerspectiveReplayListBridge } from '@chimera/shared/replay-bridge-contract.js';
+import type { GameMainMenuDefinition } from '@chimera/simulation/foundation/game-shell-contract.js';
+import type { PerspectiveReplayListBridge } from '@chimera/simulation/foundation/replay-bridge-contract.js';
 import { tacticsMainMenuDefinition, tacticsMenuCommands } from './main-menu';
 
 // ─── Export shape ─────────────────────────────────────────────────────────────

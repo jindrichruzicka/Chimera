@@ -35,9 +35,9 @@ import type {
     Unsubscribe,
     LobbyInfo,
 } from './MultiplayerProvider.js';
-import type { PlayerId, EngineAction } from '@chimera/simulation/engine/types.js';
-import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
-import { crc32Json } from '@chimera/shared/crc32.js';
+import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
+import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
+import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import { playerId as toPlayerId, JoinRejectedError } from './MultiplayerProvider.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────

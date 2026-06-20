@@ -3,7 +3,7 @@
 import { Canvas } from '@react-three/fiber';
 import React, { useState } from 'react';
 import { OrthographicCamera, Vector3 } from 'three';
-import type { GameScreenProps } from '@chimera/shared/game-screen-contract.js';
+import type { GameScreenProps } from '@chimera/simulation/foundation/game-screen-contract.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,

@@ -28,7 +28,7 @@ import type {
     GameHudProps,
     GameScreenProps,
     GameScreenRegistry,
-} from '@chimera/shared/game-screen-contract.js';
+} from '@chimera/simulation/foundation/game-screen-contract.js';
 import type { DeviceInfo } from '../../device/DeviceInfo.js';
 import { useUiStore } from '../../state/uiStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';

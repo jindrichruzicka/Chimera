@@ -1,17 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import {
-    ActionPipeline,
-    ActionUnauthorizedError,
-} from '@chimera/simulation/engine/ActionPipeline.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import { ActionRegistry } from '../engine/ActionRegistry.js';
+import { ActionPipeline, ActionUnauthorizedError } from '../engine/ActionPipeline.js';
+import { registerEngineActions } from '../engine/EngineActions.js';
 import {
     gamePhase,
     playerId,
     type BaseGameSnapshot,
     type GameReduceContext,
     type PlayerId,
-} from '@chimera/simulation/engine/types.js';
+} from '../engine/types.js';
 import { SceneManager } from './SceneManager.js';
 import { SceneRegistry, sceneId, type SceneDescriptor } from './SceneRegistry.js';
 

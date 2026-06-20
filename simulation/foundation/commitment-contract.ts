@@ -5,7 +5,7 @@
  * (§4.6 / §8).
  *
  * The branded `CommitmentId` and the envelope/reveal payload shapes live in
- * `@chimera/shared` — the zero-dependency foundation leaf — so the foundation
+ * `@chimera/simulation/foundation` — the zero-dependency foundation leaf — so the foundation
  * can describe the projected snapshot and screen contracts (which carry
  * commitments) without importing *up* into `simulation`. The runtime scheme —
  * `toCommitmentId`, the `CommitmentScheme` interface and `DefaultCommitmentScheme`

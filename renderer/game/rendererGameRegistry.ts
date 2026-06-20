@@ -1,12 +1,12 @@
 import type { ComponentType } from 'react';
-import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
-import type { GameScreenRegistry } from '@chimera/shared/game-screen-contract.js';
+import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
+import type { GameScreenRegistry } from '@chimera/simulation/foundation/game-screen-contract.js';
 import type {
     GameFontFace,
     GameMainMenuDefinition,
     GameMenuCommandId,
     GameSettingsPageDefinition,
-} from '@chimera/shared/game-shell-contract.js';
+} from '@chimera/simulation/foundation/game-shell-contract.js';
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { InputAction } from '../input/InputAction.js';
 import { loadGameFonts } from './GameFontLoader';

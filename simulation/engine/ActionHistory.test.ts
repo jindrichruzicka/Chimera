@@ -25,7 +25,7 @@ import {
     MAX_ACTION_HISTORY_ENTRIES,
 } from './UndoManager.js';
 import type { ActionHistoryEntry } from './UndoManager.js';
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '../foundation/logging.js';
 import { playerId as toPlayerId } from './types.js';
 
 const P1 = toPlayerId('player-1');

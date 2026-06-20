@@ -47,7 +47,7 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         },
         {
             filename: 'games/tactics/screens/TacticsGameHud.tsx',
-            code: `import { resolveGameResultOutcome } from '@chimera/shared/game-screen-contract.js';`,
+            code: `import { resolveGameResultOutcome } from '@chimera/simulation/foundation/game-screen-contract.js';`,
         },
         {
             // Public chat library barrel is allowed from a game surface.

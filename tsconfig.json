@@ -22,16 +22,22 @@
         "noEmit": true,
         "baseUrl": "."
     },
+    // `simulation/**` is NOT compiled by this program: `@chimera/simulation` is a
+    // built package (see simulation/tsconfig.json) and consumers here resolve it
+    // through its `exports` map onto `simulation/dist`. Its own source + tests are
+    // type-checked by simulation/tsconfig.test.json. Only its ambient global env
+    // declarations are pulled in directly (the Node programs need NODE_ENV /
+    // CHIMERA_DEBUG augmentations; the renderer program declares NODE_ENV itself).
     "include": [
         "electron/**/*.ts",
-        "simulation/**/*.ts",
         "ai/**/*.ts",
         "games/**/*.ts",
         "renderer/**/*.ts",
-        "shared/**/*.ts",
         "networking/**/*.ts",
         "tools/**/*.ts",
-        "e2e/**/*.ts"
+        "e2e/**/*.ts",
+        "simulation/foundation/env.d.ts",
+        "simulation/foundation/env-node.d.ts"
     ],
     "exclude": [
         "node_modules",

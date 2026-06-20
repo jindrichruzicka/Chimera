@@ -23,7 +23,7 @@ import type {
     SettingsControlDefinition,
     SettingsItemDefinition,
     SettingsTabDefinition,
-} from '@chimera/shared/game-shell-contract.js';
+} from '@chimera/simulation/foundation/game-shell-contract.js';
 import type { ResolvedSettings } from '@chimera/electron/preload/api-types.js';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';

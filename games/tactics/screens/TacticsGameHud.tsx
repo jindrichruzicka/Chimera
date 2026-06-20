@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { GameHudProps } from '@chimera/shared/game-screen-contract.js';
+import type { GameHudProps } from '@chimera/simulation/foundation/game-screen-contract.js';
 import {
     Badge,
     Button,

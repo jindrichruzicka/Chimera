@@ -61,7 +61,7 @@ import {
     DEBUG_CHANNEL,
     DEBUG_PUSH_CHANNEL,
     DEBUG_TOGGLE_INSPECTOR_CHANNEL,
-} from '@chimera/shared/constants.js';
+} from '@chimera/simulation/foundation/constants.js';
 import {
     SnapshotRingBuffer,
     SnapshotInspector,

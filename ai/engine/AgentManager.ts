@@ -14,7 +14,7 @@
  *          (HumanPlayerAgent.onTick is a no-op).
  */
 
-import type { Logger } from '@chimera/shared/logging.js';
+import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import type { PlayerId } from '@chimera/simulation/engine/types.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type {

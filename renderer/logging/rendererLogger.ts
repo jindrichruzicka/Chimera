@@ -8,7 +8,7 @@
 // Uses globalThis.__chimera?.logs for root-tsconfig compatibility (no DOM).
 // The renderer tsconfig has DOM, so `window` is valid in renderer source.
 
-import type { LogEntry } from '@chimera/shared/logging.js';
+import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
 import type { LogsAPI } from '@chimera/electron/preload/api-types.js';
 
 // Ambient declarations so the root tsconfig (no DOM lib) can type-check this

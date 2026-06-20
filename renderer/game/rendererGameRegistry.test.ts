@@ -5,8 +5,8 @@ import type {
     GameFontFace,
     GameMenuCommandId,
     GameSettingsPageDefinition,
-} from '@chimera/shared/game-shell-contract.js';
-import type { GameLobbyScreenProps } from '@chimera/shared/game-lobby-contract.js';
+} from '@chimera/simulation/foundation/game-shell-contract.js';
+import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import {
     getRendererGameMenuCommand,
     loadRendererGame,
