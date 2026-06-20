@@ -23,7 +23,7 @@
  * Architecture: §4.8 Content Database, §4.13 Settings, §4.6/§8 Projection.
  */
 
-import type { AIState } from '@chimera/ai/engine/AIState.js';
+import type { AIState } from '@chimera/ai';
 import { createTacticsAIState } from '@chimera/tactics/ai/tacticsPolicy.js';
 import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';

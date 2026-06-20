@@ -266,10 +266,12 @@ fi
 # The pure AI framework package must contain no game-specific subtree (e.g. a
 # re-introduced policies/<game>/). Game-specific AI belongs in games/<name>/ai/.
 # Only the framework directories below are allowed as immediate children of ai/.
+# `dist` is the generated build output (F59, issue #764) — it mirrors the
+# framework source and is gitignored, so it carries no game-specific subtree.
 if [[ -d ai ]]; then
     while IFS= read -r dir; do
         case "$(basename "${dir}")" in
-            engine|__tests__) ;;
+            engine|__tests__|dist) ;;
             *) violation "106" "${dir}/  (non-framework dir under ai/; game-specific AI belongs in games/<name>/ai/)" ;;
         esac
     done < <(find ai -mindepth 1 -maxdepth 1 -type d ! -name node_modules | sort)

@@ -5,13 +5,14 @@
  * because it wires concrete AI engine objects to the host ActionPipeline.
  */
 
-import { AIBrain } from '@chimera/ai/engine/AIBrain.js';
-import type { AIState } from '@chimera/ai/engine/AIState.js';
-import { AIStateMachineImpl } from '@chimera/ai/engine/AIStateMachine.js';
-import { CommandContextImpl } from '@chimera/ai/engine/CommandContext.js';
-import { CommandSchedulerImpl } from '@chimera/ai/engine/CommandScheduler.js';
-import { AIPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
-import type { PlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
+import {
+    AIBrain,
+    AIStateMachineImpl,
+    CommandContextImpl,
+    CommandSchedulerImpl,
+    AIPlayerAgent,
+} from '@chimera/ai/engine';
+import type { AIState, PlayerAgent } from '@chimera/ai';
 import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import type {
     ActionEnvelope,

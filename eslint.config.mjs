@@ -46,6 +46,7 @@ export default tseslint.config(
             '**/*.d.ts',
             // Fixture files used by ESLint smoke tests; they intentionally violate lint rules.
             'simulation/engine/__tests__/fixtures/**',
+            'ai/engine/__tests__/fixtures/**',
             // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
             'tools/eslint-plugin-chimera/plugin.cjs',
             // Playwright output directories — generated artefacts, not source.
@@ -76,6 +77,7 @@ export default tseslint.config(
                         '*.mts',
                         '*.cts',
                         'simulation/engine/__tests__/fixtures/*.ts',
+                        'ai/engine/__tests__/fixtures/*.ts',
                     ],
                 },
                 tsconfigRootDir: import.meta.dirname,
@@ -159,8 +161,12 @@ export default tseslint.config(
         },
     },
 
-    // AI + game-action layers: forbid importing the UI/host/game layers.
-    // (simulation/ has its own stricter zero-dependency leaf rule below.)
+    // AI + game-action layers: forbid importing the UI/host/game/networking
+    // layers. `@chimera/ai` depends on `@chimera/simulation` ONLY (Invariant #1):
+    // now that the package is consumed through its `exports` map, the realistic
+    // violation is the `@chimera/<pkg>` workspace-alias form, so both the alias
+    // and the legacy relative-path forms are forbidden. (simulation/ has its own
+    // stricter zero-dependency leaf rule below.) See issue #764.
     {
         files: ['ai/**/*.{ts,tsx}', 'games/*/actions/**/*.{ts,tsx}'],
         rules: {
@@ -170,15 +176,25 @@ export default tseslint.config(
                     patterns: [
                         {
                             group: [
+                                '@chimera/networking',
+                                '@chimera/networking/*',
+                                '@chimera/renderer',
+                                '@chimera/renderer/*',
+                                '@chimera/electron',
+                                '@chimera/electron/*',
+                                '@chimera/tactics',
+                                '@chimera/tactics/*',
                                 'renderer/*',
                                 '**/renderer/*',
                                 'electron/*',
                                 '**/electron/*',
+                                'networking/*',
+                                '**/networking/*',
                                 'games/*',
                                 '**/games/*',
                             ],
                             message:
-                                'ai/ must not import from renderer, electron, or games. See coding-standards.md §3.',
+                                'ai/ must not import from networking, renderer, electron, or games — @chimera/simulation is its only dependency (Invariant #1). See coding-standards.md §3, issue #764.',
                         },
                     ],
                 },

@@ -12,8 +12,7 @@ import { entityId, playerId as toPlayerId } from '@chimera/simulation/engine/typ
 import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
 import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import type { CommandContext } from '@chimera/ai/engine/CommandContext.js';
-import type { CommandScheduler } from '@chimera/ai/engine/CommandScheduler.js';
+import type { CommandContext, CommandScheduler } from '@chimera/ai';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import { tacticsVisibilityRules } from '@chimera/tactics/visibility-rules.js';
 import { tacticsManifest } from '@chimera/tactics/manifest.js';

@@ -158,8 +158,7 @@ import {
     type CommitmentReveal,
     type PlayerSnapshot,
 } from '@chimera/simulation/projection/index.js';
-import { AgentManager } from '@chimera/ai/engine/AgentManager.js';
-import { HumanPlayerAgent } from '@chimera/ai/engine/PlayerAgent.js';
+import { AgentManager, HumanPlayerAgent } from '@chimera/ai/engine';
 import { SimulationHost } from '@chimera/simulation/host';
 import {
     registerE2eHooks,

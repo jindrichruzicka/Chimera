@@ -1,5 +1,6 @@
 import type * as os from 'node:os';
 import type * as nodeFs from 'node:fs';
+import type * as AiEngine from '@chimera/ai/engine';
 
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -228,7 +229,10 @@ const { mockAgentManagerCtor, mockAgentManagerInstance } = vi.hoisted(() => {
     };
 });
 
-vi.mock('@chimera/ai/engine/AgentManager.js', () => ({
+// Partial-mock the public engine barrel: override AgentManager with the spy,
+// keep every other framework export (e.g. HumanPlayerAgent) real.
+vi.mock('@chimera/ai/engine', async (importActual) => ({
+    ...(await importActual<typeof AiEngine>()),
     AgentManager: mockAgentManagerCtor,
 }));
 
@@ -1483,7 +1487,7 @@ describe('main', () => {
             { hostId: playerId('host-1'), maxPlayers: 1 },
         );
 
-        const { AgentManager } = await import('@chimera/ai/engine/AgentManager.js');
+        const { AgentManager } = await import('@chimera/ai/engine');
         expect(vi.mocked(AgentManager).mock.calls[0]?.[0]).toMatchObject({
             logger: expect.any(Object),
         });

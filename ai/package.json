@@ -2,7 +2,27 @@
     "name": "@chimera/ai",
     "version": "0.9.0",
     "private": true,
+    "type": "module",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./engine": {
+            "types": "./dist/engine/index.d.ts",
+            "default": "./dist/engine/index.js"
+        },
+        "./*.js": {
+            "types": "./dist/*.d.ts",
+            "default": "./dist/*.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
     "scripts": {
+        "build": "tsc -p tsconfig.build.json",
         "test": "vitest run --config ../vitest.config.mts --dir .",
         "lint": "eslint ."
     },

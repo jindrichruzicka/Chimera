@@ -80,18 +80,26 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
         it('maps a @chimera/<engine-pkg>/sub.js import to the .ts source', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             const result = plugin.resolveId(
-                '@chimera/ai/engine/AgentManager.js',
-                path.join(workspaceRoot, 'networking/provider/x.ts'),
+                '@chimera/networking/provider/MultiplayerProvider.js',
+                path.join(workspaceRoot, 'electron/main/x.ts'),
             );
-            expect(result).toBe(path.join(workspaceRoot, 'ai/engine/AgentManager.ts'));
+            expect(result).toBe(
+                path.join(workspaceRoot, 'networking/provider/MultiplayerProvider.ts'),
+            );
         });
 
-        it('returns null for @chimera/simulation — a built package resolved via its exports map, not this plugin', () => {
+        it('returns null for built packages (@chimera/simulation, @chimera/ai) — resolved via their exports map, not this plugin', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             expect(
                 plugin.resolveId(
                     '@chimera/simulation/engine/types.js',
                     path.join(workspaceRoot, 'ai/policy.ts'),
+                ),
+            ).toBeNull();
+            expect(
+                plugin.resolveId(
+                    '@chimera/ai/engine/AgentManager.js',
+                    path.join(workspaceRoot, 'electron/main/index.ts'),
                 ),
             ).toBeNull();
         });
@@ -148,7 +156,10 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
         it('returns null when no source candidate exists on disk', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => false);
             expect(
-                plugin.resolveId('@chimera/ai/engine/types.js', path.join(workspaceRoot, 'a.ts')),
+                plugin.resolveId(
+                    '@chimera/networking/provider/types.js',
+                    path.join(workspaceRoot, 'a.ts'),
+                ),
             ).toBeNull();
         });
     });

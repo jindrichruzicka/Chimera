@@ -15,7 +15,7 @@
         "baseUrl": "..",
         "paths": {
             "@chimera/simulation/*": ["simulation/dist/*"],
-            "@chimera/ai/*": ["ai/*"],
+            "@chimera/ai/*": ["ai/dist/*"],
             "@chimera/renderer/*": ["renderer/*"],
             "@chimera/electron/*": ["electron/*"],
             "@chimera/networking/*": ["networking/*"],

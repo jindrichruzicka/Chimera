@@ -1,0 +1,16 @@
+{
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "composite": true,
+        "noEmit": false,
+        "rootDir": ".",
+        "outDir": "./dist",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    },
+    "references": [{ "path": "../simulation/tsconfig.build.json" }],
+    "include": ["**/*.ts"],
+    "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts", "**/__tests__/**"]
+}
