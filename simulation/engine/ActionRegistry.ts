@@ -157,6 +157,27 @@ export class ActionRegistry<TState extends BaseGameSnapshot = BaseGameSnapshot> 
     }
 
     /**
+     * Bulk-register an array of game-defined ActionDefinitions (Appendix C.4).
+     *
+     * Each definition is routed through the SAME validation path as `register()`:
+     * an `engine:`-prefixed type throws `NamespaceCollisionError` (Invariant #11),
+     * so games/extensions cannot register engine actions via the merge, and a true
+     * duplicate type follows `register()`'s idempotent last-write-wins contract
+     * (no error). This enables extension libraries to pre-register their shared
+     * action definitions once instead of forcing adopters to re-register each.
+     *
+     * NOT transactional: definitions are registered in iteration order. If one
+     * throws (reserved `engine:` namespace), every definition before it stays
+     * registered (partial merge); the offending definition and those after it
+     * do not.
+     */
+    mergeFrom(definitions: readonly ActionDefinition<object, TState>[]): void {
+        for (const definition of definitions) {
+            this.register(definition);
+        }
+    }
+
+    /**
      * Engine-internal registration path.
      *
      * Registers an ActionDefinition whose type begins with `engine:`.

@@ -354,6 +354,76 @@ describe('ActionRegistry.registerEngineAction() — engine-internal path', () =>
     });
 });
 
+// ─── ActionRegistry — mergeFrom() ────────────────────────────────────────────
+
+describe('ActionRegistry.mergeFrom()', () => {
+    let registry: ActionRegistry<BaseGameSnapshot>;
+
+    beforeEach(() => {
+        registry = new ActionRegistry();
+    });
+
+    it('registers every definition in the batch (resolvable + in registeredTypes)', () => {
+        const move = makeDefinition('tactics:move');
+        const attack = makeDefinition('tactics:attack');
+        const rotate = makeDefinition('puzzle:rotate');
+
+        registry.mergeFrom([move, attack, rotate]);
+
+        expect(registry.resolve('tactics:move')).toBe(move);
+        expect(registry.resolve('tactics:attack')).toBe(attack);
+        expect(registry.resolve('puzzle:rotate')).toBe(rotate);
+
+        const types = registry.registeredTypes();
+        expect(types).toContain('tactics:move');
+        expect(types).toContain('tactics:attack');
+        expect(types).toContain('puzzle:rotate');
+        expect(types).toHaveLength(3);
+    });
+
+    it('is a no-op for an empty batch (does not throw)', () => {
+        expect(() => {
+            registry.mergeFrom([]);
+        }).not.toThrow();
+        expect(registry.registeredTypes()).toEqual([]);
+    });
+
+    it('throws NamespaceCollisionError when the batch contains an engine: type', () => {
+        expect(() => {
+            registry.mergeFrom([makeDefinition('engine:end_turn')]);
+        }).toThrow(NamespaceCollisionError);
+    });
+
+    it('is NOT transactional: definitions before a throwing one stay registered', () => {
+        const before = makeDefinition('game:a');
+        const offending = makeDefinition('engine:bad');
+        const after = makeDefinition('game:c');
+
+        expect(() => {
+            registry.mergeFrom([before, offending, after]);
+        }).toThrow(NamespaceCollisionError);
+
+        // Partial merge: 'game:a' registered before the throw; 'game:c' never reached.
+        expect(registry.has('game:a')).toBe(true);
+        expect(registry.has('game:c')).toBe(false);
+        expect(registry.has('engine:bad')).toBe(false);
+    });
+
+    it('follows register() last-write-wins for a duplicate type (no error)', () => {
+        const first = makeDefinition('game:score');
+        const second = makeDefinition('game:score');
+
+        registry.register(first);
+        expect(() => {
+            registry.mergeFrom([second]);
+        }).not.toThrow();
+
+        // Idempotent last-write-wins: the merged definition overwrites the prior one.
+        expect(registry.resolve('game:score')).toBe(second);
+        expect(registry.registeredTypes()).toHaveLength(1);
+    });
+});
+
 // ─── ActionRegistry — error code discriminants (runtime type narrowing) ───────
 
 describe('Error code discriminants', () => {
