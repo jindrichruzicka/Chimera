@@ -15,7 +15,6 @@
 import type { LogEntry } from '@chimera/shared/logging.js';
 import type { ChatMessage, ChatScope, RelayResult } from '@chimera/shared/chat.js';
 import type { LobbyInfo, LobbyPlayerEntry, LobbyState } from '@chimera/shared/messages-schemas.js';
-import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 import type { GameContent, GameContentItem } from '@chimera/shared/game-content-contract.js';
 import type {
     PerspectiveReplayExportBridge,
@@ -114,64 +113,23 @@ export type SlotId = string & { readonly __brand: 'SlotId' };
 export const toSlotId = (raw: string): SlotId => raw as SlotId;
 
 // ─── Simulation domain stubs ──────────────────────────────────────────────────
-// All superseded by simulation/snapshot.ts (F03).
+// The projected-snapshot contract (`PlayerSnapshot` + its `ObservedPlayerState` /
+// `ObservedEntityState` / `GameEvent` helpers) and the commit/reveal
+// envelope/reveal shapes now live in the zero-dependency foundation leaf
+// `@chimera/shared` (issue #758). They are re-exported here so the preload
+// contract surface — and every renderer/main consumer that imports them from
+// this module — stays unchanged.
 
-/** Observed (potentially masked) state of a player in a projected snapshot. */
-export interface ObservedPlayerState {
-    readonly id: PlayerId;
-}
+import type {
+    PlayerSnapshot,
+    ObservedPlayerState,
+    ObservedEntityState,
+    GameEvent,
+} from '@chimera/shared/snapshot-contract.js';
+export type { PlayerSnapshot, ObservedPlayerState, ObservedEntityState, GameEvent };
 
-/** Observed (potentially fog-filtered) state of an entity in a projected snapshot. */
-export interface ObservedEntityState {
-    readonly id: EntityId;
-}
-
-/** A game event visible to a specific viewer. */
-export interface GameEvent {
-    readonly type: string;
-}
-
-/** Cryptographic commitment envelope for a concealed value. */
-export interface CommitmentEnvelope {
-    readonly id: CommitmentId;
-    readonly commitment: string;
-    readonly revealedAt?: number;
-}
-
-/** Verified reveal of a previously committed hidden value. */
-export interface CommitmentReveal {
-    readonly id: CommitmentId;
-    readonly value: unknown;
-    readonly nonce: string;
-}
-
-/**
- * Projected game state for the active viewer.
- * Canonical: simulation/snapshot.ts (F03).
- *
- * Invariant #1: GameSnapshot never crosses any IPC boundary. Only PlayerSnapshot does.
- */
-export interface PlayerSnapshot {
-    readonly tick: number;
-    readonly viewerId: PlayerId;
-    readonly players: Readonly<Record<PlayerId, ObservedPlayerState>>;
-    readonly entities: Readonly<Record<EntityId, ObservedEntityState>>;
-    readonly phase: GamePhase;
-    readonly sceneId?: SceneId;
-    readonly sceneDefaultScreen?: string;
-    readonly sceneTransition?: SceneTransitionState | null;
-    readonly events: readonly GameEvent[];
-    readonly gameResult: GameResult | null;
-    readonly commitments: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
-    /**
-     * Public agreed lobby setup (host-authored match settings + owner-authored
-     * per-player attributes), passed through projection verbatim. Optional and
-     * backward-compatible.
-     */
-    readonly setup?: GameSetupConfig;
-    readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
-    readonly isMyTurn: boolean;
-}
+import type { CommitmentEnvelope, CommitmentReveal } from '@chimera/shared/commitment-contract.js';
+export type { CommitmentEnvelope, CommitmentReveal };
 
 /**
  * Generic IPC action envelope dispatched through GameAPI.sendAction().

@@ -19,24 +19,33 @@
  *        outside that directory; this file contains only the abstract surface.
  */
 
-import type {
-    PlayerId,
-    EngineAction,
-    GameResult,
-    SceneId,
-    SceneTransitionState,
-} from '@chimera/simulation/engine/types.js';
+import type { PlayerId, EngineAction, GameResult } from '@chimera/simulation/engine/types.js';
 import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
-import type { CommitmentEnvelope, CommitmentId } from '@chimera/simulation/projection/index.js';
 import type { WireCommitmentReveal } from '@chimera/shared/messages.js';
-import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 import type { ChatScope, ChatRejectReason } from '@chimera/shared/chat.js';
+// The projected wire snapshot and the lobby roster contracts now live in the
+// foundation leaf `@chimera/shared` (issue #758). `WirePlayerSnapshot` is the
+// canonical loose wire projection; it is imported here under the local name
+// `PlayerSnapshot` and re-exported so this module's public import path is
+// unchanged for every transport caller.
+import type { WirePlayerSnapshot as PlayerSnapshot } from '@chimera/shared/snapshot-contract.js';
+import type {
+    LobbyAgentKind,
+    LobbyAgentSlot,
+    LobbyInfo,
+    LobbyPlayerEntry,
+    LobbyState,
+} from '@chimera/shared/lobby-contract.js';
 
-// ─── Re-export simulation primitives used by callers of this module ───────────
+// ─── Re-export primitives used by callers of this module ──────────────────────
 
 export type { PlayerId };
 
 export type { GameResult };
+
+export type { PlayerSnapshot };
+
+export type { LobbyAgentKind, LobbyAgentSlot, LobbyInfo, LobbyPlayerEntry, LobbyState };
 
 /**
  * Constructs a branded `PlayerId` from a raw string.
@@ -55,66 +64,18 @@ export type { GameResult };
 export const playerId = _makePlayerId;
 
 // ─── Wire-level snapshot type ────────────────────────────────────────────────
-
-/**
- * Projected player snapshot that crosses network and IPC boundaries.
- *
- * The authoritative definition lives in simulation/snapshot.ts (future task).
- * For now the canonical shape is declared here, as this module is the primary
- * consumer that sends/receives it over the wire. The preload stub in
- * electron/preload/api-types.ts mirrors this shape and will be superseded when
- * simulation/snapshot.ts materialises (F03 follow-up).
- *
- * INVARIANT #1: This is the ONLY snapshot type allowed to cross boundaries.
- * GameSnapshot (the full authoritative state) must never appear here.
- */
-export interface PlayerSnapshot {
-    readonly tick: number;
-    readonly viewerId: PlayerId;
-    /** Opaque per-player state visible to this viewer. */
-    readonly players: Readonly<
-        Record<string, Readonly<{ id: PlayerId }> & Readonly<Record<string, unknown>>>
-    >;
-    /** Opaque per-entity state visible to this viewer. */
-    readonly entities: Readonly<
-        Record<string, Readonly<{ id: string }> & Readonly<Record<string, unknown>>>
-    >;
-    readonly phase: string;
-    readonly sceneId?: SceneId;
-    readonly sceneTransition?: SceneTransitionState | null;
-    readonly events: readonly Readonly<{ type: string }>[];
-    readonly gameResult: GameResult | null;
-    /**
-     * Per-player commitment state (proposals and envelopes).
-     * Optional for backward-compat: older clients may not include this field
-     * when sending snapshots. The wire schema (messages-schemas.ts) declares
-     * this as `.optional()` to handle old versions gracefully; newer clients
-     * guard with `if (snapshot.commitments !== undefined)` before accessing.
-     */
-    readonly commitments?: Readonly<Record<CommitmentId, CommitmentEnvelope>>;
-    /**
-     * Public agreed lobby setup (host-authored match settings + owner-authored
-     * per-player attributes), passed through projection verbatim so every client
-     * agrees on the match configuration. Optional for backward-compat: absent on
-     * games with no lobby setup and on older clients (Invariant #1 — only public
-     * config crosses).
-     */
-    readonly setup?: GameSetupConfig;
-    readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
-    readonly isMyTurn: boolean;
-}
+//
+// `PlayerSnapshot` (the loose wire projection) is declared in the foundation
+// leaf as `WirePlayerSnapshot` and re-exported above (issue #758). It is the
+// ONLY snapshot type allowed to cross boundaries — GameSnapshot must never
+// appear here (Invariant #1).
 
 // ─── Lobby domain types ───────────────────────────────────────────────────────
-
-/** Configurable controller kind for a hosted lobby player slot. */
-export type LobbyAgentKind = 'human' | 'ai';
-
-/** Player-slot controller metadata supplied when hosting a lobby. */
-export interface LobbyAgentSlot {
-    readonly slotIndex: number;
-    readonly kind: LobbyAgentKind;
-    readonly omniscient?: boolean;
-}
+//
+// `LobbyAgentKind`, `LobbyAgentSlot`, `LobbyInfo`, `LobbyPlayerEntry`, and
+// `LobbyState` are declared in the foundation leaf `@chimera/shared/lobby-contract.js`
+// and re-exported above (issue #758). The host-/join-param and transport
+// interfaces below build on them.
 
 /** Parameters for hosting a new lobby session. */
 export interface HostLobbyParams {
@@ -149,42 +110,9 @@ export interface JoinLobbyParams {
     readonly profile?: unknown;
 }
 
-/** Metadata returned when a lobby is successfully hosted or joined. */
-export interface LobbyInfo {
-    readonly sessionId: string;
-    readonly hostId: PlayerId;
-    readonly gameId: string;
-}
-
-/** One player's entry in the live lobby roster. */
-export interface LobbyPlayerEntry {
-    readonly playerId: PlayerId;
-    readonly displayName: string;
-    readonly ready: boolean;
-    /**
-     * Owner-authored per-player match attributes (e.g. unit colour): each player
-     * writes its own seat (F53). Optional and backward-compatible: absent on games
-     * with no lobby setup and on older clients.
-     */
-    readonly attributes?: Record<string, string>;
-}
-
-/** Full lobby state pushed to all clients. */
-export interface LobbyState {
-    readonly info: LobbyInfo;
-    readonly players: readonly LobbyPlayerEntry[];
-    /**
-     * Host-authored match settings (e.g. board colour) synced to all clients on
-     * every LobbyState broadcast. Optional and backward-compatible.
-     */
-    readonly matchSettings?: Record<string, string>;
-    /**
-     * Host-configured AI agent slots, synced to all clients so every peer sees
-     * the AI roster (F54 T3/T4, #723/#724). Optional and backward-compatible:
-     * absent on games with no AI and on older clients.
-     */
-    readonly agentSlots?: readonly LobbyAgentSlot[];
-}
+// `LobbyInfo`, `LobbyPlayerEntry`, and `LobbyState` are declared in the
+// foundation leaf `@chimera/shared/lobby-contract.js` and re-exported above
+// (issue #758).
 
 /** A browsable lobby entry returned by BrowsableProvider.listLobbies(). */
 export interface LobbyListEntry {

@@ -13,14 +13,20 @@
 // @chimera-review: node:crypto is permitted here per architecture §8 commitment mandate.
 import { createHash, randomBytes } from 'node:crypto';
 
+// The commit/reveal CONTRACT types now live in the zero-dependency foundation
+// leaf `@chimera/shared/commitment-contract.js` (issue #758) so the projected
+// snapshot/screen contracts can carry commitments without importing up into
+// simulation. They are imported for local use and re-exported so
+// `@chimera/simulation/projection` stays the unchanged public import path.
+import type {
+    CommitmentId,
+    CommitmentEnvelope,
+    CommitmentReveal,
+} from '@chimera/shared/commitment-contract.js';
+export type { CommitmentId, CommitmentEnvelope, CommitmentReveal };
+
 const NONCE_BYTE_LENGTH = 32;
 const COMMITMENT_ID_BYTE_LENGTH = 16;
-
-/**
- * Opaque commitment identifier. Branded to prevent mix-up with other
- * string-shaped identifiers.
- */
-export type CommitmentId = string & { readonly __brand: 'CommitmentId' };
 
 /**
  * Constructs a branded {@link CommitmentId} from a raw string.
@@ -29,30 +35,6 @@ export type CommitmentId = string & { readonly __brand: 'CommitmentId' };
  */
 export function toCommitmentId(raw: string): CommitmentId {
     return raw as CommitmentId;
-}
-
-/**
- * Commitment envelope broadcast during Phase 1 of the commit/reveal protocol
- * (§4.6 / §8). Save files persist pending envelopes so verification can resume
- * after reload.
- *
- * Invariant #44: `revealedAt` is a tick integer — never a float.
- */
-export interface CommitmentEnvelope {
-    readonly id: CommitmentId;
-    readonly commitment: string;
-    readonly revealedAt?: number;
-}
-
-/**
- * Reveal payload broadcast by the host during Phase 2 of the commit/reveal
- * protocol (§4.6 / §8). Clients call `CommitmentScheme.verify()` with this
- * before trusting the revealed `value`.
- */
-export interface CommitmentReveal {
-    readonly id: CommitmentId;
-    readonly value: unknown;
-    readonly nonce: string;
 }
 
 export interface CommitmentScheme {

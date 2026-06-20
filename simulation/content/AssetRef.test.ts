@@ -17,7 +17,7 @@ interface TacticsVoxelAsset extends AssetKindBrand<'tactics:voxel'> {
     readonly __tacticsVoxelAsset: unique symbol;
 }
 
-declare module './AssetRef' {
+declare module '@chimera/shared/asset-contract.js' {
     interface AssetKindRegistry {
         readonly 'tactics:voxel': TacticsVoxelAsset;
     }

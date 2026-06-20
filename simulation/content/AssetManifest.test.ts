@@ -11,7 +11,7 @@ interface TacticsShaderAsset extends AssetKindBrand<'tactics:shader'> {
     readonly __tacticsShaderAsset: unique symbol;
 }
 
-declare module './AssetRef' {
+declare module '@chimera/shared/asset-contract.js' {
     interface AssetKindRegistry {
         readonly 'tactics:shader': TacticsShaderAsset;
     }

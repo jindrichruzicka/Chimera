@@ -190,6 +190,52 @@ test_games_import_in_simulation_detected() {
     fi
 }
 
+# Test: @chimera/simulation import inside shared/ → violation [invariant-1]
+# shared/ is the zero-dependency foundation leaf (issue #758).
+test_simulation_import_in_shared_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/messages.ts" \
+        "import type { PlayerId } from '@chimera/simulation/engine/types.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "@chimera/simulation import in shared/ detected as [invariant-1]"
+        else
+            fail "shared/ back-edge detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "@chimera/simulation import in shared/ not detected (exit 0)"
+    fi
+}
+
+# Test: @chimera/shared self-import inside shared/ is NOT a back-edge → no violation.
+# Confirms the leaf check excludes the shared package itself.
+test_shared_self_import_not_flagged() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "shared/game-screen-contract.ts" \
+        "import type { GameContent } from '@chimera/shared/game-content-contract.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "@chimera/shared self-import in shared/ not flagged"
+    else
+        fail "@chimera/shared self-import in shared/ wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # Test 6: GameSnapshot used in electron/preload/ → violation [invariant-3]
 test_game_snapshot_in_preload_detected() {
     local tmp
@@ -750,6 +796,8 @@ test_math_random_in_simulation_detected
 test_date_now_in_ai_detected
 test_renderer_import_in_simulation_detected
 test_games_import_in_simulation_detected
+test_simulation_import_in_shared_detected
+test_shared_self_import_not_flagged
 test_game_snapshot_in_preload_detected
 test_comment_mention_not_flagged
 test_test_title_string_not_flagged

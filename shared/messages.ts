@@ -22,14 +22,15 @@
  *         or any DOM API. Import-type-only from simulation/ and networking/.
  */
 
-import type { PlayerId, EngineAction, GameResult } from '@chimera/simulation/engine/types.js';
-import type {
-    PlayerSnapshot,
-    LobbyState,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { PlayerId, EngineAction, GameResult } from '@chimera/shared/engine-contract.js';
+import type { WirePlayerSnapshot as PlayerSnapshot } from '@chimera/shared/snapshot-contract.js';
+import type { LobbyState } from '@chimera/shared/lobby-contract.js';
 import type { ChatScope } from './chat.js';
 
 // ─── Re-export for consumers in local/ ───────────────────────────────────────
+// These contract types now live in the foundation leaf (issue #758); the wire
+// `SNAPSHOT` frame carries the loose `WirePlayerSnapshot`, re-exported here under
+// the historical name `PlayerSnapshot` so local/ consumers are unaffected.
 
 export type { PlayerId, EngineAction, GameResult, PlayerSnapshot, LobbyState };
 

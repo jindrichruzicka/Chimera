@@ -23,7 +23,7 @@
  *   #72 — `ChatMessage` is a cosmetic side-channel payload, not an EngineAction.
  */
 
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerId } from '@chimera/shared/engine-contract.js';
 
 /**
  * Routing scope of a chat message. The discriminant `kind` selects the

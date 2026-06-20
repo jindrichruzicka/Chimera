@@ -1,9 +1,21 @@
 import { readFileSync } from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { defineConfig } from 'vitest/config';
 import { createPreferTypeScriptSourceResolver } from './tools/vitest-resolver-plugin';
 
 const workspaceRoot = import.meta.dirname;
+
+// Vitest defaults to `availableParallelism() - 1` forks, all of which pull
+// module transforms from the single main-thread Vite pipeline. On high-core
+// machines that saturates the main thread for >60s, tripping birpc's
+// `onTaskUpdate` timeout on the heavy renderer suite (and starving slow async
+// tests waiting on transforms). Bounding the pool keeps the main thread
+// responsive; by avoiding redundant cold transforms it is also *faster* on the
+// renderer suite. The bottleneck is one main thread, so the cap is a small
+// constant rather than core-scaled.
+const availableParallelism = os.availableParallelism?.() ?? os.cpus().length;
+const MAX_TEST_FORKS = Math.max(2, Math.min(4, availableParallelism - 1));
 
 const VIRTUAL_PREFIX = '\0chimera-raw-css:';
 const VIRTUAL_PREFIX_STRIPPED = 'chimera-raw-css:';
@@ -46,6 +58,13 @@ export default defineConfig({
     test: {
         name: 'chimera',
         environment: 'node',
+        pool: 'forks',
+        poolOptions: {
+            forks: {
+                minForks: 1,
+                maxForks: MAX_TEST_FORKS,
+            },
+        },
         testTimeout: 60_000,
         include: ['**/*.test.ts', '**/*.test.tsx'],
         exclude: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/build/**'],

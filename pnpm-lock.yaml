@@ -216,7 +216,11 @@ importers:
 
   shared: {}
 
-  simulation: {}
+  simulation:
+    dependencies:
+      '@chimera/shared':
+        specifier: workspace:*
+        version: link:../shared
 
 packages:
 

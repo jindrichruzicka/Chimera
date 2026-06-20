@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { playerId as toPlayerId } from '../networking/provider/MultiplayerProvider.js';
+import type { PlayerId } from '@chimera/shared/engine-contract.js';
 import {
     ClientMessageSchema,
     ServerMessageSchema,
@@ -17,6 +17,10 @@ import {
     WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
     WIRE_MAX_PROFILE_REJECT_REASON_LENGTH,
 } from './messages-schemas.js';
+
+// shared/ is the foundation leaf, so its tests construct branded ids locally
+// rather than importing the `playerId` factory from simulation/networking (#758).
+const toPlayerId = (raw: string): PlayerId => raw as PlayerId;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

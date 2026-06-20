@@ -1,11 +1,7 @@
-import type {
-    CommitmentReveal,
-    EngineAction,
-    GameResult,
-    PlayerId,
-    PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { EngineAction, GameResult, PlayerId } from '@chimera/shared/engine-contract.js';
+import type { CommitmentReveal } from '@chimera/shared/commitment-contract.js';
+import type { PlayerSnapshot } from '@chimera/shared/snapshot-contract.js';
+import type { AssetRef, AudioClipAsset } from '@chimera/shared/asset-contract.js';
 import type { GameContent } from '@chimera/shared/game-content-contract.js';
 import type * as React from 'react';
 

@@ -24,15 +24,41 @@ import type { Logger } from '@chimera/shared/logging.js';
 import type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 export type { GameSetupConfig } from '@chimera/shared/game-lobby-contract.js';
 
-// ─── Primitive branded identifiers ───────────────────────────────────────────
+// The brand/contract TYPES below now live in the zero-dependency foundation leaf
+// `@chimera/shared/engine-contract.js` (issue #758) so the foundation can
+// describe its wire/screen contracts without importing up into simulation. They
+// are imported for local use (the brand factories cast to them) and re-exported
+// so `@chimera/simulation/engine/types.js` stays the unchanged public import path.
+import type {
+    PlayerId,
+    EntityId,
+    GamePhase,
+    SceneId,
+    SceneTransitionPhase,
+    SceneTransitionState,
+    EngineAction,
+    TypedAction,
+    ActionEnvelope,
+    GameResult,
+} from '@chimera/shared/engine-contract.js';
+export type {
+    PlayerId,
+    EntityId,
+    GamePhase,
+    SceneId,
+    SceneTransitionPhase,
+    SceneTransitionState,
+    EngineAction,
+    TypedAction,
+    ActionEnvelope,
+    GameResult,
+};
 
-/**
- * Opaque player identifier. Using a branded type prevents accidental mixing
- * with other string-shaped values (e.g. session tokens, entity IDs).
- *
- * Canonical source — supersedes the plain `string` stub in `electron/preload/api-types.ts`.
- */
-export type PlayerId = string & { readonly __brand: 'PlayerId' };
+// ─── Primitive branded identifiers ───────────────────────────────────────────
+//
+// The branded id types and the scene-transition contract are declared in the
+// foundation leaf (re-exported above). The runtime brand factories stay here —
+// they are the single authorised cast sites for each brand in simulation/.
 
 /**
  * Constructs a branded {@link PlayerId} from a raw string.
@@ -44,12 +70,6 @@ export type PlayerId = string & { readonly __brand: 'PlayerId' };
 export const playerId = (raw: string): PlayerId => raw as PlayerId;
 
 /**
- * Opaque entity identifier. Branded to prevent mix-up with PlayerId or
- * other string keys at call sites.
- */
-export type EntityId = string & { readonly __brand: 'EntityId' };
-
-/**
  * Constructs a branded {@link EntityId} from a raw string.
  *
  * This is the single authorised cast site for the EntityId brand in
@@ -57,14 +77,6 @@ export type EntityId = string & { readonly __brand: 'EntityId' };
  * writing `raw as EntityId` directly.
  */
 export const entityId = (raw: string): EntityId => raw as EntityId;
-
-/**
- * Current phase of the game state machine.
- * Games define their own phase strings; the engine treats this as an opaque
- * string. Typed as a branded alias to prevent accidental assignment of
- * arbitrary strings without intent.
- */
-export type GamePhase = string & { readonly __brand: 'GamePhase' };
 
 /**
  * Constructs a branded {@link GamePhase} from a raw string.
@@ -75,26 +87,8 @@ export type GamePhase = string & { readonly __brand: 'GamePhase' };
  */
 export const gamePhase = (raw: string): GamePhase => raw as GamePhase;
 
-/**
- * Opaque scene identifier. Scene ids are namespaced strings such as
- * `engine:game` or `tactics:level-1`.
- */
-export type SceneId = string & { readonly __brand: 'SceneId' };
-
 /** Constructs a branded {@link SceneId} from a raw string. */
 export const sceneId = (raw: string): SceneId => raw as SceneId;
-
-export type SceneTransitionPhase = 'preparing' | 'ready' | 'committing';
-
-export interface SceneTransitionState {
-    readonly toSceneId: SceneId;
-    readonly phase: SceneTransitionPhase;
-    readonly startedAtTick: number;
-    readonly params: Readonly<Record<string, unknown>>;
-    readonly playersReady: readonly PlayerId[];
-    readonly timeoutTicks?: number;
-    readonly onClientTimeout?: 'proceed' | 'drop';
-}
 
 // ─── Base state shapes ───────────────────────────────────────────────────────
 
@@ -124,19 +118,10 @@ export interface GameEvent {
 }
 
 // ─── Game result ────────────────────────────────────────────────────────────
-
-/**
- * The canonical outcome of a completed game.
- *
- * `winnerIds` contains the IDs of every winning player. An empty array
- * represents a draw. The type intentionally exposes only `winnerIds` —
- * no internal resolver state may be included (Invariant #1).
- *
- * Architecture reference: §4.38 — Game Resolution & Winner Detection
- */
-export interface GameResult {
-    readonly winnerIds: readonly PlayerId[];
-}
+//
+// `GameResult` is declared in the foundation leaf `@chimera/shared/engine-contract.js`
+// (re-exported above, issue #758). `GameResolution` — the engine-internal
+// discriminated union built on it — stays here.
 
 /**
  * Discriminated union that represents the resolution state of a game.
@@ -420,45 +405,11 @@ export interface PipelineContext
 }
 
 // ─── Actions ─────────────────────────────────────────────────────────────────
-
-/**
- * Generic action envelope. The ONLY shape the engine transport layer
- * operates on. Games create typed sub-forms via `TypedAction<T, P>`.
- *
- * `TType`    — namespaced type string, e.g. `'engine:end_turn'`, `'mygame:move_unit'`
- * `TPayload` — strongly-typed payload; unknown/unvalidated on the wire until
- *              `ActionDefinition.parsePayload()` runs inside ActionPipeline Stage 2.
- *
- * INVARIANT: `tick` must match `GameSnapshot.tick` at pipeline entry; Stage 1
- * (resolve) rejects stale envelopes before any game logic runs.
- */
-export interface EngineAction<
-    TType extends string = string,
-    TPayload extends object = Record<string, unknown>,
-> {
-    readonly type: TType;
-    readonly playerId: PlayerId;
-    readonly tick: number;
-    readonly payload: Readonly<TPayload>;
-}
-
-/**
- * Convenience type alias for game developers building typed action factories.
- *
- * Usage:
- *   type MoveUnitAction = TypedAction<'mygame:move_unit', MoveUnitPayload>;
- */
-export type TypedAction<T extends string, P extends object> = EngineAction<T, P>;
-
-/**
- * The exclusive inbound representation at the transport boundary — opaque form
- * of `EngineAction` with default loose type parameters. ActionPipeline receives
- * only `ActionEnvelope`s; stage 2 (parse) produces the typed payload for game code.
- *
- * INVARIANT #1: No raw `{ type, payload }` objects may enter the pipeline —
- * callers must build an `ActionEnvelope` (including `playerId` and `tick`).
- */
-export type ActionEnvelope = EngineAction<string, Record<string, unknown>>;
+//
+// `EngineAction`, `TypedAction`, and `ActionEnvelope` are declared in the
+// foundation leaf `@chimera/shared/engine-contract.js` (re-exported above, issue
+// #758) so the foundation wire/screen contracts can reference the action shape
+// without importing up into simulation.
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 

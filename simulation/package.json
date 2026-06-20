@@ -5,5 +5,8 @@
     "scripts": {
         "test": "vitest run --config ../vitest.config.mts --dir .",
         "lint": "eslint ."
+    },
+    "dependencies": {
+        "@chimera/shared": "workspace:*"
     }
 }

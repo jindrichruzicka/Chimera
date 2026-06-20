@@ -178,6 +178,57 @@ export default tseslint.config(
         },
     },
 
+    // Foundation leaf — `@chimera/shared` must import nothing from any other
+    // workspace package (Invariant #1: the contract layer points inward only).
+    // Test files are included on purpose — a type-only back-edge in a test still
+    // makes `shared` a non-leaf. `allowTypeImports` is intentionally NOT set:
+    // every back-edge this guards is an `import type`, so an exception would make
+    // the rule toothless. Relocate the contract type into `shared` and re-export
+    // from the old home instead (issue #758).
+    {
+        files: ['shared/**/*.{ts,tsx}'],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: ['../../../*'],
+                            message:
+                                'Do not reach across package boundaries with deep relative paths. Use @chimera/* aliases.',
+                        },
+                        {
+                            group: [
+                                '@chimera/simulation',
+                                '@chimera/simulation/*',
+                                '@chimera/ai',
+                                '@chimera/ai/*',
+                                '@chimera/networking',
+                                '@chimera/networking/*',
+                                '@chimera/renderer',
+                                '@chimera/renderer/*',
+                                '@chimera/electron',
+                                '@chimera/electron/*',
+                                'simulation/*',
+                                '**/simulation/*',
+                                'ai/*',
+                                '**/ai/*',
+                                'networking/*',
+                                '**/networking/*',
+                                'renderer/*',
+                                '**/renderer/*',
+                                'electron/*',
+                                '**/electron/*',
+                            ],
+                            message:
+                                '@chimera/shared is the zero-dependency foundation leaf — it must not import from simulation, ai, networking, renderer, or electron (Invariant #1). Relocate the contract type into shared and re-export from the old home. See issue #758.',
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+
     // Test files: relax a few rules that are noisy in test scaffolding.
     {
         files: ['**/*.test.{ts,tsx}', '**/*.spec.{ts,tsx}', 'test/**/*.{ts,tsx}'],

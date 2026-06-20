@@ -24,7 +24,7 @@
 
 import { describe, it, expect } from 'vitest';
 import * as React from 'react';
-import type { PlayerId } from '@chimera/electron/preload/api-types.js';
+import type { PlayerId } from '@chimera/shared/engine-contract.js';
 import type {
     GameScreenComponent,
     GameScreenProps,

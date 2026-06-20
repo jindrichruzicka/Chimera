@@ -284,6 +284,16 @@ check_grep "107" \
     'TACTICS_|tactics:' \
     ai shared
 
+# ─── Check 13: shared/ is the zero-dependency foundation leaf (invariant 1) ───
+# `@chimera/shared` is the foundation/contract layer and must point inward only —
+# it must not import from simulation, ai, networking, renderer, or electron.
+# Relocate the contract type into shared and re-export from the old home instead
+# (issue #758). Cross-package imports use `@chimera/<pkg>` specifiers; the leading
+# `@chimera/shared` package is excluded by listing only the forbidden packages.
+check_grep "1" \
+    "from ['\"]@chimera/(simulation|ai|networking|renderer|electron)[/'\"]" \
+    shared
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then
