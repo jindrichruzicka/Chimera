@@ -28,9 +28,7 @@ import {
 } from '@chimera/tactics/constants.js';
 import type { EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
 import { entityId, playerId } from '@chimera/simulation/engine/types.js';
-import type { PlayerSnapshot } from '@chimera/ai/engine/AITypes.js';
-import type { CommandContext } from '@chimera/ai/engine/CommandContext.js';
-import type { CommandScheduler } from '@chimera/ai/engine/CommandScheduler.js';
+import type { PlayerSnapshot, CommandContext, CommandScheduler } from '@chimera/ai';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import { createTacticsAIState, decideTacticsAction } from './tacticsPolicy.js';
 
