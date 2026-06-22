@@ -32,8 +32,8 @@ import type {
     LobbyAgentSlot,
     Unsubscribe,
     WireChatPayload,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
-import { JoinRejectedError } from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '@chimera/networking';
+import { JoinRejectedError } from '@chimera/networking';
 import type { EngineAction } from '@chimera/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus, PlayerConnectionEvent } from '../../preload/api-types.js';

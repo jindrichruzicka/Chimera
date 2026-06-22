@@ -11,11 +11,7 @@
 
 import { describe, it, expect, afterEach } from 'vitest';
 import type { PlayerId } from '@chimera/simulation/contracts';
-import type {
-    MultiplayerProvider,
-    HostedSession,
-    JoinedSession,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { MultiplayerProvider, HostedSession, JoinedSession } from '../MultiplayerProvider.js';
 import { LocalWebSocketProvider } from './LocalWebSocketProvider.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────

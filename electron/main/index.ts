@@ -113,7 +113,7 @@ import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { ChatRelay } from './ChatRelay.js';
 import { ChatHub } from './ChatHub.js';
-import { LocalWebSocketProvider } from '../../networking/provider/local/LocalWebSocketProvider.js';
+import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';
 import type {
     ClientTransport,
     LobbyAgentSlot,
@@ -121,7 +121,7 @@ import type {
     LobbyState,
     Unsubscribe,
     PlayerSnapshot as WirePlayerSnapshot,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '@chimera/networking';
 import {
     GAME_REVEAL_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,

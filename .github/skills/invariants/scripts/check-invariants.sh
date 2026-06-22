@@ -95,20 +95,20 @@ check_grep "2/43" \
     'Math\.random|Date\.now|performance\.now' \
     simulation ai
 
-# ─── Check 2: simulation/ must not import from renderer/ ──────────────────────
+# ─── Check 2: simulation/ ai/ networking/ must not import from renderer/ ──────
 check_grep "1" \
     "from ['\"].*renderer/" \
-    simulation ai
+    simulation ai networking
 
-# ─── Check 3: simulation/ must not import from electron/ ──────────────────────
+# ─── Check 3: simulation/ ai/ networking/ must not import from electron/ ──────
 check_grep "1" \
     "from ['\"].*electron/" \
-    simulation ai
+    simulation ai networking
 
-# ─── Check 4: simulation/ and ai/ must not import a game ─────────────────────
+# ─── Check 4: simulation/ ai/ networking/ must not import a game ──────────────
 # A game is a relative/bare games/ path or a non-engine @chimera/<game> package
 # (e.g. @chimera/tactics); engine @chimera/* imports are filtered back out.
-for games_guard_dir in simulation ai; do
+for games_guard_dir in simulation ai networking; do
     [[ -d "${games_guard_dir}" ]] || continue
     while IFS= read -r match; do
         violation "47" "${match}"
@@ -305,6 +305,12 @@ fi
 # extend the alternation as games are added. shared/ was absorbed into
 # @chimera/simulation (#758) and is currently a no-op; it is kept for parity
 # with the invariant text should the directory reappear.
+# networking/ is game-agnostic too but is intentionally NOT guarded here (#768):
+# the transport layer legitimately contains colon-namespaced NON-game literals —
+# `node:` builtin import specifiers and `host:port`-style address formats — that
+# this heuristic cannot distinguish from a `<gameId>:<action>` namespace, so
+# adding it produces false positives. Its game-agnosticism is enforced
+# structurally by Check 14 (containment) and the import-direction Checks 2/3/4.
 # False-positive suppression mirrors check_grep (comments/tests/fixtures/node_modules).
 GAME_TOKEN_RE="(TACTICS_|['\"][a-z][a-z0-9_]*:[a-z])"
 for token_guard_dir in ai shared; do
@@ -332,6 +338,31 @@ done
 check_grep "1" \
     "from ['\"]@chimera/(simulation|ai|networking|renderer|electron)[/'\"]" \
     shared
+
+# ─── Check 14: networking/ exposes provider interfaces only (invariant 47) ────
+# `@chimera/networking`'s sole source top-level members are provider/ (the
+# pluggable abstraction + the internal concrete providers), __tests__/ (the
+# boundary + side-effect smoke tests), index.ts (the curated barrel exposing the
+# provider/transport INTERFACES only), and the generated dist/ build output
+# (F60, issue #768). A non-allowlisted top-level dir, or a stray top-level
+# .ts/.tsx other than index.ts, is flagged — concrete providers must stay
+# internal under provider/ (not promoted to the package surface). The
+# import-direction half (networking/ must not import ai/renderer/electron/games)
+# is enforced by Checks 2/3/4 above and the ESLint boundary rule.
+if [[ -d networking ]]; then
+    while IFS= read -r dir; do
+        case "$(basename "${dir}")" in
+            provider|__tests__|dist) ;;
+            *) violation "47" "${dir}/  (non-provider dir under networking/; concrete providers stay internal under provider/)" ;;
+        esac
+    done < <(find networking -mindepth 1 -maxdepth 1 -type d ! -name node_modules | sort)
+    while IFS= read -r file; do
+        case "$(basename "${file}")" in
+            index.ts) ;;
+            *) violation "47" "${file}  (non-barrel file under networking/; the curated public barrel is index.ts)" ;;
+        esac
+    done < <(find networking -mindepth 1 -maxdepth 1 -type f \( -name '*.ts' -o -name '*.tsx' \) | sort)
+fi
 
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo

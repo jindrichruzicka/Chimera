@@ -16,9 +16,10 @@
         "paths": {
             "@chimera/simulation/*": ["simulation/dist/*"],
             "@chimera/ai/*": ["ai/dist/*"],
+            "@chimera/networking": ["networking/dist/index.d.ts"],
+            "@chimera/networking/*": ["networking/dist/*"],
             "@chimera/renderer/*": ["renderer/*"],
             "@chimera/electron/*": ["electron/*"],
-            "@chimera/networking/*": ["networking/*"],
             "@chimera/tactics/*": ["games/tactics/*"]
         }
     }

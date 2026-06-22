@@ -983,6 +983,149 @@ test_engine_namespace_in_ai_allowed() {
     fi
 }
 
+# ─── Networking package (F60, issue #768) ──────────────────────────────────────
+
+# Test 36: import from renderer/ inside networking/ → violation [invariant-1]
+# networking/ depends on @chimera/simulation only (+ ws); it must not reach the
+# UI layer.
+test_renderer_import_in_networking_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "networking/provider/Bad.ts" \
+        "import { foo } from '@chimera/renderer/components/ui/Button.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-1\]'; then
+            pass "renderer/ import in networking/ detected as [invariant-1]"
+        else
+            fail "renderer/ import in networking/ detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "renderer/ import in networking/ not detected (exit 0)"
+    fi
+}
+
+# Test 37: import from games/ inside networking/ → violation [invariant-47]
+test_games_import_in_networking_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "networking/provider/Bad.ts" \
+        "import { something } from '../../games/tictactoe/data';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-47\]'; then
+            pass "games/ import in networking/ detected as [invariant-47]"
+        else
+            fail "games/ import in networking/ detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "games/ import in networking/ not detected (exit 0)"
+    fi
+}
+
+# Test 38: a non-provider top-level dir under networking/ → violation [invariant-47]
+# Only provider/, __tests__/, dist/ are allowed immediate children; concrete
+# providers stay internal under provider/ (Check 14).
+test_non_provider_dir_under_networking_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "networking/discovery/scan.ts" \
+        "export const noop = 1;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-47\]'; then
+            pass "non-provider dir under networking/ detected as [invariant-47]"
+        else
+            fail "networking/ dir detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "non-provider dir under networking/ not detected (exit 0)"
+    fi
+}
+
+# Test 39: a stray top-level source file under networking/ → violation [invariant-47]
+# The only allowed top-level source file is index.ts (the curated barrel).
+test_stray_top_level_file_under_networking_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "networking/SteamProvider.ts" \
+        "export const noop = 1;"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-47\]'; then
+            pass "stray top-level file under networking/ detected as [invariant-47]"
+        else
+            fail "networking/ top-level file detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "stray top-level file under networking/ not detected (exit 0)"
+    fi
+}
+
+# Test 40: networking/index.ts barrel at top level → NOT flagged (allowed member)
+test_networking_index_barrel_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "networking/index.ts" \
+        "export type { MultiplayerProvider } from './provider/MultiplayerProvider.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "networking/index.ts barrel not flagged (allowed top-level member)"
+    else
+        fail "networking/index.ts barrel wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 41: a clean networking/provider/ file → NOT flagged (provider/ allowed)
+test_networking_provider_dir_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "networking/provider/MultiplayerProvider.ts" \
+        "export type HostTransport = { send(): void };"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "networking/provider/ file not flagged (allowed member)"
+    else
+        fail "networking/provider/ file wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -1025,6 +1168,12 @@ test_game_constant_token_in_ai_detected
 test_game_namespace_token_in_ai_detected
 test_generic_game_namespace_in_ai_detected
 test_engine_namespace_in_ai_allowed
+test_renderer_import_in_networking_detected
+test_games_import_in_networking_detected
+test_non_provider_dir_under_networking_detected
+test_stray_top_level_file_under_networking_detected
+test_networking_index_barrel_passes
+test_networking_provider_dir_passes
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

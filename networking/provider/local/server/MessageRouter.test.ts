@@ -10,8 +10,8 @@
 
 import { describe, it, expect } from 'vitest';
 import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { Unsubscribe } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
+import type { Unsubscribe } from '../../MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type { MessageBus } from './MessageBus.js';

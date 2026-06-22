@@ -56,7 +56,7 @@ import {
 } from '@chimera/simulation/projection/assertNoLeakedFields.js';
 import type { VisibilityRules } from '@chimera/simulation/projection/types.js';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
-import type { PlayerSnapshot as WirePlayerSnapshot } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { PlayerSnapshot as WirePlayerSnapshot } from '@chimera/networking';
 
 import { createNoopLogger } from '../logging/logger.js';
 import { StateBroadcaster } from '../runtime/StateBroadcaster.js';

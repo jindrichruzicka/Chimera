@@ -24,9 +24,9 @@ import type {
     LobbyState,
     PlayerSnapshot,
     SideChannelMessage,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '../MultiplayerProvider.js';
 import { LocalWebSocketProvider } from './LocalWebSocketProvider.js';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../MultiplayerProvider.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

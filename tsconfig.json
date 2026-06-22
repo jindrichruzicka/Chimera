@@ -22,18 +22,18 @@
         "noEmit": true,
         "baseUrl": "."
     },
-    // `simulation/**` and `ai/**` are NOT compiled by this program: each is a
-    // built package (see simulation/tsconfig.json, ai/tsconfig.json) and consumers
-    // here resolve it through its `exports` map onto `<pkg>/dist`. Their own source
-    // + tests are type-checked by their own `tsc --noEmit -p <pkg>/tsconfig.json`.
-    // Only simulation's ambient global env declarations are pulled in directly (the
+    // `simulation/**`, `ai/**`, and `networking/**` are NOT compiled by this
+    // program: each is a built package (see simulation/tsconfig.json,
+    // ai/tsconfig.json, networking/tsconfig.json) and consumers here resolve it
+    // through its `exports` map onto `<pkg>/dist`. Their own source + tests are
+    // type-checked by their own `tsc --noEmit -p <pkg>/tsconfig.json`. Only
+    // simulation's ambient global env declarations are pulled in directly (the
     // Node programs need NODE_ENV / CHIMERA_DEBUG augmentations; the renderer
     // program declares NODE_ENV itself).
     "include": [
         "electron/**/*.ts",
         "games/**/*.ts",
         "renderer/**/*.ts",
-        "networking/**/*.ts",
         "tools/**/*.ts",
         "e2e/**/*.ts",
         "simulation/foundation/env.d.ts",
@@ -47,6 +47,7 @@
         "**/out/**",
         "simulation/engine/__tests__/fixtures/**",
         "ai/engine/__tests__/fixtures/**",
+        "networking/__tests__/fixtures/**",
         // renderer/ is compiled exclusively by renderer/tsconfig.json (Next.js plugin + JSX).
         // Excluding it here prevents double-compilation and plugin conflicts.
         // Cross-package type checks run via renderer/tsconfig.json in CI.

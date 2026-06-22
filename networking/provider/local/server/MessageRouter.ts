@@ -17,10 +17,7 @@
  */
 
 import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
-import type {
-    SideChannelMessage,
-    Unsubscribe,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { SideChannelMessage, Unsubscribe } from '../../MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type { MessageBus } from './MessageBus.js';

@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { playerId, type LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId, type LobbyState } from '@chimera/networking';
 import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import {
     lobbySetupBuilders,

@@ -29,7 +29,7 @@ import { gamePhase, playerId as toPlayerId } from '@chimera/simulation/engine/ty
 import { DefaultStateProjector } from '@chimera/simulation/projection/StateProjector.js';
 import { assertNoLeakedFields } from '@chimera/simulation/projection/assertNoLeakedFields.js';
 import type { VisibilityRules } from '@chimera/simulation/projection/types.js';
-import type { HostTransport } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { HostTransport } from '@chimera/networking';
 import { createNoopLogger } from '../logging/logger.js';
 import { StateBroadcaster } from '../runtime/StateBroadcaster.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';

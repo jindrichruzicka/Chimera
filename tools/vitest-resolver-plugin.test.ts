@@ -80,15 +80,13 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
         it('maps a @chimera/<engine-pkg>/sub.js import to the .ts source', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             const result = plugin.resolveId(
-                '@chimera/networking/provider/MultiplayerProvider.js',
-                path.join(workspaceRoot, 'electron/main/x.ts'),
+                '@chimera/electron/runtime/SessionRuntime.js',
+                path.join(workspaceRoot, 'electron/preload/x.ts'),
             );
-            expect(result).toBe(
-                path.join(workspaceRoot, 'networking/provider/MultiplayerProvider.ts'),
-            );
+            expect(result).toBe(path.join(workspaceRoot, 'electron/runtime/SessionRuntime.ts'));
         });
 
-        it('returns null for built packages (@chimera/simulation, @chimera/ai) — resolved via their exports map, not this plugin', () => {
+        it('returns null for built packages (@chimera/simulation, @chimera/ai, @chimera/networking) — resolved via their exports map, not this plugin', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             expect(
                 plugin.resolveId(
@@ -99,6 +97,12 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
             expect(
                 plugin.resolveId(
                     '@chimera/ai/engine/AgentManager.js',
+                    path.join(workspaceRoot, 'electron/main/index.ts'),
+                ),
+            ).toBeNull();
+            expect(
+                plugin.resolveId(
+                    '@chimera/networking/provider/MultiplayerProvider.js',
                     path.join(workspaceRoot, 'electron/main/index.ts'),
                 ),
             ).toBeNull();
@@ -157,7 +161,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => false);
             expect(
                 plugin.resolveId(
-                    '@chimera/networking/provider/types.js',
+                    '@chimera/electron/provider/types.js',
                     path.join(workspaceRoot, 'a.ts'),
                 ),
             ).toBeNull();

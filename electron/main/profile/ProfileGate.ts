@@ -14,7 +14,7 @@
 
 import { admit } from '@chimera/simulation/profile/ProfileSanitizer.js';
 import type { PlayerDirectory } from './PlayerDirectory.js';
-import type { JoinGateResult, PlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { JoinGateResult, PlayerId } from '@chimera/networking';
 import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
 
 // ─── Interface ────────────────────────────────────────────────────────────────

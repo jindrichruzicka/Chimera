@@ -19,7 +19,7 @@ import type {
     DisconnectReason,
     Unsubscribe,
     JoinGateResult,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '../../MultiplayerProvider.js';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type {
     ServerMessage,

@@ -10,13 +10,13 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type { PlayerId } from '@chimera/simulation/contracts';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
 import type {
     ClientTransport,
     PlayerSnapshot,
     LobbyState,
     SideChannelMessage,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '../../MultiplayerProvider.js';
 import type { Logger } from '@chimera/simulation/foundation/logging.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';

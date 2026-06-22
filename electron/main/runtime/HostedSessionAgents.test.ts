@@ -23,7 +23,7 @@ import { createTacticsAIState } from '@chimera/tactics/ai/tacticsPolicy.js';
 import { registerTacticsActions } from '@chimera/tactics/actions.js';
 import { tacticsVisibilityRules } from '@chimera/tactics/visibility-rules.js';
 import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
-import type { LobbyAgentSlot } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { LobbyAgentSlot } from '@chimera/networking';
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,

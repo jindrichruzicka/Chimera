@@ -47,6 +47,7 @@ export default tseslint.config(
             // Fixture files used by ESLint smoke tests; they intentionally violate lint rules.
             'simulation/engine/__tests__/fixtures/**',
             'ai/engine/__tests__/fixtures/**',
+            'networking/__tests__/fixtures/**',
             // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
             'tools/eslint-plugin-chimera/plugin.cjs',
             // Playwright output directories — generated artefacts, not source.
@@ -78,6 +79,7 @@ export default tseslint.config(
                         '*.cts',
                         'simulation/engine/__tests__/fixtures/*.ts',
                         'ai/engine/__tests__/fixtures/*.ts',
+                        'networking/__tests__/fixtures/*.ts',
                     ],
                 },
                 tsconfigRootDir: import.meta.dirname,
@@ -195,6 +197,48 @@ export default tseslint.config(
                             ],
                             message:
                                 'ai/ must not import from networking, renderer, electron, or games — @chimera/simulation is its only dependency (Invariant #1). See coding-standards.md §3, issue #764.',
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+
+    // `@chimera/networking` depends on `@chimera/simulation` ONLY (+ the
+    // third-party `ws`) (Invariant #1): it must not import the AI/UI/host/game
+    // layers. Now that the package is consumed through its `exports` map, the
+    // realistic violation is the `@chimera/<pkg>` workspace-alias form, so both
+    // the alias and the legacy relative-path forms are forbidden. The barrel
+    // exposes the provider/transport interfaces only; concrete providers stay
+    // internal (Invariant #47). See issue #768.
+    {
+        files: ['networking/**/*.{ts,tsx}'],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: [
+                                '@chimera/ai',
+                                '@chimera/ai/*',
+                                '@chimera/renderer',
+                                '@chimera/renderer/*',
+                                '@chimera/electron',
+                                '@chimera/electron/*',
+                                '@chimera/tactics',
+                                '@chimera/tactics/*',
+                                'ai/*',
+                                '**/ai/*',
+                                'renderer/*',
+                                '**/renderer/*',
+                                'electron/*',
+                                '**/electron/*',
+                                'games/*',
+                                '**/games/*',
+                            ],
+                            message:
+                                'networking/ must not import from ai, renderer, electron, or games — @chimera/simulation is its only @chimera/* dependency (Invariant #1). The barrel exposes provider/transport interfaces only; concrete providers stay internal (Invariant #47). See coding-standards.md §3, issue #768.',
                         },
                     ],
                 },

@@ -21,8 +21,8 @@ import type {
     HostedSession,
     JoinedSession,
     LobbyInfo,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '../MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../MultiplayerProvider.js';
 import type { ServerConnectionOptions } from './client/ServerConnection.js';
 import { LobbyServer } from './server/LobbyServer.js';
 import { MessageRouter } from './server/MessageRouter.js';

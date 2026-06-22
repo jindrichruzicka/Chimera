@@ -21,7 +21,7 @@ import type {
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
 import { playerId, sceneId } from '@chimera/simulation/engine/types.js';
-import type { LobbyAgentSlot } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { LobbyAgentSlot } from '@chimera/networking';
 import type { ReplayPlayerMetadata } from '@chimera/simulation/replay/ReplayFile.js';
 
 export interface HostedSessionAgentMetadata {

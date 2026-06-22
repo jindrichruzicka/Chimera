@@ -18,11 +18,7 @@
  *   #67 — Constructed with injected Logger child; no console.* calls.
  */
 
-import type {
-    HostTransport,
-    PlayerId,
-    Unsubscribe,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { HostTransport, PlayerId, Unsubscribe } from '@chimera/networking';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
 import type {

@@ -23,7 +23,7 @@ import {
     type BaseGameSnapshot,
 } from '@chimera/simulation/engine/index.js';
 import { RealtimeTicker } from './RealtimeTicker.js';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '@chimera/networking';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

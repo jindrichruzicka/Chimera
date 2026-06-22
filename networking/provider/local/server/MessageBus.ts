@@ -7,7 +7,7 @@
  * Task: issue #333
  */
 
-import type { Unsubscribe } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { Unsubscribe } from '../../MultiplayerProvider.js';
 import type { PlayerId } from '@chimera/simulation/contracts';
 import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 

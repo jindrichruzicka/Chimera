@@ -10,14 +10,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/contracts';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
 import type {
     HostTransport,
     PlayerSnapshot,
     LobbyState,
     SideChannelMessage,
     LobbyPlayerEntry,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '../../MultiplayerProvider.js';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 import { LobbyServer } from './LobbyServer.js';

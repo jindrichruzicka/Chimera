@@ -42,7 +42,7 @@ import {
     type DisconnectReason,
     type SideChannelMessage,
     type Unsubscribe,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '@chimera/networking';
 import type { PlayerConnectionEvent } from '../../preload/api-types.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
 import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';

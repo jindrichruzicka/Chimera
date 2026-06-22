@@ -11,8 +11,8 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera/simulation/contracts';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
-import type { DisconnectReason } from '@chimera/networking/provider/MultiplayerProvider.js';
+import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
+import type { DisconnectReason } from '../../MultiplayerProvider.js';
 import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import { LobbyServer } from '../server/LobbyServer.js';

@@ -2,11 +2,31 @@
     "name": "@chimera/networking",
     "version": "0.9.0",
     "private": true,
+    "type": "module",
+    "types": "./dist/index.d.ts",
+    "exports": {
+        ".": {
+            "types": "./dist/index.d.ts",
+            "default": "./dist/index.js"
+        },
+        "./*.js": {
+            "types": "./dist/*.d.ts",
+            "default": "./dist/*.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
     "scripts": {
+        "build": "tsc -p tsconfig.build.json",
         "test": "vitest run --config ../vitest.config.mts --dir .",
         "lint": "eslint ."
     },
     "dependencies": {
-        "@chimera/simulation": "workspace:*"
+        "@chimera/simulation": "workspace:*",
+        "ws": "^8.20.0"
+    },
+    "devDependencies": {
+        "@types/ws": "^8.18.1"
     }
 }

@@ -17,7 +17,7 @@ import type {
     SideChannelMessage,
     DisconnectReason,
     Unsubscribe,
-} from '@chimera/networking/provider/MultiplayerProvider.js';
+} from '../../MultiplayerProvider.js';
 import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
 import type {
     ServerMessage,

@@ -47,15 +47,14 @@ const nextConfig: NextConfig = {
         // in-tree source dir for the Next build. F57 (#752) removed the root
         // tsconfig `paths` aliases, so these webpack aliases are the bundler's
         // @chimera/* resolver for the packages that have no `dist/` build yet.
-        // `@chimera/simulation` and `@chimera/ai` are intentionally NOT aliased:
-        // each is a built package (issues #759, #764) and Next resolves it through
-        // its `exports` map onto `<pkg>/dist` (build-before-consume).
-        // `@chimera/tactics` lives under games/.
+        // `@chimera/simulation`, `@chimera/ai`, and `@chimera/networking` are
+        // intentionally NOT aliased: each is a built package (issues #759, #764,
+        // #768) and Next resolves it through its `exports` map onto `<pkg>/dist`
+        // (build-before-consume). `@chimera/tactics` lives under games/.
         config.resolve ??= { alias: {}, extensionAlias: {} };
         config.resolve.alias = {
             ...config.resolve.alias,
             '@chimera/electron': path.join(root, 'electron'),
-            '@chimera/networking': path.join(root, 'networking'),
             '@chimera/renderer': path.join(root, 'renderer'),
             '@chimera/tactics': path.join(root, 'games/tactics'),
         };

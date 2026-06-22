@@ -102,8 +102,8 @@ import { IpcRequestValidationError, MAX_SNAPSHOT_RANGE } from './ipc-schemas.js'
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from '../lobby/LobbyManager.js';
 import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
-import type { LobbyInfo, LobbyState } from '@chimera/networking/provider/MultiplayerProvider.js';
-import { playerId as toPlayerId } from '@chimera/networking/provider/MultiplayerProvider.js';
+import type { LobbyInfo, LobbyState } from '@chimera/networking';
+import { playerId as toPlayerId } from '@chimera/networking';
 import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     ActionRejection,
