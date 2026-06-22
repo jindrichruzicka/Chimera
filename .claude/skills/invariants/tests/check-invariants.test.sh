@@ -1126,6 +1126,97 @@ test_networking_provider_dir_passes() {
     fi
 }
 
+# Test 42: orchestration import of a provider/local internal → violation [invariant-47]
+# electron/main orchestration must use the @chimera/networking barrel interfaces
+# only; reaching into provider/local/* is provider-internal containment (Check 15).
+test_provider_local_import_in_orchestration_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "electron/main/lobby/LobbyManager.ts" \
+        "import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-47\]'; then
+            pass "provider/local import in orchestration detected as [invariant-47]"
+        else
+            fail "provider/local import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "provider/local import in orchestration not detected (exit 0)"
+    fi
+}
+
+# Test 43: orchestration import of a provider/steam internal → violation [invariant-47]
+test_provider_steam_import_in_orchestration_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "electron/main/runtime/StateBroadcaster.ts" \
+        "import { SteamNetworkProvider } from '@chimera/networking/provider/steam/SteamNetworkProvider.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-47\]'; then
+            pass "provider/steam import in orchestration detected as [invariant-47]"
+        else
+            fail "provider/steam import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "provider/steam import in orchestration not detected (exit 0)"
+    fi
+}
+
+# Test 44: composition root electron/main/index.ts importing provider/local → NOT flagged
+# index.ts is the sole DI-wiring point permitted to name the concrete provider (Invariant #38).
+test_composition_root_provider_import_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "electron/main/index.ts" \
+        "import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "composition root provider import not flagged (allowlisted, Invariant #38)"
+    else
+        fail "composition root provider import wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 45: orchestration import of the @chimera/networking barrel → NOT flagged (sanctioned)
+test_barrel_import_in_orchestration_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "electron/main/lobby/LobbyManager.ts" \
+        "import { JoinRejectedError } from '@chimera/networking';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "barrel import in orchestration not flagged (sanctioned public surface)"
+    else
+        fail "barrel import in orchestration wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -1174,6 +1265,10 @@ test_non_provider_dir_under_networking_detected
 test_stray_top_level_file_under_networking_detected
 test_networking_index_barrel_passes
 test_networking_provider_dir_passes
+test_provider_local_import_in_orchestration_detected
+test_provider_steam_import_in_orchestration_detected
+test_composition_root_provider_import_passes
+test_barrel_import_in_orchestration_passes
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

@@ -364,6 +364,35 @@ if [[ -d networking ]]; then
     done < <(find networking -mindepth 1 -maxdepth 1 -type f \( -name '*.ts' -o -name '*.tsx' \) | sort)
 fi
 
+# ─── Check 15: electron/main orchestration imports the networking barrel only (invariant 47)
+# Main-process orchestration must talk to @chimera/networking through the public
+# barrel interfaces (MultiplayerProvider/HostTransport/ClientTransport) only; it
+# must never reach into a provider-specific subdirectory (provider/local/*,
+# provider/steam/*, or their server/client internals) — provider-internal
+# containment (issue #769). The sole exempt file is the composition root
+# electron/main/index.ts, which wires the concrete provider into the DI graph
+# (Invariant #38). Mirrors Check 10 (electron/main must not import games/*) and
+# the ESLint rule chimera/no-main-provider-internals. Matches static
+# (`import … from`, `export … from`) and dynamic (`import('…')`) specifiers; the
+# server/client internals live under provider/local/, so (local|steam) covers
+# them. Test files are excluded (they import provider internals as fixtures), as
+# are comment lines (jsdoc may cite a provider path).
+if [[ -d electron/main ]]; then
+    while IFS= read -r match; do
+        file="${match%%:*}"
+        case "${file}" in
+            electron/main/index.ts) ;;
+            *) violation "47" "${match}" ;;
+        esac
+    done < <(
+        grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="node_modules" \
+            "(from|import\()[[:space:]]*['\"][^'\"]*networking/provider/(local|steam)/" electron/main 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        || true
+    )
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

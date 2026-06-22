@@ -48,6 +48,7 @@ export default tseslint.config(
             'simulation/engine/__tests__/fixtures/**',
             'ai/engine/__tests__/fixtures/**',
             'networking/__tests__/fixtures/**',
+            'electron/main/__tests__/fixtures/**',
             // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
             'tools/eslint-plugin-chimera/plugin.cjs',
             // Playwright output directories — generated artefacts, not source.
@@ -80,6 +81,7 @@ export default tseslint.config(
                         'simulation/engine/__tests__/fixtures/*.ts',
                         'ai/engine/__tests__/fixtures/*.ts',
                         'networking/__tests__/fixtures/*.ts',
+                        'electron/main/__tests__/fixtures/*.ts',
                     ],
                 },
                 tsconfigRootDir: import.meta.dirname,
@@ -451,17 +453,23 @@ export default tseslint.config(
         },
     },
 
-    // Main-process game boundary — electron/main core must stay agnostic of which
-    // games exist (packaged, multi-game builds, F18). Only the composition
-    // registries (mainGameRegistry / gameContentRegistry / lobbySetupRegistry) may
-    // import `games/*`; the rule itself exempts them and test fixtures. Mirrors
+    // Main-process boundaries — electron/main orchestration must stay agnostic of
+    // (a) which games exist (packaged, multi-game builds, F18), and (b) which
+    // concrete networking provider is in use (Invariant #47, issue #769).
+    //   * no-main-games-import — only the composition registries (mainGameRegistry
+    //     / gameContentRegistry / lobbySetupRegistry) may import `games/*`.
+    //   * no-main-provider-internals — orchestration imports the public barrel
+    //     interfaces (@chimera/networking) only; the concrete provider is wired
+    //     solely in the composition root electron/main/index.ts.
+    // Both rules exempt their composition points and test fixtures. Mirrors
     // `no-shell-games-import` + rendererGameRegistry on the renderer side.
-    // Rule implementation: tools/eslint-plugin-chimera/rules/no-main-games-import.ts
+    // Rule implementations: tools/eslint-plugin-chimera/rules/no-main-*.ts
     {
         files: ['electron/main/**/*.{ts,tsx}'],
         plugins: { chimera: chimeraPlugin },
         rules: {
             'chimera/no-main-games-import': 'error',
+            'chimera/no-main-provider-internals': 'error',
         },
     },
 
