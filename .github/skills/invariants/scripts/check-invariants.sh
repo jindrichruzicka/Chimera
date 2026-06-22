@@ -393,6 +393,76 @@ if [[ -d electron/main ]]; then
     )
 fi
 
+# ─── Check 16: engine shell pages must not import games/* (invariant 94) ──────
+# The main-menu/lobby/game/settings/saves/component-gallery pages are
+# game-agnostic; they reach game React only through renderer-owned loader helpers
+# (renderer/game/rendererGameRegistry — a `game/`, not `games/`, path), never a
+# games/* module or a @chimera/<game> package directly. The lobby page may parse
+# LobbyConfig via @chimera/simulation helpers (engine, allowed). Mirrors the
+# ESLint rule chimera/no-shell-games-import and the host-side Check 7 (#80), and
+# locks the boundary across the @chimera/renderer package cut (issue #774).
+# Matches static + dynamic specifiers; engine @chimera/* packages and comment
+# lines are filtered out. No file is exempt — the loader lives in renderer/game/,
+# outside these page directories.
+SHELL_PAGE_DIRS=(
+    renderer/app/main-menu
+    renderer/app/lobby
+    renderer/app/game
+    renderer/app/settings
+    renderer/app/saves
+    renderer/app/component-gallery
+)
+for shell_page_dir in "${SHELL_PAGE_DIRS[@]}"; do
+    [[ -d "${shell_page_dir}" ]] || continue
+    while IFS= read -r match; do
+        violation "94" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.ts" --include="*.tsx" --include="*.js" \
+            --exclude="*.test.ts" --exclude="*.test.tsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            "${GAME_IMPORT_ANY_RE}" "${shell_page_dir}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${ENGINE_PKG_EXCLUDE_RE}" \
+        || true
+    )
+done
+
+# ─── Check 17: game renderer surfaces use only the public ui/chat barrels (inv 96)
+# A game's React surfaces — games/<name>/screens/*.tsx and
+# games/<name>/shell/*.tsx — may reach the shared library ONLY through the two
+# public barrels @chimera/renderer/components/ui and
+# @chimera/renderer/components/chat. Every other @chimera/renderer/* specifier
+# (stores, IPC bridges, shell/, R3F, hooks, asset managers, stylesheets, or a
+# deep component-file path behind either barrel) is a renderer internal and is
+# forbidden. Mirrors the ESLint rule chimera/no-game-renderer-internals, which
+# remains the comprehensive authority (it also guards non-surface game files and
+# relative renderer paths); this review-gate check guards the two surface dirs
+# the invariant names, matched through the package specifier across the cut
+# (issue #774). The barrel allow-list is tail-anchored to the closing quote so
+# `.../ui` and `.../ui/index.js` pass while `.../ui/Button.js` is flagged. Bare
+# `renderer/` paths are intentionally NOT matched: a game's own renderer/ helper
+# (games/<name>/renderer/*) is not a boundary crossing.
+RENDERER_BARREL_RE="@chimera/renderer/components/(ui|chat)(/index(\.(ts|js))?)?['\"]"
+GAME_SURFACE_DIRS=()
+for surface_dir in games/*/screens games/*/shell; do
+    [[ -d "${surface_dir}" ]] && GAME_SURFACE_DIRS+=("${surface_dir}")
+done
+if [[ ${#GAME_SURFACE_DIRS[@]} -gt 0 ]]; then
+    while IFS= read -r match; do
+        violation "96" "${match}"
+    done < <(
+        grep -rnE \
+            --include="*.tsx" --include="*.jsx" \
+            --exclude="*.test.tsx" --exclude="*.test.jsx" \
+            --exclude-dir="fixtures" --exclude-dir="node_modules" \
+            "(from|import\()[[:space:]]*['\"]@chimera/renderer/" "${GAME_SURFACE_DIRS[@]}" 2>/dev/null \
+        | grep -vE ':[[:space:]]*(//|/\*|\*)' \
+        | grep -vE "${RENDERER_BARREL_RE}" \
+        || true
+    )
+fi
+
 # ─── Summary ─────────────────────────────────────────────────────────────────
 echo
 if [[ ${VIOLATIONS} -eq 0 ]]; then

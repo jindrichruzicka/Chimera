@@ -40,7 +40,9 @@ Both must pass before landing on `main`.
 | 43    | `validate()`/`reduce()` deterministic                            | same as #2                                                                                                                 |
 | 47    | Engine doesn't import provider-specific dirs                     | `from.*games/` in `simulation/`/`ai/`                                                                                      |
 | 47    | `electron/main` orchestration imports the networking barrel only | `networking/provider/(local\|steam)/` import in `electron/main/` (≠ `index.ts`) (Check 15)                                 |
-| 48/80 | `GameShell.tsx` stays game-agnostic                              | `from.*games/` in `renderer/components/shell/GameShell.tsx`                                                                |
+| 48/80 | `GameShell.tsx`/`InGameMenuHost.tsx` stay game-agnostic          | `games/`/non-engine `@chimera/*` in `renderer/components/shell/{GameShell,InGameMenuHost}.tsx` (Check 7)                   |
+| 94    | Engine shell pages import no game                                | `games/`/non-engine `@chimera/*` in `renderer/app/{main-menu,lobby,game,settings,saves,component-gallery}/` (Check 16)     |
+| 96    | Game renderer surfaces use only the `ui`/`chat` barrels          | non-barrel `@chimera/renderer/*` in `games/*/{screens,shell}/*.tsx` (Check 17)                                             |
 | 106   | `ai/` is the game-agnostic framework only (containment)          | non-`engine`/`__tests__`/`dist` dir or non-`index.ts` `.ts`/`.tsx` file under `ai/` (Check 11)                             |
 | 107   | `ai/` defines no game tokens; only `engine:` crosses             | `TACTICS_` constant or `'<gameId>:'` namespace (≠ `engine:`) in `ai/` (Check 12)                                           |
 

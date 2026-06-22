@@ -1217,6 +1217,147 @@ test_barrel_import_in_orchestration_passes() {
     fi
 }
 
+# Test 46: engine shell page importing a games/* module → violation [invariant-94]
+test_games_import_in_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/settings/page.tsx" \
+        "import { tacticsSettings } from 'games/tactics/settings-schema';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-94\]'; then
+            pass "games/ import in a shell page detected as [invariant-94]"
+        else
+            fail "shell-page games/ import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "games/ import in a shell page not detected (exit 0)"
+    fi
+}
+
+# Test 47: shell page importing a @chimera/<game> package → violation [invariant-94]
+# The post-F57 specifier form carries no `/games/` substring; detection is by the
+# engine-package allowlist (a non-engine @chimera/* package is a game).
+test_game_package_import_in_shell_page_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/main-menu/page.tsx" \
+        "import { Registry } from '@chimera/tactics/screens/index.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-94\]'; then
+            pass "@chimera/<game> import in a shell page detected as [invariant-94]"
+        else
+            fail "shell-page @chimera/<game> import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "@chimera/<game> import in a shell page not detected (exit 0)"
+    fi
+}
+
+# Test 48: clean shell page (engine @chimera/* import only) → NOT flagged
+test_clean_shell_page_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "renderer/app/lobby/page.tsx" \
+        "import { parseLobbyConfig } from '@chimera/simulation/foundation/lobby-config.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "clean shell page (engine import) not flagged"
+    else
+        fail "clean shell page wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
+# Test 49: game surface importing a renderer internal (store) → violation [invariant-96]
+test_renderer_internal_in_game_surface_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "games/tactics/screens/TacticsDebugPanel.tsx" \
+        "import { useGameStore } from '@chimera/renderer/state/gameStore.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-96\]'; then
+            pass "renderer internal in a game surface detected as [invariant-96]"
+        else
+            fail "game-surface renderer-internal import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "renderer internal in a game surface not detected (exit 0)"
+    fi
+}
+
+# Test 50: game surface deep-importing behind the ui barrel → violation [invariant-96]
+# A deep component-file path is a renderer internal; only the barrel is public.
+test_renderer_deep_ui_in_game_surface_detected() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "games/tactics/shell/TacticsShellBackground.tsx" \
+        "import { Button } from '@chimera/renderer/components/ui/Button.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -ne 0 ]]; then
+        if echo "${out}" | grep -q '\[invariant-96\]'; then
+            pass "deep ui import in a game surface detected as [invariant-96]"
+        else
+            fail "game-surface deep-ui import detected but invariant number missing:"
+            echo "${out}" | sed 's/^/       /' >&2
+        fi
+    else
+        fail "deep ui import in a game surface not detected (exit 0)"
+    fi
+}
+
+# Test 51: game surface importing only the public ui/chat barrels → NOT flagged
+test_clean_game_surface_passes() {
+    local tmp
+    tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
+    trap 'rm -rf "${tmp}"' RETURN
+
+    plant_file "${tmp}" "games/tactics/screens/TacticsGameHud.tsx" \
+        "import { Button } from '@chimera/renderer/components/ui';"
+    plant_file "${tmp}" "games/tactics/shell/TacticsShellChat.tsx" \
+        "import { ChatPanel } from '@chimera/renderer/components/chat/index.js';"
+
+    local out exit_code
+    out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ ${exit_code} -eq 0 ]]; then
+        pass "clean game surface (public ui/chat barrels) not flagged"
+    else
+        fail "clean game surface wrongly flagged:"
+        echo "${out}" | sed 's/^/       /' >&2
+    fi
+}
+
 # ─── Run ──────────────────────────────────────────────────────────────────────
 
 echo "Running check-invariants.sh test suite..."
@@ -1269,6 +1410,12 @@ test_provider_local_import_in_orchestration_detected
 test_provider_steam_import_in_orchestration_detected
 test_composition_root_provider_import_passes
 test_barrel_import_in_orchestration_passes
+test_games_import_in_shell_page_detected
+test_game_package_import_in_shell_page_detected
+test_clean_shell_page_passes
+test_renderer_internal_in_game_surface_detected
+test_renderer_deep_ui_in_game_surface_detected
+test_clean_game_surface_passes
 
 echo
 if [[ ${FAILURES} -eq 0 ]]; then

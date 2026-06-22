@@ -476,10 +476,13 @@ export default tseslint.config(
         },
     },
 
-    // Invariants #93 and #94 — engine shell pages must not import game token
-    // override CSS or any games/* path.
+    // Invariants #93/#94 — engine shell pages must not import game token override
+    // CSS or any games/* path. Invariant #80 — GameShell.tsx / InGameMenuHost.tsx
+    // stay game-agnostic; the GameScreenRegistry prop is the sole coupling point.
+    // The same rule guards both surface sets; #774 locks #80 across the
+    // @chimera/renderer package cut alongside the bash invariants Check 7.
     // Rule implementation: tools/eslint-plugin-chimera/rules/no-shell-games-import.ts
-    // Issue: #561
+    // Issue: #561, #774
     {
         files: [
             'renderer/app/main-menu/**/*.{ts,tsx,js,jsx,mjs}',
@@ -490,6 +493,8 @@ export default tseslint.config(
             'renderer/app/component-gallery/**/*.{ts,tsx,js,jsx,mjs}',
             'renderer/app/debug/**/*.{ts,tsx,js,jsx,mjs}',
             'renderer/components/debug/**/*.{ts,tsx,js,jsx,mjs}',
+            'renderer/components/shell/GameShell.{ts,tsx,js,jsx,mjs}',
+            'renderer/components/shell/InGameMenuHost.{ts,tsx,js,jsx,mjs}',
         ],
         plugins: { chimera: chimeraPlugin },
         rules: {

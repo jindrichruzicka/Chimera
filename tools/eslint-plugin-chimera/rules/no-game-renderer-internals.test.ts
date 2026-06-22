@@ -163,5 +163,30 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             code: `import { ChatPanel } from '@chimera/renderer/components/chat/ChatPanel.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
+        // ── #774: lock Invariant #96 across the @chimera/renderer package cut ──
+        // Every renderer-internal category named by Invariant #96 must stay
+        // off-limits to a game surface when reached through the package
+        // specifier. The rule already flags any non-barrel `@chimera/renderer/*`
+        // import; these planted violations pin that across the remaining
+        // categories (asset managers, hooks, the top-level shell/ utilities).
+        {
+            // Asset managers — renderer-owned, not part of the public surface.
+            filename: 'games/tactics/screens/TacticsBoard.tsx',
+            code: `import { AssetManager } from '@chimera/renderer/assets/AssetManager.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // Renderer hooks are internal; games receive props, not hooks.
+            filename: 'games/tactics/screens/TacticsBoard.tsx',
+            code: `import { useCamera } from '@chimera/renderer/hooks/useCamera.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // Top-level renderer/shell/ utilities (distinct from components/shell)
+            // are shell-page plumbing — never a game-surface dependency.
+            filename: 'games/tactics/shell/TacticsShellMenu.tsx',
+            code: `import { renderMainMenuDefinition } from '@chimera/renderer/shell/renderMainMenuDefinition.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
     ],
 });
