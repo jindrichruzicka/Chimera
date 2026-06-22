@@ -20,9 +20,9 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 
 import { createPerfStore } from './perfStore';
-import { createSettingsStore } from '@chimera/renderer/state/settingsStore';
+import { createSettingsStore } from '../../../state/settingsStore';
 import type { PerfStoreState } from './perfStore';
-import type { SettingsStoreState } from '@chimera/renderer/state/settingsStore';
+import type { SettingsStoreState } from '../../../state/settingsStore';
 
 // ── Mock useInputAction ───────────────────────────────────────────────────────
 
@@ -37,7 +37,7 @@ type InputCallback = (event: {
 
 const inputActionCallbacks = new Map<string, InputCallback>();
 
-vi.mock('@chimera/renderer/input/useInputAction.js', () => ({
+vi.mock('../../../input/useInputAction.js', () => ({
     useInputAction: vi.fn((id: string, cb: InputCallback) => {
         inputActionCallbacks.set(id, cb);
     }),
@@ -65,9 +65,9 @@ vi.mock('./perfStore', async () => {
     };
 });
 
-vi.mock('@chimera/renderer/state/settingsStore', async () => {
+vi.mock('../../../state/settingsStore', async () => {
     const actual = await vi.importActual<{ createSettingsStore: typeof createSettingsStore }>(
-        '@chimera/renderer/state/settingsStore',
+        '../../../state/settingsStore',
     );
     return {
         ...actual,
@@ -168,7 +168,7 @@ describe('PerfHud — visibility', () => {
     });
 
     it('registers engine:toggle-perf-hud input action on mount', async () => {
-        const { useInputAction } = await import('@chimera/renderer/input/useInputAction.js');
+        const { useInputAction } = await import('../../../input/useInputAction.js');
         const { PerfHud } = await importPerfHud();
         render(<PerfHud />);
         expect(vi.mocked(useInputAction as Mock)).toHaveBeenCalledWith(

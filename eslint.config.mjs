@@ -49,6 +49,7 @@ export default tseslint.config(
             'ai/engine/__tests__/fixtures/**',
             'networking/__tests__/fixtures/**',
             'electron/main/__tests__/fixtures/**',
+            'renderer/__tests__/fixtures/**',
             // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
             'tools/eslint-plugin-chimera/plugin.cjs',
             // Playwright output directories — generated artefacts, not source.
@@ -82,6 +83,7 @@ export default tseslint.config(
                         'ai/engine/__tests__/fixtures/*.ts',
                         'networking/__tests__/fixtures/*.ts',
                         'electron/main/__tests__/fixtures/*.ts',
+                        'renderer/__tests__/fixtures/*.ts',
                     ],
                 },
                 tsconfigRootDir: import.meta.dirname,
@@ -286,6 +288,48 @@ export default tseslint.config(
                             ],
                             message:
                                 '@chimera/simulation is the zero-dependency engine leaf — it must not import from ai, networking, renderer, electron, or games (Invariant #1). Keep contracts in @chimera/simulation/foundation; only the reserved engine: namespace crosses cuts (Invariant #107). See issue #759.',
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+
+    // `@chimera/renderer` consumes the engine through `@chimera/simulation`'s
+    // type-only contract surface only (Invariant #1): it must not import the
+    // `@chimera/ai` or `@chimera/networking` runtime — neither is a renderer
+    // dependency. (The renderer↔`@chimera/electron/preload` type-only contract is
+    // a tolerated back-edge cleaned up in F62; `@chimera/tactics` stays governed
+    // by `chimera/no-shell-games-import` and the composition point
+    // `renderer/game/rendererGameRegistry.ts`.) The two public component barrels —
+    // `@chimera/renderer/components/ui` and `.../components/chat` — are the only
+    // surface games may import (Invariant #96, enforced from the games side by
+    // `chimera/no-game-renderer-internals`). Mirrors the leaf-package zones above;
+    // like them it omits the global deep-relative ban, because renderer's own
+    // deeply nested files legitimately reach package-internal modules with
+    // relative paths — renderer code must not self-import through its public
+    // `@chimera/renderer/*` alias (that alias resolves only the two barrels).
+    // See coding-standards.md §3, issue #772.
+    {
+        files: ['renderer/**/*.{ts,tsx}'],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: [
+                                '@chimera/ai',
+                                '@chimera/ai/*',
+                                '@chimera/networking',
+                                '@chimera/networking/*',
+                                'ai/*',
+                                '**/ai/*',
+                                'networking/*',
+                                '**/networking/*',
+                            ],
+                            message:
+                                'renderer/ must not import the @chimera/ai or @chimera/networking runtime — the renderer depends on @chimera/simulation contracts only (Invariant #1). Game-facing renderer code is exposed solely through @chimera/renderer/components/ui and .../components/chat (Invariant #96). See coding-standards.md §3, issue #772.',
                         },
                     ],
                 },

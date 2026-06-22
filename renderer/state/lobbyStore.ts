@@ -63,9 +63,20 @@ export function createLobbyStore(): StoreApi<LobbyStoreState> {
     }));
 }
 
-// ── Singleton store ───────────────────────────────────────────────────────────
+// ── Singleton store (lazy) ──────────────────────────────────────────────────────
 
-const lobbyStoreInstance = createLobbyStore();
+let lobbyStoreInstance: StoreApi<LobbyStoreState> | undefined;
+
+/**
+ * Lazily instantiate the singleton on first access. Importing this module — and
+ * the `@chimera/renderer/components/chat` barrel that pulls it through
+ * `ChatPanel` — therefore creates no store, keeping that barrel side-effect-free
+ * (issue #772, Invariant #96). Behaviour is otherwise identical to an eager
+ * module-level singleton: the same instance is returned on every access.
+ */
+function getLobbyStore(): StoreApi<LobbyStoreState> {
+    return (lobbyStoreInstance ??= createLobbyStore());
+}
 
 /**
  * Zustand hook for the lobby store.
@@ -78,9 +89,11 @@ const lobbyStoreInstance = createLobbyStore();
  * ```
  */
 export function useLobbyStore<T>(selector: (state: LobbyStoreState) => T): T {
-    return useStore(lobbyStoreInstance, selector);
+    return useStore(getLobbyStore(), selector);
 }
 
 // Expose static accessors for direct store access (IPC wiring, tests)
-useLobbyStore.getState = lobbyStoreInstance.getState.bind(lobbyStoreInstance);
-useLobbyStore.subscribe = lobbyStoreInstance.subscribe.bind(lobbyStoreInstance);
+useLobbyStore.getState = (): LobbyStoreState => getLobbyStore().getState();
+useLobbyStore.subscribe = ((
+    listener: Parameters<StoreApi<LobbyStoreState>['subscribe']>[0],
+): (() => void) => getLobbyStore().subscribe(listener)) as StoreApi<LobbyStoreState>['subscribe'];

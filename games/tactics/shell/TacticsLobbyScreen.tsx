@@ -34,7 +34,7 @@ import {
     Select,
     Toggle,
     ToggleButton,
-} from '@chimera/renderer/components/ui/index.js';
+} from '@chimera/renderer/components/ui';
 import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import { readTacticsTurnMode, TACTICS_TURN_MODE_SETTING } from '@chimera/tactics/constants.js';
 import {

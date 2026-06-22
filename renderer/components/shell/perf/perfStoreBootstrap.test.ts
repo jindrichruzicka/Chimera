@@ -2,7 +2,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createGameStore } from '@chimera/renderer/state/gameStore.js';
+import { createGameStore } from '../../../state/gameStore.js';
 import { playerId, gamePhase, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
 import { createPerfStore } from './perfStore.js';
 import { bootstrapPerfStore } from './perfStoreBootstrap.js';

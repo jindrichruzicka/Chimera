@@ -30,18 +30,15 @@ import type {
     PlayerSnapshot,
     ReplayPlaybackInfo,
 } from '@chimera/electron/preload/api-types.js';
-import { createAssetManager, type AssetManager } from '@chimera/renderer/assets/AssetManager';
-import { createRendererGameAssetResolver } from '@chimera/renderer/assets/AssetResolver';
-import { GameShell } from '@chimera/renderer/components/shell/GameShell';
-import { ReplayControls } from '@chimera/renderer/components/replay/ReplayControls';
-import { parseReplayKind } from '@chimera/renderer/components/replay/replayKind';
-import {
-    loadRendererGame,
-    type LoadedRendererGame,
-} from '@chimera/renderer/game/rendererGameRegistry';
-import { useReplayApi } from '@chimera/renderer/hooks/useReplayApi';
-import { useGameContent } from '@chimera/renderer/state/useGameContent';
-import { useUiStore } from '@chimera/renderer/state/uiStore';
+import { createAssetManager, type AssetManager } from '../../../assets/AssetManager';
+import { createRendererGameAssetResolver } from '../../../assets/AssetResolver';
+import { GameShell } from '../../../components/shell/GameShell';
+import { ReplayControls } from '../../../components/replay/ReplayControls';
+import { parseReplayKind } from '../../../components/replay/replayKind';
+import { loadRendererGame, type LoadedRendererGame } from '../../../game/rendererGameRegistry';
+import { useReplayApi } from '../../../hooks/useReplayApi';
+import { useGameContent } from '../../../state/useGameContent';
+import { useUiStore } from '../../../state/uiStore';
 
 /** Wall-clock spacing between auto-advanced ticks at 1× playback speed. */
 const PLAYBACK_INTERVAL_MS = 1000;

@@ -6,7 +6,7 @@ import type {
     GameResultBannerProps,
     GameResultOutcome,
 } from '@chimera/simulation/foundation/game-screen-contract.js';
-import { Card } from '@chimera/renderer/components/ui/index.js';
+import { Card } from '@chimera/renderer/components/ui';
 import styles from './TacticsGameResultBanner.module.css';
 
 const OUTCOME_ICONS = {

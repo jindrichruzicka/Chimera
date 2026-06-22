@@ -4,7 +4,7 @@
 
 import React from 'react';
 import type { InGameMenuProps } from '@chimera/simulation/foundation/game-screen-contract.js';
-import { Button, Modal } from '@chimera/renderer/components/ui/index.js';
+import { Button, Modal } from '@chimera/renderer/components/ui';
 
 /**
  * Tactics Leave-game confirmation dialog (F55 · §4.33). Adopted via the

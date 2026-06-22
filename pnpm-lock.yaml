@@ -189,12 +189,37 @@ importers:
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
+      ws:
+        specifier: ^8.20.0
+        version: 8.20.0
+    devDependencies:
+      '@types/ws':
+        specifier: ^8.18.1
+        version: 8.18.1
 
   renderer:
     dependencies:
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
+      '@react-three/fiber':
+        specifier: ^9
+        version: 9.6.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0)
+      next:
+        specifier: ^15
+        version: 15.5.15(@playwright/test@1.59.1)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)
+      react:
+        specifier: ^19
+        version: 19.2.5
+      react-dom:
+        specifier: ^19
+        version: 19.2.5(react@19.2.5)
+      three:
+        specifier: '>=0.184'
+        version: 0.184.0
+      zustand:
+        specifier: ^5
+        version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
 
   simulation: {}
 

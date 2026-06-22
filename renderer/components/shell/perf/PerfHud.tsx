@@ -23,9 +23,9 @@
 
 import React, { useCallback } from 'react';
 
-import type { InputEvent } from '@chimera/renderer/input/InputAction.js';
-import { useInputAction } from '@chimera/renderer/input/useInputAction.js';
-import { useSettingsStore } from '@chimera/renderer/state/settingsStore.js';
+import type { InputEvent } from '../../../input/InputAction.js';
+import { useInputAction } from '../../../input/useInputAction.js';
+import { useSettingsStore } from '../../../state/settingsStore.js';
 import { usePerfStore } from './perfStore.js';
 
 // ── FPS colour threshold helper ───────────────────────────────────────────────

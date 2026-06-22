@@ -78,12 +78,27 @@ export function createChatStore(): StoreApi<ChatStore> {
     }));
 }
 
-const chatStoreInstance = createChatStore();
+let chatStoreInstance: StoreApi<ChatStore> | undefined;
 
-export function useChatStore<TSelected>(selector: (state: ChatStore) => TSelected): TSelected {
-    return useStore(chatStoreInstance, selector);
+/**
+ * Lazily instantiate the singleton on first access. Importing this module — and
+ * the `@chimera/renderer/components/chat` barrel that pulls it through
+ * `ChatPanel` — therefore creates no store, keeping the barrel side-effect-free
+ * (issue #772, Invariant #96). Behaviour is otherwise identical to an eager
+ * module-level singleton: the same instance is returned on every access.
+ */
+function getChatStore(): StoreApi<ChatStore> {
+    return (chatStoreInstance ??= createChatStore());
 }
 
-useChatStore.getState = chatStoreInstance.getState.bind(chatStoreInstance);
-useChatStore.setState = chatStoreInstance.setState.bind(chatStoreInstance);
-useChatStore.subscribe = chatStoreInstance.subscribe.bind(chatStoreInstance);
+export function useChatStore<TSelected>(selector: (state: ChatStore) => TSelected): TSelected {
+    return useStore(getChatStore(), selector);
+}
+
+useChatStore.getState = (): ChatStore => getChatStore().getState();
+useChatStore.setState = ((...args: unknown[]): void => {
+    (getChatStore().setState as (...a: unknown[]) => void)(...args);
+}) as StoreApi<ChatStore>['setState'];
+useChatStore.subscribe = ((
+    listener: Parameters<StoreApi<ChatStore>['subscribe']>[0],
+): (() => void) => getChatStore().subscribe(listener)) as StoreApi<ChatStore>['subscribe'];

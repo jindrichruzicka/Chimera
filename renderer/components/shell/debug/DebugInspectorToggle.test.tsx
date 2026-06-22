@@ -31,7 +31,7 @@ type InputCallback = (event: {
 
 const inputActionCallbacks = new Map<string, InputCallback>();
 
-vi.mock('@chimera/renderer/input/useInputAction.js', () => ({
+vi.mock('../../../input/useInputAction.js', () => ({
     useInputAction: vi.fn((id: string, cb: InputCallback) => {
         inputActionCallbacks.set(id, cb);
     }),

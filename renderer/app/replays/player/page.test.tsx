@@ -15,14 +15,14 @@ import type {
 
 // Stub the game renderer loader so the player page does not pull in real
 // games/* screen modules under test.
-vi.mock('@chimera/renderer/game/rendererGameRegistry', () => ({
+vi.mock('../../../game/rendererGameRegistry', () => ({
     loadRendererGame: vi.fn(() => Promise.resolve({ registry: { screens: {} } })),
 }));
 
 // Stub GameShell — we assert which snapshot AND content it receives, not how it
 // draws. The game-specific board derives its colour palette from `content`, so a
 // replay that omits it renders every unit in the default colour.
-vi.mock('@chimera/renderer/components/shell/GameShell', () => ({
+vi.mock('../../../components/shell/GameShell', () => ({
     GameShell: ({ snapshot, content }: { snapshot?: PlayerSnapshot; content?: GameContent }) => (
         <div
             data-testid="game-shell"
@@ -38,8 +38,8 @@ vi.mock('next/navigation', () => ({
     useSearchParams: () => new URLSearchParams(window.location.search),
 }));
 
-import { useUiStore } from '@chimera/renderer/state/uiStore';
-import { resetGameContentCache } from '@chimera/renderer/state/useGameContent';
+import { useUiStore } from '../../../state/uiStore';
+import { resetGameContentCache } from '../../../state/useGameContent';
 import ReplayPlayerPage from './page';
 
 const PATH = '/replays/tactics/match.chimera-replay';

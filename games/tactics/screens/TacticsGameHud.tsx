@@ -10,7 +10,7 @@ import {
     Drawer,
     Panel,
     type BadgeVariant,
-} from '@chimera/renderer/components/ui/index.js';
+} from '@chimera/renderer/components/ui';
 import { ChatPanel } from '@chimera/renderer/components/chat';
 import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/tactics/constants.js';
 import {

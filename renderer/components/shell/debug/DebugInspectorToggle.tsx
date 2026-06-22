@@ -20,9 +20,9 @@
 
 import { useCallback } from 'react';
 
-import type { InputEvent } from '@chimera/renderer/input/InputAction.js';
-import { useInputAction } from '@chimera/renderer/input/useInputAction.js';
-import { getSystemBridge } from '@chimera/renderer/bridge/system-bridge.js';
+import type { InputEvent } from '../../../input/InputAction.js';
+import { useInputAction } from '../../../input/useInputAction.js';
+import { getSystemBridge } from '../../../bridge/system-bridge.js';
 
 // ── Component ─────────────────────────────────────────────────────────────────
 

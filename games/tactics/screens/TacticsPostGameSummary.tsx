@@ -8,7 +8,7 @@ import {
     Panel,
     type BadgeVariant,
     type CaptionTone,
-} from '@chimera/renderer/components/ui/index.js';
+} from '@chimera/renderer/components/ui';
 import {
     resolveGameResultOutcome,
     type GameScreenProps,

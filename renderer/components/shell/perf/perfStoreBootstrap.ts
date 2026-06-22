@@ -1,6 +1,6 @@
 import type { StoreApi } from 'zustand';
 
-import type { GameStore } from '@chimera/renderer/state/gameStore.js';
+import type { GameStore } from '../../../state/gameStore.js';
 import type { PerfStoreState } from './perfStore.js';
 
 export function bootstrapPerfStore(

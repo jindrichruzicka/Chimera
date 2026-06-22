@@ -2,11 +2,33 @@
     "name": "@chimera/renderer",
     "version": "0.9.0",
     "private": true,
+    "type": "module",
+    "exports": {
+        "./components/ui": {
+            "types": "./components/ui/index.ts",
+            "default": "./dist/components/ui/index.js"
+        },
+        "./components/chat": {
+            "types": "./components/chat/index.ts",
+            "default": "./dist/components/chat/index.js"
+        }
+    },
+    "files": [
+        "dist"
+    ],
     "scripts": {
         "test": "vitest run --config ../vitest.config.mts --dir .",
         "lint": "eslint ."
     },
+    "peerDependencies": {
+        "@react-three/fiber": "^9",
+        "next": "^15",
+        "react": "^19",
+        "react-dom": "^19",
+        "three": ">=0.184"
+    },
     "dependencies": {
-        "@chimera/simulation": "workspace:*"
+        "@chimera/simulation": "workspace:*",
+        "zustand": "^5"
     }
 }
