@@ -86,7 +86,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
             expect(result).toBe(path.join(workspaceRoot, 'electron/runtime/SessionRuntime.ts'));
         });
 
-        it('returns null for built packages (@chimera/simulation, @chimera/ai, @chimera/networking) — resolved via their exports map, not this plugin', () => {
+        it('returns null for built packages (@chimera/simulation, @chimera/ai, @chimera/networking, @chimera/renderer) — resolved via their exports map, not this plugin', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             expect(
                 plugin.resolveId(
@@ -104,6 +104,13 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
                 plugin.resolveId(
                     '@chimera/networking/provider/MultiplayerProvider.js',
                     path.join(workspaceRoot, 'electron/main/index.ts'),
+                ),
+            ).toBeNull();
+            // #773: renderer now ships a dist/ build and resolves via its exports map.
+            expect(
+                plugin.resolveId(
+                    '@chimera/renderer/components/ui',
+                    path.join(workspaceRoot, 'games/tactics/screens/Foo.tsx'),
                 ),
             ).toBeNull();
         });
@@ -130,13 +137,15 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
         });
 
         it('resolves an extensionless subpath via its index file', () => {
-            const existsSyncMock = vi.fn((p: string) => p.endsWith(path.join('ui', 'index.ts')));
+            const existsSyncMock = vi.fn((p: string) =>
+                p.endsWith(path.join('runtime', 'index.ts')),
+            );
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, existsSyncMock);
             const result = plugin.resolveId(
-                '@chimera/renderer/components/ui',
-                path.join(workspaceRoot, 'games/tactics/screens/Foo.tsx'),
+                '@chimera/electron/runtime',
+                path.join(workspaceRoot, 'electron/main/index.ts'),
             );
-            expect(result).toBe(path.join(workspaceRoot, 'renderer/components/ui/index.ts'));
+            expect(result).toBe(path.join(workspaceRoot, 'electron/runtime/index.ts'));
         });
 
         it('resolves a non-TS asset (.css) to the literal mapped path', () => {

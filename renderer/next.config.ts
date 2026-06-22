@@ -47,16 +47,36 @@ const nextConfig: NextConfig = {
         // in-tree source dir for the Next build. F57 (#752) removed the root
         // tsconfig `paths` aliases, so these webpack aliases are the bundler's
         // @chimera/* resolver for the packages that have no `dist/` build yet.
-        // `@chimera/simulation`, `@chimera/ai`, and `@chimera/networking` are
-        // intentionally NOT aliased: each is a built package (issues #759, #764,
-        // #768) and Next resolves it through its `exports` map onto `<pkg>/dist`
-        // (build-before-consume). `@chimera/tactics` lives under games/.
+        // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, and
+        // `@chimera/renderer` are intentionally NOT aliased: each is a built
+        // package (issues #759, #764, #768, #773) and Next resolves it through its
+        // `exports` map onto `<pkg>/dist` (build-before-consume; `build:renderer`
+        // fronts `build:packages`, so `renderer/dist` exists before `next build`).
+        // The renderer app's own internals import relatively. `@chimera/tactics`
+        // lives under games/.
         config.resolve ??= { alias: {}, extensionAlias: {} };
         config.resolve.alias = {
             ...config.resolve.alias,
             '@chimera/electron': path.join(root, 'electron'),
-            '@chimera/renderer': path.join(root, 'renderer'),
             '@chimera/tactics': path.join(root, 'games/tactics'),
+            // The renderer's own Next build is the single bundle where the
+            // renderer source AND the mounted games are linked together. The
+            // games reach shared renderer UI through the `@chimera/renderer`
+            // package surface, which resolves via the `exports` map onto
+            // `renderer/dist`. The renderer app's own internals, however, import
+            // those same modules relatively from source. Letting the two halves
+            // resolve to two physical copies (dist + source) duplicates every
+            // module-level singleton they carry — the EscapeStack React context
+            // (provider mounted from source, consumers pulled from dist) and the
+            // chat/lobby/toast Zustand stores — so context identity breaks
+            // (`useEscapeLayer() must be used within <EscapeStackProvider>`) and
+            // game ChatPanels subscribe to a different store than the IPC bridge
+            // writes to. Alias the public barrels back onto their source dirs so
+            // this bundle holds exactly one instance of each shared module. The
+            // `dist` build remains the typecheck/contract surface; `*.css`
+            // subpaths stay on `dist` (stylesheet duplication is inert).
+            '@chimera/renderer/components/ui': path.join(root, 'renderer/components/ui'),
+            '@chimera/renderer/components/chat': path.join(root, 'renderer/components/chat'),
         };
         // Allow TypeScript-style `.js` extension imports (e.g. `./foo.js`)
         // to resolve to `.ts`/`.tsx` source files at build time.

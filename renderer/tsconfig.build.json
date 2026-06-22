@@ -1,0 +1,54 @@
+{
+    // Per-package build for @chimera/renderer (issue #773; mirrors the split-tsconfig
+    // pattern of @chimera/simulation #759 / @chimera/ai #764 / @chimera/networking #768).
+    //
+    // Emits dist/ (JS + .d.ts + maps) for the two public component barrels
+    // (./components/ui, ./components/chat), consumed via the package `exports` map.
+    // JSX compiles to runnable JS via the React 19 automatic runtime ("react-jsx"),
+    // UNLIKE renderer/tsconfig.json which keeps jsx:"preserve" for the Next pipeline.
+    // tsc emits no CSS, so the build script copies *.module.css + styles/tokens.css
+    // into dist/ afterwards (tools/copy-renderer-css.ts).
+    //
+    // The `include` is SCOPED to the public-barrel import closure rather than the
+    // package-wide `**/*.ts(x)` the other packages use: the renderer package is also
+    // the whole Next app, so `**/*` would drag in app/, components/{r3f,scene,...},
+    // bridge/, hooks/ — none of which belong in the published component-library
+    // surface and most of which cannot compile standalone (R3F, Next server
+    // components). The exports map exposes only the two barrels, so only their
+    // closure is built. lib/types mirror renderer/tsconfig.json so the components
+    // compile without the Next plugin.
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "composite": true,
+        "noEmit": false,
+        "rootDir": ".",
+        "outDir": "./dist",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "tsBuildInfoFile": "./dist/.tsbuildinfo",
+        "jsx": "react-jsx",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "types": ["node", "react", "react-dom"]
+    },
+    // Simulation is the only built @chimera/* dependency; referencing it orders the
+    // `tsc --build` graph. @chimera/electron is intentionally NOT referenced: it is
+    // source-only (no composite build yet — that is F62) and the chat barrel's
+    // `import type … from '@chimera/electron/preload/api-types.js'` is type-only, so
+    // its source is read for types but never emitted (no rootDir violation).
+    "references": [{ "path": "../simulation/tsconfig.build.json" }],
+    "include": [
+        "components/ui/**/*.ts",
+        "components/ui/**/*.tsx",
+        "components/chat/index.ts",
+        "components/chat/ChatPanel.tsx",
+        "components/shell/EscapeStack.tsx",
+        "state/chatStore.ts",
+        "state/lobbyStore.ts",
+        "state/toastStore.ts",
+        "theme/types.ts",
+        "types/chimera.d.ts",
+        "build-types/css-modules.d.ts"
+    ],
+    "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"]
+}

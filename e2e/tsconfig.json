@@ -18,7 +18,7 @@
             "@chimera/ai/*": ["ai/dist/*"],
             "@chimera/networking": ["networking/dist/index.d.ts"],
             "@chimera/networking/*": ["networking/dist/*"],
-            "@chimera/renderer/*": ["renderer/*"],
+            "@chimera/renderer/*": ["renderer/dist/*"],
             "@chimera/electron/*": ["electron/*"],
             "@chimera/tactics/*": ["games/tactics/*"]
         }

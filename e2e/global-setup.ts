@@ -31,13 +31,14 @@ export default function globalSetup(): void {
         env: { ...process.env, NEXT_PUBLIC_CHIMERA_E2E: '1' },
     });
 
-    // `@chimera/simulation`, `@chimera/ai`, and `@chimera/networking` are
-    // intentionally absent: each is a built package (issues #759, #764, #768)
-    // that esbuild resolves through its `exports` map onto `<pkg>/dist`
-    // (build-before-consume; `pnpm build:packages` runs first in `test:e2e`).
+    // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, and
+    // `@chimera/renderer` are intentionally absent: each is a built package
+    // (issues #759, #764, #768, #773) that esbuild resolves through its `exports`
+    // map onto `<pkg>/dist` (build-before-consume; `pnpm build:packages` runs
+    // first in `test:e2e`). The bundled electron main/preload entry points do not
+    // import `@chimera/renderer`, so dropping its alias is inert for this bundle.
     const alias: Record<string, string> = {
         '@chimera/electron': path.join(root, 'electron'),
-        '@chimera/renderer': path.join(root, 'renderer'),
         '@chimera/tactics': path.join(root, 'games/tactics'),
     };
 
