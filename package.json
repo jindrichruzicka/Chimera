@@ -10,7 +10,7 @@
     },
     "main": "electron/main/index.js",
     "scripts": {
-        "build:packages": "pnpm --filter @chimera/simulation --filter @chimera/ai --filter @chimera/networking --filter @chimera/renderer run build",
+        "build:packages": "tsc -b tsconfig.build.json && tsx tools/copy-renderer-css.ts",
         "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer",
         "test": "pnpm build:packages && pnpm -r test && vitest run --dir tools && vitest run --dir e2e",
         "test:watch": "pnpm build:packages && vitest",

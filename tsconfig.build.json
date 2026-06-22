@@ -1,0 +1,25 @@
+{
+    // Solution-style config for `tsc -b tsconfig.build.json` (issue #756): dependency-
+    // ordered, incremental compilation of the composite @chimera/* packages off their
+    // per-package tsconfig.build.json files. `tsc --build` derives the order from the
+    // reference graph and skips up-to-date projects via each package's dist/.tsbuildinfo,
+    // so a second run with no source changes is a no-op.
+    //
+    // The references mirror the acyclic, inward `workspace:*` graph (Invariant #1):
+    // simulation is the zero-dep leaf; ai / networking / renderer reference it; nothing
+    // points back out to a sibling or the app layer. Only renderer's SCOPED component-
+    // library build participates here — the full renderer/electron/tactics app
+    // compilation stays on the flat `tsc --noEmit` checks (renderer/tsconfig.json via the
+    // Next plugin; root tsconfig.json for electron/games/tools/e2e). electron is
+    // intentionally absent: it is source-only with no composite build yet.
+    //
+    // This file is reference-only (`files: []`) and deliberately does NOT extend the root
+    // tsconfig.json — a solution config carries no compilerOptions of its own.
+    "files": [],
+    "references": [
+        { "path": "./simulation/tsconfig.build.json" },
+        { "path": "./ai/tsconfig.build.json" },
+        { "path": "./networking/tsconfig.build.json" },
+        { "path": "./renderer/tsconfig.build.json" }
+    ]
+}
