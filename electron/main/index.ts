@@ -681,19 +681,6 @@ export function resolveRuntimePaths(options: ResolveRuntimePathOptions): Runtime
     };
 }
 
-/**
- * Narrow slice of `Electron.IpcMain` required to register the crash-status
- * handler. Declared locally so tests do not need a full `IpcMain`.
- */
-export interface CleanExitIpcMain {
-    handle(channel: string, handler: () => unknown): unknown;
-}
-
-export interface RegisterCleanExitIpcOptions {
-    readonly ipcMain: CleanExitIpcMain;
-    readonly wasCleanExit: boolean;
-}
-
 export interface RevealVerificationRuntime {
     verifyReveal(reveal: CommitmentReveal): unknown;
 }
@@ -764,15 +751,6 @@ export async function registerSaveManagerLifecycle(
     });
 
     return { autosaveMeta, wasCleanExit };
-}
-
-/**
- * Expose the captured clean-exit status to the renderer via a dedicated IPC
- * channel. The value is captured at startup (before any window opens) and
- * does not change over the lifetime of the process.
- */
-export function registerCleanExitIpc(options: RegisterCleanExitIpcOptions): void {
-    options.ipcMain.handle(CLEAN_EXIT_IPC_CHANNEL, () => options.wasCleanExit);
 }
 
 export function registerClientRevealForwarding(
@@ -1141,13 +1119,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         deviceProbeWatcher?.dispose();
     });
 
-    // Expose the crash-status to the renderer via a dedicated IPC channel.
-    // Captured before any window opens so the renderer never races the handler.
-    registerCleanExitIpc({ ipcMain, wasCleanExit });
-
-    // Register the `chimera:system:*` channels (platform info, quit). Runs
-    // before the first window opens so the renderer never races the handler
-    // registration. Other preload namespaces land in later F02 tasks.
+    // Register the `chimera:system:*` channels (platform info, quit, relaunch,
+    // device info, and the startup-captured clean-exit status). Runs before the
+    // first window opens so the renderer never races the handler registration.
     registerSystemHandlers({
         ipcMain,
         app,
@@ -1156,6 +1130,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         logger: logger.child({ module: 'system' }),
         isE2e: process.env['CHIMERA_E2E'] === '1',
         getDeviceInfo: () => deviceProbeWatcher?.getCurrentInfo(),
+        wasCleanExit,
     });
 
     // Runtime Debug Layer (§4.12, F47 T5). The bridge module is loaded ONLY

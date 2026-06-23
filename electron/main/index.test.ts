@@ -445,7 +445,6 @@ const {
     createMainWindow,
     registerAppLifecycle,
     resolveChimeraEnv,
-    registerCleanExitIpc,
     registerSaveManagerLifecycle,
     parseHarnessFlags,
     registerClientRevealForwarding,
@@ -1140,37 +1139,6 @@ describe('registerAppLifecycle', () => {
 
         const registeredEvents = appOn.mock.calls.map(([event]) => event);
         expect(registeredEvents).toEqual(expect.arrayContaining(['window-all-closed', 'activate']));
-    });
-});
-
-describe('registerCleanExitIpc', () => {
-    it('registers chimera:system:was-clean-exit handler returning the captured flag', async () => {
-        const handlers = new Map<string, () => unknown>();
-        const ipcMain = {
-            handle: vi.fn((channel: string, handler: () => unknown) => {
-                handlers.set(channel, handler);
-            }),
-        };
-
-        registerCleanExitIpc({ ipcMain, wasCleanExit: true });
-
-        const handler = handlers.get('chimera:system:was-clean-exit');
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.())).resolves.toBe(true);
-    });
-
-    it('returns false when startup observed a missing flag', async () => {
-        const handlers = new Map<string, () => unknown>();
-        const ipcMain = {
-            handle: vi.fn((channel: string, handler: () => unknown) => {
-                handlers.set(channel, handler);
-            }),
-        };
-
-        registerCleanExitIpc({ ipcMain, wasCleanExit: false });
-
-        const handler = handlers.get('chimera:system:was-clean-exit');
-        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
     });
 });
 

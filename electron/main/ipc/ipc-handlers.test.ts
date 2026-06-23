@@ -38,6 +38,7 @@ import {
     CHAT_HISTORY_CHANNEL,
     CHAT_MUTE_CHANNEL,
     CHAT_UNMUTE_CHANNEL,
+    CLEAN_EXIT_IPC_CHANNEL,
     mapPlatform,
     registerChatHandlers,
     registerGameHandlers,
@@ -244,7 +245,7 @@ describe('registerSystemHandlers', () => {
         expect(exit).toHaveBeenCalledWith(0);
     });
 
-    it('registers exactly the four system channels (no cross-namespace leakage)', () => {
+    it('registers exactly the five system channels (no cross-namespace leakage)', () => {
         const stub = makeIpcMainStub();
         registerSystemHandlers({
             ipcMain: stub.ipcMain,
@@ -256,6 +257,7 @@ describe('registerSystemHandlers', () => {
         expect([...stub.handled.keys()]).toEqual([
             SYSTEM_PLATFORM_CHANNEL,
             SYSTEM_DEVICE_INFO_CHANNEL,
+            CLEAN_EXIT_IPC_CHANNEL,
         ]);
         expect([...stub.listeners.keys()]).toEqual([SYSTEM_QUIT_CHANNEL, SYSTEM_RELAUNCH_CHANNEL]);
     });
@@ -305,6 +307,50 @@ describe('registerSystemHandlers', () => {
         const result = await handler?.();
         // Should return a minimally valid DeviceInfo with at least an os field
         expect(result).toMatchObject({ os: 'linux' });
+    });
+
+    it('registers chimera:system:was-clean-exit as an invoke handler returning the injected wasCleanExit flag (true)', async () => {
+        const stub = makeIpcMainStub();
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
+            platform: 'linux',
+            electronVersion: '33.4.11',
+            wasCleanExit: true,
+        });
+
+        const handler = stub.handled.get(CLEAN_EXIT_IPC_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.())).resolves.toBe(true);
+    });
+
+    it('chimera:system:was-clean-exit handler returns false when startup observed an unclean exit', async () => {
+        const stub = makeIpcMainStub();
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
+            platform: 'linux',
+            electronVersion: '33.4.11',
+            wasCleanExit: false,
+        });
+
+        const handler = stub.handled.get(CLEAN_EXIT_IPC_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
+    });
+
+    it('chimera:system:was-clean-exit handler defaults to false when wasCleanExit is not injected', async () => {
+        const stub = makeIpcMainStub();
+        registerSystemHandlers({
+            ipcMain: stub.ipcMain,
+            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
+            platform: 'linux',
+            electronVersion: '33.4.11',
+        });
+
+        const handler = stub.handled.get(CLEAN_EXIT_IPC_CHANNEL);
+        expect(handler).toBeDefined();
+        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
     });
 });
 
