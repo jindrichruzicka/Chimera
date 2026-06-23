@@ -8,7 +8,7 @@
     "engines": {
         "node": ">=20.0.0"
     },
-    "main": "electron/main/index.js",
+    "main": "app/main.js",
     "scripts": {
         "build:packages": "tsc -b tsconfig.build.json && tsx tools/copy-renderer-css.ts",
         "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.json && tsc --noEmit -p games/tsconfig.json",
@@ -19,7 +19,7 @@
         "validate:assets": "pnpm build:packages && tsx tools/validate-assets.ts",
         "format": "prettier --write .",
         "format:check": "prettier --check .",
-        "lint": "pnpm build:packages && pnpm -r lint && eslint tools e2e eslint.config.mjs vitest.config.mts",
+        "lint": "pnpm build:packages && pnpm -r lint && eslint app tools e2e eslint.config.mjs vitest.config.mts",
         "lint:fix": "eslint . --fix",
         "coverage": "pnpm build:packages && vitest run --coverage",
         "build:renderer": "pnpm build:packages && next build renderer",

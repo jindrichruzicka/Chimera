@@ -6,7 +6,8 @@ import { buildSync } from 'esbuild';
 /**
  * Playwright global setup — runs once before all E2E tests.
  * 1. Compiles the renderer bundle so tests can load the real UI.
- * 2. Bundles electron/main/index.ts → .e2e-build/electron/main/index.js  (main process)
+ * 2. Bundles app/main.ts → .e2e-build/electron/main/index.js  (main process: the
+ *    in-tree composition root that injects the game and calls the host's main())
  * 3. Bundles electron/preload/api.ts → .e2e-build/electron/preload/api.js (preload script)
  * 4. Bundles electron/preload/debug-api.ts → .e2e-build/electron/preload/debug-api.js
  *    (Inspector window preload — the debug bridge resolves it as a sibling of
@@ -31,23 +32,29 @@ export default function globalSetup(): void {
         env: { ...process.env, NEXT_PUBLIC_CHIMERA_E2E: '1' },
     });
 
-    // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`,
-    // `@chimera/renderer`, and `@chimera/electron` are intentionally absent: each
-    // is a built package (issues #759, #764, #768, #773, #777) that esbuild
-    // resolves through its `exports` map onto `<pkg>/dist` (build-before-consume;
-    // `pnpm build:packages` runs first in `test:e2e`). The bundled electron
-    // main/preload entry points are compiled from their own source by path and
-    // import their package-internal modules relatively (never the
-    // `@chimera/electron` self-alias), so dropping its alias is inert for this
-    // bundle — and they do not import `@chimera/renderer`. `@chimera/tactics` is
-    // still source-only (built in F63), so it keeps its source alias.
+    // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, and
+    // `@chimera/renderer` are intentionally absent: each is a built package
+    // (issues #759, #764, #768, #773) that esbuild resolves through its `exports`
+    // map onto `<pkg>/dist` (build-before-consume; `pnpm build:packages` runs
+    // first in `test:e2e`). The preload entry points are compiled from their own
+    // source by path and import their package-internal modules relatively.
+    // `@chimera/tactics` is still source-only (built in F63), so it keeps its
+    // source alias. `@chimera/electron/main` is aliased onto SOURCE (#778): the
+    // main entry is now the in-tree composition root `app/main.ts`, which imports
+    // the host as a consumer would (`@chimera/electron/main`); aliasing it to
+    // source keeps the bundle compiling the host from current source rather than
+    // its (non-launchable) `dist/` ESM build — the F62/T2→T3 launch story.
     const alias: Record<string, string> = {
         '@chimera/tactics': path.join(root, 'games/tactics'),
+        '@chimera/electron/main': path.join(root, 'electron/main/index.ts'),
     };
 
-    // Main process — runs in Node.js (Electron's main context).
+    // Main process — runs in Node.js (Electron's main context). Entry is the
+    // in-tree composition root app/main.ts (injects the tactics contribution and
+    // calls the host's main()); it still outputs to the same path the launch
+    // fixture loads.
     buildSync({
-        entryPoints: [path.join(root, 'electron/main/index.ts')],
+        entryPoints: [path.join(root, 'app/main.ts')],
         outfile: mainOutfile,
         bundle: true,
         platform: 'node',

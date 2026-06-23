@@ -5,15 +5,19 @@
  *
  * Forbids `electron/main` modules from importing any `games/*` path so the host
  * (main process) stays agnostic of which games exist — required for packaged,
- * multi-game builds (F18). The three designated composition points are the sole
- * coupling points and are exempt:
+ * multi-game builds (F18). After F62 (#778) the main-side game registry became a
+ * runtime injection seam (`mainGameRegistry.ts` is now a game-agnostic factory),
+ * so the host's game wiring moved OUT of the package into the in-tree composition
+ * root `app/main.ts` — which is outside `electron/main/` and therefore outside
+ * this rule's scope (it injects the game's `MainGameContribution` at runtime). The
+ * remaining exempt composition points inside `electron/main` are the two registries
+ * still importing games (their own injection seams land separately):
  *
- *   - electron/main/game/mainGameRegistry.ts        (actions, settings, visibility, …)
  *   - electron/main/content/gameContentRegistry.ts  (content schemas)
  *   - electron/main/lobby/lobbySetupRegistry.ts     (lobby setup builders)
  *
  * Test files are exempt — they legitimately import game modules as fixtures
- * (e.g. index.test.ts, loadGameContent.test.ts, mainGameRegistry.test.ts).
+ * (e.g. index.test.ts, loadGameContent.test.ts).
  *
  * Mirrors `chimera/no-shell-games-import` on the renderer side (Invariant #94)
  * and the renderer's single-composition-point pattern (rendererGameRegistry.ts).
@@ -33,9 +37,11 @@ function normalize(filename: string): string {
     return filename.replace(/\\/gu, '/');
 }
 
-/** Composition points permitted to import `games/*` (the sole coupling points). */
+/** Composition points permitted to import `games/*` (the sole coupling points).
+ *  `mainGameRegistry.ts` left this list in F62 (#778): it no longer imports a
+ *  game — the host registry is now a runtime injection seam fed by the in-tree
+ *  composition root `app/main.ts` (outside this rule's scope). */
 const ALLOWLISTED_SUFFIXES = [
-    'electron/main/game/mainGameRegistry.ts',
     'electron/main/content/gameContentRegistry.ts',
     'electron/main/lobby/lobbySetupRegistry.ts',
 ];
@@ -99,7 +105,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             mainGamesImport:
-                'electron/main must not import from games/* (multi-game packaging). Register the game in electron/main/game/mainGameRegistry.ts (or the content/lobby registries) — the sole composition points. Mirrors renderer/game/rendererGameRegistry.ts.',
+                'electron/main must not import from games/* (multi-game packaging). Inject the game at runtime via the in-tree composition root (app/main.ts), which constructs the MainGameContribution and calls main(contributions); the content/lobby registries remain the only in-package composition points. Mirrors renderer/game/rendererGameRegistry.ts.',
         },
         schema: [],
     },

@@ -1,13 +1,13 @@
-import { hostedGame } from './game/mainGameRegistry.js';
-
 export const CHIMERA_RENDERER_PROTOCOL = 'chimera';
 export const CHIMERA_RENDERER_HOST = 'renderer';
 export const CHIMERA_RENDERER_URL: ChimeraRendererUrl =
     `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/index.html` as ChimeraRendererUrl;
-export const CHIMERA_RENDERER_LAUNCH_URL: ChimeraRendererUrl = buildRendererGameLaunchUrl(
-    hostedGame.gameId,
-);
 
+/**
+ * Build the renderer launch URL for a hosted game. The production launch URL is
+ * no longer a module constant — the host names no game, so `main()` builds it at
+ * runtime from the injected hosted game's id (the seam F62 introduces).
+ */
 export function buildRendererGameLaunchUrl(gameId: string): ChimeraRendererUrl {
     const url = new URL(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/main-menu/`);
     url.searchParams.set('gameId', gameId);

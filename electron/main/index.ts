@@ -58,13 +58,7 @@ import {
     JsonSaveSerializer,
     createDefaultMigrator,
 } from '@chimera/simulation/persistence/index.js';
-import {
-    gameVersions,
-    hostedGame,
-    knownGameIds,
-    mainGameRegistry,
-    visibilityRulesByGameId,
-} from './game/mainGameRegistry.js';
+import { createMainGameRegistry, type MainGameContribution } from './game/mainGameRegistry.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
 import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/apis/replay-api.js';
@@ -174,8 +168,8 @@ import {
     type ProfileRepository,
 } from '@chimera/simulation/profile/ProfileSchema.js';
 import {
+    buildRendererGameLaunchUrl,
     CHIMERA_RENDERER_HOST,
-    CHIMERA_RENDERER_LAUNCH_URL,
     CHIMERA_RENDERER_PROTOCOL,
     CHIMERA_RENDERER_URL,
     type ChimeraRendererUrl,
@@ -183,12 +177,13 @@ import {
 
 export { CLEAN_EXIT_IPC_CHANNEL };
 export {
+    buildRendererGameLaunchUrl,
     CHIMERA_RENDERER_HOST,
-    CHIMERA_RENDERER_LAUNCH_URL,
     CHIMERA_RENDERER_PROTOCOL,
     CHIMERA_RENDERER_URL,
 };
 export type { ChimeraRendererUrl };
+export type { MainGameContribution };
 
 export const DEFAULT_LOCAL_PROFILE_ID = 'local-default';
 const BOOTSTRAP_BACKGROUND_COLOR = '#111113';
@@ -431,7 +426,13 @@ export function registerRendererProtocolScheme(
     ]);
 }
 
-registerRendererProtocolScheme(electronProtocol);
+// Register the renderer scheme as privileged at module load (must run before
+// `app.whenReady`). Guarded like the bootstrap: skipped under Vitest, where
+// `electron` is mocked per-test, so importing this module (e.g. via the
+// composition root `app/main.ts`) is side-effect-free in unit tests.
+if (process.env['VITEST'] === undefined) {
+    registerRendererProtocolScheme(electronProtocol);
+}
 
 const RSC_CONTENT_TYPE = 'text/x-component; charset=utf-8';
 const HTML_CONTENT_TYPE = 'text/html; charset=utf-8';
@@ -807,9 +808,9 @@ export function registerClientRevealForwarding(
  * Security invariant (BLOCK-1): the env var is untrusted input — accept only
  * URLs whose protocol is `chimera:` and whose host is `renderer`.  Any other
  * value (remote https, wrong host, malformed string, undefined) falls back to
- * `CHIMERA_RENDERER_URL` (the renderer root, distinct from the production
- * launch URL `CHIMERA_RENDERER_LAUNCH_URL`) so a BrowserWindow can never load
- * a remote URL via the E2E path.
+ * `CHIMERA_RENDERER_URL` (the renderer root, distinct from the production launch
+ * URL built per hosted game by `buildRendererGameLaunchUrl`) so a BrowserWindow
+ * can never load a remote URL via the E2E path.
  */
 export function sanitiseE2eInitialUrl(raw: string | undefined): ChimeraRendererUrl {
     if (raw === undefined) {
@@ -860,7 +861,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         },
     });
 
-    const urlToLoad = options.initialUrl ?? CHIMERA_RENDERER_LAUNCH_URL;
+    const urlToLoad = options.initialUrl ?? CHIMERA_RENDERER_URL;
     // Defense-in-depth: validate protocol and host even though the branded type
     // already enforces this statically.  Guards against callers that bypass the
     // type via `as`.
@@ -954,7 +955,7 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
  * Renderer entry follows issue #3:
  *   `path.join(__dirname, '../../renderer/out/index.html')`
  */
-export async function main(): Promise<void> {
+export async function main(contributions: readonly MainGameContribution[]): Promise<void> {
     // ── Invariant #27: CHIMERA_DEBUG + production guard ───────────────────────
     // Must be the very first check so no debug surface is initialised before
     // an illegal production+debug combination is caught.
@@ -962,6 +963,15 @@ export async function main(): Promise<void> {
 
     // ── Invariant 77: CHIMERA_DEV_HARNESS + production guard ──────────────────
     assertProductionDevHarnessGuard(process.env);
+
+    // Derive the host-side game registry from the contributions injected by the
+    // in-tree composition root (app/main.ts) — the host names no game, it indexes
+    // whatever set it is given. Built before any consumer so the registerActions
+    // loop below registers the game into ActionRegistry before the tick loop
+    // starts (Invariant #10).
+    const { mainGameRegistry, hostedGame, knownGameIds, gameVersions, visibilityRulesByGameId } =
+        createMainGameRegistry(contributions);
+    const rendererLaunchUrl = buildRendererGameLaunchUrl(hostedGame.gameId);
 
     const { preloadPath, rendererEntry, gameAssetsRoot } = resolveRuntimePaths({
         moduleDirname: __dirname,
@@ -2670,7 +2680,7 @@ export async function main(): Promise<void> {
             initialUrl:
                 process.env['CHIMERA_E2E'] === '1'
                     ? sanitiseE2eInitialUrl(process.env['CHIMERA_E2E_INITIAL_URL'])
-                    : CHIMERA_RENDERER_LAUNCH_URL,
+                    : rendererLaunchUrl,
             env,
             logger,
             windowTitle: resolveWindowTitle(hostedGame.manifest),
@@ -2828,7 +2838,7 @@ export async function main(): Promise<void> {
     });
 }
 
-// Auto-bootstrap only when executed by Electron, not when imported by Vitest.
-if (process.env['VITEST'] === undefined) {
-    void main();
-}
+// The Electron entry point is the in-tree composition root (app/main.ts): it
+// constructs the game contribution(s) and calls `main(contributions)`. `index.ts`
+// (this file, the `@chimera/electron` package's `./main` surface) names no game
+// and no longer self-bootstraps.

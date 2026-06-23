@@ -5,7 +5,10 @@
  * Vitest + ESLint RuleTester.
  *
  * The host (electron/main) must stay agnostic of which games exist; only the
- * three composition registries may import `games/*`, and test files are exempt.
+ * content/lobby composition registries may import `games/*`, and test files are
+ * exempt. The main-side game registry (mainGameRegistry.ts) became a runtime
+ * injection seam in F62 (#778) and is no longer exempt — its game wiring moved to
+ * the out-of-scope in-tree composition root app/main.ts.
  */
 
 import { RuleTester } from 'eslint';
@@ -26,11 +29,8 @@ const ruleTester = new RuleTester({
 ruleTester.run('chimera/no-main-games-import', rule, {
     // ── Valid — rule must NOT fire ───────────────────────────────────────────
     valid: [
-        // The composition registries are the sole coupling points (exempt).
-        {
-            filename: 'electron/main/game/mainGameRegistry.ts',
-            code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
-        },
+        // The content/lobby registries are the remaining in-package coupling
+        // points (exempt). mainGameRegistry.ts left the allowlist in F62 (#778).
         {
             filename: 'electron/main/content/gameContentRegistry.ts',
             code: `import { TACTICS_CONTENT_SCHEMAS } from '@chimera/tactics/content/tacticsContent.js';`,
@@ -51,7 +51,7 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         // electron/main core importing non-games modules is fine.
         {
             filename: 'electron/main/index.ts',
-            code: `import { hostedGame } from './game/mainGameRegistry.js';`,
+            code: `import { createMainGameRegistry } from './game/mainGameRegistry.js';`,
         },
         {
             filename: 'electron/main/index.ts',
@@ -81,6 +81,12 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             filename: 'renderer/game/rendererGameRegistry.ts',
             code: `import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
         },
+        // The in-tree composition root (#778) lives outside electron/main, so it
+        // may import a game to build the injected MainGameContribution.
+        {
+            filename: 'app/main.ts',
+            code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
+        },
         // Dynamic import of a non-games module is fine.
         {
             filename: 'electron/main/index.ts',
@@ -88,8 +94,8 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         },
         // Dynamic import of a games module IS allowed inside a composition registry.
         {
-            filename: 'electron/main/game/mainGameRegistry.ts',
-            code: `const m = import('@chimera/tactics/actions.js');`,
+            filename: 'electron/main/content/gameContentRegistry.ts',
+            code: `const m = import('@chimera/tactics/content/tacticsContent.js');`,
         },
         // A computed dynamic specifier cannot be resolved statically — not flagged.
         {
@@ -109,6 +115,18 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         {
             filename: 'electron/main/index.ts',
             code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        // mainGameRegistry.ts is no longer exempt (F62/#778): it is a game-agnostic
+        // factory and must not import a game — statically or dynamically.
+        {
+            filename: 'electron/main/game/mainGameRegistry.ts',
+            code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        {
+            filename: 'electron/main/game/mainGameRegistry.ts',
+            code: `const m = import('@chimera/tactics/actions.js');`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
         // A non-registry main module importing a game.

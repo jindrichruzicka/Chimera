@@ -31,6 +31,12 @@
     // declarations are pulled in directly (the Node programs need NODE_ENV /
     // CHIMERA_DEBUG augmentations; the renderer program declares NODE_ENV itself).
     "include": [
+        // app/ is the in-tree composition root (#778): it injects a game's
+        // MainGameContribution into the @chimera/electron host. It consumes the
+        // host through the package exports map (onto electron/dist), so it is
+        // type-checked here rather than by electron/tsconfig.json. F63 relocates
+        // it into apps/tactics.
+        "app/**/*.ts",
         "games/**/*.ts",
         "renderer/**/*.ts",
         "tools/**/*.ts",

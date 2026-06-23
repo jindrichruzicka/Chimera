@@ -1,135 +1,89 @@
 // electron/main/game/mainGameRegistry.test.ts
 //
-// The main-side game composition root. These tests pin the generic contract the
-// host bootstrap consumes (index.ts) so a regression that drops a contribution
-// or mis-derives a lookup map is caught here rather than at host startup.
+// The main-side game registry FACTORY. These tests pin the generic, game-agnostic
+// derivation the host bootstrap (index.ts) consumes: given the injected set of
+// MainGameContributions, `createMainGameRegistry` selects the hosted game and
+// derives the gameId-keyed lookup maps. Game-specific wiring (the tactics
+// contribution) is asserted in the composition-root test (app/main.test.ts) —
+// this file imports NO game, mirroring the package boundary F62 establishes.
 
 import { describe, expect, it } from 'vitest';
 
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import { entityId, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import type { CommandContext, CommandScheduler } from '@chimera/ai';
-import type { EngineAction } from '@chimera/simulation/engine/types.js';
-import { tacticsVisibilityRules } from '@chimera/tactics/visibility-rules.js';
-import { tacticsManifest } from '@chimera/tactics/manifest.js';
-import {
-    TACTICS_ATTACK_ACTION,
-    TACTICS_GAME_ID,
-    TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/tactics/constants.js';
+import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
+import type { VisibilityRules } from '@chimera/simulation/projection/index.js';
 
-import type { SettingsManager } from '../settings/SettingsManager.js';
-import {
-    gameVersions,
-    hostedGame,
-    knownGameIds,
-    mainGameRegistry,
-    manifestsByGameId,
-    visibilityRulesByGameId,
-} from './mainGameRegistry.js';
+import { createMainGameRegistry, type MainGameContribution } from './mainGameRegistry.js';
 
-describe('mainGameRegistry', () => {
-    it('registers the tactics reference game with its id and version', () => {
-        const tactics = mainGameRegistry[TACTICS_GAME_ID];
-        expect(tactics).toBeDefined();
-        expect(tactics?.gameId).toBe(TACTICS_GAME_ID);
-        expect(tactics?.gameVersion).toBe('0.1.0');
+/** A minimal, game-agnostic contribution stub for exercising the factory. */
+function makeStubContribution(
+    gameId: string,
+    gameVersion: string,
+    overrides: Partial<MainGameContribution> = {},
+): MainGameContribution {
+    const manifest: GameManifest = { gameId, displayName: gameId, realtime: false };
+    const visibilityRules = { stubFor: gameId } as unknown as VisibilityRules;
+    return {
+        gameId,
+        gameVersion,
+        manifest,
+        registerActions: () => undefined,
+        registerSettings: () => undefined,
+        visibilityRules,
+        resolveFirstPlayer: (config) => config.firstPlayer ?? config.hostPlayerId,
+        ...overrides,
+    };
+}
+
+describe('createMainGameRegistry', () => {
+    it('selects the single injected contribution as the hosted game (M1 single-game lifecycle)', () => {
+        const contribution = makeStubContribution('alpha', '1.2.3');
+
+        const view = createMainGameRegistry([contribution]);
+
+        expect(view.hostedGame).toBe(contribution);
+        expect(view.mainGameRegistry['alpha']).toBe(contribution);
     });
 
-    it('exposes the single hosted game as the tactics entry (M1 single-game lifecycle)', () => {
-        expect(hostedGame.gameId).toBe(TACTICS_GAME_ID);
-        expect(hostedGame.gameVersion).toBe('0.1.0');
-        expect(hostedGame).toBe(mainGameRegistry[TACTICS_GAME_ID]);
+    it('throws when zero contributions are injected (the host needs a game to run)', () => {
+        expect(() => createMainGameRegistry([])).toThrow();
     });
 
-    it('derives knownGameIds from the registry keys', () => {
-        expect(knownGameIds).toEqual(Object.keys(mainGameRegistry));
-        expect(knownGameIds).toContain(TACTICS_GAME_ID);
+    it('throws when more than one contribution is injected (no multi-game selection until F18)', () => {
+        expect(() =>
+            createMainGameRegistry([
+                makeStubContribution('alpha', '1.0.0'),
+                makeStubContribution('beta', '2.0.0'),
+            ]),
+        ).toThrow();
     });
 
-    it('derives the gameId → version map', () => {
-        expect(gameVersions.get(TACTICS_GAME_ID)).toBe('0.1.0');
-        expect(gameVersions.size).toBe(knownGameIds.length);
+    it('derives knownGameIds from the injected set', () => {
+        const view = createMainGameRegistry([makeStubContribution('alpha', '1.0.0')]);
+
+        expect(view.knownGameIds).toEqual(['alpha']);
+    });
+
+    it('derives the gameId → version map ReplayManager stamps onto replays', () => {
+        const view = createMainGameRegistry([makeStubContribution('alpha', '4.5.6')]);
+
+        expect(view.gameVersions.get('alpha')).toBe('4.5.6');
+        expect(view.gameVersions.size).toBe(view.knownGameIds.length);
     });
 
     it('derives the gameId → visibility rules map for the projection resolver', () => {
-        expect(visibilityRulesByGameId[TACTICS_GAME_ID]).toBe(tacticsVisibilityRules);
-    });
+        const contribution = makeStubContribution('alpha', '1.0.0');
 
-    it('contributes the tactics game manifest (display name, turn-based loop)', () => {
-        expect(mainGameRegistry[TACTICS_GAME_ID]?.manifest).toBe(tacticsManifest);
-        expect(hostedGame.manifest.displayName).toBe('Tactics');
-        expect(hostedGame.manifest.realtime).toBe(false);
+        const view = createMainGameRegistry([contribution]);
+
+        expect(view.visibilityRulesByGameId['alpha']).toBe(contribution.visibilityRules);
     });
 
     it('derives the gameId → manifest map', () => {
-        expect(manifestsByGameId[TACTICS_GAME_ID]).toBe(tacticsManifest);
-        expect(Object.keys(manifestsByGameId)).toEqual(knownGameIds);
-    });
+        const contribution = makeStubContribution('alpha', '1.0.0');
 
-    it('registerActions wires the game reducers into a shared ActionRegistry', () => {
-        const registry = new ActionRegistry();
-        registerEngineActions(registry);
-        hostedGame.registerActions(registry);
+        const view = createMainGameRegistry([contribution]);
 
-        expect(registry.has(TACTICS_MOVE_UNIT_ACTION)).toBe(true);
-        expect(registry.resolveGame(TACTICS_GAME_ID)).toBeDefined();
-    });
-
-    it('registerSettings registers the game settings schema with the SettingsManager', () => {
-        const registered: GameSettingsSchema<EngineSettings>[] = [];
-        const fakeManager = {
-            registerSchema: (schema: GameSettingsSchema<EngineSettings>) => {
-                registered.push(schema);
-            },
-        } as unknown as SettingsManager;
-
-        hostedGame.registerSettings(fakeManager);
-
-        expect(registered).toHaveLength(1);
-        expect(registered[0]?.gameId).toBe(TACTICS_GAME_ID);
-    });
-
-    it('resolveFirstPlayer returns the chosen first player, defaulting to the host', () => {
-        const host = toPlayerId('p1');
-        const chosen = toPlayerId('p2');
-        expect(hostedGame.resolveFirstPlayer({ hostPlayerId: host })).toBe(host);
-        expect(hostedGame.resolveFirstPlayer({ hostPlayerId: host, firstPlayer: chosen })).toBe(
-            chosen,
-        );
-    });
-
-    it('contributes a tactics AI state that emits tactics actions (issue #725)', () => {
-        const ai = toPlayerId('ai-x');
-        const enemy = toPlayerId('enemy-x');
-        const myUnit = entityId('u-ai');
-        const enemyUnit = entityId('u-enemy');
-        const snapshot = {
-            ...makeStubPlayerSnapshot(1),
-            viewerId: ai,
-            isMyTurn: true,
-            entities: {
-                [myUnit]: { id: myUnit, kind: 'unit', ownerId: ai, x: 0, y: 0, hp: 1 },
-                [enemyUnit]: { id: enemyUnit, kind: 'unit', ownerId: enemy, x: 1, y: 0, hp: 1 },
-            },
-            players: { [ai]: { id: ai }, [enemy]: { id: enemy } },
-        } as unknown as PlayerSnapshot;
-
-        const state = hostedGame.createAIState?.(ai);
-        expect(state?.name).toBe('tactics:auto-play');
-
-        const dispatched: EngineAction[] = [];
-        const context: CommandContext = {
-            dispatch: (action) => dispatched.push(action),
-            transitionState: () => undefined,
-        };
-        state?.onIdle(snapshot, snapshot.tick, {}, {} as unknown as CommandScheduler, context);
-
-        expect(dispatched).toHaveLength(1);
-        expect(dispatched[0]?.type).toBe(TACTICS_ATTACK_ACTION);
+        expect(view.manifestsByGameId['alpha']).toBe(contribution.manifest);
+        expect(Object.keys(view.manifestsByGameId)).toEqual(view.knownGameIds);
     });
 });

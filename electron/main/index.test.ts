@@ -14,7 +14,7 @@ import type {
     BaseGameSnapshot,
     PlayerId,
 } from '@chimera/simulation/engine/types.js';
-import type { ChimeraRendererUrl } from './index.js';
+import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 
 interface ProjectorOptionsForTest {
     readonly getUndoMeta?: (viewerId: PlayerId) => unknown;
@@ -453,7 +453,7 @@ const {
     resolveRendererProtocolFilePath,
     registerRendererProtocolScheme,
     sanitiseE2eInitialUrl,
-    CHIMERA_RENDERER_LAUNCH_URL,
+    buildRendererGameLaunchUrl,
     CHIMERA_RENDERER_URL,
     createDefaultPlayerProfile,
     ensureActiveProfile,
@@ -483,6 +483,41 @@ const { ProfileManager } = await import('./profile/ProfileManager.js');
 const { SessionRuntime, SessionCommitmentRuntime } = await import('./runtime/SessionRuntime.js');
 const { ReplayManager } = await import('./replay/replay-manager.js');
 const { PerspectiveReplayManager } = await import('./replay/PerspectiveReplayManager.js');
+
+// ── Tactics contribution fixture for main() ──────────────────────────────────
+// main() is now game-agnostic: it hosts whatever MainGameContribution set it is
+// injected with (in production the in-tree composition root app/main.ts supplies
+// tactics). These tests inject the REAL tactics wiring — except visibility rules,
+// which stay mocked (mockTacticsVisibilityRules) so the projector-injection
+// assertions still verify the game-owned rules flow through main() → projector.
+// Tactics modules are imported directly: test files are exempt from the
+// no-main-games-import boundary.
+const { registerTacticsActions, resolveTacticsFirstPlayer } =
+    await import('@chimera/tactics/actions.js');
+const { createTacticsAIState } = await import('@chimera/tactics/ai/tacticsPolicy.js');
+const { tacticsManifest } = await import('@chimera/tactics/manifest.js');
+const { tacticsCommitmentOrchestration } =
+    await import('@chimera/tactics/commitment/orchestration.js');
+const { tacticsResolveIsMyTurn } = await import('@chimera/tactics/commitment/turnGate.js');
+const { tacticsSettingsSchema } = await import('@chimera/tactics/settings-schema.js');
+const { TACTICS_GAME_ID } = await import('@chimera/tactics/constants.js');
+
+function makeTestContributions(): MainGameContribution[] {
+    return [
+        {
+            gameId: TACTICS_GAME_ID,
+            gameVersion: '0.1.0',
+            manifest: tacticsManifest,
+            registerActions: registerTacticsActions,
+            registerSettings: (manager) => manager.registerSchema(tacticsSettingsSchema),
+            visibilityRules: mockTacticsVisibilityRules,
+            resolveFirstPlayer: resolveTacticsFirstPlayer,
+            createAIState: createTacticsAIState,
+            commitment: tacticsCommitmentOrchestration,
+            resolveIsMyTurn: tacticsResolveIsMyTurn,
+        },
+    ];
+}
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
@@ -592,7 +627,7 @@ describe('createMainWindow', () => {
         );
     });
 
-    it('loads the explicit game main-menu launch URL by default', () => {
+    it('loads the renderer root by default (game-agnostic; callers pass the game launch URL)', () => {
         const win = createMainWindow({
             preloadPath: PRELOAD,
             rendererEntry: RENDERER_ENTRY,
@@ -601,7 +636,7 @@ describe('createMainWindow', () => {
         });
 
         expect(win.loadURL).toHaveBeenCalledTimes(1);
-        expect(win.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_LAUNCH_URL);
+        expect(win.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_URL);
         expect(win.loadFile).not.toHaveBeenCalled();
     });
 
@@ -1249,7 +1284,7 @@ describe('registerClientRevealForwarding', () => {
         mockLobbyManagerCtor.mockClear();
         browserWindowInstances.length = 0;
         const win = new FakeBrowserWindow({});
-        await main();
+        await main(makeTestContributions());
 
         const onSessionJoined = (
             mockLobbyManagerCtor.mock.calls[0]?.[2] as
@@ -1326,18 +1361,18 @@ describe('main', () => {
     });
 
     it('constructs SaveManager with FileSaveRepository, not InMemorySaveRepository (BLOCK-1)', async () => {
-        await main();
+        await main(makeTestContributions());
 
         expect(capturedSaveManagerRepoClassName.value).toBe('FileSaveRepository');
     });
 
     it('does not call fsExistsSync — only the async SaveManager path owns the clean-exit flag', async () => {
-        await main();
+        await main(makeTestContributions());
         expect(fsExistsSync).not.toHaveBeenCalled();
     });
 
     it('registers the clean-exit IPC handler before opening any window', async () => {
-        await main();
+        await main(makeTestContributions());
 
         expect(ipcMainHandle).toHaveBeenCalledWith(
             'chimera:system:was-clean-exit',
@@ -1346,7 +1381,7 @@ describe('main', () => {
     });
 
     it('registers the before-quit clean-exit hook via SaveManager', async () => {
-        await main();
+        await main(makeTestContributions());
 
         expect(appOn).toHaveBeenCalledWith('before-quit', expect.any(Function));
     });
@@ -1354,7 +1389,7 @@ describe('main', () => {
     // ── Runtime Debug Layer gate (§4.12, F47 T5, Invariant #27) ──────────────
 
     it('registers NO debug handlers when IS_DEBUG_MODE is false (gate not entered)', async () => {
-        await main();
+        await main(makeTestContributions());
 
         const handleChannels = ipcMainHandle.mock.calls.map(([channel]) => channel);
         const onChannels = ipcMainOn.mock.calls.map(([channel]) => channel);
@@ -1369,7 +1404,7 @@ describe('main', () => {
             // Fresh import so shared/constants re-evaluates IS_DEBUG_MODE
             // (NODE_ENV is 'test' under vitest, so the guard passes).
             const fresh = await import('./index.js');
-            await fresh.main();
+            await fresh.main(makeTestContributions());
 
             const handleChannels = ipcMainHandle.mock.calls.map(([channel]) => channel);
             const onChannels = ipcMainOn.mock.calls.map(([channel]) => channel);
@@ -1392,7 +1427,7 @@ describe('main', () => {
     it('uses os.release() for the system device-info osVersion', async () => {
         mockOsRelease.mockReturnValue('24.1.0-test');
 
-        await main();
+        await main(makeTestContributions());
         await Promise.resolve();
 
         const handler = ipcMainHandle.mock.calls.find(
@@ -1404,7 +1439,7 @@ describe('main', () => {
     });
 
     it('disposes the previous device-probe watcher before recreating a main window', async () => {
-        await main();
+        await main(makeTestContributions());
         await Promise.resolve();
 
         const activateHandler = appOn.mock.calls.find(([event]) => event === 'activate')?.[1];
@@ -1419,7 +1454,7 @@ describe('main', () => {
     });
 
     it('pushes updated DeviceInfo via SYSTEM_DEVICE_INFO_CHANGE_CHANNEL when the window is resized', async () => {
-        await main();
+        await main(makeTestContributions());
         await Promise.resolve();
 
         const win = browserWindowInstances[browserWindowInstances.length - 1]!;
@@ -1440,7 +1475,7 @@ describe('main', () => {
 
     it('constructs LobbyManager with a LocalWebSocketProvider (Invariant #2 wiring point)', async () => {
         mockLobbyManagerCtor.mockClear();
-        await main();
+        await main(makeTestContributions());
 
         expect(mockLobbyManagerCtor).toHaveBeenCalledOnce();
         // First arg is a LocalWebSocketProvider instance (mock returns {})
@@ -1449,7 +1484,7 @@ describe('main', () => {
 
     it('constructs AgentManager with an injected lobby logger', async () => {
         mockLobbyManagerCtor.mockClear();
-        await main();
+        await main(makeTestContributions());
 
         const onSessionHosted = (
             mockLobbyManagerCtor.mock.calls[0]?.[2] as
@@ -1495,7 +1530,7 @@ describe('main', () => {
 
     it('constructs DefaultStateProjector with tactics visibility rules and injects it into StateBroadcaster', async () => {
         mockLobbyManagerCtor.mockClear();
-        await main();
+        await main(makeTestContributions());
 
         const onSessionHosted = (
             mockLobbyManagerCtor.mock.calls[0]?.[2] as
@@ -1546,7 +1581,7 @@ describe('main', () => {
 
         mockLobbyManagerCtor.mockClear();
         mockStateBroadcasterCtor.mockClear();
-        await main();
+        await main(makeTestContributions());
 
         // Verify LobbyManager was constructed with e2eHooks in the options
         expect(mockLobbyManagerCtor).toHaveBeenCalledOnce();
@@ -1592,7 +1627,7 @@ describe('main', () => {
         mockLobbyManagerCtor.mockClear();
         mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
         browserWindowInstances.length = 0;
-        await main(); // creates the main window (browserWindowInstances[0])
+        await main(makeTestContributions()); // creates the main window (browserWindowInstances[0])
         const mainWindow = browserWindowInstances[0]!;
 
         const onSessionHosted = (
@@ -1643,7 +1678,7 @@ describe('main', () => {
         mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
         browserWindowInstances.length = 0;
 
-        await main(); // creates the main window (browserWindowInstances[0])
+        await main(makeTestContributions()); // creates the main window (browserWindowInstances[0])
         const mainWindow = browserWindowInstances[0]!;
 
         // Simulate a secondary window opened after the app is ready
@@ -1702,7 +1737,7 @@ describe('main', () => {
         mockStateBroadcasterInstance.broadcast.mockClear();
         browserWindowInstances.length = 0;
 
-        await main();
+        await main(makeTestContributions());
 
         let capturedJoin:
             | ((entry: { readonly playerId: ReturnType<typeof playerId> }) => void)
@@ -1777,7 +1812,7 @@ describe('main', () => {
         mockStateBroadcasterInstance.broadcast.mockClear();
         browserWindowInstances.length = 0;
 
-        await main();
+        await main(makeTestContributions());
 
         let capturedJoin:
             | ((entry: { readonly playerId: ReturnType<typeof playerId> }) => void)
@@ -1846,7 +1881,7 @@ describe('main', () => {
         mockDefaultStateProjectorCtor.mockClear();
         browserWindowInstances.length = 0;
 
-        await main();
+        await main(makeTestContributions());
 
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -1931,7 +1966,7 @@ describe('main', () => {
         mockDefaultStateProjectorCtor.mockClear();
         browserWindowInstances.length = 0;
 
-        await main();
+        await main(makeTestContributions());
 
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -2009,7 +2044,7 @@ describe('main', () => {
         mockDefaultStateProjectorCtor.mockClear();
         browserWindowInstances.length = 0;
 
-        await main();
+        await main(makeTestContributions());
 
         const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
             | {
@@ -2093,7 +2128,7 @@ describe('main', () => {
         mockSimulationHostInstance.registerAgent.mockClear();
         mockSimulationHostInstance.onGameStart.mockClear();
 
-        await main();
+        await main(makeTestContributions());
 
         const onSessionHosted = (
             mockLobbyManagerCtor.mock.calls[0]?.[2] as
@@ -2161,7 +2196,7 @@ describe('main', () => {
         const destroyedWindow = new FakeBrowserWindow({});
         destroyedWindow.isDestroyed.mockReturnValue(true);
 
-        await main();
+        await main(makeTestContributions());
 
         const onConnectionStatusChanged = (
             mockLobbyManagerCtor.mock.calls[0]?.[2] as
@@ -2184,7 +2219,7 @@ describe('main', () => {
     });
 
     it('registers the window-all-closed and activate lifecycle listeners', async () => {
-        await main();
+        await main(makeTestContributions());
 
         const events = appOn.mock.calls.map(([event]) => event);
         expect(events).toContain('window-all-closed');
@@ -2202,7 +2237,7 @@ describe('main', () => {
                 }),
         );
 
-        const mainPromise = main();
+        const mainPromise = main(makeTestContributions());
         // Await main() so app.whenReady() has been called and resolveReady
         // is wired to the real promise resolve before we trigger it.
         await mainPromise;
@@ -2222,7 +2257,7 @@ describe('main', () => {
         const initialUrl = 'chimera://renderer/lobby/';
         process.env = { ...origEnv, CHIMERA_E2E: '1', CHIMERA_E2E_INITIAL_URL: initialUrl };
         try {
-            await main();
+            await main(makeTestContributions());
         } finally {
             process.env = origEnv;
         }
@@ -2257,7 +2292,7 @@ describe('main', () => {
             CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS: '127.0.0.1:7779:token',
         };
         try {
-            await main();
+            await main(makeTestContributions());
             await Promise.resolve();
             await Promise.resolve();
         } finally {
@@ -2301,7 +2336,7 @@ describe('main', () => {
             CHIMERA_E2E_DIRECT_GAME_JOIN_ADDRESS: '127.0.0.1:7779:token',
         };
         try {
-            await main();
+            await main(makeTestContributions());
             await Promise.resolve();
             await Promise.resolve();
         } finally {
@@ -2334,7 +2369,7 @@ describe('main', () => {
             CHIMERA_E2E_DIRECT_GAME_ROLE: 'host',
         };
         try {
-            await main();
+            await main(makeTestContributions());
             const options = mockLobbyManagerCtor.mock.calls[0]?.[2] as
                 | {
                       onLobbyStateChanged?: (state: {
@@ -2359,13 +2394,13 @@ describe('main', () => {
             CHIMERA_E2E_INITIAL_URL: 'chimera://renderer/lobby/',
         };
         try {
-            await main();
+            await main(makeTestContributions());
         } finally {
             process.env = origEnv;
         }
 
         const [win] = browserWindowInstances;
-        expect(win?.loadURL).toHaveBeenCalledWith(CHIMERA_RENDERER_LAUNCH_URL);
+        expect(win?.loadURL).toHaveBeenCalledWith(buildRendererGameLaunchUrl(TACTICS_GAME_ID));
     });
 
     it('propagates wasCleanExit=true when SaveManager.clearCleanExitFlag returns true', async () => {
@@ -2375,7 +2410,7 @@ describe('main', () => {
             handlers.set(channel, handler);
         });
 
-        await main();
+        await main(makeTestContributions());
 
         const handler = handlers.get('chimera:system:was-clean-exit');
         expect(handler).toBeDefined();
@@ -2389,7 +2424,7 @@ describe('main', () => {
             handlers.set(channel, handler);
         });
 
-        await main();
+        await main(makeTestContributions());
 
         const handler = handlers.get('chimera:system:was-clean-exit');
         expect(handler).toBeDefined();
@@ -2407,7 +2442,7 @@ describe('main', () => {
                 }),
         );
 
-        await main();
+        await main(makeTestContributions());
         // app.whenReady() has now been called; resolveReady is wired.
         resolveReady();
         await Promise.resolve();
@@ -2421,7 +2456,7 @@ describe('main', () => {
     });
 
     it('passes a non-undefined autosave callback to registerCrashReporter', async () => {
-        await main();
+        await main(makeTestContributions());
 
         expect(mockRegisterCrashReporter).toHaveBeenCalledOnce();
         const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
@@ -2429,7 +2464,7 @@ describe('main', () => {
     });
 
     it('passes app version and recent-log callbacks to registerCrashReporter', async () => {
-        await main();
+        await main(makeTestContributions());
 
         const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
         expect(options?.getAppVersion?.()).toBe('0.7.0-test');
@@ -2437,7 +2472,7 @@ describe('main', () => {
     });
 
     it('attaches the renderer process-gone handler to the created main window', async () => {
-        await main();
+        await main(makeTestContributions());
         await Promise.resolve();
 
         const [win] = browserWindowInstances;
@@ -2449,7 +2484,7 @@ describe('main', () => {
     });
 
     it('passes a per-window reload callback to the renderer process-gone handler', async () => {
-        await main();
+        await main(makeTestContributions());
         await Promise.resolve();
 
         const [win] = browserWindowInstances;
@@ -2460,7 +2495,7 @@ describe('main', () => {
     });
 
     it('passes app version and recent-log callbacks to the renderer process-gone handler', async () => {
-        await main();
+        await main(makeTestContributions());
         await Promise.resolve();
 
         const options = mockMakeRendererGoneHandler.mock.calls[0]?.[0];
@@ -2469,7 +2504,7 @@ describe('main', () => {
     });
 
     it('autosave callback resolves without throwing when no session is active (null activeSession)', async () => {
-        await main();
+        await main(makeTestContributions());
 
         const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
         expect(options?.autosave).toBeDefined();
@@ -2478,7 +2513,7 @@ describe('main', () => {
 
     it('autosave callback calls saveManager.autoSave with a SaveFile when activeSession is active', async () => {
         mockLobbyManagerCtor.mockClear();
-        await main();
+        await main(makeTestContributions());
 
         // Extract the onSessionHosted callback from the options bag (3rd arg) passed to LobbyManager.
         const onSessionHosted = (
@@ -2533,7 +2568,7 @@ describe('main', () => {
         };
         mockGetE2eHooks.mockReturnValue(e2eHooks);
         mockLobbyManagerCtor.mockClear();
-        await main();
+        await main(makeTestContributions());
 
         const onSessionHosted = (
             mockLobbyManagerCtor.mock.calls[0]?.[2] as
@@ -2582,7 +2617,7 @@ describe('main', () => {
     });
 
     it('autosave callback does not call saveManager.autoSave when no session is active', async () => {
-        await main();
+        await main(makeTestContributions());
 
         // No onSessionHosted called → activeSession remains null.
         const options = mockRegisterCrashReporter.mock.calls[0]?.[0];
@@ -2592,13 +2627,13 @@ describe('main', () => {
     });
 
     it('calls checkCrashRecovery with ["tactics"] as knownGameIds (BLOCK-2)', async () => {
-        await main();
+        await main(makeTestContributions());
 
         expect(mockSaveManagerCheckCrash).toHaveBeenCalledWith(['tactics']);
     });
 
     it('calls session.defaultSession.setPermissionRequestHandler with a deny-all handler (WARN-4)', async () => {
-        await main();
+        await main(makeTestContributions());
 
         expect(mockSetPermissionRequestHandler).toHaveBeenCalledTimes(1);
         const handler = mockSetPermissionRequestHandler.mock.calls[0]?.[0] as
@@ -2621,7 +2656,7 @@ describe('main', () => {
     });
 
     it('skips webContents.send when the window isDestroyed (WARN-10)', async () => {
-        await main();
+        await main(makeTestContributions());
         expect(capturedSettingsBroadcastFn.current).toBeDefined();
 
         // Set up two fake windows: one destroyed, one alive
@@ -2639,7 +2674,7 @@ describe('main', () => {
     });
 
     it('skips webContents.send when webContents isDestroyed (WARN-10)', async () => {
-        await main();
+        await main(makeTestContributions());
         expect(capturedSettingsBroadcastFn.current).toBeDefined();
 
         const win = new FakeBrowserWindow({ webPreferences: {} });
@@ -2966,7 +3001,9 @@ describe('main() CHIMERA_DEV_HARNESS guard', () => {
         const origEnv = process.env;
         process.env = { ...origEnv, CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'production' };
         try {
-            await expect(main()).rejects.toThrow(/CHIMERA_DEV_HARNESS.*production/i);
+            await expect(main(makeTestContributions())).rejects.toThrow(
+                /CHIMERA_DEV_HARNESS.*production/i,
+            );
         } finally {
             process.env = origEnv;
         }
@@ -2976,7 +3013,7 @@ describe('main() CHIMERA_DEV_HARNESS guard', () => {
         const origEnv = process.env;
         process.env = { ...origEnv, CHIMERA_DEV_HARNESS: '1', NODE_ENV: 'development' };
         try {
-            await expect(main()).resolves.not.toThrow();
+            await expect(main(makeTestContributions())).resolves.not.toThrow();
         } finally {
             process.env = origEnv;
         }
@@ -2996,7 +3033,7 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
             CHIMERA_DEV_HARNESS: undefined,
         };
         try {
-            await expect(main()).rejects.toThrow(/CHIMERA_DEBUG/i);
+            await expect(main(makeTestContributions())).rejects.toThrow(/CHIMERA_DEBUG/i);
         } finally {
             process.env = origEnv;
         }
@@ -3011,7 +3048,7 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
             CHIMERA_DEV_HARNESS: undefined,
         };
         try {
-            await expect(main()).resolves.not.toThrow();
+            await expect(main(makeTestContributions())).resolves.not.toThrow();
         } finally {
             process.env = origEnv;
         }
@@ -3026,7 +3063,7 @@ describe('main() CHIMERA_DEBUG production guard (Invariant #27)', () => {
         const { CHIMERA_DEBUG: _removed, ...envWithout } = origEnv;
         process.env = { ...envWithout, NODE_ENV: 'production', CHIMERA_DEV_HARNESS: undefined };
         try {
-            await expect(main()).resolves.not.toThrow();
+            await expect(main(makeTestContributions())).resolves.not.toThrow();
         } finally {
             process.env = origEnv;
         }
@@ -3118,7 +3155,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
     });
 
     it('onGameStart is NOT called synchronously when onSessionHosted fires (before any join)', async () => {
-        await main();
+        await main(makeTestContributions());
         const sessionCb = getSessionCallback();
         const transport = makeOrderingTransport();
 
@@ -3130,7 +3167,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
     });
 
     it('onGameStart is NOT called after only the first of two expected players joins', async () => {
-        await main();
+        await main(makeTestContributions());
         const sessionCb = getSessionCallback();
         const transport = makeOrderingTransport();
 
@@ -3142,7 +3179,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
     });
 
     it('onGameStart fires exactly once when all expected players have joined', async () => {
-        await main();
+        await main(makeTestContributions());
         const sessionCb = getSessionCallback();
         const transport = makeOrderingTransport();
 
@@ -3154,7 +3191,7 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
     });
 
     it('every agent is registered before onGameStart fires (Invariant #17)', async () => {
-        await main();
+        await main(makeTestContributions());
         const sessionCb = getSessionCallback();
         const transport = makeOrderingTransport();
 
@@ -3257,7 +3294,7 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
     });
 
     it('onGameStart fires only once when a player leaves and rejoins after threshold was met', async () => {
-        await main();
+        await main(makeTestContributions());
         const sessionCb = getSessionCallback();
         const transport = makeRejoinTransport();
 
@@ -3357,7 +3394,7 @@ describe('onSessionHosted session teardown: onGameEnd not called when gameResult
         // is tested in autosave-wiring.integration.test.ts:AC4 and verified via the
         // early-exit guard added to ActionPipeline#resolveGameResult (WARN-1 fix).
         // This test documents the contract at the session teardown layer.
-        await main();
+        await main(makeTestContributions());
         const sessionCb = getSessionCallback();
         const transport = makeTeardownTransport();
 
@@ -3461,12 +3498,12 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     });
 
     it('constructs a FilePerspectiveReplayRepository at the composition root', async () => {
-        await main();
+        await main(makeTestContributions());
         expect(mockFilePerspectiveReplayRepoCtor).toHaveBeenCalledOnce();
     });
 
     it('host egress: starts, records each snapshot, and finalises for the host viewerId', async () => {
-        await main();
+        await main(makeTestContributions());
         const hostId = playerId('host-perspective');
 
         getLobbyOptions().onSessionHosted?.(makeHostTransport(), { hostId, maxPlayers: 1 });
@@ -3488,7 +3525,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     });
 
     it('host egress: skips frames projected for a different seat (post-handoff lock, #98)', async () => {
-        await main();
+        await main(makeTestContributions());
         const hostId = playerId('host-locked');
         const otherSeat = playerId('other-seat');
 
@@ -3512,7 +3549,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     });
 
     it('host abnormal teardown: aborts the in-progress recording, persisting no file', async () => {
-        await main();
+        await main(makeTestContributions());
         const hostId = playerId('host-abandoned');
 
         const cleanup = getLobbyOptions().onSessionHosted?.(makeHostTransport(), {
@@ -3530,7 +3567,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     });
 
     it('client egress: starts on first snapshot, records, and finalises for the client viewerId', async () => {
-        await main();
+        await main(makeTestContributions());
         const options = getLobbyOptions();
         const clientId = playerId('client-perspective');
 
@@ -3550,7 +3587,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     });
 
     it('client abnormal teardown: aborts when the session closes before match end', async () => {
-        await main();
+        await main(makeTestContributions());
         const options = getLobbyOptions();
         const clientId = playerId('client-abandoned');
 
@@ -3564,7 +3601,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     });
 
     it('rejects a client recording that would overlap a live host recording (mutual exclusion)', async () => {
-        await main();
+        await main(makeTestContributions());
         const options = getLobbyOptions();
         const hostId = playerId('host-live');
         const clientId = playerId('client-overlap');
@@ -3592,7 +3629,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     });
 
     it('export-current resolves for a JOINED client (the gate opens for a joined session)', async () => {
-        await main();
+        await main(makeTestContributions());
         const options = getLobbyOptions();
         const clientId = playerId('client-export');
 
@@ -3638,7 +3675,7 @@ describe('main() — perspective replay IPC wiring (F44b T7)', () => {
     });
 
     it('registers every chimera:replay:perspective:* channel', async () => {
-        await main();
+        await main(makeTestContributions());
 
         for (const channel of [
             PERSPECTIVE_REPLAY_LIST_CHANNEL,
@@ -3655,7 +3692,7 @@ describe('main() — perspective replay IPC wiring (F44b T7)', () => {
     });
 
     it('export-current rejects when neither a hosted nor a joined session is active', async () => {
-        await main();
+        await main(makeTestContributions());
 
         const handler = findHandler(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL);
         expect(handler).toBeTypeOf('function');
@@ -3736,7 +3773,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
 
     /** Boot a hosted, started 2-player match with both players present. */
     const startHostedMatch = async (): Promise<RtlOptions> => {
-        await main();
+        await main(makeTestContributions());
         const options = getOptions();
         options.onSessionHosted?.(makeTransport(), { hostId, maxPlayers: 2 });
         capturedJoin?.({ playerId: guestId }); // both present → onGameStart fires once
@@ -3774,7 +3811,7 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
     });
 
     it('wires onReturnToLobbyRequested as a function', async () => {
-        await main();
+        await main(makeTestContributions());
         expect(getOptions().onReturnToLobbyRequested).toBeTypeOf('function');
     });
 

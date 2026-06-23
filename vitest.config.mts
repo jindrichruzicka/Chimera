@@ -75,6 +75,7 @@ export default defineConfig({
             provider: 'v8',
             reporter: ['text', 'html', 'lcov'],
             include: [
+                'app/**/*.ts',
                 'electron/**/*.ts',
                 'simulation/**/*.ts',
                 'ai/**/*.ts',
