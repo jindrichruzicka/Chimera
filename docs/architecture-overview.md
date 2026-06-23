@@ -343,6 +343,21 @@ Once `@chimera/simulation` is published and stable, the intended adoption path f
 
 An adopter building a card game toolkit publishes `@chimera/cards` with `peerDependencies` on `@chimera/simulation`. Their game packages depend on both. The engine team has no coupling to or knowledge of the game packages — the dependency arrows point inward toward the core, never outward.
 
+### C.7 As-Built Package Build Model (M9)
+
+As of M9, the engine ships as a hierarchy of `@chimera/*` workspace packages with a deliberate, transitional split between two build modes. This split is intentional — it is not configuration drift.
+
+**Built / independently consumable** — `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, `@chimera/renderer`. Each declares `"type": "module"`, an `exports` map onto `./dist`, `"files": ["dist"]`, and a `tsconfig.build.json` (`composite`, emitting JS + `.d.ts` + maps). All four are wired into the root [`tsconfig.build.json`](../tsconfig.build.json) `tsc -b` reference graph (the inward, acyclic `workspace:*` DAG of Invariant #1) and get an explicit `tsc --noEmit -p <pkg>` in the root `typecheck` script. `@chimera/renderer` publishes only its two public component barrels (`./components/ui`, `./components/chat`) via a scoped build; `tsc` emits no CSS, so [`tools/copy-renderer-css.ts`](../tools/copy-renderer-css.ts) copies `*.module.css` + `styles/tokens.css` into `dist/` afterward.
+
+**Source-only (consumed in place, no `dist`)** — `@chimera/electron`. It has no `exports` map, no `build` script, and no `tsconfig.build.json`; its source is type-checked by the root [`tsconfig.json`](../tsconfig.json) program rather than a package config of its own. This is intentional pending **F62**, which turns it into a composite package like the four above. It also keeps `"type": "commonjs"` (the default): the committed `electron/main/index.js` / `electron/preload/api.js` bundles are CommonJS and the root `main` points at them, so it must **not** be flipped to `"type": "module"` until F62 replaces those bundles.
+
+The engine is game-agnostic, so the game/consumer layer is **not** part of this package set. It lives under `games/` (relocating to `apps/` in **F63**), consumes the engine purely through the `@chimera/*` packages above, has no `dist` build, and is consumed from source. Its `.ts`/`.tsx` sources are type-checked standalone via [`games/tsconfig.json`](../games/tsconfig.json), wired into the `typecheck` script because the root program includes only `games/**/*.ts` — not the `.tsx` screen/shell files the consumer layer contributes.
+
+**Dual module resolution.** Two resolution modes run side by side, which is why nearly every root script is prefixed with `pnpm build:packages`:
+
+- **Tests and dev** resolve `@chimera/*` to in-tree **TypeScript source** via the Vitest resolver plugin ([`tools/vitest-resolver-plugin`](../tools/vitest-resolver-plugin.ts), and the equivalent Next/webpack alias) — fast iteration with no rebuild step.
+- **Typecheck, lint (type-aware rules), and production** resolve `@chimera/*` to the built **`dist/`** through each package's `exports` map, so `dist` must exist first — hence the `build:packages` prefix on `typecheck`, `lint`, `test`, and `coverage`. The path aliases were removed from the production/typecheck tsconfigs in F57 (#752); only [`e2e/tsconfig.json`](../e2e/tsconfig.json) keeps a transitional `paths` map, because the Playwright runner resolves bare specifiers with no bundler hook.
+
 ---
 
 ## Appendix D. Future Extensions Roadmap (Post-1.0.0)

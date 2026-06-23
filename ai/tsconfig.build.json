@@ -1,4 +1,9 @@
 {
+    // Per-package build for @chimera/ai (issue #764). Follows the split-tsconfig
+    // dist pattern established on the leaf in simulation/tsconfig.build.json (#759):
+    // composite emit under ./dist (JS + .d.ts + maps) consumed via the package
+    // `exports` map, test files excluded. References @chimera/simulation — its only
+    // workspace dependency — so `tsc --build` orders the graph (Invariant #1).
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "composite": true,

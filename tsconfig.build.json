@@ -11,7 +11,9 @@
     // library build participates here — the full renderer/electron/tactics app
     // compilation stays on the flat `tsc --noEmit` checks (renderer/tsconfig.json via the
     // Next plugin; root tsconfig.json for electron/games/tools/e2e). electron is
-    // intentionally absent: it is source-only with no composite build yet.
+    // intentionally absent: it is source-only with no composite build yet (it gains
+    // its own composite build in F62). See the two-tier package model and the
+    // source-vs-dist dual-resolution rationale in docs/architecture-overview.md §C.7.
     //
     // This file is reference-only (`files: []`) and deliberately does NOT extend the root
     // tsconfig.json — a solution config carries no compilerOptions of its own.
