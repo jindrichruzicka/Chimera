@@ -6,13 +6,19 @@
     // so a second run with no source changes is a no-op.
     //
     // The references mirror the acyclic, inward `workspace:*` graph (Invariant #1):
-    // simulation is the zero-dep leaf; ai / networking / renderer reference it; nothing
-    // points back out to a sibling or the app layer. Only renderer's SCOPED component-
-    // library build participates here — the full renderer/electron/tactics app
-    // compilation stays on the flat `tsc --noEmit` checks (renderer/tsconfig.json via the
-    // Next plugin; root tsconfig.json for electron/games/tools/e2e). electron is
-    // intentionally absent: it is source-only with no composite build yet (it gains
-    // its own composite build in F62). See the two-tier package model and the
+    // simulation is the zero-dep leaf; ai / networking / renderer reference it; electron
+    // sits at the top (layer 2) and references simulation/ai/networking/renderer. The
+    // result stays acyclic: nothing points back out to a sibling above it. The chat
+    // barrel's type-only `@chimera/electron/preload/api-types` back-edge is resolved by
+    // renderer/tsconfig.build.json onto electron SOURCE via a `paths` alias (NOT a
+    // project reference), so it never closes a renderer → electron reference cycle.
+    // `tsc --build` derives the order from the reference graph (simulation →
+    // ai/networking/renderer → electron), so this list order is informational. Only
+    // renderer's SCOPED component-library build participates as a partial compilation —
+    // the full renderer/tactics app compilation stays on the flat `tsc --noEmit` checks
+    // (renderer/tsconfig.json via the Next plugin; games/tsconfig.json for games).
+    // electron joined the composite graph in F62 (#777) as a whole-package build
+    // (electron/tsconfig.build.json). See the two-tier package model and the
     // source-vs-dist dual-resolution rationale in docs/architecture-overview.md §C.7.
     //
     // This file is reference-only (`files: []`) and deliberately does NOT extend the root
@@ -22,6 +28,7 @@
         { "path": "./simulation/tsconfig.build.json" },
         { "path": "./ai/tsconfig.build.json" },
         { "path": "./networking/tsconfig.build.json" },
-        { "path": "./renderer/tsconfig.build.json" }
+        { "path": "./renderer/tsconfig.build.json" },
+        { "path": "./electron/tsconfig.build.json" }
     ]
 }

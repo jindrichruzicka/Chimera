@@ -47,17 +47,18 @@ const nextConfig: NextConfig = {
         // in-tree source dir for the Next build. F57 (#752) removed the root
         // tsconfig `paths` aliases, so these webpack aliases are the bundler's
         // @chimera/* resolver for the packages that have no `dist/` build yet.
-        // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, and
-        // `@chimera/renderer` are intentionally NOT aliased: each is a built
-        // package (issues #759, #764, #768, #773) and Next resolves it through its
-        // `exports` map onto `<pkg>/dist` (build-before-consume; `build:renderer`
-        // fronts `build:packages`, so `renderer/dist` exists before `next build`).
-        // The renderer app's own internals import relatively. `@chimera/tactics`
-        // lives under games/.
+        // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`,
+        // `@chimera/renderer`, and `@chimera/electron` are intentionally NOT
+        // aliased: each is a built package (issues #759, #764, #768, #773, #777)
+        // and Next resolves it through its `exports` map onto `<pkg>/dist`
+        // (build-before-consume; `build:renderer` fronts `build:packages`, so the
+        // dist builds exist before `next build`). In particular the chat barrel's
+        // `@chimera/electron/preload/api-types` type import now resolves onto
+        // electron/dist. The renderer app's own internals import relatively.
+        // `@chimera/tactics` lives under games/.
         config.resolve ??= { alias: {}, extensionAlias: {} };
         config.resolve.alias = {
             ...config.resolve.alias,
-            '@chimera/electron': path.join(root, 'electron'),
             '@chimera/tactics': path.join(root, 'games/tactics'),
             // The renderer's own Next build is the single bundle where the
             // renderer source AND the mounted games are linked together. The

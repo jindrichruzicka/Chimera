@@ -1,0 +1,50 @@
+{
+    // Per-package build for @chimera/electron (issue #777, F62 — Appendix C.3/§3).
+    // Follows the split-tsconfig dist pattern established on the leaf in
+    // simulation/tsconfig.build.json (#759) and copied by ai (#764), networking
+    // (#768) and renderer (#773): composite emit under ./dist (JS + .d.ts + maps)
+    // consumed via the package `exports` map, test files excluded.
+    //
+    // Unlike renderer/tsconfig.build.json (which SCOPES `include` to the public
+    // component-barrel closure because the renderer package is also the Next app
+    // and most of it cannot compile standalone), electron is plain Node TypeScript
+    // that compiles whole — so `include` is the package-wide `**/*.ts` the leaf
+    // packages use. The exports map (not the build) is what curates the public
+    // surface: main-process internals are emitted to dist but are NOT reachable as
+    // package subpaths (Invariant #5).
+    //
+    // electron sits at the TOP of the engine graph (layer 2) and references all four
+    // engine packages it depends on — simulation, ai, networking and renderer — so
+    // `tsc --build` orders the build after them (Invariant #1). This stays acyclic:
+    // electron imports nothing from renderer at runtime, and renderer's only edge to
+    // electron is the chat barrel's type-only `@chimera/electron/preload/api-types`
+    // back-edge, which renderer/tsconfig.build.json resolves onto electron SOURCE via
+    // a `paths` alias rather than a project reference — so there is no renderer →
+    // electron reference and thus no TS6202 cycle (the build order is simulation →
+    // ai/networking/renderer → electron).
+    //
+    // `@chimera/tactics` is imported by the three composition registries
+    // (mainGameRegistry / gameContentRegistry / lobbySetupRegistry) but is NOT a
+    // composite reference: it resolves through the workspace node_modules symlink as
+    // an external source package (read for types, never emitted — no TS6307). That
+    // transitional game-injection seam is removed in T2.
+    "extends": "../tsconfig.json",
+    "compilerOptions": {
+        "composite": true,
+        "noEmit": false,
+        "rootDir": ".",
+        "outDir": "./dist",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    },
+    "references": [
+        { "path": "../simulation/tsconfig.build.json" },
+        { "path": "../ai/tsconfig.build.json" },
+        { "path": "../networking/tsconfig.build.json" },
+        { "path": "../renderer/tsconfig.build.json" }
+    ],
+    "include": ["**/*.ts"],
+    "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.spec.ts", "**/__tests__/**"]
+}

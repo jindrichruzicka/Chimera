@@ -2,7 +2,40 @@
     "name": "@chimera/electron",
     "version": "0.9.0",
     "private": true,
+    "type": "module",
+    "exports": {
+        "./main": {
+            "types": "./dist/main/index.d.ts",
+            "default": "./dist/main/index.js"
+        },
+        "./preload/api": {
+            "types": "./dist/preload/api.d.ts",
+            "default": "./dist/preload/api.js"
+        },
+        "./preload/api-types": {
+            "types": "./preload/api-types.ts",
+            "default": "./dist/preload/api-types.js"
+        },
+        "./preload/api-types.js": {
+            "types": "./preload/api-types.ts",
+            "default": "./dist/preload/api-types.js"
+        },
+        "./preload/debug-api-types": {
+            "types": "./preload/debug-api-types.ts",
+            "default": "./dist/preload/debug-api-types.js"
+        },
+        "./preload/debug-api-types.js": {
+            "types": "./preload/debug-api-types.ts",
+            "default": "./dist/preload/debug-api-types.js"
+        }
+    },
+    "files": [
+        "dist",
+        "preload/api-types.ts",
+        "preload/debug-api-types.ts"
+    ],
     "scripts": {
+        "build": "tsc -p tsconfig.build.json",
         "test": "vitest run --config ../vitest.config.mts --dir .",
         "lint": "eslint ."
     },

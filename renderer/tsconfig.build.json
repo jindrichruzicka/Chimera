@@ -31,11 +31,17 @@
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "types": ["node", "react", "react-dom"]
     },
-    // Simulation is the only built @chimera/* dependency; referencing it orders the
-    // `tsc --build` graph. @chimera/electron is intentionally NOT referenced: it is
-    // source-only (no composite build yet — that is F62) and the chat barrel's
-    // `import type … from '@chimera/electron/preload/api-types.js'` is type-only, so
-    // its source is read for types but never emitted (no rootDir violation).
+    // simulation is renderer's only built @chimera/* dependency; referencing it
+    // orders the `tsc --build` graph. @chimera/electron is intentionally NOT
+    // referenced: electron sits ABOVE renderer in the graph (electron references
+    // renderer), so a renderer → electron reference would be a forbidden app-layer
+    // back-edge (Invariant #1, tools/tsconfig-build-graph.test.ts). The chat barrel's
+    // tolerated type-only `import type … from '@chimera/electron/preload/api-types.js'`
+    // resolves through @chimera/electron's `exports` map, whose preload type
+    // contracts point `types` at electron SOURCE (#777) — so it is read as an
+    // external (node_modules) declaration, never emitted (no rootDir violation), and
+    // does not require electron/dist to exist when renderer compiles first. The
+    // back-edge itself is cleaned up later in F62.
     "references": [{ "path": "../simulation/tsconfig.build.json" }],
     "include": [
         "components/ui/**/*.ts",

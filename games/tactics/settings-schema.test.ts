@@ -7,12 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-    ENGINE_DEFAULTS,
-    SettingsMerger,
-    InMemorySettingsRepository,
-} from '@chimera/simulation/settings/index.js';
-import { SettingsManager } from '@chimera/electron/main/settings/SettingsManager.js';
+import { ENGINE_DEFAULTS, SettingsMerger } from '@chimera/simulation/settings/index.js';
 import { tacticsSettingsSchema, TACTICS_DEFAULTS } from './settings-schema.js';
 
 // ── tacticsSettingsSchema declaration ─────────────────────────────────────────
@@ -122,17 +117,11 @@ describe('tacticsSettingsSchema — SettingsMerger smoke test', () => {
     });
 });
 
-// ── SettingsManager round-trip ────────────────────────────────────────────────
-
-describe('tacticsSettingsSchema — SettingsManager round-trip', () => {
-    it('returns full tactics defaults after registerSchema + getSettings', async () => {
-        const repo = new InMemorySettingsRepository();
-        const mgr = new SettingsManager(repo);
-        mgr.registerSchema(tacticsSettingsSchema);
-
-        const settings = await mgr.getSettings('tactics');
-        expect((settings as unknown as { showGrid: boolean }).showGrid).toBe(true);
-        expect((settings as unknown as { animationSpeed: string }).animationSpeed).toBe('normal');
-        expect(settings.audio.masterVolume).toBe(1.0);
-    });
-});
+// NOTE (F62 #777): the former "SettingsManager round-trip" block was removed when
+// @chimera/electron gained its curated `exports` map. SettingsManager is an
+// electron-main internal (electron/main/settings/SettingsManager.ts) and is not a
+// reachable package subpath (Invariant #5) — a game's tests must not reach across
+// into host internals. Its assertions (registerSchema('tactics') + getSettings
+// returns the full merged tactics defaults) duplicated the SettingsMerger smoke
+// test above; the registerSchema/getSettings integration is owned by electron's
+// own SettingsManager tests, which use a game schema as a fixture.

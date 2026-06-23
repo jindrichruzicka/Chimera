@@ -23,10 +23,14 @@ import ts from 'typescript';
 const repoRoot = path.resolve(import.meta.dirname, '..');
 
 /** Packages with a composite `tsconfig.build.json` that join the `tsc -b` solution. */
-const COMPOSITE_PACKAGE_DIRS = ['simulation', 'ai', 'networking', 'renderer'] as const;
+const COMPOSITE_PACKAGE_DIRS = ['simulation', 'ai', 'networking', 'renderer', 'electron'] as const;
 
-/** Source-only app-layer packages that must NEVER be a project reference (Invariant #1). */
-const APP_LAYER_PACKAGE_DIRS = ['electron', 'games/tactics'] as const;
+/**
+ * Source-only app-layer packages that must NEVER be a project reference (Invariant #1).
+ * `@chimera/electron` graduated to a composite build in F62 (#777); `games/tactics`
+ * becomes a built consumer app in F63 (until then it stays source-only).
+ */
+const APP_LAYER_PACKAGE_DIRS = ['games/tactics'] as const;
 
 /**
  * Layer rank for the inward/acyclic check: a reference is only legal when it points to a

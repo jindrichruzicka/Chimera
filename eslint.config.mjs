@@ -49,6 +49,7 @@ export default tseslint.config(
             'ai/engine/__tests__/fixtures/**',
             'networking/__tests__/fixtures/**',
             'electron/main/__tests__/fixtures/**',
+            'electron/preload/__tests__/fixtures/**',
             'renderer/__tests__/fixtures/**',
             // CJS bridge shim for eslint.config.mjs — uses require() / module.exports by design.
             'tools/eslint-plugin-chimera/plugin.cjs',
@@ -56,7 +57,7 @@ export default tseslint.config(
             '.e2e-build/**',
             'e2e/playwright-report/**',
             'test-results/**',
-            // Legacy Electron bundle outputs — source lives in the adjacent .ts files.
+            // In-tree Electron bundle outputs — source lives in the adjacent .ts files.
             'electron/main/index.js',
             'electron/preload/api.js',
         ],
@@ -83,6 +84,7 @@ export default tseslint.config(
                         'ai/engine/__tests__/fixtures/*.ts',
                         'networking/__tests__/fixtures/*.ts',
                         'electron/main/__tests__/fixtures/*.ts',
+                        'electron/preload/__tests__/fixtures/*.ts',
                         'renderer/__tests__/fixtures/*.ts',
                     ],
                 },
@@ -330,6 +332,56 @@ export default tseslint.config(
                             ],
                             message:
                                 'renderer/ must not import the @chimera/ai or @chimera/networking runtime — the renderer depends on @chimera/simulation contracts only (Invariant #1). Game-facing renderer code is exposed solely through @chimera/renderer/components/ui and .../components/chat (Invariant #96). See coding-standards.md §3, issue #772.',
+                        },
+                    ],
+                },
+            ],
+        },
+    },
+
+    // `@chimera/electron`'s preload bridge is the sole renderer-facing surface
+    // (Invariant #5) and depends on the `@chimera/simulation` contract surface ONLY
+    // (Invariant #1): the contextBridge layer must not pull the renderer UI library,
+    // the ai/networking runtime, a game package, or the electron main-process
+    // internals into the sandboxed preload. Mirrors the per-package import zones
+    // (ai/networking/renderer) and forbids both the `@chimera/<pkg>` workspace-alias
+    // form and the legacy relative-path form (the F59 lesson). The main-process
+    // games + provider-internal boundaries are enforced separately on
+    // `electron/main/**` (chimera/no-main-games-import, chimera/no-main-provider-internals).
+    // See coding-standards.md §3, issue #777.
+    {
+        files: ['electron/preload/**/*.{ts,tsx}'],
+        rules: {
+            'no-restricted-imports': [
+                'error',
+                {
+                    patterns: [
+                        {
+                            group: [
+                                '@chimera/ai',
+                                '@chimera/ai/*',
+                                '@chimera/networking',
+                                '@chimera/networking/*',
+                                '@chimera/renderer',
+                                '@chimera/renderer/*',
+                                '@chimera/tactics',
+                                '@chimera/tactics/*',
+                                '@chimera/electron/main',
+                                '@chimera/electron/main/*',
+                                'ai/*',
+                                '**/ai/*',
+                                'networking/*',
+                                '**/networking/*',
+                                'renderer/*',
+                                '**/renderer/*',
+                                'games/*',
+                                '**/games/*',
+                                '../main/*',
+                                '../../main/*',
+                                '**/electron/main/*',
+                            ],
+                            message:
+                                'electron/preload is the sole renderer-facing surface (Invariant #5) and depends on @chimera/simulation contracts only (Invariant #1). It must not import the ai/networking runtime, the renderer UI library, a game package, or electron/main internals. See coding-standards.md §3, issue #777.',
                         },
                     ],
                 },

@@ -77,16 +77,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
     describe('@chimera/* package specifiers', () => {
         const workspaceRoot = '/workspace';
 
-        it('maps a @chimera/<engine-pkg>/sub.js import to the .ts source', () => {
-            const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
-            const result = plugin.resolveId(
-                '@chimera/electron/runtime/SessionRuntime.js',
-                path.join(workspaceRoot, 'electron/preload/x.ts'),
-            );
-            expect(result).toBe(path.join(workspaceRoot, 'electron/runtime/SessionRuntime.ts'));
-        });
-
-        it('returns null for built packages (@chimera/simulation, @chimera/ai, @chimera/networking, @chimera/renderer) — resolved via their exports map, not this plugin', () => {
+        it('returns null for built packages (@chimera/simulation, @chimera/ai, @chimera/networking, @chimera/renderer, @chimera/electron) — resolved via their exports map, not this plugin', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             expect(
                 plugin.resolveId(
@@ -97,13 +88,13 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
             expect(
                 plugin.resolveId(
                     '@chimera/ai/engine/AgentManager.js',
-                    path.join(workspaceRoot, 'electron/main/index.ts'),
+                    path.join(workspaceRoot, 'games/tactics/ai/policy.ts'),
                 ),
             ).toBeNull();
             expect(
                 plugin.resolveId(
                     '@chimera/networking/provider/MultiplayerProvider.js',
-                    path.join(workspaceRoot, 'electron/main/index.ts'),
+                    path.join(workspaceRoot, 'games/tactics/net.ts'),
                 ),
             ).toBeNull();
             // #773: renderer now ships a dist/ build and resolves via its exports map.
@@ -111,6 +102,15 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
                 plugin.resolveId(
                     '@chimera/renderer/components/ui',
                     path.join(workspaceRoot, 'games/tactics/screens/Foo.tsx'),
+                ),
+            ).toBeNull();
+            // #777: electron now ships a dist/ build; its preload api-types and the
+            // main bootstrap resolve via the @chimera/electron exports map onto
+            // electron/dist, not this source-mapping plugin.
+            expect(
+                plugin.resolveId(
+                    '@chimera/electron/preload/api-types.js',
+                    path.join(workspaceRoot, 'renderer/state/chatStore.ts'),
                 ),
             ).toBeNull();
         });
@@ -137,15 +137,13 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
         });
 
         it('resolves an extensionless subpath via its index file', () => {
-            const existsSyncMock = vi.fn((p: string) =>
-                p.endsWith(path.join('runtime', 'index.ts')),
-            );
+            const existsSyncMock = vi.fn((p: string) => p.endsWith(path.join('lobby', 'index.ts')));
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, existsSyncMock);
             const result = plugin.resolveId(
-                '@chimera/electron/runtime',
-                path.join(workspaceRoot, 'electron/main/index.ts'),
+                '@chimera/tactics/lobby',
+                path.join(workspaceRoot, 'renderer/app/lobby/page.tsx'),
             );
-            expect(result).toBe(path.join(workspaceRoot, 'electron/runtime/index.ts'));
+            expect(result).toBe(path.join(workspaceRoot, 'games/tactics/lobby/index.ts'));
         });
 
         it('resolves a non-TS asset (.css) to the literal mapped path', () => {
@@ -170,7 +168,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => false);
             expect(
                 plugin.resolveId(
-                    '@chimera/electron/provider/types.js',
+                    '@chimera/tactics/provider/types.js',
                     path.join(workspaceRoot, 'a.ts'),
                 ),
             ).toBeNull();
