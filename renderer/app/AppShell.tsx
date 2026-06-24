@@ -10,6 +10,7 @@ import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
 import { ToastHost } from '../components/shell/ToastHost';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { GameRegistrationBootstrap } from './GameRegistrationBootstrap';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
 import { LoggingBootstrap } from './LoggingBootstrap';
 import { LobbyStoreBootstrap } from './LobbyStoreBootstrap';
@@ -21,6 +22,7 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
     return (
         <Providers>
             <ThemeProvider>
+                <GameRegistrationBootstrap />
                 <LoggingBootstrap />
                 <SettingsBootstrap />
                 <LobbyStoreBootstrap />

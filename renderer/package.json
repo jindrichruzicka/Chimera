@@ -12,6 +12,10 @@
             "types": "./dist/components/chat/index.d.ts",
             "default": "./dist/components/chat/index.js"
         },
+        "./game": {
+            "types": "./dist/game/rendererGameRegistry.d.ts",
+            "default": "./dist/game/rendererGameRegistry.js"
+        },
         "./styles/*.css": "./dist/styles/*.css"
     },
     "files": [

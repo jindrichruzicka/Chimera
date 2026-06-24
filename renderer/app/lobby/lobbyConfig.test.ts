@@ -1,7 +1,25 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import {
+    _resetRendererGameRegistryForTest,
+    registerRendererGame,
+} from '../../game/rendererGameRegistry';
 import { parseLobbyConfig } from './lobbyConfig';
 
 describe('parseLobbyConfig', () => {
+    beforeEach(() => {
+        _resetRendererGameRegistryForTest();
+        registerRendererGame({
+            gameId: 'tactics',
+            loadGame: () => Promise.reject(new Error('not loaded in lobbyConfig test')),
+            loadShell: () => Promise.reject(new Error('not loaded in lobbyConfig test')),
+            isDefault: true,
+        });
+    });
+
+    afterEach(() => {
+        _resetRendererGameRegistryForTest();
+    });
+
     it('uses defaults when params are missing', () => {
         const config = parseLobbyConfig(new URLSearchParams(''));
 

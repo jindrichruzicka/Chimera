@@ -66,6 +66,15 @@
         // but its tsc -b dist/ emit must be excluded or the emitted .d.ts
         // double-declare against the source.
         "apps/tactics/dist/**",
+        // apps/tactics/renderer/** is the game's renderer composition root (#784):
+        // register.ts/loaders.ts dynamically import the game's screens/shell .tsx
+        // and the @chimera/renderer package, so — like the screens/shell .tsx — they
+        // need DOM/jsx/react libs this .ts-only flat program deliberately omits.
+        // They are type-checked with jsx by `tsc --noEmit -p apps/tactics/tsconfig.json`
+        // and by the tactics composite build (apps/tactics references renderer, a
+        // layer-1 dep — no back-edge), so excluding them here avoids a TS6142
+        // ("--jsx is not set") on the .tsx imports.
+        "apps/tactics/renderer/**",
         // electron/ is compiled exclusively by electron/tsconfig.json (#777): its
         // built package is consumed here through the @chimera/electron exports map
         // onto electron/dist. Excluding the source prevents double-compilation and

@@ -396,17 +396,21 @@ if [[ -d electron/main ]]; then
     )
 fi
 
-# ─── Check 16: engine shell pages must not import games/* (invariant 94) ──────
+# ─── Check 16: the renderer names no game (invariants 94 & #784) ─────────────
 # The main-menu/lobby/game/settings/saves/component-gallery pages are
-# game-agnostic; they reach game React only through renderer-owned loader helpers
-# (renderer/game/rendererGameRegistry — a `game/`, not `games/`, path), never a
-# games/* module or a @chimera/<game> package directly. The lobby page may parse
-# LobbyConfig via @chimera/simulation helpers (engine, allowed). Mirrors the
-# ESLint rule chimera/no-shell-games-import and the host-side Check 7 (#80), and
-# locks the boundary across the @chimera/renderer package cut (issue #774).
-# Matches static + dynamic specifiers; engine @chimera/* packages and comment
-# lines are filtered out. No file is exempt — the loader lives in renderer/game/,
-# outside these page directories.
+# game-agnostic, AND the renderer game-registration seam (renderer/game/) is now
+# game-agnostic too (#784): the registry became a runtime injection point
+# (registerRendererGame) and the tactics loaders moved to the consumer app
+# (apps/tactics/renderer/register.ts). None of these may import a games/* module
+# or a @chimera/<game> package directly — a game's renderer contribution enters
+# only at the consumer-app composition root, selected by the
+# chimera-game-registration build alias. The lobby page may parse LobbyConfig via
+# @chimera/simulation helpers (engine, allowed). Mirrors the ESLint
+# renderer/** game-import ban + chimera/no-shell-games-import and the host-side
+# Check 7 (#80); locks the boundary across the @chimera/renderer package cut
+# (issues #774, #784). Matches static + dynamic specifiers; engine @chimera/*
+# packages and comment lines are filtered out. No file is exempt — the renderer
+# registry seam is scanned alongside the shell pages.
 SHELL_PAGE_DIRS=(
     renderer/app/main-menu
     renderer/app/lobby
@@ -414,6 +418,7 @@ SHELL_PAGE_DIRS=(
     renderer/app/settings
     renderer/app/saves
     renderer/app/component-gallery
+    renderer/game
 )
 for shell_page_dir in "${SHELL_PAGE_DIRS[@]}"; do
     [[ -d "${shell_page_dir}" ]] || continue

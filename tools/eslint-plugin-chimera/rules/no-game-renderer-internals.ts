@@ -3,10 +3,14 @@
  *
  * ESLint rule: `chimera/no-game-renderer-internals`
  *
- * Allows game-owned renderer surfaces to consume the public renderer component
- * library — the UI primitive barrel (`@chimera/renderer/components/ui`) and the
- * chat barrel (`@chimera/renderer/components/chat`) — while blocking all other
- * renderer internals from games packages.
+ * Allows game-owned renderer surfaces to consume the public renderer surface —
+ * the UI primitive barrel (`@chimera/renderer/components/ui`), the chat barrel
+ * (`@chimera/renderer/components/chat`), and the game-registration seam
+ * (`@chimera/renderer/game`, #784) — while blocking all other renderer internals
+ * from games packages. Game renderer surfaces are the React screens/shell
+ * components (`apps/<name>/{screens,shell}/*.{jsx,tsx}`) and the renderer
+ * composition root (`apps/<name>/renderer/*.{ts,tsx}`), which registers the
+ * game's renderer contribution into the host through the seam.
  *
  * Architecture reference: §3 Module Boundaries, §4.35 UI Design System
  */
@@ -61,7 +65,13 @@ function isGameFile(filename: string): boolean {
 
 function isGameRendererSurface(filename: string): boolean {
     const normalized = normalizePath(filename);
-    return /(?:^|\/)apps\/[^/]+\/(?:screens|shell)\/.*\.(?:jsx|tsx)$/u.test(normalized);
+    // A game's renderer-facing surfaces: the React screens/shell components
+    // (.jsx/.tsx) and the renderer composition root under apps/<name>/renderer/
+    // (.ts/.tsx — register.ts/loaders.ts, #784), which wires the game's renderer
+    // contribution into the @chimera/renderer host through the public game seam.
+    return /(?:^|\/)apps\/[^/]+\/(?:(?:screens|shell)\/.*\.(?:jsx|tsx)|renderer\/.*\.(?:ts|tsx))$/u.test(
+        normalized,
+    );
 }
 
 function isRendererPath(value: string): boolean {
@@ -111,6 +121,18 @@ function isPublicChatBarrelImport(source: string): boolean {
     );
 }
 
+// The renderer game-registration seam (#784): the public `@chimera/renderer/game`
+// export a consumer app's renderer composition root uses to register its game's
+// renderer contribution (`registerRendererGame`, `RendererGameContribution`).
+function isPublicGameSeamImport(source: string): boolean {
+    return (
+        source === '@chimera/renderer/game' ||
+        source === '@chimera/renderer/game/index' ||
+        source === '@chimera/renderer/game/index.ts' ||
+        source === '@chimera/renderer/game/index.js'
+    );
+}
+
 function isUiDeepImport(filename: string, source: string): boolean {
     const normalized = resolveImportPath(filename, source);
     return (
@@ -128,9 +150,9 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             gameRendererImportOutsideSurface:
-                'Only game renderer surfaces under apps/<name>/screens/*.tsx or apps/<name>/shell/*.tsx may import renderer UI primitives.',
+                'Only game renderer surfaces under apps/<name>/screens/*.tsx, apps/<name>/shell/*.tsx, or apps/<name>/renderer/*.{ts,tsx} may import from the renderer package.',
             gameRendererInternalImport:
-                'Game renderer surfaces may import only the public @chimera/renderer/components/ui or @chimera/renderer/components/chat barrels from renderer code. Renderer internals are forbidden in game-app packages.',
+                'Game renderer surfaces may import only the public @chimera/renderer/components/ui, @chimera/renderer/components/chat, or @chimera/renderer/game barrels from renderer code. Renderer internals are forbidden in game-app packages.',
             gameRendererUiDeepImport:
                 'Game renderer surfaces must import UI primitives from the public @chimera/renderer/components/ui barrel, not individual renderer component files.',
         },
@@ -152,7 +174,11 @@ const rule: Rule.RuleModule = {
                 return;
             }
 
-            if (isPublicUiBarrelImport(source) || isPublicChatBarrelImport(source)) {
+            if (
+                isPublicUiBarrelImport(source) ||
+                isPublicChatBarrelImport(source) ||
+                isPublicGameSeamImport(source)
+            ) {
                 return;
             }
 

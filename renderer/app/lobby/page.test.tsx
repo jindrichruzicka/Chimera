@@ -48,7 +48,7 @@ let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
 let mockLobbyShell: Partial<LoadedRendererGameShell> = {};
 
 vi.mock('../../game/rendererGameRegistry', () => ({
-    DEFAULT_RENDERER_GAME_ID: 'tactics',
+    getDefaultRendererGameId: () => 'tactics',
     loadRendererGameShell: () => Promise.resolve(mockLobbyShell),
 }));
 

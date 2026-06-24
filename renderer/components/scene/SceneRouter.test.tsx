@@ -8,7 +8,6 @@ import type {
     GameScreenProps,
     GameScreenRegistry,
 } from '@chimera/simulation/foundation/game-screen-contract.js';
-import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';
 import { useUiStore } from '../../state/uiStore.js';
 import { FadeProvider } from '../shell/FadeContext.js';
 import { SceneRouter } from './SceneRouter.js';
@@ -100,16 +99,6 @@ describe('SceneRouter', () => {
         );
 
         expect(await screen.findByTestId('summary-screen')).toBeTruthy();
-    });
-
-    it('post-game sceneDefaultScreen from simulation matches tactics registry override', () => {
-        // Consistency guard: DefaultScenes registers engine:post-game with defaultScreen 'summary'.
-        // TacticsGameScreenRegistry must also map engine:post-game to 'summary' so simulation
-        // and renderer agree — preventing scene/UI divergence (WARN-1).
-        // NOTE: see games/tactics/screens/index.test.tsx for a
-        // cross-package assertion that does not depend on the jsdom environment.
-        const tacticsPostGame = TacticsGameScreenRegistry.sceneDefaultScreens?.['engine:post-game'];
-        expect(tacticsPostGame).toBe('summary');
     });
 
     it('renders the transition overlay while a scene transition is preparing', async () => {

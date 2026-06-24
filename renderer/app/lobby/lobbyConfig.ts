@@ -1,4 +1,4 @@
-import { DEFAULT_RENDERER_GAME_ID } from '../../game/rendererGameRegistry';
+import { getDefaultRendererGameId } from '../../game/rendererGameRegistry';
 import { themeId as makeThemeId } from '../../theme/types';
 import type { ThemeId } from '../../theme/types';
 
@@ -8,20 +8,19 @@ export interface LobbyConfig {
     readonly themeId?: ThemeId;
 }
 
-const DEFAULT_GAME_ID = DEFAULT_RENDERER_GAME_ID;
 const DEFAULT_MAX_PLAYERS = 4;
 const MIN_MAX_PLAYERS = 2;
 const MAX_MAX_PLAYERS = 16;
 
 export function getDefaultLobbyConfig(): LobbyConfig {
     return {
-        gameId: DEFAULT_GAME_ID,
+        gameId: getDefaultRendererGameId(),
         maxPlayers: DEFAULT_MAX_PLAYERS,
     };
 }
 
 export function parseLobbyConfig(searchParams: URLSearchParams): LobbyConfig {
-    const gameId = searchParams.get('gameId') ?? DEFAULT_GAME_ID;
+    const gameId = searchParams.get('gameId') ?? getDefaultRendererGameId();
 
     const rawMaxPlayers = searchParams.get('maxPlayers');
     const hasValidInteger = rawMaxPlayers !== null && /^-?\d+$/.test(rawMaxPlayers.trim());

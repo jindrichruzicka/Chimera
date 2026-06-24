@@ -1,4 +1,4 @@
-import { describe, expect, expectTypeOf, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
 import type { ComponentType } from 'react';
 import type {
     GameMainMenuDefinition,
@@ -8,58 +8,121 @@ import type {
 } from '@chimera/simulation/foundation/game-shell-contract.js';
 import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import {
+    _resetRendererGameRegistryForTest,
+    getDefaultRendererGameId,
     getRendererGameMenuCommand,
     loadRendererGame,
     loadRendererGameShell,
+    NoDefaultRendererGameError,
+    registerRendererGame,
     type LoadedRendererGame,
+    type LoadedRendererGameShell,
+    type RendererGameContribution,
     UnknownRendererGameError,
 } from './rendererGameRegistry';
 
+const FAKE_BOARD: LoadedRendererGame['registry']['board'] = () => null;
+
+function fakeGame(overrides?: Partial<LoadedRendererGame>): LoadedRendererGame {
+    return {
+        registry: { board: FAKE_BOARD },
+        assetManifest: { gameId: 'fake', entries: [] },
+        inputActions: [
+            { id: 'game:fake-action', description: 'Fake', category: 'Test', oneShot: true },
+        ],
+        shell: { mainMenu: { buttons: [] } },
+        ...overrides,
+    };
+}
+
+function fakeShell(overrides?: Partial<LoadedRendererGameShell>): LoadedRendererGameShell {
+    return {
+        mainMenu: { buttons: [] },
+        menuCommands: {},
+        ...overrides,
+    };
+}
+
+function registerFake(overrides?: Partial<RendererGameContribution>): void {
+    const game = fakeGame();
+    registerRendererGame({
+        gameId: 'fake',
+        loadGame: () => Promise.resolve(game),
+        loadShell: () => Promise.resolve(game.shell ?? fakeShell()),
+        isDefault: true,
+        ...overrides,
+    });
+}
+
 describe('rendererGameRegistry', () => {
-    it('loads the registered tactics renderer bundle', async () => {
-        const game = await loadRendererGame('tactics');
+    beforeEach(() => {
+        _resetRendererGameRegistryForTest();
+    });
+
+    afterEach(() => {
+        _resetRendererGameRegistryForTest();
+    });
+
+    it('loads a registered renderer game through the injection seam', async () => {
+        registerFake();
+
+        const game = await loadRendererGame('fake');
 
         expect(game.registry.board).toBeDefined();
-        expect(game.assetManifest?.gameId).toBe('tactics');
-        expect(game.inputActions?.map((action) => action.id)).toContain('game:end-turn');
+        expect(game.assetManifest?.gameId).toBe('fake');
+        expect(game.inputActions?.map((action) => action.id)).toContain('game:fake-action');
+    });
+
+    it('loads a registered renderer game shell through the injection seam', async () => {
+        const shell = fakeShell({ shellBackground: () => null });
+        registerRendererGame({
+            gameId: 'fake',
+            loadGame: () => Promise.resolve(fakeGame({ shell })),
+            loadShell: () => Promise.resolve(shell),
+            isDefault: true,
+        });
+
+        const loaded = await loadRendererGameShell('fake');
+
+        expect(loaded.shellBackground).toBeDefined();
+        expect(loaded.menuCommands).toEqual({});
     });
 
     it('rejects unknown game ids', async () => {
+        registerFake();
+
         await expect(loadRendererGame('missing-game')).rejects.toThrow(UnknownRendererGameError);
     });
 
-    it('loads only the registered tactics shell bundle', async () => {
-        const shell = await loadRendererGameShell('tactics');
-
-        expect(shell.mainMenu?.buttons.map((button) => button.label)).toEqual([
-            'New Game',
-            'Load Game',
-            'Settings',
-            'Replays',
-            'Quit',
-        ]);
-        expect(shell.shellBackground).toBeDefined();
-        expect(shell.menuCommands).toEqual({});
-        expect(shell.fonts?.map((font) => `${font.family}:${font.weight}`)).toEqual([
-            'Cinzel:400',
-            'Cinzel:700',
-            'Cinzel:900',
-            'Philosopher:400',
-            'Philosopher:400',
-            'Philosopher:700',
-        ]);
-    });
-
-    it('loads the tactics lobby screen into the shell bundle (#708)', async () => {
-        const shell = await loadRendererGameShell('tactics');
-
-        expect(shell.LobbyScreen).toBeDefined();
-    });
-
     it('rejects unknown game ids when loading a shell bundle', async () => {
+        registerFake();
+
         await expect(loadRendererGameShell('missing-game')).rejects.toThrow(
             UnknownRendererGameError,
         );
+    });
+
+    it('rejects every game id before any game is registered', async () => {
+        await expect(loadRendererGame('fake')).rejects.toThrow(UnknownRendererGameError);
+        await expect(loadRendererGameShell('fake')).rejects.toThrow(UnknownRendererGameError);
+    });
+
+    describe('getDefaultRendererGameId', () => {
+        it('returns the id of the contribution registered as default', () => {
+            registerFake({ gameId: 'fake', isDefault: true });
+
+            expect(getDefaultRendererGameId()).toBe('fake');
+        });
+
+        it('throws NoDefaultRendererGameError when no default is registered', () => {
+            registerFake({ isDefault: false });
+
+            expect(() => getDefaultRendererGameId()).toThrow(NoDefaultRendererGameError);
+        });
+
+        it('throws NoDefaultRendererGameError before any game is registered', () => {
+            expect(() => getDefaultRendererGameId()).toThrow(NoDefaultRendererGameError);
+        });
     });
 
     describe('LoadedRendererGame.shell type contract (#617)', () => {
@@ -105,101 +168,28 @@ describe('rendererGameRegistry', () => {
             >();
         });
 
-        it('tactics loader exposes shell.LobbyScreen (#708)', async () => {
-            const game = await loadRendererGame('tactics');
-            expect(game.shell?.LobbyScreen).toBeDefined();
-        });
-
-        it('tactics loader exposes shell.settings (#629)', async () => {
-            const game = await loadRendererGame('tactics');
-            expect(game.shell?.settings?.tabs.map((tab) => tab.id)).toEqual([
-                'audio',
-                'display',
-                'gameplay',
-                'ai',
-                'controls',
-            ]);
-        });
-
         it('shell.menuCommands lookup is typed as (() => void) | undefined', () => {
             type Commands = NonNullable<NonNullable<LoadedRendererGame['shell']>['menuCommands']>;
             expectTypeOf<Commands[GameMenuCommandId]>().toEqualTypeOf<(() => void) | undefined>();
         });
 
-        it('tactics loader exposes shell.mainMenu (GameMainMenuDefinition)', async () => {
-            const game = await loadRendererGame('tactics');
-            expect(game.shell?.mainMenu).toBeDefined();
-            expect(Array.isArray(game.shell?.mainMenu?.buttons)).toBe(true);
-        });
-
-        it('tactics loader exposes a shell background component', async () => {
-            const game = await loadRendererGame('tactics');
-            expect(game.shell?.shellBackground).toBeDefined();
-        });
-
-        it('tactics loader exposes shell fonts', async () => {
-            const game = await loadRendererGame('tactics');
-            expect(game.shell?.fonts).toEqual([
-                {
-                    family: 'Cinzel',
-                    src: 'tactics/fonts/Cinzel-Regular.woff2',
-                    weight: '400',
-                    display: 'swap',
-                },
-                {
-                    family: 'Cinzel',
-                    src: 'tactics/fonts/Cinzel-Bold.woff2',
-                    weight: '700',
-                    display: 'swap',
-                },
-                {
-                    family: 'Cinzel',
-                    src: 'tactics/fonts/Cinzel-Black.woff2',
-                    weight: '900',
-                    display: 'swap',
-                },
-                {
-                    family: 'Philosopher',
-                    src: 'tactics/fonts/Philosopher-Regular.woff2',
-                    weight: '400',
-                    display: 'swap',
-                },
-                {
-                    family: 'Philosopher',
-                    src: 'tactics/fonts/Philosopher-RegularItalic.woff2',
-                    weight: '400',
-                    style: 'italic',
-                    display: 'swap',
-                },
-                {
-                    family: 'Philosopher',
-                    src: 'tactics/fonts/Philosopher-Bold.woff2',
-                    weight: '700',
-                    display: 'swap',
-                },
-            ]);
-        });
-
-        it('tactics shell.mainMenu contains a Load Game button that routes to /saves', async () => {
-            const game = await loadRendererGame('tactics');
-            const buttons = game.shell?.mainMenu?.buttons ?? [];
-            const loadGameBtn = buttons.find((b) => b.label === 'Load Game');
-            expect(loadGameBtn).toBeDefined();
-            expect(loadGameBtn?.action.type).toBe('navigate');
-            if (loadGameBtn?.action.type === 'navigate') {
-                expect(loadGameBtn.action.target).toBe('/saves');
-            }
-        });
-
-        it('tactics loader exposes an empty shell.menuCommands registry when no commands are needed', async () => {
-            const game = await loadRendererGame('tactics');
-            expect(game.shell?.menuCommands).toEqual({});
+        it('RendererGameContribution carries the loaders and an optional default flag', () => {
+            expectTypeOf<RendererGameContribution['gameId']>().toEqualTypeOf<string>();
+            expectTypeOf<RendererGameContribution['loadGame']>().toEqualTypeOf<
+                () => Promise<LoadedRendererGame>
+            >();
+            expectTypeOf<RendererGameContribution['loadShell']>().toEqualTypeOf<
+                () => Promise<LoadedRendererGameShell>
+            >();
+            expectTypeOf<RendererGameContribution['isDefault']>().toEqualTypeOf<
+                boolean | undefined
+            >();
         });
     });
 
     describe('getRendererGameMenuCommand', () => {
-        it('returns undefined when shell is absent', async () => {
-            const game = await loadRendererGame('tactics');
+        it('returns undefined when shell is absent', () => {
+            const game: LoadedRendererGame = { registry: { board: FAKE_BOARD } };
             const commandId = 'tactics:missing' as GameMenuCommandId;
 
             expect(getRendererGameMenuCommand(game, commandId)).toBeUndefined();
@@ -207,7 +197,7 @@ describe('rendererGameRegistry', () => {
 
         it('returns undefined when command id is not registered', () => {
             const game: LoadedRendererGame = {
-                registry: { board: () => null },
+                registry: { board: FAKE_BOARD },
                 shell: {
                     menuCommands: {
                         ['tactics:play' as GameMenuCommandId]: () => undefined,
@@ -223,7 +213,7 @@ describe('rendererGameRegistry', () => {
             const execute = (): void => undefined;
             const commandId = 'tactics:play' as GameMenuCommandId;
             const game: LoadedRendererGame = {
-                registry: { board: () => null },
+                registry: { board: FAKE_BOARD },
                 shell: {
                     menuCommands: {
                         [commandId]: execute,

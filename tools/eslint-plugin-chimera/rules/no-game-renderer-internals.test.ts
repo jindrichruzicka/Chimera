@@ -78,8 +78,29 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'renderer/components/shell/GameShell.tsx',
             code: `import { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
         },
+        {
+            // #784: the renderer composition root may import the public game seam.
+            filename: 'apps/tactics/renderer/register.ts',
+            code: `import { registerRendererGame } from '@chimera/renderer/game';`,
+        },
+        {
+            // The seam may also be imported by the loaders.
+            filename: 'apps/tactics/renderer/loaders.ts',
+            code: `import { LoadedRendererGame } from '@chimera/renderer/game';`,
+        },
+        {
+            // A game's own renderer/ helper dir is not a renderer-package crossing.
+            filename: 'apps/tactics/renderer/loaders.ts',
+            code: `import { thing } from '../screens/index.js';`,
+        },
     ],
     invalid: [
+        {
+            // The composition root still may not reach renderer internals.
+            filename: 'apps/tactics/renderer/register.ts',
+            code: `import { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
             code: `import { Button } from '@chimera/renderer/components/ui/Button.js';`,

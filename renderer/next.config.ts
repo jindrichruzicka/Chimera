@@ -70,16 +70,31 @@ const nextConfig: NextConfig = {
             // those same modules relatively from source. Letting the two halves
             // resolve to two physical copies (dist + source) duplicates every
             // module-level singleton they carry — the EscapeStack React context
-            // (provider mounted from source, consumers pulled from dist) and the
-            // chat/lobby/toast Zustand stores — so context identity breaks
-            // (`useEscapeLayer() must be used within <EscapeStackProvider>`) and
+            // (provider mounted from source, consumers pulled from dist), the
+            // chat/lobby/toast Zustand stores, and the `@chimera/renderer/game`
+            // registration registry (apps/tactics registers into it, renderer
+            // pages read from it) — so context identity breaks
+            // (`useEscapeLayer() must be used within <EscapeStackProvider>`),
             // game ChatPanels subscribe to a different store than the IPC bridge
-            // writes to. Alias the public barrels back onto their source dirs so
-            // this bundle holds exactly one instance of each shared module. The
-            // `dist` build remains the typecheck/contract surface; `*.css`
-            // subpaths stay on `dist` (stylesheet duplication is inert).
+            // writes to, and `registerRendererGame` would populate a registry the
+            // pages never see (silent UnknownRendererGameError). Alias these
+            // shared module surfaces back onto their source dirs so this bundle
+            // holds exactly one instance of each. The `dist` build remains the
+            // typecheck/contract surface; `*.css` subpaths stay on `dist`
+            // (stylesheet duplication is inert).
             '@chimera/renderer/components/ui': path.join(root, 'renderer/components/ui'),
             '@chimera/renderer/components/chat': path.join(root, 'renderer/components/chat'),
+            '@chimera/renderer/game': path.join(root, 'renderer/game/rendererGameRegistry'),
+            // `renderer/**` source must name no game (#784). The renderer pulls in
+            // the active game's renderer contribution through this synthetic,
+            // build-selected specifier — the renderer twin of how `package.json`
+            // `main` selects `apps/tactics/electron/main.ts` for the Electron host.
+            // The alias is the one knob that binds the game-agnostic renderer
+            // bundle to a concrete game; `apps/tactics/renderer/register.ts`'s
+            // import side effect calls `registerRendererGame(...)`. The specifier
+            // is deliberately NOT a `@chimera/<pkg>` / `apps/*` / `games/*` token
+            // (those are forbidden in renderer source by the boundary lint).
+            'chimera-game-registration': path.join(root, 'apps/tactics/renderer/register.ts'),
         };
         // Allow TypeScript-style `.js` extension imports (e.g. `./foo.js`)
         // to resolve to `.ts`/`.tsx` source files at build time.

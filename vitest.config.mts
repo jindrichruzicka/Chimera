@@ -55,6 +55,20 @@ export default defineConfig({
         // aliases removed in F57 (#752).
         createPreferTypeScriptSourceResolver(workspaceRoot),
     ],
+    resolve: {
+        alias: {
+            // The synthetic game-registration specifier (#784): `renderer/**` names
+            // no game and pulls the active game's renderer contribution in through
+            // this build-selected alias (mirrors `renderer/next.config.ts`). The
+            // test harness selects tactics, the same way the resolver plugin maps
+            // `@chimera/tactics` onto apps/tactics — so any test that mounts the
+            // renderer's `AppShell`/`GameRegistrationBootstrap` resolves it.
+            'chimera-game-registration': path.resolve(
+                workspaceRoot,
+                'apps/tactics/renderer/register.ts',
+            ),
+        },
+    },
     test: {
         name: 'chimera',
         environment: 'node',

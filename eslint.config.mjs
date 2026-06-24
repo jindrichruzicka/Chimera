@@ -301,9 +301,14 @@ export default tseslint.config(
     // type-only contract surface only (Invariant #1): it must not import the
     // `@chimera/ai` or `@chimera/networking` runtime — neither is a renderer
     // dependency. (The renderer↔`@chimera/electron/preload` type-only contract is
-    // a tolerated back-edge cleaned up in F62; `@chimera/tactics` stays governed
-    // by `chimera/no-shell-games-import` and the composition point
-    // `renderer/game/rendererGameRegistry.ts`.) The two public component barrels —
+    // a tolerated back-edge cleaned up in F62.) `renderer/**` is also wholly
+    // game-agnostic (#784): it must not import any game — `@chimera/tactics`, an
+    // `apps/*` consumer path, or a legacy `games/*` path. The renderer host is a
+    // runtime injection seam (`renderer/game/rendererGameRegistry.ts` →
+    // `registerRendererGame`); a game's renderer contribution enters only at the
+    // consumer-app renderer composition root (`apps/tactics/renderer/register.ts`),
+    // selected by the synthetic `chimera-game-registration` build alias — never by
+    // a renderer source import. The two public component barrels —
     // `@chimera/renderer/components/ui` and `.../components/chat` — are the only
     // surface games may import (Invariant #96, enforced from the games side by
     // `chimera/no-game-renderer-internals`). Mirrors the leaf-package zones above;
@@ -311,7 +316,7 @@ export default tseslint.config(
     // deeply nested files legitimately reach package-internal modules with
     // relative paths — renderer code must not self-import through its public
     // `@chimera/renderer/*` alias (that alias resolves only the two barrels).
-    // See coding-standards.md §3, issue #772.
+    // See coding-standards.md §3, issues #772, #784.
     {
         files: ['renderer/**/*.{ts,tsx}'],
         rules: {
@@ -332,6 +337,22 @@ export default tseslint.config(
                             ],
                             message:
                                 'renderer/ must not import the @chimera/ai or @chimera/networking runtime — the renderer depends on @chimera/simulation contracts only (Invariant #1). Game-facing renderer code is exposed solely through @chimera/renderer/components/ui and .../components/chat (Invariant #96). See coding-standards.md §3, issue #772.',
+                        },
+                        {
+                            group: [
+                                '@chimera/tactics',
+                                '@chimera/tactics/*',
+                                'apps/*',
+                                'apps/**',
+                                '**/apps/*',
+                                '**/apps/**',
+                                'games/*',
+                                'games/**',
+                                '**/games/*',
+                                '**/games/**',
+                            ],
+                            message:
+                                'renderer/ must name no game (Invariants #80, #94; #784). The renderer host is a runtime injection seam; a game enters only at the consumer-app renderer composition root (apps/tactics/renderer/register.ts), selected by the chimera-game-registration build alias — never by a renderer source import. See coding-standards.md §3, issue #784.',
                         },
                     ],
                 },

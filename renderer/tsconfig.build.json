@@ -3,7 +3,9 @@
     // pattern of @chimera/simulation #759 / @chimera/ai #764 / @chimera/networking #768).
     //
     // Emits dist/ (JS + .d.ts + maps) for the two public component barrels
-    // (./components/ui, ./components/chat), consumed via the package `exports` map.
+    // (./components/ui, ./components/chat) plus the game-registration seam
+    // (./game — the runtime injection point a consumer app populates, #784),
+    // consumed via the package `exports` map.
     // JSX compiles to runnable JS via the React 19 automatic runtime ("react-jsx"),
     // UNLIKE renderer/tsconfig.json which keeps jsx:"preserve" for the Next pipeline.
     // tsc emits no CSS, so the build script copies *.module.css + styles/tokens.css
@@ -53,6 +55,14 @@
         "state/lobbyStore.ts",
         "state/toastStore.ts",
         "theme/types.ts",
+        // The ./game seam closure (#784): the registry plus its runtime deps —
+        // the font loader and the asset resolver it calls, and the InputAction
+        // contract type. All are leaf modules that compile standalone (no R3F,
+        // no Next server components), so they belong in the published surface.
+        "game/rendererGameRegistry.ts",
+        "game/GameFontLoader.ts",
+        "assets/AssetResolver.ts",
+        "input/InputAction.ts",
         "types/chimera.d.ts",
         "build-types/css-modules.d.ts"
     ],

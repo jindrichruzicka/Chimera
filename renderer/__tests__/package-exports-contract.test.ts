@@ -4,10 +4,11 @@
  * Locks the `@chimera/renderer` package surface declared in `package.json`
  * (issue #772 — F61 surface contract; updated by #773 once the dist/ build landed):
  *
- *   - the public component `exports` entry points are the two barrels
- *     `./components/ui` and `./components/chat` — no `.` barrel (there is
- *     intentionally no `renderer/index.ts`) and no deep internal subpath
- *     (Invariant #96, AC #2);
+ *   - the public `exports` entry points are the two component barrels
+ *     `./components/ui` and `./components/chat` plus the game-registration seam
+ *     `./game` (#784 — the runtime injection point a consumer app populates via
+ *     `registerRendererGame`) — no `.` barrel (there is intentionally no
+ *     `renderer/index.ts`) and no deep internal subpath (Invariant #96, AC #2);
  *   - #773 emitted the dist/ build, so each barrel's `types` AND `default`
  *     conditions now both point at the built `dist/` artifact (the #772 bridge
  *     where `types` pointed at in-tree source is gone);
@@ -52,11 +53,12 @@ describe('@chimera/renderer package surface (issue #772)', () => {
         expect(manifest.types).toBeUndefined();
     });
 
-    it('exposes the two component barrels plus the design-token styles, pointing at dist/', () => {
+    it('exposes the two component barrels, the game seam, and the design-token styles, pointing at dist/', () => {
         const exportsMap = manifest.exports ?? {};
         expect(Object.keys(exportsMap).sort()).toEqual([
             './components/chat',
             './components/ui',
+            './game',
             './styles/*.css',
         ]);
 
@@ -70,16 +72,24 @@ describe('@chimera/renderer package surface (issue #772)', () => {
             default: './dist/components/chat/index.js',
         });
 
+        // #784: the game-registration seam resolves to the built dist/ registry.
+        expect(exportsMap['./game']).toEqual({
+            types: './dist/game/rendererGameRegistry.d.ts',
+            default: './dist/game/rendererGameRegistry.js',
+        });
+
         // The styles subpath ships the design-token stylesheet from dist/.
         expect(exportsMap['./styles/*.css']).toBe('./dist/styles/*.css');
 
         // No `.` barrel and no deep internal component subpath leaks internals;
-        // the only non-component entry is the curated styles asset wildcard.
+        // the only non-component entry points are the game seam and the curated
+        // styles asset wildcard.
         expect(exportsMap['.']).toBeUndefined();
         for (const key of Object.keys(exportsMap)) {
             expect(
                 key === './components/ui' ||
                     key === './components/chat' ||
+                    key === './game' ||
                     key === './styles/*.css',
             ).toBe(true);
         }
