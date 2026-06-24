@@ -7,8 +7,9 @@
  * which turns the per-game contributions injected at bootstrap into the lookup
  * maps the host (`index.ts`) consumes.
  *
- * The games/* coupling that used to live here has moved to the in-tree
- * composition root `app/main.ts` (the seam F63 relocates into `apps/tactics`).
+ * The games/* coupling that used to live here has moved to the consumer app
+ * composition root `apps/tactics/electron/main.ts` (relocated there from the
+ * top-level `app/` in F63/#783).
  * That root constructs each game's `MainGameContribution` from `@chimera/<game>/*`
  * and injects it into `main(contributions)` at runtime — so this file, and the
  * rest of `electron/main/`, never import a game. The boundary is enforced by

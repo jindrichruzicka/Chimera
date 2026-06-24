@@ -4,8 +4,9 @@
 // derivation the host bootstrap (index.ts) consumes: given the injected set of
 // MainGameContributions, `createMainGameRegistry` selects the hosted game and
 // derives the gameId-keyed lookup maps. Game-specific wiring (the tactics
-// contribution) is asserted in the composition-root test (app/main.test.ts) —
-// this file imports NO game, mirroring the package boundary F62 establishes.
+// contribution) is asserted in the composition-root test
+// (apps/tactics/electron/main.test.ts) — this file imports NO game, mirroring the
+// package boundary F62 establishes.
 
 import { describe, expect, it } from 'vitest';
 

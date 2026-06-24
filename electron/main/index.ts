@@ -429,7 +429,7 @@ export function registerRendererProtocolScheme(
 // Register the renderer scheme as privileged at module load (must run before
 // `app.whenReady`). Guarded like the bootstrap: skipped under Vitest, where
 // `electron` is mocked per-test, so importing this module (e.g. via the
-// composition root `app/main.ts`) is side-effect-free in unit tests.
+// composition root `apps/tactics/electron/main.ts`) is side-effect-free in unit tests.
 if (process.env['VITEST'] === undefined) {
     registerRendererProtocolScheme(electronProtocol);
 }
@@ -944,7 +944,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     assertProductionDevHarnessGuard(process.env);
 
     // Derive the host-side game registry from the contributions injected by the
-    // in-tree composition root (app/main.ts) — the host names no game, it indexes
+    // consumer app composition root (apps/tactics/electron/main.ts) — the host names
+    // no game, it indexes
     // whatever set it is given. Built before any consumer so the registerActions
     // loop below registers the game into ActionRegistry before the tick loop
     // starts (Invariant #10).
@@ -2814,7 +2815,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
 }
 
-// The Electron entry point is the in-tree composition root (app/main.ts): it
-// constructs the game contribution(s) and calls `main(contributions)`. `index.ts`
+// The Electron entry point is the consumer app composition root
+// (apps/tactics/electron/main.ts): it constructs the game contribution(s) and
+// calls `main(contributions)`. `index.ts`
 // (this file, the `@chimera/electron` package's `./main` surface) names no game
 // and no longer self-bootstraps.

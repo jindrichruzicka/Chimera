@@ -6,8 +6,9 @@ import { buildSync } from 'esbuild';
 /**
  * Playwright global setup — runs once before all E2E tests.
  * 1. Compiles the renderer bundle so tests can load the real UI.
- * 2. Bundles app/main.ts → .e2e-build/electron/main/index.js  (main process: the
- *    in-tree composition root that injects the game and calls the host's main())
+ * 2. Bundles apps/tactics/electron/main.ts → .e2e-build/electron/main/index.js
+ *    (main process: the consumer app's composition root that injects the game and
+ *    calls the host's main())
  * 3. Bundles electron/preload/api.ts → .e2e-build/electron/preload/api.js (preload script)
  * 4. Bundles electron/preload/debug-api.ts → .e2e-build/electron/preload/debug-api.js
  *    (Inspector window preload — the debug bridge resolves it as a sibling of
@@ -41,7 +42,8 @@ export default function globalSetup(): void {
     // `@chimera/tactics` lives at apps/tactics (relocated in F63 #782); its dist/
     // is built but not yet consumed, so it keeps its source alias. F64 flips this
     // onto its exports map. `@chimera/electron/main` is aliased onto SOURCE (#778): the
-    // main entry is now the in-tree composition root `app/main.ts`, which imports
+    // main entry is now the consumer app's composition root
+    // `apps/tactics/electron/main.ts` (relocated from app/ in F63/#783), which imports
     // the host as a consumer would (`@chimera/electron/main`); aliasing it to
     // source keeps the bundle compiling the host from current source rather than
     // its (non-launchable) `dist/` ESM build — the F62/T2→T3 launch story.
@@ -51,11 +53,11 @@ export default function globalSetup(): void {
     };
 
     // Main process — runs in Node.js (Electron's main context). Entry is the
-    // in-tree composition root app/main.ts (injects the tactics contribution and
-    // calls the host's main()); it still outputs to the same path the launch
-    // fixture loads.
+    // consumer app's composition root apps/tactics/electron/main.ts (injects the
+    // tactics contribution and calls the host's main()); it still outputs to the
+    // same path the launch fixture loads.
     buildSync({
-        entryPoints: [path.join(root, 'app/main.ts')],
+        entryPoints: [path.join(root, 'apps/tactics/electron/main.ts')],
         outfile: mainOutfile,
         bundle: true,
         platform: 'node',

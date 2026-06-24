@@ -19,6 +19,10 @@
     // References mirror tactics' composite workspace deps (simulation, ai, renderer),
     // so `tsc --build` orders the graph (Invariant #1, tools/tsconfig-build-graph.test.ts).
     // Tactics sits at layer 2 and references only layers 0/1 — never @chimera/electron.
+    // The app's Electron composition root (electron/main.ts, relocated here in
+    // F63/#783) is the one file that imports @chimera/electron; it is EXCLUDED below
+    // so the layer-2 library build stays off the electron layer (the root flat
+    // `tsc --noEmit` type-checks it instead).
     "extends": "../../tsconfig.json",
     "compilerOptions": {
         "composite": true,
@@ -44,6 +48,10 @@
         "node_modules",
         "dist",
         "out",
+        // The Electron composition root (electron/main.ts) imports @chimera/electron
+        // and belongs to the standalone app, not the @chimera/tactics library — keep
+        // it out of the layer-2 composite build (see header note; F63/#783).
+        "electron/**",
         "**/*.test.ts",
         "**/*.test.tsx",
         "**/*.spec.ts",

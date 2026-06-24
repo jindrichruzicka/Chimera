@@ -3,6 +3,9 @@
     // tactics consumer app (relocated from games/tsconfig.json in F63 #782). Keeps
     // jsx:"preserve" + DOM/react libs for type-checking the screens/shell .tsx and
     // R3F scene. The composite `tsc -b` build (dist emit) lives in tsconfig.build.json.
+    // electron/** (the app's Electron composition root, relocated here in F63/#783)
+    // is excluded: it imports @chimera/electron and is type-checked by the root flat
+    // `tsc --noEmit`, keeping this library check off the electron layer.
     "extends": "../../tsconfig.json",
     "compilerOptions": {
         "allowArbitraryExtensions": true,
@@ -11,5 +14,5 @@
         "types": ["node", "react", "react-dom"]
     },
     "include": ["**/*.ts", "**/*.tsx"],
-    "exclude": ["node_modules", "out", "dist"]
+    "exclude": ["node_modules", "out", "dist", "electron/**"]
 }

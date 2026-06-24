@@ -8,7 +8,7 @@
  * content/lobby composition registries may import `games/*`, and test files are
  * exempt. The main-side game registry (mainGameRegistry.ts) became a runtime
  * injection seam in F62 (#778) and is no longer exempt — its game wiring moved to
- * the out-of-scope in-tree composition root app/main.ts.
+ * the out-of-scope consumer app composition root apps/tactics/electron/main.ts.
  */
 
 import { RuleTester } from 'eslint';
@@ -81,10 +81,12 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             filename: 'renderer/game/rendererGameRegistry.ts',
             code: `import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
         },
-        // The in-tree composition root (#778) lives outside electron/main, so it
-        // may import a game to build the injected MainGameContribution.
+        // The consumer app composition root (#778; relocated to apps/tactics in
+        // F63/#783) lives outside electron/main — a flat file under electron/, not
+        // electron/main/ — so it may import a game to build the injected
+        // MainGameContribution.
         {
-            filename: 'app/main.ts',
+            filename: 'apps/tactics/electron/main.ts',
             code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
         },
         // Dynamic import of a non-games module is fine.

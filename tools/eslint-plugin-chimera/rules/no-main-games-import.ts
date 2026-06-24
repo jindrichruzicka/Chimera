@@ -7,9 +7,11 @@
  * (main process) stays agnostic of which games exist — required for packaged,
  * multi-game builds (F18). After F62 (#778) the main-side game registry became a
  * runtime injection seam (`mainGameRegistry.ts` is now a game-agnostic factory),
- * so the host's game wiring moved OUT of the package into the in-tree composition
- * root `app/main.ts` — which is outside `electron/main/` and therefore outside
- * this rule's scope (it injects the game's `MainGameContribution` at runtime). The
+ * so the host's game wiring moved OUT of the package into the consumer app's
+ * composition root `apps/tactics/electron/main.ts` (relocated from the top-level
+ * `app/` in F63/#783) — a flat file under `electron/`, not `electron/main/`, so it
+ * is outside this rule's scope (it injects the game's `MainGameContribution` at
+ * runtime). The
  * remaining exempt composition points inside `electron/main` are the two registries
  * still importing games (their own injection seams land separately):
  *
@@ -39,8 +41,9 @@ function normalize(filename: string): string {
 
 /** Composition points permitted to import `games/*` (the sole coupling points).
  *  `mainGameRegistry.ts` left this list in F62 (#778): it no longer imports a
- *  game — the host registry is now a runtime injection seam fed by the in-tree
- *  composition root `app/main.ts` (outside this rule's scope). */
+ *  game — the host registry is now a runtime injection seam fed by the consumer
+ *  app's composition root `apps/tactics/electron/main.ts` (outside this rule's
+ *  scope). */
 const ALLOWLISTED_SUFFIXES = [
     'electron/main/content/gameContentRegistry.ts',
     'electron/main/lobby/lobbySetupRegistry.ts',
@@ -105,7 +108,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             mainGamesImport:
-                'electron/main must not import from games/* (multi-game packaging). Inject the game at runtime via the in-tree composition root (app/main.ts), which constructs the MainGameContribution and calls main(contributions); the content/lobby registries remain the only in-package composition points. Mirrors renderer/game/rendererGameRegistry.ts.',
+                'electron/main must not import from games/* (multi-game packaging). Inject the game at runtime via the consumer app composition root (apps/tactics/electron/main.ts), which constructs the MainGameContribution and calls main(contributions); the content/lobby registries remain the only in-package composition points. Mirrors renderer/game/rendererGameRegistry.ts.',
         },
         schema: [],
     },

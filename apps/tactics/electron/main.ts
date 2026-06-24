@@ -1,16 +1,20 @@
-// app/main.ts
+// apps/tactics/electron/main.ts
 //
-// In-tree composition root for the tactics Electron app (F62/T2). This is the
-// SOLE module that names a concrete game AND drives the Electron bootstrap: it
-// constructs the tactics `MainGameContribution` from `@chimera/tactics/*` and
-// injects it into the game-agnostic host `main(contributions)` exposed by the
-// `@chimera/electron` package. The host (`@chimera/electron`) ships no
-// game-specific code; game definitions enter only here, at runtime.
+// Composition root for the tactics Electron app (F62/T2; relocated here from the
+// top-level `app/` directory in F63/#783). This is the SOLE module that names a
+// concrete game AND drives the Electron bootstrap: it constructs the tactics
+// `MainGameContribution` from `@chimera/tactics/*` and injects it into the
+// game-agnostic host `main(contributions)` exposed by the `@chimera/electron`
+// package. The host (`@chimera/electron`) ships no game-specific code; game
+// definitions enter only here, at runtime.
 //
-// Because it owns the `@chimera/tactics/*` coupling, this module lives OUTSIDE
-// the `@chimera/electron` package and is therefore outside the
-// `chimera/no-main-games-import` ESLint rule + invariants Check 10 scope. F63
-// relocates it into the standalone consumer app `apps/tactics/`.
+// This is the standalone consumer app's entry, not part of the `@chimera/tactics`
+// library: it owns the `@chimera/electron` + `@chimera/tactics` coupling and
+// resolves both from the root `package.json` deps, so it is EXCLUDED from the
+// tactics composite library build (`tsconfig.build.json`) and type-checked by the
+// root flat program. Kept a flat file under `electron/` (not `electron/main/`) so
+// it stays outside the `chimera/no-main-games-import` ESLint rule + invariants
+// Check 10 scope, which guard the `electron/main/` package directory.
 
 import { main, type MainGameContribution } from '@chimera/electron/main';
 

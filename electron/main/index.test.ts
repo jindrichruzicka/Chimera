@@ -485,8 +485,9 @@ const { PerspectiveReplayManager } = await import('./replay/PerspectiveReplayMan
 
 // ── Tactics contribution fixture for main() ──────────────────────────────────
 // main() is now game-agnostic: it hosts whatever MainGameContribution set it is
-// injected with (in production the in-tree composition root app/main.ts supplies
-// tactics). These tests inject the REAL tactics wiring — except visibility rules,
+// injected with (in production the consumer app composition root
+// apps/tactics/electron/main.ts supplies tactics). These tests inject the REAL
+// tactics wiring — except visibility rules,
 // which stay mocked (mockTacticsVisibilityRules) so the projector-injection
 // assertions still verify the game-owned rules flow through main() → projector.
 // Tactics modules are imported directly: test files are exempt from the

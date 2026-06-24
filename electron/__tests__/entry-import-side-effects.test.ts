@@ -12,7 +12,8 @@
  * RUNNING it. No Electron app lifecycle may fire at module-load time — no
  * `app.whenReady()`, no lifecycle listeners, no IPC registration, no window
  * creation, no protocol/session wiring. All of that lives inside `main()`,
- * which the consumer app's composition root (app/main.ts) invokes explicitly.
+ * which the consumer app's composition root (apps/tactics/electron/main.ts)
+ * invokes explicitly.
  *
  * This is what makes the package a thin, composable wrapper (issue #779, F62):
  * a consumer that merely imports `@chimera/electron/main` gets the bootstrap as
