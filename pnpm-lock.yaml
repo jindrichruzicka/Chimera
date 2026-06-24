@@ -25,7 +25,7 @@ importers:
         version: link:simulation
       '@chimera/tactics':
         specifier: workspace:*
-        version: link:games/tactics
+        version: link:apps/tactics
       '@react-three/fiber':
         specifier: ^9.6.1
         version: 9.6.1(@types/react@19.2.14)(react-dom@19.2.5(react@19.2.5))(react@19.2.5)(three@0.184.0)
@@ -157,6 +157,18 @@ importers:
         specifier: workspace:*
         version: link:../simulation
 
+  apps/tactics:
+    dependencies:
+      '@chimera/ai':
+        specifier: workspace:*
+        version: link:../../ai
+      '@chimera/renderer':
+        specifier: workspace:*
+        version: link:../../renderer
+      '@chimera/simulation':
+        specifier: workspace:*
+        version: link:../../simulation
+
   electron:
     dependencies:
       '@chimera/ai':
@@ -171,18 +183,6 @@ importers:
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
-
-  games/tactics:
-    dependencies:
-      '@chimera/ai':
-        specifier: workspace:*
-        version: link:../../ai
-      '@chimera/renderer':
-        specifier: workspace:*
-        version: link:../../renderer
-      '@chimera/simulation':
-        specifier: workspace:*
-        version: link:../../simulation
 
   networking:
     dependencies:

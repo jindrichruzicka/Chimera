@@ -55,11 +55,13 @@ const nextConfig: NextConfig = {
         // dist builds exist before `next build`). In particular the chat barrel's
         // `@chimera/electron/preload/api-types` type import now resolves onto
         // electron/dist. The renderer app's own internals import relatively.
-        // `@chimera/tactics` lives under games/.
+        // `@chimera/tactics` lives under apps/tactics (relocated in F63 #782); its
+        // dist/ is built but not yet consumed, so the renderer still aliases it onto
+        // source — F64 flips this onto its exports map.
         config.resolve ??= { alias: {}, extensionAlias: {} };
         config.resolve.alias = {
             ...config.resolve.alias,
-            '@chimera/tactics': path.join(root, 'games/tactics'),
+            '@chimera/tactics': path.join(root, 'apps/tactics'),
             // The renderer's own Next build is the single bundle where the
             // renderer source AND the mounted games are linked together. The
             // games reach shared renderer UI through the `@chimera/renderer`

@@ -5,7 +5,7 @@
  *   - renderer/app/lobby/page.tsx  (host, confirm)
  *   - renderer/app/lobby/LobbyEntryTabs.tsx  (join, address)
  *   - renderer/components/shell/ConnectionStatusIndicator.tsx  (connection-status)
- *   - games/tactics/shell/TacticsLobbyScreen.tsx  (tactics-lobby-screen,
+ *   - apps/tactics/shell/TacticsLobbyScreen.tsx  (tactics-lobby-screen,
  *     tactics-lobby-player, tactics-ready-toggle, start, leave) — the
  *     registry-loaded lobby screen that actually renders for a Tactics lobby,
  *     replacing the engine default for Tactics (#702).
@@ -37,7 +37,7 @@ describe('LobbyPage POM — testid alignment with renderer', () => {
             path.join(workspaceRoot, 'renderer/app/lobby/LobbyEntryTabs.tsx'),
             path.join(workspaceRoot, 'renderer/app/lobby/ActiveLobbyPanel.tsx'),
             path.join(workspaceRoot, 'renderer/components/shell/ConnectionStatusIndicator.tsx'),
-            path.join(workspaceRoot, 'games/tactics/shell/TacticsLobbyScreen.tsx'),
+            path.join(workspaceRoot, 'apps/tactics/shell/TacticsLobbyScreen.tsx'),
         ]
             .map((p) => readFileSync(p, 'utf-8'))
             .join('\n');

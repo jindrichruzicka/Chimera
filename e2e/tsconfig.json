@@ -20,7 +20,7 @@
             "@chimera/networking/*": ["networking/dist/*"],
             "@chimera/renderer/*": ["renderer/dist/*"],
             "@chimera/electron/*": ["electron/dist/*"],
-            "@chimera/tactics/*": ["games/tactics/*"]
+            "@chimera/tactics/*": ["apps/tactics/*"]
         }
     }
 }

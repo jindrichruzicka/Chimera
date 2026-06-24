@@ -1,0 +1,15 @@
+{
+    "name": "@chimera/tactics",
+    "version": "0.9.0",
+    "private": true,
+    "scripts": {
+        "build": "tsc -p tsconfig.build.json",
+        "test": "vitest run --config ../../vitest.config.mts --dir .",
+        "lint": "eslint ."
+    },
+    "dependencies": {
+        "@chimera/simulation": "workspace:*",
+        "@chimera/ai": "workspace:*",
+        "@chimera/renderer": "workspace:*"
+    }
+}

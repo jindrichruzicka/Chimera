@@ -1,0 +1,15 @@
+{
+    // Editor / flat `tsc --noEmit -p apps/tactics/tsconfig.json` config for the
+    // tactics consumer app (relocated from games/tsconfig.json in F63 #782). Keeps
+    // jsx:"preserve" + DOM/react libs for type-checking the screens/shell .tsx and
+    // R3F scene. The composite `tsc -b` build (dist emit) lives in tsconfig.build.json.
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "allowArbitraryExtensions": true,
+        "jsx": "preserve",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "types": ["node", "react", "react-dom"]
+    },
+    "include": ["**/*.ts", "**/*.tsx"],
+    "exclude": ["node_modules", "out", "dist"]
+}

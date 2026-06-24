@@ -102,7 +102,8 @@ export function createE2eElectronLaunchConfig(
     const mainEntry = path.join(e2eBuildRoot, 'electron', 'main', 'index.js');
     const preloadPath = path.join(e2eBuildRoot, 'electron', 'preload', 'api.js');
     const rendererEntry = path.join(root, 'renderer', 'out', 'index.html');
-    const gameAssetsRoot = path.join(root, 'games');
+    // Game apps live under apps/<gameId>/ (relocated from games/ in F63 #782).
+    const gameAssetsRoot = path.join(root, 'apps');
 
     ensureE2eBuild(mainEntry, preloadPath, rendererEntry);
     const userDataDir = createFreshE2eUserDataDir(options);

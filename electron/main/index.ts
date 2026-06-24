@@ -668,7 +668,8 @@ export function resolveRuntimePaths(options: ResolveRuntimePathOptions): Runtime
         'out',
         'index.html',
     );
-    const gameAssetsRoot = path.join(options.moduleDirname, '..', '..', 'games');
+    // Game apps live under apps/<gameId>/ (relocated from games/ in F63 #782).
+    const gameAssetsRoot = path.join(options.moduleDirname, '..', '..', 'apps');
 
     if (options.env['CHIMERA_E2E'] !== '1') {
         return { preloadPath, rendererEntry, gameAssetsRoot };

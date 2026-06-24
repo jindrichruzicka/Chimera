@@ -4,7 +4,7 @@
  * chat sources. ChatPanelPage locators span two sources:
  *   - renderer/components/chat/ChatPanel.tsx  (panel, messages, body input,
  *     send error, empty/loading)
- *   - games/tactics/screens/TacticsGameHud.tsx  (in-match toggle + drawer)
+ *   - apps/tactics/screens/TacticsGameHud.tsx  (in-match toggle + drawer)
  *
  * Prevents silent POM/renderer test-id drift (cf. LobbyPage.testid-alignment.test.ts).
  *
@@ -27,7 +27,7 @@ describe('ChatPanelPage POM — testid alignment with renderer', () => {
 
         const rendererSources = [
             path.join(workspaceRoot, 'renderer/components/chat/ChatPanel.tsx'),
-            path.join(workspaceRoot, 'games/tactics/screens/TacticsGameHud.tsx'),
+            path.join(workspaceRoot, 'apps/tactics/screens/TacticsGameHud.tsx'),
         ]
             .map((p) => readFileSync(p, 'utf-8'))
             .join('\n');

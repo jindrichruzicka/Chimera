@@ -23,19 +23,27 @@ import ts from 'typescript';
 const repoRoot = path.resolve(import.meta.dirname, '..');
 
 /** Packages with a composite `tsconfig.build.json` that join the `tsc -b` solution. */
-const COMPOSITE_PACKAGE_DIRS = ['simulation', 'ai', 'networking', 'renderer', 'electron'] as const;
+const COMPOSITE_PACKAGE_DIRS = [
+    'simulation',
+    'ai',
+    'networking',
+    'renderer',
+    'electron',
+    'apps/tactics',
+] as const;
 
 /**
  * Source-only app-layer packages that must NEVER be a project reference (Invariant #1).
- * `@chimera/electron` graduated to a composite build in F62 (#777); `games/tactics`
- * becomes a built consumer app in F63 (until then it stays source-only).
+ * `@chimera/electron` graduated to a composite build in F62 (#777); the tactics consumer
+ * app (`apps/tactics`) graduated in F63 (#782). None remain source-only today.
  */
-const APP_LAYER_PACKAGE_DIRS = ['games/tactics'] as const;
+const APP_LAYER_PACKAGE_DIRS = [] as const;
 
 /**
  * Layer rank for the inward/acyclic check: a reference is only legal when it points to a
  * STRICTLY lower rank (simulation leaf ← mid-tier ← app layer). Same-rank (sibling) or
- * higher-rank (back-edge) references would form a cycle or escape the core.
+ * higher-rank (back-edge) references would form a cycle or escape the core. electron and
+ * apps/tactics are both layer-2 app nodes and never reference each other.
  */
 const PACKAGE_LAYER: Readonly<Record<string, number>> = {
     simulation: 0,
@@ -43,7 +51,7 @@ const PACKAGE_LAYER: Readonly<Record<string, number>> = {
     networking: 1,
     renderer: 1,
     electron: 2,
-    'games/tactics': 2,
+    'apps/tactics': 2,
 };
 
 interface ProjectReference {

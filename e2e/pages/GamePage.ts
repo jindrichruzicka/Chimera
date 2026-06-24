@@ -48,7 +48,7 @@ interface TacticsGridClickOptions {
     readonly modifiers?: LocatorClickOptions['modifiers'];
 }
 
-// Mirrors games/tactics/scene/tacticsCamera.ts without importing game rendering internals.
+// Mirrors apps/tactics/scene/tacticsCamera.ts without importing game rendering internals.
 // Kept in sync by GamePage.test.ts (sync-guard tests import the source-of-truth directly).
 // These are the camera frustum world bounds — used to project a grid point to a canvas
 // pixel. Since #710 widened the frustum past the board so corner units render whole, this

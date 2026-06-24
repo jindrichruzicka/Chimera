@@ -47,11 +47,11 @@ describe('electron.fixture', () => {
         expect(config.env['CHIMERA_E2E_INITIAL_URL']).toBeUndefined();
     });
 
-    it('points E2E game assets at the workspace games directory', () => {
+    it('points E2E game assets at the workspace apps directory', () => {
         const config = createE2eElectronLaunchConfig({ port: '7778' });
 
         expect(config.env['CHIMERA_E2E_GAME_ASSETS_ROOT']).toBe(
-            path.resolve(__dirname, '..', 'games'),
+            path.resolve(__dirname, '..', 'apps'),
         );
     });
 

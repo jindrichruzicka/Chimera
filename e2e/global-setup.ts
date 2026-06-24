@@ -38,14 +38,15 @@ export default function globalSetup(): void {
     // map onto `<pkg>/dist` (build-before-consume; `pnpm build:packages` runs
     // first in `test:e2e`). The preload entry points are compiled from their own
     // source by path and import their package-internal modules relatively.
-    // `@chimera/tactics` is still source-only (built in F63), so it keeps its
-    // source alias. `@chimera/electron/main` is aliased onto SOURCE (#778): the
+    // `@chimera/tactics` lives at apps/tactics (relocated in F63 #782); its dist/
+    // is built but not yet consumed, so it keeps its source alias. F64 flips this
+    // onto its exports map. `@chimera/electron/main` is aliased onto SOURCE (#778): the
     // main entry is now the in-tree composition root `app/main.ts`, which imports
     // the host as a consumer would (`@chimera/electron/main`); aliasing it to
     // source keeps the bundle compiling the host from current source rather than
     // its (non-launchable) `dist/` ESM build — the F62/T2→T3 launch story.
     const alias: Record<string, string> = {
-        '@chimera/tactics': path.join(root, 'games/tactics'),
+        '@chimera/tactics': path.join(root, 'apps/tactics'),
         '@chimera/electron/main': path.join(root, 'electron/main/index.ts'),
     };
 

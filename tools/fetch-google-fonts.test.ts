@@ -124,9 +124,9 @@ describe('fetchGoogleFontsForGame', () => {
             },
         ]);
         expect([...host.writes.keys()]).toEqual([
-            '/repo/games/tactics/assets/fonts/Cinzel-Regular.woff2',
-            '/repo/games/tactics/assets/fonts/Cinzel-Bold.woff2',
-            '/repo/games/tactics/assets/fonts/Cinzel-Black.woff2',
+            '/repo/apps/tactics/assets/fonts/Cinzel-Regular.woff2',
+            '/repo/apps/tactics/assets/fonts/Cinzel-Bold.woff2',
+            '/repo/apps/tactics/assets/fonts/Cinzel-Black.woff2',
         ]);
         expect(formatGameFontFacesSnippet(result.fonts)).toContain(
             "src: 'tactics/fonts/Cinzel-Regular.woff2'",

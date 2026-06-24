@@ -1,7 +1,7 @@
 /**
  * electron/main/content/loadGameContent.test.ts
  *
- * Round-trip test for the startup content loader against the real games/ tree,
+ * Round-trip test for the startup content loader against the real apps/ tree,
  * plus the plain-collection flattener. Exercises the game-supplied schemas
  * (a malformed colour would fail the load — Invariant #14).
  */
@@ -11,12 +11,13 @@ import { describe, expect, it } from 'vitest';
 import { paletteFromCollections } from '@chimera/tactics/content/tacticsContent.js';
 import { loadAllGameContent, toGameContent } from './loadGameContent.js';
 
-// Repo `games/` dir: electron/main/content → up 3 → repo root → games.
-const GAMES_ROOT = path.resolve(__dirname, '../../..', 'games');
+// Repo `apps/` dir: electron/main/content → up 3 → repo root → apps (game apps
+// relocated from games/ in F63 #782).
+const APPS_ROOT = path.resolve(__dirname, '../../..', 'apps');
 
 describe('loadAllGameContent', () => {
     it('loads tactics player-colors and board-colors from the real data dir', async () => {
-        const dbs = await loadAllGameContent(GAMES_ROOT);
+        const dbs = await loadAllGameContent(APPS_ROOT);
         const tactics = dbs.get('tactics');
         expect(tactics).toBeDefined();
         expect([...(tactics?.getAllIds('player-colors') ?? [])].sort()).toEqual([
@@ -35,7 +36,7 @@ describe('loadAllGameContent', () => {
 
 describe('toGameContent', () => {
     it('flattens a loaded database into plain collections with all item fields', async () => {
-        const dbs = await loadAllGameContent(GAMES_ROOT);
+        const dbs = await loadAllGameContent(APPS_ROOT);
         const tactics = dbs.get('tactics');
         expect(tactics).toBeDefined();
         const content = toGameContent(tactics!);
@@ -60,7 +61,7 @@ describe('toGameContent', () => {
     // seat n → playerColors[n], so a wrong order silently mis-colours units (e.g.
     // the host's "own" unit rendering amber instead of blue).
     it('interprets the real data into the authored player/board colour order', async () => {
-        const dbs = await loadAllGameContent(GAMES_ROOT);
+        const dbs = await loadAllGameContent(APPS_ROOT);
         const tactics = dbs.get('tactics');
         expect(tactics).toBeDefined();
 

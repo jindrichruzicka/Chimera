@@ -4,7 +4,7 @@ import { LobbyPage } from './LobbyPage';
 /**
  * Page object for the Tactics customizable lobby (#702). Extends {@link LobbyPage}
  * with the Tactics-specific colour controls rendered by
- * `games/tactics/shell/TacticsLobbyScreen.tsx`:
+ * `apps/tactics/shell/TacticsLobbyScreen.tsx`:
  *   - board colour select (`tactics-board-color-select`)
  *   - per-player colour selects (`tactics-player-color-select-${playerId}`)
  *   - per-player swatches (`tactics-player-swatch-${playerId}`)

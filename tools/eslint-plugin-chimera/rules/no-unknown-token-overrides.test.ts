@@ -31,7 +31,7 @@ const ruleName = 'chimera/no-unknown-token-overrides';
 ruleTester.run('chimera/no-unknown-token-overrides', rule, {
     valid: [
         {
-            filename: 'games/tactics/styles/tokens-override.css',
+            filename: 'apps/tactics/styles/tokens-override.css',
             code: `:root {
     --ch-color-surface: #1b1a17;
     --ch-color-accent: #c9a84c;
@@ -45,7 +45,7 @@ ruleTester.run('chimera/no-unknown-token-overrides', rule, {
 }`,
         },
         {
-            filename: 'games/tactics/screens/TacticsOverlay.module.css',
+            filename: 'apps/tactics/screens/TacticsOverlay.module.css',
             code: `.overlay {
     --ch-local-test-token: 1px;
 }`,
@@ -53,7 +53,7 @@ ruleTester.run('chimera/no-unknown-token-overrides', rule, {
     ],
     invalid: [
         {
-            filename: 'games/tactics/styles/tokens-override.css',
+            filename: 'apps/tactics/styles/tokens-override.css',
             code: `:root {
     --ch-color-surface: #1b1a17;
     --ch-new-game-token: 1px;
@@ -66,7 +66,7 @@ ruleTester.run('chimera/no-unknown-token-overrides', rule, {
             ],
         },
         {
-            filename: 'games/tactics/styles/tokens-override.css',
+            filename: 'apps/tactics/styles/tokens-override.css',
             code: `:root {
     --ch-unknown-a: 1px;
     --ch-unknown-b: 2px;

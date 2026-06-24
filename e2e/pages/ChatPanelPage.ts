@@ -4,7 +4,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * Page Object for the shared chat surface (`renderer/components/chat/ChatPanel.tsx`,
  * §4.29 — Chat System). The component is mounted in-match only — in a Tactics
  * match it lives inside a collapsed-by-default drawer in
- * `games/tactics/screens/TacticsGameHud.tsx` — so call {@link openInMatchChat}
+ * `apps/tactics/screens/TacticsGameHud.tsx` — so call {@link openInMatchChat}
  * before interacting with it.
  *
  * There is no Send button: messages are submitted by pressing Enter in the body

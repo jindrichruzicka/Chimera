@@ -11,11 +11,11 @@
     "main": "app/main.js",
     "scripts": {
         "build:packages": "tsc -b tsconfig.build.json && tsx tools/copy-renderer-css.ts",
-        "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.json && tsc --noEmit -p games/tsconfig.json",
+        "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.json && tsc --noEmit -p apps/tactics/tsconfig.json",
         "test": "pnpm build:packages && pnpm -r test && vitest run --dir tools && vitest run --dir e2e",
         "test:watch": "pnpm build:packages && vitest",
         "test:e2e": "pnpm build:packages && playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
-        "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run games/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
+        "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
         "validate:assets": "pnpm build:packages && tsx tools/validate-assets.ts",
         "format": "prettier --write .",
         "format:check": "prettier --check .",

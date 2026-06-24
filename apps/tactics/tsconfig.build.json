@@ -1,0 +1,52 @@
+{
+    // Composite `tsc -b` build for the @chimera/tactics consumer app (F63 #782).
+    // Graduates tactics into the root solution config's dependency-ordered build
+    // graph (tsconfig.build.json), following the split-tsconfig dist pattern of the
+    // engine packages (simulation #759 / ai #764 / renderer #773) — composite emit
+    // under ./dist (JS + .d.ts + maps), test files excluded.
+    //
+    // JSX compiles to runnable JS via the React 19 automatic runtime ("react-jsx"),
+    // UNLIKE the editor config tsconfig.json which keeps jsx:"preserve". lib/types
+    // mirror renderer/tsconfig.build.json so the screens/shell .tsx + R3F scene
+    // compile without the Next plugin; css-modules.d.ts supplies the *.module.css
+    // ambient.
+    //
+    // NOTE (F63 staging): this dist/ is currently UNCONSUMED. Consumers still resolve
+    // @chimera/tactics from SOURCE via the vitest resolver plugin + Next webpack alias;
+    // the emit exists only to make tactics a node in the `tsc -b` graph. F64 adds the
+    // package `exports` map and flips consumers onto dist/.
+    //
+    // References mirror tactics' composite workspace deps (simulation, ai, renderer),
+    // so `tsc --build` orders the graph (Invariant #1, tools/tsconfig-build-graph.test.ts).
+    // Tactics sits at layer 2 and references only layers 0/1 — never @chimera/electron.
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "composite": true,
+        "noEmit": false,
+        "rootDir": ".",
+        "outDir": "./dist",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "tsBuildInfoFile": "./dist/.tsbuildinfo",
+        "allowArbitraryExtensions": true,
+        "jsx": "react-jsx",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "types": ["node", "react", "react-dom"]
+    },
+    "references": [
+        { "path": "../../simulation/tsconfig.build.json" },
+        { "path": "../../ai/tsconfig.build.json" },
+        { "path": "../../renderer/tsconfig.build.json" }
+    ],
+    "include": ["**/*.ts", "**/*.tsx"],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "out",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/__tests__/**"
+    ]
+}

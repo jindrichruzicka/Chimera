@@ -4,7 +4,6 @@ packages:
   - networking
   - renderer
   - electron
-  - games/tactics
   - packages/*
   - apps/*
   - templates/*

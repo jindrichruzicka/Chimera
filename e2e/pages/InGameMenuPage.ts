@@ -4,7 +4,7 @@ import { expect, type Locator, type Page } from '@playwright/test';
  * Page object for the Escape-toggled in-game menu on Tactics (F55, §4.33–§4.34).
  * The engine `InGameMenuHost` (`renderer/components/shell/InGameMenuHost.tsx`)
  * opens the game-supplied menu; Tactics registers `TacticsInGameMenu`
- * (`games/tactics/screens/TacticsInGameMenu.tsx`) — a single-step Leave-game
+ * (`apps/tactics/screens/TacticsInGameMenu.tsx`) — a single-step Leave-game
  * confirmation built on the design-system `Modal` (title "Leave the battle?",
  * so `role="dialog"` named accordingly) with `tactics-leave-*` test-ids.
  *

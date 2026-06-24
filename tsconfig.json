@@ -34,10 +34,17 @@
         // app/ is the in-tree composition root (#778): it injects a game's
         // MainGameContribution into the @chimera/electron host. It consumes the
         // host through the package exports map (onto electron/dist), so it is
-        // type-checked here rather than by electron/tsconfig.json. F63 relocates
-        // it into apps/tactics.
+        // type-checked here rather than by electron/tsconfig.json. F63 (#783)
+        // relocates it into apps/tactics.
         "app/**/*.ts",
-        "games/**/*.ts",
+        // apps/tactics/**/*.ts is co-included (as games/**/*.ts was) so
+        // app/main.ts's @chimera/tactics imports resolve onto tactics SOURCE within
+        // this one flat program. Only .ts is included — this program carries no
+        // DOM/jsx/react libs, so the screens/shell .tsx are type-checked separately
+        // by `tsc --noEmit -p apps/tactics/tsconfig.json`. The package's dist/ is
+        // built by tsc -b but not yet consumed (F64 flips consumers to dist and
+        // excludes apps/tactics from this program, mirroring electron).
+        "apps/tactics/**/*.ts",
         "renderer/**/*.ts",
         "tools/**/*.ts",
         "e2e/**/*.ts",
@@ -53,6 +60,10 @@
         "simulation/engine/__tests__/fixtures/**",
         "ai/engine/__tests__/fixtures/**",
         "networking/__tests__/fixtures/**",
+        // apps/tactics SOURCE is type-checked here (its .ts are co-included so
+        // app/main.ts resolves @chimera/tactics), but its tsc -b dist/ emit must be
+        // excluded or the emitted .d.ts double-declare against the source.
+        "apps/tactics/dist/**",
         // electron/ is compiled exclusively by electron/tsconfig.json (#777): its
         // built package is consumed here through the @chimera/electron exports map
         // onto electron/dist. Excluding the source prevents double-compilation and

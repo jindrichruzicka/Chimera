@@ -7,19 +7,21 @@
     //
     // The references mirror the acyclic, inward `workspace:*` graph (Invariant #1):
     // simulation is the zero-dep leaf; ai / networking / renderer reference it; electron
-    // sits at the top (layer 2) and references simulation/ai/networking/renderer. The
-    // result stays acyclic: nothing points back out to a sibling above it. The chat
+    // and the tactics consumer app sit at the top (layer 2). electron references
+    // simulation/ai/networking/renderer; tactics (apps/tactics) references
+    // simulation/ai/renderer. The result stays acyclic: nothing points back out to a
+    // sibling above it, and the two layer-2 nodes never reference each other. The chat
     // barrel's type-only `@chimera/electron/preload/api-types` back-edge is resolved by
     // renderer/tsconfig.build.json onto electron SOURCE via a `paths` alias (NOT a
     // project reference), so it never closes a renderer → electron reference cycle.
     // `tsc --build` derives the order from the reference graph (simulation →
-    // ai/networking/renderer → electron), so this list order is informational. Only
-    // renderer's SCOPED component-library build participates as a partial compilation —
-    // the full renderer/tactics app compilation stays on the flat `tsc --noEmit` checks
-    // (renderer/tsconfig.json via the Next plugin; games/tsconfig.json for games).
-    // electron joined the composite graph in F62 (#777) as a whole-package build
-    // (electron/tsconfig.build.json). See the two-tier package model and the
-    // source-vs-dist dual-resolution rationale in docs/architecture-overview.md §C.7.
+    // ai/networking/renderer → electron/tactics), so this list order is informational.
+    // Only renderer's SCOPED component-library build participates as a partial
+    // compilation — the full renderer Next app stays on the flat `tsc --noEmit` checks
+    // (renderer/tsconfig.json via the Next plugin). electron joined the composite graph
+    // in F62 (#777) and apps/tactics in F63 (#782), both as whole-package builds. See
+    // the two-tier package model and the source-vs-dist dual-resolution rationale in
+    // docs/architecture-overview.md §C.7.
     //
     // This file is reference-only (`files: []`) and deliberately does NOT extend the root
     // tsconfig.json — a solution config carries no compilerOptions of its own.
@@ -29,6 +31,7 @@
         { "path": "./ai/tsconfig.build.json" },
         { "path": "./networking/tsconfig.build.json" },
         { "path": "./renderer/tsconfig.build.json" },
-        { "path": "./electron/tsconfig.build.json" }
+        { "path": "./electron/tsconfig.build.json" },
+        { "path": "./apps/tactics/tsconfig.build.json" }
     ]
 }

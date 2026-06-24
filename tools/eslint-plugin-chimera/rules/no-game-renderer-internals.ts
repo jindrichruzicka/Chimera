@@ -54,20 +54,21 @@ function resolveImportPath(filename: string, source: string): string {
     return normalizePathSegments(`${dirname(filename)}/${normalizedSource}`);
 }
 
+// Game apps live under apps/<name>/ (relocated from games/<name>/ in F63 #782).
 function isGameFile(filename: string): boolean {
-    return /(?:^|\/)games\/[^/]+\//u.test(normalizePath(filename));
+    return /(?:^|\/)apps\/[^/]+\//u.test(normalizePath(filename));
 }
 
 function isGameRendererSurface(filename: string): boolean {
     const normalized = normalizePath(filename);
-    return /(?:^|\/)games\/[^/]+\/(?:screens|shell)\/.*\.(?:jsx|tsx)$/u.test(normalized);
+    return /(?:^|\/)apps\/[^/]+\/(?:screens|shell)\/.*\.(?:jsx|tsx)$/u.test(normalized);
 }
 
 function isRendererPath(value: string): boolean {
     const segments = normalizePath(value).split('/').filter(Boolean);
 
     return segments.some(
-        (segment, index) => segment === 'renderer' && !segments.slice(0, index).includes('games'),
+        (segment, index) => segment === 'renderer' && !segments.slice(0, index).includes('apps'),
     );
 }
 
@@ -127,9 +128,9 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             gameRendererImportOutsideSurface:
-                'Only game renderer surfaces under games/<name>/screens/*.tsx or games/<name>/shell/*.tsx may import renderer UI primitives.',
+                'Only game renderer surfaces under apps/<name>/screens/*.tsx or apps/<name>/shell/*.tsx may import renderer UI primitives.',
             gameRendererInternalImport:
-                'Game renderer surfaces may import only the public @chimera/renderer/components/ui or @chimera/renderer/components/chat barrels from renderer code. Renderer internals are forbidden in games packages.',
+                'Game renderer surfaces may import only the public @chimera/renderer/components/ui or @chimera/renderer/components/chat barrels from renderer code. Renderer internals are forbidden in game-app packages.',
             gameRendererUiDeepImport:
                 'Game renderer surfaces must import UI primitives from the public @chimera/renderer/components/ui barrel, not individual renderer component files.',
         },

@@ -20,7 +20,7 @@ describe('createDevResolver', () => {
         const resolved = resolver.resolve(ref);
 
         expect(resolved).toBe(
-            'file:///workspace/Chimera/games/tactics/assets/textures/units/warrior.webp',
+            'file:///workspace/Chimera/apps/tactics/assets/textures/units/warrior.webp',
         );
     });
 

@@ -194,13 +194,7 @@ export async function validateAssetWorkspace(
 
     const missing: MissingAssetReference[] = [];
     for (const ref of [...refs, ...manifestRefs]) {
-        const expectedPath = resolve(
-            workspaceRoot,
-            'games',
-            ref.gameId,
-            'assets',
-            ref.relativePath,
-        );
+        const expectedPath = resolve(workspaceRoot, 'apps', ref.gameId, 'assets', ref.relativePath);
         if (!(await host.fileExists(expectedPath))) {
             missing.push({ ...ref, expectedPath });
         }
@@ -210,7 +204,7 @@ export async function validateAssetWorkspace(
     for (const ref of fontRefs) {
         const sourceExpectedPath = resolve(
             workspaceRoot,
-            'games',
+            'apps',
             ref.gameId,
             'assets',
             ref.relativePath,
@@ -381,7 +375,7 @@ function collectForbiddenRendererPublicAssets(
             filePath,
             gameId,
             relativePath,
-            expectedSourcePath: resolve(workspaceRoot, 'games', gameId, 'assets', relativePath),
+            expectedSourcePath: resolve(workspaceRoot, 'apps', gameId, 'assets', relativePath),
         });
     }
 
@@ -733,13 +727,14 @@ function getScriptKind(filePath: string): ScriptKind {
 }
 
 async function findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const gamesRoot = resolve(workspaceRoot, 'games');
-    const gameEntries = await readDirectoryOrEmpty(gamesRoot);
+    // Game apps live under apps/<name>/ (relocated from games/ in F63 #782).
+    const appsRoot = resolve(workspaceRoot, 'apps');
+    const gameEntries = await readDirectoryOrEmpty(appsRoot);
     const files: string[] = [];
 
     for (const entry of gameEntries) {
         if (entry.isDirectory()) {
-            const dataRoot = resolve(gamesRoot, entry.name, 'data');
+            const dataRoot = resolve(appsRoot, entry.name, 'data');
             files.push(...(await collectFiles(dataRoot, (filePath) => filePath.endsWith('.json'))));
         }
     }
@@ -748,7 +743,7 @@ async function findDataJsonFiles(workspaceRoot: string): Promise<readonly string
 }
 
 async function findSceneSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const roots = [resolve(workspaceRoot, 'games'), resolve(workspaceRoot, 'simulation', 'scene')];
+    const roots = [resolve(workspaceRoot, 'apps'), resolve(workspaceRoot, 'simulation', 'scene')];
     const files: string[] = [];
 
     for (const root of roots) {
@@ -759,12 +754,12 @@ async function findSceneSourceFiles(workspaceRoot: string): Promise<readonly str
 }
 
 async function findAssetManifestFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const gamesRoot = resolve(workspaceRoot, 'games');
-    return collectFiles(gamesRoot, (filePath) => basename(filePath) === 'asset-manifest.ts');
+    const appsRoot = resolve(workspaceRoot, 'apps');
+    return collectFiles(appsRoot, (filePath) => basename(filePath) === 'asset-manifest.ts');
 }
 
 async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const roots = [resolve(workspaceRoot, 'games'), resolve(workspaceRoot, 'renderer', 'assets')];
+    const roots = [resolve(workspaceRoot, 'apps'), resolve(workspaceRoot, 'renderer', 'assets')];
     const files: string[] = [];
 
     for (const root of roots) {
@@ -775,8 +770,8 @@ async function findAssetLoaderSourceFiles(workspaceRoot: string): Promise<readon
 }
 
 async function findGameFontSourceFiles(workspaceRoot: string): Promise<readonly string[]> {
-    const gamesRoot = resolve(workspaceRoot, 'games');
-    return collectFiles(gamesRoot, isGameFontSourceFile);
+    const appsRoot = resolve(workspaceRoot, 'apps');
+    return collectFiles(appsRoot, isGameFontSourceFile);
 }
 
 async function findRendererPublicAssetFiles(workspaceRoot: string): Promise<readonly string[]> {

@@ -37,8 +37,9 @@ function normalizeFilename(filename: string): string {
     return filename.replace(/\\/gu, '/');
 }
 
+// Game apps live under apps/<name>/ (relocated from games/<name>/ in F63 #782).
 function isTokenOverrideFile(filename: string): boolean {
-    return /(?:^|[/])games[/][^/]+[/]styles[/]tokens-override\.css$/u.test(
+    return /(?:^|[/])apps[/][^/]+[/]styles[/]tokens-override\.css$/u.test(
         normalizeFilename(filename),
     );
 }

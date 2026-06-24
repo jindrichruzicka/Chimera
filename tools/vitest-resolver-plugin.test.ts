@@ -88,20 +88,20 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
             expect(
                 plugin.resolveId(
                     '@chimera/ai/engine/AgentManager.js',
-                    path.join(workspaceRoot, 'games/tactics/ai/policy.ts'),
+                    path.join(workspaceRoot, 'apps/tactics/ai/policy.ts'),
                 ),
             ).toBeNull();
             expect(
                 plugin.resolveId(
                     '@chimera/networking/provider/MultiplayerProvider.js',
-                    path.join(workspaceRoot, 'games/tactics/net.ts'),
+                    path.join(workspaceRoot, 'apps/tactics/net.ts'),
                 ),
             ).toBeNull();
             // #773: renderer now ships a dist/ build and resolves via its exports map.
             expect(
                 plugin.resolveId(
                     '@chimera/renderer/components/ui',
-                    path.join(workspaceRoot, 'games/tactics/screens/Foo.tsx'),
+                    path.join(workspaceRoot, 'apps/tactics/screens/Foo.tsx'),
                 ),
             ).toBeNull();
             // #777: electron now ships a dist/ build; its preload api-types and the
@@ -115,13 +115,13 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
             ).toBeNull();
         });
 
-        it('maps the @chimera/tactics game package onto games/tactics/', () => {
+        it('maps the @chimera/tactics game package onto apps/tactics/', () => {
             const plugin = createPreferTypeScriptSourceResolver(workspaceRoot, () => true);
             const result = plugin.resolveId(
                 '@chimera/tactics/screens/index.js',
                 path.join(workspaceRoot, 'renderer/app/game/page.tsx'),
             );
-            expect(result).toBe(path.join(workspaceRoot, 'games/tactics/screens/index.ts'));
+            expect(result).toBe(path.join(workspaceRoot, 'apps/tactics/screens/index.ts'));
         });
 
         it('falls back to .tsx when no .ts source exists', () => {
@@ -132,7 +132,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
                 path.join(workspaceRoot, 'electron/main/index.ts'),
             );
             expect(result).toBe(
-                path.join(workspaceRoot, 'games/tactics/screens/TacticsGameHud.tsx'),
+                path.join(workspaceRoot, 'apps/tactics/screens/TacticsGameHud.tsx'),
             );
         });
 
@@ -143,7 +143,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
                 '@chimera/tactics/lobby',
                 path.join(workspaceRoot, 'renderer/app/lobby/page.tsx'),
             );
-            expect(result).toBe(path.join(workspaceRoot, 'games/tactics/lobby/index.ts'));
+            expect(result).toBe(path.join(workspaceRoot, 'apps/tactics/lobby/index.ts'));
         });
 
         it('resolves a non-TS asset (.css) to the literal mapped path', () => {
@@ -153,7 +153,7 @@ describe('createPreferTypeScriptSourceResolver plugin', () => {
                 path.join(workspaceRoot, 'renderer/game/rendererGameRegistry.ts'),
             );
             expect(result).toBe(
-                path.join(workspaceRoot, 'games/tactics/styles/tokens-override.css'),
+                path.join(workspaceRoot, 'apps/tactics/styles/tokens-override.css'),
             );
         });
 

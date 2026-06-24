@@ -136,7 +136,7 @@ export default tseslint.config(
     // Simulation + AI layers: forbid non-deterministic globals.
     // docs/coding-standards.md §1.2, §7.
     {
-        files: ['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}', 'games/*/actions/**/*.{ts,tsx}'],
+        files: ['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}', 'apps/*/actions/**/*.{ts,tsx}'],
         rules: {
             'no-restricted-syntax': [
                 'error',
@@ -176,7 +176,7 @@ export default tseslint.config(
     // and the legacy relative-path forms are forbidden. (simulation/ has its own
     // stricter zero-dependency leaf rule below.) See issue #764.
     {
-        files: ['ai/**/*.{ts,tsx}', 'games/*/actions/**/*.{ts,tsx}'],
+        files: ['ai/**/*.{ts,tsx}', 'apps/*/actions/**/*.{ts,tsx}'],
         rules: {
             'no-restricted-imports': [
                 'error',
@@ -198,11 +198,11 @@ export default tseslint.config(
                                 '**/electron/*',
                                 'networking/*',
                                 '**/networking/*',
-                                'games/*',
-                                '**/games/*',
+                                'apps/*',
+                                '**/apps/*',
                             ],
                             message:
-                                'ai/ must not import from networking, renderer, electron, or games — @chimera/simulation is its only dependency (Invariant #1). See coding-standards.md §3, issue #764.',
+                                'ai/ must not import from networking, renderer, electron, or game apps (apps/*) — @chimera/simulation is its only dependency (Invariant #1). See coding-standards.md §3, issue #764.',
                         },
                     ],
                 },
@@ -240,11 +240,11 @@ export default tseslint.config(
                                 '**/renderer/*',
                                 'electron/*',
                                 '**/electron/*',
-                                'games/*',
-                                '**/games/*',
+                                'apps/*',
+                                '**/apps/*',
                             ],
                             message:
-                                'networking/ must not import from ai, renderer, electron, or games — @chimera/simulation is its only @chimera/* dependency (Invariant #1). The barrel exposes provider/transport interfaces only; concrete providers stay internal (Invariant #47). See coding-standards.md §3, issue #768.',
+                                'networking/ must not import from ai, renderer, electron, or game apps (apps/*) — @chimera/simulation is its only @chimera/* dependency (Invariant #1). The barrel exposes provider/transport interfaces only; concrete providers stay internal (Invariant #47). See coding-standards.md §3, issue #768.',
                         },
                     ],
                 },
@@ -285,11 +285,11 @@ export default tseslint.config(
                                 '**/renderer/*',
                                 'electron/*',
                                 '**/electron/*',
-                                'games/*',
-                                '**/games/*',
+                                'apps/*',
+                                '**/apps/*',
                             ],
                             message:
-                                '@chimera/simulation is the zero-dependency engine leaf — it must not import from ai, networking, renderer, electron, or games (Invariant #1). Keep contracts in @chimera/simulation/foundation; only the reserved engine: namespace crosses cuts (Invariant #107). See issue #759.',
+                                '@chimera/simulation is the zero-dependency engine leaf — it must not import from ai, networking, renderer, electron, or game apps (apps/*) (Invariant #1). Keep contracts in @chimera/simulation/foundation; only the reserved engine: namespace crosses cuts (Invariant #107). See issue #759.',
                         },
                     ],
                 },
@@ -374,8 +374,8 @@ export default tseslint.config(
                                 '**/networking/*',
                                 'renderer/*',
                                 '**/renderer/*',
-                                'games/*',
-                                '**/games/*',
+                                'apps/*',
+                                '**/apps/*',
                                 '../main/*',
                                 '../../main/*',
                                 '**/electron/main/*',
@@ -477,7 +477,7 @@ export default tseslint.config(
     // Rule implementation: tools/eslint-plugin-chimera/rules/no-hardcoded-design-values.ts
     // Issue: #560
     {
-        files: ['renderer/**/*.{ts,tsx,js,jsx,mjs}', 'games/*/screens/**/*.{ts,tsx,js,jsx,mjs}'],
+        files: ['renderer/**/*.{ts,tsx,js,jsx,mjs}', 'apps/*/screens/**/*.{ts,tsx,js,jsx,mjs}'],
         plugins: { chimera: chimeraPlugin },
         rules: {
             'chimera/no-hardcoded-design-values': 'error',
@@ -487,7 +487,7 @@ export default tseslint.config(
         files: [
             'renderer/styles/tokens.css',
             'renderer/**/*.module.css',
-            'games/*/screens/**/*.module.css',
+            'apps/*/screens/**/*.module.css',
         ],
         language: 'css/css',
         plugins: { css, chimera: chimeraPlugin },
@@ -498,7 +498,7 @@ export default tseslint.config(
         },
     },
     {
-        files: ['games/*/styles/tokens-override.css'],
+        files: ['apps/*/styles/tokens-override.css'],
         language: 'css/css',
         plugins: { css, chimera: chimeraPlugin },
         rules: {
@@ -508,7 +508,7 @@ export default tseslint.config(
         },
     },
     {
-        files: ['games/**/*.{ts,tsx,js,jsx,mjs}'],
+        files: ['apps/**/*.{ts,tsx,js,jsx,mjs}'],
         plugins: { chimera: chimeraPlugin },
         rules: {
             'chimera/no-game-renderer-internals': 'error',
@@ -529,8 +529,9 @@ export default tseslint.config(
     },
 
     // Invariants #93/#94 — engine shell pages must not import game token override
-    // CSS or any games/* path. Invariant #80 — GameShell.tsx / InGameMenuHost.tsx
-    // stay game-agnostic; the GameScreenRegistry prop is the sole coupling point.
+    // CSS or any game-app (apps/*) path. Invariant #80 — GameShell.tsx /
+    // InGameMenuHost.tsx stay game-agnostic; the GameScreenRegistry prop is the
+    // sole coupling point.
     // The same rule guards both surface sets; #774 locks #80 across the
     // @chimera/renderer package cut alongside the bash invariants Check 7.
     // Rule implementation: tools/eslint-plugin-chimera/rules/no-shell-games-import.ts

@@ -21,21 +21,21 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/soldier.json'],
-                sceneSourceFiles: ['games/tactics/scenes/tactics-scenes.ts'],
+                dataJsonFiles: ['apps/tactics/data/units/soldier.json'],
+                sceneSourceFiles: ['apps/tactics/scenes/tactics-scenes.ts'],
                 files: {
-                    'games/tactics/data/units/soldier.json': JSON.stringify({
+                    'apps/tactics/data/units/soldier.json': JSON.stringify({
                         id: 'soldier',
                         portrait: 'tactics/portraits/soldier.webp',
                         nested: { sound: 'tactics/audio/sword.ogg' },
                     }),
-                    'games/tactics/scenes/tactics-scenes.ts': `
+                    'apps/tactics/scenes/tactics-scenes.ts': `
                         export const scene = {
                             sceneId: 'tactics:arena',
                             requiredAssets: ['tactics/models/arena.glb'],
                         };
                     `,
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -45,11 +45,11 @@ describe('validateAssetWorkspace', () => {
                             ],
                         };
                     `,
-                    'games/tactics/assets/portraits/soldier.webp': '',
-                    'games/tactics/assets/audio/sword.ogg': '',
-                    'games/tactics/assets/models/arena.glb': '',
+                    'apps/tactics/assets/portraits/soldier.webp': '',
+                    'apps/tactics/assets/audio/sword.ogg': '',
+                    'apps/tactics/assets/models/arena.glb': '',
                 },
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -62,9 +62,9 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/soldier.json'],
+                dataJsonFiles: ['apps/tactics/data/units/soldier.json'],
                 files: {
-                    'games/tactics/data/units/soldier.json': JSON.stringify({
+                    'apps/tactics/data/units/soldier.json': JSON.stringify({
                         portrait: 'tactics/portraits/missing.webp',
                         attack: 'tactics/audio/missing.ogg',
                     }),
@@ -78,16 +78,16 @@ describe('validateAssetWorkspace', () => {
         expect(toAssetValidationExitCode(report)).toBe(1);
         expect(output).toContain('tactics/portraits/missing.webp');
         expect(output).toContain('tactics/audio/missing.ogg');
-        expect(output).toContain('games/tactics/data/units/soldier.json');
+        expect(output).toContain('apps/tactics/data/units/soldier.json');
     });
 
     it('validates SceneDescriptor.requiredAssets refs in located scene source files', async () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                sceneSourceFiles: ['games/tactics/scenes/tactics-scenes.ts'],
+                sceneSourceFiles: ['apps/tactics/scenes/tactics-scenes.ts'],
                 files: {
-                    'games/tactics/scenes/tactics-scenes.ts': `
+                    'apps/tactics/scenes/tactics-scenes.ts': `
                         export const scene = {
                             sceneId: 'tactics:arena',
                             defaultScreen: 'board',
@@ -97,7 +97,7 @@ describe('validateAssetWorkspace', () => {
                             ],
                         };
                     `,
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -106,9 +106,9 @@ describe('validateAssetWorkspace', () => {
                             ],
                         };
                     `,
-                    'games/tactics/assets/textures/existing-floor.webp': '',
+                    'apps/tactics/assets/textures/existing-floor.webp': '',
                 },
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -124,12 +124,12 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/soldier.json'],
+                dataJsonFiles: ['apps/tactics/data/units/soldier.json'],
                 files: {
-                    'games/tactics/data/units/soldier.json': JSON.stringify({
+                    'apps/tactics/data/units/soldier.json': JSON.stringify({
                         portrait: 'tactics/portraits/soldier.webp',
                     }),
-                    'games/tactics/assets/portraits/soldier.webp': '',
+                    'apps/tactics/assets/portraits/soldier.webp': '',
                 },
             }),
         });
@@ -146,9 +146,9 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
                 files: {
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -156,7 +156,7 @@ describe('validateAssetWorkspace', () => {
                             ],
                         };
                     `,
-                    'games/tactics/assets/voxels/castle.vox': '',
+                    'apps/tactics/assets/voxels/castle.vox': '',
                 },
             }),
         });
@@ -172,10 +172,10 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
-                assetLoaderSourceFiles: ['games/tactics/asset-loaders.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
+                assetLoaderSourceFiles: ['apps/tactics/asset-loaders.ts'],
                 files: {
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -183,7 +183,7 @@ describe('validateAssetWorkspace', () => {
                             ],
                         };
                     `,
-                    'games/tactics/asset-loaders.ts': `
+                    'apps/tactics/asset-loaders.ts': `
                         export const tacticsVoxelLoader = {
                             kind: 'tactics:voxel',
                             async load() {
@@ -191,7 +191,7 @@ describe('validateAssetWorkspace', () => {
                             },
                         };
                     `,
-                    'games/tactics/assets/voxels/castle.vox': '',
+                    'apps/tactics/assets/voxels/castle.vox': '',
                 },
             }),
         });
@@ -203,14 +203,14 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                gameFontSourceFiles: ['games/tactics/shell/fonts.ts'],
+                gameFontSourceFiles: ['apps/tactics/shell/fonts.ts'],
                 files: {
-                    'games/tactics/shell/fonts.ts': `
+                    'apps/tactics/shell/fonts.ts': `
                         export const tacticsFonts = [
                             { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Regular.woff2', weight: '400', display: 'swap' },
                         ];
                     `,
-                    'games/tactics/assets/fonts/Cinzel-Regular.woff2': '',
+                    'apps/tactics/assets/fonts/Cinzel-Regular.woff2': '',
                 },
             }),
         });
@@ -223,9 +223,9 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                gameFontSourceFiles: ['games/tactics/shell/fonts.ts'],
+                gameFontSourceFiles: ['apps/tactics/shell/fonts.ts'],
                 files: {
-                    'games/tactics/shell/fonts.ts': `
+                    'apps/tactics/shell/fonts.ts': `
                         export const tacticsFonts = [
                             { family: 'Cinzel', src: 'tactics/fonts/Cinzel-Regular.woff2', weight: '400', display: 'swap' },
                         ];
@@ -238,7 +238,7 @@ describe('validateAssetWorkspace', () => {
 
         expect(report.ok).toBe(false);
         expect(output).toContain('Missing font source files:');
-        expect(output).toContain('games/tactics/assets/fonts/Cinzel-Regular.woff2');
+        expect(output).toContain('apps/tactics/assets/fonts/Cinzel-Regular.woff2');
     });
 
     it('rejects renderer-public game asset files so the renderer cannot own game assets', async () => {
@@ -265,9 +265,9 @@ describe('validateAssetWorkspace', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                gameFontSourceFiles: ['games/tactics/shell/fonts.ts'],
+                gameFontSourceFiles: ['apps/tactics/shell/fonts.ts'],
                 files: {
-                    'games/tactics/shell/fonts.ts': `
+                    'apps/tactics/shell/fonts.ts': `
                         export const tacticsFonts = [
                             { family: 'Cinzel', src: 'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;700;900' },
                         ];
@@ -343,9 +343,9 @@ describe('formatAssetValidationReport', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                dataJsonFiles: ['apps/tactics/data/units/unit.json'],
                 files: {
-                    'games/tactics/data/units/unit.json': JSON.stringify({ id: 'soldier' }),
+                    'apps/tactics/data/units/unit.json': JSON.stringify({ id: 'soldier' }),
                 },
             }),
         });
@@ -364,9 +364,9 @@ describe('malformed asset refs', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/bad.json'],
+                dataJsonFiles: ['apps/tactics/data/units/bad.json'],
                 files: {
-                    'games/tactics/data/units/bad.json': JSON.stringify({
+                    'apps/tactics/data/units/bad.json': JSON.stringify({
                         portrait: 'game/../traversal.webp',
                     }),
                 },
@@ -387,9 +387,9 @@ describe('malformed asset refs', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/bad.json'],
+                dataJsonFiles: ['apps/tactics/data/units/bad.json'],
                 files: {
-                    'games/tactics/data/units/bad.json': JSON.stringify({
+                    'apps/tactics/data/units/bad.json': JSON.stringify({
                         z: 'zzz/../z.webp',
                         a: 'aaa/../a.webp',
                     }),
@@ -406,9 +406,9 @@ describe('malformed asset refs', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                sceneSourceFiles: ['games/tactics/scenes/scenes.ts'],
+                sceneSourceFiles: ['apps/tactics/scenes/scenes.ts'],
                 files: {
-                    'games/tactics/scenes/scenes.ts': `
+                    'apps/tactics/scenes/scenes.ts': `
                         export const scene = {
                             requiredAssets: ['game/../bad.glb'],
                         };
@@ -430,9 +430,9 @@ describe('data JSON collection edge cases', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                dataJsonFiles: ['apps/tactics/data/units/unit.json'],
                 files: {
-                    'games/tactics/data/units/unit.json': JSON.stringify({
+                    'apps/tactics/data/units/unit.json': JSON.stringify({
                         hidden: 'tactics/_hidden/missing.webp',
                         dottedGame: 'my.game/textures/missing.webp',
                     }),
@@ -451,9 +451,9 @@ describe('data JSON collection edge cases', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                dataJsonFiles: ['apps/tactics/data/units/unit.json'],
                 files: {
-                    'games/tactics/data/units/unit.json': JSON.stringify({
+                    'apps/tactics/data/units/unit.json': JSON.stringify({
                         id: 'soldier',
                         displayName: 'Soldier',
                     }),
@@ -469,12 +469,12 @@ describe('data JSON collection edge cases', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                dataJsonFiles: ['apps/tactics/data/units/unit.json'],
                 files: {
-                    'games/tactics/data/units/unit.json': JSON.stringify({
+                    'apps/tactics/data/units/unit.json': JSON.stringify({
                         sounds: ['tactics/audio/step.ogg', 'tactics/audio/hit.ogg'],
                     }),
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -483,10 +483,10 @@ describe('data JSON collection edge cases', () => {
                             ],
                         };
                     `,
-                    'games/tactics/assets/audio/step.ogg': '',
-                    'games/tactics/assets/audio/hit.ogg': '',
+                    'apps/tactics/assets/audio/step.ogg': '',
+                    'apps/tactics/assets/audio/hit.ogg': '',
                 },
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -498,9 +498,9 @@ describe('data JSON collection edge cases', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                dataJsonFiles: ['games/tactics/data/units/unit.json'],
+                dataJsonFiles: ['apps/tactics/data/units/unit.json'],
                 files: {
-                    'games/tactics/data/units/unit.json': JSON.stringify({
+                    'apps/tactics/data/units/unit.json': JSON.stringify({
                         'some-key': 'tactics/textures/special.webp',
                     }),
                 },
@@ -521,14 +521,14 @@ describe('scene source file collection edge cases', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                sceneSourceFiles: ['games/tactics/scenes/scenes.ts'],
+                sceneSourceFiles: ['apps/tactics/scenes/scenes.ts'],
                 files: {
-                    'games/tactics/scenes/scenes.ts': `
+                    'apps/tactics/scenes/scenes.ts': `
                         export const scene = {
                             requiredAssets: ['tactics/models/board.glb'] as const,
                         };
                     `,
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -536,9 +536,9 @@ describe('scene source file collection edge cases', () => {
                             ],
                         };
                     `,
-                    'games/tactics/assets/models/board.glb': '',
+                    'apps/tactics/assets/models/board.glb': '',
                 },
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -550,14 +550,14 @@ describe('scene source file collection edge cases', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                sceneSourceFiles: ['games/tactics/scenes/scenes.tsx'],
+                sceneSourceFiles: ['apps/tactics/scenes/scenes.tsx'],
                 files: {
-                    'games/tactics/scenes/scenes.tsx': `
+                    'apps/tactics/scenes/scenes.tsx': `
                         export const scene = {
                             requiredAssets: ['tactics/models/board.glb'],
                         } satisfies { requiredAssets: string[] };
                     `,
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -565,9 +565,9 @@ describe('scene source file collection edge cases', () => {
                             ],
                         };
                     `,
-                    'games/tactics/assets/models/board.glb': '',
+                    'apps/tactics/assets/models/board.glb': '',
                 },
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -579,14 +579,14 @@ describe('scene source file collection edge cases', () => {
         const report = await validateAssetWorkspace({
             workspaceRoot,
             host: createHost({
-                sceneSourceFiles: ['games/tactics/scenes/scenes.ts'],
+                sceneSourceFiles: ['apps/tactics/scenes/scenes.ts'],
                 files: {
-                    'games/tactics/scenes/scenes.ts': `
+                    'apps/tactics/scenes/scenes.ts': `
                         export const scene = {
                             'requiredAssets': ['tactics/textures/floor.webp'],
                         };
                     `,
-                    'games/tactics/asset-manifest.ts': `
+                    'apps/tactics/asset-manifest.ts': `
                         export const tacticsAssetManifest = {
                             gameId: 'tactics',
                             entries: [
@@ -594,9 +594,9 @@ describe('scene source file collection edge cases', () => {
                             ],
                         };
                     `,
-                    'games/tactics/assets/textures/floor.webp': '',
+                    'apps/tactics/assets/textures/floor.webp': '',
                 },
-                assetManifestFiles: ['games/tactics/asset-manifest.ts'],
+                assetManifestFiles: ['apps/tactics/asset-manifest.ts'],
             }),
         });
 
@@ -655,9 +655,9 @@ describe('createNodeWorkspaceFileHost', () => {
         expect(await host.readFile(filePath)).toBe('{"ok":true}');
     });
 
-    it('findDataJsonFiles returns JSON files under games/*/data/ recursively', async () => {
+    it('findDataJsonFiles returns JSON files under apps/*/data/ recursively', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
-        const dataDir = join(dir, 'games', 'tactics', 'data', 'units');
+        const dataDir = join(dir, 'apps', 'tactics', 'data', 'units');
         await mkdir(dataDir, { recursive: true });
         await writeFile(join(dataDir, 'soldier.json'), '{}');
         await writeFile(join(dataDir, 'soldier.ts'), ''); // must be excluded
@@ -669,7 +669,7 @@ describe('createNodeWorkspaceFileHost', () => {
         expect(files[0]).toContain('soldier.json');
     });
 
-    it('findDataJsonFiles returns an empty array when the games/ directory does not exist', async () => {
+    it('findDataJsonFiles returns an empty array when the apps/ directory does not exist', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
 
         const host = createNodeWorkspaceFileHost();
@@ -680,7 +680,7 @@ describe('createNodeWorkspaceFileHost', () => {
 
     it('findSceneSourceFiles returns .ts files and excludes .d.ts and test files', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
-        const scenesDir = join(dir, 'games', 'tactics', 'scenes');
+        const scenesDir = join(dir, 'apps', 'tactics', 'scenes');
         await mkdir(scenesDir, { recursive: true });
         await writeFile(join(scenesDir, 'scenes.ts'), '');
         await writeFile(join(scenesDir, 'scenes.d.ts'), ''); // excluded
@@ -718,7 +718,7 @@ describe('runValidateAssetsCli', () => {
 
     it('returns exit code 1 for a workspace with a missing asset reference', async () => {
         const dir = await mkdtemp(join(tmpdir(), 'chimera-assets-test-'));
-        const dataDir = join(dir, 'games', 'tactics', 'data');
+        const dataDir = join(dir, 'apps', 'tactics', 'data');
         await mkdir(dataDir, { recursive: true });
         await writeFile(
             join(dataDir, 'unit.json'),

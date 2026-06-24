@@ -13,8 +13,9 @@ export type ResolverPlugin = Readonly<{
  * (relative to the workspace root). F57 removes the tsconfig `paths` aliases, so
  * this plugin — not vite-tsconfig-paths — is what lets vitest resolve bare
  * `@chimera/*` specifiers onto in-tree TypeScript source while no `dist/` build
- * exists yet. `@chimera/tactics` lives under `games/tactics`; the rest are
- * top-level. Mirrors the webpack aliases in `renderer/next.config.ts`.
+ * exists yet. `@chimera/tactics` lives under `apps/tactics` (relocated in F63
+ * #782; its `dist/` is built but not yet consumed — F64 flips this map to honour
+ * its exports). Mirrors the webpack aliases in `renderer/next.config.ts`.
  */
 const CHIMERA_PACKAGE_DIRS: Readonly<Record<string, string>> = {
     // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`,
@@ -25,7 +26,7 @@ const CHIMERA_PACKAGE_DIRS: Readonly<Record<string, string>> = {
     // artefact. Their own tests use relative imports and therefore never hit this
     // map. (`@chimera/renderer` joined this group in #773 and `@chimera/electron`
     // in #777 once their dist/ builds landed.)
-    '@chimera/tactics': 'games/tactics',
+    '@chimera/tactics': 'apps/tactics',
 };
 
 /**

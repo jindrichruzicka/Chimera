@@ -12,7 +12,8 @@ export function createDevResolver(projectRoot: string): AssetResolver {
     return {
         resolve(ref: AssetRef): string {
             const { gameId, relativePath } = parseAssetRef(ref);
-            return `file://${projectRoot}/games/${gameId}/assets/${relativePath}`;
+            // Game apps live under apps/<gameId>/ in dev (relocated from games/ in F63 #782).
+            return `file://${projectRoot}/apps/${gameId}/assets/${relativePath}`;
         },
     };
 }
