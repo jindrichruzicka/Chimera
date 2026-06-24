@@ -11,4 +11,4 @@
 // keep `globalThis.__e2eHooks` typed. build:packages fronts the typecheck and the
 // Playwright runner, so electron/dist exists first. F63 relocates the e2e suite
 // into apps/tactics, which removes this cross-tree reference.
-/// <reference path="../../electron/dist/main/runtime/e2e-hooks.d.ts" />
+/// <reference path="../../../../electron/dist/main/runtime/e2e-hooks.d.ts" />

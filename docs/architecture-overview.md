@@ -356,7 +356,7 @@ The engine is game-agnostic, so the game/consumer layer is **not** part of this 
 **Dual module resolution.** Two resolution modes run side by side, which is why nearly every root script is prefixed with `pnpm build:packages`:
 
 - **Tests and dev** resolve `@chimera/*` to in-tree **TypeScript source** via the Vitest resolver plugin ([`tools/vitest-resolver-plugin`](../tools/vitest-resolver-plugin.ts), and the equivalent Next/webpack alias) — fast iteration with no rebuild step.
-- **Typecheck, lint (type-aware rules), and production** resolve `@chimera/*` to the built **`dist/`** through each package's `exports` map, so `dist` must exist first — hence the `build:packages` prefix on `typecheck`, `lint`, `test`, and `coverage`. The path aliases were removed from the production/typecheck tsconfigs in F57 (#752); only [`e2e/tsconfig.json`](../e2e/tsconfig.json) keeps a transitional `paths` map, because the Playwright runner resolves bare specifiers with no bundler hook.
+- **Typecheck, lint (type-aware rules), and production** resolve `@chimera/*` to the built **`dist/`** through each package's `exports` map, so `dist` must exist first — hence the `build:packages` prefix on `typecheck`, `lint`, `test`, and `coverage`. The path aliases were removed from the production/typecheck tsconfigs in F57 (#752); only [`apps/tactics/e2e/tsconfig.json`](../apps/tactics/e2e/tsconfig.json) keeps a transitional `paths` map, because the Playwright runner resolves bare specifiers with no bundler hook.
 
 ---
 

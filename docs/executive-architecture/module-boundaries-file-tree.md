@@ -289,7 +289,7 @@ chimera/
 │   ├── validate-assets.ts           # CI: verify AssetRef strings and GameFontFace files resolve to disk
 │   └── migrate-save.ts              # CLI: run SaveMigrator against a save file
 │
-└── e2e/                             # Playwright end-to-end test suite
+└── apps/tactics/e2e/                # Playwright end-to-end test suite (owned by the tactics consumer app)
     ├── playwright.config.ts
     ├── fixtures/
     │   ├── electron.fixture.ts

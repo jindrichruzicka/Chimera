@@ -12,7 +12,7 @@
  */
 import { test, expect } from '../fixtures/electron.fixture';
 import { MainMenuPage } from '../pages/MainMenuPage';
-import { SYSTEM_QUIT_CHANNEL } from '../../electron/preload/apis/system-api';
+import { SYSTEM_QUIT_CHANNEL } from '../../../../electron/preload/apis/system-api';
 
 const MAIN_MENU_QUIT_OBSERVED_KEY = '__chimeraMainMenuQuitObserved';
 

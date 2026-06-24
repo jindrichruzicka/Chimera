@@ -6,7 +6,10 @@
  */
 
 import type { ElectronApplication, Page } from '@playwright/test';
-import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
 import { test, expect } from '../fixtures/direct-game.fixture';
 import { launchE2eElectronApplication } from '../fixtures/electron.fixture';
 import { GamePage } from '../pages/GamePage';

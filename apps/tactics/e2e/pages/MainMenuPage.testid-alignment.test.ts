@@ -13,12 +13,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const workspaceRoot = path.resolve(import.meta.dirname, '../..');
+const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 
 describe('MainMenuPage POM — testid alignment with renderer', () => {
     it('every getByTestId call in MainMenuPage.ts resolves against a data-testid in the renderer main menu page', () => {
         const pomSource = readFileSync(
-            path.join(workspaceRoot, 'e2e/pages/MainMenuPage.ts'),
+            path.join(workspaceRoot, 'apps/tactics/e2e/pages/MainMenuPage.ts'),
             'utf-8',
         );
         const rendererSource = readFileSync(

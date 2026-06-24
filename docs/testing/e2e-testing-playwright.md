@@ -35,7 +35,7 @@ All cross-process, multiplayer, and full-stack scenarios are validated through P
 ## §13.3 Directory Structure
 
 ```
-e2e/
+apps/tactics/e2e/
 ├── playwright.config.ts
 ├── playwright.config.test.ts    # Vitest shape-check — validates config values without launching Electron (deliberate)
 ├── lobby.fixture.test.ts        # Vitest shape-check — validates lobby.fixture exports without launching Electron (deliberate)
@@ -79,8 +79,8 @@ e2e/
     └── game-3d-render.spec.ts
 ```
 
-> **Note — Vitest shape-check files in `e2e/` root:** `playwright.config.test.ts` and
-> `lobby.fixture.test.ts` are intentional Vitest unit tests co-located at the `e2e/` root
+> **Note — Vitest shape-check files in `apps/tactics/e2e/` root:** `playwright.config.test.ts` and
+> `lobby.fixture.test.ts` are intentional Vitest unit tests co-located at the `apps/tactics/e2e/` root
 > (§12.3 pattern). They validate module-level exports and config values without launching
 > Electron, so failures surface in the fast Vitest run rather than only during a full E2E
 > run. Playwright's `testDir: './tests'` correctly excludes them; they are picked up by
@@ -91,7 +91,7 @@ e2e/
 ## §13.4 Playwright Configuration
 
 ```typescript
-// e2e/playwright.config.ts
+// apps/tactics/e2e/playwright.config.ts
 export default defineConfig({
     testDir: './tests',
     timeout: 90_000,
@@ -119,7 +119,7 @@ export default defineConfig({
 ### Base Electron Fixture
 
 ```typescript
-// e2e/fixtures/electron.fixture.ts
+// apps/tactics/e2e/fixtures/electron.fixture.ts
 export interface E2eElectronLaunchOptions {
     readonly port: string;
     readonly role?: 'host' | 'client';
@@ -151,7 +151,7 @@ export const test = base.extend<ElectronFixtures>({
 ### Multiplayer Lobby Fixture
 
 ```typescript
-// e2e/fixtures/lobby.fixture.ts
+// apps/tactics/e2e/fixtures/lobby.fixture.ts
 export const test = electronTest.extend<LobbyFixtures>({
     hostApp: async ({}, use) => {
         const app = await launchE2eElectronApplication({
@@ -202,7 +202,7 @@ when `CHIMERA_E2E=1`; production builds load the explicit game main-menu launch 
 ### LobbyPage
 
 ```typescript
-// e2e/pages/LobbyPage.ts
+// apps/tactics/e2e/pages/LobbyPage.ts
 import { Page, Locator } from '@playwright/test';
 
 export class LobbyPage {
@@ -253,7 +253,7 @@ export class LobbyPage {
 ### GamePage
 
 ```typescript
-// e2e/pages/GamePage.ts
+// apps/tactics/e2e/pages/GamePage.ts
 import { Page, Locator } from '@playwright/test';
 
 export class GamePage {
@@ -301,7 +301,7 @@ export class GamePage {
 ### ipc-spy.ts
 
 ```typescript
-// e2e/helpers/ipc-spy.ts
+// apps/tactics/e2e/helpers/ipc-spy.ts
 import type { ElectronApplication } from '@playwright/test';
 
 /**
@@ -357,7 +357,7 @@ Provides read-only helpers to record and inspect raw WebSocket frames from the E
 **Module boundary**: must NOT import from `electron/main/`, `simulation/`, or `networking/`. `ElectronApplication` is the only external import — it is a Playwright test type.
 
 ```typescript
-// e2e/helpers/ws-inspector.ts
+// apps/tactics/e2e/helpers/ws-inspector.ts
 import type { ElectronApplication } from '@playwright/test';
 
 /**
@@ -422,7 +422,7 @@ Programmatic tick-dispatch helper for soak specs. Dispatches a specified number 
 **Module boundary**: must NOT import from `electron/main/`, `simulation/`, or `networking/`. `ElectronApplication` is the only external import — it is a Playwright test type.
 
 ```typescript
-// e2e/helpers/tick-driver.ts
+// apps/tactics/e2e/helpers/tick-driver.ts
 import type { ElectronApplication } from '@playwright/test';
 
 /** Number of ticks dispatched per batch before yielding to the event loop. */
@@ -473,7 +473,7 @@ export async function tick(
 ### snapshot-assert.ts
 
 ```typescript
-// e2e/helpers/snapshot-assert.ts
+// apps/tactics/e2e/helpers/snapshot-assert.ts
 import { expect } from '@playwright/test';
 import type { ElectronApplication } from '@playwright/test';
 import { getLastBroadcastChecksums, getSimulationTick } from './ipc-spy';
@@ -573,7 +573,7 @@ export async function assertTickAdvanced(
 ### lobby.spec.ts
 
 ```typescript
-// e2e/tests/lobby.spec.ts
+// apps/tactics/e2e/tests/lobby.spec.ts
 import { test, expect } from '../fixtures/lobby.fixture';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { LobbyPage } from '../pages/LobbyPage';
@@ -605,7 +605,7 @@ test.describe('Lobby lifecycle', () => {
 ### game-flow.spec.ts
 
 ```typescript
-// e2e/tests/game-flow.spec.ts
+// apps/tactics/e2e/tests/game-flow.spec.ts
 import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
 
@@ -622,7 +622,7 @@ test.describe('Game flow', () => {
 ### undo-redo.spec.ts
 
 ```typescript
-// e2e/tests/undo-redo.spec.ts
+// apps/tactics/e2e/tests/undo-redo.spec.ts
 import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
 
@@ -642,7 +642,7 @@ test.describe('Undo/redo', () => {
 ### obfuscation.spec.ts
 
 ```typescript
-// e2e/tests/obfuscation.spec.ts
+// apps/tactics/e2e/tests/obfuscation.spec.ts
 import { test, expect } from '../fixtures/game.fixture';
 import { getHostSnapshot } from '../helpers/ipc-spy';
 import { assertNoLeakedFields } from '../helpers/snapshot-assert';
@@ -664,7 +664,7 @@ test.describe('State obfuscation', () => {
 ### multiplayer-soak.spec.ts
 
 ```typescript
-// e2e/tests/multiplayer-soak.spec.ts
+// apps/tactics/e2e/tests/multiplayer-soak.spec.ts
 import { test, expect } from '../fixtures/game.fixture';
 import { getSimulationTick } from '../helpers/ipc-spy';
 import { assertChecksumMatch } from '../helpers/snapshot-assert';
@@ -688,7 +688,7 @@ Single-player persistence spec built on the `saveLoadApp` / `saveLoadWindow` fix
 This spec exercises the save/restore invariants for atomic persistence and restored commitments: it relies on the save IPC returning only after the atomic rename, on the load IPC being the only restore entry point, and on the restored session resuming at the same tick after relaunch.
 
 ```typescript
-// e2e/tests/save-load.spec.ts
+// apps/tactics/e2e/tests/save-load.spec.ts
 import { test, expect } from '../fixtures/electron.fixture';
 import { getLastSavedSlotId, getLastSavedTick, getSimulationTick } from '../helpers/ipc-spy';
 import { captureRelaunchConfig, relaunchElectronApplication } from '../helpers/relaunch';
@@ -734,7 +734,7 @@ Single-player crash-recovery spec built on the same pass-and-play direct-game bo
 The spec validates recovery through the preload bridge and normal save/load IPC path. It does not import `electron/main/`, `simulation/`, or `networking/` helpers directly.
 
 ```typescript
-// e2e/tests/crash-recovery.spec.ts
+// apps/tactics/e2e/tests/crash-recovery.spec.ts
 test.describe('Crash recovery', () => {
     test('tick is restored to crash-save value after unclean exit, relaunch, and Resume', async ({
         crashApp,
@@ -770,7 +770,7 @@ Settings persistence spec built on an Electron instance launched directly to `/s
 The spec intentionally reads only `window.__chimera.settings` and Settings page DOM state. It never inspects `GameSnapshot`, `SaveFile`, `PlayerSnapshot`, or simulation internals, preserving invariant #32.
 
 ```typescript
-// e2e/tests/settings-persistence.spec.ts
+// apps/tactics/e2e/tests/settings-persistence.spec.ts
 test.describe('Settings persistence', () => {
     test('masterVolume persists across relaunch', async ({ settingsApp, settingsWindow }) => {
         const settingsPage = new SettingsPage(settingsWindow);
@@ -884,7 +884,7 @@ jobs:
               if: always()
               with:
                   name: playwright-report
-                  path: e2e/playwright-report/
+                  path: apps/tactics/e2e/playwright-report/
 ```
 
 On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed because Electron requires a display server.

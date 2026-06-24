@@ -13,11 +13,14 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const workspaceRoot = path.resolve(import.meta.dirname, '../..');
+const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 
 describe('GamePage POM — testid alignment with renderer', () => {
     it('every getByTestId call in GamePage.ts resolves against a data-testid in the renderer game shell', () => {
-        const pomSource = readFileSync(path.join(workspaceRoot, 'e2e/pages/GamePage.ts'), 'utf-8');
+        const pomSource = readFileSync(
+            path.join(workspaceRoot, 'apps/tactics/e2e/pages/GamePage.ts'),
+            'utf-8',
+        );
         const rendererSources = [
             readFileSync(
                 path.join(workspaceRoot, 'renderer/components/shell/GameShell.tsx'),

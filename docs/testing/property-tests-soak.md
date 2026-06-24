@@ -48,7 +48,7 @@ ai/__tests__/
 networking/__tests__/
 renderer/__tests__/
 
-e2e/                      ← E2E fixtures and specs — never imported from unit tests
+apps/tactics/e2e/         ← E2E fixtures and specs — never imported from unit tests
 ```
 
 ---

@@ -13,7 +13,10 @@
 import { test, expect } from '../fixtures/electron.fixture';
 import type { Locator } from '@playwright/test';
 import { MainMenuPage } from '../pages/MainMenuPage';
-import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
 
 const LOBBY_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/lobby/`;
 

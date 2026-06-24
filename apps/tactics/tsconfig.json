@@ -6,6 +6,10 @@
     // electron/** (the app's Electron composition root, relocated here in F63/#783)
     // is excluded: it imports @chimera/electron and is type-checked by the root flat
     // `tsc --noEmit`, keeping this library check off the electron layer.
+    // e2e/** (the Playwright suite, relocated here in F63/#785) is likewise excluded:
+    // it is test infrastructure type-checked by the root flat `tsc --noEmit` (as it was
+    // pre-move) and resolved for the runner by its own apps/tactics/e2e/tsconfig.json
+    // shim — it must not enter this app's DOM/jsx/react library program.
     "extends": "../../tsconfig.json",
     "compilerOptions": {
         "allowArbitraryExtensions": true,
@@ -14,5 +18,5 @@
         "types": ["node", "react", "react-dom"]
     },
     "include": ["**/*.ts", "**/*.tsx"],
-    "exclude": ["node_modules", "out", "dist", "electron/**"]
+    "exclude": ["node_modules", "out", "dist", "electron/**", "e2e/**"]
 }

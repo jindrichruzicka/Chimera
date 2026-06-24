@@ -48,7 +48,6 @@
         "apps/tactics/**/*.ts",
         "renderer/**/*.ts",
         "tools/**/*.ts",
-        "e2e/**/*.ts",
         "simulation/foundation/env.d.ts",
         "simulation/foundation/env-node.d.ts"
     ],

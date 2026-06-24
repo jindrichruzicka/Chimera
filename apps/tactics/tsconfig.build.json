@@ -52,6 +52,11 @@
         // and belongs to the standalone app, not the @chimera/tactics library — keep
         // it out of the layer-2 composite build (see header note; F63/#783).
         "electron/**",
+        // The Playwright e2e suite (relocated here in F63/#785) is test infrastructure,
+        // not library source — its non-test .ts (page objects, fixtures, global-setup.ts,
+        // playwright.config.ts) must not be compiled into dist/. The *.test/*.spec
+        // patterns below only cover its co-located unit/spec files.
+        "e2e/**",
         "**/*.test.ts",
         "**/*.test.tsx",
         "**/*.spec.ts",

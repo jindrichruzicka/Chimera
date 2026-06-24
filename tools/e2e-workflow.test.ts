@@ -56,11 +56,14 @@ describe('e2e.yml CI workflow', () => {
         );
     });
 
-    it('passes --config pointing at e2e/playwright.config.ts — prevents Playwright config discovery failure', () => {
+    it('passes --config pointing at apps/tactics/e2e/playwright.config.ts — prevents Playwright config discovery failure', () => {
         // Without --config, Playwright searches CWD (repo root) upward and never finds
-        // e2e/playwright.config.ts, so --project=electron-e2e fails with "project not found".
-        // The canonical command is `pnpm test:e2e` which already carries the flag.
-        expect(content).toMatch(/--config[= ]e2e\/playwright\.config\.ts|pnpm test:e2e/);
+        // apps/tactics/e2e/playwright.config.ts, so --project=electron-e2e fails with
+        // "project not found". The canonical command is `pnpm test:e2e` which already
+        // carries the flag (suite relocated under the tactics consumer app in F63 #785).
+        expect(content).toMatch(
+            /--config[= ]apps\/tactics\/e2e\/playwright\.config\.ts|pnpm test:e2e/,
+        );
     });
 
     it('uploads playwright-report artifact on every run', () => {

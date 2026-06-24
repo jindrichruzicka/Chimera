@@ -8,11 +8,13 @@
     // global-setup.ts. These paths restore resolution for the runner without
     // reintroducing an alias into any production/typecheck tsconfig (root +
     // renderer stay alias-free; `pnpm typecheck` does not use this file).
-    // Transitional: removed once F58 ships package `exports` maps or F63 moves
-    // the e2e suite into apps/tactics.
-    "extends": "../tsconfig.json",
+    // Transitional: F63 (#785) relocated the suite here (apps/tactics/e2e/), but the
+    // shim stays because `@chimera/tactics` is still consumed from SOURCE
+    // (`apps/tactics/*`) until F64 flips it onto its package `exports` map; removable
+    // once that lands. Paths below are baseUrl-relative (repo root), so unchanged.
+    "extends": "../../../tsconfig.json",
     "compilerOptions": {
-        "baseUrl": "..",
+        "baseUrl": "../../..",
         "paths": {
             "@chimera/simulation/*": ["simulation/dist/*"],
             "@chimera/ai/*": ["ai/dist/*"],

@@ -1,5 +1,8 @@
 import type { Locator, Page } from '@playwright/test';
-import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
 
 const COMPONENT_GALLERY_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/component-gallery/`;
 

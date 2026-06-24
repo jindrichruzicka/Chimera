@@ -198,7 +198,7 @@ export const tacticsLobbySetup: GameLobbySetup = {
 
 The board-colour `<Select>` is `disabled` for non-hosts (host-authored), while each per-seat unit-colour
 `<Select>` is `disabled` on every row except the local player's own (owner-authored). The 4-player
-colour-sync end-to-end test ([`e2e/tests/tactics-lobby-color-sync.spec.ts`](../../e2e/tests/tactics-lobby-color-sync.spec.ts))
+colour-sync end-to-end test ([`apps/tactics/e2e/tests/tactics-lobby-color-sync.spec.ts`](../../apps/tactics/e2e/tests/tactics-lobby-color-sync.spec.ts))
 proves each player's own-colour choice and the host's board choice reach every peer and land identically
 on `snapshot.setup`.
 

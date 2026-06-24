@@ -2,7 +2,7 @@
 //
 // Single source of truth for the §13 performance budgets. Lives in `shared/`
 // because it is the only layer importable by all three consumers alike: the
-// main-process micro-benchmark (electron/main), the renderer-heap E2E (e2e/),
+// main-process micro-benchmark (electron/main), the renderer-heap E2E (apps/tactics/e2e/),
 // and any renderer code — the renderer must not import `electron/`, and the
 // benchmark must not live in `simulation/` (where `performance.now` is
 // ESLint-banned, Invariant #43).

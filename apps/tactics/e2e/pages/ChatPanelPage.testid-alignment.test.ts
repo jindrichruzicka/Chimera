@@ -16,12 +16,12 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
-const workspaceRoot = path.resolve(import.meta.dirname, '../..');
+const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 
 describe('ChatPanelPage POM — testid alignment with renderer', () => {
     it('every literal getByTestId call in ChatPanelPage.ts resolves against a data-testid in the chat sources', () => {
         const pomSource = readFileSync(
-            path.join(workspaceRoot, 'e2e/pages/ChatPanelPage.ts'),
+            path.join(workspaceRoot, 'apps/tactics/e2e/pages/ChatPanelPage.ts'),
             'utf-8',
         );
 

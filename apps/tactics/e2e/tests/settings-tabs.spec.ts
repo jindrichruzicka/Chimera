@@ -6,7 +6,10 @@
  */
 
 import type { ElectronApplication, Page } from '@playwright/test';
-import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
 import { expect, launchE2eElectronApplication, test } from '../fixtures/electron.fixture';
 import { SettingsPage } from '../pages/SettingsPage';
 

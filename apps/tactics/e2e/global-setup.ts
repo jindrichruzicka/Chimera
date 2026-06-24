@@ -18,7 +18,9 @@ import { buildSync } from 'esbuild';
  * because the Electron process itself has no tsconfig-paths support at runtime.
  */
 export default function globalSetup(): void {
-    const root = path.resolve(__dirname, '..');
+    // apps/tactics/e2e → repo root is three levels up (suite relocated under the
+    // tactics consumer app in F63 #785). .e2e-build stays at the repo root.
+    const root = path.resolve(__dirname, '../../..');
     const e2eBuildRoot = path.join(root, '.e2e-build');
     const mainOutfile = path.join(e2eBuildRoot, 'electron', 'main', 'index.js');
     const preloadOutfile = path.join(e2eBuildRoot, 'electron', 'preload', 'api.js');

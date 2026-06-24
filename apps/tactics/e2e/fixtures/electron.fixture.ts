@@ -4,7 +4,10 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import os from 'node:os';
 import path from 'path';
 import globalSetup from '../global-setup';
-import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
 import { inheritEnv } from './inherit-env';
 
 export interface ElectronFixtures {
@@ -97,7 +100,9 @@ function createFreshE2eUserDataDir(options: E2eElectronLaunchOptions): string {
 export function createE2eElectronLaunchConfig(
     options: E2eElectronLaunchOptions,
 ): E2eElectronLaunchConfig {
-    const root = path.resolve(__dirname, '../..');
+    // apps/tactics/e2e/fixtures → repo root is four levels up (suite relocated under
+    // the tactics consumer app in F63 #785). .e2e-build stays at the repo root.
+    const root = path.resolve(__dirname, '../../../..');
     const e2eBuildRoot = path.join(root, '.e2e-build');
     const mainEntry = path.join(e2eBuildRoot, 'electron', 'main', 'index.js');
     const preloadPath = path.join(e2eBuildRoot, 'electron', 'preload', 'api.js');

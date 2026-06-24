@@ -8,7 +8,10 @@ import { test as gameTest, expect } from '../fixtures/game.fixture';
 import { test as electronTest } from '../fixtures/electron.fixture';
 import { GamePage } from '../pages/GamePage';
 import { LobbyPage } from '../pages/LobbyPage';
-import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
 
 const GAME_URL = `${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/game/`;
 

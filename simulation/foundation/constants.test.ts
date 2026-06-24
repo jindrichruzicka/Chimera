@@ -57,7 +57,7 @@ describe('IS_DEBUG_MODE (§4.12 environment matrix, Invariant #27)', () => {
 
     it('is false in E2E runs (CHIMERA_DEBUG absent — inherit-env strips it)', async () => {
         // E2E launches inherit the parent env minus CHIMERA_DEBUG
-        // (e2e/fixtures/inherit-env.ts), so the constant must read absent → false.
+        // (apps/tactics/e2e/fixtures/inherit-env.ts), so the constant must read absent → false.
         const value = await loadIsDebugMode('test', undefined);
 
         expect(typeof value).toBe('boolean');

@@ -6,7 +6,10 @@
  */
 
 import type { Page } from '@playwright/test';
-import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from '../../electron/main/renderer-url';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
 import { expect, test as electronTest } from '../fixtures/electron.fixture';
 import { test as gameTest } from '../fixtures/game.fixture';
 import { MainMenuPage } from '../pages/MainMenuPage';

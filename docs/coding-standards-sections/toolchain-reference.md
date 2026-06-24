@@ -20,7 +20,7 @@ tags: [toolchain, pnpm, vitest, scripts, path-aliases, tsconfig, coding-standard
 pnpm test              # vitest run — all unit and integration tests
 pnpm test:watch        # vitest — interactive watch mode
 pnpm test:coverage     # vitest run --coverage
-pnpm test:e2e          # playwright test --config=e2e/playwright.config.ts --project=electron-e2e
+pnpm test:e2e          # playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e
 pnpm lint              # eslint with all chimera/* rules
 pnpm validate:assets   # check AssetRef strings in game data and SceneDescriptor.requiredAssets
 pnpm format            # prettier --write on the tracked tree

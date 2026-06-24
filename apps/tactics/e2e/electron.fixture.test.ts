@@ -51,7 +51,7 @@ describe('electron.fixture', () => {
         const config = createE2eElectronLaunchConfig({ port: '7778' });
 
         expect(config.env['CHIMERA_E2E_GAME_ASSETS_ROOT']).toBe(
-            path.resolve(__dirname, '..', 'apps'),
+            path.resolve(__dirname, '../../..', 'apps'),
         );
     });
 
