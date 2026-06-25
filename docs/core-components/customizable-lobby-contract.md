@@ -165,17 +165,20 @@ keeps simulation-affecting parameters in match config rather than in user settin
 
 ## Game Contribution Pattern
 
-A game contributes a customizable lobby in two registry-mediated places — never by importing engine
-internals or `games/*` into the shell:
+A game contributes a customizable lobby in two places — never by importing engine internals or a game
+package into the shell or host:
 
 1. **Renderer — the `LobbyScreen` slot.** `GameScreenRegistry.LobbyScreen?: ComponentType<GameLobbyScreenProps>`
    ([`renderer/game/rendererGameRegistry.ts`](../../renderer/game/rendererGameRegistry.ts)) is the sole
    coupling point. `renderer/app/lobby/page.tsx` loads the active game's shell via the registry
    (`loadRendererGameShell`) and renders `gameShell.LobbyScreen` with `GameLobbyScreenProps` when present;
    otherwise it falls back to the engine's default roster UI.
-2. **Main — the lobby-setup registry.** [`electron/main/lobby/lobbySetupRegistry.ts`](../../electron/main/lobby/lobbySetupRegistry.ts)
-   is the one place permitted to import `games/*` lobby descriptors. It maps `gameId → GameLobbySetup`
-   (`resolveLobbySetup`), injected into `LobbyManager` so the manager stays free of game imports.
+2. **Main — the injected lobby-setup builder.** A game supplies `MainGameContribution.lobbySetup: (content) => GameLobbySetup`
+   at the consumer composition root ([`apps/tactics/electron/main.ts`](../../apps/tactics/electron/main.ts), #789).
+   The host derives a `gameId → builder` map and hands it to
+   [`createResolveLobbySetup`](../../electron/main/lobby/lobbySetupRegistry.ts), which closes each builder over the
+   game's loaded content and injects the resulting `(gameId) => GameLobbySetup | undefined` resolver into
+   `LobbyManager`. The registry module itself names no game — `@chimera/electron` imports no game lobby code.
 
 ### Tactics example
 
@@ -214,7 +217,7 @@ electron/
 ├── main/
 │   ├── lobby/
 │   │   ├── LobbyManager.ts          # Host-only setMatchSetting / owner-authored setPlayerAttribute + broadcast
-│   │   └── lobbySetupRegistry.ts    # resolveLobbySetup, buildSetupFromLobbyState (games/* composition point)
+│   │   └── lobbySetupRegistry.ts    # createResolveLobbySetup, buildSetupFromLobbyState (game-agnostic; builder injected via MainGameContribution.lobbySetup)
 │   └── ipc/
 │       ├── ipc-handlers.ts          # chimera:lobby:set-match-setting / set-player-attribute handlers
 │       └── ipc-schemas.ts           # SetMatchSettingPayloadSchema, SetPlayerAttributePayloadSchema

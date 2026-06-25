@@ -596,12 +596,15 @@ export default tseslint.config(
     // Main-process boundaries — electron/main orchestration must stay agnostic of
     // (a) which games exist (packaged, multi-game builds, F18), and (b) which
     // concrete networking provider is in use (Invariant #47, issue #769).
-    //   * no-main-games-import — only the composition registries (mainGameRegistry
-    //     / gameContentRegistry / lobbySetupRegistry) may import `games/*`.
+    //   * no-main-games-import — no electron/main module may import `games/*`;
+    //     since #788/#789 every game seam (actions, content schemas, lobby setup)
+    //     arrives via the injected MainGameContribution, so no in-package
+    //     composition registries remain exempt.
     //   * no-main-provider-internals — orchestration imports the public barrel
     //     interfaces (@chimera/networking) only; the concrete provider is wired
     //     solely in the composition root electron/main/index.ts.
-    // Both rules exempt their composition points and test fixtures. Mirrors
+    // Both rules exempt test fixtures (no-main-provider-internals also exempts its
+    // sole composition point, index.ts). Mirrors
     // `no-shell-games-import` + rendererGameRegistry on the renderer side.
     // Rule implementations: tools/eslint-plugin-chimera/rules/no-main-*.ts
     {

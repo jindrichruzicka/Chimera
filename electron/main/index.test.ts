@@ -501,6 +501,9 @@ const { tacticsCommitmentOrchestration } =
 const { tacticsResolveIsMyTurn } = await import('@chimera/tactics/commitment/turnGate.js');
 const { tacticsSettingsSchema } = await import('@chimera/tactics/settings-schema.js');
 const { TACTICS_GAME_ID } = await import('@chimera/tactics/constants.js');
+const { TACTICS_CONTENT_SCHEMAS, paletteFromCollections } =
+    await import('@chimera/tactics/content/tacticsContent.js');
+const { buildTacticsLobbySetup } = await import('@chimera/tactics/lobby/lobby-setup.js');
 
 function makeTestContributions(): MainGameContribution[] {
     return [
@@ -508,6 +511,8 @@ function makeTestContributions(): MainGameContribution[] {
             gameId: TACTICS_GAME_ID,
             gameVersion: '0.1.0',
             manifest: tacticsManifest,
+            contentSchemas: TACTICS_CONTENT_SCHEMAS,
+            lobbySetup: (content) => buildTacticsLobbySetup(paletteFromCollections(content)),
             registerActions: registerTacticsActions,
             registerSettings: (manager) => manager.registerSchema(tacticsSettingsSchema),
             visibilityRules: mockTacticsVisibilityRules,

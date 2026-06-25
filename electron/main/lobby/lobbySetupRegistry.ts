@@ -1,25 +1,23 @@
 /**
  * electron/main/lobby/lobbySetupRegistry.ts
  *
- * Main-side registry mapping `gameId → lobby-setup builder`, plus the pure glue
- * that turns a live `LobbyState` into the `GameSetupConfig` carried into the
- * match at `engine:start_game`.
+ * Game-agnostic main-side glue for customizable lobbies: it turns a `gameId →
+ * lobby-setup builder` map (injected at bootstrap) plus the host's content
+ * accessor into the plain `(gameId) => GameLobbySetup | undefined` resolver
+ * `LobbyManager` consumes, and turns a live `LobbyState` into the
+ * `GameSetupConfig` carried into the match at `engine:start_game`.
  *
- * This module is a designated *composition point* for game lobby descriptors: it
- * is one of the few places permitted to import `games/*` lobby code. Because a
- * game's selectable options now come from the content database, the registry
- * holds a BUILDER per game `(content) => GameLobbySetup` rather than a static
- * descriptor. `createResolveLobbySetup` closes a builder over the game's loaded
- * content so `LobbyManager` keeps receiving a plain
- * `(gameId) => GameLobbySetup | undefined` resolver and stays free of game and
- * content-loader imports (Invariant #2).
+ * This module names NO game. The per-game builders arrive by injection from the
+ * consumer composition root via `MainGameContribution.lobbySetup` (#789),
+ * derived by the host into `lobbySetupByGameId` — so `@chimera/electron` imports
+ * no game lobby code (Invariant #2). `createResolveLobbySetup` closes each
+ * builder over the game's loaded content; `LobbyManager` stays free of game and
+ * content-loader imports.
  *
  * Architecture: §4.14 — LobbyManager; §4.4 — Lobby State Sync; §4.8 — Content Database
- * Task: #706 (part of #702 — Customizable Lobby)
+ * Task: #706 (part of #702 — Customizable Lobby); #789 (game-injection seam)
  */
 
-import { buildTacticsLobbySetup } from '@chimera/tactics/lobby/lobby-setup.js';
-import { paletteFromCollections } from '@chimera/tactics/content/tacticsContent.js';
 import type { LobbyState } from '@chimera/networking';
 import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import type {
@@ -28,27 +26,19 @@ import type {
 } from '@chimera/simulation/foundation/game-lobby-contract.js';
 
 /**
- * `gameId → lobby-setup builder`. Each builder turns the game's transmitted
- * content into its full `GameLobbySetup`. Concrete games register here by
- * importing their `games/*` lobby + content modules (the sole place allowed).
- */
-export const lobbySetupBuilders: Readonly<
-    Record<string, (content: GameContent) => GameLobbySetup>
-> = {
-    tactics: (content) => buildTacticsLobbySetup(paletteFromCollections(content)),
-};
-
-/**
  * Build the `resolveLobbySetup` resolver injected into `LobbyManager`, closing
- * each game's builder over its loaded content. `getContent` returns the game's
- * plain `GameContent` (or `undefined` when the game declares none); the resolver
- * returns `undefined` for any game without both a builder and content.
+ * each game's injected builder over its loaded content. `getContent` returns the
+ * game's plain `GameContent` (or `undefined` when the game declares none);
+ * `lobbySetupByGameId` is the host-derived `gameId → builder` map (from each
+ * game's `MainGameContribution.lobbySetup`). The resolver returns `undefined`
+ * for any game without both a builder and content.
  */
 export function createResolveLobbySetup(
     getContent: (gameId: string) => GameContent | undefined,
+    lobbySetupByGameId: Readonly<Record<string, (content: GameContent) => GameLobbySetup>>,
 ): (gameId: string) => GameLobbySetup | undefined {
     return (gameId: string): GameLobbySetup | undefined => {
-        const builder = lobbySetupBuilders[gameId];
+        const builder = lobbySetupByGameId[gameId];
         if (builder === undefined) {
             return undefined;
         }

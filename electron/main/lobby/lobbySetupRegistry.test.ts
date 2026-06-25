@@ -10,18 +10,29 @@
 import { describe, it, expect } from 'vitest';
 import { playerId, type LobbyState } from '@chimera/networking';
 import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
-import {
-    lobbySetupBuilders,
-    createResolveLobbySetup,
-    buildSetupFromLobbyState,
-} from './lobbySetupRegistry.js';
+import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
+import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobbySetupRegistry.js';
 
-const TACTICS_CONTENT: GameContent = {
+const SAMPLE_CONTENT: GameContent = {
     'player-colors': [
         { id: 'blue', name: 'Blue', hex: '#2563eb' },
         { id: 'red', name: 'Red', hex: '#dc2626' },
     ],
     'board-colors': [{ id: 'slate', name: 'Slate', hex: '#3f3f46' }],
+};
+
+// A generic descriptor + injected builder map. The package names no game: the
+// concrete builder arrives from the consumer composition root via
+// `MainGameContribution.lobbySetup`, derived by the host into this map (#789).
+const SAMPLE_SETUP: GameLobbySetup = {
+    maxPlayers: 4,
+    matchSettingsDefaults: {},
+    matchSettingsOptions: {},
+    playerAttributeOptions: {},
+    resolveDefaultPlayerAttributes: () => ({}),
+};
+const sampleBuilders: Readonly<Record<string, (content: GameContent) => GameLobbySetup>> = {
+    sample: () => SAMPLE_SETUP,
 };
 
 function makeState(overrides: Partial<LobbyState> = {}): LobbyState {
@@ -32,34 +43,32 @@ function makeState(overrides: Partial<LobbyState> = {}): LobbyState {
     };
 }
 
-describe('lobbySetupBuilders', () => {
-    it('builds the Tactics descriptor from transmitted content (#708)', () => {
-        const setup = lobbySetupBuilders['tactics']?.(TACTICS_CONTENT);
-        expect(setup?.maxPlayers).toBe(4);
-        expect(setup?.playerAttributeOptions['color']).toEqual([
-            { value: 'blue', label: 'Blue' },
-            { value: 'red', label: 'Red' },
-        ]);
-        expect(setup?.matchSettingsOptions['boardColor']).toEqual([
-            { value: 'slate', label: 'Slate' },
-        ]);
-    });
-});
-
 describe('createResolveLobbySetup', () => {
-    it('resolves the Tactics descriptor by gameId when content is available', () => {
-        const resolve = createResolveLobbySetup(() => TACTICS_CONTENT);
-        expect(resolve('tactics')?.maxPlayers).toBe(4);
+    it('resolves a game descriptor by gameId from the injected builder map when content is available', () => {
+        const resolve = createResolveLobbySetup(() => SAMPLE_CONTENT, sampleBuilders);
+        expect(resolve('sample')).toBe(SAMPLE_SETUP);
     });
 
-    it('returns undefined for an unregistered gameId', () => {
-        const resolve = createResolveLobbySetup(() => TACTICS_CONTENT);
+    it('returns undefined for a gameId with no injected builder', () => {
+        const resolve = createResolveLobbySetup(() => SAMPLE_CONTENT, sampleBuilders);
         expect(resolve('unknown')).toBeUndefined();
     });
 
     it('returns undefined when the game has no loaded content', () => {
-        const resolve = createResolveLobbySetup(() => undefined);
-        expect(resolve('tactics')).toBeUndefined();
+        const resolve = createResolveLobbySetup(() => undefined, sampleBuilders);
+        expect(resolve('sample')).toBeUndefined();
+    });
+
+    it('passes the loaded content into the injected builder', () => {
+        let received: GameContent | undefined;
+        const resolve = createResolveLobbySetup(() => SAMPLE_CONTENT, {
+            sample: (content) => {
+                received = content;
+                return SAMPLE_SETUP;
+            },
+        });
+        resolve('sample');
+        expect(received).toBe(SAMPLE_CONTENT);
     });
 });
 

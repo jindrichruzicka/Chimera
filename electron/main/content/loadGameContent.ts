@@ -23,23 +23,27 @@ import type {
     GameContent,
     GameContentItem,
 } from '@chimera/simulation/foundation/game-content-contract.js';
-import { gameContentRegistry } from './gameContentRegistry.js';
+import type { ZodType } from 'zod';
 
 /**
- * Load all registered games' content from `<gameAssetsRoot>/<gameId>/data`.
- * Returns a map keyed by `gameId`; games absent from the registry are absent
- * from the map (their `PipelineContext.db` stays `undefined`).
+ * Load each game's content from `<gameAssetsRoot>/<gameId>/data`, validating it
+ * against the per-game schemas the host derived from the injected game
+ * contributions (`MainGameContribution.contentSchemas` → `contentSchemasByGameId`,
+ * #788). Returns a map keyed by `gameId`; a game absent from `schemasByGameId`
+ * (i.e. one that declares no content) is absent from the map, so its
+ * `PipelineContext.db` stays `undefined` (Invariant #46).
  *
  * @throws if any game's content fails to load or validate (Invariant #14).
  */
 export async function loadAllGameContent(
     gameAssetsRoot: string,
+    schemasByGameId: Readonly<Record<string, Readonly<Record<string, ZodType>>>>,
 ): Promise<Map<string, ContentDatabase>> {
     const dbs = new Map<string, ContentDatabase>();
-    for (const [gameId, registration] of Object.entries(gameContentRegistry)) {
+    for (const [gameId, schemas] of Object.entries(schemasByGameId)) {
         const dataDir = path.join(gameAssetsRoot, gameId, 'data');
         const db = await createContentLoader().load([{ type: 'directory', path: dataDir }], {
-            schemas: registration.schemas,
+            schemas,
         });
         dbs.set(gameId, db);
     }

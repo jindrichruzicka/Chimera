@@ -20,6 +20,7 @@ import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/set
 import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
 import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
 import type { CommandContext, CommandScheduler } from '@chimera/ai';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
 import type { MainGameContribution } from '@chimera/electron/main';
 import { tacticsManifest } from '@chimera/tactics/manifest.js';
 import {
@@ -44,6 +45,29 @@ describe('tactics composition root', () => {
         expect(tacticsContribution.manifest).toBe(tacticsManifest);
         expect(tacticsContribution.manifest.displayName).toBe('Tactics');
         expect(tacticsContribution.manifest.realtime).toBe(false);
+    });
+
+    it('contributes the tactics content schemas for the host content loader (#788)', () => {
+        expect(tacticsContribution.contentSchemas).toBeDefined();
+        expect(Object.keys(tacticsContribution.contentSchemas ?? {})).toEqual(
+            expect.arrayContaining(['player-colors', 'board-colors']),
+        );
+    });
+
+    it('contributes a lobby-setup builder that builds the tactics GameLobbySetup (#789)', () => {
+        const content: GameContent = {
+            'player-colors': [
+                { id: 'blue', name: 'Blue', hex: '#2563eb', order: 0 },
+                { id: 'red', name: 'Red', hex: '#dc2626', order: 1 },
+            ],
+            'board-colors': [{ id: 'slate', name: 'Slate', hex: '#3f3f46', order: 0 }],
+        };
+        const setup = tacticsContribution.lobbySetup?.(content);
+        expect(setup?.maxPlayers).toBe(4);
+        expect(setup?.playerAttributeOptions['color']).toEqual([
+            { value: 'blue', label: 'Blue' },
+            { value: 'red', label: 'Red' },
+        ]);
     });
 
     it('registerActions wires the game reducers into a shared ActionRegistry', () => {

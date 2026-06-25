@@ -23,11 +23,12 @@
     // electron reference and thus no TS6202 cycle (the build order is simulation →
     // ai/networking/renderer → electron).
     //
-    // `@chimera/tactics` is imported by the three composition registries
-    // (mainGameRegistry / gameContentRegistry / lobbySetupRegistry) but is NOT a
-    // composite reference: it resolves through the workspace node_modules symlink as
-    // an external source package (read for types, never emitted — no TS6307). That
-    // transitional game-injection seam is removed in T2.
+    // `@chimera/electron` names no game: every game-specific seam now arrives by
+    // runtime injection through `MainGameContribution` (mainGameRegistry in T2/#778;
+    // content schemas + lobby setup in #788/#789), so the package no longer imports
+    // `@chimera/tactics` at all — there is no game reference, composite or
+    // node_modules-symlink, to resolve. The consumer app composition root
+    // (apps/tactics/electron/main.ts) is the sole place that names a game.
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "composite": true,

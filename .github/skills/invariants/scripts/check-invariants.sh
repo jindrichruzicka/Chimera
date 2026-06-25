@@ -239,22 +239,19 @@ fi
 # ─── Check 10: electron/main core must not import games/* (invariant 2) ──────
 # The host (main process) stays agnostic of which games exist. Since F62 (#778)
 # the main-side game registry is a runtime injection seam (mainGameRegistry.ts is
-# a game-agnostic factory); the host's game wiring lives in the consumer app
-# composition root apps/tactics/electron/main.ts (a flat file under electron/, not
-# the electron/main/ dir, so outside this check). Only the two
-# remaining composition registries may import games/*. Mirrors the renderer-side
-# GameShell / rendererGameRegistry guard (Check 7) and the ESLint rule
-# chimera/no-main-games-import. Matches static (`import … from`, `export … from`)
-# and dynamic (`import('…')`) specifiers alike. Test files are excluded (they
-# import game fixtures), as are comment lines (jsdoc may cite a games/ path).
+# a game-agnostic factory); since #788/#789 content schemas and lobby setup also
+# arrive by injection, so there are NO in-package composition points left — every
+# non-test electron/main module must be game-free. The host's game wiring lives in
+# the consumer app composition root apps/tactics/electron/main.ts (a flat file
+# under electron/, not the electron/main/ dir, so outside this check). Mirrors the
+# renderer-side GameShell / rendererGameRegistry guard (Check 7) and the ESLint
+# rule chimera/no-main-games-import. Matches static (`import … from`,
+# `export … from`) and dynamic (`import('…')`) specifiers alike. Test files are
+# excluded (they import game fixtures), as are comment lines (jsdoc may cite a
+# games/ path).
 if [[ -d electron/main ]]; then
     while IFS= read -r match; do
-        file="${match%%:*}"
-        case "${file}" in
-            electron/main/content/gameContentRegistry.ts) ;;
-            electron/main/lobby/lobbySetupRegistry.ts) ;;
-            *) violation "2" "${match}" ;;
-        esac
+        violation "2" "${match}"
     done < <(
         grep -rnE --include="*.ts" --exclude="*.test.ts" --exclude="*.test.tsx" \
             --exclude-dir="node_modules" \

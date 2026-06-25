@@ -949,8 +949,15 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // whatever set it is given. Built before any consumer so the registerActions
     // loop below registers the game into ActionRegistry before the tick loop
     // starts (Invariant #10).
-    const { mainGameRegistry, hostedGame, knownGameIds, gameVersions, visibilityRulesByGameId } =
-        createMainGameRegistry(contributions);
+    const {
+        mainGameRegistry,
+        hostedGame,
+        knownGameIds,
+        gameVersions,
+        visibilityRulesByGameId,
+        contentSchemasByGameId,
+        lobbySetupByGameId,
+    } = createMainGameRegistry(contributions);
     const rendererLaunchUrl = buildRendererGameLaunchUrl(hostedGame.gameId);
 
     const { preloadPath, rendererEntry, gameAssetsRoot } = resolveRuntimePaths({
@@ -988,10 +995,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Load every registered game's content directory into an immutable
     // ContentDatabase before the lobby/tick loop comes up. A failure is fatal —
     // the app must not start with invalid content. The engine stays agnostic:
-    // each game supplies its own schemas (see content/gameContentRegistry.ts).
+    // each game supplies its own schemas through its injected contribution
+    // (`MainGameContribution.contentSchemas`, #788), derived above into
+    // `contentSchemasByGameId` — the host names no game.
     let contentDbs: Map<string, ContentDatabase>;
     try {
-        contentDbs = await loadAllGameContent(gameAssetsRoot);
+        contentDbs = await loadAllGameContent(gameAssetsRoot, contentSchemasByGameId);
     } catch (err: unknown) {
         logger.error(
             'fatal: game content failed to load',
@@ -1008,8 +1017,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     };
 
     // Game-aware resolver injected into LobbyManager: closes each game's
-    // lobby-setup builder over its loaded content (Invariant #2).
-    const resolveLobbySetup = createResolveLobbySetup(getGameContent);
+    // injected lobby-setup builder over its loaded content (Invariant #2). The
+    // builders come from the game contributions (`lobbySetupByGameId`), so the
+    // host names no game.
+    const resolveLobbySetup = createResolveLobbySetup(getGameContent, lobbySetupByGameId);
 
     // The single live `SessionRuntime` for the currently-hosted session, or
     // `null` when no session is running. Declared before crash-reporter wiring

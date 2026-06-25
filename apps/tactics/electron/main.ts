@@ -20,6 +20,11 @@ import { main, type MainGameContribution } from '@chimera/electron/main';
 
 import { createTacticsAIState } from '@chimera/tactics/ai/tacticsPolicy.js';
 import { registerTacticsActions, resolveTacticsFirstPlayer } from '@chimera/tactics/actions.js';
+import {
+    paletteFromCollections,
+    TACTICS_CONTENT_SCHEMAS,
+} from '@chimera/tactics/content/tacticsContent.js';
+import { buildTacticsLobbySetup } from '@chimera/tactics/lobby/lobby-setup.js';
 import { tacticsManifest } from '@chimera/tactics/manifest.js';
 import { tacticsCommitmentOrchestration } from '@chimera/tactics/commitment/orchestration.js';
 import { tacticsResolveIsMyTurn } from '@chimera/tactics/commitment/turnGate.js';
@@ -35,6 +40,8 @@ export const tacticsContribution: MainGameContribution = {
     gameId: TACTICS_GAME_ID,
     gameVersion: '0.1.0',
     manifest: tacticsManifest,
+    contentSchemas: TACTICS_CONTENT_SCHEMAS,
+    lobbySetup: (content) => buildTacticsLobbySetup(paletteFromCollections(content)),
     registerActions: registerTacticsActions,
     registerSettings: (manager) => manager.registerSchema(tacticsSettingsSchema),
     visibilityRules: tacticsVisibilityRules,

@@ -4,11 +4,13 @@
  * Unit tests for the `chimera/no-main-games-import` ESLint rule using
  * Vitest + ESLint RuleTester.
  *
- * The host (electron/main) must stay agnostic of which games exist; only the
- * content/lobby composition registries may import `games/*`, and test files are
- * exempt. The main-side game registry (mainGameRegistry.ts) became a runtime
- * injection seam in F62 (#778) and is no longer exempt — its game wiring moved to
- * the out-of-scope consumer app composition root apps/tactics/electron/main.ts.
+ * The host (electron/main) must stay agnostic of which games exist; since
+ * #788/#789 there are NO in-package composition points — content schemas and
+ * lobby setup arrive by runtime injection — so every non-test `electron/main`
+ * module is guarded (the former gameContentRegistry.ts/lobbySetupRegistry.ts
+ * exemptions are gone). Test files stay exempt (they import game fixtures). The
+ * game wiring lives in the out-of-scope consumer app composition root
+ * apps/tactics/electron/main.ts.
  */
 
 import { RuleTester } from 'eslint';
@@ -29,16 +31,6 @@ const ruleTester = new RuleTester({
 ruleTester.run('chimera/no-main-games-import', rule, {
     // ── Valid — rule must NOT fire ───────────────────────────────────────────
     valid: [
-        // The content/lobby registries are the remaining in-package coupling
-        // points (exempt). mainGameRegistry.ts left the allowlist in F62 (#778).
-        {
-            filename: 'electron/main/content/gameContentRegistry.ts',
-            code: `import { TACTICS_CONTENT_SCHEMAS } from '@chimera/tactics/content/tacticsContent.js';`,
-        },
-        {
-            filename: 'electron/main/lobby/lobbySetupRegistry.ts',
-            code: `import { buildTacticsLobbySetup } from '@chimera/tactics/lobby/lobby-setup.js';`,
-        },
         // Test files import game modules as fixtures (exempt).
         {
             filename: 'electron/main/index.test.ts',
@@ -94,11 +86,6 @@ ruleTester.run('chimera/no-main-games-import', rule, {
             filename: 'electron/main/index.ts',
             code: `const m = import('./game/mainGameRegistry.js');`,
         },
-        // Dynamic import of a games module IS allowed inside a composition registry.
-        {
-            filename: 'electron/main/content/gameContentRegistry.ts',
-            code: `const m = import('@chimera/tactics/content/tacticsContent.js');`,
-        },
         // A computed dynamic specifier cannot be resolved statically — not flagged.
         {
             filename: 'electron/main/index.ts',
@@ -124,6 +111,24 @@ ruleTester.run('chimera/no-main-games-import', rule, {
         {
             filename: 'electron/main/game/mainGameRegistry.ts',
             code: `import { registerTacticsActions } from '@chimera/tactics/actions.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        // The content + lobby registries lost their exemptions in #788/#789: their
+        // game coupling moved into the injected MainGameContribution, so they must
+        // no longer import a game — statically or dynamically.
+        {
+            filename: 'electron/main/content/gameContentRegistry.ts',
+            code: `import { TACTICS_CONTENT_SCHEMAS } from '@chimera/tactics/content/tacticsContent.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        {
+            filename: 'electron/main/lobby/lobbySetupRegistry.ts',
+            code: `import { buildTacticsLobbySetup } from '@chimera/tactics/lobby/lobby-setup.js';`,
+            errors: [{ messageId: 'mainGamesImport' }],
+        },
+        {
+            filename: 'electron/main/lobby/lobbySetupRegistry.ts',
+            code: `const m = import('@chimera/tactics/content/tacticsContent.js');`,
             errors: [{ messageId: 'mainGamesImport' }],
         },
         {

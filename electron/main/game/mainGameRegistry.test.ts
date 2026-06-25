@@ -10,7 +10,10 @@
 
 import { describe, expect, it } from 'vitest';
 
+import type { ZodType } from 'zod';
+
 import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
+import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import type { VisibilityRules } from '@chimera/simulation/projection/index.js';
 
 import { createMainGameRegistry, type MainGameContribution } from './mainGameRegistry.js';
@@ -86,5 +89,45 @@ describe('createMainGameRegistry', () => {
 
         expect(view.manifestsByGameId['alpha']).toBe(contribution.manifest);
         expect(Object.keys(view.manifestsByGameId)).toEqual(view.knownGameIds);
+    });
+
+    it('derives the gameId → content-schemas map only for contributions that declare schemas', () => {
+        const schemas: Readonly<Record<string, ZodType>> = {
+            'player-colors': {} as unknown as ZodType,
+        };
+        const view = createMainGameRegistry([
+            makeStubContribution('alpha', '1.0.0', { contentSchemas: schemas }),
+        ]);
+
+        expect(view.contentSchemasByGameId['alpha']).toBe(schemas);
+    });
+
+    it('omits games with no content schemas from the content-schemas map (Invariant #46)', () => {
+        const view = createMainGameRegistry([makeStubContribution('beta', '1.0.0')]);
+
+        expect(view.contentSchemasByGameId['beta']).toBeUndefined();
+        expect(Object.keys(view.contentSchemasByGameId)).toEqual([]);
+    });
+
+    it('derives the gameId → lobby-setup builder map only for contributions that declare one', () => {
+        const lobbySetup = (): GameLobbySetup => ({
+            maxPlayers: 2,
+            matchSettingsDefaults: {},
+            matchSettingsOptions: {},
+            playerAttributeOptions: {},
+            resolveDefaultPlayerAttributes: () => ({}),
+        });
+        const view = createMainGameRegistry([
+            makeStubContribution('alpha', '1.0.0', { lobbySetup }),
+        ]);
+
+        expect(view.lobbySetupByGameId['alpha']).toBe(lobbySetup);
+    });
+
+    it('omits games with no lobby setup from the lobby-setup map', () => {
+        const view = createMainGameRegistry([makeStubContribution('beta', '1.0.0')]);
+
+        expect(view.lobbySetupByGameId['beta']).toBeUndefined();
+        expect(Object.keys(view.lobbySetupByGameId)).toEqual([]);
     });
 });

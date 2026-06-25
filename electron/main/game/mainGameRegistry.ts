@@ -23,8 +23,12 @@
  * Architecture: §4.8 Content Database, §4.13 Settings, §4.6/§8 Projection.
  */
 
+import type { ZodType } from 'zod';
+
 import type { AIState } from '@chimera/ai';
 import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
+import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
+import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
 import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
 import type {
@@ -67,6 +71,26 @@ export interface MainGameContribution {
     readonly visibilityRules: VisibilityRules;
     /** Resolve the first player for a new match. */
     readonly resolveFirstPlayer: (config: FirstPlayerConfig) => PlayerId;
+    /**
+     * Optional per-collection Zod schemas for this game's content, keyed by
+     * collection type (the game's `data/<collection>` subdirectory). The host
+     * hands these to the generic `ContentLoader` at startup so malformed content
+     * fails validation (Invariant #14) before the lobby comes up. Absent ⇒ the
+     * game declares no content and its `ContentDatabase` stays absent
+     * (`PipelineContext.db` undefined, Invariant #46). Replaces the former
+     * static `gameContentRegistry` (#788) — schemas now arrive by injection so
+     * `@chimera/electron` names no game.
+     */
+    readonly contentSchemas?: Readonly<Record<string, ZodType>>;
+    /**
+     * Optional builder for this game's customizable-lobby descriptor. Given the
+     * game's loaded content, returns the pure `GameLobbySetup` the host reads to
+     * seed lobby defaults and validate host/join writes (§4.14). Absent ⇒ the
+     * game has no customizable lobby and the host seeds nothing. Replaces the
+     * former static `lobbySetupBuilders` map (#789) — the builder now arrives by
+     * injection so `@chimera/electron` names no game.
+     */
+    readonly lobbySetup?: (content: GameContent) => GameLobbySetup;
     /**
      * Optional factory for the game's AI brain state. When present, hosted AI
      * slots run this policy (composed in {@link buildDefaultAIPlayerAgent})
@@ -113,6 +137,19 @@ export interface MainGameRegistryView {
     readonly visibilityRulesByGameId: Readonly<Record<string, VisibilityRules>>;
     /** `gameId → manifest` — drives window title + real-time ticker selection. */
     readonly manifestsByGameId: Readonly<Record<string, GameManifest>>;
+    /**
+     * `gameId → per-collection content schemas`, for the games that declare
+     * content. Drives the startup content load (`loadAllGameContent`); a game
+     * with no schemas is absent here, so it gets no `ContentDatabase`
+     * (Invariant #46). Derived from the injected `contentSchemas` fields.
+     */
+    readonly contentSchemasByGameId: Readonly<Record<string, Readonly<Record<string, ZodType>>>>;
+    /**
+     * `gameId → lobby-setup builder`, for the games that declare a customizable
+     * lobby. Fed to `createResolveLobbySetup`; a game without one is absent so the
+     * host seeds no lobby defaults for it. Derived from the injected `lobbySetup`.
+     */
+    readonly lobbySetupByGameId: Readonly<Record<string, (content: GameContent) => GameLobbySetup>>;
 }
 
 /**
@@ -153,6 +190,28 @@ export function createMainGameRegistry(
         ),
         manifestsByGameId: Object.fromEntries(
             contributions.map((game) => [game.gameId, game.manifest]),
+        ),
+        contentSchemasByGameId: Object.fromEntries(
+            contributions
+                .filter(
+                    (
+                        game,
+                    ): game is MainGameContribution & {
+                        contentSchemas: Readonly<Record<string, ZodType>>;
+                    } => game.contentSchemas !== undefined,
+                )
+                .map((game) => [game.gameId, game.contentSchemas]),
+        ),
+        lobbySetupByGameId: Object.fromEntries(
+            contributions
+                .filter(
+                    (
+                        game,
+                    ): game is MainGameContribution & {
+                        lobbySetup: (content: GameContent) => GameLobbySetup;
+                    } => game.lobbySetup !== undefined,
+                )
+                .map((game) => [game.gameId, game.lobbySetup]),
         ),
     };
 }

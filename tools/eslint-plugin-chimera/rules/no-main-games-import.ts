@@ -11,12 +11,11 @@
  * composition root `apps/tactics/electron/main.ts` (relocated from the top-level
  * `app/` in F63/#783) — a flat file under `electron/`, not `electron/main/`, so it
  * is outside this rule's scope (it injects the game's `MainGameContribution` at
- * runtime). The
- * remaining exempt composition points inside `electron/main` are the two registries
- * still importing games (their own injection seams land separately):
- *
- *   - electron/main/content/gameContentRegistry.ts  (content schemas)
- *   - electron/main/lobby/lobbySetupRegistry.ts     (lobby setup builders)
+ * runtime). Since #788/#789 there are NO in-package composition points left:
+ * content schemas (`MainGameContribution.contentSchemas`) and lobby-setup
+ * builders (`MainGameContribution.lobbySetup`) also arrive by injection, so the
+ * former `gameContentRegistry.ts` / `lobbySetupRegistry.ts` exemptions are gone
+ * and every non-test `electron/main` module is guarded.
  *
  * Test files are exempt — they legitimately import game modules as fixtures
  * (e.g. index.test.ts, loadGameContent.test.ts).
@@ -39,29 +38,18 @@ function normalize(filename: string): string {
     return filename.replace(/\\/gu, '/');
 }
 
-/** Composition points permitted to import `games/*` (the sole coupling points).
- *  `mainGameRegistry.ts` left this list in F62 (#778): it no longer imports a
- *  game — the host registry is now a runtime injection seam fed by the consumer
- *  app's composition root `apps/tactics/electron/main.ts` (outside this rule's
- *  scope). */
-const ALLOWLISTED_SUFFIXES = [
-    'electron/main/content/gameContentRegistry.ts',
-    'electron/main/lobby/lobbySetupRegistry.ts',
-];
-
 /**
  * True for an `electron/main` source file that must stay game-agnostic — i.e.
- * not a test file and not one of the allowlisted composition registries.
+ * any non-test file under `electron/main/`. Since #788/#789 there are no
+ * allowlisted composition registries: content schemas and lobby setup arrive by
+ * runtime injection, so every `electron/main` module is guarded.
  */
 function isGuardedMainFile(filename: string): boolean {
     const n = normalize(filename);
     if (!n.includes('electron/main/')) {
         return false;
     }
-    if (/\.test\.tsx?$/u.test(n)) {
-        return false;
-    }
-    return !ALLOWLISTED_SUFFIXES.some((suffix) => n.endsWith(suffix));
+    return !/\.test\.tsx?$/u.test(n);
 }
 
 /**
@@ -108,7 +96,7 @@ const rule: Rule.RuleModule = {
         },
         messages: {
             mainGamesImport:
-                'electron/main must not import from games/* (multi-game packaging). Inject the game at runtime via the consumer app composition root (apps/tactics/electron/main.ts), which constructs the MainGameContribution and calls main(contributions); the content/lobby registries remain the only in-package composition points. Mirrors renderer/game/rendererGameRegistry.ts.',
+                'electron/main must not import from games/* (multi-game packaging). Inject the game at runtime via the consumer app composition root (apps/tactics/electron/main.ts), which constructs the MainGameContribution (including contentSchemas and lobbySetup) and calls main(contributions). Mirrors renderer/game/rendererGameRegistry.ts.',
         },
         schema: [],
     },

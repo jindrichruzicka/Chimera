@@ -8,16 +8,23 @@
 
 import path from 'path';
 import { describe, expect, it } from 'vitest';
-import { paletteFromCollections } from '@chimera/tactics/content/tacticsContent.js';
+import {
+    paletteFromCollections,
+    TACTICS_CONTENT_SCHEMAS,
+} from '@chimera/tactics/content/tacticsContent.js';
 import { loadAllGameContent, toGameContent } from './loadGameContent.js';
 
 // Repo `apps/` dir: electron/main/content → up 3 → repo root → apps (game apps
 // relocated from games/ in F63 #782).
 const APPS_ROOT = path.resolve(__dirname, '../../..', 'apps');
 
+// The per-game schema map the host derives from the injected contributions and
+// hands to the loader (formerly the static gameContentRegistry; F64-prep #788).
+const TACTICS_SCHEMAS = { tactics: TACTICS_CONTENT_SCHEMAS };
+
 describe('loadAllGameContent', () => {
     it('loads tactics player-colors and board-colors from the real data dir', async () => {
-        const dbs = await loadAllGameContent(APPS_ROOT);
+        const dbs = await loadAllGameContent(APPS_ROOT, TACTICS_SCHEMAS);
         const tactics = dbs.get('tactics');
         expect(tactics).toBeDefined();
         expect([...(tactics?.getAllIds('player-colors') ?? [])].sort()).toEqual([
@@ -32,11 +39,17 @@ describe('loadAllGameContent', () => {
             'stone',
         ]);
     });
+
+    it('loads no database for a game whose schemas are not injected (Invariant #46)', async () => {
+        const dbs = await loadAllGameContent(APPS_ROOT, {});
+        expect(dbs.size).toBe(0);
+        expect(dbs.get('tactics')).toBeUndefined();
+    });
 });
 
 describe('toGameContent', () => {
     it('flattens a loaded database into plain collections with all item fields', async () => {
-        const dbs = await loadAllGameContent(APPS_ROOT);
+        const dbs = await loadAllGameContent(APPS_ROOT, TACTICS_SCHEMAS);
         const tactics = dbs.get('tactics');
         expect(tactics).toBeDefined();
         const content = toGameContent(tactics!);
@@ -61,7 +74,7 @@ describe('toGameContent', () => {
     // seat n → playerColors[n], so a wrong order silently mis-colours units (e.g.
     // the host's "own" unit rendering amber instead of blue).
     it('interprets the real data into the authored player/board colour order', async () => {
-        const dbs = await loadAllGameContent(APPS_ROOT);
+        const dbs = await loadAllGameContent(APPS_ROOT, TACTICS_SCHEMAS);
         const tactics = dbs.get('tactics');
         expect(tactics).toBeDefined();
 
