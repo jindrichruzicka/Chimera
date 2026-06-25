@@ -31,21 +31,21 @@
     // declarations are pulled in directly (the Node programs need NODE_ENV /
     // CHIMERA_DEBUG augmentations; the renderer program declares NODE_ENV itself).
     "include": [
-        // apps/tactics/**/*.ts is co-included (as games/**/*.ts was) so the tactics
-        // SOURCE is type-checked within this one flat program. This is also the SOLE
-        // type-checker of the app's Electron composition root
-        // (apps/tactics/electron/main.ts — the in-tree game injection seam #778,
-        // relocated here from the top-level app/ in F63/#783): it consumes the
-        // @chimera/electron host through the package exports map (onto electron/dist)
-        // and resolves @chimera/tactics onto SOURCE here, so it is type-checked here
-        // rather than by electron/tsconfig.json or the tactics composite build (which
-        // excludes electron/** to keep the layer-2 library off @chimera/electron).
-        // Only .ts is included — this program carries no DOM/jsx/react libs, so the
-        // screens/shell .tsx are type-checked separately by
-        // `tsc --noEmit -p apps/tactics/tsconfig.json`. The package's dist/ is built
-        // by tsc -b but not yet consumed (F64 flips consumers to dist and excludes
-        // apps/tactics from this program, mirroring electron).
-        "apps/tactics/**/*.ts",
+        // apps/*/**/*.ts co-includes every consumer app's SOURCE (as games/**/*.ts
+        // did for the single game) so each app is type-checked within this one flat
+        // program. This is also the SOLE type-checker of each app's Electron
+        // composition root (apps/<game>/electron/main.ts — the in-tree game injection
+        // seam #778, relocated here from the top-level app/ in F63/#783): it consumes
+        // the @chimera/electron host through the package exports map (onto
+        // electron/dist) and resolves the app's own @chimera/<game> onto SOURCE here,
+        // so it is type-checked here rather than by electron/tsconfig.json or the app
+        // composite build (which excludes electron/** to keep the layer-3 app's
+        // library half off @chimera/electron). Only .ts is included — this program
+        // carries no DOM/jsx/react libs, so the screens/shell .tsx are type-checked
+        // separately by `tsc --noEmit -p apps/<game>/tsconfig.json`. Each app's dist/
+        // is built by tsc -b and excluded below (it is consumed via the package
+        // exports map, not re-type-checked here).
+        "apps/*/**/*.ts",
         "renderer/**/*.ts",
         "tools/**/*.ts",
         "simulation/foundation/env.d.ts",
@@ -60,20 +60,20 @@
         "simulation/engine/__tests__/fixtures/**",
         "ai/engine/__tests__/fixtures/**",
         "networking/__tests__/fixtures/**",
-        // apps/tactics SOURCE is type-checked here (its .ts are co-included so the
-        // composition root apps/tactics/electron/main.ts resolves @chimera/tactics),
+        // Each app's SOURCE is type-checked here (its .ts are co-included so the
+        // composition root apps/<game>/electron/main.ts resolves @chimera/<game>),
         // but its tsc -b dist/ emit must be excluded or the emitted .d.ts
         // double-declare against the source.
-        "apps/tactics/dist/**",
-        // apps/tactics/renderer/** is the game's renderer composition root (#784):
-        // register.ts/loaders.ts dynamically import the game's screens/shell .tsx
-        // and the @chimera/renderer package, so — like the screens/shell .tsx — they
-        // need DOM/jsx/react libs this .ts-only flat program deliberately omits.
-        // They are type-checked with jsx by `tsc --noEmit -p apps/tactics/tsconfig.json`
-        // and by the tactics composite build (apps/tactics references renderer, a
-        // layer-1 dep — no back-edge), so excluding them here avoids a TS6142
-        // ("--jsx is not set") on the .tsx imports.
-        "apps/tactics/renderer/**",
+        "apps/*/dist/**",
+        // apps/<game>/renderer/** is the game's renderer composition root + its own
+        // Next app (#784, F65): register.ts/loaders.ts and the app/** route re-exports
+        // import the game's screens/shell .tsx and the @chimera/renderer package, so —
+        // like the screens/shell .tsx — they need DOM/jsx/react libs this .ts-only flat
+        // program deliberately omits. They are type-checked with jsx by
+        // `tsc --noEmit -p apps/<game>/tsconfig.json` and by the app composite build
+        // (the app references renderer, a lower layer — no back-edge), so excluding them
+        // here avoids a TS6142 ("--jsx is not set") on the .tsx imports.
+        "apps/*/renderer/**",
         // electron/ is compiled exclusively by electron/tsconfig.json (#777): its
         // built package is consumed here through the @chimera/electron exports map
         // onto electron/dist. Excluding the source prevents double-compilation and

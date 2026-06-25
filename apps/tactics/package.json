@@ -5,7 +5,7 @@
     "main": "dist/electron/main.js",
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
-        "build:app": "tsx ../../tools/build-tactics-app.ts",
+        "build:app": "tsx electron/build-main.ts",
         "test": "vitest run --config ../../vitest.config.mts --dir .",
         "lint": "eslint ."
     },

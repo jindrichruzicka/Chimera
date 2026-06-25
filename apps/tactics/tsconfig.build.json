@@ -25,9 +25,9 @@
     // The @chimera/electron reference exists to mirror the package dep that the app's
     // Electron composition root (electron/main.ts) introduces; that composition root
     // is EXCLUDED from this composite's emit (it is bundled by `build:app` /
-    // tools/build-tactics-app.ts and type-checked by the root flat `tsc --noEmit`),
-    // because a runnable Electron main must be a single bundled file, not a tsc
-    // composite output.
+    // the app-owned electron/build-main.ts and type-checked by the root flat
+    // `tsc --noEmit`), because a runnable Electron main must be a single bundled
+    // file, not a tsc composite output.
     "extends": "../../tsconfig.json",
     "compilerOptions": {
         "composite": true,

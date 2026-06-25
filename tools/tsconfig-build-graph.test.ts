@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import ts from 'typescript';
@@ -22,15 +22,29 @@ import ts from 'typescript';
 
 const repoRoot = path.resolve(import.meta.dirname, '..');
 
+/** The fixed engine packages with a composite `tsconfig.build.json` (layers 0–2). */
+const ENGINE_PACKAGE_DIRS = ['simulation', 'ai', 'networking', 'renderer', 'electron'] as const;
+
+/**
+ * Consumer apps are DISCOVERED, not enumerated: every `apps/<game>` carrying a composite
+ * `tsconfig.build.json` is a layer-3 app that joins the `tsc -b` solution (F65 — a
+ * scaffolded app is first-class without editing this guard). Today that is just
+ * `apps/tactics`, but a `create-chimera-game` output is picked up automatically.
+ */
+function discoverAppDirs(): string[] {
+    const appsRoot = path.join(repoRoot, 'apps');
+    if (!existsSync(appsRoot)) return [];
+    return readdirSync(appsRoot, { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => `apps/${entry.name}`)
+        .filter((dir) => existsSync(path.join(repoRoot, dir, 'tsconfig.build.json')))
+        .sort();
+}
+
+const APP_PACKAGE_DIRS = discoverAppDirs();
+
 /** Packages with a composite `tsconfig.build.json` that join the `tsc -b` solution. */
-const COMPOSITE_PACKAGE_DIRS = [
-    'simulation',
-    'ai',
-    'networking',
-    'renderer',
-    'electron',
-    'apps/tactics',
-] as const;
+const COMPOSITE_PACKAGE_DIRS = [...ENGINE_PACKAGE_DIRS, ...APP_PACKAGE_DIRS] as const;
 
 /**
  * Source-only app-layer packages that must NEVER be a project reference (Invariant #1).
@@ -52,14 +66,16 @@ const APP_LAYER_PACKAGE_DIRS = [] as const;
  * on everything, nothing depends on it). Engine packages stay ≤ layer 2 and never
  * reference the app layer.
  */
-const PACKAGE_LAYER: Readonly<Record<string, number>> = {
+const ENGINE_PACKAGE_LAYER: Readonly<Record<string, number>> = {
     simulation: 0,
     ai: 1,
     networking: 1,
     renderer: 1,
     electron: 2,
-    'apps/tactics': 3,
 };
+
+/** Every discovered `apps/<game>` is a layer-3 consumer app. */
+const APP_PACKAGE_LAYER = 3;
 
 interface ProjectReference {
     readonly path: string;
@@ -87,11 +103,12 @@ function readTsconfig(absPath: string): TsconfigShape {
 
 /** Layer rank of a known package dir; throws for an unrecognized dir (Invariant #1 guard). */
 function layerOf(packageDir: string): number {
-    const layer = PACKAGE_LAYER[packageDir];
-    if (layer === undefined) {
-        throw new Error(`Unknown package dir '${packageDir}' — add it to PACKAGE_LAYER`);
-    }
-    return layer;
+    const engineLayer = ENGINE_PACKAGE_LAYER[packageDir];
+    if (engineLayer !== undefined) return engineLayer;
+    if ((APP_PACKAGE_DIRS as readonly string[]).includes(packageDir)) return APP_PACKAGE_LAYER;
+    throw new Error(
+        `Unknown package dir '${packageDir}' — add it to ENGINE_PACKAGE_LAYER or place it under apps/<game>/`,
+    );
 }
 
 /** The package dirs (relative to repo root) referenced by a tsconfig's `references`. */
