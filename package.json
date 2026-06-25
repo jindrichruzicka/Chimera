@@ -9,6 +9,9 @@
         "node": ">=20.0.0"
     },
     "scripts": {
+        "build": "pnpm build:packages",
+        "build:watch": "tsx tools/watch-packages.ts",
+        "dev": "pnpm build:watch",
         "build:packages": "tsc -b tsconfig.build.json && tsx tools/copy-renderer-css.ts",
         "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.json && tsc --noEmit -p apps/tactics/tsconfig.json",
         "test": "pnpm build:packages && pnpm -r test && vitest run --dir tools",
