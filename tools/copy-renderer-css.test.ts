@@ -20,13 +20,20 @@ describe('copyRendererCss', () => {
         outDir = path.join(rendererRoot, 'dist');
         await mkdir(path.join(rendererRoot, 'components', 'ui'), { recursive: true });
         await mkdir(path.join(rendererRoot, 'components', 'chat'), { recursive: true });
+        await mkdir(path.join(rendererRoot, 'app', 'lobby'), { recursive: true });
         await mkdir(path.join(rendererRoot, 'styles'), { recursive: true });
+        await mkdir(path.join(rendererRoot, 'dist'), { recursive: true });
         await writeFile(path.join(rendererRoot, 'components', 'ui', 'Button.module.css'), '.b{}');
         await writeFile(path.join(rendererRoot, 'components', 'ui', 'Button.tsx'), 'export {};');
         await writeFile(
             path.join(rendererRoot, 'components', 'chat', 'ChatPanel.module.css'),
             '.c{}',
         );
+        // An app-route module.css proves the copy walks the WHOLE shell, not a fixed
+        // dir list — the full Next shell ships from dist (F65 Phase 2a).
+        await writeFile(path.join(rendererRoot, 'app', 'lobby', 'page.module.css'), '.l{}');
+        // A pre-existing dist module.css must NOT be re-copied onto itself.
+        await writeFile(path.join(rendererRoot, 'dist', 'stale.module.css'), '.stale{}');
         await writeFile(path.join(rendererRoot, 'styles', 'tokens.css'), ':root{}');
         await writeFile(path.join(rendererRoot, 'styles', 'globals.css'), 'body{}');
     });
@@ -44,29 +51,35 @@ describe('copyRendererCss', () => {
         }
     };
 
-    it('copies every *.module.css preserving its path relative to the renderer root', async () => {
+    it('copies every *.module.css across the whole shell, preserving its relative path', async () => {
         await copyRendererCss({ rendererRoot });
         expect(await exists(path.join('components', 'ui', 'Button.module.css'))).toBe(true);
         expect(await exists(path.join('components', 'chat', 'ChatPanel.module.css'))).toBe(true);
+        expect(await exists(path.join('app', 'lobby', 'page.module.css'))).toBe(true);
     });
 
-    it('ships the design-token stylesheet so consumers can load the --ch-* tokens', async () => {
+    it('ships the design-token AND global stylesheets the shell layout imports', async () => {
         await copyRendererCss({ rendererRoot });
         expect(await exists(path.join('styles', 'tokens.css'))).toBe(true);
+        expect(await exists(path.join('styles', 'globals.css'))).toBe(true);
     });
 
-    it('does not copy non-module css or non-css sources', async () => {
-        await copyRendererCss({ rendererRoot });
-        expect(await exists(path.join('styles', 'globals.css'))).toBe(false);
+    it('does not copy non-css sources or re-scan the dist output dir', async () => {
+        const copied = await copyRendererCss({ rendererRoot });
         expect(await exists(path.join('components', 'ui', 'Button.tsx'))).toBe(false);
+        // dist/ is the OUTPUT — its own module.css must not be discovered + recopied.
+        expect(copied).not.toContain('stale.module.css');
+        expect(copied).not.toContain(path.join('dist', 'stale.module.css'));
     });
 
     it('returns the copied files relative to the output dir', async () => {
         const copied = await copyRendererCss({ rendererRoot });
         expect([...copied].sort()).toEqual(
             [
+                path.join('app', 'lobby', 'page.module.css'),
                 path.join('components', 'chat', 'ChatPanel.module.css'),
                 path.join('components', 'ui', 'Button.module.css'),
+                path.join('styles', 'globals.css'),
                 path.join('styles', 'tokens.css'),
             ].sort(),
         );

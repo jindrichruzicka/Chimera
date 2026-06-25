@@ -93,8 +93,31 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'apps/tactics/renderer/loaders.ts',
             code: `import { thing } from '../screens/index.js';`,
         },
+        {
+            // F65 Phase 2c: the app's OWN Next host route tree (renderer/app/**) may
+            // re-export the engine GUI shell from the public @chimera/renderer/shell/* surface.
+            filename: 'apps/tactics/renderer/app/lobby/page.tsx',
+            code: `export { default } from '@chimera/renderer/shell/lobby/page';`,
+        },
+        {
+            filename: 'apps/tactics/renderer/app/layout.tsx',
+            code: `export { default, metadata } from '@chimera/renderer/shell/layout';`,
+        },
     ],
     invalid: [
+        {
+            // The shell surface is for the app's Next host route tree only — the
+            // composition root must still reach the game via the public seam, not shell/*.
+            filename: 'apps/tactics/renderer/register.ts',
+            code: `export { default } from '@chimera/renderer/shell/lobby/page';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // Game screens may not import the shell surface either (barrels only).
+            filename: 'apps/tactics/screens/TacticsGameHud.tsx',
+            code: `import { GameShell } from '@chimera/renderer/shell/game/page';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
         {
             // The composition root still may not reach renderer internals.
             filename: 'apps/tactics/renderer/register.ts',

@@ -106,7 +106,9 @@ export function createE2eElectronLaunchConfig(
     const e2eBuildRoot = path.join(root, '.e2e-build');
     const mainEntry = path.join(e2eBuildRoot, 'electron', 'main', 'index.js');
     const preloadPath = path.join(e2eBuildRoot, 'electron', 'preload', 'api.js');
-    const rendererEntry = path.join(root, 'renderer', 'out', 'index.html');
+    // The app owns its Next host now (F65 Phase 2c): the GUI is built to
+    // apps/tactics/renderer/out, not the root renderer/out.
+    const rendererEntry = path.join(root, 'apps', 'tactics', 'renderer', 'out', 'index.html');
     // Game apps live under apps/<gameId>/ (relocated from games/ in F63 #782).
     const gameAssetsRoot = path.join(root, 'apps');
 

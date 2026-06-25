@@ -20,8 +20,17 @@ interface WebpackConfig {
 /**
  * Next.js configuration for the Chimera renderer.
  *
+ * SUPERSEDED AS THE GAME HOST (F65 Phase 2c): each consumer app now owns its OWN
+ * Next host (`apps/<game>/renderer/`) that re-exports the engine shell from
+ * `@chimera/renderer/shell/*` (the package now ships the whole shell from dist) and
+ * binds its own game. `apps/tactics/renderer` is the production host the Electron
+ * app loads; the e2e + verify:pack build that, not this config. This config is kept
+ * only as a renderer-package-local dev preview of the shell (still bound to tactics
+ * via the aliases below); nothing in the build/test pipeline runs `next build
+ * renderer` anymore.
+ *
  * The Electron main process loads the compiled output via `loadFile` from
- * `renderer/out/index.html` (see `electron/main/index.ts` — issue #3).
+ * `<app>/renderer/out/index.html` (see `electron/main/index.ts` — issue #3).
  * Static export mode is mandatory: there is no Next.js server at runtime.
  */
 const nextConfig: NextConfig = {

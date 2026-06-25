@@ -53,12 +53,13 @@ describe('@chimera/renderer package surface (issue #772)', () => {
         expect(manifest.types).toBeUndefined();
     });
 
-    it('exposes the two component barrels, the game seam, and the design-token styles, pointing at dist/', () => {
+    it('exposes the component barrels, the game seam, the engine shell, and the design-token styles, pointing at dist/', () => {
         const exportsMap = manifest.exports ?? {};
         expect(Object.keys(exportsMap).sort()).toEqual([
             './components/chat',
             './components/ui',
             './game',
+            './shell/*',
             './styles/*.css',
         ]);
 
@@ -78,18 +79,28 @@ describe('@chimera/renderer package surface (issue #772)', () => {
             default: './dist/game/rendererGameRegistry.js',
         });
 
+        // F65 Phase 2c: the engine GUI shell (every route under app/) ships from dist
+        // so a consumer app's thin per-app Next host re-exports each route from
+        // `@chimera/renderer/shell/<route>` (resolving every shared singleton through
+        // one package dist copy).
+        expect(exportsMap['./shell/*']).toEqual({
+            types: './dist/app/*.d.ts',
+            default: './dist/app/*.js',
+        });
+
         // The styles subpath ships the design-token stylesheet from dist/.
         expect(exportsMap['./styles/*.css']).toBe('./dist/styles/*.css');
 
         // No `.` barrel and no deep internal component subpath leaks internals;
-        // the only non-component entry points are the game seam and the curated
-        // styles asset wildcard.
+        // the only non-component entry points are the game seam, the shell route
+        // wildcard, and the curated styles asset wildcard.
         expect(exportsMap['.']).toBeUndefined();
         for (const key of Object.keys(exportsMap)) {
             expect(
                 key === './components/ui' ||
                     key === './components/chat' ||
                     key === './game' ||
+                    key === './shell/*' ||
                     key === './styles/*.css',
             ).toBe(true);
         }

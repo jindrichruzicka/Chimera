@@ -43,6 +43,9 @@ export default tseslint.config(
             'coverage/**',
             'renderer/out/**',
             'renderer/.next/**',
+            // Per-app Next host build output (F65 Phase 2c): apps/<game>/renderer/{out,.next}.
+            '**/.next/**',
+            'apps/*/renderer/out/**',
             '**/*.d.ts',
             // Fixture files used by ESLint smoke tests; they intentionally violate lint rules.
             'simulation/engine/__tests__/fixtures/**',

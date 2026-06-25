@@ -16,6 +16,10 @@
             "types": "./dist/game/rendererGameRegistry.d.ts",
             "default": "./dist/game/rendererGameRegistry.js"
         },
+        "./shell/*": {
+            "types": "./dist/app/*.d.ts",
+            "default": "./dist/app/*.js"
+        },
         "./styles/*.css": "./dist/styles/*.css"
     },
     "files": [

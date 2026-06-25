@@ -11,14 +11,16 @@
     // tsc emits no CSS, so the build script copies *.module.css + styles/tokens.css
     // into dist/ afterwards (tools/copy-renderer-css.ts).
     //
-    // The `include` is SCOPED to the public-barrel import closure rather than the
-    // package-wide `**/*.ts(x)` the other packages use: the renderer package is also
-    // the whole Next app, so `**/*` would drag in app/, components/{r3f,scene,...},
-    // bridge/, hooks/ — none of which belong in the published component-library
-    // surface and most of which cannot compile standalone (R3F, Next server
-    // components). The exports map exposes only the two barrels, so only their
-    // closure is built. lib/types mirror renderer/tsconfig.json so the components
-    // compile without the Next plugin.
+    // The `include` is package-wide (`**/*.ts(x)`): @chimera/renderer now ships the
+    // WHOLE Next shell from dist (F65 Phase 2a) — every route under app/, the
+    // bootstrap/provider tree, components/{ui,chat,shell,lobby,replay,scene,r3f,…},
+    // state/, theme/, hooks/, bridge/ — so a consumer app's thin per-app Next app
+    // re-exports each engine route from `@chimera/renderer/shell/*` and resolves every
+    // shared singleton (EscapeStack, the Zustand stores, the game registry) through
+    // ONE package dist copy. tsc preserves each `'use client'` directive in the emit;
+    // the post-build copy ships every `*.module.css` + tokens/globals (see
+    // tools/copy-renderer-css.ts). lib/types mirror renderer/tsconfig.json so the
+    // shell compiles without the Next plugin. Test + Next-config files are excluded.
     "extends": "../tsconfig.json",
     "compilerOptions": {
         "composite": true,
@@ -43,26 +45,19 @@
     // the renderer and electron/preload may import, so the renderer build references only
     // simulation and pulls no electron source into its program.
     "references": [{ "path": "../simulation/tsconfig.build.json" }],
-    "include": [
-        "components/ui/**/*.ts",
-        "components/ui/**/*.tsx",
-        "components/chat/index.ts",
-        "components/chat/ChatPanel.tsx",
-        "components/shell/EscapeStack.tsx",
-        "state/chatStore.ts",
-        "state/lobbyStore.ts",
-        "state/toastStore.ts",
-        "theme/types.ts",
-        // The ./game seam closure (#784): the registry plus its runtime deps —
-        // the font loader and the asset resolver it calls, and the InputAction
-        // contract type. All are leaf modules that compile standalone (no R3F,
-        // no Next server components), so they belong in the published surface.
-        "game/rendererGameRegistry.ts",
-        "game/GameFontLoader.ts",
-        "assets/AssetResolver.ts",
-        "input/InputAction.ts",
-        "types/chimera.d.ts",
-        "build-types/css-modules.d.ts"
-    ],
-    "exclude": ["node_modules", "dist", "**/*.test.ts", "**/*.test.tsx", "**/__tests__/**"]
+    "include": ["**/*.ts", "**/*.tsx"],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "out",
+        ".next",
+        // Next config + generated ambient are tooling, not shippable shell modules.
+        "next.config.ts",
+        "next-env.d.ts",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/__tests__/**",
+        "**/__test-support__/**"
+    ]
 }

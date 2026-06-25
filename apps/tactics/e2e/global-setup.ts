@@ -45,7 +45,11 @@ export default function globalSetup(): void {
 
     rmSync(e2eBuildRoot, { recursive: true, force: true });
 
-    execSync('pnpm build:renderer', {
+    // Build the engine packages (the shell dist the app re-exports), then the app's
+    // OWN Next host (F65 Phase 2c) — apps/tactics/renderer → apps/tactics/renderer/out,
+    // which the launch fixture points CHIMERA_E2E_RENDERER_ENTRY at.
+    execSync('pnpm build:packages', { cwd: root, stdio: 'inherit' });
+    execSync('pnpm exec next build apps/tactics/renderer', {
         cwd: root,
         stdio: 'inherit',
         env: { ...process.env, NEXT_PUBLIC_CHIMERA_E2E: '1' },

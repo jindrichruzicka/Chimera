@@ -3,22 +3,23 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Post-build CSS copy for the @chimera/renderer dist build (issue #773).
+ * Post-build CSS copy for the @chimera/renderer dist build (issue #773; F65 Phase 2a).
  *
- * `tsc -p tsconfig.build.json` emits the barrel JS + .d.ts but copies NO CSS — the
+ * `tsc -p tsconfig.build.json` emits the shell JS + .d.ts but copies NO CSS — the
  * compiled `dist/.../Button.js` keeps its literal `import styles from
- * './Button.module.css'`. This script copies every barrel `*.module.css` into dist/,
- * preserving each file's path relative to the renderer root, so those relative
- * imports resolve and the CONSUMER's own bundler (Next / Vite / webpack all support
- * CSS Modules) processes them. It also ships `styles/tokens.css` so consumers can
- * load the `--ch-*` design tokens the components reference at `:root`.
+ * './Button.module.css'`. Since the package now ships the WHOLE Next shell from dist
+ * (every route + component), this walks the ENTIRE renderer source tree for
+ * `*.module.css` and copies each into dist/, preserving its path relative to the
+ * renderer root, so those relative imports resolve and the consumer app's Next
+ * bundler processes them. It also ships `styles/tokens.css` (the `--ch-*` design
+ * tokens loaded at `:root`) and `styles/globals.css` (imported by the shell layout).
  */
 
-/** Renderer component dirs whose `*.module.css` belong to the built barrels. */
-const MODULE_CSS_DIRS = ['components/ui', 'components/chat'] as const;
+/** Top-level dirs never scanned for module CSS (output / deps / generated). */
+const SKIP_DIRS = new Set(['dist', 'node_modules', 'out', '.next']);
 
-/** Individual CSS files shipped verbatim (design tokens loaded at `:root`). */
-const EXTRA_CSS_FILES = ['styles/tokens.css'] as const;
+/** Individual CSS files shipped verbatim (loaded by the shell layout / at `:root`). */
+const EXTRA_CSS_FILES = ['styles/tokens.css', 'styles/globals.css'] as const;
 
 export interface CopyRendererCssOptions {
     /** Absolute path to the renderer package root. */
@@ -43,13 +44,26 @@ export async function copyRendererCss(options: CopyRendererCssOptions): Promise<
         copied.push(relPath);
     };
 
-    for (const relDir of MODULE_CSS_DIRS) {
-        const entries = await readdir(path.join(rendererRoot, relDir), { withFileTypes: true });
+    // Recursively collect every *.module.css under the renderer root (skipping the
+    // build output + deps), preserving each file's path relative to the root.
+    const moduleCss: string[] = [];
+    const walk = async (relDir: string): Promise<void> => {
+        const entries = await readdir(path.join(rendererRoot, relDir || '.'), {
+            withFileTypes: true,
+        });
         for (const entry of entries) {
-            if (entry.isFile() && entry.name.endsWith('.module.css')) {
-                await copyFile(path.join(relDir, entry.name));
+            const rel = relDir ? path.join(relDir, entry.name) : entry.name;
+            if (entry.isDirectory()) {
+                if (!SKIP_DIRS.has(entry.name)) await walk(rel);
+            } else if (entry.isFile() && entry.name.endsWith('.module.css')) {
+                moduleCss.push(rel);
             }
         }
+    };
+    await walk('');
+
+    for (const rel of moduleCss.sort()) {
+        await copyFile(rel);
     }
 
     for (const relFile of EXTRA_CSS_FILES) {

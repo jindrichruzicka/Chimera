@@ -129,6 +129,11 @@ const PROBE_SUBPATHS = [
     '@chimera/renderer/components/ui',
     '@chimera/renderer/components/chat',
     '@chimera/renderer/game',
+    // F65 Phase 2c: a consumer app's per-app Next host re-exports the engine shell
+    // from `@chimera/renderer/shell/*`; probe a representative route + the root layout
+    // so a missing `dist/app/*` entry in the packed artifact fails the gate.
+    '@chimera/renderer/shell/layout',
+    '@chimera/renderer/shell/main-menu/page',
     '@chimera/renderer/styles/tokens.css',
     '@chimera/electron/main',
     '@chimera/electron/preload/api',

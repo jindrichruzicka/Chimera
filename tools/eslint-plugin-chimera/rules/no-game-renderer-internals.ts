@@ -133,6 +133,19 @@ function isPublicGameSeamImport(source: string): boolean {
     );
 }
 
+// The engine GUI shell surface (F65 Phase 2c): the public `@chimera/renderer/shell/*`
+// route + layout exports a consumer app's OWN Next host re-exports so the app owns its
+// renderer GUI while the game-agnostic shell ships from the package. Allowed ONLY from
+// the app's Next host route tree (apps/<name>/renderer/app/**), never from game logic
+// (screens/shell) or the composition root (register.ts/loaders.ts).
+function isPublicShellImport(source: string): boolean {
+    return source.startsWith('@chimera/renderer/shell/');
+}
+
+function isAppNextHostRoute(filename: string): boolean {
+    return /(?:^|\/)apps\/[^/]+\/renderer\/app\/.*\.(?:ts|tsx)$/u.test(normalizePath(filename));
+}
+
 function isUiDeepImport(filename: string, source: string): boolean {
     const normalized = resolveImportPath(filename, source);
     return (
@@ -179,6 +192,11 @@ const rule: Rule.RuleModule = {
                 isPublicChatBarrelImport(source) ||
                 isPublicGameSeamImport(source)
             ) {
+                return;
+            }
+
+            // The engine shell surface is allowed ONLY from the app's Next host route tree.
+            if (isPublicShellImport(source) && isAppNextHostRoute(context.filename)) {
                 return;
             }
 
