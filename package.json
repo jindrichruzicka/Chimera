@@ -28,7 +28,8 @@
         "coverage": "pnpm build:packages && vitest run --coverage",
         "build:renderer": "pnpm build:packages && next build renderer",
         "fetch:fonts": "pnpm build:packages && tsx tools/fetch-google-fonts.ts",
-        "dev:mp": "pnpm build:packages && cross-env CHIMERA_DEV_HARNESS=1 tsx tools/dev-multiplayer.ts"
+        "dev:mp": "pnpm build:packages && cross-env CHIMERA_DEV_HARNESS=1 tsx tools/dev-multiplayer.ts",
+        "create:game": "tsx tools/create-chimera-game/index.ts"
     },
     "devDependencies": {
         "@eslint/css": "^1.2.0",
