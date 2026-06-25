@@ -52,17 +52,6 @@
     --ch-button-shadow-hover: 0 4px 20px rgba(201, 168, 76, 0.2);
     --ch-button-shadow-hover-danger: 0 4px 20px rgba(201, 168, 76, 0.2);
 
-    --ch-icon-button-bg: var(--ch-button-bg-secondary);
-    --ch-icon-button-bg-hover: var(--ch-button-bg-secondary-hover);
-    --ch-icon-button-border-color: var(--ch-button-border-secondary);
-    --ch-icon-button-border-color-hover: var(--ch-button-border-secondary-hover);
-
-    --ch-toggle-button-bg: var(--ch-button-bg-secondary);
-    --ch-toggle-button-bg-hover: var(--ch-button-bg-secondary-hover);
-    --ch-toggle-button-border-color: var(--ch-button-border-secondary);
-    --ch-toggle-button-border-color-hover: var(--ch-button-border-secondary-hover);
-    --ch-toggle-button-border-color-pressed: var(--ch-button-border-secondary);
-    --ch-toggle-button-border-color-pressed-hover: var(--ch-button-border-secondary-hover);
     --ch-toggle-button-color-pressed: var(--ch-button-bg-secondary);
     --ch-toggle-button-color-pressed-hover: var(--ch-button-bg-secondary);
 
@@ -72,6 +61,7 @@
 
     --ch-font-ui: 'Philosopher', serif;
     --ch-font-ui-button: 'Cinzel', serif;
+
     --ch-button-font-weight: 400;
     --ch-button-font-weight-primary: 700;
     --ch-button-letter-spacing: 1px;

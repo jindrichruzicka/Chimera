@@ -130,11 +130,11 @@
     --ch-icon-button-size: var(--ch-size-icon-button);
     --ch-icon-button-radius: var(--ch-radius-md);
     --ch-icon-button-font-size: var(--ch-font-size-md);
-    --ch-icon-button-bg: var(--ch-color-surface-raised);
-    --ch-icon-button-bg-hover: var(--ch-color-surface-overlay);
+    --ch-icon-button-bg: var(--ch-button-bg-secondary);
+    --ch-icon-button-bg-hover: var(--ch-button-bg-secondary-hover);
     --ch-icon-button-color: var(--ch-color-text-secondary);
-    --ch-icon-button-border-color: var(--ch-color-border);
-    --ch-icon-button-border-color-hover: var(--ch-color-border-subtle);
+    --ch-icon-button-border-color: var(--ch-button-border-secondary);
+    --ch-icon-button-border-color-hover: var(--ch-button-border-secondary-hover);
     --ch-icon-button-shadow: var(--ch-shadow-sm);
     --ch-icon-button-shadow-hover: var(--ch-shadow-md);
     --ch-icon-button-transition:
@@ -145,15 +145,15 @@
 
     --ch-toggle-button-radius: var(--ch-radius-md);
     --ch-toggle-button-font-size: var(--ch-font-size-sm);
-    --ch-toggle-button-bg: var(--ch-color-surface-raised);
-    --ch-toggle-button-bg-hover: var(--ch-color-surface-overlay);
+    --ch-toggle-button-bg: var(--ch-button-bg-secondary);
+    --ch-toggle-button-bg-hover: var(--ch-button-bg-secondary-hover);
     --ch-toggle-button-bg-pressed: var(--ch-color-accent);
     --ch-toggle-button-bg-pressed-hover: var(--ch-color-accent-hover);
     --ch-toggle-button-color: var(--ch-color-text-secondary);
     --ch-toggle-button-color-pressed: var(--ch-color-text-primary);
     --ch-toggle-button-color-pressed-hover: var(--ch-color-text-primary);
-    --ch-toggle-button-border-color: var(--ch-color-border);
-    --ch-toggle-button-border-color-hover: var(--ch-color-border-subtle);
+    --ch-toggle-button-border-color: var(--ch-button-border-secondary);
+    --ch-toggle-button-border-color-hover: var(--ch-button-border-secondary-hover);
     --ch-toggle-button-border-color-pressed: var(--ch-color-accent-hover);
     --ch-toggle-button-border-color-pressed-hover: var(--ch-toggle-button-border-color-pressed);
     --ch-toggle-button-shadow: var(--ch-shadow-sm);

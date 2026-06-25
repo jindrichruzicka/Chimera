@@ -313,4 +313,31 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-button-padding-md')).toBe('0.5rem 2rem');
         expect(extractTokenValue(css, '--ch-button-padding-lg')).toBe('0.75rem 2.5rem');
     });
+
+    it('wires icon-button and toggle-button surfaces to the secondary button tokens', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-icon-button-bg')).toBe('var(--ch-button-bg-secondary)');
+        expect(extractTokenValue(css, '--ch-icon-button-bg-hover')).toBe(
+            'var(--ch-button-bg-secondary-hover)',
+        );
+        expect(extractTokenValue(css, '--ch-icon-button-border-color')).toBe(
+            'var(--ch-button-border-secondary)',
+        );
+        expect(extractTokenValue(css, '--ch-icon-button-border-color-hover')).toBe(
+            'var(--ch-button-border-secondary-hover)',
+        );
+        expect(extractTokenValue(css, '--ch-toggle-button-bg')).toBe(
+            'var(--ch-button-bg-secondary)',
+        );
+        expect(extractTokenValue(css, '--ch-toggle-button-bg-hover')).toBe(
+            'var(--ch-button-bg-secondary-hover)',
+        );
+        expect(extractTokenValue(css, '--ch-toggle-button-border-color')).toBe(
+            'var(--ch-button-border-secondary)',
+        );
+        expect(extractTokenValue(css, '--ch-toggle-button-border-color-hover')).toBe(
+            'var(--ch-button-border-secondary-hover)',
+        );
+    });
 });
