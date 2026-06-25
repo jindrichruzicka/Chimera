@@ -16,13 +16,18 @@
     // the emit exists only to make tactics a node in the `tsc -b` graph. F64 adds the
     // package `exports` map and flips consumers onto dist/.
     //
-    // References mirror tactics' composite workspace deps (simulation, ai, renderer),
-    // so `tsc --build` orders the graph (Invariant #1, tools/tsconfig-build-graph.test.ts).
-    // Tactics sits at layer 2 and references only layers 0/1 — never @chimera/electron.
-    // The app's Electron composition root (electron/main.ts, relocated here in
-    // F63/#783) is the one file that imports @chimera/electron; it is EXCLUDED below
-    // so the layer-2 library build stays off the electron layer (the root flat
-    // `tsc --noEmit` type-checks it instead).
+    // LAYER 3 (#791): apps/tactics is the top-of-graph consumer APP — it depends on
+    // everything and nothing depends on it (since #784/#788/#789, no engine package
+    // statically imports a game; they reach it only by runtime registration). It
+    // therefore sits ABOVE @chimera/electron (layer 2), not beside it. References
+    // mirror its composite workspace deps (simulation, ai, renderer, electron), so
+    // `tsc --build` orders the graph (Invariant #1, tools/tsconfig-build-graph.test.ts).
+    // The @chimera/electron reference exists to mirror the package dep that the app's
+    // Electron composition root (electron/main.ts) introduces; that composition root
+    // is EXCLUDED from this composite's emit (it is bundled by `build:app` /
+    // tools/build-tactics-app.ts and type-checked by the root flat `tsc --noEmit`),
+    // because a runnable Electron main must be a single bundled file, not a tsc
+    // composite output.
     "extends": "../../tsconfig.json",
     "compilerOptions": {
         "composite": true,
@@ -41,7 +46,8 @@
     "references": [
         { "path": "../../simulation/tsconfig.build.json" },
         { "path": "../../ai/tsconfig.build.json" },
-        { "path": "../../renderer/tsconfig.build.json" }
+        { "path": "../../renderer/tsconfig.build.json" },
+        { "path": "../../electron/tsconfig.build.json" }
     ],
     "include": ["**/*.ts", "**/*.tsx"],
     "exclude": [

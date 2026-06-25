@@ -41,9 +41,16 @@ const APP_LAYER_PACKAGE_DIRS = [] as const;
 
 /**
  * Layer rank for the inward/acyclic check: a reference is only legal when it points to a
- * STRICTLY lower rank (simulation leaf ← mid-tier ← app layer). Same-rank (sibling) or
- * higher-rank (back-edge) references would form a cycle or escape the core. electron and
- * apps/tactics are both layer-2 app nodes and never reference each other.
+ * STRICTLY lower rank (simulation leaf ← engine mid-tier ← electron host ← consumer app).
+ * Same-rank (sibling) or higher-rank (back-edge) references would form a cycle or escape
+ * the core.
+ *
+ * `apps/tactics` is the LAYER-3 consumer app (#791): it sits ABOVE `@chimera/electron`
+ * (layer 2) and may reference it. This is sound because, since the game-agnosticism work
+ * (#784/#788/#789), no engine package statically imports a game — electron and renderer
+ * reach the game only by runtime registration — so `apps/tactics` is a pure sink (depends
+ * on everything, nothing depends on it). Engine packages stay ≤ layer 2 and never
+ * reference the app layer.
  */
 const PACKAGE_LAYER: Readonly<Record<string, number>> = {
     simulation: 0,
@@ -51,7 +58,7 @@ const PACKAGE_LAYER: Readonly<Record<string, number>> = {
     networking: 1,
     renderer: 1,
     electron: 2,
-    'apps/tactics': 2,
+    'apps/tactics': 3,
 };
 
 interface ProjectReference {

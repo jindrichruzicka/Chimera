@@ -8,7 +8,6 @@
     "engines": {
         "node": ">=20.0.0"
     },
-    "main": "apps/tactics/electron/main.js",
     "scripts": {
         "build:packages": "tsc -b tsconfig.build.json && tsx tools/copy-renderer-css.ts",
         "typecheck": "pnpm build:packages && tsc --noEmit && tsc --noEmit -p simulation/tsconfig.json && tsc --noEmit -p ai/tsconfig.json && tsc --noEmit -p networking/tsconfig.json && tsc --noEmit -p renderer/tsconfig.json && tsc --noEmit -p electron/tsconfig.json && tsc --noEmit -p apps/tactics/tsconfig.json",

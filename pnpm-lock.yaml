@@ -162,6 +162,9 @@ importers:
       '@chimera/ai':
         specifier: workspace:*
         version: link:../../ai
+      '@chimera/electron':
+        specifier: workspace:*
+        version: link:../../electron
       '@chimera/renderer':
         specifier: workspace:*
         version: link:../../renderer

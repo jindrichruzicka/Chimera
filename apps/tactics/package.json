@@ -2,14 +2,17 @@
     "name": "@chimera/tactics",
     "version": "0.9.0",
     "private": true,
+    "main": "dist/electron/main.js",
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
+        "build:app": "tsx ../../tools/build-tactics-app.ts",
         "test": "vitest run --config ../../vitest.config.mts --dir .",
         "lint": "eslint ."
     },
     "dependencies": {
         "@chimera/simulation": "workspace:*",
         "@chimera/ai": "workspace:*",
-        "@chimera/renderer": "workspace:*"
+        "@chimera/renderer": "workspace:*",
+        "@chimera/electron": "workspace:*"
     }
 }
