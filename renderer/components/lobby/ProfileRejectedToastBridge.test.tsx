@@ -4,7 +4,11 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LobbyAPI, ProfileRejection, SystemAPI } from '@chimera/electron/preload/api-types.js';
+import type {
+    LobbyAPI,
+    ProfileRejection,
+    SystemAPI,
+} from '@chimera/simulation/bridge/api-types.js';
 import { ProfileRejectedToastBridge } from './ProfileRejectedToastBridge';
 import { useToastStore } from '../../state/toastStore';
 

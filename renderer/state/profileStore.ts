@@ -8,7 +8,7 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { PlayerId, PlayerProfile } from '../../electron/preload/api-types';
+import type { PlayerId, PlayerProfile } from '@chimera/simulation/bridge/api-types.js';
 
 export interface ProfileStoreState {
     /** Current lobby profile directory keyed by PlayerId. */

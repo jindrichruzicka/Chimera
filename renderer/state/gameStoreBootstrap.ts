@@ -21,7 +21,7 @@
  *          must never call them directly.
  */
 
-import type { GameAPI, PlayerSnapshot, Unsubscribe } from '../../electron/preload/api-types.js';
+import type { GameAPI, PlayerSnapshot, Unsubscribe } from '@chimera/simulation/bridge/api-types.js';
 import { createIpcClient, type IpcPredictionStore } from '../bridge/ipcClient.js';
 import { useGameStore, type RevealStore } from './gameStore.js';
 

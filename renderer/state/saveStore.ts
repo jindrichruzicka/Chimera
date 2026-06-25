@@ -20,7 +20,7 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { SaveSlotMeta } from '../../electron/preload/api-types.js';
+import type { SaveSlotMeta } from '@chimera/simulation/bridge/api-types.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@
 
 import { useCallback, useDebugValue, useState } from 'react';
 import type { ThreeEvent } from '@react-three/fiber';
-import type { EntityId, EngineAction } from '@chimera/electron/preload/api-types.js';
+import type { EntityId, EngineAction } from '@chimera/simulation/bridge/api-types.js';
 import { useSendAction } from '../bridge/useSendAction.js';
 import { useInteractionContext } from '../components/r3f/interactionContext.js';
 

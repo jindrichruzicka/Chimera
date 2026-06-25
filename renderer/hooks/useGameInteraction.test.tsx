@@ -13,7 +13,7 @@ import {
     playerId,
     type EngineAction,
     type EntityId,
-} from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 import { InteractionContext } from '../components/r3f/InteractionBlocker.js';
 import { useGameInteraction } from './useGameInteraction.js';
 

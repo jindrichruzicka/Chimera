@@ -2,7 +2,7 @@
 
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import type { ReplayAPI } from '@chimera/electron/preload/api-types.js';
+import type { ReplayAPI } from '@chimera/simulation/bridge/api-types.js';
 import { getReplayBridge, useReplayApi } from './useReplayApi';
 
 function makeReplayBridge(): ReplayAPI {

@@ -6,8 +6,8 @@ import type {
     LobbyInfo,
     SystemAPI,
     PlayerId,
-} from '@chimera/electron/preload/api-types.js';
-import { playerId } from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
+import { playerId } from '@chimera/simulation/bridge/api-types.js';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 
 interface ChimeraBridge {

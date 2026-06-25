@@ -12,13 +12,13 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSavesBridge, useSavesApi } from './useSavesApi';
-import { toSlotId } from '@chimera/electron/preload/api-types';
+import { toSlotId } from '@chimera/simulation/bridge/api-types.js';
 import type {
     CrashRecoveryStatus,
     SaveRequest,
     SaveSlotMeta,
     SavesAPI,
-} from '@chimera/electron/preload/api-types';
+} from '@chimera/simulation/bridge/api-types.js';
 
 // ── getSavesBridge ────────────────────────────────────────────────────────────
 

@@ -11,7 +11,7 @@
 // the host platform; when it is missing or fails the logger records the
 // failure, which surfaces a broken bridge immediately in devtools.
 
-import type { ChimeraAPI } from '@chimera/electron/preload/api-types.js';
+import type { ChimeraAPI } from '@chimera/simulation/bridge/api-types.js';
 
 /** Narrow slice of `ChimeraAPI` needed by the boot smoke. */
 export type BootSmokeBridge = Pick<ChimeraAPI, 'system'>;

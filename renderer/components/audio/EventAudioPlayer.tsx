@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import type { GameEvent } from '@chimera/electron/preload/api-types.js';
+import type { GameEvent } from '@chimera/simulation/bridge/api-types.js';
 
 import type { EventAudioBinding } from '../../audio/EventAudioBinding.js';
 import { useAudioManager } from '../../audio/AudioManagerContext.js';

@@ -17,7 +17,7 @@
  */
 
 import { useEffect } from 'react';
-import type { ProfileRejection } from '@chimera/electron/preload/api-types.js';
+import type { ProfileRejection } from '@chimera/simulation/bridge/api-types.js';
 import { getLobbyBridge } from '../../app/lobby/useLobbyApi';
 import { useToastStore } from '../../state/toastStore';
 

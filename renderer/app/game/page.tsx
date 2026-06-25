@@ -19,7 +19,7 @@
 
 import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { type EngineAction, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import { type EngineAction, type PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import { createRendererGameAssetResolver } from '../../assets/AssetResolver';
 import { GameShell } from '../../components/shell/GameShell';

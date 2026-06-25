@@ -8,7 +8,7 @@ import type {
     GameResult,
     PlayerId,
     PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { ContentDatabase } from '@chimera/simulation/content/index.js';
 import {

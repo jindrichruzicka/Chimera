@@ -10,8 +10,8 @@
 // named in the renderer (invariant check 6).
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { playerId } from '@chimera/electron/preload/api-types.js';
-import type { ChimeraDebugApi } from '@chimera/electron/preload/debug-api-types.js';
+import { playerId } from '@chimera/simulation/bridge/api-types.js';
+import type { ChimeraDebugApi } from '@chimera/simulation/bridge/debug-api-types.js';
 import { Badge } from '../ui/Badge';
 import { Caption } from '../ui/Caption';
 import { ScrollArea } from '../ui/ScrollArea';

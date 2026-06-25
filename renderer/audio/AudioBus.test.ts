@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AudioBus, type AudioBusId } from './AudioBus';
 import { useSettingsStore } from '../state/settingsStore';
-import type { ResolvedSettings } from '@chimera/electron/preload/api-types';
+import type { ResolvedSettings } from '@chimera/simulation/bridge/api-types.js';
 
 interface ScheduledGainCall {
     readonly method: 'cancelScheduledValues' | 'setValueAtTime' | 'linearRampToValueAtTime';

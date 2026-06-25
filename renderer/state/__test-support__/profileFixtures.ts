@@ -1,5 +1,5 @@
-import type { PlayerId, PlayerProfile } from '@chimera/electron/preload/api-types.js';
-import { playerId } from '@chimera/electron/preload/api-types.js';
+import type { PlayerId, PlayerProfile } from '@chimera/simulation/bridge/api-types.js';
+import { playerId } from '@chimera/simulation/bridge/api-types.js';
 import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
 
 export function makeProfile(localProfileId: string, displayName: string): PlayerProfile {

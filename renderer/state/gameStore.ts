@@ -22,7 +22,7 @@ import type {
     CommitmentReveal,
     EngineAction,
     PlayerSnapshot,
-} from '../../electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 
 // ── Store interfaces (§4.4 split) ─────────────────────────────────────────────
 

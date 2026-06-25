@@ -23,7 +23,7 @@ import {
     playerId,
     type LobbyState,
     type PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 import type {
     GameHudProps,
     GameScreenProps,

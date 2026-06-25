@@ -27,7 +27,7 @@ import type {
     SettingsItemDefinition,
     SettingsSectionDefinition,
 } from '@chimera/simulation/foundation/game-shell-contract.js';
-import type { ResolvedSettings } from '@chimera/electron/preload/api-types.js';
+import type { ResolvedSettings } from '@chimera/simulation/bridge/api-types.js';
 import { Caption } from '../components/ui/Caption';
 import { Select } from '../components/ui/Select';
 import { Slider } from '../components/ui/Slider';

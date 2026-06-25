@@ -17,7 +17,7 @@ import React, { useEffect, useState } from 'react';
 import type {
     ChimeraDebugApi,
     NetworkDiagnostics,
-} from '@chimera/electron/preload/debug-api-types.js';
+} from '@chimera/simulation/bridge/debug-api-types.js';
 import { Badge } from '../ui/Badge';
 import { Button } from '../ui/Button';
 import { Caption } from '../ui/Caption';

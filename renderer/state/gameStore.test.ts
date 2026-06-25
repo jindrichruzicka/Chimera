@@ -23,8 +23,8 @@ import type {
     CommitmentReveal,
     EngineAction,
     PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
-import { playerId, gamePhase } from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
+import { playerId, gamePhase } from '@chimera/simulation/bridge/api-types.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 

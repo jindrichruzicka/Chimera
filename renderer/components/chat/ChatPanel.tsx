@@ -35,7 +35,7 @@ import { useLobbyStore } from '../../state/lobbyStore';
 import { useToastStore } from '../../state/toastStore';
 import type { ChatMessage, ChatRejectReason } from '@chimera/simulation/foundation/chat.js';
 import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
-import type { ChatScope, PlayerId } from '@chimera/electron/preload/api-types.js';
+import type { ChatScope, PlayerId } from '@chimera/simulation/bridge/api-types.js';
 import styles from './ChatPanel.module.css';
 
 /**

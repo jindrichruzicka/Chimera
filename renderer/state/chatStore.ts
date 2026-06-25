@@ -29,7 +29,7 @@
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
 import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
-import type { PlayerId } from '@chimera/electron/preload/api-types.js';
+import type { PlayerId } from '@chimera/simulation/bridge/api-types.js';
 
 /** Rolling-buffer hard cap — matches §4.29 (max 500 entries). */
 export const MAX_CHAT_MESSAGES = 500;

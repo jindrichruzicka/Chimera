@@ -5,7 +5,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ActionHistoryEntry, TickEntry } from '@chimera/electron/preload/debug-api-types.js';
+import type { ActionHistoryEntry, TickEntry } from '@chimera/simulation/bridge/debug-api-types.js';
 import {
     createDebugApiMock,
     makeActionHistoryEntry,

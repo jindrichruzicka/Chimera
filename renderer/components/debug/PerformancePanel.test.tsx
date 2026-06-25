@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PerfStats } from '@chimera/electron/preload/debug-api-types.js';
+import type { PerfStats } from '@chimera/simulation/bridge/debug-api-types.js';
 import {
     createDebugApiMock,
     makeLiveTickEvent,

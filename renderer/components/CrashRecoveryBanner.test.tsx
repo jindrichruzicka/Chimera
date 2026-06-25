@@ -5,8 +5,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { CrashRecoveryStatus } from '@chimera/electron/preload/api-types';
-import { toSlotId } from '@chimera/electron/preload/api-types';
+import type { CrashRecoveryStatus } from '@chimera/simulation/bridge/api-types.js';
+import { toSlotId } from '@chimera/simulation/bridge/api-types.js';
 import { CrashRecoveryBanner } from './CrashRecoveryBanner';
 
 interface SavesBridgeFixture {

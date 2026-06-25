@@ -9,7 +9,7 @@
 //   - Accepts an optional `source` parameter so tests can supply a fake global
 //     without touching `globalThis`.
 
-import type { SystemAPI } from '@chimera/electron/preload/api-types.js';
+import type { SystemAPI } from '@chimera/simulation/bridge/api-types.js';
 
 // ── Bridge accessor ───────────────────────────────────────────────────────────
 

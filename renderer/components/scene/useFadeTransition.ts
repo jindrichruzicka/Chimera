@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import type { PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type { PlayerId, PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
 import type { SendAction } from '@chimera/simulation/foundation/game-screen-contract.js';
 import { useFade } from '../shell/FadeContext.js';
 

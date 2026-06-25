@@ -16,8 +16,8 @@ import type {
     SystemAPI,
     Unsubscribe,
     LobbyState,
-} from '../../electron/preload/api-types';
-import { playerId } from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
+import { playerId } from '@chimera/simulation/bridge/api-types.js';
 import { bootstrapLobbyStore } from './lobbyStoreBootstrap';
 import { useLobbyStore } from './lobbyStore';
 import { useLobbyUiStore } from './lobbyUiStore';

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import type { LobbyAPI } from '@chimera/electron/preload/api-types.js';
+import type { LobbyAPI } from '@chimera/simulation/bridge/api-types.js';
 import { useLobbyStore } from '../state/lobbyStore.js';
 import { useLobbyUiStore } from '../state/lobbyUiStore.js';
 

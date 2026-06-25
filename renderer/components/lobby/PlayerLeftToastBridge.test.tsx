@@ -8,8 +8,8 @@ import type {
     LobbyAPI,
     PlayerLeftMatchEvent,
     SystemAPI,
-} from '@chimera/electron/preload/api-types.js';
-import { playerId } from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
+import { playerId } from '@chimera/simulation/bridge/api-types.js';
 import { PlayerLeftToastBridge } from './PlayerLeftToastBridge';
 import { useToastStore } from '../../state/toastStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';

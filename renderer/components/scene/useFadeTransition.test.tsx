@@ -3,7 +3,7 @@
 import { cleanup, render } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
 import { FadeContext, FadeProvider, type FadeControl } from '../shell/FadeContext.js';
 import { useFadeTransition } from './useFadeTransition.js';
 

@@ -18,7 +18,7 @@ import type {
     ChimeraDebugApi,
     PerfStats,
     TickDurationSample,
-} from '@chimera/electron/preload/debug-api-types.js';
+} from '@chimera/simulation/bridge/debug-api-types.js';
 import { Caption } from '../ui/Caption';
 import { ProgressBar } from '../ui/ProgressBar';
 import { Spinner } from '../ui/Spinner';

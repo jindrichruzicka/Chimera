@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
-import { playerId } from '@chimera/electron/preload/api-types.js';
+import { playerId } from '@chimera/simulation/bridge/api-types.js';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import LobbyPage from './page';

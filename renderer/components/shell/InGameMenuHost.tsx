@@ -3,7 +3,7 @@
 // renderer/components/shell/InGameMenuHost.tsx
 
 import React, { useCallback, useState } from 'react';
-import type { PlayerId } from '@chimera/electron/preload/api-types.js';
+import type { PlayerId } from '@chimera/simulation/bridge/api-types.js';
 import type {
     GameScreenComponent,
     InGameMenuProps,

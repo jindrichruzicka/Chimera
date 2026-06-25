@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { LogsAPI } from '@chimera/electron/preload/api-types.js';
+import type { LogsAPI } from '@chimera/simulation/bridge/api-types.js';
 import { installRendererLogger } from './rendererLogger.js';
 
 // jsdom provides window/PromiseRejectionEvent at runtime; these declarations

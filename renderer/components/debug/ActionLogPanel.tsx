@@ -13,7 +13,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import type {
     ActionHistoryEntry,
     ChimeraDebugApi,
-} from '@chimera/electron/preload/debug-api-types.js';
+} from '@chimera/simulation/bridge/debug-api-types.js';
 import { Button } from '../ui/Button';
 import { Caption } from '../ui/Caption';
 import { ScrollArea } from '../ui/ScrollArea';

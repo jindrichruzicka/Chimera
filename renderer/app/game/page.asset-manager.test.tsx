@@ -10,7 +10,7 @@ import {
     playerId,
     type LobbyState,
     type PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
 import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
 

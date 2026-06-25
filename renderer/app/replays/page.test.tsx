@@ -9,7 +9,7 @@ import type {
     PerspectiveReplayAPI,
     ReplayAPI,
     ReplayListItem,
-} from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 import ReplaysPage from './page';
 
 // Perspective rows navigate to the player with a client `router.push` (the

@@ -2,7 +2,7 @@
 
 import { renderHook } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { playerId, type EngineAction } from '@chimera/electron/preload/api-types.js';
+import { playerId, type EngineAction } from '@chimera/simulation/bridge/api-types.js';
 import { useSendAction } from './useSendAction';
 
 const recordActionDispatched = vi.fn<(stamp: number) => void>();

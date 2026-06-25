@@ -37,13 +37,11 @@
     // orders the `tsc --build` graph. @chimera/electron is intentionally NOT
     // referenced: electron sits ABOVE renderer in the graph (electron references
     // renderer), so a renderer → electron reference would be a forbidden app-layer
-    // back-edge (Invariant #1, tools/tsconfig-build-graph.test.ts). The chat barrel's
-    // tolerated type-only `import type … from '@chimera/electron/preload/api-types.js'`
-    // resolves through @chimera/electron's `exports` map, whose preload type
-    // contracts point `types` at electron SOURCE (#777) — so it is read as an
-    // external (node_modules) declaration, never emitted (no rootDir violation), and
-    // does not require electron/dist to exist when renderer compiles first. The
-    // back-edge itself is cleaned up later in F62.
+    // back-edge (Invariant #1, tools/tsconfig-build-graph.test.ts). The old
+    // renderer→electron `api-types` type back-edge is GONE (F62/F65): the host↔renderer
+    // bridge contract now lives in `@chimera/simulation/bridge/*`, the neutral leaf both
+    // the renderer and electron/preload may import, so the renderer build references only
+    // simulation and pulls no electron source into its program.
     "references": [{ "path": "../simulation/tsconfig.build.json" }],
     "include": [
         "components/ui/**/*.ts",

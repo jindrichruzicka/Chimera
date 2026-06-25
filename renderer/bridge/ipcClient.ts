@@ -28,7 +28,7 @@ import type {
     EngineAction,
     PlayerSnapshot,
     Unsubscribe,
-} from '../../electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 
 // ── Port interface ────────────────────────────────────────────────────────────
 

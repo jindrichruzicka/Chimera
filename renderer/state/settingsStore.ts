@@ -14,7 +14,11 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { ResolvedSettings, UserSettings, SettingsAPI } from '../../electron/preload/api-types';
+import type {
+    ResolvedSettings,
+    UserSettings,
+    SettingsAPI,
+} from '@chimera/simulation/bridge/api-types.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 

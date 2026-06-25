@@ -3,7 +3,7 @@
 // renderer/components/shell/ConnectionStatusIndicator.tsx
 
 import React, { useEffect, useState } from 'react';
-import type { ConnectionStatus } from '@chimera/electron/preload/api-types.js';
+import type { ConnectionStatus } from '@chimera/simulation/bridge/api-types.js';
 
 // Optimistic initial state; replaced by the first onConnectionStatus event.
 const DEFAULT_STATUS: ConnectionStatus = 'connected';

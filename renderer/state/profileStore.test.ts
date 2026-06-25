@@ -8,7 +8,7 @@ import {
     useProfileDirectory,
     useProfileStore,
 } from './profileStore';
-import { playerId } from '@chimera/electron/preload/api-types.js';
+import { playerId } from '@chimera/simulation/bridge/api-types.js';
 import { makeDirectory } from './__test-support__/profileFixtures';
 
 describe('profileStore', () => {

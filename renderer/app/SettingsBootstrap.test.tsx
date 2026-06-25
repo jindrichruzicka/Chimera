@@ -8,7 +8,7 @@ import type {
     LobbyState,
     ResolvedSettings,
     SettingsAPI,
-} from '@chimera/electron/preload/api-types.js';
+} from '@chimera/simulation/bridge/api-types.js';
 import { createInputActionRegistry } from '../input/InputActionRegistry.js';
 import { InputActionRegistryContext } from '../input/InputActionRegistryContext.js';
 import type { InputAction } from '../input/InputAction.js';

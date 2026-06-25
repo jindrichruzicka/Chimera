@@ -8,7 +8,7 @@
 // Usage: call after a successful `profile.updateLocal(patch)` to drive the
 // store update from the confirmed main-process state rather than optimistically.
 
-import type { ProfileAPI } from '../../electron/preload/api-types';
+import type { ProfileAPI } from '@chimera/simulation/bridge/api-types.js';
 import { useProfileStore } from './profileStore';
 
 /**
