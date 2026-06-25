@@ -1,0 +1,71 @@
+// __Game Title__'s action registry + game definition. The host calls
+// `register__GamePascal__Actions` once at startup to register this game's
+// reducers and lifecycle hooks into the shared engine `ActionRegistry`. This
+// module is game-core (no renderer/electron imports — Invariant #1).
+
+import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
+import type {
+    ActionDefinition,
+    BaseGameSnapshot,
+    PlayerId,
+    ValidationResult,
+} from '@chimera/simulation/engine/types.js';
+
+import { __GAME_CONSTANT___GAME_ID, __GAME_CONSTANT___PING_ACTION } from './constants.js';
+
+/**
+ * First-player config — structurally assignable to the host's `FirstPlayerConfig`
+ * (defined in `@chimera/electron`), so this game-core module names no platform
+ * type. Override the resolver to seat your game's starting player.
+ */
+export interface __GamePascal__GameInitializationConfig {
+    readonly hostPlayerId: PlayerId;
+    readonly firstPlayer?: PlayerId;
+}
+
+export function resolve__GamePascal__FirstPlayer(
+    config: __GamePascal__GameInitializationConfig,
+): PlayerId {
+    return config.firstPlayer ?? config.hostPlayerId;
+}
+
+/** Example action payload — replace with your game's real payloads. */
+interface __GamePascal__PingPayload {
+    readonly note: string;
+}
+
+/**
+ * A trivial example action so the registry is non-empty and the dispatch path is
+ * wired end-to-end: `validate` always passes and `reduce` returns the snapshot
+ * unchanged. Replace it with your game's real reducers (`validate` + `reduce`
+ * must stay pure — Invariant #43).
+ */
+const __gameCamel__PingDefinition: ActionDefinition<__GamePascal__PingPayload, BaseGameSnapshot> = {
+    type: __GAME_CONSTANT___PING_ACTION,
+
+    parsePayload(raw): __GamePascal__PingPayload {
+        const note = raw['note'];
+        return { note: typeof note === 'string' ? note : '' };
+    },
+
+    validate(): ValidationResult {
+        return { ok: true };
+    },
+
+    reduce(state): BaseGameSnapshot {
+        return state;
+    },
+};
+
+/**
+ * Register __Game Title__'s actions and game definition. `buildInitialEntities`
+ * seeds the match (empty here — add your starting entities) and
+ * `resolveGameResult` returns `null` while the game is still in progress.
+ */
+export function register__GamePascal__Actions(registry: ActionRegistry<BaseGameSnapshot>): void {
+    registry.register(__gameCamel__PingDefinition);
+    registry.registerGame(__GAME_CONSTANT___GAME_ID, {
+        buildInitialEntities: () => ({}),
+        resolveGameResult: () => null,
+    });
+}

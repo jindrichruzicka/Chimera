@@ -1,0 +1,21 @@
+{
+    // This app's own Next host config. Type-checks the thin route re-exports +
+    // register/loaders; the Next plugin is added by `next build`.
+    "extends": "../../../tsconfig.json",
+    "compilerOptions": {
+        "jsx": "preserve",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "types": ["node", "react", "react-dom"],
+        "allowArbitraryExtensions": true,
+        "noEmit": true,
+        "allowJs": true,
+        "incremental": true,
+        "plugins": [
+            {
+                "name": "next"
+            }
+        ]
+    },
+    "include": ["**/*.ts", "**/*.tsx", "next-env.d.ts", ".next/types/**/*.ts"],
+    "exclude": ["node_modules", "out", "**/*.test.ts", "**/*.test.tsx"]
+}

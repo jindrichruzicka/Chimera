@@ -6,4 +6,9 @@ packages:
   - electron
   - packages/*
   - apps/*
-  - templates/*
+  # NOT templates/* — templates/blank is a tokenised source skeleton, not a
+  # buildable package. The create-chimera-game CLI copies it to apps/<name> and
+  # substitutes its tokens; only then (via apps/*) does it become a workspace
+  # member whose workspace:* deps resolve. Listing templates/* here would make
+  # `pnpm -r {lint,test,build}` run inside the raw template (all files ignored /
+  # no test files) and fail the gate.

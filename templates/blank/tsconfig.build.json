@@ -1,0 +1,55 @@
+{
+    // Composite `tsc -b` build for this @chimera/<game> consumer app. Follows the
+    // split-tsconfig dist pattern of the engine packages — composite emit under
+    // ./dist (JS + .d.ts + maps), test files excluded.
+    //
+    // JSX compiles to runnable JS via the React 19 automatic runtime ("react-jsx"),
+    // UNLIKE the editor config tsconfig.json which keeps jsx:"preserve".
+    //
+    // LAYER 3: a consumer APP — it depends on everything and nothing depends on it.
+    // It therefore sits ABOVE @chimera/electron (layer 2), not beside it. References
+    // mirror its composite workspace deps (simulation, ai, renderer, electron), so
+    // `tsc --build` orders the graph (Invariant #1). The @chimera/electron reference
+    // mirrors the package dep introduced by the app's Electron composition root
+    // (electron/main.ts); that composition root is EXCLUDED from this composite's
+    // emit (it is bundled by `build:app` / electron/build-main.ts and type-checked by
+    // the root flat `tsc --noEmit`), because a runnable Electron main must be a single
+    // bundled file, not a tsc composite output.
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "composite": true,
+        "noEmit": false,
+        "rootDir": ".",
+        "outDir": "./dist",
+        "declaration": true,
+        "declarationMap": true,
+        "sourceMap": true,
+        "tsBuildInfoFile": "./dist/.tsbuildinfo",
+        "allowArbitraryExtensions": true,
+        "jsx": "react-jsx",
+        "lib": ["ES2022", "DOM", "DOM.Iterable"],
+        "types": ["node", "react", "react-dom"]
+    },
+    "references": [
+        { "path": "../../simulation/tsconfig.build.json" },
+        { "path": "../../ai/tsconfig.build.json" },
+        { "path": "../../renderer/tsconfig.build.json" },
+        { "path": "../../electron/tsconfig.build.json" }
+    ],
+    "include": ["**/*.ts", "**/*.tsx"],
+    "exclude": [
+        "node_modules",
+        "dist",
+        "out",
+        // The Electron composition root (electron/main.ts) imports @chimera/electron
+        // and belongs to the standalone app, not the @chimera/<game> library — keep
+        // it out of the layer-2 composite build (see header note).
+        "electron/**",
+        // The Playwright e2e suite is test infrastructure, not library source.
+        "e2e/**",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/__tests__/**"
+    ]
+}

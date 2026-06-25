@@ -63,6 +63,12 @@ export default tseslint.config(
             // In-tree Electron bundle outputs — source lives in the adjacent .ts files.
             'electron/main/index.js',
             'electron/preload/api.js',
+            // Scaffolding templates (create-chimera-game): a tokenised, game-agnostic
+            // app skeleton (`@chimera/__game_kebab__`, `__GamePascal__` identifiers).
+            // It is not valid source in place — its tokens are substituted into a real
+            // `apps/<name>` before it lints/typechecks; the import-boundary rules run on
+            // that generated app (the `apps/**` zones below), not on the raw template.
+            'templates/**',
         ],
     },
 
