@@ -186,6 +186,12 @@ importers:
       '@chimera/simulation':
         specifier: workspace:*
         version: link:../simulation
+      pino:
+        specifier: ^10.3.1
+        version: 10.3.1
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
 
   networking:
     dependencies:
@@ -224,7 +230,11 @@ importers:
         specifier: ^5
         version: 5.0.12(@types/react@19.2.14)(react@19.2.5)(use-sync-external-store@1.6.0(react@19.2.5))
 
-  simulation: {}
+  simulation:
+    dependencies:
+      zod:
+        specifier: ^4.3.6
+        version: 4.3.6
 
 packages:
 
