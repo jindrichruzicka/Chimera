@@ -184,14 +184,23 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
 
     // 4. Plan the copy: substitute path segments + contents and assert no token survives, all
     //    before writing anything (so a substitution gap can never leave a partial app behind).
-    const planned: { relPath: string; destPath: string; content: string }[] = [];
+    //    Binary assets (images, fonts, …) are copied byte-for-byte: their bytes are read as a
+    //    Buffer and written verbatim. Content substitution + the content leftover-check apply to
+    //    text only — running them on binary would corrupt it — but the PATH is always tokenised
+    //    and checked (a binary asset may still carry a token in its name).
+    const planned: { relPath: string; destPath: string; content: string | Buffer }[] = [];
     for (const segments of await collectFiles(templateDir)) {
         const relPath = path.join(...segments.map((segment) => renameTokensInPath(segment, names)));
-        const content = substituteTokens(
-            await readFile(path.join(templateDir, ...segments), 'utf8'),
-            names,
-        );
-        const leftover = [...findLeftoverTokens(content), ...findLeftoverTokens(relPath)];
+        const raw = await readFile(path.join(templateDir, ...segments));
+        // A NUL byte never occurs in the UTF-8 source the templates ship, so it reliably
+        // flags a binary file (the boundary between "substitute" and "copy verbatim").
+        const content: string | Buffer = raw.includes(0)
+            ? raw
+            : substituteTokens(raw.toString('utf8'), names);
+        const leftover = [
+            ...findLeftoverTokens(relPath),
+            ...(typeof content === 'string' ? findLeftoverTokens(content) : []),
+        ];
         if (leftover.length > 0) {
             throw new Error(
                 `Token substitution incomplete for ${relPath}: ${leftover.join(', ')}.`,
@@ -203,7 +212,8 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
     const filesWritten: string[] = [];
     for (const { relPath, destPath, content } of planned) {
         await mkdir(path.dirname(destPath), { recursive: true });
-        await writeFile(destPath, content, 'utf8');
+        // writeFile defaults a string to UTF-8 and writes a Buffer's bytes verbatim.
+        await writeFile(destPath, content);
         filesWritten.push(relPath);
     }
 

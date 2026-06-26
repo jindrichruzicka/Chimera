@@ -7,6 +7,7 @@
         "build": "tsc -p tsconfig.build.json",
         "build:app": "tsx electron/build-main.ts",
         "test": "vitest run --config ../../vitest.config.mts --dir .",
+        "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
         "lint": "eslint ."
     },
     "dependencies": {

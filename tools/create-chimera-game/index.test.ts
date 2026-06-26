@@ -145,6 +145,26 @@ describe('scaffoldGame', () => {
         }
     });
 
+    it('copies binary template files byte-for-byte without token substitution', async () => {
+        // A binary asset (e.g. an image/font a game template ships): a NUL byte marks
+        // it binary, and the ASCII bytes spell a token literal that MUST survive verbatim
+        // — proving binary files bypass the utf8 read + token substitution that would
+        // otherwise corrupt them.
+        const bytes = Buffer.concat([
+            Buffer.from([0x00, 0x01, 0x02, 0xff]),
+            Buffer.from('__game_kebab__'),
+            Buffer.from([0xfe, 0x00]),
+        ]);
+        const abs = path.join(repoRoot, 'templates', 'blank', 'renderer', 'public', 'logo.bin');
+        await mkdir(path.dirname(abs), { recursive: true });
+        await writeFile(abs, bytes);
+
+        const result = await scaffoldGame({ repoRoot, name: 'My Card Game' });
+
+        const copied = await readFile(path.join(result.appDir, 'renderer', 'public', 'logo.bin'));
+        expect(copied.equals(bytes)).toBe(true);
+    });
+
     it('wires the new app into root package.json, tsconfig.build.json, and the typecheck script', async () => {
         await scaffoldGame({ repoRoot, name: 'My Card Game' });
 

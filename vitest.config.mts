@@ -81,7 +81,11 @@ export default defineConfig({
         },
         testTimeout: 60_000,
         include: ['**/*.test.ts', '**/*.test.tsx'],
-        exclude: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/build/**'],
+        // `templates/**` holds tokenised game-scaffolding skeletons (consumed only by
+        // create-chimera-game, never built in place). Their co-located smoke tests carry
+        // raw `__token__` placeholders, so the engine's own vitest must not collect them;
+        // a scaffolded app runs them from `apps/<name>/` (outside this glob) via `--dir .`.
+        exclude: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/build/**', 'templates/**'],
         globals: false,
         restoreMocks: true,
         clearMocks: true,

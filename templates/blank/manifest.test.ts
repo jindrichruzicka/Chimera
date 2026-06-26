@@ -1,0 +1,25 @@
+import { describe, expect, it } from 'vitest';
+
+import { __GAME_CONSTANT___GAME_ID } from './constants.js';
+import { __gameCamel__Manifest } from './manifest.js';
+
+// Manifest unit smoke — proves the game's registration descriptor wires up from one
+// source of truth (the canonical game-id constant). Assert only on the blank seams
+// every scaffolded game starts with; replace/extend as your manifest grows.
+describe('__gameCamel__Manifest', () => {
+    it('uses the canonical __game_kebab__ game id', () => {
+        expect(__gameCamel__Manifest.gameId).toBe(__GAME_CONSTANT___GAME_ID);
+    });
+
+    it('displays as "__Game Title__"', () => {
+        expect(__gameCamel__Manifest.displayName).toBe('__Game Title__');
+    });
+
+    it('is turn-based: realtime is false so no heartbeat ticker runs', () => {
+        expect(__gameCamel__Manifest.realtime).toBe(false);
+    });
+
+    it('does not override the app icon (defaults to the Chimera icon)', () => {
+        expect(__gameCamel__Manifest.icon).toBeUndefined();
+    });
+});
