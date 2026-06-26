@@ -51,34 +51,28 @@
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
+import {
+    CHIMERA_PACKAGES,
+    parsePackTarballPath,
+    readPeerVersions,
+    type FsLike,
+    type RunFn,
+    type RunResult,
+} from './verify-shared';
 
-// ── Injected I/O surfaces (kept narrow so unit tests need no real process / disk) ──
-
-export interface RunResult {
-    readonly status: number;
-    readonly stdout: string;
-    readonly stderr: string;
-}
-
-export interface RunOptions {
-    readonly cwd?: string;
-    readonly env?: Readonly<Record<string, string | undefined>>;
-    /** Capture stdout (for parsing `pnpm pack` output) instead of inheriting the TTY. */
-    readonly capture?: boolean;
-}
-
-/** Synchronous command runner (spawnSync-shaped); injected so tests spawn nothing. */
-export type RunFn = (cmd: string, args: readonly string[], opts?: RunOptions) => RunResult;
-
-/** Minimal async filesystem surface; injected so tests touch no real disk. */
-export interface FsLike {
-    mkdtemp(prefix: string): Promise<string>;
-    mkdir(dir: string): Promise<void>;
-    rm(dir: string): Promise<void>;
-    writeFile(file: string, data: string): Promise<void>;
-    readFile(file: string): Promise<string>;
-    exists(p: string): Promise<boolean>;
-}
+// The injected I/O surfaces, engine-package list, renderer peer set, and the two
+// pure pack/peer helpers now live in `verify-shared.ts` (shared with verify-scaffold).
+// Re-exported here so this module's existing public surface — and its test — is unchanged.
+export {
+    CHIMERA_PACKAGES,
+    RENDERER_PEERS,
+    parsePackTarballPath,
+    readPeerVersions,
+    type FsLike,
+    type RunFn,
+    type RunOptions,
+    type RunResult,
+} from './verify-shared';
 
 export interface VerifyPackDeps {
     readonly run: RunFn;
@@ -91,32 +85,6 @@ export interface VerifyPackDeps {
 }
 
 // ── Constants ──────────────────────────────────────────────────────────────────
-
-/**
- * The five engine packages, in inward dependency order (`simulation` is the
- * zero-dep leaf). `apps/tactics` is the CONSUMER that exercises them, never a
- * packed artifact, so it is deliberately absent.
- */
-export const CHIMERA_PACKAGES = [
-    { name: '@chimera/simulation', dir: 'simulation' },
-    { name: '@chimera/ai', dir: 'ai' },
-    { name: '@chimera/networking', dir: 'networking' },
-    { name: '@chimera/renderer', dir: 'renderer' },
-    { name: '@chimera/electron', dir: 'electron' },
-] as const;
-
-/**
- * Renderer `peerDependencies` the throwaway consumer must install so the packed
- * renderer surface resolves like a real consumer's (and npm does not auto-pick
- * mismatched majors). Versions come from the root package.json at runtime.
- */
-export const RENDERER_PEERS = [
-    'next',
-    'react',
-    'react-dom',
-    'three',
-    '@react-three/fiber',
-] as const;
 
 /**
  * Env var the tactics E2E `global-setup` reads to flip esbuild `@chimera/*`
@@ -180,40 +148,6 @@ class VerifyPackStepError extends Error {
 }
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────
-
-/**
- * Resolve the tarball path from `pnpm pack` stdout. With `--pack-destination`,
- * pnpm prints the created tarball path; we take the last `.tgz` line (ignoring
- * any notices) and resolve a bare filename against the destination dir.
- */
-export function parsePackTarballPath(stdout: string, destDir: string): string {
-    const lines = stdout
-        .split('\n')
-        .map((line) => line.trim())
-        .filter((line) => line.length > 0);
-    const tgzLine = [...lines].reverse().find((line) => line.endsWith('.tgz'));
-    if (tgzLine === undefined) {
-        throw new Error('verify:pack: could not find a *.tgz path in `pnpm pack` output');
-    }
-    return path.isAbsolute(tgzLine) ? tgzLine : path.join(destDir, tgzLine);
-}
-
-/** Read the renderer peer ranges from the root package.json (devDeps + deps merged). */
-export function readPeerVersions(rootPkg: {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-}): Record<string, string> {
-    const merged: Record<string, string> = {
-        ...(rootPkg.devDependencies ?? {}),
-        ...(rootPkg.dependencies ?? {}),
-    };
-    const versions: Record<string, string> = {};
-    for (const peer of RENDERER_PEERS) {
-        const range = merged[peer];
-        if (range !== undefined) versions[peer] = range;
-    }
-    return versions;
-}
 
 /**
  * Synthesize the throwaway consumer `package.json`. Every `@chimera/*` package is a

@@ -15,6 +15,10 @@
  * tests drive. The `pnpm install` side effect lives only in the CLI-entry guard at the bottom,
  * which is excluded under VITEST and wrapped in an async IIFE (tsx transforms `tools/*.ts` as
  * CommonJS — top-level `await` would crash it).
+ *
+ * The `--out <dir>` flag (see {@link ScaffoldGameOptions.outDir}) is the out-of-workspace mode the
+ * `verify:scaffold` gate drives: it writes the app under `<dir>/apps/<kebab>`, skips the repo-root
+ * wiring + `pnpm install`, and leaves the standalone root (manifest, tsconfig, install) to the gate.
  */
 
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
@@ -36,6 +40,14 @@ export interface ScaffoldGameOptions {
     readonly name: string;
     /** Template id to resolve under `templates/`; defaults to {@link DEFAULT_TEMPLATE}. */
     readonly template?: string;
+    /**
+     * Out-of-workspace destination root (the `--out` flag). When set, the app is written to
+     * `<outDir>/apps/<kebab>` instead of `<repoRoot>/apps/<kebab>`, and the repo-root build
+     * files are NOT wired — the gate (`verify:scaffold`) synthesizes a standalone root that
+     * resolves `@chimera/*` from packed tarballs, so there is no monorepo root to register
+     * into. Templates are always resolved from {@link repoRoot}, regardless of `outDir`.
+     */
+    readonly outDir?: string;
 }
 
 export interface ScaffoldGameResult {
@@ -174,8 +186,10 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
         );
     }
 
-    // 3. Refuse to overwrite an existing app.
-    const appDir = path.join(repoRoot, 'apps', names.kebab);
+    // 3. Refuse to overwrite an existing app. In `--out` mode the app lands under the
+    //    out-of-workspace destination root; otherwise under the monorepo root.
+    const appsRoot = options.outDir ?? repoRoot;
+    const appDir = path.join(appsRoot, 'apps', names.kebab);
     if (await pathExists(appDir)) {
         throw new Error(
             `apps/${names.kebab} already exists; refusing to overwrite. Remove it or pick another name.`,
@@ -217,9 +231,13 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
         filesWritten.push(relPath);
     }
 
-    // 5. Register the new app at the repo root (full tactics parity).
-    await wireRootPackageJson(repoRoot, names.kebab);
-    await wireRootTsconfigBuild(repoRoot, names.kebab);
+    // 5. Register the new app at the repo root (full tactics parity) — but only for an
+    //    in-workspace scaffold. In `--out` mode there is no monorepo root to wire; the
+    //    standalone root the gate synthesizes owns its own manifest + tsconfig.
+    if (options.outDir === undefined) {
+        await wireRootPackageJson(repoRoot, names.kebab);
+        await wireRootTsconfigBuild(repoRoot, names.kebab);
+    }
 
     return { appDir, names, template, filesWritten };
 }
@@ -240,22 +258,43 @@ if (process.env['VITEST'] === undefined) {
             try {
                 const { values, positionals } = parseArgs({
                     args: process.argv.slice(2),
-                    options: { template: { type: 'string', default: DEFAULT_TEMPLATE } },
+                    options: {
+                        template: { type: 'string', default: DEFAULT_TEMPLATE },
+                        out: { type: 'string' },
+                    },
                     allowPositionals: true,
                 });
                 const name = positionals[0];
                 if (name === undefined) {
-                    throw new Error('Usage: create-chimera-game <name> [--template <id>]');
+                    throw new Error(
+                        'Usage: create-chimera-game <name> [--template <id>] [--out <dir>]',
+                    );
                 }
 
                 const repoRoot = path.resolve(
                     path.dirname(fileURLToPath(import.meta.url)),
                     '../..',
                 );
-                const result = await scaffoldGame({ repoRoot, name, template: values.template });
+                const outDir = values.out !== undefined ? path.resolve(values.out) : undefined;
+                const result = await scaffoldGame({
+                    repoRoot,
+                    name,
+                    template: values.template,
+                    ...(outDir !== undefined ? { outDir } : {}),
+                });
                 console.log(
-                    `[create-chimera-game] Scaffolded apps/${result.names.kebab} from template "${result.template}" (${result.filesWritten.length} files).`,
+                    `[create-chimera-game] Scaffolded ${result.appDir} from template "${result.template}" (${result.filesWritten.length} files).`,
                 );
+
+                // `--out` mode is owned by verify:scaffold: it synthesizes a standalone root and
+                // runs its OWN install (the app resolves @chimera/* from packed tarballs there),
+                // so skip the in-workspace `pnpm install` + the workspace-flavoured next steps.
+                if (outDir !== undefined) {
+                    console.log(
+                        '[create-chimera-game] Out-of-workspace scaffold — skipping pnpm install.',
+                    );
+                    return;
+                }
 
                 console.log('[create-chimera-game] Running pnpm install to link workspace:* deps…');
                 const install = spawnSync('pnpm', ['install'], {

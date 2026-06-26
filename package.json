@@ -19,6 +19,8 @@
         "test:e2e": "pnpm build:packages && playwright test --config=apps/tactics/e2e/playwright.config.ts --project=electron-e2e",
         "verify:pack": "tsx tools/verify-pack.ts",
         "verify:pack:selftest": "tsx tools/verify-pack.ts --self-test",
+        "verify:scaffold": "tsx tools/verify-scaffold.ts",
+        "verify:scaffold:selftest": "tsx tools/verify-scaffold.ts --self-test",
         "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
         "validate:assets": "pnpm build:packages && tsx tools/validate-assets.ts",
         "format": "prettier --write .",

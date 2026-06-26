@@ -62,3 +62,48 @@ jobs:
           name: playwright-report
           path: apps/tactics/e2e/playwright-report/
           retention-days: 14
+
+  verify-scaffold:
+    name: verify:scaffold — generated-app smoke
+    runs-on: ubuntu-latest
+    # Scaffolds a throwaway game out-of-workspace, installs the packed @chimera/* tarballs,
+    # and runs the generated app's unit + e2e boot-smoke. Heavier than the tactics e2e (a full
+    # fresh install + next build + Electron run), so give it headroom.
+    timeout-minutes: 40
+    # The local gate is authoritative (CI Actions billing is blocked); this job mirrors it for
+    # signal but the acceptance gate does not depend on it.
+    continue-on-error: true
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start Xvfb
+        run: Xvfb :99 -screen 0 1024x768x24 &
+
+      - name: Run verify:scaffold gate
+        run: pnpm verify:scaffold
+        env:
+          CI: true
+          DISPLAY: ':99'

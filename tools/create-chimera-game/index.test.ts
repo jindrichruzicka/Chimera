@@ -212,4 +212,37 @@ describe('scaffoldGame', () => {
             InvalidGameNameError,
         );
     });
+
+    it('writes to outDir/apps/<kebab> and skips root wiring in out-of-workspace mode', async () => {
+        // verify:scaffold drives the CLI with `--out <tmp>` to generate an isolated,
+        // self-contained app OUTSIDE the workspace: templates still resolve from `repoRoot`,
+        // but the app lands under `outDir` and the repo-root build files are left untouched
+        // (there is no monorepo root to wire).
+        const outDir = await mkdtemp(path.join(tmpdir(), 'chimera-out-'));
+        try {
+            const pkgBefore = await readFile(path.join(repoRoot, 'package.json'), 'utf8');
+            const tsconfigBefore = await readFile(
+                path.join(repoRoot, 'tsconfig.build.json'),
+                'utf8',
+            );
+
+            const result = await scaffoldGame({ repoRoot, name: 'My Card Game', outDir });
+
+            // App lands under outDir, not repoRoot — and is fully substituted from repoRoot's template.
+            expect(result.appDir).toBe(path.join(outDir, 'apps', 'my-card-game'));
+            const pkg = JSON.parse(
+                await readFile(path.join(result.appDir, 'package.json'), 'utf8'),
+            );
+            expect(pkg.name).toBe('@chimera/my-card-game');
+            expect(await readdir(path.join(repoRoot, 'apps'))).not.toContain('my-card-game');
+
+            // Root files untouched: no dependency added, no typecheck line, no tsconfig reference.
+            expect(await readFile(path.join(repoRoot, 'package.json'), 'utf8')).toBe(pkgBefore);
+            expect(await readFile(path.join(repoRoot, 'tsconfig.build.json'), 'utf8')).toBe(
+                tsconfigBefore,
+            );
+        } finally {
+            await rm(outDir, { recursive: true, force: true });
+        }
+    });
 });
