@@ -73,6 +73,7 @@
     },
     "files": [
         "dist",
+        "CHANGELOG.md",
         "!dist/**/__test-support__/**"
     ],
     "scripts": {

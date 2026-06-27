@@ -317,6 +317,20 @@ The dependency arrows already point this way in the monorepo — no refactoring 
 | Per-package incremental build                                                               | Medium  | `tsc --build` project references, or `turborepo`/`nx` for caching                                                               |
 | Semantic versioning and changelogs                                                          | Ongoing | Each package gets independent semver; `@chimera/simulation` breaking changes are major bumps                                    |
 
+The versioning row above is realized with **[Changesets](https://github.com/changesets/changesets)**
+(`pnpm changeset` → `pnpm version-packages` → `pnpm release`), configured for **independent**
+versioning (`fixed`/`linked` empty in [`.changeset/config.json`](../.changeset/config.json)): each
+`@chimera/*` package carries its own `version` and its own `CHANGELOG.md`. The one rule Changesets
+cannot infer is the **`@chimera/simulation` cascade** — because `simulation` is the zero-dependency
+leaf every other package points inward to (Invariant #1), a breaking change to it is genuinely
+**major** and must propagate a major to every publishable consumer (`ai`, `networking`, `renderer`,
+`electron`) in the same release. Left to its defaults Changesets would only `patch`-bump dependents to
+keep their pinned `workspace:*` ranges valid, silently weakening the promise; the
+**`verify:changeset-policy`** gate ([`tools/changeset-policy.ts`](../tools/changeset-policy.ts)) reads
+the pending changesets and fails the release if a publishable package is majored without its
+publishable dependents. The private `@chimera/tactics` reference app is exempt — it publishes nothing.
+The full policy and a worked example live in [`.changeset/README.md`](../.changeset/README.md).
+
 ### C.5 Intermediate Step: pnpm Workspaces
 
 Before publishing, the monorepo should introduce **pnpm workspaces** (or yarn workspaces) as an intermediate step. This gives:

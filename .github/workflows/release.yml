@@ -1,0 +1,80 @@
+name: Release
+
+# Publishes the @chimera/* engine packages to npm on a version tag (F66).
+#
+# Flow: run `pnpm changeset` to declare bumps, `pnpm version-packages` to apply them and
+# write per-package CHANGELOGs, commit, then push a release tag (Changesets emits per-package
+# tags like `@chimera/simulation@1.0.0`). That tag push triggers this workflow, which builds,
+# runs the true-artifact `verify:pack` gate, and `changeset publish`es every package whose
+# version is not yet on the registry.
+#
+# CI Actions billing is blocked on this account, so this workflow does not actually execute
+# here — the LOCAL `verify:pack` + `verify:publish` gates remain authoritative before a real
+# publish. It is the future automation layer and the executable record of the release steps.
+# Before the first real publish, configure the `NPM_TOKEN` repository secret (an npm automation
+# token with publish rights to the `@chimera` scope).
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+      - '@chimera/*'
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Build, verify:pack, and publish @chimera/*
+    runs-on: ubuntu-latest
+    # build:packages + verify:pack packs every engine package and runs the Playwright e2e
+    # against the packed artifacts (an out-of-workspace consumer install + Electron run),
+    # so this needs the same Electron/Playwright/Xvfb headroom as the e2e job.
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.33.0
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: pnpm
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Start Xvfb
+        run: Xvfb :99 -screen 0 1024x768x24 &
+
+      - name: Build packages
+        run: pnpm build:packages
+
+      - name: Verify packed artifacts (verify:pack)
+        run: pnpm verify:pack
+        env:
+          CI: true
+          DISPLAY: ':99'
+
+      - name: Publish to npm
+        run: pnpm release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

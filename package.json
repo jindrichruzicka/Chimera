@@ -30,6 +30,11 @@
         "verify:scaffold:selftest": "tsx tools/verify-scaffold.ts --self-test",
         "verify:publish": "tsx tools/verify-publish.ts",
         "verify:publish:selftest": "tsx tools/verify-publish.ts --self-test",
+        "verify:changeset-policy": "tsx tools/changeset-policy.ts",
+        "verify:changeset-policy:selftest": "tsx tools/changeset-policy.ts --self-test",
+        "changeset": "changeset",
+        "version-packages": "changeset version && pnpm install --lockfile-only",
+        "release": "pnpm build:packages && changeset publish",
         "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
         "validate:assets": "pnpm build:packages && tsx tools/validate-assets.ts",
         "format": "prettier --write .",
@@ -43,6 +48,7 @@
         "create:game": "tsx tools/create-chimera-game/index.ts"
     },
     "devDependencies": {
+        "@changesets/cli": "^2.31.0",
         "@eslint/css": "^1.2.0",
         "@eslint/js": "^9.39.4",
         "@next/eslint-plugin-next": "^16.2.6",

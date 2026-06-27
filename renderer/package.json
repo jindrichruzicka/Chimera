@@ -36,7 +36,8 @@
         "./styles/*.css": "./dist/styles/*.css"
     },
     "files": [
-        "dist"
+        "dist",
+        "CHANGELOG.md"
     ],
     "scripts": {
         "build": "tsc -p tsconfig.build.json && tsx ../tools/copy-renderer-css.ts",
