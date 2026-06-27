@@ -195,7 +195,12 @@ export function buildAppBundles(deps: BuildAppBundlesDeps): void {
         appDir: deps.appDir,
         gamePackageName: pkg.name,
     });
-    const nodePaths = computeNodePaths(deps.env);
+    // Resolve nodePaths to ABSOLUTE against the app dir. A standalone app's scripts inject a
+    // RELATIVE `CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules` (the only value a portable npm
+    // script can set), but both esbuild's nodePaths and resolvePreload's `createRequire` need an
+    // absolute path. Absolute values (the verify:pack / verify:scaffold gates) pass through
+    // path.resolve unchanged, so this is backward-compatible.
+    const nodePaths = computeNodePaths(deps.env).map((entry) => path.resolve(deps.appDir, entry));
     const verifyPackMode = nodePaths.length > 0;
 
     const preloadEntry = deps.resolvePreload(verifyPackMode ? nodePaths[0] : undefined);

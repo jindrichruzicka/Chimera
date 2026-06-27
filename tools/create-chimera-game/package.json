@@ -1,0 +1,38 @@
+{
+    "name": "create-chimera-game",
+    "version": "0.1.0",
+    "description": "Scaffold a new Chimera game — a self-contained project that installs @chimera/* from npm (default), or an in-monorepo app.",
+    "license": "MIT",
+    "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",
+    "homepage": "https://github.com/jindrichruzicka/Chimera#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jindrichruzicka/Chimera.git",
+        "directory": "tools/create-chimera-game"
+    },
+    "bugs": "https://github.com/jindrichruzicka/Chimera/issues",
+    "keywords": [
+        "chimera",
+        "game",
+        "scaffold",
+        "create",
+        "initializer",
+        "template"
+    ],
+    "private": false,
+    "publishConfig": {
+        "access": "public"
+    },
+    "bin": {
+        "create-chimera-game": "dist/index.mjs"
+    },
+    "files": [
+        "dist",
+        "templates",
+        "CHANGELOG.md"
+    ],
+    "scripts": {
+        "build": "tsx build.ts",
+        "prepack": "tsx build.ts"
+    }
+}

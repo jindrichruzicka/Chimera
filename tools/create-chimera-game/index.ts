@@ -21,10 +21,19 @@
  * wiring + `pnpm install`, and leaves the standalone root (manifest, tsconfig, install) to the gate.
  */
 
+import { existsSync } from 'node:fs';
 import { mkdir, readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { normalizeGameName, type GameNames } from './normalize';
+import {
+    buildStandaloneRootManifest,
+    buildStandaloneRootTsconfig,
+    buildStandaloneVitestConfig,
+    buildStandaloneWorkspaceYaml,
+    rewriteAppPackageForStandalone,
+} from './standalone';
+import { ENGINE_DEP_RANGES, ROOT_COMPILER_OPTIONS, TOOLCHAIN_DEPS } from './toolchain.generated';
 import { findLeftoverTokens, renameTokensInPath, substituteTokens } from './tokens';
 
 /** Top-level template subdirs never copied into the generated app (build output / deps). */
@@ -34,20 +43,42 @@ const SKIP_DIRS = new Set(['node_modules', 'dist', 'out', '.next']);
 const DEFAULT_TEMPLATE = 'blank';
 
 export interface ScaffoldGameOptions {
-    /** Absolute path to the monorepo root (holds `templates/`, `apps/`, `package.json`). */
+    /**
+     * Absolute path to the monorepo root that owns the OUTPUT — it holds `apps/` (where the
+     * generated app lands in the in-workspace path) and the root `package.json` / `tsconfig.build.json`
+     * the in-workspace scaffold wires. It is NO LONGER where templates live: the template SOURCE is
+     * resolved separately via {@link templatesRoot} (package-relative, so the published CLI bundles
+     * its own templates rather than reading them from the consumer's repo).
+     */
     readonly repoRoot: string;
     /** Raw game name from the command line, in any casing. */
     readonly name: string;
-    /** Template id to resolve under `templates/`; defaults to {@link DEFAULT_TEMPLATE}. */
+    /** Template id to resolve under {@link templatesRoot}; defaults to {@link DEFAULT_TEMPLATE}. */
     readonly template?: string;
     /**
-     * Out-of-workspace destination root (the `--out` flag). When set, the app is written to
-     * `<outDir>/apps/<kebab>` instead of `<repoRoot>/apps/<kebab>`, and the repo-root build
-     * files are NOT wired — the gate (`verify:scaffold`) synthesizes a standalone root that
-     * resolves `@chimera/*` from packed tarballs, so there is no monorepo root to register
-     * into. Templates are always resolved from {@link repoRoot}, regardless of `outDir`.
+     * Absolute path to the directory holding `templates/<id>/` skeletons. Decoupled from
+     * {@link repoRoot} so the published initializer resolves its bundled templates relative to its
+     * own code ({@link resolveTemplatesRoot}), not from the output repo. Defaults to
+     * `<repoRoot>/templates` for backward compatibility with in-process callers (the tests).
      */
-    readonly outDir?: string;
+    readonly templatesRoot?: string;
+    /**
+     * Which kind of project to scaffold (default `'workspace'`):
+     *   - `'workspace'`  — an in-monorepo app: written under `<outputRoot>/apps/<kebab>` and WIRED
+     *     into the monorepo root (`package.json` deps + `tsconfig.build.json` references). Used by
+     *     contributors via `pnpm create:game --workspace` and the existing in-process callers.
+     *   - `'standalone'` — a SELF-CONTAINED project: the app under `<outputRoot>/apps/<kebab>` PLUS
+     *     a synthesized project root (`package.json` toolchain manifest, `pnpm-workspace.yaml`,
+     *     `vitest.config.mts`, `tsconfig.json`), and the app's `@chimera/*` deps rewritten onto
+     *     their published `^x.y.z` ranges. No monorepo is required to install + boot it.
+     */
+    readonly mode?: 'workspace' | 'standalone';
+    /**
+     * The project root the app + (standalone) root files are written under. Defaults to
+     * {@link repoRoot}. For a standalone project this is the new project directory; the
+     * `verify:scaffold` gate points it at a throwaway temp dir.
+     */
+    readonly outputRoot?: string;
 }
 
 export interface ScaffoldGameResult {
@@ -71,7 +102,26 @@ async function pathExists(target: string): Promise<boolean> {
     }
 }
 
-/** The directory ids directly under `templates/`, sorted; empty when the dir is absent. */
+/**
+ * Resolve the bundled `templates/` directory relative to the CLI's own location, so the same
+ * code works run-from-source (`tsx tools/create-chimera-game/index.ts` → `./templates`) and
+ * run-from-built-package (`dist/index.js` → `../templates`, since `files:['dist','templates']`
+ * ships `templates/` beside `dist/`). Probing both candidates — rather than branching on a build
+ * flag — keeps the resolution declarative and testable via the injected `exists` predicate.
+ *
+ * @param entryDir absolute directory of the running entry module (`dirname(import.meta.url)`).
+ */
+export function resolveTemplatesRoot(
+    entryDir: string,
+    exists: (candidate: string) => boolean = existsSync,
+): string {
+    const sourceLayout = path.join(entryDir, 'templates');
+    if (exists(sourceLayout)) return sourceLayout;
+    // Built layout: the entry is `<pkg>/dist/index.js`, templates ship at `<pkg>/templates`.
+    return path.join(entryDir, '..', 'templates');
+}
+
+/** The directory ids directly under `templatesRoot`, sorted; empty when the dir is absent. */
 async function listTemplateIds(templatesRoot: string): Promise<string[]> {
     try {
         const entries = await readdir(templatesRoot, { withFileTypes: true });
@@ -162,10 +212,63 @@ async function wireRootTsconfigBuild(repoRoot: string, kebab: string): Promise<v
 }
 
 /**
+ * Emit the SELF-CONTAINED project root around a freshly-scaffolded `apps/<kebab>` so the project
+ * installs + boots with no monorepo: the toolchain manifest (`package.json`), the lone-member
+ * `pnpm-workspace.yaml`, the unit-arm `vitest.config.mts`, and a `tsconfig.json` carrying the
+ * frozen root `compilerOptions` the app's tsconfigs `extends`. Finally rewrites the app's
+ * `@chimera/*` deps onto their published ranges and wires the Electron-host node_modules env into
+ * its build/e2e scripts. The toolchain + engine versions come from the committed snapshot
+ * ({@link TOOLCHAIN_DEPS} / {@link ENGINE_DEP_RANGES} / {@link ROOT_COMPILER_OPTIONS}), so no
+ * monorepo read is needed at `npm create` time. Shared by the published CLI and the
+ * `verify:scaffold` gate (which then layers tarball overrides on top) — one emission path.
+ */
+async function emitStandaloneProject(
+    outputRoot: string,
+    appDir: string,
+    kebab: string,
+): Promise<void> {
+    const manifest = buildStandaloneRootManifest({ name: kebab, toolchainDeps: TOOLCHAIN_DEPS });
+    await writeFile(
+        path.join(outputRoot, 'package.json'),
+        `${JSON.stringify(manifest, null, 4)}\n`,
+        'utf8',
+    );
+    await writeFile(
+        path.join(outputRoot, 'pnpm-workspace.yaml'),
+        buildStandaloneWorkspaceYaml(),
+        'utf8',
+    );
+    await writeFile(
+        path.join(outputRoot, 'vitest.config.mts'),
+        buildStandaloneVitestConfig(kebab),
+        'utf8',
+    );
+    await writeFile(
+        path.join(outputRoot, 'tsconfig.json'),
+        buildStandaloneRootTsconfig(ROOT_COMPILER_OPTIONS),
+        'utf8',
+    );
+
+    const appPkgPath = path.join(appDir, 'package.json');
+    const rawAppPkg = await readFile(appPkgPath, 'utf8');
+    await writeFile(
+        appPkgPath,
+        rewriteAppPackageForStandalone(rawAppPkg, {
+            engineRanges: ENGINE_DEP_RANGES,
+            // pnpm runs the app's scripts with cwd = the app dir, so a relative `node_modules`
+            // resolves to the installed `<app>/node_modules`.
+            nodeModulesEnv: 'node_modules',
+        }),
+        'utf8',
+    );
+}
+
+/**
  * Scaffold a new game app from a template. Validates the name and resolves the template before
  * any filesystem write, refuses to clobber an existing `apps/<kebab>`, copies + substitutes the
- * tree, then wires the app into the repo-root build files. Does NOT run `pnpm install` — that is
- * the CLI entry's job, keeping this core fast and hermetic for tests.
+ * tree, then either WIRES the app into the monorepo root (`'workspace'` mode) or emits a
+ * self-contained project root around it ({@link emitStandaloneProject}, `'standalone'` mode). Does
+ * NOT run `pnpm install` — that is the CLI entry's job, keeping this core fast + hermetic for tests.
  */
 export async function scaffoldGame(options: ScaffoldGameOptions): Promise<ScaffoldGameResult> {
     const { repoRoot, name } = options;
@@ -174,8 +277,10 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
     // 1. Validate the name (throws InvalidGameNameError) before touching the filesystem.
     const names = normalizeGameName(name);
 
-    // 2. Resolve the template generically — no template id is hardcoded into this path.
-    const templatesRoot = path.join(repoRoot, 'templates');
+    // 2. Resolve the template generically — no template id is hardcoded into this path. The
+    //    template SOURCE root is decoupled from repoRoot (the published CLI bundles its own
+    //    templates); it defaults to `<repoRoot>/templates` for in-process callers.
+    const templatesRoot = options.templatesRoot ?? path.join(repoRoot, 'templates');
     const templateDir = path.join(templatesRoot, template);
     if (!(await pathExists(templateDir))) {
         const available = await listTemplateIds(templatesRoot);
@@ -186,10 +291,11 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
         );
     }
 
-    // 3. Refuse to overwrite an existing app. In `--out` mode the app lands under the
-    //    out-of-workspace destination root; otherwise under the monorepo root.
-    const appsRoot = options.outDir ?? repoRoot;
-    const appDir = path.join(appsRoot, 'apps', names.kebab);
+    // 3. Refuse to overwrite an existing app. The app lands under `<outputRoot>/apps/<kebab>`
+    //    (outputRoot defaults to the monorepo root for the in-workspace path).
+    const mode = options.mode ?? 'workspace';
+    const outputRoot = options.outputRoot ?? repoRoot;
+    const appDir = path.join(outputRoot, 'apps', names.kebab);
     if (await pathExists(appDir)) {
         throw new Error(
             `apps/${names.kebab} already exists; refusing to overwrite. Remove it or pick another name.`,
@@ -231,12 +337,13 @@ export async function scaffoldGame(options: ScaffoldGameOptions): Promise<Scaffo
         filesWritten.push(relPath);
     }
 
-    // 5. Register the new app at the repo root (full tactics parity) — but only for an
-    //    in-workspace scaffold. In `--out` mode there is no monorepo root to wire; the
-    //    standalone root the gate synthesizes owns its own manifest + tsconfig.
-    if (options.outDir === undefined) {
+    // 5. Finish per mode: WIRE the app into the monorepo root (full tactics parity), or EMIT a
+    //    self-contained project root around it.
+    if (mode === 'workspace') {
         await wireRootPackageJson(repoRoot, names.kebab);
         await wireRootTsconfigBuild(repoRoot, names.kebab);
+    } else {
+        await emitStandaloneProject(outputRoot, appDir, names.kebab);
     }
 
     return { appDir, names, template, filesWritten };
@@ -261,44 +368,79 @@ if (process.env['VITEST'] === undefined) {
                     options: {
                         template: { type: 'string', default: DEFAULT_TEMPLATE },
                         out: { type: 'string' },
+                        workspace: { type: 'boolean', default: false },
                     },
                     allowPositionals: true,
                 });
                 const name = positionals[0];
                 if (name === undefined) {
                     throw new Error(
-                        'Usage: create-chimera-game <name> [--template <id>] [--out <dir>]',
+                        'Usage: create-chimera-game <name> [--template <id>] [--out <dir>] [--workspace]',
                     );
                 }
 
-                const repoRoot = path.resolve(
-                    path.dirname(fileURLToPath(import.meta.url)),
-                    '../..',
-                );
-                const outDir = values.out !== undefined ? path.resolve(values.out) : undefined;
-                const result = await scaffoldGame({
-                    repoRoot,
-                    name,
-                    template: values.template,
-                    ...(outDir !== undefined ? { outDir } : {}),
-                });
+                const entryDir = path.dirname(fileURLToPath(import.meta.url));
+                // repoRoot is the monorepo root (two up from tools/create-chimera-game) used for
+                // the in-workspace output + root wiring; templatesRoot is resolved relative to the
+                // CLI's own code so a published, out-of-tree install finds its bundled templates.
+                const repoRoot = path.resolve(entryDir, '../..');
+                const templatesRoot = resolveTemplatesRoot(entryDir);
+
+                // Resolve the mode, where the project is written, and where (if anywhere) to install:
+                //   --workspace  → in-monorepo app, wired into repoRoot, install at repoRoot.
+                //   --out <dir>  → standalone project AT <dir>; the verify:scaffold gate owns install.
+                //   (default)    → standalone project at <cwd>/<kebab>, install there.
+                let scaffoldOptions: ScaffoldGameOptions;
+                let installCwd: string | undefined;
+                if (values.workspace) {
+                    scaffoldOptions = {
+                        repoRoot,
+                        name,
+                        template: values.template,
+                        templatesRoot,
+                        mode: 'workspace',
+                    };
+                    installCwd = repoRoot;
+                } else if (values.out !== undefined) {
+                    scaffoldOptions = {
+                        repoRoot,
+                        name,
+                        template: values.template,
+                        templatesRoot,
+                        mode: 'standalone',
+                        outputRoot: path.resolve(values.out),
+                    };
+                    installCwd = undefined;
+                } else {
+                    const projectRoot = path.join(process.cwd(), normalizeGameName(name).kebab);
+                    scaffoldOptions = {
+                        repoRoot,
+                        name,
+                        template: values.template,
+                        templatesRoot,
+                        mode: 'standalone',
+                        outputRoot: projectRoot,
+                    };
+                    installCwd = projectRoot;
+                }
+
+                const result = await scaffoldGame(scaffoldOptions);
                 console.log(
                     `[create-chimera-game] Scaffolded ${result.appDir} from template "${result.template}" (${result.filesWritten.length} files).`,
                 );
 
-                // `--out` mode is owned by verify:scaffold: it synthesizes a standalone root and
-                // runs its OWN install (the app resolves @chimera/* from packed tarballs there),
-                // so skip the in-workspace `pnpm install` + the workspace-flavoured next steps.
-                if (outDir !== undefined) {
+                // `--out` mode is owned by verify:scaffold: it layers tarball overrides on the
+                // emitted root and runs its OWN install, so skip install + the next-steps here.
+                if (installCwd === undefined) {
                     console.log(
-                        '[create-chimera-game] Out-of-workspace scaffold — skipping pnpm install.',
+                        '[create-chimera-game] Out-of-workspace scaffold — skipping pnpm install (the gate installs).',
                     );
                     return;
                 }
 
-                console.log('[create-chimera-game] Running pnpm install to link workspace:* deps…');
+                console.log(`[create-chimera-game] Running pnpm install in ${installCwd}…`);
                 const install = spawnSync('pnpm', ['install'], {
-                    cwd: repoRoot,
+                    cwd: installCwd,
                     stdio: 'inherit',
                     shell: false,
                 });
@@ -309,8 +451,15 @@ if (process.env['VITEST'] === undefined) {
                 }
 
                 console.log('[create-chimera-game] Done. Next steps:');
-                console.log('  pnpm typecheck');
-                console.log(`  pnpm --filter @chimera/${result.names.kebab} build:app`);
+                if (values.workspace) {
+                    console.log('  pnpm typecheck');
+                    console.log(`  pnpm --filter @chimera/${result.names.kebab} build:app`);
+                } else {
+                    const rel = path.relative(process.cwd(), installCwd) || '.';
+                    console.log(`  cd ${rel}`);
+                    console.log(`  pnpm --filter @chimera/${result.names.kebab} test`);
+                    console.log(`  pnpm --filter @chimera/${result.names.kebab} build:app`);
+                }
             } catch (error) {
                 console.error(
                     `[create-chimera-game] ${error instanceof Error ? error.message : String(error)}`,

@@ -17,3 +17,7 @@ electron/preload/api.js
 # Playwright output — generated artefacts, not source
 e2e/playwright-report/
 test-results/
+
+# Machine-generated toolchain snapshot (tools/gen-toolchain.ts). Prettier-ignored so the
+# verify:toolchain-snapshot drift gate can byte-compare it against the generator's own output.
+tools/create-chimera-game/toolchain.generated.ts

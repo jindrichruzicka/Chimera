@@ -46,6 +46,16 @@ describe('release.yml CI release workflow', () => {
         expect(idxPublish).toBeGreaterThan(idxVerifyPack);
     });
 
+    // F66 PR5 — the create-chimera-game initializer bin is an esbuild bundle (not the engine
+    // `tsc -b`), so it is built explicitly before publish; `changeset publish` then publishes it
+    // alongside the engine packages (it is a non-private workspace member).
+    it('builds the create-chimera-game initializer before publish', () => {
+        const idxInitBuild = content.search(/run:\s*pnpm --filter create-chimera-game build/);
+        const idxPublish = content.search(/run:\s*pnpm release\b/);
+        expect(idxInitBuild).toBeGreaterThanOrEqual(0);
+        expect(idxPublish).toBeGreaterThan(idxInitBuild);
+    });
+
     // AC2 — publish is gated behind verify:pack (it precedes publish; a failed step
     // fails the job before publish runs). Skip-unchanged is delegated to `changeset
     // publish`, which only publishes versions not already on the registry.

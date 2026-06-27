@@ -2,23 +2,23 @@
 //
 // Unit tests for the `verify:scaffold` scaffold-and-smoke gate (issue #801, F65).
 //
-// Exercises the pure wiring — the standalone-root manifest (toolchain deps minus
-// @chimera/*, pnpm.overrides onto the tarballs, a no-op build:packages), the app
-// dependency rewrite (workspace:* -> file:<tarball>), the synthesized vitest config,
-// and the verifyScaffold / verifyScaffoldSelfTest orchestration (step order,
-// short-circuit on failure, finally cleanup) — with injected fakes, so no real
-// pnpm, tsx, playwright, electron, or filesystem is touched.
+// Exercises the gate-owned pure wiring — buildPnpmOverrides, the applyTarballOverrides layer
+// (which forces the published standalone manifest's @chimera/* edges onto the packed tarballs),
+// the app dependency rewrite (workspace:* -> file:<tarball>), and the verifyScaffold /
+// verifyScaffoldSelfTest orchestration (step order, short-circuit on failure, finally cleanup) —
+// with injected fakes, so no real pnpm, tsx, playwright, electron, or filesystem is touched.
+//
+// The standalone-root SYNTHESIZERS themselves (toolchain deps, root manifest, workspace yaml,
+// unit-arm vitest config) are owned by create-chimera-game and unit-tested in standalone.test.ts.
 
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import { describe, it, expect } from 'vitest';
 import {
     PROBE_GAME,
-    buildStandaloneToolchainDeps,
+    applyTarballOverrides,
     buildPnpmOverrides,
-    buildStandaloneRootManifest,
     rewriteAppChimeraDeps,
-    buildStandaloneVitestConfig,
     verifyScaffold,
     verifyScaffoldSelfTest,
     type RunFn,
@@ -26,6 +26,10 @@ import {
     type FsLike,
     type VerifyScaffoldDeps,
 } from './verify-scaffold.js';
+// The pure standalone-root synthesizers moved to create-chimera-game (their own unit tests live
+// in standalone.test.ts); the gate's test builds a base manifest with one to exercise the
+// gate-owned applyTarballOverrides layer.
+import { buildStandaloneRootManifest } from './create-chimera-game/standalone.js';
 
 // ── Fakes ─────────────────────────────────────────────────────────────────────
 
@@ -97,16 +101,30 @@ function makeFakeRun(
                 stderr: '',
             };
         }
-        // The scaffold CLI run: emulate the files create-chimera-game --out writes.
+        // The scaffold CLI run: emulate what `create-chimera-game --out` writes in standalone mode
+        // — the project ROOT (published-form toolchain manifest: no pnpm.overrides) AND the app
+        // (with @chimera/* on their published ^ranges). The gate then layers overrides on the root
+        // and rewrites the app deps onto the tarballs.
         if (cmd === 'tsx' && args.some((a) => a.includes('create-chimera-game'))) {
+            files.set(
+                path.join(tmpRoot, 'package.json'),
+                JSON.stringify({
+                    name: PROBE_GAME.kebab,
+                    version: '0.0.0',
+                    private: true,
+                    devDependencies: { next: '^15', vitest: '^3' },
+                    scripts: { 'build:packages': 'node -e ""' },
+                    pnpm: { onlyBuiltDependencies: ['electron', 'esbuild'] },
+                }),
+            );
             files.set(
                 path.join(appDir, 'package.json'),
                 JSON.stringify({
                     name: PROBE_GAME.pkg,
                     dependencies: {
-                        '@chimera/simulation': 'workspace:*',
-                        '@chimera/renderer': 'workspace:*',
-                        '@chimera/electron': 'workspace:*',
+                        '@chimera/simulation': '^0.9.0',
+                        '@chimera/renderer': '^0.9.0',
+                        '@chimera/electron': '^0.9.0',
                     },
                 }),
             );
@@ -142,24 +160,11 @@ function makeDeps(
         fs,
         log: () => {},
         repoRoot: '/repo',
-        toolchainDeps: { next: '^15', react: '^19', vitest: '^3', electron: '^33' },
-        rootTsconfig: '{ "compilerOptions": { "strict": true } }',
         ...extra,
     };
 }
 
 // ── Pure helpers ────────────────────────────────────────────────────────────────
-
-describe('buildStandaloneToolchainDeps', () => {
-    it('merges root deps + devDeps and strips every @chimera/* workspace entry', () => {
-        const deps = buildStandaloneToolchainDeps({
-            dependencies: { three: '^0.184', '@chimera/renderer': 'workspace:*' },
-            devDependencies: { vitest: '^3', '@chimera/tactics': 'workspace:*', next: '^15' },
-        });
-        expect(deps).toEqual({ three: '^0.184', vitest: '^3', next: '^15' });
-        expect(Object.keys(deps).some((k) => k.startsWith('@chimera/'))).toBe(false);
-    });
-});
 
 describe('buildPnpmOverrides', () => {
     it('maps every @chimera/* package onto its file:<tarball> so packed internal edges resolve', () => {
@@ -170,22 +175,31 @@ describe('buildPnpmOverrides', () => {
     });
 });
 
-describe('buildStandaloneRootManifest', () => {
-    it('declares the toolchain, forces @chimera/* onto tarballs, and stubs build:packages', () => {
-        const manifest = buildStandaloneRootManifest({ next: '^15', electron: '^33' }, TARBALLS);
-        expect(manifest.private).toBe(true);
-        expect(manifest.devDependencies['next']).toBe('^15');
-        // No @chimera/* leaks into the declared deps (they arrive only via overrides + the app).
-        expect(Object.keys(manifest.devDependencies).some((k) => k.startsWith('@chimera/'))).toBe(
-            false,
-        );
-        expect(manifest.pnpm.overrides['@chimera/renderer']).toBe(
+describe('applyTarballOverrides', () => {
+    it('layers pnpm.overrides onto the published (override-free) manifest, forcing @chimera/* onto tarballs', () => {
+        // The CLI emits the published form: toolchain deps, no overrides (npm resolution).
+        const published = buildStandaloneRootManifest({
+            name: 'chimera-verify-scaffold-root',
+            toolchainDeps: { next: '^15', electron: '^33' },
+        });
+        expect(published.pnpm.overrides).toBeUndefined();
+
+        const resolved = applyTarballOverrides(published, TARBALLS);
+
+        // Every @chimera/* edge is forced onto its packed tarball for the gate's local verify.
+        expect(resolved.pnpm.overrides?.['@chimera/renderer']).toBe(
             `file:${TARBALLS['@chimera/renderer']}`,
         );
-        // global-setup runs `pnpm build:packages` from the standalone root: it must be a no-op
-        // (the packages arrive prebuilt as tarballs), never the engine's real build.
-        expect(manifest.scripts['build:packages']).toBeDefined();
-        expect(manifest.scripts['build:packages']).not.toContain('tsc');
+        expect(Object.keys(resolved.pnpm.overrides ?? {})).toHaveLength(5);
+        // The rest of the root is untouched: toolchain deps, no @chimera/* leak, stubbed build.
+        expect(resolved.devDependencies['next']).toBe('^15');
+        expect(Object.keys(resolved.devDependencies).some((k) => k.startsWith('@chimera/'))).toBe(
+            false,
+        );
+        expect(resolved.pnpm.onlyBuiltDependencies).toEqual(['electron', 'esbuild']);
+        expect(resolved.scripts['build:packages']).not.toContain('tsc');
+        // overrides serialize first (historical key order).
+        expect(Object.keys(resolved.pnpm)[0]).toBe('overrides');
     });
 });
 
@@ -207,17 +221,6 @@ describe('rewriteAppChimeraDeps', () => {
         );
         // No workspace:* spec survives (pnpm would reject it without a matching member).
         expect(JSON.stringify(rewritten)).not.toContain('workspace:*');
-    });
-});
-
-describe('buildStandaloneVitestConfig', () => {
-    it('aliases chimera-game-registration to the app register and resolves @chimera via node_modules', () => {
-        const config = buildStandaloneVitestConfig(PROBE_GAME.kebab);
-        expect(config).toContain('chimera-game-registration');
-        expect(config).toContain(`apps/${PROBE_GAME.kebab}/renderer/register.ts`);
-        // The config must NOT pull @chimera/* onto source — that is the reach-through the gate forbids.
-        expect(config).not.toContain('createPreferTypeScriptSourceResolver');
-        expect(config).not.toContain('@chimera/renderer');
     });
 });
 
@@ -252,13 +255,16 @@ describe('verifyScaffold', () => {
         expect(idx((c) => c.args[0] === 'install')).toBeLessThan(idx((c) => c === unit));
         expect(idx((c) => c === unit)).toBeLessThan(idx((c) => c === e2e));
 
-        // The standalone root + app rewrite were written.
-        expect(files.has(path.join(tmpRoot, 'package.json'))).toBe(true);
-        expect(files.has(path.join(tmpRoot, 'pnpm-workspace.yaml'))).toBe(true);
-        expect(files.has(path.join(tmpRoot, 'vitest.config.mts'))).toBe(true);
-        // The app tsconfigs `extends` the repo root from <tmp>/apps/<kebab>; the gate must provide it.
-        expect(files.has(path.join(tmpRoot, 'tsconfig.json'))).toBe(true);
+        // The gate layered tarball overrides onto the CLI-emitted root (it no longer synthesizes
+        // the root — the CLI emits package.json/pnpm-workspace.yaml/vitest/tsconfig; that is the
+        // CLI's contract, tested in create-chimera-game/index.test.ts).
+        const rootPkg = JSON.parse(files.get(path.join(tmpRoot, 'package.json')) ?? '{}') as {
+            pnpm?: { overrides?: Record<string, string> };
+        };
+        expect(rootPkg.pnpm?.overrides?.['@chimera/renderer']).toContain('file:');
+        // The app's @chimera/* deps were rewritten onto the packed tarballs.
         const appPkg = files.get(path.join(tmpRoot, 'apps', PROBE_GAME.kebab, 'package.json'));
+        expect(appPkg).toContain('file:');
         expect(appPkg).not.toContain('workspace:*');
 
         // Cleanup happened.

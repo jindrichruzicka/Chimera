@@ -57,6 +57,11 @@
         "build",
         "out",
         "**/out/**",
+        // Tokenised game-scaffolding skeletons bundled with create-chimera-game. The `tools/**/*.ts`
+        // include above would otherwise pull this raw, un-substituted template source (`__GamePascal__`
+        // identifiers, `@chimera/__game_kebab__` specifiers) into the flat program and fail typecheck.
+        // It is type-checked only after substitution, inside the generated `apps/<name>`.
+        "tools/create-chimera-game/templates/**",
         "simulation/engine/__tests__/fixtures/**",
         "ai/engine/__tests__/fixtures/**",
         "networking/__tests__/fixtures/**",

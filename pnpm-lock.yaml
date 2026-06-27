@@ -245,6 +245,8 @@ importers:
         specifier: ^4.3.6
         version: 4.3.6
 
+  tools/create-chimera-game: {}
+
 packages:
 
   '@adobe/css-tools@4.4.4':

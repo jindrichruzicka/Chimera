@@ -13,7 +13,8 @@
 // Unlike the old `tools/build-tactics-app.ts`, this lives INSIDE the app and names
 // no other game: the `@chimera/<game>` alias key is read from the app's own
 // `package.json` `name`, so the file is copied verbatim into a scaffolded app
-// (`templates/blank/electron/build-main.ts`) with zero edits. It also bundles the
+// (`tools/create-chimera-game/templates/blank/electron/build-main.ts`) with zero
+// edits. It also bundles the
 // preload (the old tool emitted only `main.js`, so the built app was not actually
 // standalone-launchable), making `pnpm --filter <app> build:app` produce a
 // fully launchable bundle.
@@ -200,7 +201,12 @@ export function buildAppBundles(deps: BuildAppBundlesDeps): void {
         appDir: deps.appDir,
         gamePackageName: pkg.name,
     });
-    const nodePaths = computeNodePaths(deps.env);
+    // Resolve nodePaths to ABSOLUTE against the app dir. A standalone app's scripts inject a
+    // RELATIVE `CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules` (the only value a portable npm
+    // script can set), but both esbuild's nodePaths and resolvePreload's `createRequire` need an
+    // absolute path. Absolute values (the verify:pack / verify:scaffold gates) pass through
+    // path.resolve unchanged, so this is backward-compatible.
+    const nodePaths = computeNodePaths(deps.env).map((entry) => path.resolve(deps.appDir, entry));
     const verifyPackMode = nodePaths.length > 0;
 
     const preloadEntry = deps.resolvePreload(verifyPackMode ? nodePaths[0] : undefined);

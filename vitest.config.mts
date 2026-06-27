@@ -81,11 +81,20 @@ export default defineConfig({
         },
         testTimeout: 60_000,
         include: ['**/*.test.ts', '**/*.test.tsx'],
-        // `templates/**` holds tokenised game-scaffolding skeletons (consumed only by
-        // create-chimera-game, never built in place). Their co-located smoke tests carry
-        // raw `__token__` placeholders, so the engine's own vitest must not collect them;
-        // a scaffolded app runs them from `apps/<name>/` (outside this glob) via `--dir .`.
-        exclude: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/build/**', 'templates/**'],
+        // The bundled scaffolding skeletons hold tokenised game-app source (consumed only by
+        // create-chimera-game, never built in place). Their co-located smoke tests carry raw
+        // `__token__` placeholders and a tsconfig that `extends` the SCAFFOLDED app's root, so the
+        // engine's own vitest must not collect them; a scaffolded app runs them from `apps/<name>/`
+        // via `--dir .`. The `**/`-prefixed glob matches whether the run is workspace-rooted
+        // (`vitest run`) or tools-rooted (`vitest run --dir tools`, the gate) — a bare
+        // `tools/...` glob silently fails to match under `--dir tools`.
+        exclude: [
+            '**/node_modules/**',
+            '**/dist/**',
+            '**/out/**',
+            '**/build/**',
+            '**/create-chimera-game/templates/**',
+        ],
         globals: false,
         restoreMocks: true,
         clearMocks: true,
@@ -107,6 +116,8 @@ export default defineConfig({
                 '**/node_modules/**',
                 '**/out/**',
                 '**/dist/**',
+                // Tokenised scaffolding skeletons — not real source, never imported in place.
+                '**/create-chimera-game/templates/**',
             ],
         },
     },

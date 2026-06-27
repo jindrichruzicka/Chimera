@@ -1,6 +1,9 @@
 name: Release
 
-# Publishes the @chimera/* engine packages to npm on a version tag (F66).
+# Publishes the @chimera/* engine packages AND the `create-chimera-game` initializer to npm on a
+# version tag (F66). The initializer is a workspace member, so `changeset publish` picks it up
+# alongside the engine packages whenever its version is not yet on the registry; its `prepack`
+# (and the explicit build step below) bundle its `dist/index.mjs` bin from source first.
 #
 # Flow: run `pnpm changeset` to declare bumps, `pnpm version-packages` to apply them and
 # write per-package CHANGELOGs, commit, then push a release tag (Changesets emits per-package
@@ -73,6 +76,11 @@ jobs:
 
       - name: Build packages
         run: pnpm build:packages
+
+      # The initializer bin is an esbuild bundle, not part of the engine `tsc -b`. Build it
+      # explicitly so its dist exists for `changeset publish` (its `prepack` also rebuilds it).
+      - name: Build the create-chimera-game initializer
+        run: pnpm --filter create-chimera-game build
 
       - name: Verify packed artifacts (verify:pack)
         run: pnpm verify:pack

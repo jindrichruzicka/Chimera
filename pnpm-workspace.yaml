@@ -6,9 +6,17 @@ packages:
   - electron
   - packages/*
   - apps/*
-  # NOT templates/* — templates/blank is a tokenised source skeleton, not a
-  # buildable package. The create-chimera-game CLI copies it to apps/<name> and
-  # substitutes its tokens; only then (via apps/*) does it become a workspace
-  # member whose workspace:* deps resolve. Listing templates/* here would make
-  # `pnpm -r {lint,test,build}` run inside the raw template (all files ignored /
-  # no test files) and fail the gate.
+  # The create-chimera-game initializer is a published package (F66): a member so Changesets
+  # versions + publishes it. pnpm treats it as ONE package and does not recurse into its
+  # templates/ for nested members. It exposes only a `build` script (its tests + lint run via the
+  # root `--dir tools` / `eslint tools` passes), so `pnpm -r {test,lint}` skip it.
+  - tools/create-chimera-game
+  # NOT tools/create-chimera-game/templates/* — the blank template is a tokenised
+  # source skeleton bundled with the create-chimera-game CLI, not a buildable
+  # package. The CLI copies it to apps/<name> and substitutes its tokens; only then
+  # (via apps/*) does it become a workspace member whose workspace:* deps resolve.
+  # Listing the template here would make `pnpm -r {lint,test,build}` run inside the
+  # raw template (all files ignored / no test files) and fail the gate. (The CLI
+  # package dir itself, tools/create-chimera-game, is added as a member in F66 #PR5
+  # for publishing — pnpm treats it as one package and does not recurse into
+  # templates/ looking for nested members.)

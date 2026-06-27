@@ -13,13 +13,14 @@
  *
  *   1. `pnpm build:packages`          — emit every `@chimera/*` `dist/`
  *   2. `pnpm pack` per package        — one tarball per engine package
- *   3. synthesize a standalone pnpm workspace in an OS temp dir (NOT under the repo
- *      workspace): a root `package.json` declaring the repo's toolchain (minus
- *      `@chimera/*`) + `pnpm.overrides` forcing every `@chimera/*` edge onto a tarball,
- *      a `pnpm-workspace.yaml` (`apps/*`), and a `vitest.config.mts` that resolves
- *      `@chimera/*` through `node_modules` (the packed `exports`) — never source
- *   4. `create-chimera-game <probe> --out <tmp>` — scaffold the app into `<tmp>/apps/<kebab>`,
- *      then rewrite its `workspace:*` `@chimera/*` deps onto the tarballs
+ *   3. `create-chimera-game <probe> --out <tmp>` — the CLI EMITS the whole standalone project into
+ *      the temp dir: the app at `<tmp>/apps/<kebab>` PLUS the project root it ships (a toolchain
+ *      `package.json`, `pnpm-workspace.yaml`, a `node_modules`-resolving `vitest.config.mts`, and
+ *      a `tsconfig.json` carrying the frozen root `compilerOptions`). The gate verifies the EXACT
+ *      bytes the published CLI emits — it no longer synthesizes the root itself.
+ *   4. layer the gate's `pnpm.overrides` onto the CLI-emitted root + rewrite the app's `@chimera/*`
+ *      deps onto the packed tarballs, so the whole DAG resolves through the locally-built
+ *      artifacts instead of the (unpublished) npm ranges the CLI emitted
  *   5. `pnpm install`                 — install the tarballs + toolchain into `<tmp>`
  *   6. `pnpm --filter <app> test`     — the generated app's UNIT smoke (manifest + screen render)
  *   7. `pnpm --filter <app> test:e2e` — the generated app's Electron BOOT-smoke
@@ -34,7 +35,8 @@
  *
  * Invariants upheld:
  *   #1  — a GENERATED consumer composes the acyclic, inward `@chimera/*` DAG end-to-end.
- *   #2  — lives in `tools/`; imports only node builtins + the side-effect-free `verify-shared`.
+ *   #2  — lives in `tools/`; imports node builtins + the side-effect-free `verify-shared` and the
+ *         sibling `create-chimera-game/standalone` pure synthesizers (no `@chimera/*`).
  *   #47 — the generated app resolves `@chimera/*` ONLY through public `exports` (tarballs +
  *         a node_modules-resolving vitest config), never an internal subpath.
  *   #96 — a dropped public renderer barrel/export surfaces as a scaffold smoke failure.
@@ -50,6 +52,10 @@ import {
     type RunFn,
     type RunResult,
 } from './verify-shared';
+// The standalone-root synthesizers are owned by create-chimera-game (the single author of the
+// shape the published CLI emits). The gate consumes them and layers tarball overrides on top
+// (applyTarballOverrides below), so it verifies the exact bytes the CLI ships.
+import { type StandaloneRootManifest } from './create-chimera-game/standalone';
 
 // Re-export the injected I/O surfaces so the gate's own test imports them from one place.
 export { type FsLike, type RunFn, type RunOptions, type RunResult } from './verify-shared';
@@ -60,23 +66,12 @@ export interface VerifyScaffoldDeps {
     readonly run: RunFn;
     readonly fs: FsLike;
     readonly log: (message: string) => void;
-    /** Absolute repo root — build/pack run from each package dir under it; templates resolve here. */
+    /**
+     * Absolute repo root — build/pack run from each package dir under it, and the
+     * `create-chimera-game` CLI is invoked from here. (The CLI resolves its bundled templates
+     * package-relative to its own code, not from this root — see {@link resolveTemplatesRoot}.)
+     */
     readonly repoRoot: string;
-    /**
-     * The repo's toolchain dependency ranges (root deps + devDeps, minus `@chimera/*`),
-     * declared at the standalone root so the generated app resolves react / vitest /
-     * playwright / electron / next by walking up to `<tmp>/node_modules`
-     * ({@link buildStandaloneToolchainDeps}).
-     */
-    readonly toolchainDeps: Readonly<Record<string, string>>;
-    /**
-     * The repo's root `tsconfig.json` contents (JSONC, verbatim). The generated app's
-     * `tsconfig.json` / `tsconfig.build.json` / `e2e/tsconfig.json` all `extends` the repo
-     * root two/three levels up, so it must exist at the standalone root for vite / Playwright /
-     * Next to resolve the extends chain. `extends` only merges `compilerOptions`; each app
-     * config defines its own `include`, so the root's repo-relative globs are inert here.
-     */
-    readonly rootTsconfig: string;
 }
 
 export type VerifyScaffoldStep = 'build' | 'pack' | 'scaffold' | 'install' | 'unit' | 'e2e';
@@ -118,29 +113,7 @@ function assertStepOk(step: VerifyScaffoldStep, result: RunResult): void {
     }
 }
 
-// ── Pure helpers ───────────────────────────────────────────────────────────────
-
-/**
- * Merge the root `dependencies` + `devDependencies` and drop every `@chimera/*` entry.
- * The remainder — the repo's toolchain + renderer peers at the exact versions the packed
- * artifacts were built against — is declared at the standalone root so the generated app
- * (which only declares `@chimera/*`) resolves them by walking up to `<tmp>/node_modules`,
- * exactly as it would by walking up to the monorepo root.
- */
-export function buildStandaloneToolchainDeps(rootPkg: {
-    dependencies?: Record<string, string>;
-    devDependencies?: Record<string, string>;
-}): Record<string, string> {
-    const merged: Record<string, string> = {
-        ...(rootPkg.devDependencies ?? {}),
-        ...(rootPkg.dependencies ?? {}),
-    };
-    const out: Record<string, string> = {};
-    for (const [name, range] of Object.entries(merged)) {
-        if (!name.startsWith('@chimera/')) out[name] = range;
-    }
-    return out;
-}
+// ── Pure helpers (gate-owned: tarball/override concerns) ─────────────────────────
 
 /**
  * `pnpm pack` rewrites each tarball's internal `workspace:*` edges to a concrete version,
@@ -157,46 +130,25 @@ export function buildPnpmOverrides(
     return overrides;
 }
 
-export interface StandaloneRootManifest {
-    readonly name: string;
-    readonly version: string;
-    readonly private: true;
-    readonly devDependencies: Record<string, string>;
-    readonly scripts: Record<string, string>;
-    readonly pnpm: {
-        readonly overrides: Record<string, string>;
-        readonly onlyBuiltDependencies: readonly string[];
-    };
-}
-
 /**
- * The standalone workspace-root `package.json`. Declares the toolchain, forces `@chimera/*`
- * onto the tarballs, and stubs `build:packages` to a no-op — the generated app's e2e
- * `global-setup` runs `pnpm build:packages` from this root, but the packages arrive prebuilt
- * as tarballs, so it must not (and cannot) run the engine's real `tsc` build here. The
- * `onlyBuiltDependencies` allowlist lets pnpm run electron's + esbuild's install scripts so
- * the e2e arm has a usable Electron binary + esbuild platform binary.
+ * Layer the gate's tarball overrides onto the published-form standalone root manifest. The
+ * create-chimera-game CLI emits a root whose `@chimera/*` edges resolve from npm (no overrides);
+ * the gate re-resolves every edge onto its packed `file:<tarball>` so it verifies the EXACT bytes
+ * the CLI ships against the locally-built (unpublished) artifacts. Pure; `overrides` is placed
+ * first to mirror the historical key order. The input is always the published (override-free)
+ * form, so the spread of the rest of `pnpm` never clobbers the tarball overrides.
  */
-export function buildStandaloneRootManifest(
-    toolchainDeps: Readonly<Record<string, string>>,
+export function applyTarballOverrides(
+    manifest: StandaloneRootManifest,
     tarballs: Readonly<Record<string, string>>,
 ): StandaloneRootManifest {
     return {
-        name: 'chimera-verify-scaffold-root',
-        version: '0.0.0',
-        private: true,
-        devDependencies: { ...toolchainDeps },
-        scripts: { 'build:packages': 'node -e ""' },
+        ...manifest,
         pnpm: {
             overrides: buildPnpmOverrides(tarballs),
-            onlyBuiltDependencies: ['electron', 'esbuild'],
+            ...manifest.pnpm,
         },
     };
-}
-
-/** The `pnpm-workspace.yaml` for the standalone root: the scaffolded app is the lone member. */
-export function buildStandaloneWorkspaceYaml(): string {
-    return 'packages:\n  - apps/*\n';
 }
 
 /**
@@ -219,65 +171,6 @@ export function rewriteAppChimeraDeps(
     }
     pkg.dependencies = deps;
     return `${JSON.stringify(pkg, null, 4)}\n`;
-}
-
-/**
- * The unit-arm vitest config the generated app's `test` script loads via
- * `--config ../../vitest.config.mts`. It maps the app's OWN relative `.js` smoke imports onto
- * co-located TS source (never node_modules), and deliberately does NOT remap bare `@chimera/*`
- * specifiers — those resolve through the installed tarballs' published `exports` (the public
- * surface the gate proves), never workspace source. `@chimera/*` is INLINED (transformed by
- * vite, not externalized to Node ESM) so the packed dist's extensionless relative re-exports
- * load — exactly how the engine's own tests consume the symlinked renderer; resolution still
- * flows through `exports`, so a missing barrel still fails (Invariant #96). The one alias wires
- * the synthetic `chimera-game-registration` seam onto the app's own register.
- */
-export function buildStandaloneVitestConfig(kebab: string): string {
-    return `// Generated by tools/verify-scaffold.ts — standalone unit-smoke vitest config.
-import { existsSync } from 'node:fs';
-import path from 'node:path';
-import { defineConfig } from 'vitest/config';
-
-const root = import.meta.dirname;
-
-export default defineConfig({
-    plugins: [
-        {
-            name: 'scaffold-prefer-ts-source',
-            enforce: 'pre',
-            resolveId(source, importer) {
-                if (importer === undefined || !source.startsWith('.') || !source.endsWith('.js')) {
-                    return null;
-                }
-                const importerPath = importer.split('?')[0];
-                if (importerPath === undefined || !importerPath.startsWith(root)) return null;
-                // Only the app's own source maps .js -> .ts/.tsx; packed deps keep their .js.
-                if (importerPath.includes('node_modules')) return null;
-                const base = path.resolve(path.dirname(importerPath), source).slice(0, -3);
-                for (const ext of ['.ts', '.tsx']) {
-                    if (existsSync(base + ext)) return base + ext;
-                }
-                return null;
-            },
-        },
-    ],
-    resolve: {
-        alias: {
-            'chimera-game-registration': path.resolve(root, 'apps/${kebab}/renderer/register.ts'),
-        },
-    },
-    test: {
-        environment: 'node',
-        include: ['**/*.test.ts', '**/*.test.tsx'],
-        exclude: ['**/node_modules/**', '**/dist/**', '**/out/**', '**/.e2e-build/**'],
-        server: { deps: { inline: [/@chimera\\//] } },
-        globals: false,
-        restoreMocks: true,
-        clearMocks: true,
-        testTimeout: 60_000,
-    },
-});
-`;
 }
 
 // ── Step runners ─────────────────────────────────────────────────────────────
@@ -304,28 +197,14 @@ function scaffoldProbe(deps: VerifyScaffoldDeps, tmp: string): RunResult {
     return deps.run('tsx', [cli, PROBE_GAME.name, '--out', tmp], { cwd: deps.repoRoot });
 }
 
-/**
- * Env var the generated app's e2e `global-setup`/`build-main` reads to bundle the Electron host
- * from a packed tarball install instead of repo source. Duplicated as a literal (not imported
- * from verify-pack.ts, whose CLI entry runs on import) — the same boundary reason `build-main`
- * inlines it. Pointed at the app's own `node_modules`, this drops the `@chimera/electron/main`
- * SOURCE alias (there is no `electron/` source under the standalone root) so esbuild resolves the
- * host + preload from the installed `@chimera/electron` tarball, and sets the `@chimera/*` nodePaths.
- */
-const E2E_NODE_MODULES_ENV = 'CHIMERA_VERIFY_PACK_NODE_MODULES';
-
 /** Run one of the generated app's smoke scripts (`test` or `test:e2e`) from the standalone root. */
 function runAppScript(
     deps: VerifyScaffoldDeps,
     tmp: string,
     script: 'test' | 'test:e2e',
-    env?: Readonly<Record<string, string>>,
 ): RunResult {
     deps.log(`running the generated app's "${script}" smoke…`);
-    return deps.run('pnpm', ['--filter', PROBE_GAME.pkg, script], {
-        cwd: tmp,
-        ...(env !== undefined ? { env } : {}),
-    });
+    return deps.run('pnpm', ['--filter', PROBE_GAME.pkg, script], { cwd: tmp });
 }
 
 /**
@@ -383,21 +262,21 @@ async function scaffoldPipeline(
     // 2. pack
     const tarballs = packAll(deps, tarballsDir);
 
-    // 3. synthesize the standalone root (manifest + workspace + unit-arm vitest config)
-    await deps.fs.writeFile(
-        path.join(tmp, 'package.json'),
-        `${JSON.stringify(buildStandaloneRootManifest(deps.toolchainDeps, tarballs), null, 4)}\n`,
-    );
-    await deps.fs.writeFile(path.join(tmp, 'pnpm-workspace.yaml'), buildStandaloneWorkspaceYaml());
-    await deps.fs.writeFile(
-        path.join(tmp, 'vitest.config.mts'),
-        buildStandaloneVitestConfig(PROBE_GAME.kebab),
-    );
-    // The generated app's tsconfigs `extends` the repo root from `<tmp>/apps/<kebab>`; provide it.
-    await deps.fs.writeFile(path.join(tmp, 'tsconfig.json'), deps.rootTsconfig);
-
-    // 4. scaffold via the real CLI, then rewrite the app's @chimera/* deps onto the tarballs
+    // 3. scaffold via the real CLI in standalone `--out` mode: it EMITS the whole project root
+    //    (package.json toolchain manifest, pnpm-workspace.yaml, vitest.config.mts, tsconfig.json)
+    //    AND the app. The gate verifies the EXACT bytes the CLI ships — it no longer synthesizes
+    //    the root itself.
     assertStepOk('scaffold', scaffoldProbe(deps, tmp));
+
+    // 4. layer tarball overrides onto the CLI-emitted root, and rewrite the app's @chimera/* deps
+    //    onto the packed tarballs, so the whole DAG resolves through the locally-built artifacts
+    //    instead of the (unpublished) npm ranges the CLI emitted.
+    const rootPkgPath = path.join(tmp, 'package.json');
+    const emittedRoot = JSON.parse(await deps.fs.readFile(rootPkgPath)) as StandaloneRootManifest;
+    await deps.fs.writeFile(
+        rootPkgPath,
+        `${JSON.stringify(applyTarballOverrides(emittedRoot, tarballs), null, 4)}\n`,
+    );
     const appPkgPath = path.join(appDir, 'package.json');
     await deps.fs.writeFile(
         appPkgPath,
@@ -413,16 +292,13 @@ async function scaffoldPipeline(
     // 6. unit smoke
     assertStepOk('unit', runAppScript(deps, tmp, 'test'));
 
-    // 7. e2e boot-smoke — run in verify-pack mode so the app's build-main bundles the Electron
-    //    host + preload from the installed @chimera/electron tarball (no `electron/` source exists
-    //    under the standalone root). Point it at the app's own node_modules (its package.json
-    //    declares the @chimera/* tarball deps that resolvePreload + the esbuild nodePaths read).
+    // 7. e2e boot-smoke. The EMITTED app's `test:e2e` script self-sets
+    //    `CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules` (via cross-env), so build-main bundles the
+    //    Electron host + preload from the app's own installed `@chimera/electron` (no monorepo
+    //    `electron/` source exists here). The gate passes no env of its own — it validates exactly
+    //    the shipped script behaviour.
     if (options.skipE2e !== true) {
-        const appNodeModules = path.join(appDir, 'node_modules');
-        assertStepOk(
-            'e2e',
-            runAppScript(deps, tmp, 'test:e2e', { [E2E_NODE_MODULES_ENV]: appNodeModules }),
-        );
+        assertStepOk('e2e', runAppScript(deps, tmp, 'test:e2e'));
     }
 }
 
@@ -508,11 +384,6 @@ if (process.env['VITEST'] === undefined) {
         const fsp = await import('node:fs/promises');
 
         const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-        const rootPkg = JSON.parse(
-            await fsp.readFile(path.join(repoRoot, 'package.json'), 'utf8'),
-        ) as { dependencies?: Record<string, string>; devDependencies?: Record<string, string> };
-        // Read verbatim (JSONC): the standalone root re-emits it so the app's `extends` resolves.
-        const rootTsconfig = await fsp.readFile(path.join(repoRoot, 'tsconfig.json'), 'utf8');
 
         // Scrub ELECTRON_RUN_AS_NODE from the gate's own spawn env: when a shell / CI runner /
         // agent sandbox exports it, the e2e arm's Electron binary boots as plain Node and rejects
@@ -554,8 +425,6 @@ if (process.env['VITEST'] === undefined) {
             fs,
             log: (message) => console.log(`[verify:scaffold] ${message}`),
             repoRoot,
-            toolchainDeps: buildStandaloneToolchainDeps(rootPkg),
-            rootTsconfig,
         };
 
         const selfTest = process.argv.includes('--self-test');

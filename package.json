@@ -32,6 +32,8 @@
         "verify:publish:selftest": "tsx tools/verify-publish.ts --self-test",
         "verify:changeset-policy": "tsx tools/changeset-policy.ts",
         "verify:changeset-policy:selftest": "tsx tools/changeset-policy.ts --self-test",
+        "verify:toolchain-snapshot": "tsx tools/gen-toolchain.ts --check",
+        "gen:toolchain": "tsx tools/gen-toolchain.ts",
         "changeset": "changeset",
         "version-packages": "changeset version && pnpm install --lockfile-only",
         "release": "pnpm build:packages && changeset publish",
@@ -45,7 +47,7 @@
         "build:renderer": "pnpm build:packages && next build renderer",
         "fetch:fonts": "pnpm build:packages && tsx tools/fetch-google-fonts.ts",
         "dev:mp": "pnpm build:packages && cross-env CHIMERA_DEV_HARNESS=1 tsx tools/dev-multiplayer.ts",
-        "create:game": "tsx tools/create-chimera-game/index.ts"
+        "create:game": "tsx tools/create-chimera-game/index.ts --workspace"
     },
     "devDependencies": {
         "@changesets/cli": "^2.31.0",

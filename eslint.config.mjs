@@ -64,11 +64,15 @@ export default tseslint.config(
             'electron/main/index.js',
             'electron/preload/api.js',
             // Scaffolding templates (create-chimera-game): a tokenised, game-agnostic
-            // app skeleton (`@chimera/__game_kebab__`, `__GamePascal__` identifiers).
+            // app skeleton (`@chimera/__game_kebab__`, `__GamePascal__` identifiers),
+            // bundled beside the CLI so the published initializer ships its own templates.
             // It is not valid source in place — its tokens are substituted into a real
             // `apps/<name>` before it lints/typechecks; the import-boundary rules run on
             // that generated app (the `apps/**` zones below), not on the raw template.
-            'templates/**',
+            'tools/create-chimera-game/templates/**',
+            // Machine-generated toolchain snapshot (tools/gen-toolchain.ts) — a frozen data module
+            // with JSON-style formatting; lint-ignored as a build artifact (it is still typechecked).
+            'tools/create-chimera-game/toolchain.generated.ts',
         ],
     },
 

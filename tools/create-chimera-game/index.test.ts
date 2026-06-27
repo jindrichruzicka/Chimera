@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { scaffoldGame } from './index';
+import { resolveTemplatesRoot, scaffoldGame } from './index';
 import { InvalidGameNameError } from './normalize';
 import { findLeftoverTokens } from './tokens';
 
@@ -13,6 +13,26 @@ import { findLeftoverTokens } from './tokens';
  * The `pnpm install` side effect lives only in the CLI-entry guard (VITEST-excluded), so these
  * tests never spawn a real install and stay hermetic.
  */
+describe('resolveTemplatesRoot', () => {
+    it('returns the package-relative templates dir when running from the source layout', () => {
+        // Source run: tools/create-chimera-game/index.ts → ./templates is a sibling.
+        const entryDir = path.join('/repo', 'tools', 'create-chimera-game');
+        const sourceTemplates = path.join(entryDir, 'templates');
+        const exists = (p: string): boolean => p === sourceTemplates;
+        expect(resolveTemplatesRoot(entryDir, exists)).toBe(sourceTemplates);
+    });
+
+    it('returns the dist-sibling templates dir when running from the built dist layout', () => {
+        // Published/dist run: dist/index.js → ../templates (templates ships beside dist/).
+        const pkgDir = path.join('/pkg', 'create-chimera-game');
+        const entryDir = path.join(pkgDir, 'dist');
+        const distSiblingTemplates = path.join(pkgDir, 'templates');
+        // dist/templates does NOT exist; only the package-root templates/ does.
+        const exists = (p: string): boolean => p === distSiblingTemplates;
+        expect(resolveTemplatesRoot(entryDir, exists)).toBe(distSiblingTemplates);
+    });
+});
+
 describe('scaffoldGame', () => {
     let repoRoot: string;
 
@@ -191,6 +211,36 @@ describe('scaffoldGame', () => {
         expect(manifest).toContain('id: "space-duel"');
     });
 
+    it('resolves templates from an explicit templatesRoot decoupled from repoRoot', async () => {
+        // The published CLI bundles templates beside its own code, NOT under the output
+        // repo root. Prove the split: a templatesRoot OUTSIDE repoRoot still scaffolds,
+        // and the app still lands under the output root (repoRoot/apps).
+        const templatesRoot = await mkdtemp(path.join(tmpdir(), 'chimera-templates-'));
+        try {
+            await mkdir(path.join(templatesRoot, 'solo'), { recursive: true });
+            await writeFile(
+                path.join(templatesRoot, 'solo', 'manifest.ts'),
+                'export const __gameCamel__Id = "__game_kebab__";',
+                'utf8',
+            );
+
+            const result = await scaffoldGame({
+                repoRoot,
+                name: 'Solo Game',
+                template: 'solo',
+                templatesRoot,
+            });
+
+            const manifest = await readFile(path.join(result.appDir, 'manifest.ts'), 'utf8');
+            expect(manifest).toContain('soloGameId');
+            expect(manifest).toContain('"solo-game"');
+            // Output root is unchanged — the app lands under repoRoot/apps, not templatesRoot.
+            expect(result.appDir).toBe(path.join(repoRoot, 'apps', 'solo-game'));
+        } finally {
+            await rm(templatesRoot, { recursive: true, force: true });
+        }
+    });
+
     it('errors and lists available template ids for an unknown template', async () => {
         await expect(
             scaffoldGame({ repoRoot, name: 'Whatever', template: 'nope' }),
@@ -213,12 +263,12 @@ describe('scaffoldGame', () => {
         );
     });
 
-    it('writes to outDir/apps/<kebab> and skips root wiring in out-of-workspace mode', async () => {
-        // verify:scaffold drives the CLI with `--out <tmp>` to generate an isolated,
-        // self-contained app OUTSIDE the workspace: templates still resolve from `repoRoot`,
-        // but the app lands under `outDir` and the repo-root build files are left untouched
-        // (there is no monorepo root to wire).
-        const outDir = await mkdtemp(path.join(tmpdir(), 'chimera-out-'));
+    it('emits a self-contained project (root files + rewritten app deps) in standalone mode and leaves the monorepo untouched', async () => {
+        // The published CLI (and verify:scaffold via `--out`) drive standalone mode: the app lands
+        // under `outputRoot/apps/<kebab>` and a project root is emitted around it (toolchain
+        // manifest, workspace yaml, vitest config, tsconfig) with the app's @chimera/* deps onto
+        // their published ranges. No monorepo is wired.
+        const outputRoot = await mkdtemp(path.join(tmpdir(), 'chimera-standalone-'));
         try {
             const pkgBefore = await readFile(path.join(repoRoot, 'package.json'), 'utf8');
             const tsconfigBefore = await readFile(
@@ -226,23 +276,54 @@ describe('scaffoldGame', () => {
                 'utf8',
             );
 
-            const result = await scaffoldGame({ repoRoot, name: 'My Card Game', outDir });
+            const result = await scaffoldGame({
+                repoRoot,
+                name: 'My Card Game',
+                mode: 'standalone',
+                outputRoot,
+            });
 
-            // App lands under outDir, not repoRoot — and is fully substituted from repoRoot's template.
-            expect(result.appDir).toBe(path.join(outDir, 'apps', 'my-card-game'));
-            const pkg = JSON.parse(
-                await readFile(path.join(result.appDir, 'package.json'), 'utf8'),
-            );
-            expect(pkg.name).toBe('@chimera/my-card-game');
+            // App lands under outputRoot, not repoRoot.
+            expect(result.appDir).toBe(path.join(outputRoot, 'apps', 'my-card-game'));
             expect(await readdir(path.join(repoRoot, 'apps'))).not.toContain('my-card-game');
 
-            // Root files untouched: no dependency added, no typecheck line, no tsconfig reference.
+            // The standalone project root is emitted.
+            for (const file of [
+                'package.json',
+                'pnpm-workspace.yaml',
+                'vitest.config.mts',
+                'tsconfig.json',
+            ]) {
+                expect(
+                    await readFile(path.join(outputRoot, file), 'utf8'),
+                    `expected ${file} at the project root`,
+                ).toBeTruthy();
+            }
+            const rootPkg = JSON.parse(
+                await readFile(path.join(outputRoot, 'package.json'), 'utf8'),
+            );
+            expect(rootPkg.private).toBe(true);
+            expect(rootPkg.devDependencies.vitest).toBeDefined();
+            const rootTsconfig = JSON.parse(
+                await readFile(path.join(outputRoot, 'tsconfig.json'), 'utf8'),
+            );
+            expect(rootTsconfig.compilerOptions.strict).toBe(true);
+
+            // The app's @chimera/* deps are rewritten onto published ranges — no workspace:* survives.
+            const appPkg = JSON.parse(
+                await readFile(path.join(result.appDir, 'package.json'), 'utf8'),
+            );
+            expect(appPkg.name).toBe('@chimera/my-card-game');
+            expect(appPkg.dependencies['@chimera/simulation']).toMatch(/^\^\d+\.\d+\.\d+$/);
+            expect(JSON.stringify(appPkg)).not.toContain('workspace:*');
+
+            // The monorepo root is untouched: no dependency added, no tsconfig reference.
             expect(await readFile(path.join(repoRoot, 'package.json'), 'utf8')).toBe(pkgBefore);
             expect(await readFile(path.join(repoRoot, 'tsconfig.build.json'), 'utf8')).toBe(
                 tsconfigBefore,
             );
         } finally {
-            await rm(outDir, { recursive: true, force: true });
+            await rm(outputRoot, { recursive: true, force: true });
         }
     });
 });

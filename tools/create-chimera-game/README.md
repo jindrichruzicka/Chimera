@@ -1,41 +1,59 @@
 # `create-chimera-game`
 
-Scaffolds a new Chimera game app from a template. It copies `templates/<id>/` into
-`apps/<game>`, substitutes the game name into every file's contents **and** its file/directory
-names, and registers the new app at the repo root so its `workspace:*` dependencies resolve and
-it typechecks and boots.
+Scaffolds a new Chimera game app from a bundled template. It copies `templates/<id>/` (shipped
+beside this CLI) into `apps/<game>`, substitutes the game name into every file's contents **and**
+its file/directory names, and then either emits a **self-contained project** around it (the
+default) or **wires it into this monorepo** (`--workspace`).
 
 ## Usage
 
 ```bash
-pnpm create:game <name> [--template <id>]
-# or directly:
-tsx tools/create-chimera-game/index.ts <name> [--template <id>]
+# Standalone (default) — a self-contained project that installs @chimera/* from npm.
+# Published as `create-chimera-game`, so end users run:
+npm create chimera-game@latest <name>        # or: pnpm create chimera-game <name>
+
+# In-monorepo (contributors adding an app like apps/tactics):
+pnpm create:game <name> [--template <id>]     # wraps `… --workspace`
 ```
 
 - `<name>` — the game name in any casing (`my-card-game`, `My Card Game`, `myCardGame`, …). It
   is normalised into every casing the template needs (see the token table below). Must contain a
   letter, start with a letter, and use only letters, digits, and `-` `_` space separators.
 - `--template <id>` — which template to scaffold from. **Defaults to `blank`.** The id resolves
-  generically to `templates/<id>/`; any directory you add under `templates/` is usable with no
-  code change here. An unknown id errors and lists the available ids.
+  generically to the bundled `templates/<id>/`; any directory added there is usable with no code
+  change here. An unknown id errors and lists the available ids.
+- `--workspace` — in-monorepo mode (see below). `pnpm create:game` passes this for you.
+- `--out <dir>` — standalone mode, but emit into `<dir>` and skip `pnpm install` (the
+  `verify:scaffold` gate drives this).
 
-The new app lands in `apps/<kebab-name>/`. Re-running against an existing app errors instead of
-overwriting it.
+Re-running against an existing `apps/<kebab>` errors instead of overwriting it.
 
-### What the CLI does
+### Modes
 
-1. Validates the name and resolves the template **before** any filesystem write.
-2. Copies the template tree into `apps/<game>`, skipping `node_modules` / `dist` / `out` /
-   `.next`, substituting tokens in contents and path segments, and asserting no token survives.
-3. Wires the app into the repo root (mirroring `apps/tactics`):
-    - adds `@chimera/<kebab>: "workspace:*"` to the root `package.json` `dependencies`,
-    - appends `{ "path": "./apps/<kebab>/tsconfig.build.json" }` to `tsconfig.build.json`
-      `references`,
-    - appends `tsc --noEmit -p apps/<kebab>/tsconfig.json` to the root `typecheck` script.
-4. Runs `pnpm install` to link the new workspace package.
+**Standalone (default).** Creates a self-contained project at `<cwd>/<kebab>/` whose lone
+workspace member is the app under `apps/<kebab>/`. It emits the project root the app needs to
+install + boot with no monorepo:
 
-Then: `pnpm typecheck`, and `pnpm --filter @chimera/<kebab> build:app` to build the app bundle.
+- `package.json` — the toolchain (react / three / next / vitest / playwright / electron / …) at
+  the versions the engine was built against, frozen in [`toolchain.generated.ts`](./toolchain.generated.ts),
+  plus a no-op `build:packages` and `pnpm.onlyBuiltDependencies` for electron/esbuild;
+- `pnpm-workspace.yaml` (`apps/*`), a self-contained `vitest.config.mts`, and a `tsconfig.json`
+  carrying the frozen root `compilerOptions` the app's tsconfigs `extends`;
+- the app's `@chimera/*` deps rewritten from `workspace:*` onto their published `^x.y.z` ranges,
+  and `CHIMERA_VERIFY_PACK_NODE_MODULES` wired into its `build:app` / `test:e2e` scripts so the
+  Electron bundler resolves the host from the installed `@chimera/electron`.
+
+Then `pnpm install` runs in the new project. Next: `cd <kebab>`, `pnpm --filter @chimera/<kebab> test`,
+`pnpm --filter @chimera/<kebab> build:app`.
+
+**In-monorepo (`--workspace`).** Writes the app under this repo's `apps/<kebab>/` and registers it
+(mirroring `apps/tactics`): adds `@chimera/<kebab>: "workspace:*"` to the root `package.json`,
+appends a `tsconfig.build.json` reference and a `typecheck` line, then `pnpm install`. Next:
+`pnpm typecheck`, `pnpm --filter @chimera/<kebab> build:app`.
+
+Both modes validate the name and resolve the template **before** any write, copy the tree
+(skipping `node_modules` / `dist` / `out` / `.next`), substitute tokens in contents + path
+segments, and assert no token survives.
 
 ## Token reference
 
@@ -56,10 +74,15 @@ Legitimate dunders such as `__dirname` / `__filename` are **not** tokens and are
 
 ## Implementation notes
 
-- Pure tooling: imports only `node:*` and the sibling pure modules
-  ([`normalize.ts`](./normalize.ts), [`tokens.ts`](./tokens.ts)). It must **not** import any
-  `@chimera/*` package — boundary lint enforces this.
-- `templates/<id>/` is not a pnpm workspace member (it holds unsubstituted tokens); only after
-  the copy into `apps/*` does the new app become a workspace member.
-- The exported `scaffoldGame()` performs the copy + root wiring and is fully unit-tested; the
-  `pnpm install` step lives only in the CLI entry, which is excluded under VITEST.
+- Pure tooling: imports only `node:*` and sibling modules — the pure
+  [`normalize.ts`](./normalize.ts) / [`tokens.ts`](./tokens.ts) / [`standalone.ts`](./standalone.ts)
+  and the generated [`toolchain.generated.ts`](./toolchain.generated.ts). It must **not** import
+  any `@chimera/*` package — boundary lint enforces this, keeping it publishable standalone.
+- `templates/<id>/` is bundled beside this CLI but is **not** a pnpm workspace member (it holds
+  unsubstituted tokens); only after the copy into `apps/*` does the new app become a member.
+- The exported `scaffoldGame()` performs the copy + the per-mode finish (monorepo wiring or
+  standalone-root emission) and is fully unit-tested; the `pnpm install` step lives only in the
+  CLI entry, which is excluded under VITEST.
+- The standalone-root synthesizers in [`standalone.ts`](./standalone.ts) are shared with the
+  `verify:scaffold` gate, which drives this CLI in `--out` mode and layers packed-tarball
+  overrides on the emitted root — so the gate verifies the exact project the published CLI ships.

@@ -15,7 +15,7 @@ import { describe, expect, it } from 'vitest';
  * (a scaffolded app's suites actually passing) is a manual verification, not encoded
  * here — it needs a full package build + Electron launch.
  */
-const blankTemplateDir = path.resolve(import.meta.dirname, '../../templates/blank');
+const blankTemplateDir = path.resolve(import.meta.dirname, 'templates/blank');
 
 const read = (rel: string): Promise<string> => readFile(path.join(blankTemplateDir, rel), 'utf8');
 
