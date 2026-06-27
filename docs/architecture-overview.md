@@ -357,6 +357,8 @@ Once `@chimera/simulation` is published and stable, the intended adoption path f
 
 An adopter building a card game toolkit publishes `@chimera/cards` with `peerDependencies` on `@chimera/simulation`. Their game packages depend on both. The engine team has no coupling to or knowledge of the game packages — the dependency arrows point inward toward the core, never outward.
 
+See the [Extension-Library Adopter On-Ramp](adopter-on-ramp.md) for the concrete `@chimera/cards` manifest, the peer-not-dependency rationale, the install matrix, and the publish flow an adopter follows.
+
 ### C.7 As-Built Package Build Model (M9)
 
 As of M9, the engine ships as a hierarchy of `@chimera/*` workspace packages, each built to a consumable `dist/`, with a single fluent build that compiles them in dependency order and a watch mode that keeps that build live.

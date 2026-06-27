@@ -95,6 +95,8 @@ A platform-independent Node CLI in `tools/create-chimera-game/` that scaffolds a
 
 Publish `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, `@chimera/renderer`, and `@chimera/electron` to a registry (default: public npm, scoped `@chimera/*`) with independent semantic versioning and per-package changelogs — `@chimera/simulation` breaking changes are major bumps. Add a CI release workflow that, on a version tag, builds, runs `verify:pack`, and publishes the packages. Document the `@chimera/<domain>` extension-library on-ramp (e.g. `@chimera/cards` with `peerDependencies` on `@chimera/simulation`) as the external-adopter pattern from Appendix C.6.
 
+The extension-library on-ramp is documented in the [Extension-Library Adopter On-Ramp](../adopter-on-ramp.md) guide.
+
 ---
 
 ## F67 — App Icon & Per-Game Branding `Appendix C.4, C.6`
@@ -120,6 +122,7 @@ TypeScript project references resolve at the file/program level — even `import
 ## Cross-References
 
 - [Architecture Overview — Appendix C (From Monorepo to Package Hierarchy)](../architecture-overview.md#appendix-c-roadmap-from-monorepo-to-package-hierarchy)
+- [Extension-Library Adopter On-Ramp](../adopter-on-ramp.md) — the `@chimera/<domain>` publish/consume pattern for external adopters (F66)
 - [Module Boundaries](../coding-standards-sections/module-boundaries.md) — import-direction rules the package graph enforces
 - [Module Boundaries & File Tree](../executive-architecture/module-boundaries-file-tree.md) — annotated target file tree
 - [Architecture Invariants](../executive-architecture/architecture-invariants.md) — #1, #47, #80, #94, #96, #106, #107 (package-boundary purity & barrels)
