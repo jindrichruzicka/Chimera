@@ -1,7 +1,20 @@
 {
     "name": "@chimera/renderer",
     "version": "0.9.0",
-    "private": true,
+    "description": "React / React-Three-Fiber renderer component library and app shell for the Chimera engine.",
+    "license": "MIT",
+    "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",
+    "homepage": "https://github.com/jindrichruzicka/Chimera#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jindrichruzicka/Chimera.git",
+        "directory": "renderer"
+    },
+    "bugs": "https://github.com/jindrichruzicka/Chimera/issues",
+    "private": false,
+    "publishConfig": {
+        "access": "public"
+    },
     "type": "module",
     "exports": {
         "./components/ui": {

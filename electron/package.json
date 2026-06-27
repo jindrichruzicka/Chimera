@@ -1,7 +1,20 @@
 {
     "name": "@chimera/electron",
     "version": "0.9.0",
-    "private": true,
+    "description": "Electron main + preload host wrapper composing the Chimera engine into a desktop app.",
+    "license": "MIT",
+    "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",
+    "homepage": "https://github.com/jindrichruzicka/Chimera#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jindrichruzicka/Chimera.git",
+        "directory": "electron"
+    },
+    "bugs": "https://github.com/jindrichruzicka/Chimera/issues",
+    "private": false,
+    "publishConfig": {
+        "access": "public"
+    },
     "type": "module",
     "exports": {
         "./main": {
@@ -38,6 +51,14 @@
         "build": "tsc -p tsconfig.build.json",
         "test": "vitest run --config ../vitest.config.mts --dir .",
         "lint": "eslint ."
+    },
+    "peerDependencies": {
+        "electron": "^33.2.0"
+    },
+    "peerDependenciesMeta": {
+        "electron": {
+            "optional": true
+        }
     },
     "dependencies": {
         "@chimera/simulation": "workspace:*",

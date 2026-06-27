@@ -6,15 +6,16 @@
  * the engine-package list + renderer peer set, and the two pure helpers that parse
  * `pnpm pack` output and read renderer peer ranges from the root `package.json`.
  *
- * This module has NO CLI entry and imports only `node:path`, so a gate can `import`
- * it freely without triggering another gate's run-on-import side effect (the gates'
- * CLI entries fire on any non-VITEST import). `verify-pack.ts` re-exports these so
- * its existing test surface is unchanged.
+ * This module has NO CLI entry and imports only node builtins (`node:path`,
+ * `node:module`), so a gate can `import` it freely without triggering another gate's
+ * run-on-import side effect (the gates' CLI entries fire on any non-VITEST import).
+ * `verify-pack.ts` re-exports these so its existing test surface is unchanged.
  *
  * Invariant #2: lives in `tools/`; imports only node builtins — never a package/app.
  */
 
 import path from 'node:path';
+import { isBuiltin } from 'node:module';
 
 // ── Injected I/O surfaces (kept narrow so unit tests need no real process / disk) ──
 
@@ -90,6 +91,31 @@ export function parsePackTarballPath(stdout: string, destDir: string): string {
         throw new Error('pack: could not find a *.tgz path in `pnpm pack` output');
     }
     return path.isAbsolute(tgzLine) ? tgzLine : path.join(destDir, tgzLine);
+}
+
+/**
+ * Normalize a module specifier to its installable package name — strip any subpath,
+ * preserve the scope for scoped packages:
+ *   '@react-three/fiber'            -> '@react-three/fiber'
+ *   '@chimera/simulation/engine/x'  -> '@chimera/simulation'
+ *   'three/examples/jsm/x.js'       -> 'three'
+ *   'next/image'                    -> 'next'
+ *   'zod'                           -> 'zod'
+ */
+export function specifierToPackageName(specifier: string): string {
+    if (specifier.startsWith('@')) {
+        const parts = specifier.split('/');
+        return parts.length >= 2 ? `${parts[0]}/${parts[1]}` : specifier;
+    }
+    return specifier.split('/')[0] ?? specifier;
+}
+
+/**
+ * True for Node core builtins in every form a dist `.js` may reference them:
+ * bare (`fs`), `node:`-prefixed (`node:fs`), and subpath (`fs/promises`).
+ */
+export function isNodeBuiltin(specifier: string): boolean {
+    return isBuiltin(specifier);
 }
 
 /** Read the renderer peer ranges from the root package.json (devDeps + deps merged). */

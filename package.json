@@ -3,7 +3,14 @@
     "version": "0.8.0",
     "private": true,
     "description": "Host-authoritative, multiplatform multiplayer game engine built on Electron + React Three Fiber.",
-    "license": "UNLICENSED",
+    "license": "MIT",
+    "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",
+    "homepage": "https://github.com/jindrichruzicka/Chimera#readme",
+    "repository": {
+        "type": "git",
+        "url": "git+https://github.com/jindrichruzicka/Chimera.git"
+    },
+    "bugs": "https://github.com/jindrichruzicka/Chimera/issues",
     "packageManager": "pnpm@10.33.0",
     "engines": {
         "node": ">=20.0.0"
@@ -21,6 +28,8 @@
         "verify:pack:selftest": "tsx tools/verify-pack.ts --self-test",
         "verify:scaffold": "tsx tools/verify-scaffold.ts",
         "verify:scaffold:selftest": "tsx tools/verify-scaffold.ts --self-test",
+        "verify:publish": "tsx tools/verify-publish.ts",
+        "verify:publish:selftest": "tsx tools/verify-publish.ts --self-test",
         "test:perf": "pnpm build:packages && cross-env NODE_OPTIONS=--expose-gc CHIMERA_PERF_STRICT=1 vitest run apps/tactics/__tests__/ActionPipelinePerf.bench.test.ts",
         "validate:assets": "pnpm build:packages && tsx tools/validate-assets.ts",
         "format": "prettier --write .",
@@ -61,6 +70,7 @@
         "next": "^15.5.15",
         "pngjs": "^7.0.0",
         "prettier": "^3.3.3",
+        "publint": "^0.3.21",
         "react": "^19.2.5",
         "react-dom": "^19.2.5",
         "tsx": "^4.21.0",
