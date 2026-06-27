@@ -8,6 +8,11 @@ name: Release
 # runs the true-artifact `verify:pack` gate, and `changeset publish`es every package whose
 # version is not yet on the registry.
 #
+# Packages publish with npm provenance: the job is granted `id-token: write` (OIDC) and the
+# publish step sets `NPM_CONFIG_PROVENANCE=true`. Provenance is enabled here in CI only (not via
+# each package's `publishConfig`) on purpose — provenance generation needs the OIDC CI runtime,
+# so a global `publishConfig.provenance` would break the LOCAL `verify:publish` dry-run.
+#
 # CI Actions billing is blocked on this account, so this workflow does not actually execute
 # here — the LOCAL `verify:pack` + `verify:publish` gates remain authoritative before a real
 # publish. It is the future automation layer and the executable record of the release steps.
@@ -26,6 +31,7 @@ concurrency:
 
 permissions:
   contents: read
+  id-token: write # npm provenance (OIDC) — links each published tarball to this build
 
 jobs:
   publish:
@@ -74,7 +80,16 @@ jobs:
           CI: true
           DISPLAY: ':99'
 
+      # Publish-readiness gate: depcheck + publint + `pnpm publish --dry-run` per package —
+      # the same publish path `changeset publish` takes, proving every package publishes
+      # cleanly before the real publish runs. No Electron/Playwright (no e2e).
+      - name: Verify publish-readiness (verify:publish)
+        run: pnpm verify:publish
+
       - name: Publish to npm
         run: pnpm release
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          # provenance attestation (requires the job's id-token: write); changeset publish
+          # shells out to pnpm publish, which inherits this env and honors it.
+          NPM_CONFIG_PROVENANCE: true
