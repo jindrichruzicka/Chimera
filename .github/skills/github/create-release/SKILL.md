@@ -146,6 +146,8 @@ git push origin "v$VERSION"
 git ls-remote --tags origin | grep "v$VERSION"
 ```
 
+> **Heads-up — `v*` triggers npm publish.** `release.yml` triggers on `v*.*.*` tags, so pushing this milestone tag runs `changeset publish` in CI and publishes any `@chimera-engine/*` / `create-chimera-game` version that is in the manifests but not yet on the registry (already-published versions are a no-op). To control package versions deliberately, declare bumps with the `publish-packages` skill _before_ tagging the milestone.
+
 ## Step 10 — Extract release notes
 
 ```bash

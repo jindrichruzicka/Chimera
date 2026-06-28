@@ -13,7 +13,7 @@ GitHub Copilot configuration under `.github/`. Both surfaces are kept in sync;
 edit either one and reflect the change in the other.
 
 - **Subagents**: `.claude/agents/chimera-*.md` — architect, code-reviewer, engine-developer, engine-planner, git-operations, product-manager, qa-engineer, release-manager. Claude routes by `description`; explicit invocation works too.
-- **Slash commands**: `.claude/commands/*.md` — `/bootstrap-feature`, `/bootstrap-milestone`, `/create-issues-feature-review`, `/create-release`, `/implement-issue`, `/implement-issue-merge`, `/merge-to-main`, `/review-branch`, `/review-feature`, `/review-milestone`.
+- **Slash commands**: `.claude/commands/*.md` — `/bootstrap-feature`, `/bootstrap-milestone`, `/create-issues-feature-review`, `/create-release`, `/implement-issue`, `/implement-issue-merge`, `/merge-to-main`, `/publish-packages`, `/review-branch`, `/review-feature`, `/review-milestone`.
 - **Skills**: `.claude/skills/{git,github,invariants,tdd}/` — load the matching `SKILL.md` before performing the corresponding operation.
 - **Hooks**: `.claude/settings.json` enforces the pre-commit gate and blocks `git commit --no-verify`.
 

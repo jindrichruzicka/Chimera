@@ -1,7 +1,7 @@
 ---
 name: github
-description: 'Use when fetching, creating, or managing GitHub milestones, issues, or releases. How: load the matching sub-skill (fetch-issue, list-issues, create-issue, create-milestone, bootstrap-milestone, close-issue, create-release).'
-argument-hint: "Operation type (e.g. 'fetch-issue', 'create-milestone', 'create-issue', 'bootstrap-milestone', 'close-issue', 'list-issues', 'create-release')"
+description: 'Use when fetching, creating, or managing GitHub milestones, issues, or releases — or publishing the @chimera-engine/* packages to npm. How: load the matching sub-skill (fetch-issue, list-issues, create-issue, create-milestone, bootstrap-milestone, close-issue, create-release, publish-packages).'
+argument-hint: "Operation type (e.g. 'fetch-issue', 'create-milestone', 'create-issue', 'bootstrap-milestone', 'close-issue', 'list-issues', 'create-release', 'publish-packages')"
 user-invocable: true
 ---
 
@@ -21,6 +21,7 @@ Repo: `jindrichruzicka/Chimera`. Set once per session: `export GH_REPO=jindrichr
 | close-issue         | Closing a task issue after merge             | `close-issue/SKILL.md`         |
 | list-issues         | Querying issues                              | `list-issues/SKILL.md`         |
 | create-release      | Cutting a versioned release                  | `create-release/SKILL.md`      |
+| publish-packages    | Publishing @chimera-engine/\* to npm         | `publish-packages/SKILL.md`    |
 
 Templates: `assets/feature-template.md`, `assets/task-template.md`, `assets/release-template.md`. Labels: `references/labels.md`.
 
