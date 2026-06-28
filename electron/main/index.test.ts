@@ -292,6 +292,7 @@ type AppEventHandler = (...args: readonly unknown[]) => void;
 interface FakeWebPreferences {
     readonly nodeIntegration?: boolean;
     readonly contextIsolation?: boolean;
+    readonly sandbox?: boolean;
     readonly webSecurity?: boolean;
     readonly preload?: string;
     readonly additionalArguments?: readonly string[];
@@ -300,6 +301,7 @@ interface FakeWebPreferences {
 interface FakeBrowserWindowOptions {
     readonly backgroundColor?: string;
     readonly title?: string;
+    readonly icon?: string;
     readonly webPreferences?: FakeWebPreferences;
 }
 
@@ -341,6 +343,7 @@ const appWhenReady = vi.fn<() => Promise<void>>(() => Promise.resolve());
 const appGetPath = vi.fn<(name: string) => string>(() => '/tmp/chimera-userData-fake');
 const appGetLocale = vi.fn<() => string>(() => 'en-US');
 const appGetVersion = vi.fn<() => string>(() => '0.7.0-test');
+const appDockSetIcon = vi.fn<(path: string) => void>();
 const ipcMainHandle = vi.fn<(channel: string, handler: () => unknown) => void>();
 const ipcMainOn = vi.fn<(channel: string, handler: () => void) => void>();
 const protocolRegisterSchemesAsPrivileged = vi.fn<
@@ -395,6 +398,8 @@ vi.mock('electron', () => ({
         getPath: appGetPath,
         getLocale: appGetLocale,
         getVersion: appGetVersion,
+        // macOS-only dock handle (undefined on other platforms in real Electron).
+        dock: { setIcon: appDockSetIcon },
     },
     BrowserWindow: FakeBrowserWindow,
     ipcMain: {
@@ -526,6 +531,21 @@ function makeTestContributions(): MainGameContribution[] {
 
 const PRELOAD = '/abs/path/preload/api.js';
 const RENDERER_ENTRY = '/abs/path/renderer/out/index.html';
+const ICON_PATH = '/abs/path/icons/chimera.png';
+
+/**
+ * Runs `fn` with `process.platform` temporarily forced to `value`, restoring the
+ * real platform afterwards so the macOS dock branch is testable on any host OS.
+ */
+function withPlatform(value: NodeJS.Platform, fn: () => void): void {
+    const original = process.platform;
+    Object.defineProperty(process, 'platform', { value, configurable: true });
+    try {
+        fn();
+    } finally {
+        Object.defineProperty(process, 'platform', { value: original, configurable: true });
+    }
+}
 
 describe('createMainWindow', () => {
     beforeEach(() => {
@@ -855,6 +875,82 @@ describe('createMainWindow', () => {
                 initialUrl: 'chimera://evil/lobby/' as unknown as ChimeraRendererUrl,
             });
         }).toThrow();
+    });
+
+    it('passes the supplied icon path through to the BrowserWindow constructor config', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+            icon: ICON_PATH,
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.icon).toBe(ICON_PATH);
+    });
+
+    it('sets the macOS dock icon via app.dock.setIcon on darwin', () => {
+        withPlatform('darwin', () => {
+            createMainWindow({
+                preloadPath: PRELOAD,
+                rendererEntry: RENDERER_ENTRY,
+                env: 'production',
+                logger: createNoopLogger(),
+                icon: ICON_PATH,
+            });
+        });
+
+        expect(appDockSetIcon).toHaveBeenCalledTimes(1);
+        expect(appDockSetIcon).toHaveBeenCalledWith(ICON_PATH);
+    });
+
+    it('does not touch the dock on non-darwin platforms, but still wires the window icon', () => {
+        withPlatform('linux', () => {
+            createMainWindow({
+                preloadPath: PRELOAD,
+                rendererEntry: RENDERER_ENTRY,
+                env: 'production',
+                logger: createNoopLogger(),
+                icon: ICON_PATH,
+            });
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.icon).toBe(ICON_PATH);
+        expect(appDockSetIcon).not.toHaveBeenCalled();
+    });
+
+    it('leaves the icon unset and never calls the dock when no icon is supplied (no throw, even on darwin)', () => {
+        withPlatform('darwin', () => {
+            expect(() =>
+                createMainWindow({
+                    preloadPath: PRELOAD,
+                    rendererEntry: RENDERER_ENTRY,
+                    env: 'production',
+                    logger: createNoopLogger(),
+                }),
+            ).not.toThrow();
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.icon).toBeUndefined();
+        expect(appDockSetIcon).not.toHaveBeenCalled();
+    });
+
+    it('preserves secure BrowserWindow defaults when an icon is supplied', () => {
+        createMainWindow({
+            preloadPath: PRELOAD,
+            rendererEntry: RENDERER_ENTRY,
+            env: 'production',
+            logger: createNoopLogger(),
+            icon: ICON_PATH,
+        });
+
+        const [win] = browserWindowInstances;
+        expect(win?.options.webPreferences?.nodeIntegration).toBe(false);
+        expect(win?.options.webPreferences?.contextIsolation).toBe(true);
+        expect(win?.options.webPreferences?.sandbox).toBe(true);
     });
 });
 

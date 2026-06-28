@@ -369,6 +369,15 @@ export interface CreateMainWindowOptions {
      * ({@link resolveWindowTitle}); defaults to {@link DEFAULT_WINDOW_TITLE}.
      */
     readonly windowTitle?: string;
+    /**
+     * Absolute filesystem path to the application/window icon. When provided it
+     * is wired into the {@link BrowserWindow} `icon` and, on macOS, the dock
+     * icon. When omitted, Electron keeps its stock icon. Resolution from the
+     * bundled default Chimera asset or a game's `GameManifest` override happens
+     * at the call site (F67 T2); this layer only applies an already-resolved
+     * absolute path.
+     */
+    readonly icon?: string;
 }
 
 export interface RegisterAppLifecycleOptions {
@@ -832,6 +841,9 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         height: DEFAULT_WINDOW_HEIGHT,
         backgroundColor: BOOTSTRAP_BACKGROUND_COLOR,
         title: resolvedTitle,
+        // Only set `icon` when supplied so the no-icon case leaves Electron's
+        // stock icon untouched (F67 T1).
+        ...(options.icon !== undefined ? { icon: options.icon } : {}),
         show: true,
         webPreferences: {
             nodeIntegration: false,
@@ -842,6 +854,13 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
             additionalArguments: [`--chimera-env=${options.env}`],
         },
     });
+
+    // macOS shows the app icon in the dock, not just the window chrome; the
+    // `BrowserWindow` `icon` alone does not cover it. `app.dock` exists only on
+    // darwin (`Dock | undefined`), so guard on the platform and chain defensively.
+    if (options.icon !== undefined && process.platform === 'darwin') {
+        app.dock?.setIcon(options.icon);
+    }
 
     const urlToLoad = options.initialUrl ?? CHIMERA_RENDERER_URL;
     // Defense-in-depth: validate protocol and host even though the branded type
