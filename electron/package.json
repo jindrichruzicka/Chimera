@@ -44,6 +44,7 @@
     },
     "files": [
         "dist",
+        "assets",
         "CHANGELOG.md",
         "preload/api-types.ts",
         "preload/debug-api-types.ts"
