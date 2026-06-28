@@ -9,40 +9,40 @@ export type ResolverPlugin = Readonly<{
 }>;
 
 /**
- * Maps each `@chimera/<pkg>` workspace package onto its source directory
+ * Maps each `@chimera-engine/<pkg>` workspace package onto its source directory
  * (relative to the workspace root). F57 removes the tsconfig `paths` aliases, so
  * this plugin — not vite-tsconfig-paths — is what lets vitest resolve bare
- * `@chimera/*` specifiers onto in-tree TypeScript source while no `dist/` build
- * exists yet. `@chimera/tactics` lives under `apps/tactics` (relocated in F63
+ * `@chimera-engine/*` specifiers onto in-tree TypeScript source while no `dist/` build
+ * exists yet. `@chimera-engine/tactics` lives under `apps/tactics` (relocated in F63
  * #782; its `dist/` is built but not yet consumed — F64 flips this map to honour
  * its exports). Mirrors the webpack aliases in `renderer/next.config.ts`.
  */
 const CHIMERA_PACKAGE_DIRS: Readonly<Record<string, string>> = {
-    // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`,
-    // `@chimera/renderer`, and `@chimera/electron` are intentionally absent: each
+    // `@chimera-engine/simulation`, `@chimera-engine/ai`, `@chimera-engine/networking`,
+    // `@chimera-engine/renderer`, and `@chimera-engine/electron` are intentionally absent: each
     // is a built package consumed through its `exports` map onto `<pkg>/dist`.
     // Leaving them out lets Vite's default resolver honour the exports map
     // (build-before-consume), so other packages' tests exercise the packaged
     // artefact. Their own tests use relative imports and therefore never hit this
-    // map. (`@chimera/renderer` joined this group in #773 and `@chimera/electron`
+    // map. (`@chimera-engine/renderer` joined this group in #773 and `@chimera-engine/electron`
     // in #777 once their dist/ builds landed.)
-    '@chimera/tactics': 'apps/tactics',
+    '@chimera-engine/tactics': 'apps/tactics',
 };
 
 /**
- * Resolve a bare `@chimera/<pkg>[/subpath]` specifier onto its TypeScript
+ * Resolve a bare `@chimera-engine/<pkg>[/subpath]` specifier onto its TypeScript
  * source, preferring `.ts`/`.tsx` over the imported `.js` (TS-style extension
  * rewriting), falling back to `index.ts`/`index.tsx` for extensionless
  * subpaths, and passing non-TS assets (e.g. `.css`) through to their literal
  * mapped path. Returns the first candidate that exists, or `null` when the
- * specifier is not a known `@chimera/*` package or nothing exists on disk.
+ * specifier is not a known `@chimera-engine/*` package or nothing exists on disk.
  */
 function resolveChimeraPackageSource(
     source: string,
     workspaceRoot: string,
     existsSync: (path: string) => boolean,
 ): string | null {
-    const match = /^(@chimera\/[^/]+)(\/.*)?$/u.exec(source);
+    const match = /^(@chimera-engine\/[^/]+)(\/.*)?$/u.exec(source);
     if (match === null) {
         return null;
     }
@@ -106,9 +106,9 @@ export function createPreferTypeScriptSourceResolver(
         name: 'chimera-prefer-typescript-source-for-js-specifiers',
         enforce: 'pre',
         resolveId(source: string, importer: string | undefined): string | null {
-            // Bare `@chimera/*` workspace-package specifiers resolve from the
+            // Bare `@chimera-engine/*` workspace-package specifiers resolve from the
             // workspace root (independent of the importer) onto TS source.
-            if (source.startsWith('@chimera/')) {
+            if (source.startsWith('@chimera-engine/')) {
                 return resolveChimeraPackageSource(source, workspaceRoot, existsSync);
             }
             if (importer === undefined || !source.startsWith('.') || !source.endsWith('.js')) {

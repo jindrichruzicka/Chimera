@@ -20,12 +20,12 @@ describe('release.yml CI release workflow', () => {
         expect(existsSync(workflowPath)).toBe(true);
     });
 
-    it('triggers on a version-tag push (v*.*.* and @chimera/* scoped tags)', () => {
+    it('triggers on a version-tag push (v*.*.* and @chimera-engine/* scoped tags)', () => {
         expect(content).toMatch(/on:/);
         expect(content).toMatch(/push:/);
         expect(content).toMatch(/tags:/);
         expect(content).toMatch(/v\*\.\*\.\*/);
-        expect(content).toMatch(/@chimera\/\*/);
+        expect(content).toMatch(/@chimera-engine\/\*/);
     });
 
     it('runs on ubuntu-latest', () => {
@@ -86,7 +86,7 @@ describe('release.yml CI release workflow', () => {
         expect(content).toMatch(/NPM_CONFIG_PROVENANCE:\s*true/);
     });
 
-    // AC4 — scoped @chimera/* publishes to the public npm registry.
+    // AC4 — scoped @chimera-engine/* publishes to the public npm registry.
     it('targets the public npm registry (AC4)', () => {
         expect(content).toMatch(/registry-url:\s*['"]?https:\/\/registry\.npmjs\.org['"]?/);
     });

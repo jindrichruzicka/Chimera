@@ -13,7 +13,7 @@
 // survives the lobby → game route transition without a refetch.
 
 import { useEffect, useState } from 'react';
-import type { ContentAPI, GameContent } from '@chimera/simulation/bridge/api-types.js';
+import type { ContentAPI, GameContent } from '@chimera-engine/simulation/bridge/api-types.js';
 
 interface ContentBridge {
     readonly __chimera?: {

@@ -11,8 +11,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { InMemoryProfileRepository } from '@chimera/simulation/profile/InMemoryProfileRepository.js';
-import { localProfileId, type PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
+import { InMemoryProfileRepository } from '@chimera-engine/simulation/profile/InMemoryProfileRepository.js';
+import {
+    localProfileId,
+    type PlayerProfile,
+} from '@chimera-engine/simulation/profile/ProfileSchema.js';
 
 import {
     NoActiveProfileError,

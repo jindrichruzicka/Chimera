@@ -1,4 +1,4 @@
-import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
 import type { LoggerSink } from './logger.js';
 
 const DEFAULT_LOG_RING_BUFFER_CAPACITY = 1000;

@@ -61,22 +61,22 @@ import {
     DEBUG_CHANNEL,
     DEBUG_PUSH_CHANNEL,
     DEBUG_TOGGLE_INSPECTOR_CHANNEL,
-} from '@chimera/simulation/foundation/constants.js';
+} from '@chimera-engine/simulation/foundation/constants.js';
 import {
     SnapshotRingBuffer,
     SnapshotInspector,
     TickNotAvailableError,
-} from '@chimera/simulation/debug/index.js';
+} from '@chimera-engine/simulation/debug/index.js';
 import type {
     DebugRequest,
     DebugResponse,
     InspectorMemento,
     NetworkDiagnostics,
-} from '@chimera/simulation/debug/index.js';
-import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import type { ActionHistoryEntry } from '@chimera/simulation/engine/UndoManager.js';
-import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
+} from '@chimera-engine/simulation/debug/index.js';
+import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { ActionHistoryEntry } from '@chimera-engine/simulation/engine/UndoManager.js';
+import type { StateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { Logger } from './logging/logger.js';
 import { CHIMERA_RENDERER_HOST, CHIMERA_RENDERER_PROTOCOL } from './renderer-url.js';
 import type { HostSessionDebugPort } from './runtime/HostSessionPipeline.js';

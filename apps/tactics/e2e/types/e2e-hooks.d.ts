@@ -2,7 +2,7 @@
 //
 // Pulls the CHIMERA_E2E-gated `__e2eHooks` main-process global contract into the
 // e2e type program. The declaration lives in electron/main/runtime/e2e-hooks.ts,
-// but F62 (#777) made @chimera/electron a built package whose curated `exports`
+// but F62 (#777) made @chimera-engine/electron a built package whose curated `exports`
 // map deliberately does not surface main-process internals, and the root
 // typecheck no longer compiles electron source. The e2e suite is a whitebox
 // harness that bundles electron source at runtime and drives this test-only

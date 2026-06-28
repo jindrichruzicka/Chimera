@@ -30,13 +30,13 @@
  *           the source rather than only at the serializer boundary.
  */
 
-import { ReplayVersionError } from '@chimera/simulation/replay/index.js';
+import { ReplayVersionError } from '@chimera-engine/simulation/replay/index.js';
 import type {
     PerspectiveReplayFile,
     PerspectiveReplayFrame,
     PerspectiveReplayHeader,
     PerspectiveReplayRepository,
-} from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
 import type { Logger } from '../logging/logger.js';
 
 /**

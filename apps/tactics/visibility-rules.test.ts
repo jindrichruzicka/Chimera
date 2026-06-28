@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_MAX_STAMINA } from '@chimera/tactics/constants.js';
-import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+import { TACTICS_MAX_STAMINA } from '@chimera-engine/tactics/constants.js';
+import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,
     BasePlayerState,
     GameEvent,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 import { tacticsVisibilityRules } from './visibility-rules.js';
 
 const PLAYER_A = playerId('player-a');

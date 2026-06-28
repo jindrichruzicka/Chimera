@@ -1,5 +1,5 @@
 import React from 'react';
-import type { GameScreenRegistry } from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,

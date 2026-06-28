@@ -49,7 +49,9 @@ describe('blank template smoke harness', () => {
         await expect(read('e2e/global-setup.ts')).resolves.toContain('buildAppBundles');
         await expect(read('e2e/playwright.config.ts')).resolves.toContain('electron-e2e');
         // The runner resolution shim names the app's own package, tokenised.
-        await expect(read('e2e/tsconfig.json')).resolves.toContain('@chimera/__game_kebab__/*');
+        await expect(read('e2e/tsconfig.json')).resolves.toContain(
+            '@chimera-engine/__game_kebab__/*',
+        );
     });
 
     it('wires test + test:e2e scripts into the template package.json', async () => {

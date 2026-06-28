@@ -22,7 +22,7 @@ import {
     SYSTEM_DEVICE_INFO_CHANNEL,
     type PlatformInfo,
 } from '../../preload/apis/system-api.js';
-import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera/simulation/foundation/constants.js';
+import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera-engine/simulation/foundation/constants.js';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_REVEAL_CHANNEL,
@@ -117,7 +117,7 @@ import type {
     UserSettings,
 } from '../../preload/api-types.js';
 import { isInsidePath } from '../path-containment.js';
-import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import {
     ChatHistoryRequestSchema,
     ChatMuteRequestSchema,
@@ -156,8 +156,8 @@ import type { SettingsManager } from '../settings/SettingsManager.js';
 import type { LobbyManager } from '../lobby/LobbyManager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/apis/logs-api.js';
 import { RendererLogEntrySchema } from './ipc-schemas.js';
-import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 
 export {
     SYSTEM_PLATFORM_CHANNEL,

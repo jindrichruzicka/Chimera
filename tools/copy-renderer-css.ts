@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 /**
- * Post-build CSS copy for the @chimera/renderer dist build (issue #773; F65 Phase 2a).
+ * Post-build CSS copy for the @chimera-engine/renderer dist build (issue #773; F65 Phase 2a).
  *
  * `tsc -p tsconfig.build.json` emits the shell JS + .d.ts but copies NO CSS — the
  * compiled `dist/.../Button.js` keeps its literal `import styles from

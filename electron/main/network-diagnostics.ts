@@ -12,7 +12,7 @@
 //    this module carries zero runtime coupling to the debug graph (Invariant
 //    #31); it is itself loaded only under `IS_DEBUG_MODE` (Invariant #27).
 
-import type { NetworkDiagnostics } from '@chimera/simulation/debug/DebugProtocol.js';
+import type { NetworkDiagnostics } from '@chimera-engine/simulation/debug/DebugProtocol.js';
 
 // ─── Narrow port types ─────────────────────────────────────────────────────────
 

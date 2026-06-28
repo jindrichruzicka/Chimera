@@ -21,35 +21,35 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import type {
     ActionEnvelope,
     BaseEntityState,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { entityId, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { entityId, playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import {
     CommitmentVerificationError,
     toCommitmentId,
     type CommitmentReveal,
-} from '@chimera/simulation/projection/index.js';
+} from '@chimera-engine/simulation/projection/index.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera/tactics/constants.js';
-import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
+} from '@chimera-engine/tactics/constants.js';
+import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
 import {
     registerTacticsActions,
     tacticsGridCoordinate,
     type TacticsAttackPayload,
     type TacticsMoveUnitPayload,
-} from '@chimera/tactics/actions.js';
-import { tacticsCommitmentOrchestration } from '@chimera/tactics/commitment/orchestration.js';
-import type { BufferedTacticsAction } from '@chimera/tactics/commitment/contract.js';
+} from '@chimera-engine/tactics/actions.js';
+import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/commitment/orchestration.js';
+import type { BufferedTacticsAction } from '@chimera-engine/tactics/commitment/contract.js';
 
 import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
 import { runRevealSync } from '../runtime/RevealOrchestrator.js';

@@ -11,18 +11,18 @@ import {
     CommandContextImpl,
     CommandSchedulerImpl,
     AIPlayerAgent,
-} from '@chimera/ai/engine';
-import type { AIState, PlayerAgent } from '@chimera/ai';
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
+} from '@chimera-engine/ai/engine';
+import type { AIState, PlayerAgent } from '@chimera-engine/ai';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
     GamePhase,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { playerId, sceneId } from '@chimera/simulation/engine/types.js';
-import type { LobbyAgentSlot } from '@chimera/networking';
-import type { ReplayPlayerMetadata } from '@chimera/simulation/replay/ReplayFile.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { playerId, sceneId } from '@chimera-engine/simulation/engine/types.js';
+import type { LobbyAgentSlot } from '@chimera-engine/networking';
+import type { ReplayPlayerMetadata } from '@chimera-engine/simulation/replay/ReplayFile.js';
 
 export interface HostedSessionAgentMetadata {
     readonly hostId: PlayerId;

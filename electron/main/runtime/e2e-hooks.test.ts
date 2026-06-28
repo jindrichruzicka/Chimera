@@ -10,9 +10,9 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { createE2eHooks, registerE2eHooks, getE2eHooks, MAX_WS_FRAMES } from './e2e-hooks';
 import type { WsFrame } from './e2e-hooks';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js';
 
 const HOST_VIEWER_ID = toPlayerId('player-host');
 

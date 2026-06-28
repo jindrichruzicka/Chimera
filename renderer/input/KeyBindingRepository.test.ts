@@ -16,7 +16,7 @@ import { createKeyBindingRepository } from './KeyBindingRepository.js';
 import { createSettingsStore } from '../state/settingsStore.js';
 import type { InputActionId } from './InputAction.js';
 import type { KeyBinding } from './InputBindingSchema.js';
-import type { ResolvedSettings } from '@chimera/simulation/bridge/api-types.js';
+import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

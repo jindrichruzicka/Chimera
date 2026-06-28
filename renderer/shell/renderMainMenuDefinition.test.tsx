@@ -20,7 +20,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type {
     GameMainMenuDefinition,
     GameMenuCommandId,
-} from '@chimera/simulation/foundation/game-shell-contract.js';
+} from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import { RenderMainMenuDefinition } from './renderMainMenuDefinition';
 
 // ── Router mock ───────────────────────────────────────────────────────────────

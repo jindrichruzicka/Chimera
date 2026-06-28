@@ -1,15 +1,15 @@
 /**
  * renderer/__tests__/eslint-import-boundary.test.ts
  *
- * ESLint smoke test for the module-import boundary that keeps `@chimera/renderer`
- * depending on `@chimera/simulation` contracts only (Invariant #1, issue #772).
+ * ESLint smoke test for the module-import boundary that keeps `@chimera-engine/renderer`
+ * depending on `@chimera-engine/simulation` contracts only (Invariant #1, issue #772).
  *
  * Runs ESLint programmatically against fixtures and asserts the
  * `no-restricted-imports` rule fires on a forbidden sibling-runtime import
- * (`@chimera/ai`) but not on the allowed `@chimera/simulation` contract import.
+ * (`@chimera-engine/ai`) but not on the allowed `@chimera-engine/simulation` contract import.
  * This proves the boundary is enforced by the linter, not merely by convention —
  * the AC for issue #772:
- *   "Import-boundary ESLint rule for @chimera/renderer is wired and fails on a
+ *   "Import-boundary ESLint rule for @chimera-engine/renderer is wired and fails on a
  *    forbidden cross-boundary import."
  *
  * Mirrors `networking/__tests__/eslint-import-boundary.test.ts` (#768).
@@ -63,9 +63,9 @@ function runEslint(fixtureName: string): ESLintMessage[] {
     return parsed[0]?.messages ?? [];
 }
 
-describe('ESLint import-boundary — @chimera/renderer depends on @chimera/simulation contracts only (Invariant #1)', () => {
+describe('ESLint import-boundary — @chimera-engine/renderer depends on @chimera-engine/simulation contracts only (Invariant #1)', () => {
     it(
-        'flags a sibling-runtime import (@chimera/ai) from renderer/ with no-restricted-imports',
+        'flags a sibling-runtime import (@chimera-engine/ai) from renderer/ with no-restricted-imports',
         () => {
             const messages = runEslint('bad-cross-boundary-import.fixture.ts');
             const ruleIds = messages.filter((m) => m.ruleId !== null).map((m) => m.ruleId!);
@@ -75,7 +75,7 @@ describe('ESLint import-boundary — @chimera/renderer depends on @chimera/simul
     );
 
     it(
-        'does not flag the allowed @chimera/simulation contract import from renderer/',
+        'does not flag the allowed @chimera-engine/simulation contract import from renderer/',
         () => {
             const messages = runEslint('good-contract-import.fixture.ts');
             const ruleIds = messages.filter((m) => m.ruleId !== null).map((m) => m.ruleId!);

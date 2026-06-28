@@ -35,7 +35,7 @@ const ruleTester = new RuleTester({
 
 const IMPORT_FIXED_POINT = `import { fromFloat } from './FixedPoint.js';`;
 const IMPORT_FIXED_POINT_RELATIVE = `import { fromFloat } from '../../engine/FixedPoint.js';`;
-const IMPORT_FIXED_POINT_ALIAS = `import { fromFloat } from '@chimera/simulation/engine/FixedPoint';`;
+const IMPORT_FIXED_POINT_ALIAS = `import { fromFloat } from '@chimera-engine/simulation/engine/FixedPoint';`;
 const IMPORT_FIXED_POINT_RENAMED = `import { fromFloat as fp } from './FixedPoint.js';`;
 
 // ── Test suite ────────────────────────────────────────────────────────────────
@@ -123,7 +123,7 @@ ruleTester.run('chimera/no-fromfloat-in-simulation', rule, {
             errors: [{ messageId: 'noFromFloat' }],
         },
 
-        // 4. fromFloat() via @chimera alias import triggers
+        // 4. fromFloat() via @chimera-engine alias import triggers
         {
             filename: 'simulation/engine/DeterministicRng.ts',
             code: `${IMPORT_FIXED_POINT_ALIAS}\nconst v = fromFloat(1.0);`,

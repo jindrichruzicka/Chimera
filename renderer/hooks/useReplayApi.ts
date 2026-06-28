@@ -25,7 +25,7 @@ import type {
     ReplayNavigatePayload,
     ReplayPlaybackInfo,
     Unsubscribe,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Bridge accessor ───────────────────────────────────────────────────────────
 

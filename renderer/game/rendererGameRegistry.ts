@@ -1,13 +1,13 @@
 import type { ComponentType } from 'react';
-import type { GameLobbyScreenProps } from '@chimera/simulation/foundation/game-lobby-contract.js';
-import type { GameScreenRegistry } from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type {
     GameFontFace,
     GameMainMenuDefinition,
     GameMenuCommandId,
     GameSettingsPageDefinition,
-} from '@chimera/simulation/foundation/game-shell-contract.js';
-import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
+} from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type { InputAction } from '../input/InputAction.js';
 import { loadGameFonts } from './GameFontLoader';
 
@@ -62,7 +62,7 @@ export type RendererGameShellLoader = () => Promise<LoadedRendererGameShell>;
 /**
  * A consumer app's renderer-side contribution, injected at the renderer
  * composition root (the F62 `MainGameContribution` twin). The renderer host
- * (`@chimera/renderer`) ships no game-specific renderer code; a game enters the
+ * (`@chimera-engine/renderer`) ships no game-specific renderer code; a game enters the
  * renderer exclusively by registering one of these through
  * {@link registerRendererGame}. The two loaders keep the heavy game modules
  * behind dynamic `import()` so registration stays a cheap, eager side effect

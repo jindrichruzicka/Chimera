@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { LobbyState, PlayerId } from '@chimera/simulation/bridge/api-types.js';
+import type { LobbyState, PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { PlayerList } from '../../components/shell/PlayerList';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';

@@ -3,8 +3,8 @@
  *
  * `verify:changeset-policy` — the bump-policy cascade gate (issue #805, F66).
  *
- * Changesets drives independent per-package semver for the `@chimera/*` hierarchy,
- * but it cannot encode our one non-negotiable rule: `@chimera/simulation` is the
+ * Changesets drives independent per-package semver for the `@chimera-engine/*` hierarchy,
+ * but it cannot encode our one non-negotiable rule: `@chimera-engine/simulation` is the
  * zero-dependency leaf, so a breaking change to it is genuinely MAJOR and must
  * propagate a major to every inward consumer (Appendix C.4 / Invariant #1). Left to
  * its defaults, Changesets would only PATCH-bump dependents to keep their pinned
@@ -14,7 +14,7 @@
  * This gate reads the pending `.changeset/*.md`, merges their declared releases
  * (strongest bump wins), and asserts the cascade: if a PUBLISHABLE package is given a
  * `major`, every publishable package that depends on it — directly or transitively —
- * must also be `major`. Private packages (the `@chimera/tactics` reference app) are
+ * must also be `major`. Private packages (the `@chimera-engine/tactics` reference app) are
  * exempt: Changesets auto-bumps them and they publish nothing, so they make no semver
  * promise to protect.
  *
@@ -22,7 +22,7 @@
  *   tsx tools/changeset-policy.ts --self-test # negative gate (must detect a synthetic violation)
  *
  * Invariants upheld:
- *   #1  — the cascade keeps the inward `@chimera/*` DAG's semver honest: a simulation
+ *   #1  — the cascade keeps the inward `@chimera-engine/*` DAG's semver honest: a simulation
  *         break forces a major on every consumer, never a masked patch.
  *   #2  — lives in `tools/`; the pure surface imports only node builtins; the CLI entry
  *         lazy-imports `node:fs`/`node:path` — never a package or app.
@@ -44,13 +44,13 @@ export interface ChangesetManifest {
     readonly optionalDependencies?: Record<string, string>;
 }
 
-/** The internal `@chimera/*` dependency graph (external deps dropped). */
+/** The internal `@chimera-engine/*` dependency graph (external deps dropped). */
 export interface DepGraph {
-    /** Every `@chimera/*` package the graph knows about. */
+    /** Every `@chimera-engine/*` package the graph knows about. */
     readonly packages: readonly string[];
     /** Packages marked `private: true` (exempt from the major-cascade requirement). */
     readonly privatePackages: ReadonlySet<string>;
-    /** pkg → the set of `@chimera/*` packages it directly depends on. */
+    /** pkg → the set of `@chimera-engine/*` packages it directly depends on. */
     readonly dependsOn: ReadonlyMap<string, ReadonlySet<string>>;
 }
 
@@ -71,7 +71,7 @@ export interface CascadeViolation {
     readonly actual: BumpType | 'none';
 }
 
-const SCOPE_PREFIX = '@chimera/';
+const SCOPE_PREFIX = '@chimera-engine/';
 
 function isBumpType(value: string): value is BumpType {
     return value === 'patch' || value === 'minor' || value === 'major';
@@ -126,8 +126,8 @@ export function parseChangeset(content: string): ParsedChangeset {
 }
 
 /**
- * Build the internal `@chimera/*` dependency graph from a set of manifests. Only
- * edges to other `@chimera/*` packages in the same set are kept (external deps like
+ * Build the internal `@chimera-engine/*` dependency graph from a set of manifests. Only
+ * edges to other `@chimera-engine/*` packages in the same set are kept (external deps like
  * `zod`/`react` are dropped); `dependencies`, `peerDependencies`, and
  * `optionalDependencies` all count, since each makes a consumer break when the
  * dependency breaks.
@@ -215,7 +215,7 @@ export interface VerifyChangesetPolicyDeps {
     /** Absolute paths of the pending `.changeset/*.md` files (README excluded). */
     readonly listChangesetFiles: () => Promise<readonly string[]>;
     readonly readFile: (file: string) => Promise<string>;
-    /** The manifests of every `@chimera/*` package (publishable + private). */
+    /** The manifests of every `@chimera-engine/*` package (publishable + private). */
     readonly readManifests: () => Promise<readonly ChangesetManifest[]>;
     readonly log: (message: string) => void;
 }
@@ -264,12 +264,15 @@ export function verifyChangesetPolicySelfTest(deps: {
     log: (message: string) => void;
 }): Promise<VerifyChangesetPolicyResult> {
     const graph = buildDepGraph([
-        { name: '@chimera/simulation' },
-        { name: '@chimera/ai', dependencies: { '@chimera/simulation': 'workspace:*' } },
+        { name: '@chimera-engine/simulation' },
+        {
+            name: '@chimera-engine/ai',
+            dependencies: { '@chimera-engine/simulation': 'workspace:*' },
+        },
     ]);
     // simulation majored, dependent ai left un-bumped — the cascade MUST catch this.
-    const violations = cascadeViolations({ '@chimera/simulation': 'major' }, graph);
-    const detected = violations.some((v) => v.pkg === '@chimera/ai');
+    const violations = cascadeViolations({ '@chimera-engine/simulation': 'major' }, graph);
+    const detected = violations.some((v) => v.pkg === '@chimera-engine/ai');
     deps.log(
         detected
             ? 'verify:changeset-policy --self-test — PASS: the cascade detected the under-bumped dependent.'
@@ -295,7 +298,7 @@ if (process.env['VITEST'] === undefined) {
         const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
         const log = (message: string): void => console.log(`[verify:changeset-policy] ${message}`);
 
-        // Every @chimera/* package: the 5 publishable engine packages plus the private
+        // Every @chimera-engine/* package: the 5 publishable engine packages plus the private
         // tactics app, so the graph is complete and tactics is correctly exempted.
         const PACKAGE_DIRS = [
             'simulation',

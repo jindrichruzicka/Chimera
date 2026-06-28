@@ -21,7 +21,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import type { ReplayListItem } from '@chimera/simulation/bridge/api-types.js';
+import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
 import { Badge, Button, Caption, Heading } from '../../components/ui';
 import { useReplayApi } from '../../hooks/useReplayApi';
 import { resolveShellGameId } from '../../shell/resolveMainMenuGameId';

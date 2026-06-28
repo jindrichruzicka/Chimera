@@ -9,7 +9,10 @@ import {
     screen as electronScreen,
     session,
 } from 'electron';
-import { CLEAN_EXIT_IPC_CHANNEL, IS_DEBUG_MODE } from '@chimera/simulation/foundation/constants.js';
+import {
+    CLEAN_EXIT_IPC_CHANNEL,
+    IS_DEBUG_MODE,
+} from '@chimera-engine/simulation/foundation/constants.js';
 // Type-only import — erased at compile time, so the debug-bridge module graph
 // stays out of the production bundle (Invariant #27); the runtime import is
 // the dynamic one behind the IS_DEBUG_MODE gate in main().
@@ -17,7 +20,7 @@ import type { DebugBridge } from './debug-bridge.js';
 import {
     MalformedAssetRefError,
     parseAssetRef,
-} from '@chimera/simulation/foundation/asset-ref-parse.js';
+} from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
 import {
     registerGameHandlers,
     registerLobbyHandlers,
@@ -57,7 +60,7 @@ import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
     JsonSaveSerializer,
     createDefaultMigrator,
-} from '@chimera/simulation/persistence/index.js';
+} from '@chimera-engine/simulation/persistence/index.js';
 import { createMainGameRegistry, type MainGameContribution } from './game/mainGameRegistry.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
 import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
@@ -65,13 +68,13 @@ import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/api
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobbySetupRegistry.js';
 import { loadAllGameContent, toGameContent } from './content/loadGameContent.js';
-import type { ContentDatabase } from '@chimera/simulation/content/index.js';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
+import type { ContentDatabase } from '@chimera-engine/simulation/content/index.js';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import {
     DEFAULT_WINDOW_TITLE,
     resolveTickerHz,
     resolveWindowTitle,
-} from '@chimera/simulation/foundation/game-manifest-contract.js';
+} from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
 import { buildHostSessionPipeline, type ReplayPort } from './runtime/HostSessionPipeline.js';
@@ -87,8 +90,8 @@ import type { PerspectiveReplayStartHeader } from './replay/PerspectiveReplayMan
 import { PerspectiveReplayPlaybackManager } from './replay/PerspectiveReplayPlaybackManager.js';
 import { FilePerspectiveReplayRepository } from './replay/FilePerspectiveReplayRepository.js';
 import { CompressedPerspectiveReplaySerializer } from './replay/CompressedReplaySerializer.js';
-import { JsonReplaySerializer, ReplayMigrator } from '@chimera/simulation/replay/index.js';
-import type { PerspectiveReplayFrame } from '@chimera/simulation/replay/index.js';
+import { JsonReplaySerializer, ReplayMigrator } from '@chimera-engine/simulation/replay/index.js';
+import type { PerspectiveReplayFrame } from '@chimera-engine/simulation/replay/index.js';
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,
@@ -107,7 +110,7 @@ import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { ChatRelay } from './ChatRelay.js';
 import { ChatHub } from './ChatHub.js';
-import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';
+import { LocalWebSocketProvider } from '@chimera-engine/networking/provider/local/LocalWebSocketProvider.js';
 import type {
     ClientTransport,
     LobbyAgentSlot,
@@ -115,7 +118,7 @@ import type {
     LobbyState,
     Unsubscribe,
     PlayerSnapshot as WirePlayerSnapshot,
-} from '@chimera/networking';
+} from '@chimera-engine/networking';
 import {
     GAME_REVEAL_CHANNEL,
     GAME_SNAPSHOT_CHANNEL,
@@ -137,23 +140,23 @@ import {
     type DeviceProbeWatcher,
     type ScreenPort,
 } from './device-probe.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import {
     CommitmentVerificationError,
     DefaultStateProjector,
     toCommitmentId,
     type CommitmentReveal,
     type PlayerSnapshot,
-} from '@chimera/simulation/projection/index.js';
-import { AgentManager, HumanPlayerAgent } from '@chimera/ai/engine';
-import { SimulationHost } from '@chimera/simulation/host';
+} from '@chimera-engine/simulation/projection/index.js';
+import { AgentManager, HumanPlayerAgent } from '@chimera-engine/ai/engine';
+import { SimulationHost } from '@chimera-engine/simulation/host';
 import {
     registerE2eHooks,
     getE2eHooks,
@@ -161,12 +164,12 @@ import {
     type E2eHooks,
 } from './runtime/e2e-hooks.js';
 import { assertProductionDebugGuard, assertProductionDevHarnessGuard } from './startup-guard.js';
-import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import {
     localProfileId,
     type PlayerProfile,
     type ProfileRepository,
-} from '@chimera/simulation/profile/ProfileSchema.js';
+} from '@chimera-engine/simulation/profile/ProfileSchema.js';
 import {
     buildRendererGameLaunchUrl,
     CHIMERA_RENDERER_HOST,
@@ -695,7 +698,7 @@ export interface RegisterClientRevealForwardingOptions {
 
 // ─── SaveManager lifecycle wiring ─────────────────────────────────────────────
 
-import type { SaveSlotMeta } from '@chimera/simulation/persistence/SaveRepository.js';
+import type { SaveSlotMeta } from '@chimera-engine/simulation/persistence/SaveRepository.js';
 
 /**
  * Narrow slice of `Electron.App` required by the SaveManager lifecycle hook.
@@ -2829,5 +2832,5 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
 // The Electron entry point is the consumer app composition root
 // (apps/tactics/electron/main.ts): it constructs the game contribution(s) and
 // calls `main(contributions)`. `index.ts`
-// (this file, the `@chimera/electron` package's `./main` surface) names no game
+// (this file, the `@chimera-engine/electron` package's `./main` surface) names no game
 // and no longer self-bootstraps.

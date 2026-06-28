@@ -4,12 +4,12 @@
  * ESLint rule: chimera/no-main-provider-internals
  *
  * Forbids `electron/main` orchestration modules from importing a
- * provider-specific subdirectory of `@chimera/networking`. Orchestration must
+ * provider-specific subdirectory of `@chimera-engine/networking`. Orchestration must
  * talk to networking exclusively through the public barrel interfaces
  * (`MultiplayerProvider` / `HostTransport` / `ClientTransport`); the concrete
  * providers (`provider/local/*`, `provider/steam/*`, and their `server/`/
  * `client/` internals, plus the `InMemoryMultiplayerProvider` test double) stay
- * package-internal. This enforces Invariant #47 across the `@chimera/networking`
+ * package-internal. This enforces Invariant #47 across the `@chimera-engine/networking`
  * boundary (issue #769) and reaffirms #38 (`LobbyManager` is constructed with an
  * injected `MultiplayerProvider`; no orchestration module names a concrete
  * provider) and #39 (`StateBroadcaster`/`MessageRouter` go through the transport
@@ -56,13 +56,13 @@ function isGuardedMainFile(filename: string): boolean {
 }
 
 /**
- * True if `source` reaches into a `@chimera/networking` provider internal rather
- * than the public surface. The public surface is the barrel (`@chimera/networking`,
+ * True if `source` reaches into a `@chimera-engine/networking` provider internal rather
+ * than the public surface. The public surface is the barrel (`@chimera-engine/networking`,
  * no `provider/` segment) and the interface module (`provider/MultiplayerProvider`);
  * everything else under `provider/` — `local/`, `steam/`, their `server/`/`client/`
  * internals, and the `InMemoryMultiplayerProvider` test double — is internal.
  *
- * Matches both the package specifier (`@chimera/networking/provider/…`) and any
+ * Matches both the package specifier (`@chimera-engine/networking/provider/…`) and any
  * relative/bare path navigating into `networking/provider/…`.
  */
 function isProviderInternalImport(source: string): boolean {
@@ -86,11 +86,11 @@ const rule: Rule.RuleModule = {
         type: 'problem',
         docs: {
             description:
-                'Forbid electron/main orchestration modules from importing @chimera/networking provider internals (provider/local/*, provider/steam/*, server/client). Orchestration uses the public barrel interfaces only.',
+                'Forbid electron/main orchestration modules from importing @chimera-engine/networking provider internals (provider/local/*, provider/steam/*, server/client). Orchestration uses the public barrel interfaces only.',
         },
         messages: {
             mainProviderInternals:
-                'electron/main must not import a @chimera/networking provider internal (provider/local/*, provider/steam/*, or their server/client). Use the public barrel @chimera/networking (MultiplayerProvider/HostTransport/ClientTransport); the concrete provider is wired only in the composition root electron/main/index.ts (Invariant #38/#47).',
+                'electron/main must not import a @chimera-engine/networking provider internal (provider/local/*, provider/steam/*, or their server/client). Use the public barrel @chimera-engine/networking (MultiplayerProvider/HostTransport/ClientTransport); the concrete provider is wired only in the composition root electron/main/index.ts (Invariant #38/#47).',
         },
         schema: [],
     },

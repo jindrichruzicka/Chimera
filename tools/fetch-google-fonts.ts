@@ -6,7 +6,7 @@ import type {
     GameFontDisplay,
     GameFontFace,
     GameFontStyle,
-} from '@chimera/simulation/foundation/game-shell-contract.js';
+} from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 
 export interface FontFetchResponse {
     readonly ok: boolean;

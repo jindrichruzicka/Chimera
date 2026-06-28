@@ -10,8 +10,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
-import { playerId } from '@chimera/simulation/engine/types.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
+import { playerId } from '@chimera-engine/simulation/engine/types.js';
 import { AIBrain } from './AIBrain.js';
 import type { AIStateMachine } from './AIStateMachine.js';
 import type { CommandContext } from './CommandContext.js';

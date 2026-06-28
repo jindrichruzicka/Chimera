@@ -10,9 +10,9 @@ import {
     playerId,
     type LobbyState,
     type PlayerSnapshot,
-} from '@chimera/simulation/bridge/api-types.js';
-import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager } from '../../assets/AssetManager';
 import GamePage from './page';

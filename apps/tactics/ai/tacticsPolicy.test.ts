@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_BOARD_MAX_X,
@@ -25,11 +25,11 @@ import {
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera/tactics/constants.js';
-import type { EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
-import { entityId, playerId } from '@chimera/simulation/engine/types.js';
-import type { PlayerSnapshot, CommandContext, CommandScheduler } from '@chimera/ai';
-import type { EngineAction } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/tactics/constants.js';
+import type { EntityId, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { entityId, playerId } from '@chimera-engine/simulation/engine/types.js';
+import type { PlayerSnapshot, CommandContext, CommandScheduler } from '@chimera-engine/ai';
+import type { EngineAction } from '@chimera-engine/simulation/engine/types.js';
 import { createTacticsAIState, decideTacticsAction } from './tacticsPolicy.js';
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────

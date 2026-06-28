@@ -15,19 +15,19 @@
  *   #67 — Constructed with injected dependencies; no raw console.* calls.
  */
 
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import type {
     EngineSettings,
     GameSettingsSchema,
     ResolvedSettings,
     SettingsRepository,
     UserSettings,
-} from '@chimera/simulation/settings/index.js';
+} from '@chimera-engine/simulation/settings/index.js';
 import {
     ENGINE_DEFAULTS,
     SettingsNamespaceCollisionError,
     SettingsMerger,
-} from '@chimera/simulation/settings/index.js';
+} from '@chimera-engine/simulation/settings/index.js';
 
 /** Top-level engine namespace keys that game schemas must not shadow (invariant #35). */
 const ENGINE_NAMESPACE_KEYS = new Set(['audio', 'display', 'gameplay', 'controls']);
@@ -80,7 +80,7 @@ function mergeUserOverrides(
 
 // SettingsNamespaceCollisionError is defined in simulation/settings/SettingsSchema.ts
 // and re-exported from simulation/settings/index.ts — imported above.
-export { SettingsNamespaceCollisionError } from '@chimera/simulation/settings/index.js';
+export { SettingsNamespaceCollisionError } from '@chimera-engine/simulation/settings/index.js';
 
 /** Optional broadcast callback type — avoids importing Electron in this module. */
 export type BroadcastFn = (gameId: string, settings: ResolvedSettings) => void;

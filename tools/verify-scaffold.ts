@@ -3,22 +3,22 @@
  *
  * `verify:scaffold` — the scaffold-and-smoke gate (issue #801, F65).
  *
- * `verify:pack` proves the packed `@chimera/*` surfaces resolve. This gate proves the
+ * `verify:pack` proves the packed `@chimera-engine/*` surfaces resolve. This gate proves the
  * NEXT link in the chain: that `create-chimera-game` token-substitutes those packages
  * into a genuinely BOOTABLE app — not just files that look right. It generates a game
  * OUTSIDE the workspace and runs the generated app's own unit smoke + e2e boot-smoke
- * against it, so a broken token map, a missing public `@chimera/*` export, or a renderer
+ * against it, so a broken token map, a missing public `@chimera-engine/*` export, or a renderer
  * barrel regression surfaces here as a scaffold boot failure. It doubles as an
- * end-to-end regression net for the `@chimera/*` packages.
+ * end-to-end regression net for the `@chimera-engine/*` packages.
  *
- *   1. `pnpm build:packages`          — emit every `@chimera/*` `dist/`
+ *   1. `pnpm build:packages`          — emit every `@chimera-engine/*` `dist/`
  *   2. `pnpm pack` per package        — one tarball per engine package
  *   3. `create-chimera-game <probe> --out <tmp>` — the CLI EMITS the whole standalone project into
  *      the temp dir: the app at `<tmp>/apps/<kebab>` PLUS the project root it ships (a toolchain
  *      `package.json`, `pnpm-workspace.yaml`, a `node_modules`-resolving `vitest.config.mts`, and
  *      a `tsconfig.json` carrying the frozen root `compilerOptions`). The gate verifies the EXACT
  *      bytes the published CLI emits — it no longer synthesizes the root itself.
- *   4. layer the gate's `pnpm.overrides` onto the CLI-emitted root + rewrite the app's `@chimera/*`
+ *   4. layer the gate's `pnpm.overrides` onto the CLI-emitted root + rewrite the app's `@chimera-engine/*`
  *      deps onto the packed tarballs, so the whole DAG resolves through the locally-built
  *      artifacts instead of the (unpublished) npm ranges the CLI emitted
  *   5. `pnpm install`                 — install the tarballs + toolchain into `<tmp>`
@@ -34,10 +34,10 @@
  * invoked explicitly via `pnpm verify:scaffold` / `pnpm verify:scaffold:selftest`.
  *
  * Invariants upheld:
- *   #1  — a GENERATED consumer composes the acyclic, inward `@chimera/*` DAG end-to-end.
+ *   #1  — a GENERATED consumer composes the acyclic, inward `@chimera-engine/*` DAG end-to-end.
  *   #2  — lives in `tools/`; imports node builtins + the side-effect-free `verify-shared` and the
- *         sibling `create-chimera-game/standalone` pure synthesizers (no `@chimera/*`).
- *   #47 — the generated app resolves `@chimera/*` ONLY through public `exports` (tarballs +
+ *         sibling `create-chimera-game/standalone` pure synthesizers (no `@chimera-engine/*`).
+ *   #47 — the generated app resolves `@chimera-engine/*` ONLY through public `exports` (tarballs +
  *         a node_modules-resolving vitest config), never an internal subpath.
  *   #96 — a dropped public renderer barrel/export surfaces as a scaffold smoke failure.
  */
@@ -90,7 +90,7 @@ export interface VerifyScaffoldOptions {
 export const PROBE_GAME = {
     name: 'Verify Scaffold Probe',
     kebab: 'verify-scaffold-probe',
-    pkg: '@chimera/verify-scaffold-probe',
+    pkg: '@chimera-engine/verify-scaffold-probe',
 } as const;
 
 /** Thrown by a step runner on a non-zero exit so the orchestrator can report which step failed. */
@@ -117,7 +117,7 @@ function assertStepOk(step: VerifyScaffoldStep, result: RunResult): void {
 
 /**
  * `pnpm pack` rewrites each tarball's internal `workspace:*` edges to a concrete version,
- * which is unpublished — so force every `@chimera/*` resolution onto its `file:<tarball>`
+ * which is unpublished — so force every `@chimera-engine/*` resolution onto its `file:<tarball>`
  * via `pnpm.overrides`. This guarantees the DAG resolves ONLY through the packed `exports`.
  */
 export function buildPnpmOverrides(
@@ -132,7 +132,7 @@ export function buildPnpmOverrides(
 
 /**
  * Layer the gate's tarball overrides onto the published-form standalone root manifest. The
- * create-chimera-game CLI emits a root whose `@chimera/*` edges resolve from npm (no overrides);
+ * create-chimera-game CLI emits a root whose `@chimera-engine/*` edges resolve from npm (no overrides);
  * the gate re-resolves every edge onto its packed `file:<tarball>` so it verifies the EXACT bytes
  * the CLI ships against the locally-built (unpublished) artifacts. Pure; `overrides` is placed
  * first to mirror the historical key order. The input is always the published (override-free)
@@ -152,8 +152,8 @@ export function applyTarballOverrides(
 }
 
 /**
- * Rewrite the generated app's `@chimera/*` `workspace:*` deps onto `file:<tarball>`. The
- * standalone root has no `@chimera/*` workspace members, so a surviving `workspace:*` spec
+ * Rewrite the generated app's `@chimera-engine/*` `workspace:*` deps onto `file:<tarball>`. The
+ * standalone root has no `@chimera-engine/*` workspace members, so a surviving `workspace:*` spec
  * would make `pnpm install` reject the app; pointing each at its tarball resolves it through
  * the packed `exports`.
  */
@@ -165,7 +165,7 @@ export function rewriteAppChimeraDeps(
     const deps = pkg.dependencies ?? {};
     for (const name of Object.keys(deps)) {
         const tgz = tarballs[name];
-        if (name.startsWith('@chimera/') && tgz !== undefined) {
+        if (name.startsWith('@chimera-engine/') && tgz !== undefined) {
             deps[name] = `file:${tgz}`;
         }
     }
@@ -256,7 +256,7 @@ async function scaffoldPipeline(
     await deps.fs.mkdir(tarballsDir);
 
     // 1. build
-    deps.log('building @chimera/* packages…');
+    deps.log('building @chimera-engine/* packages…');
     assertStepOk('build', deps.run('pnpm', ['build:packages'], { cwd: deps.repoRoot }));
 
     // 2. pack
@@ -268,7 +268,7 @@ async function scaffoldPipeline(
     //    the root itself.
     assertStepOk('scaffold', scaffoldProbe(deps, tmp));
 
-    // 4. layer tarball overrides onto the CLI-emitted root, and rewrite the app's @chimera/* deps
+    // 4. layer tarball overrides onto the CLI-emitted root, and rewrite the app's @chimera-engine/* deps
     //    onto the packed tarballs, so the whole DAG resolves through the locally-built artifacts
     //    instead of the (unpublished) npm ranges the CLI emitted.
     const rootPkgPath = path.join(tmp, 'package.json');
@@ -294,7 +294,7 @@ async function scaffoldPipeline(
 
     // 7. e2e boot-smoke. The EMITTED app's `test:e2e` script self-sets
     //    `CHIMERA_VERIFY_PACK_NODE_MODULES=node_modules` (via cross-env), so build-main bundles the
-    //    Electron host + preload from the app's own installed `@chimera/electron` (no monorepo
+    //    Electron host + preload from the app's own installed `@chimera-engine/electron` (no monorepo
     //    `electron/` source exists here). The gate passes no env of its own — it validates exactly
     //    the shipped script behaviour.
     if (options.skipE2e !== true) {
@@ -305,7 +305,7 @@ async function scaffoldPipeline(
 // ── Orchestration ──────────────────────────────────────────────────────────────
 
 /**
- * The positive gate: scaffold a game out-of-workspace from the packed `@chimera/*` and run
+ * The positive gate: scaffold a game out-of-workspace from the packed `@chimera-engine/*` and run
  * its unit + e2e smoke. Cleans up the throwaway in `finally`, even on failure.
  */
 export async function verifyScaffold(

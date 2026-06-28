@@ -1,8 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useRef } from 'react';
-import type { PlayerId, PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
-import type { SendAction } from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { PlayerId, PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { SendAction } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { useFade } from '../shell/FadeContext.js';
 
 export interface UseFadeTransitionOptions {

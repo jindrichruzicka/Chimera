@@ -4,8 +4,8 @@
 // board uses `parseRevealedTurn` to turn an opaque verified reveal into the
 // committed turn it animates; malformed or absent reveals yield null.
 
-import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+import { TACTICS_MOVE_UNIT_ACTION } from '@chimera-engine/tactics/constants.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { describe, expect, it } from 'vitest';
 
 import { parseRevealedTurn } from './revealView.js';

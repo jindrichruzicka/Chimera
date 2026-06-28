@@ -13,7 +13,7 @@ function isErrorEntry(entry: RendererConsoleEntry): boolean {
 
 /**
  * Boot-smoke: the one e2e spec a freshly scaffolded game ships. It proves the
- * generated consumer composes the inward @chimera/* DAG into a runnable Electron app
+ * generated consumer composes the inward @chimera-engine/* DAG into a runnable Electron app
  * (Invariant #1): the main window opens, the preload bridge exposes window.__chimera
  * (Invariant #5 — exposed only through preload/api.ts), and the shared renderer shell
  * reaches its first screen. Every assertion targets engine-shell seams that exist in a

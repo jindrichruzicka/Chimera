@@ -19,7 +19,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
 import type { Logger } from './logger.js';
 
 // ── public constants ────────────────────────────────────────────────────────────

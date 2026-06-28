@@ -5,11 +5,11 @@
 // `GameScreenProps` (the projected `snapshot`, `localPlayerId`, and `sendAction`
 // to dispatch game actions); this stub ignores them and just renders. Game
 // screens may import the renderer only through its public component barrels —
-// `@chimera/renderer/components/ui` and `@chimera/renderer/components/chat`
+// `@chimera-engine/renderer/components/ui` and `@chimera-engine/renderer/components/chat`
 // (Invariant #96).
 
 import React from 'react';
-import { Caption, Heading, Panel } from '@chimera/renderer/components/ui';
+import { Caption, Heading, Panel } from '@chimera-engine/renderer/components/ui';
 
 export default function __GamePascal__Board(): React.ReactElement {
     return (

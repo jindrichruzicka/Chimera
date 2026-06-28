@@ -31,11 +31,11 @@ import type {
     LocalProfileId,
     PlayerProfile,
     ProfileRepository,
-} from '@chimera/simulation/profile/ProfileSchema.js';
+} from '@chimera-engine/simulation/profile/ProfileSchema.js';
 import {
     localProfileId as toLocalProfileId,
     EngineProfileSchema,
-} from '@chimera/simulation/profile/ProfileSchema.js';
+} from '@chimera-engine/simulation/profile/ProfileSchema.js';
 
 /** Extension used for persisted profile files. */
 const FILE_EXT = '.json';

@@ -1,5 +1,5 @@
 {
-    "name": "@chimera/electron",
+    "name": "@chimera-engine/electron",
     "version": "0.9.0",
     "description": "Electron main + preload host wrapper composing the Chimera engine into a desktop app.",
     "license": "MIT",
@@ -62,10 +62,10 @@
         }
     },
     "dependencies": {
-        "@chimera/simulation": "workspace:*",
-        "@chimera/ai": "workspace:*",
-        "@chimera/networking": "workspace:*",
-        "@chimera/renderer": "workspace:*",
+        "@chimera-engine/simulation": "workspace:*",
+        "@chimera-engine/ai": "workspace:*",
+        "@chimera-engine/networking": "workspace:*",
+        "@chimera-engine/renderer": "workspace:*",
         "pino": "^10.3.1",
         "zod": "^4.3.6"
     }

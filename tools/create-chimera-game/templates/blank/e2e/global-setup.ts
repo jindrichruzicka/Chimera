@@ -15,10 +15,10 @@ import { buildAppBundles } from '../electron/build-main';
  *     — the SAME bundler `build:app` runs in production — into the `.e2e-build/` layout
  *     the launch fixture loads.
  *
- * `@chimera/*` path aliases are resolved by `buildAppBundles` (the Electron process has
- * no tsconfig-paths support at runtime). The preload is resolved from `@chimera/electron`'s
+ * `@chimera-engine/*` path aliases are resolved by `buildAppBundles` (the Electron process has
+ * no tsconfig-paths support at runtime). The preload is resolved from `@chimera-engine/electron`'s
  * package `exports` (the way a consumer reaches it), mirroring the app's own
- * `electron/build-main.ts` CLI. No debug preload is bundled: `@chimera/electron/preload/debug-api`
+ * `electron/build-main.ts` CLI. No debug preload is bundled: `@chimera-engine/electron/preload/debug-api`
  * is not a public export (Invariant #27).
  */
 export default function globalSetup(): void {
@@ -62,14 +62,14 @@ export default function globalSetup(): void {
             });
         },
         readJson: (file) => JSON.parse(readFileSync(file, 'utf8')) as { name?: string },
-        // Resolve the host preload through `@chimera/electron`'s package `exports`: from the
+        // Resolve the host preload through `@chimera-engine/electron`'s package `exports`: from the
         // throwaway tarball install in verify:pack mode, otherwise from this app's own deps.
         resolvePreload: (nodeModules) => {
             const fromPackageJson =
                 nodeModules !== undefined
                     ? path.join(path.dirname(nodeModules), 'package.json')
                     : path.join(appDir, 'package.json');
-            return createRequire(fromPackageJson).resolve('@chimera/electron/preload/api');
+            return createRequire(fromPackageJson).resolve('@chimera-engine/electron/preload/api');
         },
         env: process.env,
         root,

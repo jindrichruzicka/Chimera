@@ -5,7 +5,7 @@ import {
     type AssetKind,
     type AssetRef,
     type AudioClipAsset,
-} from '@chimera/simulation/content/AssetRef.js';
+} from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager, ResolvedAsset } from '../assets/AssetManager';
 import { useSettingsStore } from '../state/settingsStore';

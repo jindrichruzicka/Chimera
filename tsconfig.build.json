@@ -1,6 +1,6 @@
 {
     // Solution-style config for `tsc -b tsconfig.build.json` (issue #756): dependency-
-    // ordered, incremental compilation of the composite @chimera/* packages off their
+    // ordered, incremental compilation of the composite @chimera-engine/* packages off their
     // per-package tsconfig.build.json files. `tsc --build` derives the order from the
     // reference graph and skips up-to-date projects via each package's dist/.tsbuildinfo,
     // so a second run with no source changes is a no-op.
@@ -11,7 +11,7 @@
     // simulation/ai/networking/renderer; tactics (apps/tactics) references
     // simulation/ai/renderer. The result stays acyclic: nothing points back out to a
     // sibling above it, and the two layer-2 nodes never reference each other. The chat
-    // barrel's type-only `@chimera/electron/preload/api-types` back-edge is resolved by
+    // barrel's type-only `@chimera-engine/electron/preload/api-types` back-edge is resolved by
     // renderer/tsconfig.build.json onto electron SOURCE via a `paths` alias (NOT a
     // project reference), so it never closes a renderer → electron reference cycle.
     // `tsc --build` derives the order from the reference graph (simulation →

@@ -5,12 +5,12 @@
  * (§4.6 / §8).
  *
  * The branded `CommitmentId` and the envelope/reveal payload shapes live in
- * `@chimera/simulation/foundation` — the zero-dependency foundation leaf — so the foundation
+ * `@chimera-engine/simulation/foundation` — the zero-dependency foundation leaf — so the foundation
  * can describe the projected snapshot and screen contracts (which carry
  * commitments) without importing *up* into `simulation`. The runtime scheme —
  * `toCommitmentId`, the `CommitmentScheme` interface and `DefaultCommitmentScheme`
  * implementation — stays in `simulation/projection/CommitmentScheme.ts`, which
- * re-exports these three types so `@chimera/simulation/projection` remains the
+ * re-exports these three types so `@chimera-engine/simulation/projection` remains the
  * unchanged public import path.
  *
  * This module is PURE TYPE DECLARATIONS only — zero runtime code, zero workspace

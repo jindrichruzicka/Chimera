@@ -33,12 +33,15 @@ import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { CURRENT_SCHEMA_VERSION, type SaveFile } from '@chimera/simulation/persistence/index.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import {
+    CURRENT_SCHEMA_VERSION,
+    type SaveFile,
+} from '@chimera-engine/simulation/persistence/index.js';
 import {
     DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY,
     DEFAULT_SCENE_TRANSITION_TIMEOUT_TICKS,
-} from '@chimera/simulation/scene/SceneRegistry.js';
+} from '@chimera-engine/simulation/scene/SceneRegistry.js';
 import {
     CommitmentVerificationError,
     DefaultCommitmentScheme,
@@ -50,7 +53,7 @@ import {
     type CommitmentScheme,
     type RevealStagingPort,
     type StagedReveals,
-} from '@chimera/simulation/projection/index.js';
+} from '@chimera-engine/simulation/projection/index.js';
 import type { SaveRequest } from '../../preload/api-types.js';
 
 /**

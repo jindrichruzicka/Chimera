@@ -9,9 +9,9 @@ import ts from 'typescript';
  * Structural guard for the `tsc -b` project-reference graph (issue #756).
  *
  * `tsc --build` drives dependency-ordered incremental compilation of the composite
- * @chimera/* packages off the root solution config `tsconfig.build.json`. The reference
+ * @chimera-engine/* packages off the root solution config `tsconfig.build.json`. The reference
  * graph MUST mirror the acyclic, inward `workspace:*` dependency graph (Invariant #1):
- * the core points inward toward `@chimera/simulation` and never back out to a sibling or
+ * the core points inward toward `@chimera-engine/simulation` and never back out to a sibling or
  * the app layer (electron/tactics). This test pins that shape so a stray `references`
  * entry — or a per-package build config drifting from its real workspace deps — fails
  * here instead of silently corrupting the build order.
@@ -48,7 +48,7 @@ const COMPOSITE_PACKAGE_DIRS = [...ENGINE_PACKAGE_DIRS, ...APP_PACKAGE_DIRS] as 
 
 /**
  * Source-only app-layer packages that must NEVER be a project reference (Invariant #1).
- * `@chimera/electron` graduated to a composite build in F62 (#777); the tactics consumer
+ * `@chimera-engine/electron` graduated to a composite build in F62 (#777); the tactics consumer
  * app (`apps/tactics`) graduated in F63 (#782). None remain source-only today.
  */
 const APP_LAYER_PACKAGE_DIRS = [] as const;
@@ -59,7 +59,7 @@ const APP_LAYER_PACKAGE_DIRS = [] as const;
  * Same-rank (sibling) or higher-rank (back-edge) references would form a cycle or escape
  * the core.
  *
- * `apps/tactics` is the LAYER-3 consumer app (#791): it sits ABOVE `@chimera/electron`
+ * `apps/tactics` is the LAYER-3 consumer app (#791): it sits ABOVE `@chimera-engine/electron`
  * (layer 2) and may reference it. This is sound because, since the game-agnosticism work
  * (#784/#788/#789), no engine package statically imports a game — electron and renderer
  * reach the game only by runtime registration — so `apps/tactics` is a pure sink (depends
@@ -121,7 +121,7 @@ function referencedPackageDirs(config: TsconfigShape, configDir: string): string
         .sort();
 }
 
-/** Composite @chimera/* runtime dependencies of a package, expressed as package dirs. */
+/** Composite @chimera-engine/* runtime dependencies of a package, expressed as package dirs. */
 function compositeDependencyDirs(packageDir: string): string[] {
     // @chimera-review: intentional filesystem read — structural guard; mocking defeats the purpose
     const pkg = JSON.parse(
@@ -140,7 +140,7 @@ function compositeDependencyDirs(packageDir: string): string[] {
         .sort();
 }
 
-/** Map every workspace `@chimera/*` package name to its directory (relative to repo root). */
+/** Map every workspace `@chimera-engine/*` package name to its directory (relative to repo root). */
 const CHIMERA_NAME_TO_DIR: ReadonlyMap<string, string> = new Map(
     [...COMPOSITE_PACKAGE_DIRS, ...APP_LAYER_PACKAGE_DIRS].map((dir) => {
         const pkg = JSON.parse(readFileSync(path.join(repoRoot, dir, 'package.json'), 'utf8')) as {

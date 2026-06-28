@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback } from 'react';
-import type { EngineAction } from '@chimera/simulation/bridge/api-types.js';
+import type { EngineAction } from '@chimera-engine/simulation/bridge/api-types.js';
 import { usePerfStore } from '../components/shell/perf/perfStore.js';
 
 export type SendAction = (action: EngineAction) => void;

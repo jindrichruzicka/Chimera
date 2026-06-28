@@ -1,5 +1,5 @@
 {
-    // Type-check / editor / ESLint project for @chimera/simulation.
+    // Type-check / editor / ESLint project for @chimera-engine/simulation.
     //
     // This is the config typescript-eslint's project service and the root
     // `typecheck` script use for the package: it covers ALL of simulation/ —
@@ -8,7 +8,7 @@
     // (which excludes test files). noEmit — purely a verification/editor project.
     //
     // No path aliases are needed: every intra-package import is relative, so
-    // `@chimera/simulation/*` never appears inside simulation/ and the package's
+    // `@chimera-engine/simulation/*` never appears inside simulation/ and the package's
     // own exports map never redirects a same-package import to dist.
     "extends": "../tsconfig.json",
     "compilerOptions": {

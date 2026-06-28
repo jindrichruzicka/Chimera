@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { copyRendererCss } from './copy-renderer-css';
 
 /**
- * `tsc` does not copy or transform CSS, so the @chimera/renderer dist build (issue
+ * `tsc` does not copy or transform CSS, so the @chimera-engine/renderer dist build (issue
  * #773) relies on this script to place every barrel `*.module.css` — plus the
  * design-token stylesheet — next to the compiled JS in dist/, preserving each
  * file's path relative to the renderer root. The tests drive a fixture renderer

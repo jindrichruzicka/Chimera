@@ -4,8 +4,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import {
+    gamePhase,
+    playerId,
+    type PlayerSnapshot,
+} from '@chimera-engine/simulation/bridge/api-types.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import type { AssetManager } from '../../assets/AssetManager';
 import { useAssetManager } from '../../assets/AssetManagerContext.js';
 import { SetGameAssetManagerContext } from '../../assets/SetGameAssetManagerContext';

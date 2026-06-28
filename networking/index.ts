@@ -1,5 +1,5 @@
 /**
- * Public contract surface of `@chimera/networking`.
+ * Public contract surface of `@chimera-engine/networking`.
  *
  * The package root (`.`) exposes the pluggable multiplayer abstraction's
  * provider/transport INTERFACES plus the supporting contract types consumers
@@ -9,7 +9,7 @@
  * through this barrel (Invariant #47); the host reaches a concrete provider
  * through the `./*.js` subpath escape hatch, never the curated root.
  *
- * Importing `@chimera/networking` evaluates NO concrete-provider runtime — no
+ * Importing `@chimera-engine/networking` evaluates NO concrete-provider runtime — no
  * `provider/local/`, `provider/steam/`, or `ws` module is pulled in. The barrel
  * does carry three small runtime VALUES that are part of the provider contract
  * and live in the otherwise type-only contract module: the `playerId` brand
@@ -17,7 +17,7 @@
  * `isBrowsable` type-narrowing guard. Asserted by
  * `networking/__tests__/contract-barrel-side-effects.test.ts`.
  *
- * `@chimera/networking` depends on `@chimera/simulation` only (+ `ws`) and
+ * `@chimera-engine/networking` depends on `@chimera-engine/simulation` only (+ `ws`) and
  * carries no React or DOM (Invariant #1).
  */
 export type {

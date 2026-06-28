@@ -22,16 +22,16 @@ import {
     decodeFrameStream,
     DEFAULT_KEYFRAME_INTERVAL,
 } from './CompressedReplaySerializer.js';
-import { serializeReplay } from '@chimera/simulation/replay/index.js';
-import { ReplayParseError } from '@chimera/simulation/replay/index.js';
+import { serializeReplay } from '@chimera-engine/simulation/replay/index.js';
+import { ReplayParseError } from '@chimera-engine/simulation/replay/index.js';
 import type {
     ReplayFile,
     PerspectiveReplayFile,
     PerspectiveReplayFrame,
-} from '@chimera/simulation/replay/index.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/index.js';
-import { gamePhase } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/replay/index.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/index.js';
+import { gamePhase } from '@chimera-engine/simulation/engine/types.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

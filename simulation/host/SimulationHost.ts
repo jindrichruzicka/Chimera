@@ -13,7 +13,7 @@
  * The host is deliberately free of any Electron, DOM, IPC, AI, or networking
  * dependency: it talks to its agent collaborator only through the
  * {@link AgentCoordinator} port (dependency inversion), so it instantiates and
- * runs in a plain Node/test context. `@chimera/ai`'s `AgentManager` is the
+ * runs in a plain Node/test context. `@chimera-engine/ai`'s `AgentManager` is the
  * production implementation of that port.
  *
  * Architecture reference: Appendix C.3 / §C.4 — Composable SimulationHost;
@@ -22,7 +22,7 @@
  *
  * Invariants upheld:
  *   #1  — the host adds no React/DOM/networking/AI dependency to the
- *          zero-dependency `@chimera/simulation` leaf.
+ *          zero-dependency `@chimera-engine/simulation` leaf.
  *   #16 — No direct dispatch channel to agents; all routing goes through the
  *          `AgentCoordinator`, which in turn calls only agent lifecycle methods.
  *   #17 — fan-out calls receive the `StateProjector`; honest agents receive a

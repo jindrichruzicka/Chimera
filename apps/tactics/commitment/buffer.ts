@@ -22,13 +22,13 @@
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §2, §6
  */
 
-import { createRng } from '@chimera/simulation/engine/DeterministicRng.js';
+import { createRng } from '@chimera-engine/simulation/engine/DeterministicRng.js';
 import type {
     BaseGameSnapshot,
     GameReduceContext,
     PlayerId,
     ValidationResult,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 
 import {
     TACTICS_ATTACK_ACTION,

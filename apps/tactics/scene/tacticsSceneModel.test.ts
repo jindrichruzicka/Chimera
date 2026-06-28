@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { GameSetupConfig } from '@chimera/simulation/foundation/game-lobby-contract.js';
+import type { GameSetupConfig } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     entityId,
     playerId,
     type EntityId,
     type PlayerId,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 import {
     gridToWorldPoint,
     parseTacticsAllSeatsCommitted,

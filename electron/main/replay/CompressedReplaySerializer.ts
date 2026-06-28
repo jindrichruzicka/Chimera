@@ -34,16 +34,16 @@ import {
     deserializeReplay,
     parsePerspectiveReplayFile,
     safeReviver,
-} from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
 import type {
     ReplayFile,
     ReplaySerializer,
     PerspectiveReplayFile,
     PerspectiveReplayFrame,
     PerspectiveReplaySerializer,
-} from '@chimera/simulation/replay/index.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import { ReplayParseError } from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import { ReplayParseError } from '@chimera-engine/simulation/replay/index.js';
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);

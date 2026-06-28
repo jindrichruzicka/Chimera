@@ -1,7 +1,7 @@
 /**
  * tools/watch-packages.ts
  *
- * Live package-development watch loop for the `@chimera/*` hierarchy (issue #793).
+ * Live package-development watch loop for the `@chimera-engine/*` hierarchy (issue #793).
  *
  * Drives the fluent dev loop that pairs with the first-class `pnpm build`:
  *
@@ -12,7 +12,7 @@
  *     `*.module.css` or `styles/tokens.css` changes, because `tsc --watch` emits
  *     JS + `.d.ts` only and never copies CSS.
  *
- * Because `apps/tactics` consumes the `@chimera/*` packages through pnpm
+ * Because `apps/tactics` consumes the `@chimera-engine/*` packages through pnpm
  * `workspace:*` symlinks, re-emitting a package's `dist/` is picked up by the
  * consumer app with no manual relink.
  *
@@ -154,7 +154,7 @@ if (process.env['VITEST'] === undefined) {
         process.on('SIGTERM', shutdown);
 
         console.log(
-            '[watch-packages] watching @chimera/* — tsc -b --watch tsconfig.build.json + renderer CSS copy…',
+            '[watch-packages] watching @chimera-engine/* — tsc -b --watch tsconfig.build.json + renderer CSS copy…',
         );
     })();
 }

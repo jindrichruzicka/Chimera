@@ -32,20 +32,24 @@ import type {
     LobbyAgentSlot,
     Unsubscribe,
     WireChatPayload,
-} from '@chimera/networking';
-import { JoinRejectedError } from '@chimera/networking';
-import type { EngineAction } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/networking';
+import { JoinRejectedError } from '@chimera-engine/networking';
+import type { EngineAction } from '@chimera-engine/simulation/engine/types.js';
 import type { Logger } from '../logging/logger.js';
 import type { ConnectionStatus, PlayerConnectionEvent } from '../../preload/api-types.js';
 import type { ProfileGate } from '../profile/ProfileGate.js';
 import type { ChatRelay } from '../ChatRelay.js';
-import type { ChatMessage, ChatScope, RelayResult } from '@chimera/simulation/foundation/chat.js';
+import type {
+    ChatMessage,
+    ChatScope,
+    RelayResult,
+} from '@chimera-engine/simulation/foundation/chat.js';
 import type { E2eHooks } from '../runtime/e2e-hooks.js';
-import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
+import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import {
     resolveMatchSettingsDefaults,
     resolvePlayerAttributeDefaults,
-} from '@chimera/simulation/foundation/game-lobby-contract.js';
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 export interface HostedSessionMetadata {
     readonly hostId: PlayerId;

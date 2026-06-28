@@ -6,7 +6,7 @@
  * vocabulary in one map ({@link GAME_TOKENS}) means content substitution, path renaming, and
  * the leftover-token check all agree on exactly which tokens exist.
  *
- * Pure module: no `fs`, no `process`, no CLI concerns, no `@chimera/*` imports.
+ * Pure module: no `fs`, no `process`, no CLI concerns, no `@chimera-engine/*` imports.
  */
 
 import type { GameNames } from './normalize';

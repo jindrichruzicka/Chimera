@@ -16,12 +16,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import type { ActionDefinition } from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import type { ReplayFile } from '@chimera/simulation/replay/index.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/index.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
+import type { ActionDefinition } from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { ReplayFile } from '@chimera-engine/simulation/replay/index.js';
+import type { VisibilityRules } from '@chimera-engine/simulation/projection/index.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 import { ReplayPlaybackManager } from './replay-playback-manager.js';
 

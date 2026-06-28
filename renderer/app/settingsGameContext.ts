@@ -1,4 +1,4 @@
-import type { SettingsAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { SettingsAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 import { loadRendererGame } from '../game/rendererGameRegistry';
 import type { InputAction } from '../input/InputAction.js';
 import type { InputActionRegistry } from '../input/InputActionRegistry.js';

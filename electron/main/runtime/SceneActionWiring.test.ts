@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { wireDefaultSceneActions } from './SceneActionWiring.js';
 
 describe('wireDefaultSceneActions', () => {

@@ -26,19 +26,19 @@
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §5
  */
 
-import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
+import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 import {
     CommitmentVerificationError,
     RevealStagingError,
     type CommitmentReveal,
     type CommitmentTurnOrchestration,
     type StagedReveals,
-} from '@chimera/simulation/projection/index.js';
+} from '@chimera-engine/simulation/projection/index.js';
 
 /**
  * The minimal slice of `SessionRuntime` the reveal driver needs. Declared as an

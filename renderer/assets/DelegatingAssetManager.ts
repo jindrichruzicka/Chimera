@@ -1,5 +1,5 @@
-import type { AssetKind, AssetRef } from '@chimera/simulation/content/AssetRef.js';
-import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
+import type { AssetKind, AssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 
 import type { AssetManager, ResolvedAsset } from './AssetManager';
 

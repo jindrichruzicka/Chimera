@@ -1,7 +1,7 @@
 {
     "name": "create-chimera-game",
     "version": "0.1.0",
-    "description": "Scaffold a new Chimera game — a self-contained project that installs @chimera/* from npm (default), or an in-monorepo app.",
+    "description": "Scaffold a new Chimera game — a self-contained project that installs @chimera-engine/* from npm (default), or an in-monorepo app.",
     "license": "MIT",
     "author": "Jindrich Ruzicka <ing.jindrich.ruzicka@gmail.com>",
     "homepage": "https://github.com/jindrichruzicka/Chimera#readme",

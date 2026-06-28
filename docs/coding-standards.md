@@ -46,4 +46,4 @@ tags:
 | [coding-standards-sections/testing.md](coding-standards-sections/testing.md)                             | §12     | TDD cycle, Vitest/Playwright toolchain, file conventions, coverage gates (80/80/75), test scope matrix     |
 | [coding-standards-sections/performance.md](coding-standards-sections/performance.md)                     | §13     | Simulation hot path (≤16 ms), IPC discipline, renderer memoisation, memory targets (≤32 MB)                |
 | [coding-standards-sections/git-commit-discipline.md](coding-standards-sections/git-commit-discipline.md) | §14     | Branch naming, first commit + `fixup!` structure, fast-forward-only merge policy                           |
-| [coding-standards-sections/toolchain-reference.md](coding-standards-sections/toolchain-reference.md)     | §15     | pnpm scripts, `@chimera/*` path aliases, Vitest `environmentMatchGlobs` config                             |
+| [coding-standards-sections/toolchain-reference.md](coding-standards-sections/toolchain-reference.md)     | §15     | pnpm scripts, `@chimera-engine/*` path aliases, Vitest `environmentMatchGlobs` config                      |

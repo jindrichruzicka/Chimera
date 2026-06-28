@@ -14,12 +14,12 @@
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §3, §4
  */
 
-import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/tactics/constants.js';
+import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera-engine/tactics/constants.js';
 import type {
     ActionDefinition,
     BaseGameSnapshot,
     ValidationResult,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 
 /** The commit action carries no payload — the acting player is the committer. */
 export type TacticsCommitPayload = Record<string, never>;

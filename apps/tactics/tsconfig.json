@@ -4,7 +4,7 @@
     // jsx:"preserve" + DOM/react libs for type-checking the screens/shell .tsx and
     // R3F scene. The composite `tsc -b` build (dist emit) lives in tsconfig.build.json.
     // electron/** (the app's Electron composition root, relocated here in F63/#783)
-    // is excluded: it imports @chimera/electron and is type-checked by the root flat
+    // is excluded: it imports @chimera-engine/electron and is type-checked by the root flat
     // `tsc --noEmit`, keeping this library check off the electron layer.
     // e2e/** (the Playwright suite, relocated here in F63/#785) is likewise excluded:
     // it is test infrastructure type-checked by the root flat `tsc --noEmit` (as it was

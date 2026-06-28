@@ -30,8 +30,8 @@
  *   #72 — Side-channel only; no tick advance, no ActionPipeline/ActionHistory.
  */
 
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
-import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
+import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js';
 
 import type { Logger } from './logging/logger.js';
 

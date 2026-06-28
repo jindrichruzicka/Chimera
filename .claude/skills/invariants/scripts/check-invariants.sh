@@ -74,20 +74,20 @@ check_grep() {
 
 # Game-import detection (engine allowlist).
 #
-# Games are now first-class `@chimera/<game>` packages (F57: `@chimera/tactics`
-# replaces the old `@chimera/games/tactics` alias) and will leave `games/`
-# entirely in F63 (→ `apps/tactics`). A `@chimera/<game>` specifier carries no
+# Games are now first-class `@chimera-engine/<game>` packages (F57: `@chimera-engine/tactics`
+# replaces the old `@chimera-engine/games/tactics` alias) and will leave `games/`
+# entirely in F63 (→ `apps/tactics`). A `@chimera-engine/<game>` specifier carries no
 # `/games/` substring and is indistinguishable from an engine package by shape,
-# so a game is identified by exclusion: any `@chimera/<pkg>` import whose `<pkg>`
+# so a game is identified by exclusion: any `@chimera-engine/<pkg>` import whose `<pkg>`
 # is NOT an engine package, plus any relative/bare `games/*` path.
 #
 # Usage in a pipeline: match a candidate-import RE below, then drop engine
 # packages with `grep -vE "${ENGINE_PKG_EXCLUDE_RE}"`.
-ENGINE_PKG_EXCLUDE_RE="@chimera/(shared|simulation|ai|networking|renderer|electron)[/'\"]"
-# Static `import … from`/`export … from` of a games/ path or any @chimera/ pkg.
-GAME_IMPORT_STATIC_RE="from ['\"][^'\"]*(games/|@chimera/)"
-# Static + dynamic `import('…')` of a games/ path or any @chimera/ pkg.
-GAME_IMPORT_ANY_RE="(from|import\()[[:space:]]*['\"][^'\"]*(games/|@chimera/)"
+ENGINE_PKG_EXCLUDE_RE="@chimera-engine/(shared|simulation|ai|networking|renderer|electron)[/'\"]"
+# Static `import … from`/`export … from` of a games/ path or any @chimera-engine/ pkg.
+GAME_IMPORT_STATIC_RE="from ['\"][^'\"]*(games/|@chimera-engine/)"
+# Static + dynamic `import('…')` of a games/ path or any @chimera-engine/ pkg.
+GAME_IMPORT_ANY_RE="(from|import\()[[:space:]]*['\"][^'\"]*(games/|@chimera-engine/)"
 
 # ─── Check 1 & 43: no Math.random / Date.now / performance.now in simulation or ai ───
 # Covers both invariant 2 (purity) and invariant 43 (no non-deterministic APIs).
@@ -106,8 +106,8 @@ check_grep "1" \
     simulation ai networking
 
 # ─── Check 4: simulation/ ai/ networking/ must not import a game ──────────────
-# A game is a relative/bare games/ path or a non-engine @chimera/<game> package
-# (e.g. @chimera/tactics); engine @chimera/* imports are filtered back out.
+# A game is a relative/bare games/ path or a non-engine @chimera-engine/<game> package
+# (e.g. @chimera-engine/tactics); engine @chimera-engine/* imports are filtered back out.
 for games_guard_dir in simulation ai networking; do
     [[ -d "${games_guard_dir}" ]] || continue
     while IFS= read -r match; do
@@ -303,7 +303,7 @@ fi
 # here. The constant half stays keyed to known game prefixes (TACTICS_) — there
 # is no false-positive-free way to detect "a game's constant" generically — so
 # extend the alternation as games are added. shared/ was absorbed into
-# @chimera/simulation (#758) and is currently a no-op; it is kept for parity
+# @chimera-engine/simulation (#758) and is currently a no-op; it is kept for parity
 # with the invariant text should the directory reappear.
 # networking/ is game-agnostic too but is intentionally NOT guarded here (#768):
 # the transport layer legitimately contains colon-namespaced NON-game literals —
@@ -330,17 +330,17 @@ for token_guard_dir in ai shared; do
 done
 
 # ─── Check 13: shared/ is the zero-dependency foundation leaf (invariant 1) ───
-# `@chimera/shared` is the foundation/contract layer and must point inward only —
+# `@chimera-engine/shared` is the foundation/contract layer and must point inward only —
 # it must not import from simulation, ai, networking, renderer, or electron.
 # Relocate the contract type into shared and re-export from the old home instead
-# (issue #758). Cross-package imports use `@chimera/<pkg>` specifiers; the leading
-# `@chimera/shared` package is excluded by listing only the forbidden packages.
+# (issue #758). Cross-package imports use `@chimera-engine/<pkg>` specifiers; the leading
+# `@chimera-engine/shared` package is excluded by listing only the forbidden packages.
 check_grep "1" \
-    "from ['\"]@chimera/(simulation|ai|networking|renderer|electron)[/'\"]" \
+    "from ['\"]@chimera-engine/(simulation|ai|networking|renderer|electron)[/'\"]" \
     shared
 
 # ─── Check 14: networking/ exposes provider interfaces only (invariant 47) ────
-# `@chimera/networking`'s sole source top-level members are provider/ (the
+# `@chimera-engine/networking`'s sole source top-level members are provider/ (the
 # pluggable abstraction + the internal concrete providers), __tests__/ (the
 # boundary + side-effect smoke tests), index.ts (the curated barrel exposing the
 # provider/transport INTERFACES only), and the generated dist/ build output
@@ -365,7 +365,7 @@ if [[ -d networking ]]; then
 fi
 
 # ─── Check 15: electron/main orchestration imports the networking barrel only (invariant 47)
-# Main-process orchestration must talk to @chimera/networking through the public
+# Main-process orchestration must talk to @chimera-engine/networking through the public
 # barrel interfaces (MultiplayerProvider/HostTransport/ClientTransport) only; it
 # must never reach into a provider-specific subdirectory (provider/local/*,
 # provider/steam/*, or their server/client internals) — provider-internal
@@ -399,13 +399,13 @@ fi
 # game-agnostic too (#784): the registry became a runtime injection point
 # (registerRendererGame) and the tactics loaders moved to the consumer app
 # (apps/tactics/renderer/register.ts). None of these may import a games/* module
-# or a @chimera/<game> package directly — a game's renderer contribution enters
+# or a @chimera-engine/<game> package directly — a game's renderer contribution enters
 # only at the consumer-app composition root, selected by the
 # chimera-game-registration build alias. The lobby page may parse LobbyConfig via
-# @chimera/simulation helpers (engine, allowed). Mirrors the ESLint
+# @chimera-engine/simulation helpers (engine, allowed). Mirrors the ESLint
 # renderer/** game-import ban + chimera/no-shell-games-import and the host-side
-# Check 7 (#80); locks the boundary across the @chimera/renderer package cut
-# (issues #774, #784). Matches static + dynamic specifiers; engine @chimera/*
+# Check 7 (#80); locks the boundary across the @chimera-engine/renderer package cut
+# (issues #774, #784). Matches static + dynamic specifiers; engine @chimera-engine/*
 # packages and comment lines are filtered out. No file is exempt — the renderer
 # registry seam is scanned alongside the shell pages.
 SHELL_PAGE_DIRS=(
@@ -436,8 +436,8 @@ done
 # ─── Check 17: game renderer surfaces use only the public ui/chat barrels (inv 96)
 # A game's React surfaces — games/<name>/screens/*.tsx and
 # games/<name>/shell/*.tsx — may reach the shared library ONLY through the two
-# public barrels @chimera/renderer/components/ui and
-# @chimera/renderer/components/chat. Every other @chimera/renderer/* specifier
+# public barrels @chimera-engine/renderer/components/ui and
+# @chimera-engine/renderer/components/chat. Every other @chimera-engine/renderer/* specifier
 # (stores, IPC bridges, shell/, R3F, hooks, asset managers, stylesheets, or a
 # deep component-file path behind either barrel) is a renderer internal and is
 # forbidden. Mirrors the ESLint rule chimera/no-game-renderer-internals, which
@@ -448,7 +448,7 @@ done
 # `.../ui` and `.../ui/index.js` pass while `.../ui/Button.js` is flagged. Bare
 # `renderer/` paths are intentionally NOT matched: a game's own renderer/ helper
 # (games/<name>/renderer/*) is not a boundary crossing.
-RENDERER_BARREL_RE="@chimera/renderer/components/(ui|chat)(/index(\.(ts|js))?)?['\"]"
+RENDERER_BARREL_RE="@chimera-engine/renderer/components/(ui|chat)(/index(\.(ts|js))?)?['\"]"
 GAME_SURFACE_DIRS=()
 for surface_dir in games/*/screens games/*/shell; do
     [[ -d "${surface_dir}" ]] && GAME_SURFACE_DIRS+=("${surface_dir}")
@@ -461,7 +461,7 @@ if [[ ${#GAME_SURFACE_DIRS[@]} -gt 0 ]]; then
             --include="*.tsx" --include="*.jsx" \
             --exclude="*.test.tsx" --exclude="*.test.jsx" \
             --exclude-dir="fixtures" --exclude-dir="node_modules" \
-            "(from|import\()[[:space:]]*['\"]@chimera/renderer/" "${GAME_SURFACE_DIRS[@]}" 2>/dev/null \
+            "(from|import\()[[:space:]]*['\"]@chimera-engine/renderer/" "${GAME_SURFACE_DIRS[@]}" 2>/dev/null \
         | grep -vE ':[[:space:]]*(//|/\*|\*)' \
         | grep -vE "${RENDERER_BARREL_RE}" \
         || true

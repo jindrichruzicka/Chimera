@@ -5,8 +5,8 @@
  * `AgentManager` (its production `AgentCoordinator` implementation).
  *
  * Relocated from `electron/main/runtime/SimulationHost.test.ts` when the host
- * moved into `@chimera/simulation/host` (issue #760, feature F58). The host
- * itself can no longer live with a test that imports `@chimera/ai`
+ * moved into `@chimera-engine/simulation/host` (issue #760, feature F58). The host
+ * itself can no longer live with a test that imports `@chimera-engine/ai`
  * (`simulation/**` is the zero-dependency leaf), so the real-collaborator
  * assertions live here in `ai/`, where importing both the host and the
  * `AgentManager` is legal (`ai → simulation`). The host's own delegation
@@ -23,14 +23,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { SimulationHost } from '@chimera/simulation/host';
+import { SimulationHost } from '@chimera-engine/simulation/host';
 import { AgentManager } from './AgentManager.js';
-import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
+import type { StateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
-import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
+import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

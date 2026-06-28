@@ -16,7 +16,7 @@
 
 import { useEffect } from 'react';
 import { bootstrapSaveStore } from '../state/saveStoreBootstrap';
-import type { SavesAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { SavesAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 /**
  * Default game identifier used by the initial `list()` fetch when no

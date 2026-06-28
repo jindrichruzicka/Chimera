@@ -40,23 +40,23 @@ import type {
     BasePlayerState,
     EntityId,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 import {
     entityId as toEntityId,
     gamePhase,
     playerId as toPlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import { DefaultStateProjector } from '@chimera/simulation/projection/StateProjector.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
+import { DefaultStateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 import {
     assertNoLeakedFields,
     ObfuscationAssertionError,
-} from '@chimera/simulation/projection/assertNoLeakedFields.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/types.js';
-import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
-import type { PlayerSnapshot as WirePlayerSnapshot } from '@chimera/networking';
+} from '@chimera-engine/simulation/projection/assertNoLeakedFields.js';
+import type { VisibilityRules } from '@chimera-engine/simulation/projection/types.js';
+import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
+import type { PlayerSnapshot as WirePlayerSnapshot } from '@chimera-engine/networking';
 
 import { createNoopLogger } from '../logging/logger.js';
 import { StateBroadcaster } from '../runtime/StateBroadcaster.js';

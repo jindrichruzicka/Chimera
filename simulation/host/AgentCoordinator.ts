@@ -5,8 +5,8 @@
  *
  * `SimulationHost` drives a hosted session's player agents through this port,
  * never against a concrete implementation. This is the dependency-inversion
- * seam that keeps `@chimera/simulation` the zero-dependency engine leaf
- * (Invariant #1): the leaf OWNS the contract, while `@chimera/ai`'s
+ * seam that keeps `@chimera-engine/simulation` the zero-dependency engine leaf
+ * (Invariant #1): the leaf OWNS the contract, while `@chimera-engine/ai`'s
  * `AgentManager` IMPLEMENTS it — the dependency edge therefore points inward
  * (`ai → simulation`) and the host stays composable outside both Electron and
  * the AI framework.
@@ -17,7 +17,7 @@
  *
  * The port is generic over `TAgent` because the host only ever forwards the
  * agent value to `registerAgent`; it never inspects it. Concrete consumers
- * (Electron main) bind `TAgent` to `@chimera/ai`'s `PlayerAgent`.
+ * (Electron main) bind `TAgent` to `@chimera-engine/ai`'s `PlayerAgent`.
  */
 
 import type { StateProjector } from '../projection/StateProjector.js';

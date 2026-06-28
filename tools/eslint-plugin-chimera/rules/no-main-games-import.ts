@@ -25,8 +25,8 @@
  *
  * Glob-based `no-restricted-imports` is unreliable for deep `games/*` paths, so
  * this rule classifies the import source directly (as no-shell-games-import
- * does): any relative/bare `games/*` path, or any `@chimera/<pkg>` package that
- * is not on the engine allowlist (i.e. a game such as `@chimera/tactics`). It
+ * does): any relative/bare `games/*` path, or any `@chimera-engine/<pkg>` package that
+ * is not on the engine allowlist (i.e. a game such as `@chimera-engine/tactics`). It
  * covers every static and dynamic form that can pull in a module:
  * `import`, `export … from`, `export * from`, and dynamic `import('…')` with a
  * string-literal specifier — so the boundary cannot be bypassed by a lazy load.
@@ -54,7 +54,7 @@ function isGuardedMainFile(filename: string): boolean {
 
 /**
  * Engine packages — game-agnostic, always importable by the host. Every other
- * `@chimera/*` package is a game (e.g. `@chimera/tactics`) and is forbidden.
+ * `@chimera-engine/*` package is a game (e.g. `@chimera-engine/tactics`) and is forbidden.
  */
 const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
     'simulation',
@@ -67,19 +67,19 @@ const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
 /**
  * True if `source` imports from a game (rather than an engine package):
  *   - a relative/bare `games/*` path (`games/…`, `…/games/…`), or
- *   - a `@chimera/<pkg>` package whose `<pkg>` is NOT an engine package
- *     (e.g. `@chimera/tactics`).
+ *   - a `@chimera-engine/<pkg>` package whose `<pkg>` is NOT an engine package
+ *     (e.g. `@chimera-engine/tactics`).
  *
  * Detecting games by the engine allowlist — rather than the legacy `/games/`
  * directory substring — keeps the guard correct now that games are first-class
- * `@chimera/<game>` packages (F57) and once they move out of `games/` (F63).
+ * `@chimera-engine/<game>` packages (F57) and once they move out of `games/` (F63).
  */
 function isGamesImport(source: string): boolean {
     const n = source.replace(/\\/gu, '/');
     if (n.startsWith('games/') || n.includes('/games/')) {
         return true;
     }
-    const scoped = /^@chimera\/([^/]+)/u.exec(n);
+    const scoped = /^@chimera-engine\/([^/]+)/u.exec(n);
     if (scoped === null) {
         return false;
     }

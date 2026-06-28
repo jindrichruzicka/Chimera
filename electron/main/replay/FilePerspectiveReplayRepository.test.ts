@@ -15,15 +15,15 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { ReplayNotFoundError } from '@chimera/simulation/replay/index.js';
+import { ReplayNotFoundError } from '@chimera-engine/simulation/replay/index.js';
 import type {
     PerspectiveReplayFile,
     PerspectiveReplaySerializer,
-} from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
 import {
     makePerspectiveReplayFile,
     runPerspectiveReplayRepositoryContractTests,
-} from '@chimera/simulation/replay/__test-support__/perspectiveReplayRepositoryContractTests.js';
+} from '@chimera-engine/simulation/replay/__test-support__/perspectiveReplayRepositoryContractTests.js';
 import { CompressedPerspectiveReplaySerializer } from './CompressedReplaySerializer.js';
 import { ReplayPathError, InvalidGameIdError } from './FileReplayRepository.js';
 import { FilePerspectiveReplayRepository } from './FilePerspectiveReplayRepository.js';

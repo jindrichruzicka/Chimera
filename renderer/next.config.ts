@@ -22,7 +22,7 @@ interface WebpackConfig {
  *
  * SUPERSEDED AS THE GAME HOST (F65 Phase 2c): each consumer app now owns its OWN
  * Next host (`apps/<game>/renderer/`) that re-exports the engine shell from
- * `@chimera/renderer/shell/*` (the package now ships the whole shell from dist) and
+ * `@chimera-engine/renderer/shell/*` (the package now ships the whole shell from dist) and
  * binds its own game. `apps/tactics/renderer` is the production host the Electron
  * app loads; the e2e + verify:pack build that, not this config. This config is kept
  * only as a renderer-package-local dev preview of the shell (still bound to tactics
@@ -52,35 +52,35 @@ const nextConfig: NextConfig = {
     },
     webpack(rawConfig): WebpackConfig {
         const config = rawConfig as WebpackConfig;
-        // Resolve the still-in-source @chimera/* workspace packages onto their
+        // Resolve the still-in-source @chimera-engine/* workspace packages onto their
         // in-tree source dir for the Next build. F57 (#752) removed the root
         // tsconfig `paths` aliases, so these webpack aliases are the bundler's
-        // @chimera/* resolver for the packages that have no `dist/` build yet.
-        // `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`,
-        // `@chimera/renderer`, and `@chimera/electron` are intentionally NOT
+        // @chimera-engine/* resolver for the packages that have no `dist/` build yet.
+        // `@chimera-engine/simulation`, `@chimera-engine/ai`, `@chimera-engine/networking`,
+        // `@chimera-engine/renderer`, and `@chimera-engine/electron` are intentionally NOT
         // aliased: each is a built package (issues #759, #764, #768, #773, #777)
         // and Next resolves it through its `exports` map onto `<pkg>/dist`
         // (build-before-consume; `build:renderer` fronts `build:packages`, so the
         // dist builds exist before `next build`). In particular the chat barrel's
-        // `@chimera/electron/preload/api-types` type import now resolves onto
+        // `@chimera-engine/electron/preload/api-types` type import now resolves onto
         // electron/dist. The renderer app's own internals import relatively.
-        // `@chimera/tactics` lives under apps/tactics (relocated in F63 #782); its
+        // `@chimera-engine/tactics` lives under apps/tactics (relocated in F63 #782); its
         // dist/ is built but not yet consumed, so the renderer still aliases it onto
         // source — F64 flips this onto its exports map.
         config.resolve ??= { alias: {}, extensionAlias: {} };
         config.resolve.alias = {
             ...config.resolve.alias,
-            '@chimera/tactics': path.join(root, 'apps/tactics'),
+            '@chimera-engine/tactics': path.join(root, 'apps/tactics'),
             // The renderer's own Next build is the single bundle where the
             // renderer source AND the mounted games are linked together. The
-            // games reach shared renderer UI through the `@chimera/renderer`
+            // games reach shared renderer UI through the `@chimera-engine/renderer`
             // package surface, which resolves via the `exports` map onto
             // `renderer/dist`. The renderer app's own internals, however, import
             // those same modules relatively from source. Letting the two halves
             // resolve to two physical copies (dist + source) duplicates every
             // module-level singleton they carry — the EscapeStack React context
             // (provider mounted from source, consumers pulled from dist), the
-            // chat/lobby/toast Zustand stores, and the `@chimera/renderer/game`
+            // chat/lobby/toast Zustand stores, and the `@chimera-engine/renderer/game`
             // registration registry (apps/tactics registers into it, renderer
             // pages read from it) — so context identity breaks
             // (`useEscapeLayer() must be used within <EscapeStackProvider>`),
@@ -91,9 +91,9 @@ const nextConfig: NextConfig = {
             // holds exactly one instance of each. The `dist` build remains the
             // typecheck/contract surface; `*.css` subpaths stay on `dist`
             // (stylesheet duplication is inert).
-            '@chimera/renderer/components/ui': path.join(root, 'renderer/components/ui'),
-            '@chimera/renderer/components/chat': path.join(root, 'renderer/components/chat'),
-            '@chimera/renderer/game': path.join(root, 'renderer/game/rendererGameRegistry'),
+            '@chimera-engine/renderer/components/ui': path.join(root, 'renderer/components/ui'),
+            '@chimera-engine/renderer/components/chat': path.join(root, 'renderer/components/chat'),
+            '@chimera-engine/renderer/game': path.join(root, 'renderer/game/rendererGameRegistry'),
             // `renderer/**` source must name no game (#784). The renderer pulls in
             // the active game's renderer contribution through this synthetic,
             // build-selected specifier — the renderer twin of how `package.json`
@@ -101,7 +101,7 @@ const nextConfig: NextConfig = {
             // The alias is the one knob that binds the game-agnostic renderer
             // bundle to a concrete game; `apps/tactics/renderer/register.ts`'s
             // import side effect calls `registerRendererGame(...)`. The specifier
-            // is deliberately NOT a `@chimera/<pkg>` / `apps/*` / `games/*` token
+            // is deliberately NOT a `@chimera-engine/<pkg>` / `apps/*` / `games/*` token
             // (those are forbidden in renderer source by the boundary lint).
             'chimera-game-registration': path.join(root, 'apps/tactics/renderer/register.ts'),
         };

@@ -17,7 +17,7 @@
  */
 
 import { useEffect } from 'react';
-import type { PlayerLeftMatchEvent } from '@chimera/simulation/bridge/api-types.js';
+import type { PlayerLeftMatchEvent } from '@chimera-engine/simulation/bridge/api-types.js';
 import { getLobbyBridge } from '../../app/lobby/useLobbyApi';
 import { useToastStore } from '../../state/toastStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';

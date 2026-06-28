@@ -30,18 +30,18 @@ import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
 import type { HostSessionDebugPort } from '../runtime/HostSessionPipeline.js';
 import { startDebugBridge } from '../debug-bridge.js';
 import type { DebugInvokeEvent } from '../debug-bridge.js';
-import type { DebugResponse } from '@chimera/simulation/debug/index.js';
-import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import type { DebugResponse } from '@chimera-engine/simulation/debug/index.js';
+import type { StateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import type {
     ActionDefinition,
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import type { ActionHistoryEntry } from '@chimera/simulation/engine/UndoManager.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { ActionHistoryEntry } from '@chimera-engine/simulation/engine/UndoManager.js';
 import type { Logger } from '../logging/logger.js';
 import { FakeInspectorWindow } from '../__test-support__/debug-fakes.js';
 

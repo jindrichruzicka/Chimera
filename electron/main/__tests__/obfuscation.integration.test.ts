@@ -24,15 +24,15 @@ import type {
     BaseGameSnapshot,
     BasePlayerState,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { gamePhase, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import { DefaultStateProjector } from '@chimera/simulation/projection/StateProjector.js';
-import { assertNoLeakedFields } from '@chimera/simulation/projection/assertNoLeakedFields.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/types.js';
-import type { HostTransport } from '@chimera/networking';
+} from '@chimera-engine/simulation/engine/types.js';
+import { gamePhase, playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { DefaultStateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
+import { assertNoLeakedFields } from '@chimera-engine/simulation/projection/assertNoLeakedFields.js';
+import type { VisibilityRules } from '@chimera-engine/simulation/projection/types.js';
+import type { HostTransport } from '@chimera-engine/networking';
 import { createNoopLogger } from '../logging/logger.js';
 import { StateBroadcaster } from '../runtime/StateBroadcaster.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 
 // ──── Test data models ──────────────────────────────────────────────────────────
 

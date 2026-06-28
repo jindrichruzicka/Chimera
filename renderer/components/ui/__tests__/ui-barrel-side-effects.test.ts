@@ -1,7 +1,7 @@
 /**
  * renderer/components/ui/__tests__/ui-barrel-side-effects.test.ts
  *
- * Asserts the `@chimera/renderer/components/ui` public barrel is
+ * Asserts the `@chimera-engine/renderer/components/ui` public barrel is
  * SIDE-EFFECT-FREE (issue #772, AC #3: "Importing each barrel is side-effect-free
  * — no store/bridge/R3F runtime evaluated").
  *
@@ -69,8 +69,8 @@ function importsRuntime(externals: ReadonlySet<string>, name: string): boolean {
     return [...externals].some((spec) => spec === name || spec.startsWith(`${name}/`));
 }
 
-describe('@chimera/renderer/components/ui barrel is side-effect-free (issue #772)', () => {
-    it('evaluates no store, no IPC bridge, and no React-Three-Fiber / @chimera sibling runtime', async () => {
+describe('@chimera-engine/renderer/components/ui barrel is side-effect-free (issue #772)', () => {
+    it('evaluates no store, no IPC bridge, and no React-Three-Fiber / @chimera-engine sibling runtime', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // metafile input paths are relative to the esbuild working dir, which is
@@ -89,7 +89,7 @@ describe('@chimera/renderer/components/ui barrel is side-effect-free (issue #772
         expect(importsRuntime(externals, 'three')).toBe(false);
         expect(importsRuntime(externals, '@react-three/fiber')).toBe(false);
         expect(importsRuntime(externals, 'zustand')).toBe(false);
-        expect(importsRuntime(externals, '@chimera/ai')).toBe(false);
-        expect(importsRuntime(externals, '@chimera/networking')).toBe(false);
+        expect(importsRuntime(externals, '@chimera-engine/ai')).toBe(false);
+        expect(importsRuntime(externals, '@chimera-engine/networking')).toBe(false);
     });
 });

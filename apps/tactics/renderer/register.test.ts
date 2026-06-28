@@ -4,7 +4,7 @@ import {
     getDefaultRendererGameId,
     loadRendererGame,
     loadRendererGameShell,
-} from '@chimera/renderer/game';
+} from '@chimera-engine/renderer/game';
 import { tacticsRendererContribution } from './register';
 
 describe('tactics renderer composition root', () => {

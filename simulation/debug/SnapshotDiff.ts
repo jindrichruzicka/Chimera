@@ -5,7 +5,7 @@
  * Diff View (§4.12 — Runtime Debug Layer).
  *
  * Invariant #31: lives in the debug-only module graph, loaded exclusively
- * under `IS_DEBUG_MODE` via the `@chimera/simulation/debug` subpath barrel.
+ * under `IS_DEBUG_MODE` via the `@chimera-engine/simulation/debug` subpath barrel.
  * Pure and deterministic — no I/O, no clock, no randomness, no imports
  * outside `simulation/`.
  *

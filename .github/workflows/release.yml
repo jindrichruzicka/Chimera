@@ -1,13 +1,13 @@
 name: Release
 
-# Publishes the @chimera/* engine packages AND the `create-chimera-game` initializer to npm on a
+# Publishes the @chimera-engine/* engine packages AND the `create-chimera-game` initializer to npm on a
 # version tag (F66). The initializer is a workspace member, so `changeset publish` picks it up
 # alongside the engine packages whenever its version is not yet on the registry; its `prepack`
 # (and the explicit build step below) bundle its `dist/index.mjs` bin from source first.
 #
 # Flow: run `pnpm changeset` to declare bumps, `pnpm version-packages` to apply them and
 # write per-package CHANGELOGs, commit, then push a release tag (Changesets emits per-package
-# tags like `@chimera/simulation@1.0.0`). That tag push triggers this workflow, which builds,
+# tags like `@chimera-engine/simulation@1.0.0`). That tag push triggers this workflow, which builds,
 # runs the true-artifact `verify:pack` gate, and `changeset publish`es every package whose
 # version is not yet on the registry.
 #
@@ -20,13 +20,13 @@ name: Release
 # here — the LOCAL `verify:pack` + `verify:publish` gates remain authoritative before a real
 # publish. It is the future automation layer and the executable record of the release steps.
 # Before the first real publish, configure the `NPM_TOKEN` repository secret (an npm automation
-# token with publish rights to the `@chimera` scope).
+# token with publish rights to the `@chimera-engine` scope).
 
 on:
   push:
     tags:
       - 'v*.*.*'
-      - '@chimera/*'
+      - '@chimera-engine/*'
 
 concurrency:
   group: release-${{ github.ref }}
@@ -38,7 +38,7 @@ permissions:
 
 jobs:
   publish:
-    name: Build, verify:pack, and publish @chimera/*
+    name: Build, verify:pack, and publish @chimera-engine/*
     runs-on: ubuntu-latest
     # build:packages + verify:pack packs every engine package and runs the Playwright e2e
     # against the packed artifacts (an out-of-workspace consumer install + Electron run),

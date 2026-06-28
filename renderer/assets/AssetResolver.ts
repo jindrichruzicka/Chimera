@@ -1,5 +1,5 @@
-import { parseAssetRef } from '@chimera/simulation/foundation/asset-ref-parse.js';
-import type { AssetRef } from '@chimera/simulation/content/AssetRef.js';
+import { parseAssetRef } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
+import type { AssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
 
 export interface AssetResolver {
     resolve(ref: AssetRef): string;

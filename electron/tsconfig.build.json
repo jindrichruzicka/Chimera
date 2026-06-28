@@ -1,5 +1,5 @@
 {
-    // Per-package build for @chimera/electron (issue #777, F62 — Appendix C.3/§3).
+    // Per-package build for @chimera-engine/electron (issue #777, F62 — Appendix C.3/§3).
     // Follows the split-tsconfig dist pattern established on the leaf in
     // simulation/tsconfig.build.json (#759) and copied by ai (#764), networking
     // (#768) and renderer (#773): composite emit under ./dist (JS + .d.ts + maps)
@@ -17,16 +17,16 @@
     // engine packages it depends on — simulation, ai, networking and renderer — so
     // `tsc --build` orders the build after them (Invariant #1). This stays acyclic:
     // electron imports nothing from renderer at runtime, and renderer's only edge to
-    // electron is the chat barrel's type-only `@chimera/electron/preload/api-types`
+    // electron is the chat barrel's type-only `@chimera-engine/electron/preload/api-types`
     // back-edge, which renderer/tsconfig.build.json resolves onto electron SOURCE via
     // a `paths` alias rather than a project reference — so there is no renderer →
     // electron reference and thus no TS6202 cycle (the build order is simulation →
     // ai/networking/renderer → electron).
     //
-    // `@chimera/electron` names no game: every game-specific seam now arrives by
+    // `@chimera-engine/electron` names no game: every game-specific seam now arrives by
     // runtime injection through `MainGameContribution` (mainGameRegistry in T2/#778;
     // content schemas + lobby setup in #788/#789), so the package no longer imports
-    // `@chimera/tactics` at all — there is no game reference, composite or
+    // `@chimera-engine/tactics` at all — there is no game reference, composite or
     // node_modules-symlink, to resolve. The consumer app composition root
     // (apps/tactics/electron/main.ts) is the sole place that names a game.
     "extends": "../tsconfig.json",

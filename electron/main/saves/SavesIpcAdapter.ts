@@ -38,8 +38,8 @@ import {
     type SaveRequest,
     type CrashRecoveryStatus,
 } from '../../preload/api-types.js';
-import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
-import type { SaveSlotMeta as SimSaveSlotMeta } from '@chimera/simulation/persistence/SaveRepository.js';
+import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
+import type { SaveSlotMeta as SimSaveSlotMeta } from '@chimera-engine/simulation/persistence/SaveRepository.js';
 import type { SavesIpcPort } from '../ipc/ipc-handlers.js';
 import type { Logger } from '../logging/logger.js';
 import type { SaveManager } from './SaveManager.js';

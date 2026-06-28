@@ -1,7 +1,7 @@
 // Renderer composition root — the renderer twin of electron/main.ts and the SOLE
 // renderer-side module that names this game. It builds the game's
 // `RendererGameContribution` and injects it into the game-agnostic renderer host
-// through `registerRendererGame`. The host (`@chimera/renderer`) ships no
+// through `registerRendererGame`. The host (`@chimera-engine/renderer`) ships no
 // game-specific renderer code; a game's renderer surfaces enter only here.
 //
 // The renderer selects this module by build config, not by source import:
@@ -10,7 +10,7 @@
 // single `import 'chimera-game-registration'` from the renderer's client
 // bootstrap populates the registry before any page reads it.
 
-import { registerRendererGame, type RendererGameContribution } from '@chimera/renderer/game';
+import { registerRendererGame, type RendererGameContribution } from '@chimera-engine/renderer/game';
 import { __GAME_CONSTANT___GAME_ID } from '../constants.js';
 import { load__GamePascal__RendererGame, load__GamePascal__RendererGameShell } from './loaders.js';
 

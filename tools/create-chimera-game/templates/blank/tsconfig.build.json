@@ -1,5 +1,5 @@
 {
-    // Composite `tsc -b` build for this @chimera/<game> consumer app. Follows the
+    // Composite `tsc -b` build for this @chimera-engine/<game> consumer app. Follows the
     // split-tsconfig dist pattern of the engine packages — composite emit under
     // ./dist (JS + .d.ts + maps), test files excluded.
     //
@@ -7,9 +7,9 @@
     // UNLIKE the editor config tsconfig.json which keeps jsx:"preserve".
     //
     // LAYER 3: a consumer APP — it depends on everything and nothing depends on it.
-    // It therefore sits ABOVE @chimera/electron (layer 2), not beside it. References
+    // It therefore sits ABOVE @chimera-engine/electron (layer 2), not beside it. References
     // mirror its composite workspace deps (simulation, ai, renderer, electron), so
-    // `tsc --build` orders the graph (Invariant #1). The @chimera/electron reference
+    // `tsc --build` orders the graph (Invariant #1). The @chimera-engine/electron reference
     // mirrors the package dep introduced by the app's Electron composition root
     // (electron/main.ts); that composition root is EXCLUDED from this composite's
     // emit (it is bundled by `build:app` / electron/build-main.ts and type-checked by
@@ -41,8 +41,8 @@
         "node_modules",
         "dist",
         "out",
-        // The Electron composition root (electron/main.ts) imports @chimera/electron
-        // and belongs to the standalone app, not the @chimera/<game> library — keep
+        // The Electron composition root (electron/main.ts) imports @chimera-engine/electron
+        // and belongs to the standalone app, not the @chimera-engine/<game> library — keep
         // it out of the layer-2 composite build (see header note).
         "electron/**",
         // The Playwright e2e suite is test infrastructure, not library source.

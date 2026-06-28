@@ -19,7 +19,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { KeyBinding, EngineBindings, GameBindingSchema } from './InputBindingSchema.js';
-import type { EngineSettings } from '@chimera/simulation/settings/index.js';
+import type { EngineSettings } from '@chimera-engine/simulation/settings/index.js';
 
 // ─── KeyBinding ───────────────────────────────────────────────────────────────
 

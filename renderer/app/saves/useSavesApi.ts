@@ -22,7 +22,7 @@ import type {
     SaveSlotMeta,
     SavesAPI,
     SlotId,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Bridge accessor ───────────────────────────────────────────────────────────
 

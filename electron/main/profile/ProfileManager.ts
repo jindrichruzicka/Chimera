@@ -23,7 +23,7 @@ import type {
     LocalProfileId,
     PlayerProfile,
     ProfileRepository,
-} from '@chimera/simulation/profile/ProfileSchema.js';
+} from '@chimera-engine/simulation/profile/ProfileSchema.js';
 
 // Convenience type: every PlayerProfile field except the immutable primary key.
 type PlayerProfilePatch = Partial<Omit<PlayerProfile, 'localProfileId'>>;

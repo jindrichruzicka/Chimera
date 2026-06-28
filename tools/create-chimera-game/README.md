@@ -8,7 +8,7 @@ default) or **wires it into this monorepo** (`--workspace`).
 ## Usage
 
 ```bash
-# Standalone (default) — a self-contained project that installs @chimera/* from npm.
+# Standalone (default) — a self-contained project that installs @chimera-engine/* from npm.
 # Published as `create-chimera-game`, so end users run:
 npm create chimera-game@latest <name>        # or: pnpm create chimera-game <name>
 
@@ -39,17 +39,17 @@ install + boot with no monorepo:
   plus a no-op `build:packages` and `pnpm.onlyBuiltDependencies` for electron/esbuild;
 - `pnpm-workspace.yaml` (`apps/*`), a self-contained `vitest.config.mts`, and a `tsconfig.json`
   carrying the frozen root `compilerOptions` the app's tsconfigs `extends`;
-- the app's `@chimera/*` deps rewritten from `workspace:*` onto their published `^x.y.z` ranges,
+- the app's `@chimera-engine/*` deps rewritten from `workspace:*` onto their published `^x.y.z` ranges,
   and `CHIMERA_VERIFY_PACK_NODE_MODULES` wired into its `build:app` / `test:e2e` scripts so the
-  Electron bundler resolves the host from the installed `@chimera/electron`.
+  Electron bundler resolves the host from the installed `@chimera-engine/electron`.
 
-Then `pnpm install` runs in the new project. Next: `cd <kebab>`, `pnpm --filter @chimera/<kebab> test`,
-`pnpm --filter @chimera/<kebab> build:app`.
+Then `pnpm install` runs in the new project. Next: `cd <kebab>`, `pnpm --filter @chimera-engine/<kebab> test`,
+`pnpm --filter @chimera-engine/<kebab> build:app`.
 
 **In-monorepo (`--workspace`).** Writes the app under this repo's `apps/<kebab>/` and registers it
-(mirroring `apps/tactics`): adds `@chimera/<kebab>: "workspace:*"` to the root `package.json`,
+(mirroring `apps/tactics`): adds `@chimera-engine/<kebab>: "workspace:*"` to the root `package.json`,
 appends a `tsconfig.build.json` reference and a `typecheck` line, then `pnpm install`. Next:
-`pnpm typecheck`, `pnpm --filter @chimera/<kebab> build:app`.
+`pnpm typecheck`, `pnpm --filter @chimera-engine/<kebab> build:app`.
 
 Both modes validate the name and resolve the template **before** any write, copy the tree
 (skipping `node_modules` / `dist` / `out` / `.next`), substitute tokens in contents + path
@@ -77,7 +77,7 @@ Legitimate dunders such as `__dirname` / `__filename` are **not** tokens and are
 - Pure tooling: imports only `node:*` and sibling modules — the pure
   [`normalize.ts`](./normalize.ts) / [`tokens.ts`](./tokens.ts) / [`standalone.ts`](./standalone.ts)
   and the generated [`toolchain.generated.ts`](./toolchain.generated.ts). It must **not** import
-  any `@chimera/*` package — boundary lint enforces this, keeping it publishable standalone.
+  any `@chimera-engine/*` package — boundary lint enforces this, keeping it publishable standalone.
 - `templates/<id>/` is bundled beside this CLI but is **not** a pnpm workspace member (it holds
   unsubstituted tokens); only after the copy into `apps/*` does the new app become a member.
 - The exported `scaffoldGame()` performs the copy + the per-mode finish (monorepo wiring or

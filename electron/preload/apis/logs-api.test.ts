@@ -1,6 +1,6 @@
 // electron/preload/logs-api.test.ts
 import { describe, it, expect, vi } from 'vitest';
-import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
 import { buildLogsApi, LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from './logs-api.js';
 
 const SAMPLE_ENTRY: LogEntry = {

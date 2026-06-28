@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
-import { playerId } from '@chimera/electron/preload/api-types.js';
+import { playerId } from '@chimera-engine/electron/preload/api-types.js';
 import { TacticsGameResultBanner } from './TacticsGameResultBanner.js';
 
 afterEach(() => {

@@ -2,7 +2,7 @@
  * electron/main/__tests__/eslint-import-boundary.test.ts
  *
  * ESLint smoke test for the provider-internal containment boundary that keeps
- * main-process orchestration depending on the `@chimera/networking` public barrel
+ * main-process orchestration depending on the `@chimera-engine/networking` public barrel
  * interfaces only (Invariant #47, issue #769).
  *
  * Runs ESLint programmatically against two fixtures and asserts the
@@ -63,7 +63,7 @@ function runEslint(fixtureName: string): ESLintMessage[] {
     return parsed[0]?.messages ?? [];
 }
 
-describe('ESLint import-boundary — electron/main orchestration imports the @chimera/networking barrel only (Invariant #47)', () => {
+describe('ESLint import-boundary — electron/main orchestration imports the @chimera-engine/networking barrel only (Invariant #47)', () => {
     it(
         'flags a provider-internal import (provider/local/*) from electron/main with chimera/no-main-provider-internals',
         () => {
@@ -75,7 +75,7 @@ describe('ESLint import-boundary — electron/main orchestration imports the @ch
     );
 
     it(
-        'does not flag the public barrel import (@chimera/networking) from electron/main',
+        'does not flag the public barrel import (@chimera-engine/networking) from electron/main',
         () => {
             const messages = runEslint('good-barrel-import.fixture.ts');
             const ruleIds = messages.filter((m) => m.ruleId !== null).map((m) => m.ruleId!);

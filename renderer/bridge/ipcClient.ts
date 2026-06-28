@@ -28,7 +28,7 @@ import type {
     EngineAction,
     PlayerSnapshot,
     Unsubscribe,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Port interface ────────────────────────────────────────────────────────────
 

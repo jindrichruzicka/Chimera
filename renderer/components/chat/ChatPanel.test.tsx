@@ -11,8 +11,8 @@ import { useChatStore } from '../../state/chatStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
 import { useToastStore } from '../../state/toastStore';
-import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
-import type { PlayerId } from '@chimera/simulation/bridge/api-types.js';
+import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js';
+import type { PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ─── Test helpers ───────────────────────────────────────────────────────────
 

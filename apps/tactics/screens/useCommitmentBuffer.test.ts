@@ -6,13 +6,13 @@
 // stamina). It reuses the pure kernel (`../commitment/buffer`) for all rules; the
 // store only holds state and a "committed" latch and resets per turn / match.
 
-import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
+import { TACTICS_MOVE_UNIT_ACTION } from '@chimera-engine/tactics/constants.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,
     EntityId,
-} from '@chimera/simulation/engine/types.js';
-import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { tacticsGridCoordinate } from '../actions.js';

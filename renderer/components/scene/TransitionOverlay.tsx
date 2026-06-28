@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import type { PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useFade, type FadePhase } from '../shell/FadeContext.js';
 
 export interface TransitionOverlayProps {

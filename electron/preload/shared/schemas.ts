@@ -22,8 +22,8 @@
 // elsewhere.
 
 import { z } from 'zod';
-import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
-import { toCommitmentId } from '@chimera/simulation/projection/index.js';
+import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import { toCommitmentId } from '@chimera-engine/simulation/projection/index.js';
 import { toSlotId, playerId } from '../api-types.js';
 import type {
     ActionRejection,

@@ -15,10 +15,10 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
-import { playerId, gamePhase } from '@chimera/simulation/engine/types.js';
-import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
+import { playerId, gamePhase } from '@chimera-engine/simulation/engine/types.js';
+import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
+import type { StateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { PlayerAgent, PlayerSnapshot, GameResult } from './PlayerAgent.js';
 import { HumanPlayerAgent } from './PlayerAgent.js';
 import { AgentManager } from './AgentManager.js';

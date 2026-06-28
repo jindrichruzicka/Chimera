@@ -1,4 +1,4 @@
-import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
+import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { TACTICS_GAME_ID } from './constants.js';
 

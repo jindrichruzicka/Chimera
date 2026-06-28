@@ -1,6 +1,6 @@
 import type * as os from 'node:os';
 import type * as nodeFs from 'node:fs';
-import type * as AiEngine from '@chimera/ai/engine';
+import type * as AiEngine from '@chimera-engine/ai/engine';
 
 import path from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -8,12 +8,12 @@ import type {
     LocalProfileId,
     PlayerProfile,
     ProfileRepository,
-} from '@chimera/simulation/profile/ProfileSchema.js';
+} from '@chimera-engine/simulation/profile/ProfileSchema.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
 
 interface ProjectorOptionsForTest {
@@ -186,7 +186,7 @@ const {
     };
 });
 
-vi.mock('@chimera/simulation/projection/index.js', () => ({
+vi.mock('@chimera-engine/simulation/projection/index.js', () => ({
     DefaultStateProjector: mockDefaultStateProjectorCtor,
     DefaultCommitmentScheme: vi.fn(() => ({
         commit: vi.fn(),
@@ -216,7 +216,7 @@ const { mockTacticsVisibilityRules } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@chimera/tactics/visibility-rules.js', () => ({
+vi.mock('@chimera-engine/tactics/visibility-rules.js', () => ({
     tacticsVisibilityRules: mockTacticsVisibilityRules,
 }));
 
@@ -231,7 +231,7 @@ const { mockAgentManagerCtor, mockAgentManagerInstance } = vi.hoisted(() => {
 
 // Partial-mock the public engine barrel: override AgentManager with the spy,
 // keep every other framework export (e.g. HumanPlayerAgent) real.
-vi.mock('@chimera/ai/engine', async (importActual) => ({
+vi.mock('@chimera-engine/ai/engine', async (importActual) => ({
     ...(await importActual<typeof AiEngine>()),
     AgentManager: mockAgentManagerCtor,
 }));
@@ -246,7 +246,7 @@ const { mockSimulationHostInstance } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@chimera/simulation/host', () => ({
+vi.mock('@chimera-engine/simulation/host', () => ({
     SimulationHost: vi.fn(() => mockSimulationHostInstance),
 }));
 
@@ -476,8 +476,8 @@ const {
     PERSPECTIVE_REPLAY_CLOSE_PLAYBACK_CHANNEL,
 } = await import('../preload/apis/perspective-replay-api.js');
 const { createNoopLogger } = await import('./logging/logger.js');
-const { ActionRegistry } = await import('@chimera/simulation/engine/ActionRegistry.js');
-const { entityId, playerId } = await import('@chimera/simulation/engine/types.js');
+const { ActionRegistry } = await import('@chimera-engine/simulation/engine/ActionRegistry.js');
+const { entityId, playerId } = await import('@chimera-engine/simulation/engine/types.js');
 const { ProfileManager } = await import('./profile/ProfileManager.js');
 const { SessionRuntime, SessionCommitmentRuntime } = await import('./runtime/SessionRuntime.js');
 const { ReplayManager } = await import('./replay/replay-manager.js');
@@ -493,17 +493,17 @@ const { PerspectiveReplayManager } = await import('./replay/PerspectiveReplayMan
 // Tactics modules are imported directly: test files are exempt from the
 // no-main-games-import boundary.
 const { registerTacticsActions, resolveTacticsFirstPlayer } =
-    await import('@chimera/tactics/actions.js');
-const { createTacticsAIState } = await import('@chimera/tactics/ai/tacticsPolicy.js');
-const { tacticsManifest } = await import('@chimera/tactics/manifest.js');
+    await import('@chimera-engine/tactics/actions.js');
+const { createTacticsAIState } = await import('@chimera-engine/tactics/ai/tacticsPolicy.js');
+const { tacticsManifest } = await import('@chimera-engine/tactics/manifest.js');
 const { tacticsCommitmentOrchestration } =
-    await import('@chimera/tactics/commitment/orchestration.js');
-const { tacticsResolveIsMyTurn } = await import('@chimera/tactics/commitment/turnGate.js');
-const { tacticsSettingsSchema } = await import('@chimera/tactics/settings-schema.js');
-const { TACTICS_GAME_ID } = await import('@chimera/tactics/constants.js');
+    await import('@chimera-engine/tactics/commitment/orchestration.js');
+const { tacticsResolveIsMyTurn } = await import('@chimera-engine/tactics/commitment/turnGate.js');
+const { tacticsSettingsSchema } = await import('@chimera-engine/tactics/settings-schema.js');
+const { TACTICS_GAME_ID } = await import('@chimera-engine/tactics/constants.js');
 const { TACTICS_CONTENT_SCHEMAS, paletteFromCollections } =
-    await import('@chimera/tactics/content/tacticsContent.js');
-const { buildTacticsLobbySetup } = await import('@chimera/tactics/lobby/lobby-setup.js');
+    await import('@chimera-engine/tactics/content/tacticsContent.js');
+const { buildTacticsLobbySetup } = await import('@chimera-engine/tactics/lobby/lobby-setup.js');
 
 function makeTestContributions(): MainGameContribution[] {
     return [
@@ -1496,7 +1496,7 @@ describe('main', () => {
             { hostId: playerId('host-1'), maxPlayers: 1 },
         );
 
-        const { AgentManager } = await import('@chimera/ai/engine');
+        const { AgentManager } = await import('@chimera-engine/ai/engine');
         expect(vi.mocked(AgentManager).mock.calls[0]?.[0]).toMatchObject({
             logger: expect.any(Object),
         });

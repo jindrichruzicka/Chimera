@@ -32,8 +32,8 @@ import type {
     ReplayListingEntry,
     ReplayRepository,
     ReplaySerializer,
-} from '@chimera/simulation/replay/index.js';
-import { ReplayNotFoundError } from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
+import { ReplayNotFoundError } from '@chimera-engine/simulation/replay/index.js';
 import { isInsidePath } from '../path-containment.js';
 
 /** Extension used for stored replay files. */

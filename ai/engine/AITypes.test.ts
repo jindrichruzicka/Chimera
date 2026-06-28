@@ -17,7 +17,7 @@
 
 import { describe, it, expect } from 'vitest';
 import type { AIParams, PlayerSnapshot } from './AITypes.js';
-import type { PlayerSnapshot as CanonicalPlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import type { PlayerSnapshot as CanonicalPlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 
 // ─── AIParams type constraints ────────────────────────────────────────────────
 

@@ -4,8 +4,8 @@
 // field is visible to everyone. Tighten it for hidden information (fog-of-war,
 // owner-only fields) by masking entities/player fields per viewer.
 
-import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/types.js';
+import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
+import type { VisibilityRules } from '@chimera-engine/simulation/projection/types.js';
 
 export const __gameCamel__VisibilityRules: VisibilityRules<BaseGameSnapshot> = {
     isEntityVisible(): boolean {

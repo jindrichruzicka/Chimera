@@ -11,8 +11,8 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { InMemorySettingsRepository } from '@chimera/simulation/settings/index.js';
-import type { SettingsRepository } from '@chimera/simulation/settings/index.js';
+import { InMemorySettingsRepository } from '@chimera-engine/simulation/settings/index.js';
+import type { SettingsRepository } from '@chimera-engine/simulation/settings/index.js';
 import { FileSettingsRepository, InvalidGameIdError } from './FileSettingsRepository.js';
 
 // ── Contract tests ────────────────────────────────────────────────────────────

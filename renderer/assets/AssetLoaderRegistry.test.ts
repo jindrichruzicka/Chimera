@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { type AssetKindBrand, buildAssetRef } from '@chimera/simulation/content/AssetRef.js';
+import { type AssetKindBrand, buildAssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import {
     createAssetLoaderRegistry,
@@ -14,7 +14,7 @@ interface RendererTestAsset extends AssetKindBrand<'renderer:test-asset'> {
     readonly __rendererTestAsset: unique symbol;
 }
 
-declare module '@chimera/simulation/foundation/asset-contract.js' {
+declare module '@chimera-engine/simulation/foundation/asset-contract.js' {
     interface AssetKindRegistry {
         readonly 'renderer:test-asset': RendererTestAsset;
     }

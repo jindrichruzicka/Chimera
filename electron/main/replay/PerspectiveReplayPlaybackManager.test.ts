@@ -19,9 +19,9 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { InMemoryPerspectiveReplayRepository } from '@chimera/simulation/replay/index.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import { playerId as toPlayerId, gamePhase } from '@chimera/simulation/engine/types.js';
+import { InMemoryPerspectiveReplayRepository } from '@chimera-engine/simulation/replay/index.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import { playerId as toPlayerId, gamePhase } from '@chimera-engine/simulation/engine/types.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 import type { MemorySink } from '../logging/logger.js';
 import { PerspectiveReplayManager } from './PerspectiveReplayManager.js';

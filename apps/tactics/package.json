@@ -1,5 +1,5 @@
 {
-    "name": "@chimera/tactics",
+    "name": "@chimera-engine/tactics",
     "version": "0.9.0",
     "private": true,
     "main": "dist/electron/main.js",
@@ -10,9 +10,9 @@
         "lint": "eslint ."
     },
     "dependencies": {
-        "@chimera/simulation": "workspace:*",
-        "@chimera/ai": "workspace:*",
-        "@chimera/renderer": "workspace:*",
-        "@chimera/electron": "workspace:*"
+        "@chimera-engine/simulation": "workspace:*",
+        "@chimera-engine/ai": "workspace:*",
+        "@chimera-engine/renderer": "workspace:*",
+        "@chimera-engine/electron": "workspace:*"
     }
 }

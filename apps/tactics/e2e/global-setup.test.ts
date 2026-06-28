@@ -1,6 +1,6 @@
 // apps/tactics/e2e/global-setup.test.ts
 //
-// The pure @chimera/* esbuild resolution helpers (computeEsbuildAlias /
+// The pure @chimera-engine/* esbuild resolution helpers (computeEsbuildAlias /
 // computeNodePaths) now live in the app-owned bundler and are unit-tested by
 // apps/tactics/electron/build-main.test.ts — global-setup delegates bundling to
 // `buildAppBundles`, so the only thing left to guard on the e2e side is that the

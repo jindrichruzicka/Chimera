@@ -3,17 +3,17 @@
 // The tactics renderer bundle loaders. Relocated out of
 // `renderer/game/rendererGameRegistry.ts` in #784 so that `renderer/**` names no
 // game: the renderer host became a runtime injection seam and the game's
-// renderer contribution now lives in the consumer app. The `@chimera/tactics`
+// renderer contribution now lives in the consumer app. The `@chimera-engine/tactics`
 // dynamic imports are kept (so the heavy screen/shell/font modules stay
 // code-split), rewritten as relative paths since this file is part of the
-// `@chimera/tactics` library build.
+// `@chimera-engine/tactics` library build.
 //
 // Font loading is intentionally NOT performed here: the renderer seam's
 // `loadRendererGame`/`loadRendererGameShell` wrappers call `loadGameFonts` on the
 // returned `shell.fonts`, keeping the renderer-internal `GameFontLoader` out of
-// this game package (it is not a public `@chimera/renderer` barrel).
+// this game package (it is not a public `@chimera-engine/renderer` barrel).
 
-import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera/renderer/game';
+import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera-engine/renderer/game';
 
 export async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     const [screenModule, assetManifestModule, shell] = await Promise.all([

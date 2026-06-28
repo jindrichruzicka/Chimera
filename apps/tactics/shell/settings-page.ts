@@ -8,7 +8,7 @@
 // Module boundary: games/* may import from simulation/, ai/, shared/, and own files.
 // This module imports from shared/ only; it must never import from renderer/*.
 
-import type { GameSettingsPageDefinition } from '@chimera/simulation/foundation/game-shell-contract.js';
+import type { GameSettingsPageDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 
 const ANIMATION_SPEED_OPTIONS = [
     { value: 'slow', label: 'Slow' },

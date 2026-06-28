@@ -19,23 +19,23 @@
  *        outside that directory; this file contains only the abstract surface.
  */
 
-import type { PlayerId, EngineAction, GameResult } from '@chimera/simulation/contracts';
-import { playerId as _makePlayerId } from '@chimera/simulation/engine/types.js';
-import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
-import type { ChatScope, ChatRejectReason } from '@chimera/simulation/foundation/chat.js';
+import type { PlayerId, EngineAction, GameResult } from '@chimera-engine/simulation/contracts';
+import { playerId as _makePlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
+import type { ChatScope, ChatRejectReason } from '@chimera-engine/simulation/foundation/chat.js';
 // The projected wire snapshot and the lobby roster contracts now live in the
-// foundation leaf `@chimera/simulation/foundation` (issue #758). `WirePlayerSnapshot` is the
+// foundation leaf `@chimera-engine/simulation/foundation` (issue #758). `WirePlayerSnapshot` is the
 // canonical loose wire projection; it is imported here under the local name
 // `PlayerSnapshot` and re-exported so this module's public import path is
 // unchanged for every transport caller.
-import type { WirePlayerSnapshot as PlayerSnapshot } from '@chimera/simulation/foundation/snapshot-contract.js';
+import type { WirePlayerSnapshot as PlayerSnapshot } from '@chimera-engine/simulation/foundation/snapshot-contract.js';
 import type {
     LobbyAgentKind,
     LobbyAgentSlot,
     LobbyInfo,
     LobbyPlayerEntry,
     LobbyState,
-} from '@chimera/simulation/foundation/lobby-contract.js';
+} from '@chimera-engine/simulation/foundation/lobby-contract.js';
 
 // ─── Re-export primitives used by callers of this module ──────────────────────
 
@@ -73,7 +73,7 @@ export const playerId = _makePlayerId;
 // ─── Lobby domain types ───────────────────────────────────────────────────────
 //
 // `LobbyAgentKind`, `LobbyAgentSlot`, `LobbyInfo`, `LobbyPlayerEntry`, and
-// `LobbyState` are declared in the foundation leaf `@chimera/simulation/foundation/lobby-contract.js`
+// `LobbyState` are declared in the foundation leaf `@chimera-engine/simulation/foundation/lobby-contract.js`
 // and re-exported above (issue #758). The host-/join-param and transport
 // interfaces below build on them.
 
@@ -111,7 +111,7 @@ export interface JoinLobbyParams {
 }
 
 // `LobbyInfo`, `LobbyPlayerEntry`, and `LobbyState` are declared in the
-// foundation leaf `@chimera/simulation/foundation/lobby-contract.js` and re-exported above
+// foundation leaf `@chimera-engine/simulation/foundation/lobby-contract.js` and re-exported above
 // (issue #758).
 
 /** A browsable lobby entry returned by BrowsableProvider.listLobbies(). */

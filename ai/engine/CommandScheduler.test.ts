@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
 import type { CommandProgress, AnyAICommand } from './AICommand.js';
 import { CommandSchedulerImpl } from './CommandScheduler.js';
 import type { CommandScheduler } from './CommandScheduler.js';

@@ -5,7 +5,7 @@
  * into the profileStore singleton.
  */
 
-import type { ProfileAPI, Unsubscribe } from '@chimera/simulation/bridge/api-types.js';
+import type { ProfileAPI, Unsubscribe } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useProfileStore } from './profileStore';
 
 export function bootstrapProfileStore(

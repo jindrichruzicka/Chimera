@@ -18,11 +18,11 @@ import {
     type GLTFModelAsset,
     type SpriteSheetAsset,
     type TextureAsset,
-} from '@chimera/simulation/content/AssetRef.js';
+} from '@chimera-engine/simulation/content/AssetRef.js';
 import type {
     AssetManifest,
     AssetManifestEntry,
-} from '@chimera/simulation/content/AssetManifest.js';
+} from '@chimera-engine/simulation/content/AssetManifest.js';
 
 import type { AssetResolver } from './AssetResolver';
 import {
@@ -47,7 +47,7 @@ interface LoadedCompressedMapAsset {
     readonly cells: readonly number[];
 }
 
-declare module '@chimera/simulation/foundation/asset-contract.js' {
+declare module '@chimera-engine/simulation/foundation/asset-contract.js' {
     interface AssetKindRegistry {
         readonly 'tactics:compressed-map': CompressedMapAsset;
     }

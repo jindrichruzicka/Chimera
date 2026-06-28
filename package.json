@@ -88,12 +88,12 @@
         "vitest": "^3.2.4"
     },
     "dependencies": {
-        "@chimera/ai": "workspace:*",
-        "@chimera/electron": "workspace:*",
-        "@chimera/networking": "workspace:*",
-        "@chimera/renderer": "workspace:*",
-        "@chimera/simulation": "workspace:*",
-        "@chimera/tactics": "workspace:*",
+        "@chimera-engine/ai": "workspace:*",
+        "@chimera-engine/electron": "workspace:*",
+        "@chimera-engine/networking": "workspace:*",
+        "@chimera-engine/renderer": "workspace:*",
+        "@chimera-engine/simulation": "workspace:*",
+        "@chimera-engine/tactics": "workspace:*",
         "@react-three/fiber": "^9.6.1",
         "@types/ws": "^8.18.1",
         "pino": "^10.3.1",

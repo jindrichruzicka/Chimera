@@ -4,11 +4,11 @@
  * Foundation brand/contract types for the Chimera engine.
  *
  * These are the canonical declarations of the core engine identifiers and the
- * action envelope. They live in `@chimera/simulation/foundation` — the zero-dependency
+ * action envelope. They live in `@chimera-engine/simulation/foundation` — the zero-dependency
  * foundation leaf — so that the foundation can describe wire/screen contracts
  * (messages, chat, game-screen) without importing *up* into `simulation`
  * (Invariant #1: the contract layer points inward only). `simulation/engine/`
- * re-exports every name here, keeping `@chimera/simulation/engine/types.js` the
+ * re-exports every name here, keeping `@chimera-engine/simulation/engine/types.js` the
  * unchanged public import path for the rest of the codebase; the runtime brand
  * factories (`playerId`, `entityId`, `gamePhase`, `sceneId`) also stay there.
  *

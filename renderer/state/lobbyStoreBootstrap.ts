@@ -20,8 +20,8 @@ import type {
     PlayerId,
     SystemAPI,
     Unsubscribe,
-} from '@chimera/simulation/bridge/api-types.js';
-import { playerId } from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
+import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useLobbyStore } from './lobbyStore';
 import { useLobbyUiStore } from './lobbyUiStore';
 

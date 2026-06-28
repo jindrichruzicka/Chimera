@@ -20,7 +20,7 @@
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
 
-import type { PlayerId, PlayerSnapshot } from '@chimera/electron/preload/api-types.js';
+import type { PlayerId, PlayerSnapshot } from '@chimera-engine/electron/preload/api-types.js';
 
 import { appendToBuffer, bufferCanUndo, popBuffer } from '../commitment/buffer.js';
 import type { BufferedTacticsAction, LocalActionBuffer } from '../commitment/contract.js';

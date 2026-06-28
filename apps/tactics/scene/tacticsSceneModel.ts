@@ -1,5 +1,5 @@
-import type { GameSetupConfig } from '@chimera/simulation/foundation/game-lobby-contract.js';
-import type { EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
+import type { GameSetupConfig } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import type { EntityId, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import {
     DEFAULT_BOARD_COLOR,
     DEFAULT_BOARD_COLOR_HEX,

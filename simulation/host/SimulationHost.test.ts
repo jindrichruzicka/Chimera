@@ -4,7 +4,7 @@
  * Unit tests for the composable `SimulationHost`.
  *
  * The host is exercised against an in-file stub `AgentCoordinator` only — no
- * `@chimera/ai`, Electron, DOM, or IPC import appears in this file. This both
+ * `@chimera-engine/ai`, Electron, DOM, or IPC import appears in this file. This both
  * satisfies the zero-dependency leaf boundary (Invariant #1) and proves
  * acceptance criterion #1 of issue #760: the host instantiates and drives a
  * full register → start → tick → end cycle in a plain Node/test context.

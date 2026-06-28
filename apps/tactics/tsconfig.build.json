@@ -1,5 +1,5 @@
 {
-    // Composite `tsc -b` build for the @chimera/tactics consumer app (F63 #782).
+    // Composite `tsc -b` build for the @chimera-engine/tactics consumer app (F63 #782).
     // Graduates tactics into the root solution config's dependency-ordered build
     // graph (tsconfig.build.json), following the split-tsconfig dist pattern of the
     // engine packages (simulation #759 / ai #764 / renderer #773) — composite emit
@@ -12,17 +12,17 @@
     // ambient.
     //
     // NOTE (F63 staging): this dist/ is currently UNCONSUMED. Consumers still resolve
-    // @chimera/tactics from SOURCE via the vitest resolver plugin + Next webpack alias;
+    // @chimera-engine/tactics from SOURCE via the vitest resolver plugin + Next webpack alias;
     // the emit exists only to make tactics a node in the `tsc -b` graph. F64 adds the
     // package `exports` map and flips consumers onto dist/.
     //
     // LAYER 3 (#791): apps/tactics is the top-of-graph consumer APP — it depends on
     // everything and nothing depends on it (since #784/#788/#789, no engine package
     // statically imports a game; they reach it only by runtime registration). It
-    // therefore sits ABOVE @chimera/electron (layer 2), not beside it. References
+    // therefore sits ABOVE @chimera-engine/electron (layer 2), not beside it. References
     // mirror its composite workspace deps (simulation, ai, renderer, electron), so
     // `tsc --build` orders the graph (Invariant #1, tools/tsconfig-build-graph.test.ts).
-    // The @chimera/electron reference exists to mirror the package dep that the app's
+    // The @chimera-engine/electron reference exists to mirror the package dep that the app's
     // Electron composition root (electron/main.ts) introduces; that composition root
     // is EXCLUDED from this composite's emit (it is bundled by `build:app` /
     // the app-owned electron/build-main.ts and type-checked by the root flat
@@ -54,8 +54,8 @@
         "node_modules",
         "dist",
         "out",
-        // The Electron composition root (electron/main.ts) imports @chimera/electron
-        // and belongs to the standalone app, not the @chimera/tactics library — keep
+        // The Electron composition root (electron/main.ts) imports @chimera-engine/electron
+        // and belongs to the standalone app, not the @chimera-engine/tactics library — keep
         // it out of the layer-2 composite build (see header note; F63/#783).
         "electron/**",
         // The Playwright e2e suite (relocated here in F63/#785) is test infrastructure,

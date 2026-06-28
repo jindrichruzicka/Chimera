@@ -25,8 +25,14 @@
 // `shared/listener.ts`.
 
 import { contextBridge, ipcRenderer } from 'electron';
-import { DEBUG_CHANNEL, DEBUG_PUSH_CHANNEL } from '@chimera/simulation/foundation/constants.js';
-import type { DebugRequest, DebugResponse } from '@chimera/simulation/debug/DebugProtocol.js';
+import {
+    DEBUG_CHANNEL,
+    DEBUG_PUSH_CHANNEL,
+} from '@chimera-engine/simulation/foundation/constants.js';
+import type {
+    DebugRequest,
+    DebugResponse,
+} from '@chimera-engine/simulation/debug/DebugProtocol.js';
 import type { ChimeraDebugApi } from './debug-api-types.js';
 import type { PushListenerPort } from './shared/listener.js';
 import { subscribePush } from './shared/listener.js';

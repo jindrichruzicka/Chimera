@@ -19,7 +19,7 @@ import type {
     PlayerSnapshot,
 } from '../api-types.js';
 import { playerId, gamePhase } from '../api-types.js';
-import { toCommitmentId } from '@chimera/simulation/projection/index.js';
+import { toCommitmentId } from '@chimera-engine/simulation/projection/index.js';
 
 /**
  * Recording stub for the narrow `GameApiIpcPort` slice. Captures every call

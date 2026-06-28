@@ -13,8 +13,8 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { playerId } from '@chimera/simulation/engine/types.js';
-import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
+import { playerId } from '@chimera-engine/simulation/engine/types.js';
+import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js';
 
 import { ChatHub } from './ChatHub.js';
 import { createNoopLogger } from './logging/logger.js';

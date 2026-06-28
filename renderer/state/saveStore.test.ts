@@ -15,8 +15,8 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createSaveStore, useSaveStore } from './saveStore';
-import { toSlotId } from '@chimera/simulation/bridge/api-types.js';
-import type { SaveSlotMeta } from '@chimera/simulation/bridge/api-types.js';
+import { toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { SaveSlotMeta } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

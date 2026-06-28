@@ -1,5 +1,5 @@
 {
-    "name": "@chimera/ai",
+    "name": "@chimera-engine/ai",
     "version": "0.9.0",
     "description": "Game-agnostic AI agent framework for the Chimera engine.",
     "license": "MIT",
@@ -41,6 +41,6 @@
         "lint": "eslint ."
     },
     "dependencies": {
-        "@chimera/simulation": "workspace:*"
+        "@chimera-engine/simulation": "workspace:*"
     }
 }

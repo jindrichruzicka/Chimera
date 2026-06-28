@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, afterEach } from 'vitest';
-import type { PlayerId } from '@chimera/simulation/contracts';
+import type { PlayerId } from '@chimera-engine/simulation/contracts';
 import type { MultiplayerProvider, HostedSession, JoinedSession } from '../MultiplayerProvider.js';
 import { LocalWebSocketProvider } from './LocalWebSocketProvider.js';
 

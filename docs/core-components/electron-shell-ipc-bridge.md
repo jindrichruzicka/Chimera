@@ -253,9 +253,9 @@ A game (or engine module) extends the surface:
 
 ```typescript
 // games/<game>/preload-extension.ts
-import type {} from '@chimera/core/electron/preload/api-types';
+import type {} from '@chimera-engine/core/electron/preload/api-types';
 
-declare module '@chimera/core/electron/preload/api-types' {
+declare module '@chimera-engine/core/electron/preload/api-types' {
     interface ChimeraExtensions {
         readonly <game>: GameExtensionAPI;
     }
@@ -291,7 +291,7 @@ Extensions must be registered **before** `api.ts` is evaluated. In a game's prel
 ```typescript
 // games/<game>/preload.ts
 import './preload-extension'; // FIRST — register extension
-import '@chimera/core/electron/preload/api.js'; // SECOND — build + expose
+import '@chimera-engine/core/electron/preload/api.js'; // SECOND — build + expose
 ```
 
 Do **not** mix a body-level `registerExtension()` call and `import './api.js'` in the same file — ESM's static import hoisting means `api.js` always evaluates before any body code in the importing module.
@@ -301,7 +301,7 @@ Do **not** mix a body-level `registerExtension()` call and `import './api.js'` i
 - Extensions are registered in the **preload script** — same security context as all other preload code.
 - `buildExtensionsApi()` freezes the returned object before it is passed to `exposeInMainWorld`.
 - `contextBridge` independently clones values into the renderer world; the freeze guards the preload-world side.
-- Core (`@chimera/core`) registers **zero** extensions in 1.0.0.
+- Core (`@chimera-engine/core`) registers **zero** extensions in 1.0.0.
 
 ### Invariant
 

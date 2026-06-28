@@ -7,7 +7,7 @@
 //
 // Design note: docs/security-trust/tactics-commitment-battle-mode.md §5
 
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { describe, expect, it } from 'vitest';
 
 import type { CommittedTurn } from './contract.js';

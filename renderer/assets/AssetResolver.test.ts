@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { MalformedAssetRefError } from '@chimera/simulation/foundation/asset-ref-parse.js';
-import { buildAssetRef, type AssetRef } from '@chimera/simulation/content/AssetRef.js';
+import { MalformedAssetRefError } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
+import { buildAssetRef, type AssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import {
     createDevResolver,

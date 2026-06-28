@@ -17,8 +17,8 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SavesPage from './page';
-import { toSlotId } from '@chimera/simulation/bridge/api-types.js';
-import type { SaveSlotMeta } from '@chimera/simulation/bridge/api-types.js';
+import { toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { SaveSlotMeta } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useToastStore } from '../../state/toastStore';
 
 // ── Mock window.__chimera.saves ───────────────────────────────────────────────

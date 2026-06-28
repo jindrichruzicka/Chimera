@@ -1,5 +1,5 @@
 {
-    "name": "@chimera/renderer",
+    "name": "@chimera-engine/renderer",
     "version": "0.9.0",
     "description": "React / React-Three-Fiber renderer component library and app shell for the Chimera engine.",
     "license": "MIT",
@@ -52,7 +52,7 @@
         "three": ">=0.184"
     },
     "dependencies": {
-        "@chimera/simulation": "workspace:*",
+        "@chimera-engine/simulation": "workspace:*",
         "zustand": "^5"
     }
 }

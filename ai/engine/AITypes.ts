@@ -13,8 +13,8 @@
  *          AI state and command implementations must not mutate them.
  */
 
-import type { GameResult as EngineGameResult } from '@chimera/simulation/engine/types.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import type { GameResult as EngineGameResult } from '@chimera-engine/simulation/engine/types.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 
 // ─── AIParams ─────────────────────────────────────────────────────────────────
 

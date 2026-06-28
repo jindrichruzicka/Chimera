@@ -5,7 +5,7 @@ import { cleanup, render, screen, waitFor, within } from '@testing-library/react
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { SnapshotDiff, TickEntry } from '@chimera/simulation/bridge/debug-api-types.js';
+import type { SnapshotDiff, TickEntry } from '@chimera-engine/simulation/bridge/debug-api-types.js';
 import {
     createDebugApiMock,
     makeDiffEntry,

@@ -5,7 +5,7 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { playerId } from '@chimera/simulation/bridge/api-types.js';
+import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { createLobbyUiStore } from './lobbyUiStore';
 
 describe('lobbyUiStore', () => {

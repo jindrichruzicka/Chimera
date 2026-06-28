@@ -2,7 +2,7 @@
 //
 // The tactics composition root (F62/T2; relocated here from `app/` in F63/#783).
 // This is the sole place that names a game AND drives the Electron bootstrap: it
-// constructs the tactics `MainGameContribution` from `@chimera/tactics/*` and
+// constructs the tactics `MainGameContribution` from `@chimera-engine/tactics/*` and
 // injects it into the game-agnostic host `main(contributions)`.
 //
 // These tests pin the tactics wiring that used to live in
@@ -12,22 +12,25 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import { entityId, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import type { EngineAction } from '@chimera/simulation/engine/types.js';
-import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import type { CommandContext, CommandScheduler } from '@chimera/ai';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
-import type { MainGameContribution } from '@chimera/electron/main';
-import { tacticsManifest } from '@chimera/tactics/manifest.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
+import { entityId, playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { EngineAction } from '@chimera-engine/simulation/engine/types.js';
+import type {
+    EngineSettings,
+    GameSettingsSchema,
+} from '@chimera-engine/simulation/settings/index.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import type { CommandContext, CommandScheduler } from '@chimera-engine/ai';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
+import type { MainGameContribution } from '@chimera-engine/electron/main';
+import { tacticsManifest } from '@chimera-engine/tactics/manifest.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_GAME_ID,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/tactics/constants.js';
+} from '@chimera-engine/tactics/constants.js';
 
 import { tacticsContribution } from './main.js';
 

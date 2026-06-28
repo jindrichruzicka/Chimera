@@ -1,4 +1,4 @@
-// Build-only ambient declaration for the @chimera/renderer dist build (issue #773).
+// Build-only ambient declaration for the @chimera-engine/renderer dist build (issue #773).
 //
 // The standalone `tsc -p tsconfig.build.json` build compiles the component barrels
 // WITHOUT the Next.js language-service plugin and WITHOUT `next-env.d.ts` /

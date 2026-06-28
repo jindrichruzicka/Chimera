@@ -2,7 +2,7 @@
 //
 // ESLint import-boundary smoke-test fixture (issue #769).
 //
-// Main-process orchestration (electron/main) must import @chimera/networking
+// Main-process orchestration (electron/main) must import @chimera-engine/networking
 // through the public barrel interfaces ONLY (MultiplayerProvider / HostTransport
 // / ClientTransport); it must never reach into a provider-specific subdirectory.
 // Importing the concrete local provider implementation from a non-composition
@@ -13,4 +13,4 @@
 // eslint.config.mjs; the eslint-import-boundary smoke test lints it explicitly
 // with `--no-ignore`.
 
-import '@chimera/networking/provider/local/LocalWebSocketProvider.js';
+import '@chimera-engine/networking/provider/local/LocalWebSocketProvider.js';

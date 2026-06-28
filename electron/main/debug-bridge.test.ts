@@ -23,7 +23,7 @@ import {
     DEBUG_CHANNEL,
     DEBUG_TOGGLE_INSPECTOR_CHANNEL,
     DEBUG_PUSH_CHANNEL,
-} from '@chimera/simulation/foundation/constants.js';
+} from '@chimera-engine/simulation/foundation/constants.js';
 import {
     createInspectorWindow,
     startDebugBridge,
@@ -35,11 +35,14 @@ import {
 } from './debug-bridge.js';
 import type { HostSessionDebugPort } from './runtime/HostSessionPipeline.js';
 import type { Logger } from './logging/logger.js';
-import type { DebugResponse } from '@chimera/simulation/debug/index.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
-import type { ActionHistoryEntry } from '@chimera/simulation/engine/UndoManager.js';
-import type { PlayerSnapshot, StateProjector } from '@chimera/simulation/projection/index.js';
+import type { DebugResponse } from '@chimera-engine/simulation/debug/index.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { ActionHistoryEntry } from '@chimera-engine/simulation/engine/UndoManager.js';
+import type {
+    PlayerSnapshot,
+    StateProjector,
+} from '@chimera-engine/simulation/projection/index.js';
 import {
     FakeFullInspectorWindow,
     FakeInspectorWindow,

@@ -12,13 +12,13 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera/tactics/constants.js';
+} from '@chimera-engine/tactics/constants.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,
     EntityId,
-} from '@chimera/simulation/engine/types.js';
-import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import { describe, expect, it } from 'vitest';
 
 import { tacticsGridCoordinate } from '../actions.js';

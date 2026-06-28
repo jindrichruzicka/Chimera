@@ -8,17 +8,17 @@ import {
     Panel,
     type BadgeVariant,
     type CaptionTone,
-} from '@chimera/renderer/components/ui';
+} from '@chimera-engine/renderer/components/ui';
 import {
     resolveGameResultOutcome,
     type GameScreenProps,
     type GameResultOutcome,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type {
     PerspectiveReplayExportBridge,
     ReplayExportBridge,
     ReplayExportIntent,
-} from '@chimera/simulation/foundation/replay-bridge-contract.js';
+} from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import styles from './TacticsPostGameSummary.module.css';
 
 interface SummaryCopy {

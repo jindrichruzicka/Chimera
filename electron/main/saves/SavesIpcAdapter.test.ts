@@ -16,9 +16,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { toSlotId } from '../../preload/api-types.js';
 import type { SaveSlotMeta as PreloadSaveSlotMeta, SaveRequest } from '../../preload/api-types.js';
-import { InMemorySaveRepository } from '@chimera/simulation/persistence/InMemorySaveRepository.js';
-import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
-import { SaveNotFoundError } from '@chimera/simulation/persistence/SaveMigrator.js';
+import { InMemorySaveRepository } from '@chimera-engine/simulation/persistence/InMemorySaveRepository.js';
+import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
+import { SaveNotFoundError } from '@chimera-engine/simulation/persistence/SaveMigrator.js';
 import { createNoopLogger } from '../logging/logger.js';
 import { SaveManager } from './SaveManager.js';
 import { createSavesIpcPort } from './SavesIpcAdapter.js';

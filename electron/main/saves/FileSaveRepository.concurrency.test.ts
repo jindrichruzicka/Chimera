@@ -78,7 +78,7 @@ import { FileSaveRepository, LIST_CONCURRENCY } from './FileSaveRepository.js';
 import {
     JsonSaveSerializer,
     createDefaultMigrator,
-} from '@chimera/simulation/persistence/index.js';
+} from '@chimera-engine/simulation/persistence/index.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -4,7 +4,7 @@
  * `verify:publish` — the publish-readiness gate (issue #804, F66).
  *
  * `verify:pack` already proves the packed `exports`/`files` surface resolves end to
- * end. This sibling gate proves the orthogonal property: every `@chimera/*` package
+ * end. This sibling gate proves the orthogonal property: every `@chimera-engine/*` package
  * is publish-ready — its declared `dependencies` actually cover every external module
  * its built `dist/` imports, its manifest is publint-clean, and it dry-run-publishes.
  *
@@ -13,7 +13,7 @@
  * break on an isolated registry install. The centerpiece `depcheck` step catches that
  * class statically, without running anything:
  *
- *   1. `pnpm build:packages`   — emit every `@chimera/*` `dist/`
+ *   1. `pnpm build:packages`   — emit every `@chimera-engine/*` `dist/`
  *   2. depcheck                — for each package, scan its published `.js` files for
  *                                external specifiers (TS pre-processor: import/export-from,
  *                                dynamic import, require — comments/strings ignored),
@@ -34,7 +34,7 @@
  *
  * Invariants upheld:
  *   #1  — depcheck asserts each package's declared deps cover its real runtime imports,
- *         keeping the inward `@chimera/*` DAG honest (no undeclared cross-edge masked
+ *         keeping the inward `@chimera-engine/*` DAG honest (no undeclared cross-edge masked
  *         by root hoisting).
  *   #2  — lives in `tools/`; imports only node builtins + the side-effect-free
  *         `verify-shared` + the `typescript` pre-processor — never a package or app.
@@ -152,7 +152,7 @@ class VerifyPublishStepError extends Error {
  * Every module specifier a built `.js` references — import/export-from, side-effect
  * `import 'x'`, dynamic `import('x')`, and `require('x')` — via the TypeScript
  * pre-processor, which natively ignores comments and string literals (so a
- * commented-out `@chimera/core` import is never extracted). Returns raw specifiers
+ * commented-out `@chimera-engine/core` import is never extracted). Returns raw specifiers
  * (relative ones included; the caller drops them).
  */
 export function extractImportSpecifiers(jsSource: string): string[] {
@@ -285,7 +285,7 @@ export async function verifyPublish(
 ): Promise<VerifyPublishResult> {
     try {
         if (options.skipBuild !== true) {
-            deps.log('building @chimera/* packages…');
+            deps.log('building @chimera-engine/* packages…');
             assertStepOk('build', deps.run('pnpm', ['build:packages'], { cwd: deps.repoRoot }));
         }
 
@@ -330,7 +330,7 @@ export async function verifyPublish(
  * an undeclared dep slipped through and the gate is not trustworthy.
  */
 export function verifyPublishSelfTest(deps: VerifyPublishDeps): Promise<VerifyPublishResult> {
-    const manifest: PackageManifest = { name: '@chimera/self-test', dependencies: {} };
+    const manifest: PackageManifest = { name: '@chimera-engine/self-test', dependencies: {} };
     const files = new Map<string, string>([
         [
             '/self-test/dist/index.js',

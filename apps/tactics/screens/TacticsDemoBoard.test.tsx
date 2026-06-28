@@ -12,14 +12,14 @@ import {
     type EntityId,
     type PlayerId,
     type PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
+} from '@chimera-engine/electron/preload/api-types.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera/tactics/constants.js';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
+} from '@chimera-engine/tactics/constants.js';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
 

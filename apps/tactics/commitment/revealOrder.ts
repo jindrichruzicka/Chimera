@@ -20,8 +20,8 @@
  * Design note: docs/security-trust/tactics-commitment-battle-mode.md §5
  */
 
-import { createRng } from '@chimera/simulation/engine/DeterministicRng.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import { createRng } from '@chimera-engine/simulation/engine/DeterministicRng.js';
+import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';
 
 import type { CommittedTurn, ResolveRevealOrder } from './contract.js';
 

@@ -35,7 +35,7 @@
  *
  * Boundaries (§3): a game package module — it imports its own game's constants
  * (`apps/tactics/constants.ts`: action strings, board extents, stamina), the
- * game-agnostic `ai/` framework (contract types via the `@chimera/ai` barrel),
+ * game-agnostic `ai/` framework (contract types via the `@chimera-engine/ai` barrel),
  * and `simulation/` types only.
  * The pure `ai/` framework holds zero tactics-specific code (Invariants #106/#107).
  *
@@ -56,9 +56,9 @@ import {
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
     readTacticsTurnMode,
-} from '@chimera/tactics/constants.js';
-import type { EngineAction, EntityId, PlayerId } from '@chimera/simulation/engine/types.js';
-import type { AIState, PlayerSnapshot } from '@chimera/ai';
+} from '@chimera-engine/tactics/constants.js';
+import type { EngineAction, EntityId, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { AIState, PlayerSnapshot } from '@chimera-engine/ai';
 
 const ENGINE_END_TURN_ACTION = 'engine:end_turn';
 const TACTICS_AI_STATE_NAME = 'tactics:auto-play';

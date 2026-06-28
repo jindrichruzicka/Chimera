@@ -4,7 +4,7 @@ import { cleanup, renderHook } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import { AudioManagerContext } from './AudioManagerContext.js';
 import type { AudioHandle, AudioManager, PlayOptions } from './AudioManager';

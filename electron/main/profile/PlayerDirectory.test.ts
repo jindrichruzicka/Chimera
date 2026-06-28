@@ -12,8 +12,11 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { localProfileId, type PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
-import { playerId } from '@chimera/simulation/engine/types.js';
+import {
+    localProfileId,
+    type PlayerProfile,
+} from '@chimera-engine/simulation/profile/ProfileSchema.js';
+import { playerId } from '@chimera-engine/simulation/engine/types.js';
 
 import {
     PlayerAlreadyExistsError,

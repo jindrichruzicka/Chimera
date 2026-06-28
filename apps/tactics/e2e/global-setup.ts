@@ -21,7 +21,7 @@ export { VERIFY_PACK_NODE_MODULES_ENV };
  *     app-owned {@link buildAppBundles} — the SAME bundler `build:app` runs in
  *     production — into the `.e2e-build/` layout the launch fixture loads.
  *
- * `@chimera/*` path aliases are resolved by `buildAppBundles` (the Electron process
+ * `@chimera-engine/*` path aliases are resolved by `buildAppBundles` (the Electron process
  * has no tsconfig-paths support at runtime). In `verify:pack` mode
  * (`CHIMERA_VERIFY_PACK_NODE_MODULES` set) it resolves the host + preload from the
  * packed tarballs instead of source, validating the real artifact end-to-end; the
@@ -72,11 +72,11 @@ export default function globalSetup(): void {
         },
         readJson: (file) => JSON.parse(readFileSync(file, 'utf8')) as { name?: string },
         // Everyday suite: bundle the preload from host SOURCE (unchanged). verify:pack
-        // mode: resolve it from the throwaway tarball's `@chimera/electron` export.
+        // mode: resolve it from the throwaway tarball's `@chimera-engine/electron` export.
         resolvePreload: (nodeModules) =>
             nodeModules !== undefined
                 ? createRequire(path.join(path.dirname(nodeModules), 'package.json')).resolve(
-                      '@chimera/electron/preload/api',
+                      '@chimera-engine/electron/preload/api',
                   )
                 : path.join(root, 'electron/preload/api.ts'),
         env: process.env,

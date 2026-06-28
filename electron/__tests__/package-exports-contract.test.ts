@@ -1,10 +1,10 @@
 /**
  * electron/__tests__/package-exports-contract.test.ts
  *
- * Locks the `@chimera/electron` package surface declared in `package.json`
+ * Locks the `@chimera-engine/electron` package surface declared in `package.json`
  * (issue #777 — F62 surface contract + dist build), mirroring the contract
- * tests of @chimera/simulation (#759), @chimera/networking (#768) and
- * @chimera/renderer (#772/#773):
+ * tests of @chimera-engine/simulation (#759), @chimera-engine/networking (#768) and
+ * @chimera-engine/renderer (#772/#773):
  *
  *   - the package is an ES module shipping the built `dist/` (Appendix C.3);
  *   - the public `exports` are the TWO entry points named by the issue — the
@@ -24,9 +24,9 @@
  *     rootDir violation. The full `types`→dist flip lands with the back-edge cleanup
  *     (later in F62). `./main` and `./preload/api` have no pre-electron consumer and
  *     resolve fully to dist;
- *   - the four engine packages (`@chimera/simulation`, `@chimera/ai`,
- *     `@chimera/networking`, `@chimera/renderer`) remain its only `@chimera/*`
- *     dependencies; `@chimera/tactics` is NOT a declared dependency — the
+ *   - the four engine packages (`@chimera-engine/simulation`, `@chimera-engine/ai`,
+ *     `@chimera-engine/networking`, `@chimera-engine/renderer`) remain its only `@chimera-engine/*`
+ *     dependencies; `@chimera-engine/tactics` is NOT a declared dependency — the
  *     game-injection seam in the composition registries is removed in T2.
  *
  * Reading the manifest directly guards the contract against drift.
@@ -80,7 +80,7 @@ const EXPECTED_EXPORTS = {
     },
 } as const;
 
-describe('@chimera/electron package surface (issue #777)', () => {
+describe('@chimera-engine/electron package surface (issue #777)', () => {
     it('is an ES module shipping the dist/ build', () => {
         expect(manifest.type).toBe('module');
         expect(manifest.files).toContain('dist');
@@ -123,22 +123,22 @@ describe('@chimera/electron package surface (issue #777)', () => {
         }
     });
 
-    it('depends on the four engine packages only — not @chimera/tactics', () => {
+    it('depends on the four engine packages only — not @chimera-engine/tactics', () => {
         const deps = manifest.dependencies ?? {};
         const chimeraDeps = Object.keys(deps)
-            .filter((name) => name.startsWith('@chimera/'))
+            .filter((name) => name.startsWith('@chimera-engine/'))
             .sort();
         expect(chimeraDeps).toEqual([
-            '@chimera/ai',
-            '@chimera/networking',
-            '@chimera/renderer',
-            '@chimera/simulation',
+            '@chimera-engine/ai',
+            '@chimera-engine/networking',
+            '@chimera-engine/renderer',
+            '@chimera-engine/simulation',
         ]);
         for (const dep of chimeraDeps) {
             expect(deps[dep]).toBe('workspace:*');
         }
         // The game-injection seam in the composition registries is removed in
         // T2; tactics must never become a declared dependency of the package.
-        expect(deps['@chimera/tactics']).toBeUndefined();
+        expect(deps['@chimera-engine/tactics']).toBeUndefined();
     });
 });

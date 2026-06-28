@@ -23,8 +23,8 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera/tactics/constants.js';
-import { entityId, playerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/tactics/constants.js';
+import { entityId, playerId } from '@chimera-engine/simulation/engine/types.js';
 
 import { tacticsGridCoordinate } from '../actions.js';
 import type { LocalActionBuffer, TacticsCommitmentEnvelopeValue } from './contract.js';

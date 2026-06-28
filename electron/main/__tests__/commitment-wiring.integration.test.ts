@@ -25,16 +25,16 @@
 
 import { describe, expect, it, vi } from 'vitest';
 
-import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import { gamePhase, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import { DefaultStateProjector } from '@chimera/simulation/projection/StateProjector.js';
-import type { CommitmentEnvelope } from '@chimera/simulation/projection/index.js';
-import { toCommitmentId } from '@chimera/simulation/projection/index.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/types.js';
+import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
+import { gamePhase, playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { DefaultStateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
+import type { CommitmentEnvelope } from '@chimera-engine/simulation/projection/index.js';
+import { toCommitmentId } from '@chimera-engine/simulation/projection/index.js';
+import type { VisibilityRules } from '@chimera-engine/simulation/projection/types.js';
 
 import { SessionCommitmentRuntime } from '../runtime/SessionRuntime.js';
-import type { CommitmentReveal } from '@chimera/simulation/projection/CommitmentScheme.js';
-import { CommitmentVerificationError } from '@chimera/simulation/projection/CommitmentScheme.js';
+import type { CommitmentReveal } from '@chimera-engine/simulation/projection/CommitmentScheme.js';
+import { CommitmentVerificationError } from '@chimera-engine/simulation/projection/CommitmentScheme.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

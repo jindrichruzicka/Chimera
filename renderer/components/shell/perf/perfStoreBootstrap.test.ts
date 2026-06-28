@@ -3,7 +3,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createGameStore } from '../../../state/gameStore.js';
-import { playerId, gamePhase, type PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
+import {
+    playerId,
+    gamePhase,
+    type PlayerSnapshot,
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import { createPerfStore } from './perfStore.js';
 import { bootstrapPerfStore } from './perfStoreBootstrap.js';
 

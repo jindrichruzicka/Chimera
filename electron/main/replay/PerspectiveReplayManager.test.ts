@@ -9,14 +9,14 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { InMemoryPerspectiveReplayRepository } from '@chimera/simulation/replay/index.js';
-import { ReplayVersionError } from '@chimera/simulation/replay/index.js';
+import { InMemoryPerspectiveReplayRepository } from '@chimera-engine/simulation/replay/index.js';
+import { ReplayVersionError } from '@chimera-engine/simulation/replay/index.js';
 import type {
     PerspectiveReplayFrame,
     PerspectiveReplayRepository,
-} from '@chimera/simulation/replay/index.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import { playerId as toPlayerId, gamePhase } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/replay/index.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import { playerId as toPlayerId, gamePhase } from '@chimera-engine/simulation/engine/types.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 import type { MemorySink } from '../logging/logger.js';
 import { PerspectiveReplayManager } from './PerspectiveReplayManager.js';

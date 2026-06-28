@@ -14,8 +14,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import type { AIState } from './AIState.js';
 import { AIStateMachineImpl, type AIStateMachine } from './AIStateMachine.js';
 import type { CommandContext } from './CommandContext.js';

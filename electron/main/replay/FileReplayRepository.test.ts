@@ -14,12 +14,15 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import { afterEach, afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { JsonReplaySerializer, ReplayNotFoundError } from '@chimera/simulation/replay/index.js';
-import type { ReplayFile, ReplaySerializer } from '@chimera/simulation/replay/index.js';
+import {
+    JsonReplaySerializer,
+    ReplayNotFoundError,
+} from '@chimera-engine/simulation/replay/index.js';
+import type { ReplayFile, ReplaySerializer } from '@chimera-engine/simulation/replay/index.js';
 import {
     makeReplayFile,
     runReplayRepositoryContractTests,
-} from '@chimera/simulation/replay/__test-support__/replayRepositoryContractTests.js';
+} from '@chimera-engine/simulation/replay/__test-support__/replayRepositoryContractTests.js';
 import {
     FileReplayRepository,
     ReplayPathError,

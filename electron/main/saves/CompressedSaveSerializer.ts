@@ -17,9 +17,9 @@
 
 import { promisify } from 'node:util';
 import { gzip, gunzip } from 'node:zlib';
-import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
-import type { SaveSerializer } from '@chimera/simulation/persistence/SaveSerializer.js';
-import { JsonSaveSerializer } from '@chimera/simulation/persistence/JsonSaveSerializer.js';
+import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
+import type { SaveSerializer } from '@chimera-engine/simulation/persistence/SaveSerializer.js';
+import { JsonSaveSerializer } from '@chimera-engine/simulation/persistence/JsonSaveSerializer.js';
 
 const gzipAsync = promisify(gzip);
 const gunzipAsync = promisify(gunzip);

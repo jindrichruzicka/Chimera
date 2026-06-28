@@ -1,21 +1,21 @@
 /**
- * Public contract surface of `@chimera/ai`.
+ * Public contract surface of `@chimera-engine/ai`.
  *
  * The package root (`.`) exposes the game-agnostic agent framework's
- * side-effect-free CONTRACT TYPES only. Importing `@chimera/ai` therefore
+ * side-effect-free CONTRACT TYPES only. Importing `@chimera-engine/ai` therefore
  * evaluates no AI runtime module — it is the curated, tree-shakeable type
  * barrel that hosts depend on for type annotations without pulling the AI
  * runtime graph.
  *
  * Runtime APIs — the framework classes — are reached through the `./engine`
  * subpath, never the root:
- *   - `@chimera/ai/engine` — AIBrain, AgentManager, CommandSchedulerImpl,
+ *   - `@chimera-engine/ai/engine` — AIBrain, AgentManager, CommandSchedulerImpl,
  *                            AIStateMachineImpl, CommandContextImpl,
  *                            AIPlayerAgent, HumanPlayerAgent
  *
  * Only the game-agnostic framework is reachable from this package (Invariant
  * #106): game-specific AI policies live in the consumer's `games/<name>/ai/`,
- * never inside `@chimera/ai`.
+ * never inside `@chimera-engine/ai`.
  *
  * Asserted side-effect-free by
  * `ai/__tests__/contract-barrel-side-effects.test.ts`.

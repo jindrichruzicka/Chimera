@@ -13,8 +13,8 @@
  *          in CommandContextImpl; earlier requests discarded with a warning.
  */
 
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
-import type { EngineAction } from '@chimera/simulation/engine/types.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
+import type { EngineAction } from '@chimera-engine/simulation/engine/types.js';
 
 /**
  * Dispatch bridge supplied to every AICommand and AIState lifecycle method.

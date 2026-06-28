@@ -12,8 +12,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
     JsonSaveSerializer,
     createDefaultMigrator,
-} from '@chimera/simulation/persistence/index.js';
-import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
+} from '@chimera-engine/simulation/persistence/index.js';
+import { makeFile } from '@chimera-engine/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
 import { FileSaveRepository } from './FileSaveRepository.js';
 
 // vi.hoisted creates the vi.fn() stubs before any import is evaluated so they

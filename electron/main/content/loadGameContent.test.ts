@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 import {
     paletteFromCollections,
     TACTICS_CONTENT_SCHEMAS,
-} from '@chimera/tactics/content/tacticsContent.js';
+} from '@chimera-engine/tactics/content/tacticsContent.js';
 import { loadAllGameContent, toGameContent } from './loadGameContent.js';
 
 // Repo `apps/` dir: electron/main/content → up 3 → repo root → apps (game apps

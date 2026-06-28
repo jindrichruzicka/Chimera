@@ -27,24 +27,24 @@
  *          orchestration layer (post-pipeline), never inside reduce().
  */
 
-import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
+import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
     GameResult,
-} from '@chimera/simulation/engine/types.js';
-import { ActionPipeline } from '@chimera/simulation/engine/ActionPipeline.js';
-import { StateReducer } from '@chimera/simulation/engine/StateReducer.js';
-import { createRng } from '@chimera/simulation/engine/DeterministicRng.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { ActionPipeline } from '@chimera-engine/simulation/engine/ActionPipeline.js';
+import { StateReducer } from '@chimera-engine/simulation/engine/StateReducer.js';
+import { createRng } from '@chimera-engine/simulation/engine/DeterministicRng.js';
 import {
     InMemoryActionHistory,
     InMemoryUndoManager,
-} from '@chimera/simulation/engine/UndoManager.js';
-import type { ActionHistoryEntry } from '@chimera/simulation/engine/UndoManager.js';
-import { DEFAULT_UNDO_POLICY } from '@chimera/simulation/engine/UndoPolicy.js';
-import type { RecordedAction, ReplayHeader } from '@chimera/simulation/replay/index.js';
-import type { ContentDatabase } from '@chimera/simulation/content/index.js';
+} from '@chimera-engine/simulation/engine/UndoManager.js';
+import type { ActionHistoryEntry } from '@chimera-engine/simulation/engine/UndoManager.js';
+import { DEFAULT_UNDO_POLICY } from '@chimera-engine/simulation/engine/UndoPolicy.js';
+import type { RecordedAction, ReplayHeader } from '@chimera-engine/simulation/replay/index.js';
+import type { ContentDatabase } from '@chimera-engine/simulation/content/index.js';
 import type { Logger } from '../logging/logger.js';
 import { createNoopLogger } from '../logging/logger.js';
 

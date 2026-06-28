@@ -2,8 +2,8 @@
  * simulation/__tests__/contract-barrel-side-effects.test.ts
  *
  * Asserts the public contract barrels are SIDE-EFFECT-FREE (issue #759, AC #2):
- * importing `@chimera/simulation` (the root `.` entry) or
- * `@chimera/simulation/contracts` must evaluate NO simulation runtime module.
+ * importing `@chimera-engine/simulation` (the root `.` entry) or
+ * `@chimera-engine/simulation/contracts` must evaluate NO simulation runtime module.
  *
  * Both barrels re-export contract *types* only (`export type *`), so after
  * TypeScript type-stripping and tree-shaking they compile to an empty module.
@@ -48,11 +48,11 @@ async function bundleAndStrip(entryRelativeToSimulation: string): Promise<string
 }
 
 describe('contract barrels are side-effect-free (Invariant #1, issue #759)', () => {
-    it('@chimera/simulation/contracts evaluates no runtime module', async () => {
+    it('@chimera-engine/simulation/contracts evaluates no runtime module', async () => {
         expect(await bundleAndStrip('contracts/index.ts')).toBe('');
     });
 
-    it('@chimera/simulation root barrel (.) evaluates no runtime module', async () => {
+    it('@chimera-engine/simulation root barrel (.) evaluates no runtime module', async () => {
         expect(await bundleAndStrip('index.ts')).toBe('');
     });
 });

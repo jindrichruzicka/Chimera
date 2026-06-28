@@ -14,8 +14,8 @@ import * as os from 'os';
 import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
-import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
+import { localProfileId } from '@chimera-engine/simulation/profile/ProfileSchema.js';
+import type { PlayerProfile } from '@chimera-engine/simulation/profile/ProfileSchema.js';
 
 import { FileProfileRepository, InvalidLocalProfileIdError } from './FileProfileRepository.js';
 

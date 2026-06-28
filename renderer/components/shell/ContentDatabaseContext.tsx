@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, type ReactNode } from 'react';
-import type { ContentDatabase } from '@chimera/simulation/content/index.js';
+import type { ContentDatabase } from '@chimera-engine/simulation/content/index.js';
 
 export const ContentDatabaseContext = createContext<ContentDatabase | null>(null);
 

@@ -21,16 +21,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AutoSavePort } from '../runtime/HostSessionPipeline.js';
 import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
-import { ActionUnauthorizedError } from '@chimera/simulation/engine/ActionPipeline.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import { ActionUnauthorizedError } from '@chimera-engine/simulation/engine/ActionPipeline.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import type {
     ActionDefinition,
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 
 // ── Player IDs ─────────────────────────────────────────────────────────────────
 

@@ -3,12 +3,12 @@
  *
  * Foundation contract types for the lobby roster (§4.14).
  *
- * The full lobby state and its nested entries live in `@chimera/simulation/foundation` — the
+ * The full lobby state and its nested entries live in `@chimera-engine/simulation/foundation` — the
  * zero-dependency foundation leaf — so the foundation wire protocol
  * (`shared/messages.ts`) can describe the `WELCOME` / `LOBBY_STATE` frames
  * without importing *up* into `networking` (Invariant #1). The
  * `networking/provider/MultiplayerProvider.ts` module re-exports every name here,
- * keeping `@chimera/networking/provider/MultiplayerProvider.js` the unchanged
+ * keeping `@chimera-engine/networking/provider/MultiplayerProvider.js` the unchanged
  * public import path for the lobby/transport contracts that build on it.
  *
  * Note: `shared/messages-schemas.ts` carries a *separate*, Zod-inferred

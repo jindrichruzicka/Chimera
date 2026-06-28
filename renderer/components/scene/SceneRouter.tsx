@@ -5,14 +5,14 @@ import type {
     CommitmentReveal,
     PlayerId,
     PlayerSnapshot,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
     GameScreenComponent,
     GameScreenProps,
     GameScreenRegistry,
     SendAction,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import { useActiveScreen, useUiStore } from '../../state/uiStore.js';
 import { TransitionOverlay } from './TransitionOverlay.js';
 import { useFadeTransition } from './useFadeTransition.js';

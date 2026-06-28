@@ -2,16 +2,16 @@
 //
 // The app-OWNED Electron bundler (Seam 1, F65). Bundles this consumer app's
 // Electron MAIN composition root (`electron/main.ts`, which constructs the game's
-// `MainGameContribution` and calls the host `@chimera/electron/main`'s `main()`)
-// AND the host PRELOAD (`@chimera/electron/preload/api`) into single runnable CJS
+// `MainGameContribution` and calls the host `@chimera-engine/electron/main`'s `main()`)
+// AND the host PRELOAD (`@chimera-engine/electron/preload/api`) into single runnable CJS
 // files under the app's own `dist/`:
 //
 //   electron/main.ts                       → dist/electron/main.js   (package.json "main")
-//   @chimera/electron/preload/api          → dist/preload/api.js     (sibling the host
+//   @chimera-engine/electron/preload/api          → dist/preload/api.js     (sibling the host
 //                                            resolves at runtime: <main>/../preload/api.js)
 //
 // Unlike the old `tools/build-tactics-app.ts`, this lives INSIDE the app and names
-// no other game: the `@chimera/<game>` alias key is read from the app's own
+// no other game: the `@chimera-engine/<game>` alias key is read from the app's own
 // `package.json` `name`, so the file is copied verbatim into a scaffolded app
 // (`tools/create-chimera-game/templates/blank/electron/build-main.ts`) with zero
 // edits. It also bundles the
@@ -22,7 +22,7 @@
 // The pure config derivation below is shared with the app's E2E `global-setup.ts`
 // (one source of truth for the esbuild alias / nodePaths), and honours the
 // `verify:pack` true-artifact mode: when `CHIMERA_VERIFY_PACK_NODE_MODULES` points
-// at a throwaway tarball install, the `@chimera/electron/main` source alias is
+// at a throwaway tarball install, the `@chimera-engine/electron/main` source alias is
 // dropped and the preload is resolved from the packed artifact instead of source.
 
 import path from 'node:path';
@@ -32,7 +32,7 @@ import { buildSync } from 'esbuild';
 
 /**
  * Env var the `verify:pack` gate (tools/verify-pack.ts) sets to the throwaway
- * consumer's `node_modules`, flipping `@chimera/*` resolution off the workspace
+ * consumer's `node_modules`, flipping `@chimera-engine/*` resolution off the workspace
  * symlinks and onto the packed tarballs. Duplicated as a literal (not imported)
  * to keep the app off the `tools/` import boundary; both sides assert it in tests.
  */
@@ -52,7 +52,7 @@ export interface BundleSpec {
 export type BuildFn = (spec: BundleSpec) => void;
 
 /**
- * esbuild `nodePaths` for `@chimera/*` resolution: the throwaway tarball
+ * esbuild `nodePaths` for `@chimera-engine/*` resolution: the throwaway tarball
  * `node_modules` in `verify:pack` mode, otherwise empty (esbuild falls back to the
  * workspace symlinks, the everyday path).
  */
@@ -65,18 +65,18 @@ export interface AliasOptions {
     readonly root: string;
     /** Absolute app dir (e.g. `<root>/apps/tactics`). */
     readonly appDir: string;
-    /** The app's own package name (e.g. `@chimera/tactics`), read from its package.json. */
+    /** The app's own package name (e.g. `@chimera-engine/tactics`), read from its package.json. */
     readonly gamePackageName: string;
 }
 
 /**
- * esbuild `@chimera/*` alias map for the Electron main + preload bundles.
+ * esbuild `@chimera-engine/*` alias map for the Electron main + preload bundles.
  *
- * The app's own `@chimera/<game>` always resolves to the consumer app source (it is
- * the game, not a packed engine artifact). `@chimera/electron/main` is aliased onto
+ * The app's own `@chimera-engine/<game>` always resolves to the consumer app source (it is
+ * the game, not a packed engine artifact). `@chimera-engine/electron/main` is aliased onto
  * host SOURCE for the everyday suite (#778: the main entry is the consumer's
  * composition root, which imports the host as a consumer would). In `verify:pack`
- * mode that alias is DROPPED so the host resolves from the packed `@chimera/electron`
+ * mode that alias is DROPPED so the host resolves from the packed `@chimera-engine/electron`
  * tarball — validating the real artifact end-to-end.
  */
 export function computeEsbuildAlias(
@@ -87,7 +87,7 @@ export function computeEsbuildAlias(
         [options.gamePackageName]: options.appDir,
     };
     if (computeNodePaths(env).length === 0) {
-        alias['@chimera/electron/main'] = path.join(options.root, 'electron/main/index.ts');
+        alias['@chimera-engine/electron/main'] = path.join(options.root, 'electron/main/index.ts');
     }
     return alias;
 }
@@ -113,7 +113,7 @@ export interface PlanBundlesOptions {
     readonly preloadEntry: string;
     /**
      * The Inspector-window debug preload entry. Absent ⇒ no debug bundle (the
-     * portable production default; `@chimera/electron/preload/debug-api` is not a
+     * portable production default; `@chimera-engine/electron/preload/debug-api` is not a
      * public export — Invariant #27 — so only the monorepo dev/e2e build, which has
      * the host source, supplies it).
      */
@@ -170,7 +170,7 @@ export interface BuildAppBundlesDeps {
     /** Read + parse a JSON file (the app's package.json); injected for testability. */
     readonly readJson: (file: string) => { name?: string };
     /**
-     * Resolve `@chimera/electron/preload/api` to a concrete entry file. In
+     * Resolve `@chimera-engine/electron/preload/api` to a concrete entry file. In
      * `verify:pack` mode it is given the throwaway `node_modules` so it resolves from
      * the packed tarball; otherwise called with no argument (resolve from the app).
      */
@@ -273,12 +273,12 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
 
     const resolvePreload = (nodeModules?: string): string => {
         // From the consumer's package.json (verify:pack) or the app's own — both
-        // resolve `@chimera/electron/preload/api` through the package `exports` map.
+        // resolve `@chimera-engine/electron/preload/api` through the package `exports` map.
         const fromPackageJson =
             nodeModules !== undefined
                 ? path.join(path.dirname(nodeModules), 'package.json')
                 : path.join(appDir, 'package.json');
-        return createRequire(fromPackageJson).resolve('@chimera/electron/preload/api');
+        return createRequire(fromPackageJson).resolve('@chimera-engine/electron/preload/api');
     };
 
     buildAppBundles({

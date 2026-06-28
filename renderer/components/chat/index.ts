@@ -5,7 +5,7 @@
 // `ChatPanel` is a higher-level, stateful feature component — wired to renderer
 // stores and the host IPC bridge — as opposed to the stateless design primitives
 // exported from `renderer/components/ui`. Games consume it through the single
-// public specifier `@chimera/renderer/components/chat` (the
+// public specifier `@chimera-engine/renderer/components/chat` (the
 // `chimera/no-game-renderer-internals` lint rule whitelists this barrel alongside
 // the UI primitive barrel; deep imports into the directory remain forbidden).
 //

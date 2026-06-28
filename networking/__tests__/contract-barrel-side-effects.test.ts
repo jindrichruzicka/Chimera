@@ -1,14 +1,14 @@
 /**
  * networking/__tests__/contract-barrel-side-effects.test.ts
  *
- * Asserts the `@chimera/networking` public root barrel is SIDE-EFFECT-FREE in
+ * Asserts the `@chimera-engine/networking` public root barrel is SIDE-EFFECT-FREE in
  * the sense the F60 AC (issue #768) requires: "Importing the barrel is
  * side-effect-free (no provider runtime evaluated)." Importing
- * `@chimera/networking` must evaluate NO concrete-provider runtime — neither a
+ * `@chimera-engine/networking` must evaluate NO concrete-provider runtime — neither a
  * module under `provider/local/` (the WebSocket provider, lobby server, client
  * connection) or `provider/steam/`, nor the `ws` package.
  *
- * Unlike the strictly type-only `@chimera/simulation` / `@chimera/ai` root
+ * Unlike the strictly type-only `@chimera-engine/simulation` / `@chimera-engine/ai` root
  * barrels (which erase to an empty bundle — F58 #759 / F59 #764), the networking
  * contract module legitimately carries three runtime VALUES that ARE part of
  * the provider contract: the `playerId` brand factory, the `JoinRejectedError`
@@ -33,8 +33,8 @@ import { fileURLToPath } from 'node:url';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const networkingDir = resolve(__dirname, '..');
 
-describe('@chimera/networking contract barrel is side-effect-free (issue #768)', () => {
-    it('importing @chimera/networking evaluates no concrete-provider runtime (provider/local, provider/steam, ws)', async () => {
+describe('@chimera-engine/networking contract barrel is side-effect-free (issue #768)', () => {
+    it('importing @chimera-engine/networking evaluates no concrete-provider runtime (provider/local, provider/steam, ws)', async () => {
         const result = await build({
             entryPoints: [resolve(networkingDir, 'index.ts')],
             bundle: true,

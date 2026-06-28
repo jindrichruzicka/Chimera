@@ -1,5 +1,5 @@
-import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 export const tacticsAudioRefs = {
     step: 'tactics/audio/sfx/step.wav' as AssetRef<AudioClipAsset>,

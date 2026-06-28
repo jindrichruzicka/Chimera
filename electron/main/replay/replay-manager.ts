@@ -26,7 +26,7 @@ import type {
     ReplayHeader,
     ReplayMigrator,
     ReplayRepository,
-} from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
 import type { Logger } from '../logging/logger.js';
 import type { ReplayListItem } from '../../preload/api-types.js';
 

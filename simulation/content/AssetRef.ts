@@ -30,7 +30,7 @@ export { MalformedAssetRefError } from '../foundation/asset-ref-parse.js';
 // The phantom asset-kind TYPES now live in the zero-dependency foundation leaf
 // `../foundation/asset-contract.js` (issue #758). They are imported for local
 // use by the runtime factories below and re-exported so
-// `@chimera/simulation/content/AssetRef.js` stays the unchanged public import path.
+// `@chimera-engine/simulation/content/AssetRef.js` stays the unchanged public import path.
 import type {
     AssetKindBrand,
     TextureAsset,
@@ -47,7 +47,7 @@ import type {
 // ---------------------------------------------------------------------------
 // Phantom asset-kind types — declared in `../foundation/asset-contract.js`
 // (foundation leaf, issue #758) and re-exported here so the public import path
-// `@chimera/simulation/content/AssetRef.js` is unchanged. `AssetKindRegistry`
+// `@chimera-engine/simulation/content/AssetRef.js` is unchanged. `AssetKindRegistry`
 // stays open for declaration merging — augment the shared module.
 // ---------------------------------------------------------------------------
 

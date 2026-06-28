@@ -85,7 +85,7 @@ function makeDeps(
 }
 
 const RENDERER_MANIFEST: PackageManifest = {
-    name: '@chimera/renderer',
+    name: '@chimera-engine/renderer',
     peerDependencies: {
         react: '^19',
         'react-dom': '^19',
@@ -93,7 +93,7 @@ const RENDERER_MANIFEST: PackageManifest = {
         '@react-three/fiber': '^9',
         next: '^15',
     },
-    dependencies: { '@chimera/simulation': 'workspace:*', zustand: '^5' },
+    dependencies: { '@chimera-engine/simulation': 'workspace:*', zustand: '^5' },
 };
 
 // ── Package list ──────────────────────────────────────────────────────────────
@@ -101,11 +101,11 @@ const RENDERER_MANIFEST: PackageManifest = {
 describe('CHIMERA_PACKAGES (re-exported)', () => {
     it('covers the five engine packages the gate scans', () => {
         expect(CHIMERA_PACKAGES.map((p) => p.name)).toEqual([
-            '@chimera/simulation',
-            '@chimera/ai',
-            '@chimera/networking',
-            '@chimera/renderer',
-            '@chimera/electron',
+            '@chimera-engine/simulation',
+            '@chimera-engine/ai',
+            '@chimera-engine/networking',
+            '@chimera-engine/renderer',
+            '@chimera-engine/electron',
         ]);
     });
 });
@@ -132,7 +132,7 @@ describe('extractImportSpecifiers', () => {
 
     it('ignores specifiers that appear only inside comments (TS pre-processor strips them)', () => {
         const src = [
-            '// import { x } from "@chimera/core";',
+            '// import { x } from "@chimera-engine/core";',
             '/* import { y } from "totally-fake"; */',
             "import { real } from 'zod';",
         ].join('\n');
@@ -148,8 +148,8 @@ describe('extractImportSpecifiers', () => {
 
 describe('specifierToPackageName', () => {
     it('strips subpaths and preserves the scope for scoped packages', () => {
-        expect(specifierToPackageName('@chimera/simulation/engine/types.js')).toBe(
-            '@chimera/simulation',
+        expect(specifierToPackageName('@chimera-engine/simulation/engine/types.js')).toBe(
+            '@chimera-engine/simulation',
         );
         expect(specifierToPackageName('@react-three/fiber')).toBe('@react-three/fiber');
     });
@@ -174,7 +174,7 @@ describe('isNodeBuiltin', () => {
 
     it('rejects real external packages', () => {
         expect(isNodeBuiltin('zod')).toBe(false);
-        expect(isNodeBuiltin('@chimera/simulation')).toBe(false);
+        expect(isNodeBuiltin('@chimera-engine/simulation')).toBe(false);
     });
 });
 
@@ -184,13 +184,13 @@ describe('buildAllowlist', () => {
     it('unions dependencies, peerDependencies, optionalDependencies, and the package own name', () => {
         const allow = buildAllowlist(RENDERER_MANIFEST);
         for (const name of [
-            '@chimera/renderer',
+            '@chimera-engine/renderer',
             'react',
             'react-dom',
             'three',
             '@react-three/fiber',
             'next',
-            '@chimera/simulation',
+            '@chimera-engine/simulation',
             'zustand',
         ]) {
             expect(allow.has(name)).toBe(true);
@@ -212,7 +212,7 @@ describe('findUndeclaredDeps', () => {
                     "import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';",
                     "import { jsx } from 'react/jsx-runtime';",
                     "import { create } from 'zustand';",
-                    "import type { GameSnapshot } from '@chimera/simulation/contracts';",
+                    "import type { GameSnapshot } from '@chimera-engine/simulation/contracts';",
                     "import { local } from './local.js';",
                     "import { readFile } from 'node:fs/promises';",
                 ].join('\n'),
@@ -223,7 +223,7 @@ describe('findUndeclaredDeps', () => {
 
     it('flags a stray runtime import not present in the manifest (the vitest-in-dist class)', () => {
         const manifest: PackageManifest = {
-            name: '@chimera/simulation',
+            name: '@chimera-engine/simulation',
             dependencies: { zod: '^4.3.6' },
         };
         const files = new Map<string, string>([
@@ -235,7 +235,7 @@ describe('findUndeclaredDeps', () => {
         const findings = findUndeclaredDeps(manifest, files);
         expect(findings).toHaveLength(1);
         expect(findings[0]).toMatchObject({
-            pkg: '@chimera/simulation',
+            pkg: '@chimera-engine/simulation',
             specifier: 'vitest',
             file: '/repo/simulation/dist/persistence/__test-support__/contractTests.js',
         });
@@ -243,8 +243,8 @@ describe('findUndeclaredDeps', () => {
 
     it('flags a consumer-provided virtual seam by default but skips it when allowed', () => {
         const manifest: PackageManifest = {
-            name: '@chimera/renderer',
-            dependencies: { '@chimera/simulation': 'workspace:*' },
+            name: '@chimera-engine/renderer',
+            dependencies: { '@chimera-engine/simulation': 'workspace:*' },
         };
         const files = new Map<string, string>([
             [
@@ -260,14 +260,14 @@ describe('findUndeclaredDeps', () => {
 
     it('does not flag specifiers that appear only in comments', () => {
         const manifest: PackageManifest = {
-            name: '@chimera/electron',
+            name: '@chimera-engine/electron',
             dependencies: { pino: '^10', zod: '^4' },
         };
         const files = new Map<string, string>([
             [
                 '/repo/electron/dist/preload/extensions-api.js',
                 [
-                    '// import { registerExtension } from "@chimera/core/preload/extensions-api.js";',
+                    '// import { registerExtension } from "@chimera-engine/core/preload/extensions-api.js";',
                     "import pino from 'pino';",
                 ].join('\n'),
             ],
@@ -300,28 +300,28 @@ describe('checkAllDeps', () => {
     it('reads each package manifest + dist and aggregates undeclared findings', async () => {
         const files: Record<string, string> = {
             '/repo/simulation/package.json': JSON.stringify({
-                name: '@chimera/simulation',
+                name: '@chimera-engine/simulation',
                 dependencies: { zod: '^4.3.6' },
             }),
             '/repo/simulation/dist/index.js': "import { z } from 'zod';\n",
             // ai/networking/renderer/electron manifests with a single clean dist file each
             '/repo/ai/package.json': JSON.stringify({
-                name: '@chimera/ai',
-                dependencies: { '@chimera/simulation': 'workspace:*' },
+                name: '@chimera-engine/ai',
+                dependencies: { '@chimera-engine/simulation': 'workspace:*' },
             }),
-            '/repo/ai/dist/index.js': "import { x } from '@chimera/simulation/engine';\n",
+            '/repo/ai/dist/index.js': "import { x } from '@chimera-engine/simulation/engine';\n",
             '/repo/networking/package.json': JSON.stringify({
-                name: '@chimera/networking',
-                dependencies: { '@chimera/simulation': 'workspace:*', ws: '^8' },
+                name: '@chimera-engine/networking',
+                dependencies: { '@chimera-engine/simulation': 'workspace:*', ws: '^8' },
             }),
             '/repo/networking/dist/index.js': "import { WebSocket } from 'ws';\n",
             '/repo/renderer/package.json': JSON.stringify({
-                name: '@chimera/renderer',
-                dependencies: { '@chimera/simulation': 'workspace:*' },
+                name: '@chimera-engine/renderer',
+                dependencies: { '@chimera-engine/simulation': 'workspace:*' },
             }),
-            '/repo/renderer/dist/index.js': "import { x } from '@chimera/simulation';\n",
+            '/repo/renderer/dist/index.js': "import { x } from '@chimera-engine/simulation';\n",
             '/repo/electron/package.json': JSON.stringify({
-                name: '@chimera/electron',
+                name: '@chimera-engine/electron',
                 peerDependencies: { electron: '^33' },
                 // intentionally omits 'pino' so the scan flags it
                 dependencies: { zod: '^4' },
@@ -333,7 +333,7 @@ describe('checkAllDeps', () => {
         const deps = makeDeps(run, makeFakeFsDeps(files));
         const findings = await checkAllDeps(deps);
         expect(findings).toHaveLength(1);
-        expect(findings[0]).toMatchObject({ pkg: '@chimera/electron', specifier: 'pino' });
+        expect(findings[0]).toMatchObject({ pkg: '@chimera-engine/electron', specifier: 'pino' });
     });
 });
 

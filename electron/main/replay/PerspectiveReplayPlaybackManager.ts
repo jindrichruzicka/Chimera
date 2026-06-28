@@ -34,7 +34,7 @@
 import type {
     PerspectiveReplayFile,
     PerspectiveReplayFrame,
-} from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
 // The IPC-contract types that cross the boundary, as used by the deterministic
 // `replay-playback-manager.ts`. `PerspectiveReplayPlaybackInfo` is the canonical
 // `open()` return shape — imported here rather than redeclared, mirroring how that

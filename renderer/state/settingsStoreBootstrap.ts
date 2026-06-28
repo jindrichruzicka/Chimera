@@ -14,7 +14,7 @@
  * Invariant #1: ResolvedSettings (not GameSnapshot) is what crosses IPC.
  */
 
-import type { SettingsAPI, Unsubscribe } from '@chimera/simulation/bridge/api-types.js';
+import type { SettingsAPI, Unsubscribe } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useSettingsStore } from './settingsStore';
 
 const ENGINE_SETTINGS_GAME_ID = '__engine__';

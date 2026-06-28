@@ -1,5 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import type { EventAudioBinding } from './EventAudioBinding.js';
 
 describe('EventAudioBinding', () => {

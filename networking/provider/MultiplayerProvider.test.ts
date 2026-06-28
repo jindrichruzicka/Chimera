@@ -20,7 +20,7 @@ import { describe, it, expect } from 'vitest';
 
 import { isBrowsable, playerId } from './MultiplayerProvider.js';
 
-import type { PlayerId } from '@chimera/simulation/contracts';
+import type { PlayerId } from '@chimera-engine/simulation/contracts';
 import type {
     MultiplayerProvider,
     BrowsableProvider,

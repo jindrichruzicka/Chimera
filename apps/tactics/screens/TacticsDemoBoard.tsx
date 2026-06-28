@@ -3,13 +3,13 @@
 import { Canvas } from '@react-three/fiber';
 import React, { useState } from 'react';
 import { OrthographicCamera, Vector3 } from 'three';
-import type { GameScreenProps } from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { GameScreenProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
     readTacticsTurnMode,
-} from '@chimera/tactics/constants.js';
+} from '@chimera-engine/tactics/constants.js';
 import {
     parseTacticsSceneUnits,
     parseTacticsSeatCommitted,

@@ -11,12 +11,12 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { SaveParseError } from '@chimera/simulation/persistence/index.js';
-import type { SaveFile } from '@chimera/simulation/persistence/index.js';
-import type { GamePhase } from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/index.js';
+import { SaveParseError } from '@chimera-engine/simulation/persistence/index.js';
+import type { SaveFile } from '@chimera-engine/simulation/persistence/index.js';
+import type { GamePhase } from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/index.js';
 import { CompressedSaveSerializer } from './CompressedSaveSerializer.js';
-import { JsonSaveSerializer } from '@chimera/simulation/persistence/index.js';
+import { JsonSaveSerializer } from '@chimera-engine/simulation/persistence/index.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 

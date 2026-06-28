@@ -65,9 +65,9 @@ describe('scaffoldGame', () => {
             'templates/blank/package.json',
             JSON.stringify(
                 {
-                    name: '@chimera/__game_kebab__',
+                    name: '@chimera-engine/__game_kebab__',
                     private: true,
-                    dependencies: { '@chimera/simulation': 'workspace:*' },
+                    dependencies: { '@chimera-engine/simulation': 'workspace:*' },
                 },
                 null,
                 4,
@@ -100,8 +100,8 @@ describe('scaffoldGame', () => {
                 {
                     name: 'chimera',
                     dependencies: {
-                        '@chimera/ai': 'workspace:*',
-                        '@chimera/tactics': 'workspace:*',
+                        '@chimera-engine/ai': 'workspace:*',
+                        '@chimera-engine/tactics': 'workspace:*',
                     },
                     scripts: {
                         typecheck: 'tsc --noEmit && tsc --noEmit -p apps/tactics/tsconfig.json',
@@ -149,7 +149,7 @@ describe('scaffoldGame', () => {
         expect(await readFile(boardPath, 'utf8')).toContain('MyCardGameBoard');
 
         const pkg = JSON.parse(await readFile(path.join(result.appDir, 'package.json'), 'utf8'));
-        expect(pkg.name).toBe('@chimera/my-card-game');
+        expect(pkg.name).toBe('@chimera-engine/my-card-game');
     });
 
     it('does not copy the template node_modules and leaves no token markers behind', async () => {
@@ -189,8 +189,8 @@ describe('scaffoldGame', () => {
         await scaffoldGame({ repoRoot, name: 'My Card Game' });
 
         const pkg = await readRootPkg();
-        expect(pkg.dependencies['@chimera/my-card-game']).toBe('workspace:*');
-        // Alphabetically ordered within the @chimera/* block.
+        expect(pkg.dependencies['@chimera-engine/my-card-game']).toBe('workspace:*');
+        // Alphabetically ordered within the @chimera-engine/* block.
         const keys = Object.keys(pkg.dependencies);
         expect(keys).toEqual([...keys].sort());
         expect(pkg.scripts['typecheck']).toContain(
@@ -266,7 +266,7 @@ describe('scaffoldGame', () => {
     it('emits a self-contained project (root files + rewritten app deps) in standalone mode and leaves the monorepo untouched', async () => {
         // The published CLI (and verify:scaffold via `--out`) drive standalone mode: the app lands
         // under `outputRoot/apps/<kebab>` and a project root is emitted around it (toolchain
-        // manifest, workspace yaml, vitest config, tsconfig) with the app's @chimera/* deps onto
+        // manifest, workspace yaml, vitest config, tsconfig) with the app's @chimera-engine/* deps onto
         // their published ranges. No monorepo is wired.
         const outputRoot = await mkdtemp(path.join(tmpdir(), 'chimera-standalone-'));
         try {
@@ -309,12 +309,12 @@ describe('scaffoldGame', () => {
             );
             expect(rootTsconfig.compilerOptions.strict).toBe(true);
 
-            // The app's @chimera/* deps are rewritten onto published ranges — no workspace:* survives.
+            // The app's @chimera-engine/* deps are rewritten onto published ranges — no workspace:* survives.
             const appPkg = JSON.parse(
                 await readFile(path.join(result.appDir, 'package.json'), 'utf8'),
             );
-            expect(appPkg.name).toBe('@chimera/my-card-game');
-            expect(appPkg.dependencies['@chimera/simulation']).toMatch(/^\^\d+\.\d+\.\d+$/);
+            expect(appPkg.name).toBe('@chimera-engine/my-card-game');
+            expect(appPkg.dependencies['@chimera-engine/simulation']).toMatch(/^\^\d+\.\d+\.\d+$/);
             expect(JSON.stringify(appPkg)).not.toContain('workspace:*');
 
             // The monorepo root is untouched: no dependency added, no tsconfig reference.

@@ -1,5 +1,5 @@
 {
-    // Type-check / editor / ESLint project for @chimera/electron (issue #777).
+    // Type-check / editor / ESLint project for @chimera-engine/electron (issue #777).
     // This is the config typescript-eslint's project service and the root
     // `typecheck` script use for the package: it covers ALL of electron/ — source,
     // `*.test.ts`, and test-support — on source. The published artifact is emitted
@@ -7,7 +7,7 @@
     // purely a verification/editor project.
     //
     // No path aliases are needed: every intra-package import is relative, so
-    // `@chimera/electron/*` never appears inside electron/ and the package's own
+    // `@chimera-engine/electron/*` never appears inside electron/ and the package's own
     // exports map never redirects a same-package import to dist.
     "extends": "../tsconfig.json",
     "compilerOptions": {

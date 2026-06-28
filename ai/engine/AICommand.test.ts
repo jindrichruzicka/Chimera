@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
 import type { AICommand, AnyAICommand, CommandProgress } from './AICommand.js';
 import type { AIParams, PlayerSnapshot } from './AITypes.js';
 import type { CommandContext } from './CommandContext.js';

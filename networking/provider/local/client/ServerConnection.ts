@@ -18,14 +18,17 @@
  */
 
 import WebSocket from 'ws';
-import type { PlayerId } from '@chimera/simulation/contracts';
-import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
+import type { PlayerId } from '@chimera-engine/simulation/contracts';
+import type {
+    ClientMessage,
+    ServerMessage,
+} from '@chimera-engine/simulation/foundation/messages.js';
 import type { DisconnectReason, Unsubscribe } from '../../MultiplayerProvider.js';
 import type { LobbyState } from '../../MultiplayerProvider.js';
 import { JoinRejectedError } from '../../MultiplayerProvider.js';
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
-import { ServerMessageSchema } from '@chimera/simulation/foundation/messages-schemas.js';
-import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
+import { ServerMessageSchema } from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 
 // ─── Result types ─────────────────────────────────────────────────────────────
 

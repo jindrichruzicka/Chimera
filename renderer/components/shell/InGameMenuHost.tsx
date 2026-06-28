@@ -3,11 +3,11 @@
 // renderer/components/shell/InGameMenuHost.tsx
 
 import React, { useCallback, useState } from 'react';
-import type { PlayerId } from '@chimera/simulation/bridge/api-types.js';
+import type { PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
     GameScreenComponent,
     InGameMenuProps,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { useLeaveGame } from '../../bridge/useLeaveGame.js';
 import { useInputAction } from '../../input/useInputAction.js';
 import { Button } from '../ui/Button.js';

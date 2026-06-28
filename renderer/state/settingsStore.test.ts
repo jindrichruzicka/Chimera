@@ -9,7 +9,7 @@
 
 import { describe, it, expect, vi } from 'vitest';
 import { useSettingsStore, createSettingsStore } from './settingsStore';
-import type { ResolvedSettings } from '@chimera/simulation/bridge/api-types.js';
+import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -31,7 +31,7 @@ pnpm dev:mp 3          # 1 host + 2 auto-joining clients (multiplayer dev)
 
 ## 15.3 Path aliases
 
-All `@chimera/*` path aliases are declared in the root `tsconfig.json` and resolved by `vite-tsconfig-paths` in Vitest and the renderer's Vite config. Never add bare relative `../../` imports across package boundaries — use the alias.
+All `@chimera-engine/*` path aliases are declared in the root `tsconfig.json` and resolved by `vite-tsconfig-paths` in Vitest and the renderer's Vite config. Never add bare relative `../../` imports across package boundaries — use the alias.
 
 ## 15.4 Vitest config
 

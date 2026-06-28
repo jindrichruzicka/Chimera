@@ -1,7 +1,7 @@
 import { TextureLoader } from 'three';
 import type { Texture } from 'three';
 
-import { isTraversalUnsafe } from '@chimera/simulation/foundation/asset-ref-parse.js';
+import { isTraversalUnsafe } from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
 
 import type {
     AssetKind,
@@ -12,11 +12,11 @@ import type {
     ParticleConfigAsset,
     SpriteSheetAsset,
     TextureAsset,
-} from '@chimera/simulation/content/AssetRef.js';
+} from '@chimera-engine/simulation/content/AssetRef.js';
 import type {
     AssetManifest,
     AssetManifestEntry,
-} from '@chimera/simulation/content/AssetManifest.js';
+} from '@chimera-engine/simulation/content/AssetManifest.js';
 
 import type { AssetResolver } from './AssetResolver';
 import {

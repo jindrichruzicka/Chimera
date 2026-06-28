@@ -3,8 +3,8 @@
 // apps/tactics/screens/TacticsInGameMenu.tsx
 
 import React from 'react';
-import type { InGameMenuProps } from '@chimera/simulation/foundation/game-screen-contract.js';
-import { Button, Modal } from '@chimera/renderer/components/ui';
+import type { InGameMenuProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
+import { Button, Modal } from '@chimera-engine/renderer/components/ui';
 
 /**
  * Tactics Leave-game confirmation dialog (F55 · §4.33). Adopted via the

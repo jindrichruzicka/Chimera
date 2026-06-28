@@ -9,11 +9,14 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
+import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
 import type { Unsubscribe } from '../../MultiplayerProvider.js';
-import type { ClientMessage, ServerMessage } from '@chimera/simulation/foundation/messages.js';
-import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
+import type {
+    ClientMessage,
+    ServerMessage,
+} from '@chimera-engine/simulation/foundation/messages.js';
+import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 import type { MessageBus } from './MessageBus.js';
 import { MessageRouter } from './MessageRouter.js';
 

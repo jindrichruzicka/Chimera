@@ -29,7 +29,7 @@ import type {
     PerspectiveReplayPlaybackInfo,
     PlayerSnapshot,
     ReplayPlaybackInfo,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import { createAssetManager, type AssetManager } from '../../../assets/AssetManager';
 import { createRendererGameAssetResolver } from '../../../assets/AssetResolver';
 import { GameShell } from '../../../components/shell/GameShell';

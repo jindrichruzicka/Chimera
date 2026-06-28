@@ -4,8 +4,14 @@
 // extend all three: the interface, the defaults, and the Zod shape.
 
 import { z } from 'zod';
-import { ENGINE_DEFAULTS, engineSettingsZodShape } from '@chimera/simulation/settings/index.js';
-import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
+import {
+    ENGINE_DEFAULTS,
+    engineSettingsZodShape,
+} from '@chimera-engine/simulation/settings/index.js';
+import type {
+    EngineSettings,
+    GameSettingsSchema,
+} from '@chimera-engine/simulation/settings/index.js';
 
 import { __GAME_CONSTANT___GAME_ID } from './constants.js';
 

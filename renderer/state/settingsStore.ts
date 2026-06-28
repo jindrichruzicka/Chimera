@@ -18,7 +18,7 @@ import type {
     ResolvedSettings,
     UserSettings,
     SettingsAPI,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 

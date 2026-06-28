@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from 'react';
 
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AudioHandle, PlayOptions } from './AudioManager';
 import { useAudioManager } from './AudioManagerContext.js';

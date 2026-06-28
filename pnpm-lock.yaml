@@ -8,22 +8,22 @@ importers:
 
   .:
     dependencies:
-      '@chimera/ai':
+      '@chimera-engine/ai':
         specifier: workspace:*
         version: link:ai
-      '@chimera/electron':
+      '@chimera-engine/electron':
         specifier: workspace:*
         version: link:electron
-      '@chimera/networking':
+      '@chimera-engine/networking':
         specifier: workspace:*
         version: link:networking
-      '@chimera/renderer':
+      '@chimera-engine/renderer':
         specifier: workspace:*
         version: link:renderer
-      '@chimera/simulation':
+      '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:simulation
-      '@chimera/tactics':
+      '@chimera-engine/tactics':
         specifier: workspace:*
         version: link:apps/tactics
       '@react-three/fiber':
@@ -159,37 +159,37 @@ importers:
 
   ai:
     dependencies:
-      '@chimera/simulation':
+      '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:../simulation
 
   apps/tactics:
     dependencies:
-      '@chimera/ai':
+      '@chimera-engine/ai':
         specifier: workspace:*
         version: link:../../ai
-      '@chimera/electron':
+      '@chimera-engine/electron':
         specifier: workspace:*
         version: link:../../electron
-      '@chimera/renderer':
+      '@chimera-engine/renderer':
         specifier: workspace:*
         version: link:../../renderer
-      '@chimera/simulation':
+      '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:../../simulation
 
   electron:
     dependencies:
-      '@chimera/ai':
+      '@chimera-engine/ai':
         specifier: workspace:*
         version: link:../ai
-      '@chimera/networking':
+      '@chimera-engine/networking':
         specifier: workspace:*
         version: link:../networking
-      '@chimera/renderer':
+      '@chimera-engine/renderer':
         specifier: workspace:*
         version: link:../renderer
-      '@chimera/simulation':
+      '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:../simulation
       electron:
@@ -204,7 +204,7 @@ importers:
 
   networking:
     dependencies:
-      '@chimera/simulation':
+      '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:../simulation
       ws:
@@ -217,7 +217,7 @@ importers:
 
   renderer:
     dependencies:
-      '@chimera/simulation':
+      '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:../simulation
       '@react-three/fiber':

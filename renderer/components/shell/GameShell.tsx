@@ -8,9 +8,9 @@ import type {
     GameResult,
     PlayerId,
     PlayerSnapshot,
-} from '@chimera/simulation/bridge/api-types.js';
-import type { AssetManifest } from '@chimera/simulation/content/AssetManifest.js';
-import type { ContentDatabase } from '@chimera/simulation/content/index.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
+import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
+import type { ContentDatabase } from '@chimera-engine/simulation/content/index.js';
 import {
     resolveGameResultOutcome,
     type GameHudProps,
@@ -18,8 +18,8 @@ import {
     type GameScreenRegistry,
     type GameResultBannerProps,
     type SendAction,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
@@ -531,4 +531,4 @@ export type {
     GameScreenProps,
     GameScreenRegistry,
     GameResultBannerProps,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';

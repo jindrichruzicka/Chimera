@@ -17,8 +17,8 @@
  *   #27 — CHIMERA_E2E is a test-only flag and absent/0 means no hook is set.
  */
 
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js';
 import { createRingBuffer } from './ws-ring-buffer.js';
 
 /** Maximum number of WebSocket frames retained in the E2E buffer. Oldest frames are evicted when this limit is reached. */

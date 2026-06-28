@@ -23,12 +23,12 @@ import {
     playerId,
     type LobbyState,
     type PlayerSnapshot,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
     GameHudProps,
     GameScreenProps,
     GameScreenRegistry,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { DeviceInfo } from '../../device/DeviceInfo.js';
 import { useUiStore } from '../../state/uiStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';

@@ -39,7 +39,7 @@ import type {
     SideChannelMessage,
     DisconnectReason,
 } from './MultiplayerProvider.js';
-import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
+import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
 
 // ─── Shared helpers ───────────────────────────────────────────────────────────
 

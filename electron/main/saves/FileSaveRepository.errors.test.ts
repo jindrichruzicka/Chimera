@@ -14,7 +14,7 @@ import {
     JsonSaveSerializer,
     createDefaultMigrator,
     SaveNotFoundError,
-} from '@chimera/simulation/persistence/index.js';
+} from '@chimera-engine/simulation/persistence/index.js';
 import { FileSaveRepository } from './FileSaveRepository.js';
 
 // vi.hoisted runs before any imports are evaluated so the stubs exist when

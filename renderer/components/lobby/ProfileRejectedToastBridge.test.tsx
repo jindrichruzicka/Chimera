@@ -8,7 +8,7 @@ import type {
     LobbyAPI,
     ProfileRejection,
     SystemAPI,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import { ProfileRejectedToastBridge } from './ProfileRejectedToastBridge';
 import { useToastStore } from '../../state/toastStore';
 

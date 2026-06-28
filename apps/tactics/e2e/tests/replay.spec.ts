@@ -24,13 +24,13 @@ import { GamePage } from '../pages/GamePage';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
 // F49 / #715 — §13.4 renderer-heap budget during replay playback, from the single
-// source of truth. Imported by relative path (not the @chimera/* alias, which the
+// source of truth. Imported by relative path (not the @chimera-engine/* alias, which the
 // Playwright spec runner does not resolve) so the gate can never drift;
 // shared/perf-budget.test.ts locks the canonical value. Replay reuses the live
 // ActionPipeline (Inv #42/#70), so its renderer-side heap must stay within the
 // same budget as a live match. Strict locally / under CHIMERA_PERF_STRICT=1,
 // informational on CI.
-import { RENDERER_HEAP_BUDGET_MB } from '@chimera/simulation/foundation/perf-budget.js';
+import { RENDERER_HEAP_BUDGET_MB } from '@chimera-engine/simulation/foundation/perf-budget.js';
 
 const TACTICS_GAME_ID = 'tactics';
 

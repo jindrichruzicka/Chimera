@@ -14,16 +14,16 @@ import {
     sceneId,
     type ActionEnvelope,
     type BaseGameSnapshot,
-} from '@chimera/simulation/engine/types.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
-import { DefaultStateProjector } from '@chimera/simulation/projection/index.js';
-import { createTacticsAIState } from '@chimera/tactics/ai/tacticsPolicy.js';
-import { registerTacticsActions } from '@chimera/tactics/actions.js';
-import { tacticsVisibilityRules } from '@chimera/tactics/visibility-rules.js';
-import { TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
-import type { LobbyAgentSlot } from '@chimera/networking';
+} from '@chimera-engine/simulation/engine/types.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
+import { DefaultStateProjector } from '@chimera-engine/simulation/projection/index.js';
+import { createTacticsAIState } from '@chimera-engine/tactics/ai/tacticsPolicy.js';
+import { registerTacticsActions } from '@chimera-engine/tactics/actions.js';
+import { tacticsVisibilityRules } from '@chimera-engine/tactics/visibility-rules.js';
+import { TACTICS_MOVE_UNIT_ACTION } from '@chimera-engine/tactics/constants.js';
+import type { LobbyAgentSlot } from '@chimera-engine/networking';
 import {
     buildDefaultAIPlayerAgent,
     buildInitialHostedSessionSnapshot,

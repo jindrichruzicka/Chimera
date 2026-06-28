@@ -12,12 +12,12 @@ import type {
     GameSettingsSchema,
     SettingsRepository,
     UserSettings,
-} from '@chimera/simulation/settings/index.js';
+} from '@chimera-engine/simulation/settings/index.js';
 import {
     ENGINE_DEFAULTS,
     InMemorySettingsRepository,
     SettingsNamespaceCollisionError,
-} from '@chimera/simulation/settings/index.js';
+} from '@chimera-engine/simulation/settings/index.js';
 import { SettingsManager } from './SettingsManager.js';
 
 // ── Test helpers ──────────────────────────────────────────────────────────────

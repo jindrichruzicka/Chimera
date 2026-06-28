@@ -3,7 +3,7 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { getSystemBridge } from './system-bridge';
-import type { SystemAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { SystemAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 describe('getSystemBridge', () => {
     it('returns null when source has no __chimera property', () => {

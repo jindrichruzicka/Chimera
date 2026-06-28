@@ -4,7 +4,7 @@ import React from 'react';
 import ReactThreeTestRenderer, { type ReactThreeTest } from '@react-three/test-renderer';
 import type { Mesh, MeshStandardMaterial } from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { entityId } from '@chimera/simulation/engine/types.js';
+import { entityId } from '@chimera-engine/simulation/engine/types.js';
 import { TacticsUnitPrimitive, type TacticsUnitPrimitiveProps } from './TacticsUnitPrimitive';
 
 type TestInstance = ReactThreeTest.ReactThreeTestInstance;

@@ -1,12 +1,12 @@
 // simulation/bridge/api-types.ts
 //
 // The host↔renderer bridge contract (`window.__chimera` / `ChimeraAPI` and every
-// nested namespace interface). It lives in the foundational `@chimera/simulation`
+// nested namespace interface). It lives in the foundational `@chimera-engine/simulation`
 // leaf — the ONE place both the renderer (which consumes the bridge) and
-// `electron/preload` (Invariant #5: depends on `@chimera/simulation` contracts only)
+// `electron/preload` (Invariant #5: depends on `@chimera-engine/simulation` contracts only)
 // may import it without a cross-layer back-edge. Side-effect-free type contracts
 // derived from simulation types, alongside the other `foundation/*-contract` types.
-// `@chimera/electron/preload/api-types` re-exports it (electron implements the
+// `@chimera-engine/electron/preload/api-types` re-exports it (electron implements the
 // contract), preserving that public surface; this removes the old renderer→electron
 // type back-edge (F62/F65).
 //
@@ -819,7 +819,7 @@ export interface LogsAPI {
  * **How to extend (TypeScript declaration merging):**
  * ```ts
  * // In your game package's type declarations:
- * declare module '@chimera/core/electron/preload/api-types.js' {
+ * declare module '@chimera-engine/core/electron/preload/api-types.js' {
  *     interface ChimeraExtensions {
  *         tactics: TacticsExtensionAPI;
  *     }
@@ -830,7 +830,7 @@ export interface LogsAPI {
  * call to `registerExtension()` from `extensions-api.ts` in your preload
  * entry, before `contextBridge.exposeInMainWorld` is invoked.
  *
- * Invariant: `ChimeraExtensions` is intentionally empty in `@chimera/core`
+ * Invariant: `ChimeraExtensions` is intentionally empty in `@chimera-engine/core`
  * 1.0.0. All extension namespaces are contributed by consuming packages.
  */
 // eslint-disable-next-line @typescript-eslint/no-empty-object-type
@@ -865,7 +865,7 @@ export interface ChimeraAPI {
     /**
      * Typed namespace map for all registered extensions.
      *
-     * Empty in `@chimera/core` 1.0.0. External packages populate this at
+     * Empty in `@chimera-engine/core` 1.0.0. External packages populate this at
      * preload time via `registerExtension()` from `extensions-api.ts` and
      * extend the type via TypeScript declaration merging on `ChimeraExtensions`.
      *
@@ -887,7 +887,7 @@ export interface ChimeraAPI {
 /**
  * Generic, game-agnostic content delivery (§4.8). Re-exported from the shared
  * contract so renderer code can `import type { GameContent } from
- * '@chimera/electron/preload/api-types.js'` alongside the other API types.
+ * '@chimera-engine/electron/preload/api-types.js'` alongside the other API types.
  */
 export type { GameContent, GameContentItem };
 

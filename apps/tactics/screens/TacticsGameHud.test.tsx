@@ -9,11 +9,14 @@ import {
     playerId,
     type PlayerId,
     type PlayerSnapshot,
-} from '@chimera/electron/preload/api-types.js';
-import { TACTICS_COMMIT_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
-import type { GameHudProps } from '@chimera/simulation/foundation/game-screen-contract.js';
-import { entityId } from '@chimera/electron/preload/api-types.js';
-import { EscapeStackProvider } from '@chimera/renderer/components/ui';
+} from '@chimera-engine/electron/preload/api-types.js';
+import {
+    TACTICS_COMMIT_ACTION,
+    TACTICS_MOVE_UNIT_ACTION,
+} from '@chimera-engine/tactics/constants.js';
+import type { GameHudProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
+import { entityId } from '@chimera-engine/electron/preload/api-types.js';
+import { EscapeStackProvider } from '@chimera-engine/renderer/components/ui';
 import { tacticsGridCoordinate } from '../actions.js';
 import type { BufferedTacticsAction } from '../commitment/contract.js';
 import { TacticsGameHud } from './TacticsGameHud';

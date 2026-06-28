@@ -19,17 +19,17 @@ import * as path from 'path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AutoSavePort, ReplayPort } from '../runtime/HostSessionPipeline.js';
 import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import type {
     ActionDefinition,
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import { JsonReplaySerializer, ReplayMigrator } from '@chimera/simulation/replay/index.js';
-import type { ReplayHeader } from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { JsonReplaySerializer, ReplayMigrator } from '@chimera-engine/simulation/replay/index.js';
+import type { ReplayHeader } from '@chimera-engine/simulation/replay/index.js';
 import { FileReplayRepository } from '../replay/FileReplayRepository.js';
 import { ReplayManager } from '../replay/replay-manager.js';
 import type { ReplayEngineIdentity } from '../replay/replay-manager.js';

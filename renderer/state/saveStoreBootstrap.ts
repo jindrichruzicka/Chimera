@@ -18,7 +18,7 @@
  * Invariant #1: SaveSlotMeta (not GameSnapshot) is what crosses IPC.
  */
 
-import type { SavesAPI, Unsubscribe } from '@chimera/simulation/bridge/api-types.js';
+import type { SavesAPI, Unsubscribe } from '@chimera-engine/simulation/bridge/api-types.js';
 import { useSaveStore } from './saveStore.js';
 
 /**

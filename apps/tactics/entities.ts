@@ -3,13 +3,13 @@ import type {
     EntityId,
     GameSetupConfig,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { entityId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { entityId } from '@chimera-engine/simulation/engine/types.js';
 import { tacticsGridCoordinate } from './actions.js';
 import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_START_POSITIONS,
-} from '@chimera/tactics/constants.js';
+} from '@chimera-engine/tactics/constants.js';
 
 /**
  * Builds the initial entity set for a tactics match — one movable unit per

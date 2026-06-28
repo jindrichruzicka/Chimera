@@ -4,7 +4,7 @@
 import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getSystemBridge, useQuit } from './useQuit';
-import type { SystemAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { SystemAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── getSystemBridge ───────────────────────────────────────────────────────────
 

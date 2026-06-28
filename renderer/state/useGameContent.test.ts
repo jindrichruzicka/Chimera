@@ -2,7 +2,7 @@
 
 import { renderHook, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ContentAPI, GameContent } from '@chimera/simulation/bridge/api-types.js';
+import type { ContentAPI, GameContent } from '@chimera-engine/simulation/bridge/api-types.js';
 import { getContentBridge, resetGameContentCache, useGameContent } from './useGameContent';
 
 // The hook passes content through verbatim, so the item fields are arbitrary

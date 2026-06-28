@@ -1,5 +1,5 @@
 {
-    "name": "@chimera/simulation",
+    "name": "@chimera-engine/simulation",
     "version": "0.9.0",
     "description": "Deterministic, host-authoritative game-simulation core for the Chimera engine.",
     "license": "MIT",

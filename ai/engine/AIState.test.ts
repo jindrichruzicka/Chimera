@@ -14,7 +14,7 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
 import type { AIState } from './AIState.js';
 import type { CommandContext } from './CommandContext.js';
 import type { CommandScheduler, CommandProgress } from './CommandScheduler.js';

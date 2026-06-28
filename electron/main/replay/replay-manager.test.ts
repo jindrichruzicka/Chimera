@@ -13,9 +13,9 @@ import {
     InMemoryReplayRepository,
     ReplayMigrator,
     ReplayVersionError,
-} from '@chimera/simulation/replay/index.js';
-import type { ReplayHeader, ReplayRepository } from '@chimera/simulation/replay/index.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/replay/index.js';
+import type { ReplayHeader, ReplayRepository } from '@chimera-engine/simulation/replay/index.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { createLogger, createMemorySink } from '../logging/logger.js';
 import type { MemorySink } from '../logging/logger.js';
 import { ReplayManager } from './replay-manager.js';

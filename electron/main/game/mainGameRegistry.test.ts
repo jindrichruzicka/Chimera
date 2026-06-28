@@ -12,9 +12,9 @@ import { describe, expect, it } from 'vitest';
 
 import type { ZodType } from 'zod';
 
-import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
-import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
-import type { VisibilityRules } from '@chimera/simulation/projection/index.js';
+import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import type { VisibilityRules } from '@chimera-engine/simulation/projection/index.js';
 
 import { createMainGameRegistry, type MainGameContribution } from './mainGameRegistry.js';
 

@@ -24,23 +24,26 @@
 
 import { describe, expect, it } from 'vitest';
 
-import { ActionPipeline } from '@chimera/simulation/engine/ActionPipeline.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { registerEngineActions } from '@chimera/simulation/engine/EngineActions.js';
+import { ActionPipeline } from '@chimera-engine/simulation/engine/ActionPipeline.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import { registerTacticsActions } from '@chimera/tactics/actions.js';
-import { buildInitialTacticsEntities } from '@chimera/tactics/entities.js';
-import { withSeededStamina } from '@chimera/tactics/stamina.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { registerTacticsActions } from '@chimera-engine/tactics/actions.js';
+import { buildInitialTacticsEntities } from '@chimera-engine/tactics/entities.js';
+import { withSeededStamina } from '@chimera-engine/tactics/stamina.js';
 import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera/tactics/constants.js';
-import { MAIN_HEAP_BUDGET_MB, TICK_BUDGET_MS } from '@chimera/simulation/foundation/perf-budget.js';
+} from '@chimera-engine/tactics/constants.js';
+import {
+    MAIN_HEAP_BUDGET_MB,
+    TICK_BUDGET_MS,
+} from '@chimera-engine/simulation/foundation/perf-budget.js';
 
 // ─── Gating policy ──────────────────────────────────────────────────────────
 

@@ -17,13 +17,17 @@ import {
  */
 
 describe('buildStandaloneToolchainDeps', () => {
-    it('merges root deps + devDeps and strips every @chimera/* workspace entry', () => {
+    it('merges root deps + devDeps and strips every @chimera-engine/* workspace entry', () => {
         const deps = buildStandaloneToolchainDeps({
-            dependencies: { three: '^0.184', '@chimera/renderer': 'workspace:*' },
-            devDependencies: { vitest: '^3', '@chimera/tactics': 'workspace:*', next: '^15' },
+            dependencies: { three: '^0.184', '@chimera-engine/renderer': 'workspace:*' },
+            devDependencies: {
+                vitest: '^3',
+                '@chimera-engine/tactics': 'workspace:*',
+                next: '^15',
+            },
         });
         expect(deps).toEqual({ three: '^0.184', vitest: '^3', next: '^15' });
-        expect(Object.keys(deps).some((k) => k.startsWith('@chimera/'))).toBe(false);
+        expect(Object.keys(deps).some((k) => k.startsWith('@chimera-engine/'))).toBe(false);
     });
 });
 
@@ -36,10 +40,10 @@ describe('buildStandaloneRootManifest', () => {
         expect(manifest.private).toBe(true);
         expect(manifest.name).toBe('my-game');
         expect(manifest.devDependencies['next']).toBe('^15');
-        // No @chimera/* leaks into the declared deps (the app declares them, resolved from npm).
-        expect(Object.keys(manifest.devDependencies).some((k) => k.startsWith('@chimera/'))).toBe(
-            false,
-        );
+        // No @chimera-engine/* leaks into the declared deps (the app declares them, resolved from npm).
+        expect(
+            Object.keys(manifest.devDependencies).some((k) => k.startsWith('@chimera-engine/')),
+        ).toBe(false);
         // The published form has no pnpm.overrides — npm resolution, not tarballs.
         expect(manifest.pnpm.overrides).toBeUndefined();
         // electron + esbuild install scripts are allowed (e2e needs the binaries).
@@ -51,7 +55,7 @@ describe('buildStandaloneRootManifest', () => {
     });
 
     it('carries the supplied pnpm.overrides for the gate tarball-resolved form', () => {
-        const overrides = { '@chimera/renderer': 'file:/tmp/chimera-renderer-0.9.0.tgz' };
+        const overrides = { '@chimera-engine/renderer': 'file:/tmp/chimera-renderer-0.9.0.tgz' };
         const manifest = buildStandaloneRootManifest({
             name: 'chimera-verify-scaffold-root',
             toolchainDeps: { next: '^15' },
@@ -81,10 +85,10 @@ describe('buildStandaloneRootTsconfig', () => {
 
 describe('rewriteAppPackageForStandalone', () => {
     const raw = JSON.stringify({
-        name: '@chimera/my-game',
+        name: '@chimera-engine/my-game',
         dependencies: {
-            '@chimera/simulation': 'workspace:*',
-            '@chimera/renderer': 'workspace:*',
+            '@chimera-engine/simulation': 'workspace:*',
+            '@chimera-engine/renderer': 'workspace:*',
         },
         scripts: {
             'build:app': 'tsx electron/build-main.ts',
@@ -93,15 +97,18 @@ describe('rewriteAppPackageForStandalone', () => {
         },
     });
 
-    it('rewrites @chimera/* workspace deps onto their published ^ranges', () => {
+    it('rewrites @chimera-engine/* workspace deps onto their published ^ranges', () => {
         const out = JSON.parse(
             rewriteAppPackageForStandalone(raw, {
-                engineRanges: { '@chimera/simulation': '^0.9.0', '@chimera/renderer': '^0.9.0' },
+                engineRanges: {
+                    '@chimera-engine/simulation': '^0.9.0',
+                    '@chimera-engine/renderer': '^0.9.0',
+                },
                 nodeModulesEnv: 'node_modules',
             }),
         );
-        expect(out.dependencies['@chimera/simulation']).toBe('^0.9.0');
-        expect(out.dependencies['@chimera/renderer']).toBe('^0.9.0');
+        expect(out.dependencies['@chimera-engine/simulation']).toBe('^0.9.0');
+        expect(out.dependencies['@chimera-engine/renderer']).toBe('^0.9.0');
         expect(JSON.stringify(out)).not.toContain('workspace:*');
     });
 
@@ -136,12 +143,12 @@ describe('rewriteAppPackageForStandalone', () => {
 });
 
 describe('buildStandaloneVitestConfig', () => {
-    it('aliases chimera-game-registration to the app register and resolves @chimera via node_modules', () => {
+    it('aliases chimera-game-registration to the app register and resolves @chimera-engine via node_modules', () => {
         const config = buildStandaloneVitestConfig('my-game');
         expect(config).toContain('chimera-game-registration');
         expect(config).toContain('apps/my-game/renderer/register.ts');
-        // The config must NOT pull @chimera/* onto source — that is the reach-through the gate forbids.
+        // The config must NOT pull @chimera-engine/* onto source — that is the reach-through the gate forbids.
         expect(config).not.toContain('createPreferTypeScriptSourceResolver');
-        expect(config).not.toContain('@chimera/renderer');
+        expect(config).not.toContain('@chimera-engine/renderer');
     });
 });

@@ -1,4 +1,4 @@
-import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
     PROFILE_DIRECTORY_CHANGED_CHANNEL,

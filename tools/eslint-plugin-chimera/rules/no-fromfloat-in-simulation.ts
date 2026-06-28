@@ -31,7 +31,7 @@ const RULE_NAME = 'chimera/no-fromfloat-in-simulation';
  * Matches:
  *   './FixedPoint'
  *   '../engine/FixedPoint'
- *   '@chimera/simulation/engine/FixedPoint'
+ *   '@chimera-engine/simulation/engine/FixedPoint'
  *   './FixedPoint.js'  / './FixedPoint.ts'
  */
 function isFixedPointSource(source: string): boolean {

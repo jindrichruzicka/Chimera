@@ -8,15 +8,15 @@
  */
 
 import { describe, expect, it, vi } from 'vitest';
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,
     EntityId,
-} from '@chimera/simulation/engine/types.js';
-import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import { AgentManager } from '../engine/AgentManager.js';
-import type { StateProjector } from '@chimera/simulation/projection/StateProjector.js';
+import type { StateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
 import { AIBrain } from '../engine/AIBrain.js';
 import type { AIStateMachine } from '../engine/AIStateMachine.js';
 import type { CommandContext } from '../engine/CommandContext.js';

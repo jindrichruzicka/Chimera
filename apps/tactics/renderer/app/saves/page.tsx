@@ -1,1 +1,1 @@
-export { default } from '@chimera/renderer/shell/saves/page';
+export { default } from '@chimera-engine/renderer/shell/saves/page';

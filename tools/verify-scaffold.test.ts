@@ -3,7 +3,7 @@
 // Unit tests for the `verify:scaffold` scaffold-and-smoke gate (issue #801, F65).
 //
 // Exercises the gate-owned pure wiring — buildPnpmOverrides, the applyTarballOverrides layer
-// (which forces the published standalone manifest's @chimera/* edges onto the packed tarballs),
+// (which forces the published standalone manifest's @chimera-engine/* edges onto the packed tarballs),
 // the app dependency rewrite (workspace:* -> file:<tarball>), and the verifyScaffold /
 // verifyScaffoldSelfTest orchestration (step order, short-circuit on failure, finally cleanup) —
 // with injected fakes, so no real pnpm, tsx, playwright, electron, or filesystem is touched.
@@ -103,7 +103,7 @@ function makeFakeRun(
         }
         // The scaffold CLI run: emulate what `create-chimera-game --out` writes in standalone mode
         // — the project ROOT (published-form toolchain manifest: no pnpm.overrides) AND the app
-        // (with @chimera/* on their published ^ranges). The gate then layers overrides on the root
+        // (with @chimera-engine/* on their published ^ranges). The gate then layers overrides on the root
         // and rewrites the app deps onto the tarballs.
         if (cmd === 'tsx' && args.some((a) => a.includes('create-chimera-game'))) {
             files.set(
@@ -122,9 +122,9 @@ function makeFakeRun(
                 JSON.stringify({
                     name: PROBE_GAME.pkg,
                     dependencies: {
-                        '@chimera/simulation': '^0.9.0',
-                        '@chimera/renderer': '^0.9.0',
-                        '@chimera/electron': '^0.9.0',
+                        '@chimera-engine/simulation': '^0.9.0',
+                        '@chimera-engine/renderer': '^0.9.0',
+                        '@chimera-engine/electron': '^0.9.0',
                     },
                 }),
             );
@@ -143,11 +143,11 @@ function makeFakeRun(
 const TMP_ROOT = `${path.join(tmpdir(), 'chimera-verify-scaffold-')}1`;
 
 const TARBALLS = {
-    '@chimera/simulation': '/tmp/t/chimera-simulation-0.9.0.tgz',
-    '@chimera/ai': '/tmp/t/chimera-ai-0.9.0.tgz',
-    '@chimera/networking': '/tmp/t/chimera-networking-0.9.0.tgz',
-    '@chimera/renderer': '/tmp/t/chimera-renderer-0.9.0.tgz',
-    '@chimera/electron': '/tmp/t/chimera-electron-0.9.0.tgz',
+    '@chimera-engine/simulation': '/tmp/t/chimera-simulation-0.9.0.tgz',
+    '@chimera-engine/ai': '/tmp/t/chimera-ai-0.9.0.tgz',
+    '@chimera-engine/networking': '/tmp/t/chimera-networking-0.9.0.tgz',
+    '@chimera-engine/renderer': '/tmp/t/chimera-renderer-0.9.0.tgz',
+    '@chimera-engine/electron': '/tmp/t/chimera-electron-0.9.0.tgz',
 } as const;
 
 function makeDeps(
@@ -167,16 +167,20 @@ function makeDeps(
 // ── Pure helpers ────────────────────────────────────────────────────────────────
 
 describe('buildPnpmOverrides', () => {
-    it('maps every @chimera/* package onto its file:<tarball> so packed internal edges resolve', () => {
+    it('maps every @chimera-engine/* package onto its file:<tarball> so packed internal edges resolve', () => {
         const overrides = buildPnpmOverrides(TARBALLS);
-        expect(overrides['@chimera/simulation']).toBe(`file:${TARBALLS['@chimera/simulation']}`);
-        expect(overrides['@chimera/renderer']).toBe(`file:${TARBALLS['@chimera/renderer']}`);
+        expect(overrides['@chimera-engine/simulation']).toBe(
+            `file:${TARBALLS['@chimera-engine/simulation']}`,
+        );
+        expect(overrides['@chimera-engine/renderer']).toBe(
+            `file:${TARBALLS['@chimera-engine/renderer']}`,
+        );
         expect(Object.keys(overrides)).toHaveLength(5);
     });
 });
 
 describe('applyTarballOverrides', () => {
-    it('layers pnpm.overrides onto the published (override-free) manifest, forcing @chimera/* onto tarballs', () => {
+    it('layers pnpm.overrides onto the published (override-free) manifest, forcing @chimera-engine/* onto tarballs', () => {
         // The CLI emits the published form: toolchain deps, no overrides (npm resolution).
         const published = buildStandaloneRootManifest({
             name: 'chimera-verify-scaffold-root',
@@ -186,16 +190,16 @@ describe('applyTarballOverrides', () => {
 
         const resolved = applyTarballOverrides(published, TARBALLS);
 
-        // Every @chimera/* edge is forced onto its packed tarball for the gate's local verify.
-        expect(resolved.pnpm.overrides?.['@chimera/renderer']).toBe(
-            `file:${TARBALLS['@chimera/renderer']}`,
+        // Every @chimera-engine/* edge is forced onto its packed tarball for the gate's local verify.
+        expect(resolved.pnpm.overrides?.['@chimera-engine/renderer']).toBe(
+            `file:${TARBALLS['@chimera-engine/renderer']}`,
         );
         expect(Object.keys(resolved.pnpm.overrides ?? {})).toHaveLength(5);
-        // The rest of the root is untouched: toolchain deps, no @chimera/* leak, stubbed build.
+        // The rest of the root is untouched: toolchain deps, no @chimera-engine/* leak, stubbed build.
         expect(resolved.devDependencies['next']).toBe('^15');
-        expect(Object.keys(resolved.devDependencies).some((k) => k.startsWith('@chimera/'))).toBe(
-            false,
-        );
+        expect(
+            Object.keys(resolved.devDependencies).some((k) => k.startsWith('@chimera-engine/')),
+        ).toBe(false);
         expect(resolved.pnpm.onlyBuiltDependencies).toEqual(['electron', 'esbuild']);
         expect(resolved.scripts['build:packages']).not.toContain('tsc');
         // overrides serialize first (historical key order).
@@ -204,20 +208,20 @@ describe('applyTarballOverrides', () => {
 });
 
 describe('rewriteAppChimeraDeps', () => {
-    it('rewrites the app workspace:* @chimera deps onto file:<tarball>, leaving others intact', () => {
+    it('rewrites the app workspace:* @chimera-engine deps onto file:<tarball>, leaving others intact', () => {
         const raw = JSON.stringify({
             name: PROBE_GAME.pkg,
             dependencies: {
-                '@chimera/renderer': 'workspace:*',
-                '@chimera/simulation': 'workspace:*',
+                '@chimera-engine/renderer': 'workspace:*',
+                '@chimera-engine/simulation': 'workspace:*',
             },
         });
         const rewritten = JSON.parse(rewriteAppChimeraDeps(raw, TARBALLS));
-        expect(rewritten.dependencies['@chimera/renderer']).toBe(
-            `file:${TARBALLS['@chimera/renderer']}`,
+        expect(rewritten.dependencies['@chimera-engine/renderer']).toBe(
+            `file:${TARBALLS['@chimera-engine/renderer']}`,
         );
-        expect(rewritten.dependencies['@chimera/simulation']).toBe(
-            `file:${TARBALLS['@chimera/simulation']}`,
+        expect(rewritten.dependencies['@chimera-engine/simulation']).toBe(
+            `file:${TARBALLS['@chimera-engine/simulation']}`,
         );
         // No workspace:* spec survives (pnpm would reject it without a matching member).
         expect(JSON.stringify(rewritten)).not.toContain('workspace:*');
@@ -261,8 +265,8 @@ describe('verifyScaffold', () => {
         const rootPkg = JSON.parse(files.get(path.join(tmpRoot, 'package.json')) ?? '{}') as {
             pnpm?: { overrides?: Record<string, string> };
         };
-        expect(rootPkg.pnpm?.overrides?.['@chimera/renderer']).toContain('file:');
-        // The app's @chimera/* deps were rewritten onto the packed tarballs.
+        expect(rootPkg.pnpm?.overrides?.['@chimera-engine/renderer']).toContain('file:');
+        // The app's @chimera-engine/* deps were rewritten onto the packed tarballs.
         const appPkg = files.get(path.join(tmpRoot, 'apps', PROBE_GAME.kebab, 'package.json'));
         expect(appPkg).toContain('file:');
         expect(appPkg).not.toContain('workspace:*');

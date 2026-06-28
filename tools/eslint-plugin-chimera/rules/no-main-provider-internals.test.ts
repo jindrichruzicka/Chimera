@@ -4,14 +4,14 @@
  * Unit tests for the `chimera/no-main-provider-internals` ESLint rule using
  * Vitest + ESLint RuleTester.
  *
- * Main-process orchestration (electron/main) must talk to @chimera/networking
+ * Main-process orchestration (electron/main) must talk to @chimera-engine/networking
  * exclusively through the public barrel interfaces (MultiplayerProvider /
  * HostTransport / ClientTransport); it must never reach into a provider-specific
  * subdirectory (provider/local/*, provider/steam/*, or their server/client
  * internals). The composition root electron/main/index.ts is the sole exempt
  * file — it wires the concrete provider into the DI graph (Invariant #38).
  *
- * Enforces Invariant #47 across the @chimera/networking boundary (issue #769);
+ * Enforces Invariant #47 across the @chimera-engine/networking boundary (issue #769);
  * mirrors `chimera/no-main-games-import` (the games/* electron/main boundary).
  */
 
@@ -36,32 +36,32 @@ ruleTester.run('chimera/no-main-provider-internals', rule, {
         // The public barrel is the orchestration entry point.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
-            code: `import { JoinRejectedError } from '@chimera/networking';`,
+            code: `import { JoinRejectedError } from '@chimera-engine/networking';`,
         },
         {
             filename: 'electron/main/runtime/StateBroadcaster.ts',
-            code: `import { playerId } from '@chimera/networking';`,
+            code: `import { playerId } from '@chimera-engine/networking';`,
         },
         // The interface module itself is the public contract (same types as the
         // barrel) — importing it is allowed; only concrete providers are off-limits.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
-            code: `import { JoinRejectedError } from '@chimera/networking/provider/MultiplayerProvider.js';`,
+            code: `import { JoinRejectedError } from '@chimera-engine/networking/provider/MultiplayerProvider.js';`,
         },
         // The composition root wires the concrete provider via DI (Invariant #38) — exempt.
         {
             filename: 'electron/main/index.ts',
-            code: `import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';`,
+            code: `import { LocalWebSocketProvider } from '@chimera-engine/networking/provider/local/LocalWebSocketProvider.js';`,
         },
         // Test files legitimately import provider internals as fixtures (exempt).
         {
             filename: 'electron/main/runtime/StateBroadcaster.test.ts',
-            code: `import { WsHostTransport } from '@chimera/networking/provider/local/server/WsHostTransport.js';`,
+            code: `import { WsHostTransport } from '@chimera-engine/networking/provider/local/server/WsHostTransport.js';`,
         },
         // electron/main importing other engine packages is out of scope here.
         {
             filename: 'electron/main/index.ts',
-            code: `import { ActionPipeline } from '@chimera/simulation/engine/ActionPipeline.js';`,
+            code: `import { ActionPipeline } from '@chimera-engine/simulation/engine/ActionPipeline.js';`,
         },
         // The rule only guards electron/main — the networking package itself may
         // wire its own internals.
@@ -86,25 +86,25 @@ ruleTester.run('chimera/no-main-provider-internals', rule, {
         // Orchestration manager reaching into the local provider implementation.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
-            code: `import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';`,
+            code: `import { LocalWebSocketProvider } from '@chimera-engine/networking/provider/local/LocalWebSocketProvider.js';`,
             errors: [{ messageId: 'mainProviderInternals' }],
         },
         // Reaching into the steam provider implementation.
         {
             filename: 'electron/main/runtime/StateBroadcaster.ts',
-            code: `import { SteamNetworkProvider } from '@chimera/networking/provider/steam/SteamNetworkProvider.js';`,
+            code: `import { SteamNetworkProvider } from '@chimera-engine/networking/provider/steam/SteamNetworkProvider.js';`,
             errors: [{ messageId: 'mainProviderInternals' }],
         },
         // A deep server/ internal of the local provider.
         {
             filename: 'electron/main/runtime/StateBroadcaster.ts',
-            code: `import { WsHostTransport } from '@chimera/networking/provider/local/server/WsHostTransport.js';`,
+            code: `import { WsHostTransport } from '@chimera-engine/networking/provider/local/server/WsHostTransport.js';`,
             errors: [{ messageId: 'mainProviderInternals' }],
         },
         // The in-memory test double is a concrete provider — not for production orchestration.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
-            code: `import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';`,
+            code: `import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';`,
             errors: [{ messageId: 'mainProviderInternals' }],
         },
         // Relative path navigating into a provider internal.
@@ -116,19 +116,19 @@ ruleTester.run('chimera/no-main-provider-internals', rule, {
         // Dynamic import() of a provider internal in a non-exempt main file.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
-            code: `const m = import('@chimera/networking/provider/local/LocalWebSocketProvider.js');`,
+            code: `const m = import('@chimera-engine/networking/provider/local/LocalWebSocketProvider.js');`,
             errors: [{ messageId: 'mainProviderInternals' }],
         },
         // Re-export from a provider internal.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
-            code: `export { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';`,
+            code: `export { LocalWebSocketProvider } from '@chimera-engine/networking/provider/local/LocalWebSocketProvider.js';`,
             errors: [{ messageId: 'mainProviderInternals' }],
         },
         // Export-all from a provider internal.
         {
             filename: 'electron/main/lobby/LobbyManager.ts',
-            code: `export * from '@chimera/networking/provider/steam/SteamNetworkProvider.js';`,
+            code: `export * from '@chimera-engine/networking/provider/steam/SteamNetworkProvider.js';`,
             errors: [{ messageId: 'mainProviderInternals' }],
         },
     ],

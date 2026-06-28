@@ -94,13 +94,13 @@ Games and first-party extension libraries may contribute new phantom kinds witho
 
 ```typescript
 // games/<game>/assets/asset-kinds.ts
-import type { AssetKindBrand } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetKindBrand } from '@chimera-engine/simulation/content/AssetRef.js';
 
 export interface GameVoxelAsset extends AssetKindBrand<'<game>:voxel'> {
     readonly __gameVoxelAsset: unique symbol;
 }
 
-declare module '@chimera/simulation/content/AssetRef.js' {
+declare module '@chimera-engine/simulation/content/AssetRef.js' {
     interface AssetKindRegistry {
         readonly '<game>:voxel': GameVoxelAsset;
     }
@@ -270,8 +270,8 @@ export function useAsset<T extends AssetKind>(
 
 ```tsx
 // games/<game>/screens/components/EntityMesh.tsx
-import { useAsset } from '@chimera/renderer/assets/useAsset';
-import { TextureAsset, AssetRef } from '@chimera/simulation/content';
+import { useAsset } from '@chimera-engine/renderer/assets/useAsset';
+import { TextureAsset, AssetRef } from '@chimera-engine/simulation/content';
 
 interface EntityMeshProps {
     portraitRef: AssetRef<TextureAsset>;

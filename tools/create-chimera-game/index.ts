@@ -8,7 +8,7 @@
  *
  * Template resolution is generic — there is no per-template branching, so a future template drops
  * in as a new `templates/<id>/` directory with zero changes here. This module imports no
- * `@chimera/*` package (boundary lint forbids it for `tools/`); it depends only on `node:*` and
+ * `@chimera-engine/*` package (boundary lint forbids it for `tools/`); it depends only on `node:*` and
  * the two sibling pure modules.
  *
  * The exported {@link scaffoldGame} performs the filesystem copy + root wiring and is what the
@@ -69,7 +69,7 @@ export interface ScaffoldGameOptions {
      *     contributors via `pnpm create:game --workspace` and the existing in-process callers.
      *   - `'standalone'` — a SELF-CONTAINED project: the app under `<outputRoot>/apps/<kebab>` PLUS
      *     a synthesized project root (`package.json` toolchain manifest, `pnpm-workspace.yaml`,
-     *     `vitest.config.mts`, `tsconfig.json`), and the app's `@chimera/*` deps rewritten onto
+     *     `vitest.config.mts`, `tsconfig.json`), and the app's `@chimera-engine/*` deps rewritten onto
      *     their published `^x.y.z` ranges. No monorepo is required to install + boot it.
      */
     readonly mode?: 'workspace' | 'standalone';
@@ -156,7 +156,7 @@ async function collectFiles(dir: string, segments: string[] = []): Promise<strin
 }
 
 /**
- * Add `@chimera/<kebab>` to the root `package.json` dependencies (kept alphabetically sorted)
+ * Add `@chimera-engine/<kebab>` to the root `package.json` dependencies (kept alphabetically sorted)
  * and append the per-app `tsc --noEmit` line to the `typecheck` script — matching how
  * `apps/tactics` is wired. `package.json` is plain JSON, so it is parsed and reserialised.
  */
@@ -168,7 +168,7 @@ async function wireRootPackageJson(repoRoot: string, kebab: string): Promise<voi
         [key: string]: unknown;
     };
 
-    const deps = { ...(pkg.dependencies ?? {}), [`@chimera/${kebab}`]: 'workspace:*' };
+    const deps = { ...(pkg.dependencies ?? {}), [`@chimera-engine/${kebab}`]: 'workspace:*' };
     pkg.dependencies = Object.fromEntries(
         Object.entries(deps).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
     );
@@ -216,7 +216,7 @@ async function wireRootTsconfigBuild(repoRoot: string, kebab: string): Promise<v
  * installs + boots with no monorepo: the toolchain manifest (`package.json`), the lone-member
  * `pnpm-workspace.yaml`, the unit-arm `vitest.config.mts`, and a `tsconfig.json` carrying the
  * frozen root `compilerOptions` the app's tsconfigs `extends`. Finally rewrites the app's
- * `@chimera/*` deps onto their published ranges and wires the Electron-host node_modules env into
+ * `@chimera-engine/*` deps onto their published ranges and wires the Electron-host node_modules env into
  * its build/e2e scripts. The toolchain + engine versions come from the committed snapshot
  * ({@link TOOLCHAIN_DEPS} / {@link ENGINE_DEP_RANGES} / {@link ROOT_COMPILER_OPTIONS}), so no
  * monorepo read is needed at `npm create` time. Shared by the published CLI and the
@@ -453,12 +453,12 @@ if (process.env['VITEST'] === undefined) {
                 console.log('[create-chimera-game] Done. Next steps:');
                 if (values.workspace) {
                     console.log('  pnpm typecheck');
-                    console.log(`  pnpm --filter @chimera/${result.names.kebab} build:app`);
+                    console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                 } else {
                     const rel = path.relative(process.cwd(), installCwd) || '.';
                     console.log(`  cd ${rel}`);
-                    console.log(`  pnpm --filter @chimera/${result.names.kebab} test`);
-                    console.log(`  pnpm --filter @chimera/${result.names.kebab} build:app`);
+                    console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} test`);
+                    console.log(`  pnpm --filter @chimera-engine/${result.names.kebab} build:app`);
                 }
             } catch (error) {
                 console.error(

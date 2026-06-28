@@ -14,7 +14,7 @@ import type {
     GameSettingsPageDefinition,
     SettingsItemDefinition,
     SettingsTabDefinition,
-} from '@chimera/simulation/foundation/game-shell-contract.js';
+} from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import { TACTICS_DEFAULTS, tacticsSettingsSchema } from '../settings-schema';
 import { tacticsSettingsPageDefinition } from './settings-page';
 

@@ -11,7 +11,7 @@
 
 import { vi, type Mock } from 'vitest';
 
-import { playerId } from '@chimera/simulation/bridge/api-types.js';
+import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
     ActionHistoryEntry,
     ChimeraDebugApi,
@@ -23,7 +23,7 @@ import type {
     SnapshotDiff,
     SnapshotResult,
     TickEntry,
-} from '@chimera/simulation/bridge/debug-api-types.js';
+} from '@chimera-engine/simulation/bridge/debug-api-types.js';
 
 /**
  * A `ChimeraDebugApi` whose methods are all `vi.fn` spies, plus harness

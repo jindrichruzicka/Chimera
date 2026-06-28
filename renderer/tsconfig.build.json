@@ -1,6 +1,6 @@
 {
-    // Per-package build for @chimera/renderer (issue #773; mirrors the split-tsconfig
-    // pattern of @chimera/simulation #759 / @chimera/ai #764 / @chimera/networking #768).
+    // Per-package build for @chimera-engine/renderer (issue #773; mirrors the split-tsconfig
+    // pattern of @chimera-engine/simulation #759 / @chimera-engine/ai #764 / @chimera-engine/networking #768).
     //
     // Emits dist/ (JS + .d.ts + maps) for the two public component barrels
     // (./components/ui, ./components/chat) plus the game-registration seam
@@ -11,11 +11,11 @@
     // tsc emits no CSS, so the build script copies *.module.css + styles/tokens.css
     // into dist/ afterwards (tools/copy-renderer-css.ts).
     //
-    // The `include` is package-wide (`**/*.ts(x)`): @chimera/renderer now ships the
+    // The `include` is package-wide (`**/*.ts(x)`): @chimera-engine/renderer now ships the
     // WHOLE Next shell from dist (F65 Phase 2a) — every route under app/, the
     // bootstrap/provider tree, components/{ui,chat,shell,lobby,replay,scene,r3f,…},
     // state/, theme/, hooks/, bridge/ — so a consumer app's thin per-app Next app
-    // re-exports each engine route from `@chimera/renderer/shell/*` and resolves every
+    // re-exports each engine route from `@chimera-engine/renderer/shell/*` and resolves every
     // shared singleton (EscapeStack, the Zustand stores, the game registry) through
     // ONE package dist copy. tsc preserves each `'use client'` directive in the emit;
     // the post-build copy ships every `*.module.css` + tokens/globals (see
@@ -35,13 +35,13 @@
         "lib": ["ES2022", "DOM", "DOM.Iterable"],
         "types": ["node", "react", "react-dom"]
     },
-    // simulation is renderer's only built @chimera/* dependency; referencing it
-    // orders the `tsc --build` graph. @chimera/electron is intentionally NOT
+    // simulation is renderer's only built @chimera-engine/* dependency; referencing it
+    // orders the `tsc --build` graph. @chimera-engine/electron is intentionally NOT
     // referenced: electron sits ABOVE renderer in the graph (electron references
     // renderer), so a renderer → electron reference would be a forbidden app-layer
     // back-edge (Invariant #1, tools/tsconfig-build-graph.test.ts). The old
     // renderer→electron `api-types` type back-edge is GONE (F62/F65): the host↔renderer
-    // bridge contract now lives in `@chimera/simulation/bridge/*`, the neutral leaf both
+    // bridge contract now lives in `@chimera-engine/simulation/bridge/*`, the neutral leaf both
     // the renderer and electron/preload may import, so the renderer build references only
     // simulation and pulls no electron source into its program.
     "references": [{ "path": "../simulation/tsconfig.build.json" }],

@@ -1,4 +1,8 @@
-import type { AssetKind, AssetKindId, AssetRef } from '@chimera/simulation/content/AssetRef.js';
+import type {
+    AssetKind,
+    AssetKindId,
+    AssetRef,
+} from '@chimera-engine/simulation/content/AssetRef.js';
 
 export interface AssetLoadRequest<TAssetKind extends AssetKind = AssetKind> {
     readonly ref: AssetRef<TAssetKind>;

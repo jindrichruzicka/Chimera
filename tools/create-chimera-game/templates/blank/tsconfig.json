@@ -3,7 +3,7 @@
     // Keeps jsx:"preserve" + DOM/react libs for type-checking the screens .tsx.
     // The composite `tsc -b` build (dist emit) lives in tsconfig.build.json.
     // electron/** (the app's Electron composition root) is excluded: it imports
-    // @chimera/electron and is type-checked by the root flat `tsc --noEmit`,
+    // @chimera-engine/electron and is type-checked by the root flat `tsc --noEmit`,
     // keeping this library check off the electron layer.
     "extends": "../../tsconfig.json",
     "compilerOptions": {

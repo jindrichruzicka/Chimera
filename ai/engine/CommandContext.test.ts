@@ -14,8 +14,8 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
-import { type EngineAction, playerId } from '@chimera/simulation/engine/types.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
+import { type EngineAction, playerId } from '@chimera-engine/simulation/engine/types.js';
 import { type CommandContext, CommandContextImpl } from './CommandContext.js';
 
 // ─── Test helpers ─────────────────────────────────────────────────────────────

@@ -17,7 +17,7 @@
  */
 
 import { useEffect } from 'react';
-import type { PlayerConnectionEvent } from '@chimera/simulation/bridge/api-types.js';
+import type { PlayerConnectionEvent } from '@chimera-engine/simulation/bridge/api-types.js';
 import { getLobbyBridge } from '../../app/lobby/useLobbyApi';
 import { useToastStore } from '../../state/toastStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';

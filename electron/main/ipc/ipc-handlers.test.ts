@@ -1,4 +1,4 @@
-import { buildAssetRef, type TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
@@ -102,9 +102,9 @@ import {
 import { IpcRequestValidationError, MAX_SNAPSHOT_RANGE } from './ipc-schemas.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from '../lobby/LobbyManager.js';
-import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
-import type { LobbyInfo, LobbyState } from '@chimera/networking';
-import { playerId as toPlayerId } from '@chimera/networking';
+import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
+import type { LobbyInfo, LobbyState } from '@chimera-engine/networking';
+import { playerId as toPlayerId } from '@chimera-engine/networking';
 import { toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     ActionRejection,
@@ -1327,7 +1327,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
         const stub = makeSettingsIpcMainStub();
         const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
-            await import('@chimera/simulation/settings/index.js');
+            await import('@chimera-engine/simulation/settings/index.js');
         const { z } = await import('zod');
 
         const engineSchema = z.object({
@@ -1382,7 +1382,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
         const stub = makeSettingsIpcMainStub();
         const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
-            await import('@chimera/simulation/settings/index.js');
+            await import('@chimera-engine/simulation/settings/index.js');
         const { z } = await import('zod');
 
         const engineSchema = z.object({
@@ -1437,7 +1437,7 @@ describe('registerSettingsHandlers — with real SettingsManager', () => {
         const stub = makeSettingsIpcMainStub();
         const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
-            await import('@chimera/simulation/settings/index.js');
+            await import('@chimera-engine/simulation/settings/index.js');
         const { z } = await import('zod');
 
         const engineSchema = z.object({
@@ -1765,7 +1765,7 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
         const stub = makeSettingsIpcMainStub();
         const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository } =
-            await import('@chimera/simulation/settings/index.js');
+            await import('@chimera-engine/simulation/settings/index.js');
         const { z } = await import('zod');
 
         const engineSchema = z.object({
@@ -1804,7 +1804,8 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
         const mgr = new SettingsManager(repo);
         mgr.registerSchema({
             gameId: 'block4-game',
-            defaults: (await import('@chimera/simulation/settings/index.js')).ENGINE_DEFAULTS,
+            defaults: (await import('@chimera-engine/simulation/settings/index.js'))
+                .ENGINE_DEFAULTS,
             schema: engineSchema,
         });
 
@@ -1826,7 +1827,7 @@ describe('registerSettingsHandlers — BLOCK-4 per-game patch validation at IPC 
         const stub = makeSettingsIpcMainStub();
         const { SettingsManager } = await import('../settings/SettingsManager.js');
         const { InMemorySettingsRepository, ENGINE_DEFAULTS } =
-            await import('@chimera/simulation/settings/index.js');
+            await import('@chimera-engine/simulation/settings/index.js');
         const { z } = await import('zod');
 
         const engineSchema = z.object({
@@ -1885,7 +1886,7 @@ import {
     registerLogsHandlers,
     type LogsHandlersIpcMain,
 } from './ipc-handlers.js';
-import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
 import type { MemorySink } from '../logging/logger.js';
 
 function makeLogsIpcMainStub(): {

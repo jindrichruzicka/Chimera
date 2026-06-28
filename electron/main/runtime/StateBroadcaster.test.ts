@@ -19,15 +19,15 @@ import { describe, it, expect, vi } from 'vitest';
 import { StateBroadcaster } from './StateBroadcaster.js';
 import { createNoopLogger } from '../logging/logger.js';
 import { GAME_SNAPSHOT_CHANNEL } from '../../preload/apis/game-api.js';
-import { playerId as toPlayerId } from '@chimera/networking';
-import type { HostTransport, PlayerId } from '@chimera/networking';
-import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
-import { gamePhase } from '@chimera/simulation/engine/types.js';
-import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
+import { playerId as toPlayerId } from '@chimera-engine/networking';
+import type { HostTransport, PlayerId } from '@chimera-engine/networking';
+import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
+import { gamePhase } from '@chimera-engine/simulation/engine/types.js';
+import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
 import type {
     PlayerSnapshot,
     StateProjector,
-} from '@chimera/simulation/projection/StateProjector.js';
+} from '@chimera-engine/simulation/projection/StateProjector.js';
 import type { E2eHooks } from './e2e-hooks.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────

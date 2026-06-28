@@ -7,7 +7,7 @@
  * downstream task ever has to hardcode a game name or re-derive a casing.
  *
  * This module is intentionally dependency-free: no `fs`, no `process`, no CLI concerns, and no
- * imports from any `@chimera/*` package. It is the leaf the rest of the scaffolder builds on.
+ * imports from any `@chimera-engine/*` package. It is the leaf the rest of the scaffolder builds on.
  */
 
 /** A game name expanded into every casing the blank template references. */

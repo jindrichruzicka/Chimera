@@ -25,11 +25,11 @@
 import {
     TACTICS_DEFAULT_TURN_MODE,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera/tactics/constants.js';
+} from '@chimera-engine/tactics/constants.js';
 import type {
     GameLobbySetup,
     LobbyFieldOption,
-} from '@chimera/simulation/foundation/game-lobby-contract.js';
+} from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 /**
  * The interpreted tactics colour palette: the selectable options for the lobby

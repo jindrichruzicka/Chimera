@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { ENGINE_DEFAULTS, SettingsMerger } from '@chimera/simulation/settings/index.js';
+import { ENGINE_DEFAULTS, SettingsMerger } from '@chimera-engine/simulation/settings/index.js';
 import { tacticsSettingsSchema, TACTICS_DEFAULTS } from './settings-schema.js';
 
 // ── tacticsSettingsSchema declaration ─────────────────────────────────────────
@@ -118,7 +118,7 @@ describe('tacticsSettingsSchema — SettingsMerger smoke test', () => {
 });
 
 // NOTE (F62 #777): the former "SettingsManager round-trip" block was removed when
-// @chimera/electron gained its curated `exports` map. SettingsManager is an
+// @chimera-engine/electron gained its curated `exports` map. SettingsManager is an
 // electron-main internal (electron/main/settings/SettingsManager.ts) and is not a
 // reachable package subpath (Invariant #5) — a game's tests must not reach across
 // into host internals. Its assertions (registerSchema('tactics') + getSettings

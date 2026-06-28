@@ -22,10 +22,10 @@ import { GamePage } from '../pages/GamePage';
 import { tick } from '../helpers/tick-driver';
 import { getSimulationTick } from '../helpers/ipc-spy';
 // §13.4 — the single source of truth. Imported by relative path (not the
-// @chimera/* alias, which the Playwright spec runner does not resolve) so the
+// @chimera-engine/* alias, which the Playwright spec runner does not resolve) so the
 // gate and the canonical budget can never drift; shared/perf-budget.test.ts
 // locks the canonical value.
-import { RENDERER_HEAP_BUDGET_MB } from '@chimera/simulation/foundation/perf-budget.js';
+import { RENDERER_HEAP_BUDGET_MB } from '@chimera-engine/simulation/foundation/perf-budget.js';
 
 const TICKS_TO_DRIVE = 1000;
 

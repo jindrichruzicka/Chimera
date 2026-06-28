@@ -1,8 +1,8 @@
-import type { AssetRef } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
 import type {
     AssetManifest,
     AssetManifestEntry,
-} from '@chimera/simulation/content/AssetManifest.js';
+} from '@chimera-engine/simulation/content/AssetManifest.js';
 
 import type { AssetManager } from './AssetManager';
 

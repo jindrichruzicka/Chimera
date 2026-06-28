@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 
-import type { AssetKind, AssetRef } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetKind, AssetRef } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { ResolvedAsset } from './AssetManager';
 import { useAssetManager } from './AssetManagerContext.js';

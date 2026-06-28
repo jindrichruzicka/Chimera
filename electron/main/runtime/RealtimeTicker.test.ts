@@ -21,9 +21,9 @@ import {
     type ActionDefinition,
     type ActionEnvelope,
     type BaseGameSnapshot,
-} from '@chimera/simulation/engine/index.js';
+} from '@chimera-engine/simulation/engine/index.js';
 import { RealtimeTicker } from './RealtimeTicker.js';
-import { playerId as toPlayerId } from '@chimera/networking';
+import { playerId as toPlayerId } from '@chimera-engine/networking';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

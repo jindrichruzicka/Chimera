@@ -23,18 +23,18 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
+import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 import type {
     SaveRepository,
     SaveSlotMeta,
-} from '@chimera/simulation/persistence/SaveRepository.js';
-import type { SaveSerializer } from '@chimera/simulation/persistence/SaveSerializer.js';
-import type { SaveMigrator } from '@chimera/simulation/persistence/SaveMigrator.js';
+} from '@chimera-engine/simulation/persistence/SaveRepository.js';
+import type { SaveSerializer } from '@chimera-engine/simulation/persistence/SaveSerializer.js';
+import type { SaveMigrator } from '@chimera-engine/simulation/persistence/SaveMigrator.js';
 import {
     SaveNotFoundError,
     SaveIntegrityError,
-} from '@chimera/simulation/persistence/SaveMigrator.js';
-import { computeBodyChecksum } from '@chimera/simulation/persistence/SaveChecksum.js';
+} from '@chimera-engine/simulation/persistence/SaveMigrator.js';
+import { computeBodyChecksum } from '@chimera-engine/simulation/persistence/SaveChecksum.js';
 
 /** Extension used for save files. */
 const FILE_EXT = '.chimera';

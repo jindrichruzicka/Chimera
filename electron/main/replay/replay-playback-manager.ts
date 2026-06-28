@@ -21,12 +21,18 @@
  *           replay through the same undo/history machinery as live play.
  */
 
-import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
-import type { ReplayFile } from '@chimera/simulation/replay/index.js';
-import { createBaseReplayInitialSnapshot, ReplayPlayer } from '@chimera/simulation/replay/index.js';
-import type { StateProjector, VisibilityRules } from '@chimera/simulation/projection/index.js';
-import { DefaultStateProjector } from '@chimera/simulation/projection/index.js';
+import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { ReplayFile } from '@chimera-engine/simulation/replay/index.js';
+import {
+    createBaseReplayInitialSnapshot,
+    ReplayPlayer,
+} from '@chimera-engine/simulation/replay/index.js';
+import type {
+    StateProjector,
+    VisibilityRules,
+} from '@chimera-engine/simulation/projection/index.js';
+import { DefaultStateProjector } from '@chimera-engine/simulation/projection/index.js';
 import type { PlayerSnapshot, ReplayPlaybackInfo } from '../../preload/api-types.js';
 import type { Logger } from '../logging/logger.js';
 import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';

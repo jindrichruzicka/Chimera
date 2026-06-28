@@ -43,18 +43,18 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         },
         // Invariant #80: GameShell / InGameMenuHost are game-agnostic shell hosts.
         // Non-game imports (React, engine packages, renderer internals) are fine —
-        // only games/* and @chimera/<game> specifiers are blocked.
+        // only games/* and @chimera-engine/<game> specifiers are blocked.
         {
             filename: 'renderer/components/shell/GameShell.tsx',
             code: `import React from 'react';`,
         },
         {
             filename: 'renderer/components/shell/GameShell.tsx',
-            code: `import { resolveGameResultOutcome } from '@chimera/simulation/foundation/game-screen-contract.js';`,
+            code: `import { resolveGameResultOutcome } from '@chimera-engine/simulation/foundation/game-screen-contract.js';`,
         },
         {
             filename: 'renderer/components/shell/InGameMenuHost.tsx',
-            code: `import { playerId } from '@chimera/electron/preload/api-types.js';`,
+            code: `import { playerId } from '@chimera-engine/electron/preload/api-types.js';`,
         },
         {
             filename: 'renderer/components/shell/InGameMenuHost.tsx',
@@ -91,20 +91,20 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
             filename: 'renderer/app/component-gallery/ComponentGalleryClient.tsx',
             code: `import { Tabs } from '../../components/ui/Tabs';`,
         },
-        // Engine packages share the @chimera/* scope with games but are allowed
+        // Engine packages share the @chimera-engine/* scope with games but are allowed
         // on shell pages — detection is by package name, not a `/games/` path.
         {
             filename: 'renderer/app/game/page.tsx',
-            code: `import { applyAction } from '@chimera/simulation/engine/types.js';`,
+            code: `import { applyAction } from '@chimera-engine/simulation/engine/types.js';`,
         },
         {
             filename: 'renderer/app/lobby/page.tsx',
-            code: `import { playerId } from '@chimera/electron/preload/api-types.js';`,
+            code: `import { playerId } from '@chimera-engine/electron/preload/api-types.js';`,
         },
         // Re-export from an engine package is allowed (engine, not a game).
         {
             filename: 'renderer/app/game/page.tsx',
-            code: `export { playerId } from '@chimera/simulation/engine/types.js';`,
+            code: `export { playerId } from '@chimera-engine/simulation/engine/types.js';`,
         },
         // Dynamic import of a non-game module is allowed.
         {
@@ -175,25 +175,25 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
             code: `import { TacticsBoard } from 'games/tactics/screens/TacticsBoard';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
-        // Invariant #94: shell page importing the game as a @chimera/* package
+        // Invariant #94: shell page importing the game as a @chimera-engine/* package
         // (the post-F57 specifier form — no `/games/` substring).
         {
             filename: 'renderer/app/game/page.tsx',
-            code: `import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
+            code: `import { TacticsGameScreenRegistry } from '@chimera-engine/tactics/screens/index.js';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
         // Invariant #93: shell page importing the game's tokens-override.css via
-        // its @chimera/* package specifier.
+        // its @chimera-engine/* package specifier.
         {
             filename: 'renderer/app/main-menu/page.tsx',
-            code: `import '@chimera/tactics/styles/tokens-override.css';`,
+            code: `import '@chimera-engine/tactics/styles/tokens-override.css';`,
             errors: [{ messageId: 'shellGamesTokenOverrideImport' }],
         },
         // Invariant #94: the boundary cannot be bypassed by re-export or a lazy
         // dynamic import — mirrors chimera/no-main-games-import parity.
         {
             filename: 'renderer/app/game/page.tsx',
-            code: `export { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
+            code: `export { TacticsGameScreenRegistry } from '@chimera-engine/tactics/screens/index.js';`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
         {
@@ -203,13 +203,13 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         },
         {
             filename: 'renderer/app/lobby/page.tsx',
-            code: `const m = import('@chimera/tactics/screens/index.js');`,
+            code: `const m = import('@chimera-engine/tactics/screens/index.js');`,
             errors: [{ messageId: 'shellGamesImport' }],
         },
-        // ── #774: lock Invariant #80 across the @chimera/renderer package cut ──
+        // ── #774: lock Invariant #80 across the @chimera-engine/renderer package cut ──
         // GameShell.tsx / InGameMenuHost.tsx are the engine↔game-React coupling
         // surfaces; the GameScreenRegistry prop is the sole coupling point. They
-        // must never import a games/* path or a @chimera/<game> package — via a
+        // must never import a games/* path or a @chimera-engine/<game> package — via a
         // relative path, the package specifier, a re-export, or a dynamic import.
         {
             filename: 'renderer/components/shell/GameShell.tsx',
@@ -218,7 +218,7 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         },
         {
             filename: 'renderer/components/shell/GameShell.tsx',
-            code: `import { TacticsGameScreenRegistry } from '@chimera/tactics/screens/index.js';`,
+            code: `import { TacticsGameScreenRegistry } from '@chimera-engine/tactics/screens/index.js';`,
             errors: [{ messageId: 'shellHostGamesImport' }],
         },
         {
@@ -233,12 +233,12 @@ ruleTester.run('chimera/no-shell-games-import', rule, {
         },
         {
             filename: 'renderer/components/shell/InGameMenuHost.tsx',
-            code: `export { TacticsInGameMenu } from '@chimera/tactics/screens/index.js';`,
+            code: `export { TacticsInGameMenu } from '@chimera-engine/tactics/screens/index.js';`,
             errors: [{ messageId: 'shellHostGamesImport' }],
         },
         {
             filename: 'renderer/components/shell/InGameMenuHost.tsx',
-            code: `const m = import('@chimera/tactics/screens/index.js');`,
+            code: `const m = import('@chimera-engine/tactics/screens/index.js');`,
             errors: [{ messageId: 'shellHostGamesImport' }],
         },
     ],

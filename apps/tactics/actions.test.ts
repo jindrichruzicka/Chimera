@@ -7,17 +7,17 @@ import {
     TACTICS_INITIAL_UNIT_SPACING_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
-} from '@chimera/tactics/constants.js';
-import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import { createRng } from '@chimera/simulation/engine/DeterministicRng.js';
+} from '@chimera-engine/tactics/constants.js';
+import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import { createRng } from '@chimera-engine/simulation/engine/DeterministicRng.js';
 import type {
     BaseEntityState,
     BaseGameSnapshot,
     EntityId,
     GameReduceContext,
-} from '@chimera/simulation/engine/types.js';
-import { entityId, gamePhase, playerId } from '@chimera/simulation/engine/types.js';
-import { DefaultStateProjector } from '@chimera/simulation/projection/StateProjector.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
+import { DefaultStateProjector } from '@chimera-engine/simulation/projection/StateProjector.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,

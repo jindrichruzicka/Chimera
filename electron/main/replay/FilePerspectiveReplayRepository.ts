@@ -34,8 +34,8 @@ import type {
     PerspectiveReplayFile,
     PerspectiveReplayRepository,
     PerspectiveReplaySerializer,
-} from '@chimera/simulation/replay/index.js';
-import { ReplayNotFoundError } from '@chimera/simulation/replay/index.js';
+} from '@chimera-engine/simulation/replay/index.js';
+import { ReplayNotFoundError } from '@chimera-engine/simulation/replay/index.js';
 import type { Logger } from '../logging/logger.js';
 import { isInsidePath } from '../path-containment.js';
 import { InvalidGameIdError, LIST_CONCURRENCY, ReplayPathError } from './FileReplayRepository.js';

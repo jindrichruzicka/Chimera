@@ -16,7 +16,7 @@
  *   3. Any import from a games package path in `GameShell.tsx` /
  *      `InGameMenuHost.tsx` (Invariant #80). These engine↔game-React coupling
  *      surfaces stay game-agnostic — the `GameScreenRegistry` prop is the sole
- *      coupling point. Locks the boundary across the @chimera/renderer package
+ *      coupling point. Locks the boundary across the @chimera-engine/renderer package
  *      cut alongside the bash invariants Check 7 (issue #774).
  *
  * Architecture reference: section 4.35 UI Design System, 4.37 Shell Pages UI Contract
@@ -60,7 +60,7 @@ function isGameShellHost(filename: string): boolean {
 
 /**
  * Engine packages — game-agnostic, importable by shell pages. Every other
- * `@chimera/*` package is a game (e.g. `@chimera/tactics`) and is forbidden.
+ * `@chimera-engine/*` package is a game (e.g. `@chimera-engine/tactics`) and is forbidden.
  */
 const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
     'simulation',
@@ -74,19 +74,19 @@ const ENGINE_PACKAGES: ReadonlySet<string> = new Set([
  * Returns true if `source` is an import from a game (rather than an engine
  * package):
  *   - a relative/bare `games/*` path (`games/…`, `…/games/…`), or
- *   - a `@chimera/<pkg>` package whose `<pkg>` is NOT an engine package
- *     (e.g. `@chimera/tactics`).
+ *   - a `@chimera-engine/<pkg>` package whose `<pkg>` is NOT an engine package
+ *     (e.g. `@chimera-engine/tactics`).
  *
  * Detecting games by the engine allowlist — rather than the legacy `/games/`
  * directory substring — keeps the guard correct now that games are first-class
- * `@chimera/<game>` packages (F57) and once they move out of `games/` (F63).
+ * `@chimera-engine/<game>` packages (F57) and once they move out of `games/` (F63).
  */
 function isGamesImport(source: string): boolean {
     const n = source.replace(/\\/gu, '/');
     if (n.startsWith('games/') || n.includes('/games/')) {
         return true;
     }
-    const scoped = /^@chimera\/([^/]+)/u.exec(n);
+    const scoped = /^@chimera-engine\/([^/]+)/u.exec(n);
     if (scoped === null) {
         return false;
     }
@@ -96,7 +96,7 @@ function isGamesImport(source: string): boolean {
 
 /**
  * Returns true if `source` references a game's `styles/tokens-override.css` —
- * via either a relative/bare `games/*` path or a `@chimera/<game>` package
+ * via either a relative/bare `games/*` path or a `@chimera-engine/<game>` package
  * specifier.
  */
 function isTokensOverrideImport(source: string): boolean {

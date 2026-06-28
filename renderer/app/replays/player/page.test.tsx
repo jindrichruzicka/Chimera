@@ -11,7 +11,7 @@ import type {
     PlayerSnapshot,
     ReplayAPI,
     ReplayPlaybackInfo,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 
 // Stub the game renderer loader so the player page does not pull in real
 // games/* screen modules under test.

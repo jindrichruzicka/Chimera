@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import type { GameHudProps } from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { GameHudProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import {
     Badge,
     Button,
@@ -10,9 +10,9 @@ import {
     Drawer,
     Panel,
     type BadgeVariant,
-} from '@chimera/renderer/components/ui';
-import { ChatPanel } from '@chimera/renderer/components/chat';
-import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera/tactics/constants.js';
+} from '@chimera-engine/renderer/components/ui';
+import { ChatPanel } from '@chimera-engine/renderer/components/chat';
+import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera-engine/tactics/constants.js';
 import {
     parseTacticsAllSeatsCommitted,
     parseTacticsSeatCommitted,

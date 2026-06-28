@@ -23,8 +23,8 @@ import type {
     SettingsControlDefinition,
     SettingsItemDefinition,
     SettingsTabDefinition,
-} from '@chimera/simulation/foundation/game-shell-contract.js';
-import type { ResolvedSettings } from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';
 import { Heading } from '../../components/ui/Heading';

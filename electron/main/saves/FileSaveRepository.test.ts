@@ -20,11 +20,11 @@ import {
     SaveNotFoundError,
     SaveIntegrityError,
     SaveSchemaTooNewError,
-} from '@chimera/simulation/persistence/index.js';
+} from '@chimera-engine/simulation/persistence/index.js';
 import {
     runSaveRepositoryContractTests,
     makeFile,
-} from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
+} from '@chimera-engine/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
 import { FileSaveRepository, InvalidSlotIdError } from './FileSaveRepository.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

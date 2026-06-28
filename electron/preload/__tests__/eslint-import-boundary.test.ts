@@ -4,15 +4,15 @@
  * ESLint smoke test for the preload import boundary added in F62 (#777).
  *
  * The preload bridge is the sole renderer-facing surface (Invariant #5) and
- * depends on the `@chimera/simulation` contract surface ONLY (Invariant #1): it
+ * depends on the `@chimera-engine/simulation` contract surface ONLY (Invariant #1): it
  * must not import the renderer UI library, the ai/networking runtime, a game
  * package, or the electron main-process internals. The `electron/preload/**`
  * `no-restricted-imports` zone in eslint.config.mjs enforces this.
  *
  * Runs ESLint programmatically against two fixtures and asserts the
  * `no-restricted-imports` rule fires on a forbidden cross-boundary import
- * (the @chimera/renderer component barrel) but NOT on the sanctioned
- * @chimera/simulation contract import. Mirrors
+ * (the @chimera-engine/renderer component barrel) but NOT on the sanctioned
+ * @chimera-engine/simulation contract import. Mirrors
  * `electron/main/__tests__/eslint-import-boundary.test.ts` (#769) and the
  * ai/ + networking/ + renderer/ boundary smoke tests.
  */
@@ -65,7 +65,7 @@ function runEslint(fixtureName: string): ESLintMessage[] {
     return parsed[0]?.messages ?? [];
 }
 
-describe('ESLint import-boundary — electron/preload imports the @chimera/simulation contract surface only (Invariants #1/#5)', () => {
+describe('ESLint import-boundary — electron/preload imports the @chimera-engine/simulation contract surface only (Invariants #1/#5)', () => {
     it(
         'flags a renderer/ai/networking/game/host-internal import from electron/preload with no-restricted-imports',
         () => {
@@ -77,7 +77,7 @@ describe('ESLint import-boundary — electron/preload imports the @chimera/simul
     );
 
     it(
-        'does not flag the sanctioned @chimera/simulation contract import from electron/preload',
+        'does not flag the sanctioned @chimera-engine/simulation contract import from electron/preload',
         () => {
             const messages = runEslint('good-contract-import.fixture.ts');
             const ruleIds = messages.filter((m) => m.ruleId !== null).map((m) => m.ruleId!);

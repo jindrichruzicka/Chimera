@@ -3,7 +3,7 @@
  *
  * Public API barrel for the simulation/replay sub-module.
  *
- * Consumers import from `@chimera/simulation/replay` rather than
+ * Consumers import from `@chimera-engine/simulation/replay` rather than
  * internal module paths directly.
  *
  * Populated as F44 tasks land:

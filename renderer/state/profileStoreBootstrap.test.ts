@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ProfileAPI, Unsubscribe } from '@chimera/simulation/bridge/api-types.js';
+import type { ProfileAPI, Unsubscribe } from '@chimera-engine/simulation/bridge/api-types.js';
 import { bootstrapProfileStore } from './profileStoreBootstrap';
 import { useProfileStore } from './profileStore';
 import { makeDirectory, makeProfile } from './__test-support__/profileFixtures';

@@ -1,8 +1,8 @@
 import {
     MalformedAssetRefError,
     parseAssetRef,
-} from '@chimera/simulation/foundation/asset-ref-parse.js';
-import type { GameFontFace } from '@chimera/simulation/foundation/game-shell-contract.js';
+} from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
+import type { GameFontFace } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 
 import { DEFAULT_RENDERER_GAME_ASSET_BASE_URL } from '../assets/AssetResolver';
 

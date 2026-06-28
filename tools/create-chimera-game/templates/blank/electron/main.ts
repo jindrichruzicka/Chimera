@@ -1,23 +1,23 @@
 // Composition root for the __Game Title__ Electron app — the SOLE module that
 // names this game AND drives the Electron bootstrap. It builds the game's
-// `MainGameContribution` from its own `@chimera/__game_kebab__/*` modules and
-// injects it into the game-agnostic host `main()` from `@chimera/electron`. The
+// `MainGameContribution` from its own `@chimera-engine/__game_kebab__/*` modules and
+// injects it into the game-agnostic host `main()` from `@chimera-engine/electron`. The
 // host ships no game-specific code; the game enters only here, at runtime.
 //
-// The `@chimera/__game_kebab__/*` self-imports resolve to this app's own source:
-// the app-owned bundler (electron/build-main.ts) aliases `@chimera/<game>` (read
+// The `@chimera-engine/__game_kebab__/*` self-imports resolve to this app's own source:
+// the app-owned bundler (electron/build-main.ts) aliases `@chimera-engine/<game>` (read
 // from package.json `name`) onto the app directory.
 
-import { main, type MainGameContribution } from '@chimera/electron/main';
+import { main, type MainGameContribution } from '@chimera-engine/electron/main';
 
 import {
     register__GamePascal__Actions,
     resolve__GamePascal__FirstPlayer,
-} from '@chimera/__game_kebab__/actions.js';
-import { __gameCamel__Manifest } from '@chimera/__game_kebab__/manifest.js';
-import { __gameCamel__SettingsSchema } from '@chimera/__game_kebab__/settings-schema.js';
-import { __gameCamel__VisibilityRules } from '@chimera/__game_kebab__/visibility-rules.js';
-import { __GAME_CONSTANT___GAME_ID } from '@chimera/__game_kebab__/constants.js';
+} from '@chimera-engine/__game_kebab__/actions.js';
+import { __gameCamel__Manifest } from '@chimera-engine/__game_kebab__/manifest.js';
+import { __gameCamel__SettingsSchema } from '@chimera-engine/__game_kebab__/settings-schema.js';
+import { __gameCamel__VisibilityRules } from '@chimera-engine/__game_kebab__/visibility-rules.js';
+import { __GAME_CONSTANT___GAME_ID } from '@chimera-engine/__game_kebab__/constants.js';
 
 /**
  * __Game Title__'s main-side contribution. Exported for the composition-root
@@ -26,7 +26,7 @@ import { __GAME_CONSTANT___GAME_ID } from '@chimera/__game_kebab__/constants.js'
  *
  *   - `contentSchemas` — per-collection Zod schemas (validates `data/<collection>`
  *     at startup). Import `__GAME_CONSTANT___CONTENT_SCHEMAS` from
- *     `@chimera/__game_kebab__/content/__gameCamel__Content.js` and set it here
+ *     `@chimera-engine/__game_kebab__/content/__gameCamel__Content.js` and set it here
  *     once you add a content collection + its `data/` directory.
  *   - `lobbySetup` — a customizable-lobby descriptor.
  *   - `createAIState` — an AI policy for hosted AI seats.

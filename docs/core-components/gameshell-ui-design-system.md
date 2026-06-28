@@ -238,10 +238,10 @@ game may use:
 
 ```typescript
 // Tier 1 — stateless design primitives (this section, §4.35):
-import { Button, Card, Heading } from '@chimera/renderer/components/ui/index.js';
+import { Button, Card, Heading } from '@chimera-engine/renderer/components/ui/index.js';
 
 // Tier 2 — the shared chat component (§4.35.1):
-import { ChatPanel } from '@chimera/renderer/components/chat';
+import { ChatPanel } from '@chimera-engine/renderer/components/chat';
 ```
 
 This allowance applies only to React components under `games/<name>/screens/*.tsx`
@@ -258,7 +258,7 @@ The chat barrel is the second tier of the shared component library: a higher-lev
 **stateful** feature component wired to renderer stores and the host IPC bridge — in
 contrast to the stateless primitives of `renderer/components/ui/`. It carries a
 different stability and review bar, so it lives behind its own public specifier
-`@chimera/renderer/components/chat` (whitelisted alongside the UI barrel by the
+`@chimera-engine/renderer/components/chat` (whitelisted alongside the UI barrel by the
 `chimera/no-game-renderer-internals` lint rule; deep imports into the directory stay
 forbidden).
 
@@ -416,11 +416,11 @@ renderer/
 
 ### Invariants
 
-| #   | Rule                                                                                                                                                                                                                                                               |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| #85 | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                              |
-| #86 | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                   |
-| #96 | Game renderer surfaces may import the shared component library only through its public barrels — `@chimera/renderer/components/ui` (primitives) and `@chimera/renderer/components/chat` (the shared chat component); all other renderer internals stay off-limits. |
+| #   | Rule                                                                                                                                                                                                                                                                             |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #85 | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                            |
+| #86 | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                 |
+| #96 | Game renderer surfaces may import the shared component library only through its public barrels — `@chimera-engine/renderer/components/ui` (primitives) and `@chimera-engine/renderer/components/chat` (the shared chat component); all other renderer internals stay off-limits. |
 
 ---
 

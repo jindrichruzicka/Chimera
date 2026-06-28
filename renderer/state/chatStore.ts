@@ -28,8 +28,8 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
-import type { PlayerId } from '@chimera/simulation/bridge/api-types.js';
+import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js';
+import type { PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 
 /** Rolling-buffer hard cap — matches §4.29 (max 500 entries). */
 export const MAX_CHAT_MESSAGES = 500;
@@ -82,7 +82,7 @@ let chatStoreInstance: StoreApi<ChatStore> | undefined;
 
 /**
  * Lazily instantiate the singleton on first access. Importing this module — and
- * the `@chimera/renderer/components/chat` barrel that pulls it through
+ * the `@chimera-engine/renderer/components/chat` barrel that pulls it through
  * `ChatPanel` — therefore creates no store, keeping the barrel side-effect-free
  * (issue #772, Invariant #96). Behaviour is otherwise identical to an eager
  * module-level singleton: the same instance is returned on every access.

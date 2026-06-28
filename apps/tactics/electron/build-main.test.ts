@@ -24,7 +24,7 @@ import {
 
 const ROOT = '/repo';
 const APP_DIR = path.join(ROOT, 'apps/tactics');
-const GAME_PKG = '@chimera/tactics';
+const GAME_PKG = '@chimera-engine/tactics';
 
 describe('computeNodePaths', () => {
     it('is empty when the verify:pack env var is unset (everyday workspace resolution)', () => {
@@ -44,28 +44,33 @@ describe('computeNodePaths', () => {
 describe('computeEsbuildAlias', () => {
     const opts = { root: ROOT, appDir: APP_DIR, gamePackageName: GAME_PKG };
 
-    it("aliases the app's own @chimera/<game> package onto its source dir", () => {
+    it("aliases the app's own @chimera-engine/<game> package onto its source dir", () => {
         const alias = computeEsbuildAlias({}, opts);
         expect(alias[GAME_PKG]).toBe(APP_DIR);
     });
 
     it('derives the game alias key from the package name, not a hardcoded literal', () => {
-        const alias = computeEsbuildAlias({}, { ...opts, gamePackageName: '@chimera/chess' });
-        expect(alias['@chimera/chess']).toBe(APP_DIR);
+        const alias = computeEsbuildAlias(
+            {},
+            { ...opts, gamePackageName: '@chimera-engine/chess' },
+        );
+        expect(alias['@chimera-engine/chess']).toBe(APP_DIR);
         expect(alias[GAME_PKG]).toBeUndefined();
     });
 
-    it('aliases @chimera/electron/main onto host SOURCE in the everyday suite', () => {
+    it('aliases @chimera-engine/electron/main onto host SOURCE in the everyday suite', () => {
         const alias = computeEsbuildAlias({}, opts);
-        expect(alias['@chimera/electron/main']).toBe(path.join(ROOT, 'electron/main/index.ts'));
+        expect(alias['@chimera-engine/electron/main']).toBe(
+            path.join(ROOT, 'electron/main/index.ts'),
+        );
     });
 
-    it('DROPS the @chimera/electron/main source alias in verify:pack mode (resolve from tarball)', () => {
+    it('DROPS the @chimera-engine/electron/main source alias in verify:pack mode (resolve from tarball)', () => {
         const alias = computeEsbuildAlias(
             { [VERIFY_PACK_NODE_MODULES_ENV]: '/tmp/consumer/node_modules' },
             opts,
         );
-        expect(alias['@chimera/electron/main']).toBeUndefined();
+        expect(alias['@chimera-engine/electron/main']).toBeUndefined();
         // The game alias still resolves to the consumer app source (it is the game,
         // not a packed engine artifact).
         expect(alias[GAME_PKG]).toBe(APP_DIR);
@@ -85,7 +90,7 @@ describe('planBundles', () => {
     const base = {
         appDir: APP_DIR,
         mainEntry: path.join(APP_DIR, 'electron/main.ts'),
-        preloadEntry: '/node_modules/@chimera/electron/dist/preload/api.js',
+        preloadEntry: '/node_modules/@chimera-engine/electron/dist/preload/api.js',
         alias: {},
         nodePaths: [],
     };
@@ -117,7 +122,7 @@ describe('planBundles', () => {
     });
 
     it('threads the alias + nodePaths onto every bundle spec', () => {
-        const alias = { '@chimera/tactics': APP_DIR };
+        const alias = { '@chimera-engine/tactics': APP_DIR };
         const nodePaths = ['/tmp/nm'];
         const specs = planBundles({ ...base, alias, nodePaths });
         for (const spec of specs) {
@@ -157,7 +162,9 @@ describe('buildAppBundles', () => {
                     expect(p).toBe(path.join(APP_DIR, 'package.json'));
                     return { name: GAME_PKG };
                 }),
-                resolvePreload: vi.fn(() => '/node_modules/@chimera/electron/dist/preload/api.js'),
+                resolvePreload: vi.fn(
+                    () => '/node_modules/@chimera-engine/electron/dist/preload/api.js',
+                ),
                 env,
                 root: ROOT,
                 appDir: APP_DIR,
@@ -174,7 +181,7 @@ describe('buildAppBundles', () => {
         expect(labels).toContain('preload');
         const main = built.find((s) => s.label === 'main');
         expect(main?.alias[GAME_PKG]).toBe(APP_DIR);
-        expect(main?.alias['@chimera/electron/main']).toBe(
+        expect(main?.alias['@chimera-engine/electron/main']).toBe(
             path.join(ROOT, 'electron/main/index.ts'),
         );
     });
@@ -185,7 +192,7 @@ describe('buildAppBundles', () => {
         buildAppBundles(deps);
         const preload = built.find((s) => s.label === 'preload');
         expect(preload?.nodePaths).toEqual([nm]);
-        expect(preload?.alias['@chimera/electron/main']).toBeUndefined();
+        expect(preload?.alias['@chimera-engine/electron/main']).toBeUndefined();
         // preload entry was resolved from the consumer (verify:pack) require root.
         expect(deps.resolvePreload).toHaveBeenCalledWith(nm);
     });

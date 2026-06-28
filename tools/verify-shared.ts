@@ -53,11 +53,11 @@ export interface FsLike {
  * consumer is deliberately absent.
  */
 export const CHIMERA_PACKAGES = [
-    { name: '@chimera/simulation', dir: 'simulation' },
-    { name: '@chimera/ai', dir: 'ai' },
-    { name: '@chimera/networking', dir: 'networking' },
-    { name: '@chimera/renderer', dir: 'renderer' },
-    { name: '@chimera/electron', dir: 'electron' },
+    { name: '@chimera-engine/simulation', dir: 'simulation' },
+    { name: '@chimera-engine/ai', dir: 'ai' },
+    { name: '@chimera-engine/networking', dir: 'networking' },
+    { name: '@chimera-engine/renderer', dir: 'renderer' },
+    { name: '@chimera-engine/electron', dir: 'electron' },
 ] as const;
 
 /**
@@ -97,7 +97,7 @@ export function parsePackTarballPath(stdout: string, destDir: string): string {
  * Normalize a module specifier to its installable package name — strip any subpath,
  * preserve the scope for scoped packages:
  *   '@react-three/fiber'            -> '@react-three/fiber'
- *   '@chimera/simulation/engine/x'  -> '@chimera/simulation'
+ *   '@chimera-engine/simulation/engine/x'  -> '@chimera-engine/simulation'
  *   'three/examples/jsm/x.js'       -> 'three'
  *   'next/image'                    -> 'next'
  *   'zod'                           -> 'zod'

@@ -5,7 +5,7 @@ import { renderHook } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { getLobbyBridge, useLobbyApi } from './useLobbyApi';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
-import { playerId } from '@chimera/simulation/bridge/api-types.js';
+import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 
 describe('getLobbyBridge', () => {
     it('returns null when chimera bridge is unavailable', () => {

@@ -4,7 +4,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ConnectionStatus } from '@chimera/simulation/bridge/api-types.js';
+import type { ConnectionStatus } from '@chimera-engine/simulation/bridge/api-types.js';
 import { ConnectionStatusIndicator } from './ConnectionStatusIndicator';
 
 type StatusListener = (status: ConnectionStatus) => void;

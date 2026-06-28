@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import pino from 'pino';
 import { createLogger, createMemorySink, createNoopLogger, createPinoSink } from './logger.js';
-import type { LogEntry, LogSource } from '@chimera/simulation/foundation/logging.js';
+import type { LogEntry, LogSource } from '@chimera-engine/simulation/foundation/logging.js';
 
 const TEST_SOURCE: LogSource = { process: 'main', module: 'test' };
 

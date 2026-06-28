@@ -1,11 +1,11 @@
-import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
+import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera/tactics/constants.js';
+} from '@chimera-engine/tactics/constants.js';
 import type {
     ActionDefinition,
     BaseEntityState,
@@ -14,8 +14,8 @@ import type {
     GameResult,
     PlayerId,
     ValidationResult,
-} from '@chimera/simulation/engine/types.js';
-import { entityId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { entityId } from '@chimera-engine/simulation/engine/types.js';
 import { tacticsCommitDefinition } from './commitment/commitAction.js';
 import {
     allSeatsCommitted,

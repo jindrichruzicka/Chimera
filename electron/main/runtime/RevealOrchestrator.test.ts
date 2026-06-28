@@ -8,20 +8,20 @@
 //
 // Design note: docs/security-trust/tactics-commitment-battle-mode.md §5
 
-import type { WireCommitmentReveal } from '@chimera/simulation/foundation/messages.js';
+import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
 import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { gamePhase, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import { gamePhase, playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
 import {
     CommitmentVerificationError,
     RevealStagingError,
     toCommitmentId,
     type CommitmentReveal,
     type CommitmentTurnOrchestration,
-} from '@chimera/simulation/projection/index.js';
+} from '@chimera-engine/simulation/projection/index.js';
 import { describe, expect, it, vi } from 'vitest';
 
 import { runRevealSync, type RevealSyncSession } from './RevealOrchestrator.js';

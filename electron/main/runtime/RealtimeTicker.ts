@@ -14,7 +14,7 @@
  * Issue: #89
  */
 
-import type { ActionEnvelope } from '@chimera/simulation/engine/index.js';
+import type { ActionEnvelope } from '@chimera-engine/simulation/engine/index.js';
 
 export interface RealtimeTickerOptions {
     /** Dispatch frequency in Hz. Must be finite and > 0. */

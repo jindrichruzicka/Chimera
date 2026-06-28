@@ -28,7 +28,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import type {
     ActionHistoryEntry,
     ChimeraDebugApi,
-} from '@chimera/simulation/bridge/debug-api-types.js';
+} from '@chimera-engine/simulation/bridge/debug-api-types.js';
 import { getDebugBridge } from '../../bridge/debug-bridge';
 import { ActionLogPanel } from '../../components/debug/ActionLogPanel';
 import { DiffViewPanel } from '../../components/debug/DiffViewPanel';

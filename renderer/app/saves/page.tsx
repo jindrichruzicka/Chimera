@@ -21,8 +21,8 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { toSlotId } from '@chimera/simulation/bridge/api-types.js';
-import type { SaveSlotMeta, SlotId } from '@chimera/simulation/bridge/api-types.js';
+import { toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { SaveSlotMeta, SlotId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';
 import { Heading } from '../../components/ui/Heading';

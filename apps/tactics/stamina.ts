@@ -16,12 +16,12 @@
  * `simulation/engine`) — no renderer/electron/networking (Invariant #3).
  */
 
-import { TACTICS_MAX_STAMINA, readTacticsTurnMode } from '@chimera/tactics/constants.js';
+import { TACTICS_MAX_STAMINA, readTacticsTurnMode } from '@chimera-engine/tactics/constants.js';
 import type {
     BaseGameSnapshot,
     BasePlayerState,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 
 /**
  * Stored per-player stamina entry. `refreshedTurn` records the `turnNumber` at

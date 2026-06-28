@@ -14,8 +14,11 @@ import type {
     BaseGameSnapshot,
     BasePlayerState,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import type { ObservedEntityState, VisibilityRules } from '@chimera/simulation/projection/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import type {
+    ObservedEntityState,
+    VisibilityRules,
+} from '@chimera-engine/simulation/projection/types.js';
 import { hasCommittedThisTurn } from './commitment/turnGate.js';
 import type { TacticsObservedPlayer } from './stamina.js';
 import { readStamina } from './stamina.js';

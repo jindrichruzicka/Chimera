@@ -66,7 +66,7 @@ jobs:
   verify-scaffold:
     name: verify:scaffold — generated-app smoke
     runs-on: ubuntu-latest
-    # Scaffolds a throwaway game out-of-workspace, installs the packed @chimera/* tarballs,
+    # Scaffolds a throwaway game out-of-workspace, installs the packed @chimera-engine/* tarballs,
     # and runs the generated app's unit + e2e boot-smoke. Heavier than the tactics e2e (a full
     # fresh install + next build + Electron run), so give it headroom.
     timeout-minutes: 40

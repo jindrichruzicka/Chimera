@@ -1,8 +1,8 @@
 {
-    // Per-package build for @chimera/networking (issue #768). Follows the split-
+    // Per-package build for @chimera-engine/networking (issue #768). Follows the split-
     // tsconfig dist pattern established on the leaf in simulation/tsconfig.build.json
     // (#759): composite emit under ./dist (JS + .d.ts + maps) consumed via the
-    // package `exports` map, test files excluded. References @chimera/simulation —
+    // package `exports` map, test files excluded. References @chimera-engine/simulation —
     // its only workspace dependency (+ third-party `ws`) — so `tsc --build` orders
     // the graph (Invariant #1).
     "extends": "../tsconfig.json",

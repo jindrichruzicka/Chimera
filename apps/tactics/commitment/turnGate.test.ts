@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { TACTICS_TURN_MODE_SETTING } from '@chimera/tactics/constants.js';
-import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
-import { gamePhase, playerId } from '@chimera/simulation/engine/types.js';
+import { TACTICS_TURN_MODE_SETTING } from '@chimera-engine/tactics/constants.js';
+import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import {
     allSeatsCommitted,
     hasCommittedThisTurn,

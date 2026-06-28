@@ -11,8 +11,14 @@
  */
 
 import { z } from 'zod';
-import { ENGINE_DEFAULTS, engineSettingsZodShape } from '@chimera/simulation/settings/index.js';
-import type { EngineSettings, GameSettingsSchema } from '@chimera/simulation/settings/index.js';
+import {
+    ENGINE_DEFAULTS,
+    engineSettingsZodShape,
+} from '@chimera-engine/simulation/settings/index.js';
+import type {
+    EngineSettings,
+    GameSettingsSchema,
+} from '@chimera-engine/simulation/settings/index.js';
 
 // ── TacticsSettings interface ─────────────────────────────────────────────────
 

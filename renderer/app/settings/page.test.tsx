@@ -21,7 +21,7 @@ import React from 'react';
 import '@testing-library/jest-dom/vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { GameSettingsPageDefinition } from '@chimera/simulation/foundation/game-shell-contract.js';
+import type { GameSettingsPageDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import pageCss from './page.module.css?raw';
 import SettingsPage from './page';
 import { useSettingsStore } from '../../state/settingsStore';
@@ -29,7 +29,7 @@ import { useInputManager } from '../../input/InputManagerContext.js';
 import type { InputManager } from '../../input/InputManager.js';
 import type { InputAction, InputActionId } from '../../input/InputAction.js';
 import type { KeyBinding } from '../../input/InputBindingSchema.js';
-import type { ResolvedSettings } from '@chimera/simulation/bridge/api-types.js';
+import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
 import type { LoadedRendererGame } from '../../game/rendererGameRegistry';
 
 const { mockLoadRendererGame, mockPush } = vi.hoisted(() => ({

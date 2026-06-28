@@ -1,14 +1,14 @@
 /**
- * `@chimera/ai/engine` — the runtime surface of the game-agnostic agent
+ * `@chimera-engine/ai/engine` — the runtime surface of the game-agnostic agent
  * framework (Architecture §4.9 — AI Framework and Agent System).
  *
  * Consumers (e.g. the Electron host) import the framework classes from this
  * subpath rather than internal module paths directly. Unlike the side-effect-
- * free root barrel (`@chimera/ai`, contract types only), importing this subpath
+ * free root barrel (`@chimera-engine/ai`, contract types only), importing this subpath
  * evaluates the AI runtime modules.
  *
  * Everything here is game-agnostic (Invariant #106): game-specific AI policies
- * live in the consumer's `games/<name>/ai/`, never inside `@chimera/ai`.
+ * live in the consumer's `games/<name>/ai/`, never inside `@chimera-engine/ai`.
  */
 
 // ─── Framework runtime (classes) ──────────────────────────────────────────────

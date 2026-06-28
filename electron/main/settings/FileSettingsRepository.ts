@@ -15,8 +15,8 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { UserSettings } from '@chimera/simulation/settings/index.js';
-import type { SettingsRepository } from '@chimera/simulation/settings/index.js';
+import type { UserSettings } from '@chimera-engine/simulation/settings/index.js';
+import type { SettingsRepository } from '@chimera-engine/simulation/settings/index.js';
 
 /**
  * Thrown when a gameId fails the allowlist check that prevents path traversal.

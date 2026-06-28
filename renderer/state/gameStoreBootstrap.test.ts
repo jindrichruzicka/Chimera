@@ -24,8 +24,8 @@ import type {
     PlayerSnapshot,
     EngineAction,
     ActionRejection,
-} from '@chimera/simulation/bridge/api-types.js';
-import { playerId, gamePhase } from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
+import { playerId, gamePhase } from '@chimera-engine/simulation/bridge/api-types.js';
 import { bootstrapGameStore } from './gameStoreBootstrap.js';
 import { createGameStore } from './gameStore.js';
 import { createIpcClient } from '../bridge/ipcClient.js';

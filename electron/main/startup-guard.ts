@@ -10,7 +10,7 @@
 // Invariant #77: the process refuses to start when `CHIMERA_DEV_HARNESS=1` is
 //   combined with `NODE_ENV=production`.
 
-import { IS_DEBUG_MODE } from '@chimera/simulation/foundation/constants.js';
+import { IS_DEBUG_MODE } from '@chimera-engine/simulation/foundation/constants.js';
 
 /**
  * Asserts that debug mode is fully disabled when the process is running in a

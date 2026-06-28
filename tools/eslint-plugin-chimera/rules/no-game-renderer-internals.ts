@@ -4,9 +4,9 @@
  * ESLint rule: `chimera/no-game-renderer-internals`
  *
  * Allows game-owned renderer surfaces to consume the public renderer surface —
- * the UI primitive barrel (`@chimera/renderer/components/ui`), the chat barrel
- * (`@chimera/renderer/components/chat`), and the game-registration seam
- * (`@chimera/renderer/game`, #784) — while blocking all other renderer internals
+ * the UI primitive barrel (`@chimera-engine/renderer/components/ui`), the chat barrel
+ * (`@chimera-engine/renderer/components/chat`), and the game-registration seam
+ * (`@chimera-engine/renderer/game`, #784) — while blocking all other renderer internals
  * from games packages. Game renderer surfaces are the React screens/shell
  * components (`apps/<name>/{screens,shell}/*.{jsx,tsx}`) and the renderer
  * composition root (`apps/<name>/renderer/*.{ts,tsx}`), which registers the
@@ -68,7 +68,7 @@ function isGameRendererSurface(filename: string): boolean {
     // A game's renderer-facing surfaces: the React screens/shell components
     // (.jsx/.tsx) and the renderer composition root under apps/<name>/renderer/
     // (.ts/.tsx — register.ts/loaders.ts, #784), which wires the game's renderer
-    // contribution into the @chimera/renderer host through the public game seam.
+    // contribution into the @chimera-engine/renderer host through the public game seam.
     return /(?:^|\/)apps\/[^/]+\/(?:(?:screens|shell)\/.*\.(?:jsx|tsx)|renderer\/.*\.(?:ts|tsx))$/u.test(
         normalized,
     );
@@ -85,8 +85,8 @@ function isRendererPath(value: string): boolean {
 function isRendererImport(filename: string, source: string): boolean {
     const normalizedSource = normalizePath(source);
     if (
-        normalizedSource === '@chimera/renderer' ||
-        normalizedSource.startsWith('@chimera/renderer/')
+        normalizedSource === '@chimera-engine/renderer' ||
+        normalizedSource.startsWith('@chimera-engine/renderer/')
     ) {
         return true;
     }
@@ -105,41 +105,41 @@ function isRendererImport(filename: string, source: string): boolean {
 
 function isPublicUiBarrelImport(source: string): boolean {
     return (
-        source === '@chimera/renderer/components/ui' ||
-        source === '@chimera/renderer/components/ui/index' ||
-        source === '@chimera/renderer/components/ui/index.ts' ||
-        source === '@chimera/renderer/components/ui/index.js'
+        source === '@chimera-engine/renderer/components/ui' ||
+        source === '@chimera-engine/renderer/components/ui/index' ||
+        source === '@chimera-engine/renderer/components/ui/index.ts' ||
+        source === '@chimera-engine/renderer/components/ui/index.js'
     );
 }
 
 function isPublicChatBarrelImport(source: string): boolean {
     return (
-        source === '@chimera/renderer/components/chat' ||
-        source === '@chimera/renderer/components/chat/index' ||
-        source === '@chimera/renderer/components/chat/index.ts' ||
-        source === '@chimera/renderer/components/chat/index.js'
+        source === '@chimera-engine/renderer/components/chat' ||
+        source === '@chimera-engine/renderer/components/chat/index' ||
+        source === '@chimera-engine/renderer/components/chat/index.ts' ||
+        source === '@chimera-engine/renderer/components/chat/index.js'
     );
 }
 
-// The renderer game-registration seam (#784): the public `@chimera/renderer/game`
+// The renderer game-registration seam (#784): the public `@chimera-engine/renderer/game`
 // export a consumer app's renderer composition root uses to register its game's
 // renderer contribution (`registerRendererGame`, `RendererGameContribution`).
 function isPublicGameSeamImport(source: string): boolean {
     return (
-        source === '@chimera/renderer/game' ||
-        source === '@chimera/renderer/game/index' ||
-        source === '@chimera/renderer/game/index.ts' ||
-        source === '@chimera/renderer/game/index.js'
+        source === '@chimera-engine/renderer/game' ||
+        source === '@chimera-engine/renderer/game/index' ||
+        source === '@chimera-engine/renderer/game/index.ts' ||
+        source === '@chimera-engine/renderer/game/index.js'
     );
 }
 
-// The engine GUI shell surface (F65 Phase 2c): the public `@chimera/renderer/shell/*`
+// The engine GUI shell surface (F65 Phase 2c): the public `@chimera-engine/renderer/shell/*`
 // route + layout exports a consumer app's OWN Next host re-exports so the app owns its
 // renderer GUI while the game-agnostic shell ships from the package. Allowed ONLY from
 // the app's Next host route tree (apps/<name>/renderer/app/**), never from game logic
 // (screens/shell) or the composition root (register.ts/loaders.ts).
 function isPublicShellImport(source: string): boolean {
-    return source.startsWith('@chimera/renderer/shell/');
+    return source.startsWith('@chimera-engine/renderer/shell/');
 }
 
 function isAppNextHostRoute(filename: string): boolean {
@@ -149,7 +149,7 @@ function isAppNextHostRoute(filename: string): boolean {
 function isUiDeepImport(filename: string, source: string): boolean {
     const normalized = resolveImportPath(filename, source);
     return (
-        normalized.startsWith('@chimera/renderer/components/ui/') ||
+        normalized.startsWith('@chimera-engine/renderer/components/ui/') ||
         /(?:^|\/)renderer\/components\/ui\//u.test(normalized)
     );
 }
@@ -165,9 +165,9 @@ const rule: Rule.RuleModule = {
             gameRendererImportOutsideSurface:
                 'Only game renderer surfaces under apps/<name>/screens/*.tsx, apps/<name>/shell/*.tsx, or apps/<name>/renderer/*.{ts,tsx} may import from the renderer package.',
             gameRendererInternalImport:
-                'Game renderer surfaces may import only the public @chimera/renderer/components/ui, @chimera/renderer/components/chat, or @chimera/renderer/game barrels from renderer code. Renderer internals are forbidden in game-app packages.',
+                'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, or @chimera-engine/renderer/game barrels from renderer code. Renderer internals are forbidden in game-app packages.',
             gameRendererUiDeepImport:
-                'Game renderer surfaces must import UI primitives from the public @chimera/renderer/components/ui barrel, not individual renderer component files.',
+                'Game renderer surfaces must import UI primitives from the public @chimera-engine/renderer/components/ui barrel, not individual renderer component files.',
         },
         schema: [],
     },

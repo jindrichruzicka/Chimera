@@ -2,7 +2,7 @@
 // title + real-time ticker selection) and the renderer (shell display name) both
 // read from one source of truth.
 
-import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
+import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 import { __GAME_CONSTANT___GAME_ID } from './constants.js';
 

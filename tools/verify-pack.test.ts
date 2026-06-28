@@ -123,11 +123,11 @@ function makeDeps(run: RunFn, fs: FsLike, extra: Partial<VerifyPackDeps> = {}): 
 describe('CHIMERA_PACKAGES', () => {
     it('lists the five engine packages in inward dependency order, not the consumer app', () => {
         expect(CHIMERA_PACKAGES.map((p) => p.name)).toEqual([
-            '@chimera/simulation',
-            '@chimera/ai',
-            '@chimera/networking',
-            '@chimera/renderer',
-            '@chimera/electron',
+            '@chimera-engine/simulation',
+            '@chimera-engine/ai',
+            '@chimera-engine/networking',
+            '@chimera-engine/renderer',
+            '@chimera-engine/electron',
         ]);
         expect(CHIMERA_PACKAGES.map((p) => p.dir)).toEqual([
             'simulation',
@@ -137,7 +137,9 @@ describe('CHIMERA_PACKAGES', () => {
             'electron',
         ]);
         // apps/tactics is the consumer, never a packed artifact.
-        expect(CHIMERA_PACKAGES.map((p) => String(p.name))).not.toContain('@chimera/tactics');
+        expect(CHIMERA_PACKAGES.map((p) => String(p.name))).not.toContain(
+            '@chimera-engine/tactics',
+        );
     });
 });
 
@@ -186,11 +188,11 @@ describe('readPeerVersions', () => {
 
 describe('buildConsumerManifest', () => {
     const tarballs = {
-        '@chimera/simulation': '/t/chimera-simulation-0.9.0.tgz',
-        '@chimera/ai': '/t/chimera-ai-0.9.0.tgz',
-        '@chimera/networking': '/t/chimera-networking-0.9.0.tgz',
-        '@chimera/renderer': '/t/chimera-renderer-0.9.0.tgz',
-        '@chimera/electron': '/t/chimera-electron-0.9.0.tgz',
+        '@chimera-engine/simulation': '/t/chimera-simulation-0.9.0.tgz',
+        '@chimera-engine/ai': '/t/chimera-ai-0.9.0.tgz',
+        '@chimera-engine/networking': '/t/chimera-networking-0.9.0.tgz',
+        '@chimera-engine/renderer': '/t/chimera-renderer-0.9.0.tgz',
+        '@chimera-engine/electron': '/t/chimera-electron-0.9.0.tgz',
     };
     const peers = {
         next: '^15',
@@ -200,14 +202,14 @@ describe('buildConsumerManifest', () => {
         '@react-three/fiber': '^9',
     };
 
-    it('maps every @chimera/* package to its file: tarball in dependencies', () => {
+    it('maps every @chimera-engine/* package to its file: tarball in dependencies', () => {
         const manifest = buildConsumerManifest(tarballs, peers);
         for (const [name, tgz] of Object.entries(tarballs)) {
             expect(manifest.dependencies[name]).toBe(`file:${tgz}`);
         }
     });
 
-    it('forces every @chimera/* edge through the tarball via npm overrides', () => {
+    it('forces every @chimera-engine/* edge through the tarball via npm overrides', () => {
         const manifest = buildConsumerManifest(tarballs, peers);
         for (const [name, tgz] of Object.entries(tarballs)) {
             expect(manifest.overrides[name]).toBe(`file:${tgz}`);
@@ -234,19 +236,19 @@ describe('buildConsumerManifest', () => {
 describe('buildProbeScript', () => {
     it('asserts the two public renderer barrels + game seam resolve from the tarball', () => {
         const script = buildProbeScript();
-        expect(script).toContain('@chimera/renderer/components/ui');
-        expect(script).toContain('@chimera/renderer/components/chat');
-        expect(script).toContain('@chimera/renderer/game');
+        expect(script).toContain('@chimera-engine/renderer/components/ui');
+        expect(script).toContain('@chimera-engine/renderer/components/chat');
+        expect(script).toContain('@chimera-engine/renderer/game');
     });
 
     it('asserts the renderer CSS subpath ships via files', () => {
-        expect(buildProbeScript()).toContain('@chimera/renderer/styles/tokens.css');
+        expect(buildProbeScript()).toContain('@chimera-engine/renderer/styles/tokens.css');
     });
 
     it('asserts the electron public surface (main + preload api) resolves from the tarball', () => {
         const script = buildProbeScript();
-        expect(script).toContain('@chimera/electron/main');
-        expect(script).toContain('@chimera/electron/preload/api');
+        expect(script).toContain('@chimera-engine/electron/main');
+        expect(script).toContain('@chimera-engine/electron/preload/api');
     });
 
     it('is resolution-based (createRequire / require.resolve), not a runtime render', () => {

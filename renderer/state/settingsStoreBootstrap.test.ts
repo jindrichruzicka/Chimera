@@ -15,7 +15,7 @@ import type {
     SettingsAPI,
     Unsubscribe,
     ResolvedSettings,
-} from '@chimera/simulation/bridge/api-types.js';
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import { bootstrapSettingsStore } from './settingsStoreBootstrap';
 import { useSettingsStore } from './settingsStore';
 import { ENGINE_SETTINGS_GAME_ID } from '../input/KeyBindingRepository.js';

@@ -3,7 +3,7 @@
  *
  * `verify:pack` — the release-gating TRUE-ARTIFACT validation step (issue #794, F64 T2).
  *
- * Day-to-day, `apps/tactics` consumes the `@chimera/*` packages through pnpm
+ * Day-to-day, `apps/tactics` consumes the `@chimera-engine/*` packages through pnpm
  * `workspace:*` symlinks, which resolve the WHOLE source tree regardless of what
  * each package actually publishes. That masks a class of packaging bug: a missing
  * `exports` subpath or `files` entry works fine locally but breaks a real consumer
@@ -11,10 +11,10 @@
  *
  * This driver validates the real packaged artifact instead of the symlinks:
  *
- *   1. `pnpm build:packages`         — emit every `@chimera/*` `dist/` (+ renderer CSS copy)
+ *   1. `pnpm build:packages`         — emit every `@chimera-engine/*` `dist/` (+ renderer CSS copy)
  *   2. `pnpm pack` per package       — produce one tarball per engine package
  *   3. synthesize a throwaway consumer OUTSIDE the workspace — `file:` deps + npm
- *      `overrides` so EVERY `@chimera/*` edge resolves through a tarball's `exports`
+ *      `overrides` so EVERY `@chimera-engine/*` edge resolves through a tarball's `exports`
  *      (no `workspace:*` reach-through; the gate's whole point)
  *   4. `npm install`                 — install the tarballs into the throwaway
  *   5. renderer-barrel resolution probe — assert the renderer's two public barrels
@@ -87,25 +87,25 @@ export interface VerifyPackDeps {
 // ── Constants ──────────────────────────────────────────────────────────────────
 
 /**
- * Env var the tactics E2E `global-setup` reads to flip esbuild `@chimera/*`
+ * Env var the tactics E2E `global-setup` reads to flip esbuild `@chimera-engine/*`
  * resolution off the workspace symlinks and onto the throwaway tarball install.
  */
 export const E2E_NODE_MODULES_ENV = 'CHIMERA_VERIFY_PACK_NODE_MODULES';
 
 /** Public subpaths the resolution probe asserts ship in the packed surface. */
 const PROBE_SUBPATHS = [
-    '@chimera/renderer/components/ui',
-    '@chimera/renderer/components/chat',
-    '@chimera/renderer/game',
+    '@chimera-engine/renderer/components/ui',
+    '@chimera-engine/renderer/components/chat',
+    '@chimera-engine/renderer/game',
     // F65 Phase 2c: a consumer app's per-app Next host re-exports the engine shell
-    // from `@chimera/renderer/shell/*`; probe a representative route + the root layout
+    // from `@chimera-engine/renderer/shell/*`; probe a representative route + the root layout
     // so a missing `dist/app/*` entry in the packed artifact fails the gate.
-    '@chimera/renderer/shell/layout',
-    '@chimera/renderer/shell/main-menu/page',
-    '@chimera/renderer/styles/tokens.css',
-    '@chimera/electron/main',
-    '@chimera/electron/preload/api',
-    '@chimera/electron/preload/api-types',
+    '@chimera-engine/renderer/shell/layout',
+    '@chimera-engine/renderer/shell/main-menu/page',
+    '@chimera-engine/renderer/styles/tokens.css',
+    '@chimera-engine/electron/main',
+    '@chimera-engine/electron/preload/api',
+    '@chimera-engine/electron/preload/api-types',
 ] as const;
 
 // ── Result + step-error types ────────────────────────────────────────────────
@@ -150,7 +150,7 @@ class VerifyPackStepError extends Error {
 // ── Pure helpers ───────────────────────────────────────────────────────────────
 
 /**
- * Synthesize the throwaway consumer `package.json`. Every `@chimera/*` package is a
+ * Synthesize the throwaway consumer `package.json`. Every `@chimera-engine/*` package is a
  * `file:` tarball dep AND an `overrides` entry, so the tarballs' own internal
  * `workspace:*` edges (ai→sim, networking→sim, renderer→sim, electron→all four) are
  * forced onto the packed artifacts — guaranteeing resolution flows ONLY through each
@@ -180,7 +180,7 @@ export function buildConsumerManifest(
 
 /**
  * The resolution probe, emitted as an ESM script run from the throwaway consumer
- * (so `createRequire` resolves bare `@chimera/*` specifiers through the installed
+ * (so `createRequire` resolves bare `@chimera-engine/*` specifiers through the installed
  * tarballs only). Resolution + existence is deliberate: the renderer barrels import
  * React/Three and CSS Modules, which plain Node cannot execute — but `require.resolve`
  * exercises exactly the `exports`/`files` surface Invariant #96 guards, and throws
@@ -227,7 +227,7 @@ export function e2ePlaywrightArgs(): string[] {
         '--config=apps/tactics/e2e/playwright.config.ts',
         '--project=electron-e2e',
         // The Runtime Debug Layer preload (`./preload/debug-api`) is intentionally NOT a
-        // public `@chimera/electron` export (Invariant #27), so exclude the debug specs.
+        // public `@chimera-engine/electron` export (Invariant #27), so exclude the debug specs.
         '--grep-invert',
         'debug',
     ];
@@ -288,7 +288,7 @@ async function runProbe(deps: VerifyPackDeps, consumerDir: string): Promise<RunR
     return deps.run('node', ['probe.mjs'], { cwd: consumerDir });
 }
 
-/** Run the scoped Playwright E2E suite with `@chimera/*` resolved from the tarballs. */
+/** Run the scoped Playwright E2E suite with `@chimera-engine/*` resolved from the tarballs. */
 function runE2e(deps: VerifyPackDeps, consumerNodeModules: string): RunResult {
     deps.log('running the tactics E2E suite against the packed artifact…');
     return deps.run('pnpm', ['exec', 'playwright', ...e2ePlaywrightArgs()], {
@@ -348,7 +348,7 @@ async function buildPackInstall(deps: VerifyPackDeps, tmp: string): Promise<Cons
     await deps.fs.mkdir(tarballsDir);
     await deps.fs.mkdir(consumerDir);
 
-    deps.log('building @chimera/* packages…');
+    deps.log('building @chimera-engine/* packages…');
     assertStepOk('build', deps.run('pnpm', ['build:packages'], { cwd: deps.repoRoot }));
 
     const tarballs = await packAll(deps, tarballsDir);
@@ -407,7 +407,10 @@ export async function verifyPackSelfTest(
     deps: VerifyPackDeps,
     options: VerifyPackSelfTestOptions = {},
 ): Promise<VerifyPackResult> {
-    const target = options.target ?? { pkg: '@chimera/renderer', subpath: './components/ui' };
+    const target = options.target ?? {
+        pkg: '@chimera-engine/renderer',
+        subpath: './components/ui',
+    };
     const tmp = await deps.fs.mkdtemp(path.join(tmpdir(), 'chimera-verify-pack-'));
     try {
         const setup = await buildPackInstall(deps, tmp);

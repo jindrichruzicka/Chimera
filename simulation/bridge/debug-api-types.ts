@@ -1,7 +1,7 @@
 // simulation/bridge/debug-api-types.ts
 //
 // Type-only module declaring the full `window.__chimeraDebug` contract
-// (`ChimeraDebugApi`). Lives in the `@chimera/simulation` leaf (the neutral home
+// (`ChimeraDebugApi`). Lives in the `@chimera-engine/simulation` leaf (the neutral home
 // both renderer and electron/preload import — sibling of `api-types.ts`). This is
 // the Invariant 28 counterpart of `api-types.ts`: the Debug Inspector surface is
 // typed HERE and nowhere else; `api-types.ts` must never declare it, and the runtime

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import type { LogsAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { LogsAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 import { installRendererLogger } from '../logging/rendererLogger';
 
 export function LoggingBootstrap(): null {

@@ -3,11 +3,15 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { gamePhase, playerId, type PlayerSnapshot } from '@chimera/simulation/bridge/api-types.js';
+import {
+    gamePhase,
+    playerId,
+    type PlayerSnapshot,
+} from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
     GameScreenProps,
     GameScreenRegistry,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { useUiStore } from '../../state/uiStore.js';
 import { FadeProvider } from '../shell/FadeContext.js';
 import { SceneRouter } from './SceneRouter.js';

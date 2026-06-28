@@ -1,26 +1,26 @@
 {
     // Playwright-runner resolution shim ONLY (referenced by playwright.config.ts
-    // `tsconfig`). The root tsconfig carries no `@chimera/*` `paths` so production `tsc`
+    // `tsconfig`). The root tsconfig carries no `@chimera-engine/*` `paths` so production `tsc`
     // resolves through real workspace deps. But the Playwright test transform loads
-    // electron main/preload source (which imports `@chimera/*`) and resolves bare
+    // electron main/preload source (which imports `@chimera-engine/*`) and resolves bare
     // specifiers ONLY via tsconfig paths — it has no webpack/vite-style alias hook like
     // next.config.ts / vitest.config.mts / global-setup.ts. These paths restore
     // resolution for the runner without reintroducing an alias into any
     // production/typecheck tsconfig (`pnpm typecheck` does not use this file). The
     // engine packages resolve from their built `dist`; the game's own
-    // `@chimera/__game_kebab__` resolves from this app's source. Paths below are
+    // `@chimera-engine/__game_kebab__` resolves from this app's source. Paths below are
     // baseUrl-relative (repo root).
     "extends": "../../../tsconfig.json",
     "compilerOptions": {
         "baseUrl": "../../..",
         "paths": {
-            "@chimera/simulation/*": ["simulation/dist/*"],
-            "@chimera/ai/*": ["ai/dist/*"],
-            "@chimera/networking": ["networking/dist/index.d.ts"],
-            "@chimera/networking/*": ["networking/dist/*"],
-            "@chimera/renderer/*": ["renderer/dist/*"],
-            "@chimera/electron/*": ["electron/dist/*"],
-            "@chimera/__game_kebab__/*": ["apps/__game_kebab__/*"]
+            "@chimera-engine/simulation/*": ["simulation/dist/*"],
+            "@chimera-engine/ai/*": ["ai/dist/*"],
+            "@chimera-engine/networking": ["networking/dist/index.d.ts"],
+            "@chimera-engine/networking/*": ["networking/dist/*"],
+            "@chimera-engine/renderer/*": ["renderer/dist/*"],
+            "@chimera-engine/electron/*": ["electron/dist/*"],
+            "@chimera-engine/__game_kebab__/*": ["apps/__game_kebab__/*"]
         }
     }
 }

@@ -190,7 +190,7 @@ test_games_import_in_simulation_detected() {
     fi
 }
 
-# Test: @chimera/simulation import inside shared/ → violation [invariant-1]
+# Test: @chimera-engine/simulation import inside shared/ → violation [invariant-1]
 # shared/ is the zero-dependency foundation leaf (issue #758).
 test_simulation_import_in_shared_detected() {
     local tmp
@@ -198,24 +198,24 @@ test_simulation_import_in_shared_detected() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "shared/messages.ts" \
-        "import type { PlayerId } from '@chimera/simulation/engine/types.js';"
+        "import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
 
     if [[ ${exit_code} -ne 0 ]]; then
         if echo "${out}" | grep -q '\[invariant-1\]'; then
-            pass "@chimera/simulation import in shared/ detected as [invariant-1]"
+            pass "@chimera-engine/simulation import in shared/ detected as [invariant-1]"
         else
             fail "shared/ back-edge detected but invariant number missing:"
             echo "${out}" | sed 's/^/       /' >&2
         fi
     else
-        fail "@chimera/simulation import in shared/ not detected (exit 0)"
+        fail "@chimera-engine/simulation import in shared/ not detected (exit 0)"
     fi
 }
 
-# Test: @chimera/shared self-import inside shared/ is NOT a back-edge → no violation.
+# Test: @chimera-engine/shared self-import inside shared/ is NOT a back-edge → no violation.
 # Confirms the leaf check excludes the shared package itself.
 test_shared_self_import_not_flagged() {
     local tmp
@@ -223,15 +223,15 @@ test_shared_self_import_not_flagged() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "shared/game-screen-contract.ts" \
-        "import type { GameContent } from '@chimera/shared/game-content-contract.js';"
+        "import type { GameContent } from '@chimera-engine/shared/game-content-contract.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
 
     if [[ ${exit_code} -eq 0 ]]; then
-        pass "@chimera/shared self-import in shared/ not flagged"
+        pass "@chimera-engine/shared self-import in shared/ not flagged"
     else
-        fail "@chimera/shared self-import in shared/ wrongly flagged:"
+        fail "@chimera-engine/shared self-import in shared/ wrongly flagged:"
         echo "${out}" | sed 's/^/       /' >&2
     fi
 }
@@ -788,7 +788,7 @@ test_glob_string_before_assignment_passes() {
     fi
 }
 
-# ─── Checks 11 & 12: @chimera/ai boundary (invariants 106 / 107, issue #765) ───
+# ─── Checks 11 & 12: @chimera-engine/ai boundary (invariants 106 / 107, issue #765) ───
 
 # Test 28: import from games/ inside ai/ → violation [invariant-47]
 # The import-direction half of invariant #106 is enforced by Check 4 (#47):
@@ -986,7 +986,7 @@ test_engine_namespace_in_ai_allowed() {
 # ─── Networking package (F60, issue #768) ──────────────────────────────────────
 
 # Test 36: import from renderer/ inside networking/ → violation [invariant-1]
-# networking/ depends on @chimera/simulation only (+ ws); it must not reach the
+# networking/ depends on @chimera-engine/simulation only (+ ws); it must not reach the
 # UI layer.
 test_renderer_import_in_networking_detected() {
     local tmp
@@ -994,7 +994,7 @@ test_renderer_import_in_networking_detected() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "networking/provider/Bad.ts" \
-        "import { foo } from '@chimera/renderer/components/ui/Button.js';"
+        "import { foo } from '@chimera-engine/renderer/components/ui/Button.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1127,7 +1127,7 @@ test_networking_provider_dir_passes() {
 }
 
 # Test 42: orchestration import of a provider/local internal → violation [invariant-47]
-# electron/main orchestration must use the @chimera/networking barrel interfaces
+# electron/main orchestration must use the @chimera-engine/networking barrel interfaces
 # only; reaching into provider/local/* is provider-internal containment (Check 15).
 test_provider_local_import_in_orchestration_detected() {
     local tmp
@@ -1135,7 +1135,7 @@ test_provider_local_import_in_orchestration_detected() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "electron/main/lobby/LobbyManager.ts" \
-        "import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';"
+        "import { LocalWebSocketProvider } from '@chimera-engine/networking/provider/local/LocalWebSocketProvider.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1159,7 +1159,7 @@ test_provider_steam_import_in_orchestration_detected() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "electron/main/runtime/StateBroadcaster.ts" \
-        "import { SteamNetworkProvider } from '@chimera/networking/provider/steam/SteamNetworkProvider.js';"
+        "import { SteamNetworkProvider } from '@chimera-engine/networking/provider/steam/SteamNetworkProvider.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1184,7 +1184,7 @@ test_composition_root_provider_import_passes() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "electron/main/index.ts" \
-        "import { LocalWebSocketProvider } from '@chimera/networking/provider/local/LocalWebSocketProvider.js';"
+        "import { LocalWebSocketProvider } from '@chimera-engine/networking/provider/local/LocalWebSocketProvider.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1197,14 +1197,14 @@ test_composition_root_provider_import_passes() {
     fi
 }
 
-# Test 45: orchestration import of the @chimera/networking barrel → NOT flagged (sanctioned)
+# Test 45: orchestration import of the @chimera-engine/networking barrel → NOT flagged (sanctioned)
 test_barrel_import_in_orchestration_passes() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "electron/main/lobby/LobbyManager.ts" \
-        "import { JoinRejectedError } from '@chimera/networking';"
+        "import { JoinRejectedError } from '@chimera-engine/networking';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1241,40 +1241,40 @@ test_games_import_in_shell_page_detected() {
     fi
 }
 
-# Test 47: shell page importing a @chimera/<game> package → violation [invariant-94]
+# Test 47: shell page importing a @chimera-engine/<game> package → violation [invariant-94]
 # The post-F57 specifier form carries no `/games/` substring; detection is by the
-# engine-package allowlist (a non-engine @chimera/* package is a game).
+# engine-package allowlist (a non-engine @chimera-engine/* package is a game).
 test_game_package_import_in_shell_page_detected() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "renderer/app/main-menu/page.tsx" \
-        "import { Registry } from '@chimera/tactics/screens/index.js';"
+        "import { Registry } from '@chimera-engine/tactics/screens/index.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
 
     if [[ ${exit_code} -ne 0 ]]; then
         if echo "${out}" | grep -q '\[invariant-94\]'; then
-            pass "@chimera/<game> import in a shell page detected as [invariant-94]"
+            pass "@chimera-engine/<game> import in a shell page detected as [invariant-94]"
         else
-            fail "shell-page @chimera/<game> import detected but invariant number missing:"
+            fail "shell-page @chimera-engine/<game> import detected but invariant number missing:"
             echo "${out}" | sed 's/^/       /' >&2
         fi
     else
-        fail "@chimera/<game> import in a shell page not detected (exit 0)"
+        fail "@chimera-engine/<game> import in a shell page not detected (exit 0)"
     fi
 }
 
-# Test 48: clean shell page (engine @chimera/* import only) → NOT flagged
+# Test 48: clean shell page (engine @chimera-engine/* import only) → NOT flagged
 test_clean_shell_page_passes() {
     local tmp
     tmp=$(mktemp -d -t chimera-inv-test-XXXXXX)
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "renderer/app/lobby/page.tsx" \
-        "import { parseLobbyConfig } from '@chimera/simulation/foundation/lobby-config.js';"
+        "import { parseLobbyConfig } from '@chimera-engine/simulation/foundation/lobby-config.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1294,7 +1294,7 @@ test_renderer_internal_in_game_surface_detected() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "games/tactics/screens/TacticsDebugPanel.tsx" \
-        "import { useGameStore } from '@chimera/renderer/state/gameStore.js';"
+        "import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1319,7 +1319,7 @@ test_renderer_deep_ui_in_game_surface_detected() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "games/tactics/shell/TacticsShellBackground.tsx" \
-        "import { Button } from '@chimera/renderer/components/ui/Button.js';"
+        "import { Button } from '@chimera-engine/renderer/components/ui/Button.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?
@@ -1343,9 +1343,9 @@ test_clean_game_surface_passes() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "games/tactics/screens/TacticsGameHud.tsx" \
-        "import { Button } from '@chimera/renderer/components/ui';"
+        "import { Button } from '@chimera-engine/renderer/components/ui';"
     plant_file "${tmp}" "games/tactics/shell/TacticsShellChat.tsx" \
-        "import { ChatPanel } from '@chimera/renderer/components/chat/index.js';"
+        "import { ChatPanel } from '@chimera-engine/renderer/components/chat/index.js';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?

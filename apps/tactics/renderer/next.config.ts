@@ -3,10 +3,10 @@ import path from 'path';
 
 // The tactics app's OWN Next host (F65 Phase 2c). The app owns its renderer GUI:
 // every route under app/** is a thin re-export of the engine shell from
-// `@chimera/renderer/shell/*` (compiled by `transpilePackages`), and the single
+// `@chimera-engine/renderer/shell/*` (compiled by `transpilePackages`), and the single
 // `chimera-game-registration` alias binds the game-agnostic shell to THIS game's
 // renderer composition root. There are NO source-twin aliases: the app's route
-// re-exports AND the game's screens both resolve `@chimera/renderer/*` to the one
+// re-exports AND the game's screens both resolve `@chimera-engine/renderer/*` to the one
 // package dist, so EscapeStack / the Zustand stores / the game registry are
 // single-instance via uniform resolution (proven by the Phase-2 spike).
 const appRendererDir = __dirname; // apps/tactics/renderer
@@ -26,7 +26,7 @@ const nextConfig: NextConfig = {
     reactStrictMode: true,
     trailingSlash: true,
     images: { unoptimized: true },
-    transpilePackages: ['@chimera/renderer'],
+    transpilePackages: ['@chimera-engine/renderer'],
     webpack(rawConfig): WebpackConfig {
         const config = rawConfig as WebpackConfig;
         config.resolve ??= { alias: {}, extensionAlias: {} };

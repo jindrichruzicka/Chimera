@@ -5,11 +5,11 @@
 // any Electron module — the renderer must not depend on Electron runtime
 // types (architecture §4.1).
 //
-// The `ChimeraAPI` type itself lives in `@chimera/simulation/bridge/api-types`
+// The `ChimeraAPI` type itself lives in `@chimera-engine/simulation/bridge/api-types`
 // (the neutral leaf both the renderer and electron/preload import); re-using it
 // here guarantees the renderer's view and the preload's exposure stay in lockstep.
 
-import type { ChimeraAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { ChimeraAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 declare global {
     interface Window {

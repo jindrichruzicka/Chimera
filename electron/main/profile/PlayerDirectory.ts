@@ -19,9 +19,9 @@
  *   #61 — PlayerDirectory trusts its callers to only pass sanitised profiles.
  */
 
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
-import { EngineProfileSchema } from '@chimera/simulation/profile/ProfileSchema.js';
-import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
+import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import { EngineProfileSchema } from '@chimera-engine/simulation/profile/ProfileSchema.js';
+import type { PlayerProfile } from '@chimera-engine/simulation/profile/ProfileSchema.js';
 
 // ─── Error types ──────────────────────────────────────────────────────────────
 

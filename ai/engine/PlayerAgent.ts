@@ -12,7 +12,7 @@
  *          provides no mutation shortcut; it only calls brain lifecycle methods.
  */
 
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import type { AIBrain } from './AIBrain.js';
 import type { AIParams, GameResult, PlayerSnapshot } from './AITypes.js';
 

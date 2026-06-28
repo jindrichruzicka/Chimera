@@ -1,7 +1,7 @@
 /**
  * renderer/components/chat/__tests__/chat-barrel-side-effects.test.ts
  *
- * Asserts the `@chimera/renderer/components/chat` public barrel is
+ * Asserts the `@chimera-engine/renderer/components/chat` public barrel is
  * SIDE-EFFECT-FREE at import (issue #772, AC #3: "Importing each barrel is
  * side-effect-free — no store/bridge/R3F runtime evaluated").
  *
@@ -54,7 +54,7 @@ const externalizeBareImports: Plugin = {
  * Bundle a barrel entry with esbuild (bundle + tree-shake) and return its
  * resolved in-repo input file paths plus the set of external (bare) specifiers
  * it imports. `import type` specifiers are stripped by esbuild before resolution,
- * so type-only contract imports (`@chimera/simulation/*`, `@chimera/electron/*`)
+ * so type-only contract imports (`@chimera-engine/simulation/*`, `@chimera-engine/electron/*`)
  * never appear.
  */
 async function analyzeBarrel(
@@ -104,7 +104,7 @@ vi.mock('zustand', async (importOriginal) => {
     };
 });
 
-describe('@chimera/renderer/components/chat barrel is side-effect-free at import (issue #772)', () => {
+describe('@chimera-engine/renderer/components/chat barrel is side-effect-free at import (issue #772)', () => {
     beforeEach(() => {
         createStoreSpy.mockClear();
         vi.resetModules();
@@ -129,8 +129,8 @@ describe('@chimera/renderer/components/chat barrel is side-effect-free at import
     });
 });
 
-describe('@chimera/renderer/components/chat barrel pulls no bridge / R3F / sibling runtime (issue #772)', () => {
-    it('evaluates no IPC bridge module and no React-Three-Fiber / @chimera sibling runtime', async () => {
+describe('@chimera-engine/renderer/components/chat barrel pulls no bridge / R3F / sibling runtime (issue #772)', () => {
+    it('evaluates no IPC bridge module and no React-Three-Fiber / @chimera-engine sibling runtime', async () => {
         const { inputs, externals } = await analyzeBarrel(resolve(__dirname, '../index.ts'));
 
         // metafile input paths are relative to the esbuild working dir, which is
@@ -155,7 +155,7 @@ describe('@chimera/renderer/components/chat barrel pulls no bridge / R3F / sibli
 
         expect(importsRuntime(externals, 'three')).toBe(false);
         expect(importsRuntime(externals, '@react-three/fiber')).toBe(false);
-        expect(importsRuntime(externals, '@chimera/ai')).toBe(false);
-        expect(importsRuntime(externals, '@chimera/networking')).toBe(false);
+        expect(importsRuntime(externals, '@chimera-engine/ai')).toBe(false);
+        expect(importsRuntime(externals, '@chimera-engine/networking')).toBe(false);
     });
 });

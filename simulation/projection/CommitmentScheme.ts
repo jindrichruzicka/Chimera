@@ -17,7 +17,7 @@ import { createHash, randomBytes } from 'node:crypto';
 // leaf `../foundation/commitment-contract.js` (issue #758) so the projected
 // snapshot/screen contracts can carry commitments without importing up into
 // simulation. They are imported for local use and re-exported so
-// `@chimera/simulation/projection` stays the unchanged public import path.
+// `@chimera-engine/simulation/projection` stays the unchanged public import path.
 import type {
     CommitmentId,
     CommitmentEnvelope,

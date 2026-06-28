@@ -11,7 +11,7 @@
 //   - Accepts an optional `source` parameter so tests can supply a fake
 //     global without touching `globalThis`.
 
-import type { ChimeraDebugApi } from '@chimera/simulation/bridge/debug-api-types.js';
+import type { ChimeraDebugApi } from '@chimera-engine/simulation/bridge/debug-api-types.js';
 
 // ── Bridge accessor ───────────────────────────────────────────────────────────
 

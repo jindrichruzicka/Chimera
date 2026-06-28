@@ -1,12 +1,12 @@
 'use client';
 
 import React from 'react';
-import { resolveGameResultOutcome } from '@chimera/simulation/foundation/game-screen-contract.js';
+import { resolveGameResultOutcome } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type {
     GameResultBannerProps,
     GameResultOutcome,
-} from '@chimera/simulation/foundation/game-screen-contract.js';
-import { Card } from '@chimera/renderer/components/ui';
+} from '@chimera-engine/simulation/foundation/game-screen-contract.js';
+import { Card } from '@chimera-engine/renderer/components/ui';
 import styles from './TacticsGameResultBanner.module.css';
 
 const OUTCOME_ICONS = {

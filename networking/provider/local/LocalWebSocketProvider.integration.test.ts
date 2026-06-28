@@ -17,7 +17,7 @@
 
 // @vitest-environment node
 import { describe, it, expect, afterEach } from 'vitest';
-import type { PlayerId, EngineAction } from '@chimera/simulation/contracts';
+import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contracts';
 import type {
     HostedSession,
     JoinedSession,

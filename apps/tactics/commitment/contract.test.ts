@@ -10,8 +10,8 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera/tactics/constants.js';
-import { entityId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/tactics/constants.js';
+import { entityId } from '@chimera-engine/simulation/engine/types.js';
 import { describe, expect, it } from 'vitest';
 
 import { tacticsGridCoordinate } from '../actions.js';

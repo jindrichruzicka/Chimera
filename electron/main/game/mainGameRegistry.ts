@@ -2,7 +2,7 @@
  * electron/main/game/mainGameRegistry.ts
  *
  * Game-agnostic main-side registry FACTORY. This module ships inside
- * `@chimera/electron` and therefore names NO concrete game: it owns only the
+ * `@chimera-engine/electron` and therefore names NO concrete game: it owns only the
  * generic {@link MainGameContribution} contract and {@link createMainGameRegistry},
  * which turns the per-game contributions injected at bootstrap into the lookup
  * maps the host (`index.ts`) consumes.
@@ -10,7 +10,7 @@
  * The games/* coupling that used to live here has moved to the consumer app
  * composition root `apps/tactics/electron/main.ts` (relocated there from the
  * top-level `app/` in F63/#783).
- * That root constructs each game's `MainGameContribution` from `@chimera/<game>/*`
+ * That root constructs each game's `MainGameContribution` from `@chimera-engine/<game>/*`
  * and injects it into `main(contributions)` at runtime — so this file, and the
  * rest of `electron/main/`, never import a game. The boundary is enforced by
  * ESLint (`chimera/no-main-games-import`) and invariants Check 10.
@@ -25,16 +25,16 @@
 
 import type { ZodType } from 'zod';
 
-import type { AIState } from '@chimera/ai';
-import type { GameManifest } from '@chimera/simulation/foundation/game-manifest-contract.js';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
-import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
-import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
-import type { BaseGameSnapshot, PlayerId } from '@chimera/simulation/engine/types.js';
+import type { AIState } from '@chimera-engine/ai';
+import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
+import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
+import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import type {
     CommitmentTurnOrchestration,
     VisibilityRules,
-} from '@chimera/simulation/projection/index.js';
+} from '@chimera-engine/simulation/projection/index.js';
 
 import type { SettingsManager } from '../settings/SettingsManager.js';
 
@@ -79,7 +79,7 @@ export interface MainGameContribution {
      * game declares no content and its `ContentDatabase` stays absent
      * (`PipelineContext.db` undefined, Invariant #46). Replaces the former
      * static `gameContentRegistry` (#788) — schemas now arrive by injection so
-     * `@chimera/electron` names no game.
+     * `@chimera-engine/electron` names no game.
      */
     readonly contentSchemas?: Readonly<Record<string, ZodType>>;
     /**
@@ -88,7 +88,7 @@ export interface MainGameContribution {
      * seed lobby defaults and validate host/join writes (§4.14). Absent ⇒ the
      * game has no customizable lobby and the host seeds nothing. Replaces the
      * former static `lobbySetupBuilders` map (#789) — the builder now arrives by
-     * injection so `@chimera/electron` names no game.
+     * injection so `@chimera-engine/electron` names no game.
      */
     readonly lobbySetup?: (content: GameContent) => GameLobbySetup;
     /**

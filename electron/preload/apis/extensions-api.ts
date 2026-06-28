@@ -13,7 +13,7 @@
 // separate — the factory passed to `registerExtension()` provides the
 // implementation object.
 //
-// Invariant: `ChimeraExtensions` is empty in @chimera/core 1.0.0.
+// Invariant: `ChimeraExtensions` is empty in @chimera-engine/core 1.0.0.
 // No extensions are registered here — this file is the infrastructure only.
 
 import type { ChimeraExtensions } from '../api-types.js';
@@ -45,7 +45,7 @@ const registry: Partial<Record<keyof ChimeraExtensions, unknown>> = {};
  * @example
  * ```ts
  * // In your game's preload entry, before importing api.ts:
- * import { registerExtension } from '@chimera/core/electron/preload/extensions-api.js';
+ * import { registerExtension } from '@chimera-engine/core/electron/preload/extensions-api.js';
  * import { createTacticsApi } from './tactics-api.js';
  *
  * registerExtension('tactics', () => createTacticsApi(ipcRenderer));
@@ -75,7 +75,7 @@ export function registerExtension<TKey extends keyof ChimeraExtensions>(
  *
  * @returns A frozen, partial `ChimeraExtensions` record. Keys are present only
  *          for extensions that were registered via `registerExtension()`. In
- *          `@chimera/core` 1.0.0 no extensions are registered, so the result
+ *          `@chimera-engine/core` 1.0.0 no extensions are registered, so the result
  *          is an empty frozen object by default.
  */
 export function buildExtensionsApi(): Readonly<Partial<ChimeraExtensions>> {

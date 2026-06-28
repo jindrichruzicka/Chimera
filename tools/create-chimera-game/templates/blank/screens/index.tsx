@@ -4,7 +4,7 @@
 // `screens`/`sceneDefaultScreens` as your game grows.
 
 import React from 'react';
-import type { GameScreenRegistry } from '@chimera/simulation/foundation/game-screen-contract.js';
+import type { GameScreenRegistry } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 
 // Invariant #87: every screen registered here must be wrapped in React.lazy.
 const __GamePascal__Board = React.lazy(() => import('./__GamePascal__Board.js'));

@@ -177,7 +177,7 @@ The renderer side: `renderer/components/chat/ChatPanel.tsx`. Reads from `chatSto
 
 Mute/unmute is **dual-written**: the renderer `chatStore` provides the instant local view filter (and reveals already-buffered messages on unmute), and the same action is mirrored to the host-side `ChatHub` via `window.__chimera.chat.mute` / `unmute`, so the main process also suppresses delivery of that sender and filters them from `history()` backfill. The two layers are complementary, not redundant: the store is the immediate render filter, the `ChatHub` is the authoritative delivery/history gate.
 
-`ChatPanel` is the shared **chat component** (§4.35.1), exported from the public barrel `@chimera/renderer/components/chat`. It is an **in-match-only UI**: the engine never mounts it — no engine shell surface (lobby included) renders chat — and a game mounts it from its own renderer surfaces. Tactics renders it inside `TacticsGameHud` (a sibling of the HUD footer) within a drawer that is **collapsed by default** — a corner toggle expands it on demand, so chat never occludes board interaction behind it. The dock owns its own positioning. Games that do not mount it get no chat.
+`ChatPanel` is the shared **chat component** (§4.35.1), exported from the public barrel `@chimera-engine/renderer/components/chat`. It is an **in-match-only UI**: the engine never mounts it — no engine shell surface (lobby included) renders chat — and a game mounts it from its own renderer surfaces. Tactics renders it inside `TacticsGameHud` (a sibling of the HUD footer) within a drawer that is **collapsed by default** — a corner toggle expands it on demand, so chat never occludes board interaction behind it. The dock owns its own positioning. Games that do not mount it get no chat.
 
 ---
 

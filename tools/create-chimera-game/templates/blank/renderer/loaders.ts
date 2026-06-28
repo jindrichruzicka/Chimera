@@ -3,7 +3,7 @@
 // remains a cheap, eager side effect. The renderer seam calls these to load the
 // game's screens and shell on demand.
 
-import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera/renderer/game';
+import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera-engine/renderer/game';
 
 export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGame> {
     const screenModule = await import('../screens/index.js');

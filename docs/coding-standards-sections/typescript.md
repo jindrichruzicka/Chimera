@@ -15,7 +15,7 @@ tags: [typescript, strict, formatting, imports, branded-types, readonly, coding-
 - `strict: true` is mandatory in every `tsconfig.json`. No exceptions.
 - `noUncheckedIndexedAccess: true` — all array/record indexing returns `T | undefined`.
 - `exactOptionalPropertyTypes: true` — `undefined` is not assignable to an optional field unless `?` is declared.
-- Path aliases use the `@chimera/*` namespace (e.g. `@chimera/simulation/engine`). Never use relative `../../..` paths across package boundaries.
+- Path aliases use the `@chimera-engine/*` namespace (e.g. `@chimera-engine/simulation/engine`). Never use relative `../../..` paths across package boundaries.
 
 ## 1.2 Forbidden patterns
 
@@ -48,7 +48,7 @@ tags: [typescript, strict, formatting, imports, branded-types, readonly, coding-
 ## 1.5 Imports
 
 - Use named imports. Avoid `import * as X` unless consuming a module with no named exports.
-- Sort imports: external packages → `@chimera/*` path aliases → relative paths. Within each group, alphabetical order.
+- Sort imports: external packages → `@chimera-engine/*` path aliases → relative paths. Within each group, alphabetical order.
 - Never import a type with a value import when only the type is needed. Use `import type { Foo }`.
 
 ## 1.6 Formatting and indentation

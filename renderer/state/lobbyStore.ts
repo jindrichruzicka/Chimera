@@ -13,7 +13,7 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
+import type { LobbyState } from '@chimera-engine/simulation/foundation/messages-schemas.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 
@@ -69,7 +69,7 @@ let lobbyStoreInstance: StoreApi<LobbyStoreState> | undefined;
 
 /**
  * Lazily instantiate the singleton on first access. Importing this module — and
- * the `@chimera/renderer/components/chat` barrel that pulls it through
+ * the `@chimera-engine/renderer/components/chat` barrel that pulls it through
  * `ChatPanel` — therefore creates no store, keeping that barrel side-effect-free
  * (issue #772, Invariant #96). Behaviour is otherwise identical to an eager
  * module-level singleton: the same instance is returned on every access.

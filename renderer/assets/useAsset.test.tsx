@@ -8,7 +8,7 @@ import type {
     AssetKind,
     AssetRef,
     ParticleConfigAsset,
-} from '@chimera/simulation/content/AssetRef.js';
+} from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager, ResolvedAsset } from './AssetManager';
 import { AssetManagerContext } from './AssetManagerContext.js';

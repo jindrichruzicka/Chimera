@@ -14,7 +14,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { EscapeStackProvider } from '@chimera/renderer/components/ui';
+import { EscapeStackProvider } from '@chimera-engine/renderer/components/ui';
 import { TacticsInGameMenu } from './TacticsInGameMenu.js';
 
 afterEach(() => {

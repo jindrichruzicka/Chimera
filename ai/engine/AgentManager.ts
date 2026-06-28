@@ -14,14 +14,14 @@
  *          (HumanPlayerAgent.onTick is a no-op).
  */
 
-import type { Logger } from '@chimera/simulation/foundation/logging.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
-import type { BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
+import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
+import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';
+import type { BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
 import type {
     StateProjector,
     PlayerSnapshot,
-} from '@chimera/simulation/projection/StateProjector.js';
-import type { AgentCoordinator } from '@chimera/simulation/host';
+} from '@chimera-engine/simulation/projection/StateProjector.js';
+import type { AgentCoordinator } from '@chimera-engine/simulation/host';
 import type { PlayerAgent, GameResult } from './PlayerAgent.js';
 
 // ─── AgentManager ─────────────────────────────────────────────────────────────

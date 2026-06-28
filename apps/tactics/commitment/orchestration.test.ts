@@ -14,10 +14,14 @@ import {
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera/tactics/constants.js';
-import type { ActionEnvelope, BaseGameSnapshot } from '@chimera/simulation/engine/types.js';
-import { entityId, gamePhase, playerId as toPlayerId } from '@chimera/simulation/engine/types.js';
-import { toCommitmentId, type StagedReveals } from '@chimera/simulation/projection/index.js';
+} from '@chimera-engine/tactics/constants.js';
+import type { ActionEnvelope, BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
+import {
+    entityId,
+    gamePhase,
+    playerId as toPlayerId,
+} from '@chimera-engine/simulation/engine/types.js';
+import { toCommitmentId, type StagedReveals } from '@chimera-engine/simulation/projection/index.js';
 import { describe, expect, it } from 'vitest';
 
 import { tacticsGridCoordinate } from '../actions.js';

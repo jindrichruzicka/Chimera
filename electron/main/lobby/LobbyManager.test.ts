@@ -14,7 +14,7 @@
  */
 
 import { afterEach, describe, it, expect, vi } from 'vitest';
-import { InMemoryMultiplayerProvider } from '@chimera/networking/provider/InMemoryMultiplayerProvider.js';
+import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import {
     LobbyManager,
@@ -24,7 +24,7 @@ import {
 import { PlayerDirectory } from '../profile/PlayerDirectory.js';
 import { createProfileGate } from '../profile/ProfileGate.js';
 import { ChatRelay } from '../ChatRelay.js';
-import type { EngineAction } from '@chimera/simulation/engine/types.js';
+import type { EngineAction } from '@chimera-engine/simulation/engine/types.js';
 import {
     playerId,
     JoinRejectedError,
@@ -42,16 +42,16 @@ import {
     type DisconnectReason,
     type SideChannelMessage,
     type Unsubscribe,
-} from '@chimera/networking';
+} from '@chimera-engine/networking';
 import type { PlayerConnectionEvent } from '../../preload/api-types.js';
 import type { ConnectionStatus } from '../../preload/api-types.js';
-import type { ChatMessage } from '@chimera/simulation/foundation/chat.js';
-import { localProfileId } from '@chimera/simulation/profile/ProfileSchema.js';
-import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
-import type { AssetRef, TextureAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { ChatMessage } from '@chimera-engine/simulation/foundation/chat.js';
+import { localProfileId } from '@chimera-engine/simulation/profile/ProfileSchema.js';
+import type { PlayerProfile } from '@chimera-engine/simulation/profile/ProfileSchema.js';
+import type { AssetRef, TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { registerE2eHooks, type E2eHooks } from '../runtime/e2e-hooks.js';
-import { crc32Json } from '@chimera/simulation/foundation/crc32.js';
-import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
+import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
+import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 

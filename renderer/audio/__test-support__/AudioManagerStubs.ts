@@ -1,4 +1,4 @@
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 import { vi } from 'vitest';
 
 import type { AudioHandle, AudioManager } from '../AudioManager';

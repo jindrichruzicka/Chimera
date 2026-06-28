@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, render } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { ReplayAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { ReplayAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 const mockPush = vi.fn();
 vi.mock('next/navigation', () => ({

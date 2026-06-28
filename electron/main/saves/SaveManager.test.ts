@@ -15,8 +15,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
     InMemorySaveRepository,
     SaveNotFoundError,
-} from '@chimera/simulation/persistence/index.js';
-import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
+} from '@chimera-engine/simulation/persistence/index.js';
+import { makeFile } from '@chimera-engine/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
 import { createNoopLogger } from '../logging/logger.js';
 import { SaveManager } from './SaveManager.js';
 

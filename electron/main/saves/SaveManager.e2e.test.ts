@@ -18,8 +18,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
     JsonSaveSerializer,
     createDefaultMigrator,
-} from '@chimera/simulation/persistence/index.js';
-import { makeFile } from '@chimera/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
+} from '@chimera-engine/simulation/persistence/index.js';
+import { makeFile } from '@chimera-engine/simulation/persistence/__test-support__/saveRepositoryContractTests.js';
 import { FileSaveRepository } from './FileSaveRepository.js';
 import { SaveManager } from './SaveManager.js';
 import type { Logger } from '../logging/logger.js';

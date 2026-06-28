@@ -3,7 +3,7 @@
 // Global `Window.__chimeraDebug` augmentation consumed by the Inspector
 // debug page (§4.12 — Runtime Debug Layer). Mirrors `chimera.d.ts`: the
 // `ChimeraDebugApi` type itself lives in
-// `@chimera/simulation/bridge/debug-api-types` (the neutral leaf both the
+// `@chimera-engine/simulation/bridge/debug-api-types` (the neutral leaf both the
 // renderer and electron/preload import), so the renderer's view and the
 // Inspector preload's exposure stay in lockstep — with zero runtime import
 // of Electron or `simulation/debug` (the whole chain is `import type` and
@@ -15,7 +15,7 @@
 // data-free Inspector toggle (Invariant #28) — so the debug page must
 // guard for absence rather than assume it.
 
-import type { ChimeraDebugApi } from '@chimera/simulation/bridge/debug-api-types.js';
+import type { ChimeraDebugApi } from '@chimera-engine/simulation/bridge/debug-api-types.js';
 
 declare global {
     interface Window {

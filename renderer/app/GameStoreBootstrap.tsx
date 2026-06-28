@@ -31,7 +31,7 @@ import { useGameStore, type GameStore } from '../state/gameStore';
 import { useLobbyUiStore } from '../state/lobbyUiStore';
 import { bootstrapPerfStore } from '../components/shell/perf/perfStoreBootstrap.js';
 import { usePerfStore, type PerfStoreState } from '../components/shell/perf/perfStore.js';
-import type { GameAPI, LobbyAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { GameAPI, LobbyAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 export function GameStoreBootstrap(): null {
     const router = useRouter();

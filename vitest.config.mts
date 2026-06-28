@@ -49,9 +49,9 @@ export default defineConfig({
                 return `export default ${JSON.stringify(content)}`;
             },
         },
-        // Resolves both relative `.js`→`.ts` specifiers and bare `@chimera/*`
+        // Resolves both relative `.js`→`.ts` specifiers and bare `@chimera-engine/*`
         // workspace packages onto in-tree TypeScript source. Replaces
-        // vite-tsconfig-paths, which read the `@chimera/*` tsconfig `paths`
+        // vite-tsconfig-paths, which read the `@chimera-engine/*` tsconfig `paths`
         // aliases removed in F57 (#752).
         createPreferTypeScriptSourceResolver(workspaceRoot),
     ],
@@ -61,7 +61,7 @@ export default defineConfig({
             // no game and pulls the active game's renderer contribution in through
             // this build-selected alias (mirrors `renderer/next.config.ts`). The
             // test harness selects tactics, the same way the resolver plugin maps
-            // `@chimera/tactics` onto apps/tactics — so any test that mounts the
+            // `@chimera-engine/tactics` onto apps/tactics — so any test that mounts the
             // renderer's `AppShell`/`GameRegistrationBootstrap` resolves it.
             'chimera-game-registration': path.resolve(
                 workspaceRoot,

@@ -14,9 +14,9 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { playerId } from '@chimera/simulation/bridge/api-types.js';
-import type { LobbyState } from '@chimera/simulation/foundation/messages-schemas.js';
-import type { InGameMenuProps } from '@chimera/simulation/foundation/game-screen-contract.js';
+import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
+import type { LobbyState } from '@chimera-engine/simulation/foundation/messages-schemas.js';
+import type { InGameMenuProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 
 import type { InputActionId, InputEvent } from '../../input/InputAction.js';
 import type { InputManager } from '../../input/InputManager.js';

@@ -8,8 +8,8 @@
 // Uses globalThis.__chimera?.logs for root-tsconfig compatibility (no DOM).
 // The renderer tsconfig has DOM, so `window` is valid in renderer source.
 
-import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
-import type { LogsAPI } from '@chimera/simulation/bridge/api-types.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
+import type { LogsAPI } from '@chimera-engine/simulation/bridge/api-types.js';
 
 // Ambient declarations so the root tsconfig (no DOM lib) can type-check this
 // file. The renderer tsconfig (lib: ["ES2022","DOM"]) provides the full types.

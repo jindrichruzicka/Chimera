@@ -178,7 +178,7 @@ package into the shell or host:
    The host derives a `gameId → builder` map and hands it to
    [`createResolveLobbySetup`](../../electron/main/lobby/lobbySetupRegistry.ts), which closes each builder over the
    game's loaded content and injects the resulting `(gameId) => GameLobbySetup | undefined` resolver into
-   `LobbyManager`. The registry module itself names no game — `@chimera/electron` imports no game lobby code.
+   `LobbyManager`. The registry module itself names no game — `@chimera-engine/electron` imports no game lobby code.
 
 ### Tactics example
 

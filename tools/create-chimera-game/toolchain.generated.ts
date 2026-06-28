@@ -7,7 +7,7 @@
 // toolchain + engine versions the monorepo builds against, without reading the monorepo at
 // `npm create` time. This file is prettier/eslint-ignored: it is a machine artifact.
 
-/** Root devDependencies + dependencies, minus every `@chimera/*` workspace edge. */
+/** Root devDependencies + dependencies, minus every `@chimera-engine/*` workspace edge. */
 export const TOOLCHAIN_DEPS: Readonly<Record<string, string>> = {
     "@changesets/cli": "^2.31.0",
     "@eslint/css": "^1.2.0",
@@ -56,11 +56,11 @@ export const TOOLCHAIN_DEPS: Readonly<Record<string, string>> = {
 
 /** `^<version>` per publishable engine package, from each package's own version field. */
 export const ENGINE_DEP_RANGES: Readonly<Record<string, string>> = {
-    "@chimera/ai": "^0.9.0",
-    "@chimera/electron": "^0.9.0",
-    "@chimera/networking": "^0.9.0",
-    "@chimera/renderer": "^0.9.0",
-    "@chimera/simulation": "^0.9.0"
+    "@chimera-engine/ai": "^0.9.0",
+    "@chimera-engine/electron": "^0.9.0",
+    "@chimera-engine/networking": "^0.9.0",
+    "@chimera-engine/renderer": "^0.9.0",
+    "@chimera-engine/simulation": "^0.9.0"
 };
 
 /** The root tsconfig `compilerOptions`, frozen for the standalone app's inlined tsconfig. */

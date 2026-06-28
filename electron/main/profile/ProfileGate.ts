@@ -12,10 +12,10 @@
  * createProfileGate() and injects it into LobbyManager.
  */
 
-import { admit } from '@chimera/simulation/profile/ProfileSanitizer.js';
+import { admit } from '@chimera-engine/simulation/profile/ProfileSanitizer.js';
 import type { PlayerDirectory } from './PlayerDirectory.js';
-import type { JoinGateResult, PlayerId } from '@chimera/networking';
-import type { PlayerProfile } from '@chimera/simulation/profile/ProfileSchema.js';
+import type { JoinGateResult, PlayerId } from '@chimera-engine/networking';
+import type { PlayerProfile } from '@chimera-engine/simulation/profile/ProfileSchema.js';
 
 // ─── Interface ────────────────────────────────────────────────────────────────
 

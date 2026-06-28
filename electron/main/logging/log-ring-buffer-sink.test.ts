@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { LogEntry } from '@chimera/simulation/foundation/logging.js';
+import type { LogEntry } from '@chimera-engine/simulation/foundation/logging.js';
 import type { LoggerSink } from './logger.js';
 import { LogRingBufferSink } from './log-ring-buffer-sink.js';
 

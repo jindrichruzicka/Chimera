@@ -3,19 +3,19 @@
 // reducers and lifecycle hooks into the shared engine `ActionRegistry`. This
 // module is game-core (no renderer/electron imports — Invariant #1).
 
-import type { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';
+import type { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import type {
     ActionDefinition,
     BaseGameSnapshot,
     PlayerId,
     ValidationResult,
-} from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/simulation/engine/types.js';
 
 import { __GAME_CONSTANT___GAME_ID, __GAME_CONSTANT___PING_ACTION } from './constants.js';
 
 /**
  * First-player config — structurally assignable to the host's `FirstPlayerConfig`
- * (defined in `@chimera/electron`), so this game-core module names no platform
+ * (defined in `@chimera-engine/electron`), so this game-core module names no platform
  * type. Override the resolver to seat your game's starting player.
  */
 export interface __GamePascal__GameInitializationConfig {

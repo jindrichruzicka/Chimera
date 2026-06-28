@@ -1,7 +1,7 @@
 /**
  * renderer/__tests__/package-exports-contract.test.ts
  *
- * Locks the `@chimera/renderer` package surface declared in `package.json`
+ * Locks the `@chimera-engine/renderer` package surface declared in `package.json`
  * (issue #772 — F61 surface contract; updated by #773 once the dist/ build landed):
  *
  *   - the public `exports` entry points are the two component barrels
@@ -13,10 +13,10 @@
  *     conditions now both point at the built `dist/` artifact (the #772 bridge
  *     where `types` pointed at in-tree source is gone);
  *   - a `./styles/*.css` entry ships the design-token stylesheet so a consumer
- *     can `import '@chimera/renderer/styles/tokens.css'` to load the `--ch-*`
+ *     can `import '@chimera-engine/renderer/styles/tokens.css'` to load the `--ch-*`
  *     tokens the barrel components reference at `:root` (#773);
- *   - `@chimera/simulation` is the only `@chimera/*` dependency (Invariant #1);
- *     `@chimera/ai` / `@chimera/networking` / `@chimera/electron` are NOT
+ *   - `@chimera-engine/simulation` is the only `@chimera-engine/*` dependency (Invariant #1);
+ *     `@chimera-engine/ai` / `@chimera-engine/networking` / `@chimera-engine/electron` are NOT
  *     dependencies;
  *   - React / React-DOM / Three / `@react-three/fiber` / Next are peers so the
  *     consumer app owns a single copy; renderer-internal runtime libs (zustand)
@@ -45,7 +45,7 @@ const manifest = JSON.parse(
     readFileSync(resolve(__dirname, '../package.json'), 'utf8'),
 ) as RendererManifest;
 
-describe('@chimera/renderer package surface (issue #772)', () => {
+describe('@chimera-engine/renderer package surface (issue #772)', () => {
     it('is an ES module shipping the dist/ build', () => {
         expect(manifest.type).toBe('module');
         expect(manifest.files).toContain('dist');
@@ -81,7 +81,7 @@ describe('@chimera/renderer package surface (issue #772)', () => {
 
         // F65 Phase 2c: the engine GUI shell (every route under app/) ships from dist
         // so a consumer app's thin per-app Next host re-exports each route from
-        // `@chimera/renderer/shell/<route>` (resolving every shared singleton through
+        // `@chimera-engine/renderer/shell/<route>` (resolving every shared singleton through
         // one package dist copy).
         expect(exportsMap['./shell/*']).toEqual({
             types: './dist/app/*.d.ts',
@@ -106,16 +106,16 @@ describe('@chimera/renderer package surface (issue #772)', () => {
         }
     });
 
-    it('depends on @chimera/simulation only among @chimera/* packages', () => {
+    it('depends on @chimera-engine/simulation only among @chimera-engine/* packages', () => {
         const deps = manifest.dependencies ?? {};
-        const chimeraDeps = Object.keys(deps).filter((name) => name.startsWith('@chimera/'));
-        expect(chimeraDeps).toEqual(['@chimera/simulation']);
-        expect(deps['@chimera/simulation']).toBe('workspace:*');
+        const chimeraDeps = Object.keys(deps).filter((name) => name.startsWith('@chimera-engine/'));
+        expect(chimeraDeps).toEqual(['@chimera-engine/simulation']);
+        expect(deps['@chimera-engine/simulation']).toBe('workspace:*');
 
         // Sibling engine packages must NOT be declared as renderer dependencies.
-        expect(deps['@chimera/networking']).toBeUndefined();
-        expect(deps['@chimera/ai']).toBeUndefined();
-        expect(deps['@chimera/electron']).toBeUndefined();
+        expect(deps['@chimera-engine/networking']).toBeUndefined();
+        expect(deps['@chimera-engine/ai']).toBeUndefined();
+        expect(deps['@chimera-engine/electron']).toBeUndefined();
 
         // Renderer-internal runtime libs are direct dependencies.
         expect(deps['zustand']).toBeDefined();

@@ -28,7 +28,7 @@ export type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
 // `../foundation/engine-contract.js` (issue #758) so the foundation can
 // describe its wire/screen contracts without importing up into simulation. They
 // are imported for local use (the brand factories cast to them) and re-exported
-// so `@chimera/simulation/engine/types.js` stays the unchanged public import path.
+// so `@chimera-engine/simulation/engine/types.js` stays the unchanged public import path.
 import type {
     PlayerId,
     EntityId,

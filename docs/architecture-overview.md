@@ -289,46 +289,46 @@ Once that bar is met, the project transitions to a **published package hierarchy
 ### C.3 Target Package Layout
 
 ```
-@chimera/simulation     ←  simulation/ + shared/          (pure TS, zero runtime deps)
-@chimera/ai             ←  ai/                             (depends on @chimera/simulation)
-@chimera/networking     ←  networking/                     (depends on @chimera/simulation)
-@chimera/renderer       ←  renderer/                       (depends on @chimera/simulation, React, Three.js)
-@chimera/electron       ←  electron/                       (depends on all above)
+@chimera-engine/simulation     ←  simulation/ + shared/          (pure TS, zero runtime deps)
+@chimera-engine/ai             ←  ai/                             (depends on @chimera-engine/simulation)
+@chimera-engine/networking     ←  networking/                     (depends on @chimera-engine/simulation)
+@chimera-engine/renderer       ←  renderer/                       (depends on @chimera-engine/simulation, React, Three.js)
+@chimera-engine/electron       ←  electron/                       (depends on all above)
 
 # First-party extension library — example of the adopter pattern:
-@chimera/cards          ←  new package                     (depends on @chimera/simulation, @chimera/ai)
+@chimera-engine/cards          ←  new package                     (depends on @chimera-engine/simulation, @chimera-engine/ai)
 
 # Games become independent repositories / packages:
-my-poker-game           ←  games/poker/                    (depends on @chimera/simulation, @chimera/cards, @chimera/renderer)
-my-ccg                  ←  games/my-ccg/                   (depends on @chimera/simulation, @chimera/cards, @chimera/renderer)
+my-poker-game           ←  games/poker/                    (depends on @chimera-engine/simulation, @chimera-engine/cards, @chimera-engine/renderer)
+my-ccg                  ←  games/my-ccg/                   (depends on @chimera-engine/simulation, @chimera-engine/cards, @chimera-engine/renderer)
 ```
 
 The dependency arrows already point this way in the monorepo — no refactoring of logic is required. The transition is a **packaging and publishing change**, not an architectural one.
 
 ### C.4 What the Transition Requires
 
-| Task                                                                                        | Effort  | Notes                                                                                                                           |
-| ------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Add `mergeFrom(definitions)` to `ActionRegistry`                                            | Small   | Enables extension libraries to pre-register shared action definitions without forcing adopters to re-register each one manually |
-| Extract `SimulationHost` from `electron/main/simulation-host.ts` into `@chimera/simulation` | Medium  | Makes the host composable outside Electron; `@chimera/electron` becomes a thin wrapper                                          |
-| Replace `tsconfig` path aliases with real workspace `package.json` deps                     | Small   | One-line change per package in a pnpm/yarn workspace                                                                            |
-| Add import-boundary lint rules                                                              | Small   | `eslint-plugin-import` `no-restricted-imports` — enforces what the architecture already requires                                |
-| Curate each package's `index.ts` barrel                                                     | Small   | Expose contract types only; hide implementation details                                                                         |
-| Per-package incremental build                                                               | Medium  | `tsc --build` project references, or `turborepo`/`nx` for caching                                                               |
-| Semantic versioning and changelogs                                                          | Ongoing | Each package gets independent semver; `@chimera/simulation` breaking changes are major bumps                                    |
+| Task                                                                                               | Effort  | Notes                                                                                                                           |
+| -------------------------------------------------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Add `mergeFrom(definitions)` to `ActionRegistry`                                                   | Small   | Enables extension libraries to pre-register shared action definitions without forcing adopters to re-register each one manually |
+| Extract `SimulationHost` from `electron/main/simulation-host.ts` into `@chimera-engine/simulation` | Medium  | Makes the host composable outside Electron; `@chimera-engine/electron` becomes a thin wrapper                                   |
+| Replace `tsconfig` path aliases with real workspace `package.json` deps                            | Small   | One-line change per package in a pnpm/yarn workspace                                                                            |
+| Add import-boundary lint rules                                                                     | Small   | `eslint-plugin-import` `no-restricted-imports` — enforces what the architecture already requires                                |
+| Curate each package's `index.ts` barrel                                                            | Small   | Expose contract types only; hide implementation details                                                                         |
+| Per-package incremental build                                                                      | Medium  | `tsc --build` project references, or `turborepo`/`nx` for caching                                                               |
+| Semantic versioning and changelogs                                                                 | Ongoing | Each package gets independent semver; `@chimera-engine/simulation` breaking changes are major bumps                             |
 
 The versioning row above is realized with **[Changesets](https://github.com/changesets/changesets)**
 (`pnpm changeset` → `pnpm version-packages` → `pnpm release`), configured for **independent**
 versioning (`fixed`/`linked` empty in [`.changeset/config.json`](../.changeset/config.json)): each
-`@chimera/*` package carries its own `version` and its own `CHANGELOG.md`. The one rule Changesets
-cannot infer is the **`@chimera/simulation` cascade** — because `simulation` is the zero-dependency
+`@chimera-engine/*` package carries its own `version` and its own `CHANGELOG.md`. The one rule Changesets
+cannot infer is the **`@chimera-engine/simulation` cascade** — because `simulation` is the zero-dependency
 leaf every other package points inward to (Invariant #1), a breaking change to it is genuinely
 **major** and must propagate a major to every publishable consumer (`ai`, `networking`, `renderer`,
 `electron`) in the same release. Left to its defaults Changesets would only `patch`-bump dependents to
 keep their pinned `workspace:*` ranges valid, silently weakening the promise; the
 **`verify:changeset-policy`** gate ([`tools/changeset-policy.ts`](../tools/changeset-policy.ts)) reads
 the pending changesets and fails the release if a publishable package is majored without its
-publishable dependents. The private `@chimera/tactics` reference app is exempt — it publishes nothing.
+publishable dependents. The private `@chimera-engine/tactics` reference app is exempt — it publishes nothing.
 The full policy and a worked example live in [`.changeset/README.md`](../.changeset/README.md).
 
 ### C.5 Intermediate Step: pnpm Workspaces
@@ -344,44 +344,44 @@ Before publishing, the monorepo should introduce **pnpm workspaces** (or yarn wo
 
 ### C.6 Adopter Model
 
-Once `@chimera/simulation` is published and stable, the intended adoption path for external developers is:
+Once `@chimera-engine/simulation` is published and stable, the intended adoption path for external developers is:
 
 ```
-@chimera/simulation          ← always required; the core contract
-@chimera/ai                  ← required if the game has AI players
-@chimera/networking          ← required if the game has multiplayer
-@chimera/renderer            ← required if using the React/R3F renderer shell
-@chimera/electron            ← required if shipping as an Electron desktop app
-@chimera/<domain>            ← optional extension libraries (e.g. @chimera/cards, @chimera/hex-grid)
+@chimera-engine/simulation          ← always required; the core contract
+@chimera-engine/ai                  ← required if the game has AI players
+@chimera-engine/networking          ← required if the game has multiplayer
+@chimera-engine/renderer            ← required if using the React/R3F renderer shell
+@chimera-engine/electron            ← required if shipping as an Electron desktop app
+@chimera-engine/<domain>            ← optional extension libraries (e.g. @chimera-engine/cards, @chimera-engine/hex-grid)
 ```
 
-An adopter building a card game toolkit publishes `@chimera/cards` with `peerDependencies` on `@chimera/simulation`. Their game packages depend on both. The engine team has no coupling to or knowledge of the game packages — the dependency arrows point inward toward the core, never outward.
+An adopter building a card game toolkit publishes `@chimera-engine/cards` with `peerDependencies` on `@chimera-engine/simulation`. Their game packages depend on both. The engine team has no coupling to or knowledge of the game packages — the dependency arrows point inward toward the core, never outward.
 
-See the [Extension-Library Adopter On-Ramp](adopter-on-ramp.md) for the concrete `@chimera/cards` manifest, the peer-not-dependency rationale, the install matrix, and the publish flow an adopter follows.
+See the [Extension-Library Adopter On-Ramp](adopter-on-ramp.md) for the concrete `@chimera-engine/cards` manifest, the peer-not-dependency rationale, the install matrix, and the publish flow an adopter follows.
 
 ### C.7 As-Built Package Build Model (M9)
 
-As of M9, the engine ships as a hierarchy of `@chimera/*` workspace packages, each built to a consumable `dist/`, with a single fluent build that compiles them in dependency order and a watch mode that keeps that build live.
+As of M9, the engine ships as a hierarchy of `@chimera-engine/*` workspace packages, each built to a consumable `dist/`, with a single fluent build that compiles them in dependency order and a watch mode that keeps that build live.
 
-**Built / independently consumable** — `@chimera/simulation`, `@chimera/ai`, `@chimera/networking`, `@chimera/renderer`, and `@chimera/electron`. Each declares `"type": "module"`, an `exports` map onto `./dist`, a `"files"` allowlist that ships `dist`, and a `tsconfig.build.json` (`composite`, emitting JS + `.d.ts` + maps). All are wired into the root [`tsconfig.build.json`](../tsconfig.build.json) `tsc -b` reference graph (the inward, acyclic `workspace:*` DAG of Invariant #1) and get an explicit `tsc --noEmit -p <pkg>` in the root `typecheck` script. `@chimera/renderer` publishes only its two public component barrels (`./components/ui`, `./components/chat`) via a scoped build; `tsc` emits no CSS, so [`tools/copy-renderer-css.ts`](../tools/copy-renderer-css.ts) copies `*.module.css` + `styles/tokens.css` into `dist/` afterward. `@chimera/electron` (built as of **F62**) ships its main process via `./main` and exposes the preload contract through `./preload/*`; its preload `*-types.ts` are listed in `files` and served from source in `exports` so consumers can type the IPC surface.
+**Built / independently consumable** — `@chimera-engine/simulation`, `@chimera-engine/ai`, `@chimera-engine/networking`, `@chimera-engine/renderer`, and `@chimera-engine/electron`. Each declares `"type": "module"`, an `exports` map onto `./dist`, a `"files"` allowlist that ships `dist`, and a `tsconfig.build.json` (`composite`, emitting JS + `.d.ts` + maps). All are wired into the root [`tsconfig.build.json`](../tsconfig.build.json) `tsc -b` reference graph (the inward, acyclic `workspace:*` DAG of Invariant #1) and get an explicit `tsc --noEmit -p <pkg>` in the root `typecheck` script. `@chimera-engine/renderer` publishes only its two public component barrels (`./components/ui`, `./components/chat`) via a scoped build; `tsc` emits no CSS, so [`tools/copy-renderer-css.ts`](../tools/copy-renderer-css.ts) copies `*.module.css` + `styles/tokens.css` into `dist/` afterward. `@chimera-engine/electron` (built as of **F62**) ships its main process via `./main` and exposes the preload contract through `./preload/*`; its preload `*-types.ts` are listed in `files` and served from source in `exports` so consumers can type the IPC surface.
 
-The engine is game-agnostic, so the game/consumer layer is **not** part of this package set. As of **F63** it lives at [`apps/tactics`](../apps/tactics) — the engine's single reference consumer — depends on the `@chimera/*` packages above, and registers its game into the electron host and renderer through the public registries. It is type-checked standalone via [`apps/tactics/tsconfig.json`](../apps/tactics/tsconfig.json) (wired into the `typecheck` script for the `.tsx` screen/shell files) and sits at the top of the `tsc -b` solution graph through its own `tsconfig.build.json`.
+The engine is game-agnostic, so the game/consumer layer is **not** part of this package set. As of **F63** it lives at [`apps/tactics`](../apps/tactics) — the engine's single reference consumer — depends on the `@chimera-engine/*` packages above, and registers its game into the electron host and renderer through the public registries. It is type-checked standalone via [`apps/tactics/tsconfig.json`](../apps/tactics/tsconfig.json) (wired into the `typecheck` script for the `.tsx` screen/shell files) and sits at the top of the `tsc -b` solution graph through its own `tsconfig.build.json`.
 
 **Dual module resolution.** Two resolution modes run side by side, which is why nearly every root script is prefixed with `pnpm build:packages`:
 
-- **Tests and dev** resolve `@chimera/*` to in-tree **TypeScript source** via the Vitest resolver plugin ([`tools/vitest-resolver-plugin`](../tools/vitest-resolver-plugin.ts), and the equivalent Next/webpack alias) — fast iteration with no rebuild step.
-- **Typecheck, lint (type-aware rules), and production** resolve `@chimera/*` to the built **`dist/`** through each package's `exports` map, so `dist` must exist first — hence the `build:packages` prefix on `typecheck`, `lint`, `test`, and `coverage`. The path aliases were removed from the production/typecheck tsconfigs in F57 (#752); only [`apps/tactics/e2e/tsconfig.json`](../apps/tactics/e2e/tsconfig.json) keeps a transitional `paths` map, because the Playwright runner resolves bare specifiers with no bundler hook.
+- **Tests and dev** resolve `@chimera-engine/*` to in-tree **TypeScript source** via the Vitest resolver plugin ([`tools/vitest-resolver-plugin`](../tools/vitest-resolver-plugin.ts), and the equivalent Next/webpack alias) — fast iteration with no rebuild step.
+- **Typecheck, lint (type-aware rules), and production** resolve `@chimera-engine/*` to the built **`dist/`** through each package's `exports` map, so `dist` must exist first — hence the `build:packages` prefix on `typecheck`, `lint`, `test`, and `coverage`. The path aliases were removed from the production/typecheck tsconfigs in F57 (#752); only [`apps/tactics/e2e/tsconfig.json`](../apps/tactics/e2e/tsconfig.json) keeps a transitional `paths` map, because the Playwright runner resolves bare specifiers with no bundler hook.
 
 **Fluent build & watch (F64).** The topological build is promoted to a first-class root command:
 
-- **`pnpm build`** rebuilds every `@chimera/*` package — and the `apps/tactics` consumer — in dependency order via `tsc -b tsconfig.build.json`, then runs the renderer CSS copy. It is incremental: each package's `dist/.tsbuildinfo` lets `tsc -b` skip up-to-date projects, so a second `build` with no source change is a no-op. Because consumers resolve the packages through pnpm `workspace:*` symlinks, `apps/tactics` picks up the fresh `dist/` with no manual relink. (`build` is the documented alias of the internal `build:packages` that prefixes the other scripts.)
+- **`pnpm build`** rebuilds every `@chimera-engine/*` package — and the `apps/tactics` consumer — in dependency order via `tsc -b tsconfig.build.json`, then runs the renderer CSS copy. It is incremental: each package's `dist/.tsbuildinfo` lets `tsc -b` skip up-to-date projects, so a second `build` with no source change is a no-op. Because consumers resolve the packages through pnpm `workspace:*` symlinks, `apps/tactics` picks up the fresh `dist/` with no manual relink. (`build` is the documented alias of the internal `build:packages` that prefixes the other scripts.)
 - **`pnpm build:watch`** (alias **`pnpm dev`**) keeps that loop live during package development: a single `tsc -b --watch tsconfig.build.json` re-emits each changed package's `dist/` in the same dependency order, and a chokidar watcher ([`tools/watch-packages.ts`](../tools/watch-packages.ts)) re-copies the renderer barrel CSS on change — so an edit in any package is reflected in the running consumer app without a manual rebuild.
 
-**True-artifact validation — `pnpm verify:pack` (F64).** The everyday build and the watch loop both resolve `@chimera/*` through `workspace:*` symlinks, which expose the whole source tree regardless of what each package actually _publishes_ — masking a missing `exports` subpath or `files` entry that would break a real consumer. `verify:pack` ([`tools/verify-pack.ts`](../tools/verify-pack.ts)) is the release-gating step that validates the **real packaged artifact** instead:
+**True-artifact validation — `pnpm verify:pack` (F64).** The everyday build and the watch loop both resolve `@chimera-engine/*` through `workspace:*` symlinks, which expose the whole source tree regardless of what each package actually _publishes_ — masking a missing `exports` subpath or `files` entry that would break a real consumer. `verify:pack` ([`tools/verify-pack.ts`](../tools/verify-pack.ts)) is the release-gating step that validates the **real packaged artifact** instead:
 
-- It runs `build:packages`, then `pnpm pack` per engine package, and synthesizes a throwaway consumer **outside the workspace** whose `package.json` lists each `@chimera/*` as a `file:` tarball dep **and** an npm `overrides` entry — forcing every inter-package edge (the tarballs keep their internal `workspace:*` specs) onto the packed artifacts. `npm install` then resolves every `@chimera/*` **only** through each package's published `exports`/`files`, with no `workspace:*` reach-through (Invariant #47).
-- A Node **resolution probe** asserts the renderer's two public barrels (`./components/ui`, `./components/chat`), the `./game` seam, the `./styles/*.css` surface, and `@chimera/electron`'s `./main` + `./preload/api` all resolve from the tarball — a dropped `exports`/`files` entry makes `require.resolve` throw (Invariant #96).
-- It then runs the tactics Playwright suite against the install: the four library packages **and** the electron host main + preload are bundled from the throwaway tarballs (the `CHIMERA_VERIFY_PACK_NODE_MODULES` flag flips [`apps/tactics/e2e/global-setup.ts`](../apps/tactics/e2e/global-setup.ts) esbuild resolution onto them via `nodePaths`, dropping the `@chimera/electron/main` source alias). esbuild transpiles each package's ESM `dist` to CJS while bundling, so resolution — not the raw launchability of the ESM `dist` — is what is exercised. Validating the real artifact confirms the acyclic inward DAG survives packaging (Invariant #1).
+- It runs `build:packages`, then `pnpm pack` per engine package, and synthesizes a throwaway consumer **outside the workspace** whose `package.json` lists each `@chimera-engine/*` as a `file:` tarball dep **and** an npm `overrides` entry — forcing every inter-package edge (the tarballs keep their internal `workspace:*` specs) onto the packed artifacts. `npm install` then resolves every `@chimera-engine/*` **only** through each package's published `exports`/`files`, with no `workspace:*` reach-through (Invariant #47).
+- A Node **resolution probe** asserts the renderer's two public barrels (`./components/ui`, `./components/chat`), the `./game` seam, the `./styles/*.css` surface, and `@chimera-engine/electron`'s `./main` + `./preload/api` all resolve from the tarball — a dropped `exports`/`files` entry makes `require.resolve` throw (Invariant #96).
+- It then runs the tactics Playwright suite against the install: the four library packages **and** the electron host main + preload are bundled from the throwaway tarballs (the `CHIMERA_VERIFY_PACK_NODE_MODULES` flag flips [`apps/tactics/e2e/global-setup.ts`](../apps/tactics/e2e/global-setup.ts) esbuild resolution onto them via `nodePaths`, dropping the `@chimera-engine/electron/main` source alias). esbuild transpiles each package's ESM `dist` to CJS while bundling, so resolution — not the raw launchability of the ESM `dist` — is what is exercised. Validating the real artifact confirms the acyclic inward DAG survives packaging (Invariant #1).
 - Scoping: the renderer GUI shell (`renderer/out`) stays **source-built**, because [`renderer/next.config.ts`](../renderer/next.config.ts) deliberately resolves the renderer barrels + game registry onto source for single-instance EscapeStack / Zustand / registry identity; the packed renderer surface is therefore gate-checked by the resolution probe rather than re-rendered. The Runtime Debug Layer preload (`./preload/debug-api`) is intentionally **not** a public export (Invariant #27), so the gate excludes the debug specs (`--grep-invert debug`).
 - **`pnpm verify:pack:selftest`** proves the gate bites: it drops a required `exports` entry from a freshly-installed tarball (in the temp dir only — never the repo) and asserts the probe then fails. If the broken surface slips through, the self-test exits non-zero. `verify:pack` is kept out of `test`/`lint` (it spawns a full pack + install + Electron run) and is invoked explicitly as a release gate.
 

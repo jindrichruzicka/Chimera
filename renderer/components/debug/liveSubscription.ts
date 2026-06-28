@@ -11,7 +11,7 @@
 // be collected); a window reload drops the renderer-side count with the
 // page, and the main side cleans its slot up on window close regardless.
 
-import type { ChimeraDebugApi } from '@chimera/simulation/bridge/debug-api-types.js';
+import type { ChimeraDebugApi } from '@chimera-engine/simulation/bridge/debug-api-types.js';
 
 const holderCounts = new WeakMap<ChimeraDebugApi, number>();
 

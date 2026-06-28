@@ -26,11 +26,11 @@
 
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
+import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 import type {
     SaveRepository,
     SaveSlotMeta,
-} from '@chimera/simulation/persistence/SaveRepository.js';
+} from '@chimera-engine/simulation/persistence/SaveRepository.js';
 import type { Logger } from '../logging/logger.js';
 
 /** Filename of the clean-exit sentinel written on graceful shutdown. */

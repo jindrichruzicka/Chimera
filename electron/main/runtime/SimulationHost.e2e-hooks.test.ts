@@ -15,8 +15,8 @@
  */
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { makeStubPlayerSnapshot } from '@chimera/simulation/engine/__test-support__/stubs.js';
-import type { PlayerSnapshot } from '@chimera/simulation/projection/StateProjector.js';
+import { makeStubPlayerSnapshot } from '@chimera-engine/simulation/engine/__test-support__/stubs.js';
+import type { PlayerSnapshot } from '@chimera-engine/simulation/projection/StateProjector.js';
 import { registerE2eHooks, type E2eHooks } from './e2e-hooks.js';
 
 function clearGlobalHooks(): void {

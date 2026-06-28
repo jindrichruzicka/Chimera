@@ -11,7 +11,7 @@ import { useLobbyStore } from '../../state/lobbyStore';
 import type {
     LobbyPlayerEntry,
     PlayerId,
-} from '@chimera/simulation/foundation/messages-schemas.js';
+} from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import styles from './PlayerList.module.css';
 
 export interface PlayerListProps {

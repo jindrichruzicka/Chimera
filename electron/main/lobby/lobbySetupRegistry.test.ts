@@ -8,9 +8,9 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { playerId, type LobbyState } from '@chimera/networking';
-import type { GameContent } from '@chimera/simulation/foundation/game-content-contract.js';
-import type { GameLobbySetup } from '@chimera/simulation/foundation/game-lobby-contract.js';
+import { playerId, type LobbyState } from '@chimera-engine/networking';
+import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
+import type { GameLobbySetup } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobbySetupRegistry.js';
 
 const SAMPLE_CONTENT: GameContent = {

@@ -30,7 +30,7 @@ import type {
 import {
     MalformedAssetRefError,
     parseAssetRef,
-} from '@chimera/simulation/foundation/asset-ref-parse.js';
+} from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
 
 export interface WorkspaceFileHost {
     findDataJsonFiles(workspaceRoot: string): Promise<readonly string[]>;

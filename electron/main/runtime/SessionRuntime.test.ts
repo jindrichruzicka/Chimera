@@ -21,20 +21,27 @@ import type {
     ActionEnvelope,
     BaseGameSnapshot,
     PlayerId,
-} from '@chimera/simulation/engine/types.js';
-import { entityId, playerId as toPlayerId, sceneId } from '@chimera/simulation/engine/types.js';
-import { TACTICS_ATTACK_ACTION, TACTICS_MOVE_UNIT_ACTION } from '@chimera/tactics/constants.js';
-import { tacticsGridCoordinate } from '@chimera/tactics/actions.js';
-import type { TacticsCommitmentEnvelopeValue } from '@chimera/tactics/commitment/contract.js';
-import { RevealStaging } from '@chimera/simulation/projection/index.js';
-import { CURRENT_SCHEMA_VERSION } from '@chimera/simulation/persistence/SaveMigrator.js';
-import type { SaveFile } from '@chimera/simulation/persistence/SaveFile.js';
+} from '@chimera-engine/simulation/engine/types.js';
+import {
+    entityId,
+    playerId as toPlayerId,
+    sceneId,
+} from '@chimera-engine/simulation/engine/types.js';
+import {
+    TACTICS_ATTACK_ACTION,
+    TACTICS_MOVE_UNIT_ACTION,
+} from '@chimera-engine/tactics/constants.js';
+import { tacticsGridCoordinate } from '@chimera-engine/tactics/actions.js';
+import type { TacticsCommitmentEnvelopeValue } from '@chimera-engine/tactics/commitment/contract.js';
+import { RevealStaging } from '@chimera-engine/simulation/projection/index.js';
+import { CURRENT_SCHEMA_VERSION } from '@chimera-engine/simulation/persistence/SaveMigrator.js';
+import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 import {
     CommitmentVerificationError,
     toCommitmentId,
     type CommitmentEnvelope,
     type CommitmentReveal,
-} from '@chimera/simulation/projection/index.js';
+} from '@chimera-engine/simulation/projection/index.js';
 
 const P1 = toPlayerId('player-1');
 const P2 = toPlayerId('player-2');

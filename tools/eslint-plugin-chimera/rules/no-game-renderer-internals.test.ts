@@ -27,44 +27,44 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
     valid: [
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { Button, Card } from '@chimera/renderer/components/ui/index.js';`,
+            code: `import { Button, Card } from '@chimera-engine/renderer/components/ui/index.js';`,
         },
         {
             filename: 'apps/tactics/screens/TacticsGameMenu.tsx',
-            code: `import { Button } from '@chimera/renderer/components/ui';`,
+            code: `import { Button } from '@chimera-engine/renderer/components/ui';`,
         },
         {
             filename: 'apps/tactics/shell/TacticsShellBackground.tsx',
-            code: `import { Panel } from '@chimera/renderer/components/ui/index.js';`,
+            code: `import { Panel } from '@chimera-engine/renderer/components/ui/index.js';`,
         },
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { Button } from '@chimera/renderer/components/ui/index.ts';`,
+            code: `import { Button } from '@chimera-engine/renderer/components/ui/index.ts';`,
         },
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `export { Button } from '@chimera/renderer/components/ui/index.js';`,
+            code: `export { Button } from '@chimera-engine/renderer/components/ui/index.js';`,
         },
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { resolveGameResultOutcome } from '@chimera/simulation/foundation/game-screen-contract.js';`,
+            code: `import { resolveGameResultOutcome } from '@chimera-engine/simulation/foundation/game-screen-contract.js';`,
         },
         {
             // Public chat library barrel is allowed from a game surface.
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { ChatPanel } from '@chimera/renderer/components/chat';`,
+            code: `import { ChatPanel } from '@chimera-engine/renderer/components/chat';`,
         },
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { ChatPanel } from '@chimera/renderer/components/chat/index.js';`,
+            code: `import { ChatPanel } from '@chimera-engine/renderer/components/chat/index.js';`,
         },
         {
             filename: 'apps/tactics/shell/TacticsShellChat.tsx',
-            code: `import { ChatPanel } from '@chimera/renderer/components/chat';`,
+            code: `import { ChatPanel } from '@chimera-engine/renderer/components/chat';`,
         },
         {
             filename: 'apps/tactics/actions/MoveUnitAction.ts',
-            code: `import { ActionRegistry } from '@chimera/simulation/engine/ActionRegistry.js';`,
+            code: `import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';`,
         },
         {
             filename: 'apps/tactics/actions/MoveUnitAction.ts',
@@ -76,17 +76,17 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         },
         {
             filename: 'renderer/components/shell/GameShell.tsx',
-            code: `import { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
         },
         {
             // #784: the renderer composition root may import the public game seam.
             filename: 'apps/tactics/renderer/register.ts',
-            code: `import { registerRendererGame } from '@chimera/renderer/game';`,
+            code: `import { registerRendererGame } from '@chimera-engine/renderer/game';`,
         },
         {
             // The seam may also be imported by the loaders.
             filename: 'apps/tactics/renderer/loaders.ts',
-            code: `import { LoadedRendererGame } from '@chimera/renderer/game';`,
+            code: `import { LoadedRendererGame } from '@chimera-engine/renderer/game';`,
         },
         {
             // A game's own renderer/ helper dir is not a renderer-package crossing.
@@ -95,13 +95,13 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         },
         {
             // F65 Phase 2c: the app's OWN Next host route tree (renderer/app/**) may
-            // re-export the engine GUI shell from the public @chimera/renderer/shell/* surface.
+            // re-export the engine GUI shell from the public @chimera-engine/renderer/shell/* surface.
             filename: 'apps/tactics/renderer/app/lobby/page.tsx',
-            code: `export { default } from '@chimera/renderer/shell/lobby/page';`,
+            code: `export { default } from '@chimera-engine/renderer/shell/lobby/page';`,
         },
         {
             filename: 'apps/tactics/renderer/app/layout.tsx',
-            code: `export { default, metadata } from '@chimera/renderer/shell/layout';`,
+            code: `export { default, metadata } from '@chimera-engine/renderer/shell/layout';`,
         },
     ],
     invalid: [
@@ -109,29 +109,29 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             // The shell surface is for the app's Next host route tree only — the
             // composition root must still reach the game via the public seam, not shell/*.
             filename: 'apps/tactics/renderer/register.ts',
-            code: `export { default } from '@chimera/renderer/shell/lobby/page';`,
+            code: `export { default } from '@chimera-engine/renderer/shell/lobby/page';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             // Game screens may not import the shell surface either (barrels only).
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { GameShell } from '@chimera/renderer/shell/game/page';`,
+            code: `import { GameShell } from '@chimera-engine/renderer/shell/game/page';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             // The composition root still may not reach renderer internals.
             filename: 'apps/tactics/renderer/register.ts',
-            code: `import { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { Button } from '@chimera/renderer/components/ui/Button.js';`,
+            code: `import { Button } from '@chimera-engine/renderer/components/ui/Button.js';`,
             errors: [{ messageId: 'gameRendererUiDeepImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsDebugPanel.tsx',
-            code: `import { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
@@ -146,42 +146,42 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         },
         {
             filename: 'apps/tactics/screens/TacticsDebugPanel.tsx',
-            code: `export { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
+            code: `export { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsDebugPanel.tsx',
-            code: `export * from '@chimera/renderer/components/ui/Button.js';`,
+            code: `export * from '@chimera-engine/renderer/components/ui/Button.js';`,
             errors: [{ messageId: 'gameRendererUiDeepImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsDebugPanel.tsx',
-            code: `import { getGameBridge } from '@chimera/renderer/bridge/game-bridge.js';`,
+            code: `import { getGameBridge } from '@chimera-engine/renderer/bridge/game-bridge.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsMenu.tsx',
-            code: `import { GameShell } from '@chimera/renderer/components/shell/GameShell.js';`,
+            code: `import { GameShell } from '@chimera-engine/renderer/components/shell/GameShell.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsBoard.tsx',
-            code: `import { GameCanvas } from '@chimera/renderer/components/r3f/GameCanvas.js';`,
+            code: `import { GameCanvas } from '@chimera-engine/renderer/components/r3f/GameCanvas.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsMenu.tsx',
-            code: `import { useInputAction } from '@chimera/renderer/input/useInputAction.js';`,
+            code: `import { useInputAction } from '@chimera-engine/renderer/input/useInputAction.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             filename: 'apps/tactics/screens/TacticsMenu.tsx',
-            code: `import '@chimera/renderer/styles/tokens.css';`,
+            code: `import '@chimera-engine/renderer/styles/tokens.css';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             filename: 'apps/tactics/actions/MoveUnitAction.ts',
-            code: `import { Button } from '@chimera/renderer/components/ui/index.js';`,
+            code: `import { Button } from '@chimera-engine/renderer/components/ui/index.js';`,
             errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
         },
         {
@@ -192,44 +192,44 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         {
             // .ts file inside screens/ is not a renderer surface (.tsx/.jsx required)
             filename: 'apps/tactics/screens/tacticsScreenHelpers.ts',
-            code: `import { Button } from '@chimera/renderer/components/ui/index.js';`,
+            code: `import { Button } from '@chimera-engine/renderer/components/ui/index.js';`,
             errors: [{ messageId: 'gameRendererImportOutsideSurface' }],
         },
         {
             // shell .tsx file importing a renderer internal (not the barrel)
             filename: 'apps/tactics/shell/TacticsShellSidebar.tsx',
-            code: `import { useGameStore } from '@chimera/renderer/state/gameStore.js';`,
+            code: `import { useGameStore } from '@chimera-engine/renderer/state/gameStore.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             // chat exposes only its barrel; deep file imports stay forbidden.
             filename: 'apps/tactics/screens/TacticsGameHud.tsx',
-            code: `import { ChatPanel } from '@chimera/renderer/components/chat/ChatPanel.js';`,
+            code: `import { ChatPanel } from '@chimera-engine/renderer/components/chat/ChatPanel.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
-        // ── #774: lock Invariant #96 across the @chimera/renderer package cut ──
+        // ── #774: lock Invariant #96 across the @chimera-engine/renderer package cut ──
         // Every renderer-internal category named by Invariant #96 must stay
         // off-limits to a game surface when reached through the package
-        // specifier. The rule already flags any non-barrel `@chimera/renderer/*`
+        // specifier. The rule already flags any non-barrel `@chimera-engine/renderer/*`
         // import; these planted violations pin that across the remaining
         // categories (asset managers, hooks, the top-level shell/ utilities).
         {
             // Asset managers — renderer-owned, not part of the public surface.
             filename: 'apps/tactics/screens/TacticsBoard.tsx',
-            code: `import { AssetManager } from '@chimera/renderer/assets/AssetManager.js';`,
+            code: `import { AssetManager } from '@chimera-engine/renderer/assets/AssetManager.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             // Renderer hooks are internal; games receive props, not hooks.
             filename: 'apps/tactics/screens/TacticsBoard.tsx',
-            code: `import { useCamera } from '@chimera/renderer/hooks/useCamera.js';`,
+            code: `import { useCamera } from '@chimera-engine/renderer/hooks/useCamera.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {
             // Top-level renderer/shell/ utilities (distinct from components/shell)
             // are shell-page plumbing — never a game-surface dependency.
             filename: 'apps/tactics/shell/TacticsShellMenu.tsx',
-            code: `import { renderMainMenuDefinition } from '@chimera/renderer/shell/renderMainMenuDefinition.js';`,
+            code: `import { renderMainMenuDefinition } from '@chimera-engine/renderer/shell/renderMainMenuDefinition.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
     ],

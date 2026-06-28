@@ -1,5 +1,5 @@
 {
-    // Per-package build for @chimera/simulation (issue #759, Appendix C.3/§C.4).
+    // Per-package build for @chimera-engine/simulation (issue #759, Appendix C.3/§C.4).
     //
     // Emits the published artifact under ./dist (JS + .d.ts) consumed via the
     // package's `exports` map. Composite so it can be wired as a `tsc --build`
@@ -9,7 +9,7 @@
     // Actual test files (`*.test.ts`, `__tests__/`) and lint fixtures are
     // excluded. Cross-package test doubles (`__test-support__`) ARE built: other
     // workspace packages import them (e.g. the shared SaveRepository contract
-    // suite) via `@chimera/simulation/.../__test-support__/*.js`, so under the
+    // suite) via `@chimera-engine/simulation/.../__test-support__/*.js`, so under the
     // build-before-consume model they must exist in `dist/`. This package is
     // `private` and never published, so shipping vitest-coupled test suites in
     // its in-tree `dist/` is intentional, not a leak.

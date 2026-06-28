@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type {
     ProjectionResult,
     SnapshotResult,
-} from '@chimera/simulation/bridge/debug-api-types.js';
+} from '@chimera-engine/simulation/bridge/debug-api-types.js';
 import {
     createDebugApiMock,
     makeProjectionResult,

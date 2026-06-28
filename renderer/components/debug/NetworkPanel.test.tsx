@@ -4,7 +4,7 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { NetworkDiagnostics } from '@chimera/simulation/bridge/debug-api-types.js';
+import type { NetworkDiagnostics } from '@chimera-engine/simulation/bridge/debug-api-types.js';
 import { createDebugApiMock, makeNetworkDiagnostics } from './__test-support__/DebugApiStubs';
 import { NetworkPanel } from './NetworkPanel';
 

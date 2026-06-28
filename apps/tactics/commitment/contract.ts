@@ -24,8 +24,8 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera/tactics/constants.js';
-import type { PlayerId } from '@chimera/simulation/engine/types.js';
+} from '@chimera-engine/tactics/constants.js';
+import type { PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import type {
     TacticsAttackPayload,
     TacticsMoveUnitPayload,

@@ -17,12 +17,12 @@
  */
 
 import path from 'path';
-import { createContentLoader } from '@chimera/simulation/content/index.js';
-import type { ContentDatabase } from '@chimera/simulation/content/index.js';
+import { createContentLoader } from '@chimera-engine/simulation/content/index.js';
+import type { ContentDatabase } from '@chimera-engine/simulation/content/index.js';
 import type {
     GameContent,
     GameContentItem,
-} from '@chimera/simulation/foundation/game-content-contract.js';
+} from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import type { ZodType } from 'zod';
 
 /**

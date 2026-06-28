@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { useRouter } from 'next/navigation';
-import type { GameMainMenuButton } from '@chimera/simulation/foundation/game-shell-contract.js';
+import type { GameMainMenuButton } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import { IconButton } from '../../components/ui/IconButton';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { isGalleryEnabled } from '../component-gallery/galleryGate';

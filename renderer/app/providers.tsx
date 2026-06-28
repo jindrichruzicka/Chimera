@@ -1,7 +1,7 @@
 'use client';
 
 import React, { type ReactNode } from 'react';
-import type { AssetRef, AudioClipAsset } from '@chimera/simulation/content/AssetRef.js';
+import type { AssetRef, AudioClipAsset } from '@chimera-engine/simulation/content/AssetRef.js';
 
 import type { AssetManager } from '../assets/AssetManager';
 import { AssetManagerContext } from '../assets/AssetManagerContext.js';

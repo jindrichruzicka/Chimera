@@ -5,11 +5,11 @@
  *
  * The published `create-chimera-game` CLI emits a standalone game project whose root declares the
  * toolchain (react / three / next / vitest / playwright / electron / typescript / …) and whose app
- * declares `@chimera/* : ^x.y.z`. At `npm create` time there is no monorepo to read those versions
+ * declares `@chimera-engine/* : ^x.y.z`. At `npm create` time there is no monorepo to read those versions
  * from, so they are FROZEN into `tools/create-chimera-game/toolchain.generated.ts` — a committed,
  * gate-checked constants module derived here from the live monorepo:
  *
- *   - TOOLCHAIN_DEPS      — root devDeps+deps minus `@chimera/*` (the toolchain the app inherits).
+ *   - TOOLCHAIN_DEPS      — root devDeps+deps minus `@chimera-engine/*` (the toolchain the app inherits).
  *   - ENGINE_DEP_RANGES   — `^<version>` per engine package, read from each package's own version,
  *                           so the snapshot tracks future Changeset bumps on regeneration.
  *   - ROOT_COMPILER_OPTIONS — the root tsconfig `compilerOptions`, frozen so the standalone app's
@@ -40,11 +40,11 @@ import { buildStandaloneToolchainDeps } from './create-chimera-game/standalone';
  * the `verify:toolchain-snapshot` gate keeps all three honest by failing on drift.)
  */
 export const ENGINE_PACKAGES = [
-    { name: '@chimera/simulation', dir: 'simulation' },
-    { name: '@chimera/ai', dir: 'ai' },
-    { name: '@chimera/networking', dir: 'networking' },
-    { name: '@chimera/renderer', dir: 'renderer' },
-    { name: '@chimera/electron', dir: 'electron' },
+    { name: '@chimera-engine/simulation', dir: 'simulation' },
+    { name: '@chimera-engine/ai', dir: 'ai' },
+    { name: '@chimera-engine/networking', dir: 'networking' },
+    { name: '@chimera-engine/renderer', dir: 'renderer' },
+    { name: '@chimera-engine/electron', dir: 'electron' },
 ] as const;
 
 export interface ToolchainSnapshot {
@@ -55,7 +55,7 @@ export interface ToolchainSnapshot {
 
 /**
  * Map each engine package's exact version to a caret range, keyed by package name. Only the known
- * {@link ENGINE_PACKAGES} are included — a stray `@chimera/<game>` workspace version is ignored.
+ * {@link ENGINE_PACKAGES} are included — a stray `@chimera-engine/<game>` workspace version is ignored.
  */
 export function buildEngineRanges(
     versions: Readonly<Record<string, string>>,
@@ -104,7 +104,7 @@ export function renderToolchainModule(snapshot: ToolchainSnapshot): string {
 // toolchain + engine versions the monorepo builds against, without reading the monorepo at
 // \`npm create\` time. This file is prettier/eslint-ignored: it is a machine artifact.
 
-/** Root devDependencies + dependencies, minus every \`@chimera/*\` workspace edge. */
+/** Root devDependencies + dependencies, minus every \`@chimera-engine/*\` workspace edge. */
 export const TOOLCHAIN_DEPS: Readonly<Record<string, string>> = ${stableStringify(
         snapshot.toolchainDeps,
     )};
