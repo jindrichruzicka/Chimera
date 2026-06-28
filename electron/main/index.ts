@@ -68,6 +68,7 @@ import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/api
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobbySetupRegistry.js';
 import { loadAllGameContent, toGameContent } from './content/loadGameContent.js';
+import { resolveAppIcon } from './app-icon.js';
 import type { ContentDatabase } from '@chimera-engine/simulation/content/index.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import {
@@ -2694,6 +2695,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             env,
             logger,
             windowTitle: resolveWindowTitle(hostedGame.manifest),
+            icon: resolveAppIcon(hostedGame.manifest, gameAssetsRoot, __dirname),
         });
         mainWindow = createdWindow;
         createdWindow.webContents.on(
