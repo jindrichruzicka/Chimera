@@ -77,6 +77,25 @@ function makeReplayFile(actionCount = 3): ReplayFile {
     };
 }
 
+/**
+ * A replay whose recorded actions begin at `baseTick` > 0, as happens for the
+ * second (and later) match of a session: the session tick is monotonic across
+ * match boundaries, so `engine:start_game` for match 2 is recorded at a non-zero
+ * tick. Playback must reconstruct from that base tick and translate the
+ * renderer's 0-based requests onto it.
+ */
+function makeNonZeroBaseReplayFile(baseTick: number, actionCount = 3): ReplayFile {
+    const base = makeReplayFile(actionCount);
+    const actions = Array.from({ length: actionCount }, (_unused, index) =>
+        advance(baseTick + index),
+    );
+    return {
+        ...base,
+        actions,
+        metadata: { ...base.metadata, durationTicks: baseTick + actionCount - 1 },
+    };
+}
+
 function makeLogger(): ReturnType<typeof createLogger> {
     return createLogger({ source: { process: 'main', module: 'test' }, sink: createMemorySink() });
 }
@@ -213,6 +232,41 @@ describe('ReplayPlaybackManager', () => {
             const manager = makeManager();
 
             expect(() => manager.snapshotRange(0, 1)).toThrow(/no .*playback/i);
+        });
+    });
+
+    describe('non-zero base tick (second match in a session)', () => {
+        it('reports totalTicks as the action count, independent of the base tick', async () => {
+            const manager = makeManager(makeNonZeroBaseReplayFile(4, 3));
+
+            const info = await manager.open('/replays/tactics/match2.chimera-replay');
+
+            // The renderer scrubs 0..totalTicks; the final reachable state tick in
+            // renderer space is the number of recorded actions, regardless of where
+            // the absolute ticks start (here 4..7).
+            expect(info.totalTicks).toBe(3);
+        });
+
+        it('serves a 0-based snapshot range without a StaleActionError', async () => {
+            const manager = makeManager(makeNonZeroBaseReplayFile(4, 3));
+            await manager.open('/replays/tactics/match2.chimera-replay');
+
+            // Before the fix this threw `StaleActionError: action.tick (4) does not
+            // match snapshot.tick (0)` because the player reconstructed at tick 0
+            // while actions[0] was at tick 4. The renderer's 0-based ticks must map
+            // onto the replay's absolute ticks (4..7).
+            const snaps = manager.snapshotRange(0, 3);
+
+            expect(snaps.map((s) => s.tick)).toEqual([4, 5, 6, 7]);
+            expect(snaps.every((s) => !('seed' in s))).toBe(true);
+        });
+
+        it('resolves snapshotAt(0) to the match base tick', async () => {
+            const manager = makeManager(makeNonZeroBaseReplayFile(4, 3));
+            await manager.open('/replays/tactics/match2.chimera-replay');
+
+            expect(manager.snapshotAt(0).tick).toBe(4);
+            expect(manager.snapshotAt(1).tick).toBe(5);
         });
     });
 

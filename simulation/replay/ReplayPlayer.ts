@@ -303,8 +303,17 @@ export function createBaseReplayInitialSnapshot(file: ReplayFile): BaseGameSnaps
     const initialSceneId: SceneId =
         config.phase === gamePhase('playing') ? sceneId('engine:game') : sceneId('engine:lobby');
 
+    // The session tick is monotonic across match boundaries (`engine:start_game`
+    // and `engine:return_to_lobby` advance the tick, they do not reset it), so a
+    // second-or-later match's first recorded action is at a non-zero tick. The
+    // initial snapshot is the pre-`actions[0]` state, so under invariant #42 its
+    // tick MUST equal `actions[0].tick`; otherwise the ActionPipeline rejects the
+    // first replayed action with a StaleActionError. An empty replay has no
+    // baseline action and reconstructs at tick 0.
+    const baseTick = file.actions[0]?.tick ?? 0;
+
     const snapshot: BaseGameSnapshot = {
-        tick: 0,
+        tick: baseTick,
         seed: file.seed,
         players,
         entities: config.initialEntities,

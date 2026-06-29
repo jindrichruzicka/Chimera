@@ -420,6 +420,67 @@ describe('ReplayPlayer.seek', () => {
     });
 });
 
+describe('ReplayPlayer with a non-zero base tick (second match in a session)', () => {
+    // A session's tick is monotonic across matches: `engine:start_game` /
+    // `engine:return_to_lobby` advance the tick rather than resetting it, so the
+    // second match's first recorded action is at tick > 0. The reconstructed
+    // initial snapshot must therefore start at that action's tick, not 0, or the
+    // ActionPipeline rejects `actions[0]` with a StaleActionError (tick mismatch).
+    function makeNonZeroBaseReplayFile(): ReplayFile {
+        return makeReplayFile({
+            actions: [
+                {
+                    tick: 4,
+                    playerId: P1,
+                    action: { type: 'test:add', playerId: P1, tick: 4, payload: { amount: 2 } },
+                },
+                {
+                    tick: 5,
+                    playerId: P2,
+                    action: { type: 'test:add', playerId: P2, tick: 5, payload: { amount: 3 } },
+                },
+                {
+                    tick: 6,
+                    playerId: P1,
+                    action: { type: 'test:add', playerId: P1, tick: 6, payload: { amount: 5 } },
+                },
+            ],
+        });
+    }
+
+    it('reconstructs the initial snapshot at the first recorded action tick', () => {
+        const snapshot = createBaseReplayInitialSnapshot(makeNonZeroBaseReplayFile());
+
+        expect(snapshot.tick).toBe(4);
+    });
+
+    it('falls back to tick 0 when the replay has no recorded actions', () => {
+        const snapshot = createBaseReplayInitialSnapshot(makeReplayFile({ actions: [] }));
+
+        expect(snapshot.tick).toBe(0);
+    });
+
+    it('steps through actions that begin at a non-zero tick without a StaleActionError', () => {
+        const player = makePlayer(makeNonZeroBaseReplayFile());
+
+        expect(player.initialize()).toMatchObject({ tick: 4 });
+        expect(player.step()).toMatchObject({ tick: 5, total: 2 });
+        expect(player.step()).toMatchObject({ tick: 6, total: 5 });
+        expect(player.step()).toMatchObject({ tick: 7, total: 10 });
+        expect(player.step()).toBeNull();
+    });
+
+    it('seeks and plays a non-zero-base replay to its final tick', () => {
+        const player = makePlayer(makeNonZeroBaseReplayFile());
+
+        expect(player.seek(6)).toMatchObject({ tick: 6, total: 5 });
+        expect(makePlayer(makeNonZeroBaseReplayFile()).playSync()).toMatchObject({
+            tick: 7,
+            total: 10,
+        });
+    });
+});
+
 describe('ReplayPlayer.play', () => {
     it('replays all recorded actions through the callback API', () => {
         const player = makePlayer();

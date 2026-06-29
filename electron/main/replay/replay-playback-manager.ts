@@ -53,7 +53,14 @@ interface ActivePlayback {
     readonly player: ReplayPlayer;
     readonly projector: StateProjector;
     readonly viewerId: PlayerId;
-    /** Tick of the last snapshot produced, so sequential requests can `step`. */
+    /**
+     * Absolute tick the replay starts at (the first recorded action's tick). The
+     * renderer scrubs in 0-based ticks; this offset maps a renderer tick onto the
+     * replay's absolute tick. A second-or-later match in a session starts at a
+     * tick > 0 because the session tick is monotonic across match boundaries.
+     */
+    readonly baseTick: number;
+    /** Absolute tick of the last snapshot produced, so sequential requests can `step`. */
     lastTick: number;
 }
 
@@ -121,18 +128,25 @@ export class ReplayPlaybackManager {
         const playerIds = Object.keys(initial.players);
         const viewerId = (playerIds[0] ?? '') as PlayerId;
 
-        this.#active = { player, projector, viewerId, lastTick: initial.tick };
+        this.#active = {
+            player,
+            projector,
+            viewerId,
+            baseTick: initial.tick,
+            lastTick: initial.tick,
+        };
 
         return {
             gameId: file.gameId,
-            // The final scrubbable tick is the *state* tick reached after every
-            // recorded action is applied. Under invariant #42 each recorded
-            // action advances the tick by exactly 1, so that final tick is
-            // `initial.tick + actions.length`. The file's `metadata.durationTicks`
-            // records the highest *issued* action tick instead — one short of the
-            // final state tick for a contiguous match — so it cannot be used here
-            // or the terminal (game-over) snapshot would be unreachable (#663).
-            totalTicks: initial.tick + file.actions.length,
+            // The renderer scrubs 0..totalTicks. Under invariant #42 each recorded
+            // action advances the tick by exactly 1, so the number of scrubbable
+            // steps is `file.actions.length` — independent of the replay's
+            // (possibly non-zero) base tick. `#projectedAt` maps each 0-based
+            // renderer tick onto the replay's absolute ticks, so the terminal
+            // (game-over) snapshot at renderer tick `file.actions.length` stays
+            // reachable (#663). The file's `metadata.durationTicks` records the
+            // highest *issued* action tick and cannot be used here.
+            totalTicks: file.actions.length,
             playerIds: [...playerIds],
             viewerId,
         };
@@ -174,9 +188,11 @@ export class ReplayPlaybackManager {
     }
 
     /**
-     * Advance/seek the active player to `tick` and project the result. Advances
-     * via `step()` for the common sequential case (`tick === lastTick + 1`) and
-     * falls back to `seek()` for scrubbing.
+     * Advance/seek the active player to the 0-based renderer `tick` and project
+     * the result. The renderer tick is mapped onto the replay's absolute tick
+     * (`baseTick + tick`); playback then advances via `step()` for the common
+     * sequential case (`absoluteTick === lastTick + 1`) and falls back to `seek()`
+     * for scrubbing.
      *
      * The `step()` fast-path is sound because every recorded action advances the
      * tick by exactly 1 (Invariant #42): `step()` therefore returns either the
@@ -185,12 +201,15 @@ export class ReplayPlaybackManager {
      * `lastTick`.
      */
     #projectedAt(active: ActivePlayback, tick: number): PlayerSnapshot {
+        // `tick` is renderer-space (0-based); map it onto the replay's absolute
+        // ticks, which start at `baseTick` (non-zero for a second-or-later match).
+        const absoluteTick = active.baseTick + tick;
         let state: BaseGameSnapshot;
-        if (tick === active.lastTick + 1) {
+        if (absoluteTick === active.lastTick + 1) {
             const next = active.player.step();
-            state = next ?? active.player.seek(tick);
+            state = next ?? active.player.seek(absoluteTick);
         } else {
-            state = active.player.seek(tick);
+            state = active.player.seek(absoluteTick);
         }
         active.lastTick = state.tick;
 
