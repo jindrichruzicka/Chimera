@@ -238,6 +238,28 @@ describe('InGameMenuHost', () => {
         expect(useLobbyUiStore.getState().leavingToMainMenu).toBe(true);
     });
 
+    it('uses the injected leaveGame override instead of the live-match leave', async () => {
+        // A non-live-match surface (the replay player) injects its own leave. Even
+        // with lobby state that would otherwise route to returnToLobby, the override
+        // must win and the live-match IPC leave must never fire.
+        const override = vi.fn(async () => undefined);
+        const leave = vi.fn(async () => undefined);
+        const returnToLobby = vi.fn(async () => undefined);
+        (globalThis as { __chimera?: unknown }).__chimera = { lobby: { leave, returnToLobby } };
+        useLobbyStore.getState().applyLobbyState(makeLobbyState('host'));
+        useLobbyUiStore.getState().setLocalLobbyContext(playerId('host'), [playerId('host')]);
+
+        renderHost(<InGameMenuHost isHost leaveGame={override} />);
+        toggleMenu();
+
+        fireEvent.click(screen.getByRole('button', { name: /leave match/i }));
+        fireEvent.click(screen.getByRole('button', { name: /confirm leave/i }));
+
+        await waitFor(() => expect(override).toHaveBeenCalledOnce());
+        expect(returnToLobby).not.toHaveBeenCalled();
+        expect(leave).not.toHaveBeenCalled();
+    });
+
     it('acts only on the key-down: the key-up dispatch must not re-close a freshly opened menu', () => {
         renderHost(<InGameMenuHost />);
 

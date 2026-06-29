@@ -133,6 +133,33 @@ describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot (#74
     });
 });
 
+describe('GameStoreBootstrap — /replays/player → /lobby on a phase:lobby snapshot', () => {
+    it('pushes /lobby and resets the store when a phase:lobby snapshot arrives on the replay player', () => {
+        // A post-game replay leaves the live session alive; the host's Leave
+        // (returnToLobby) broadcasts a phase:'lobby' snapshot, and the replay route
+        // must navigate to the lobby just like /game does.
+        window.history.replaceState({}, '', '/replays/player');
+        mockPathname = '/replays/player';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockReset).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledWith('/lobby');
+    });
+
+    it('does not navigate for a non-lobby snapshot on the replay player', () => {
+        window.history.replaceState({}, '', '/replays/player');
+        mockPathname = '/replays/player';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(mockReset).not.toHaveBeenCalled();
+    });
+});
+
 describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)', () => {
     it('pushes /game when a snapshot arrives on /lobby', () => {
         window.history.replaceState({}, '', '/lobby');

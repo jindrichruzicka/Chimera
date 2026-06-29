@@ -8,7 +8,7 @@ import type {
     GameScreenComponent,
     InGameMenuProps,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
-import { useLeaveGame } from '../../bridge/useLeaveGame.js';
+import { useLeaveGame, type LeaveGame } from '../../bridge/useLeaveGame.js';
 import { useInputAction } from '../../input/useInputAction.js';
 import { Button } from '../ui/Button.js';
 import { Modal } from '../ui/Modal.js';
@@ -25,6 +25,14 @@ export interface InGameMenuHostProps {
     readonly isHost?: boolean;
     /** The local player's id, or `undefined` for a purely local game with no lobby. */
     readonly localPlayerId?: PlayerId;
+    /**
+     * Overrides the leave action. Defaults to the role-aware live-match
+     * {@link useLeaveGame} (host → returnToLobby; client → disconnect). A surface
+     * that is not a live match — the replay player — injects its own context-aware
+     * leave (e.g. back to the lobby for a post-game replay, or the replay library
+     * for a library-opened one), since the live-match IPC leave does not apply.
+     */
+    readonly leaveGame?: LeaveGame;
 }
 
 /**
@@ -43,9 +51,12 @@ export function InGameMenuHost({
     inGameMenu,
     isHost = false,
     localPlayerId,
+    leaveGame: leaveGameOverride,
 }: InGameMenuHostProps): React.ReactElement | null {
     const [open, setOpen] = useState(false);
-    const leaveGame = useLeaveGame();
+    // Always call the hook (rules of hooks); the override, when provided, wins.
+    const defaultLeaveGame = useLeaveGame();
+    const leaveGame = leaveGameOverride ?? defaultLeaveGame;
 
     // `'none'` is a full opt-out: the toggle is inert and nothing ever renders.
     const enabled = inGameMenu !== 'none';

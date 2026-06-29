@@ -53,11 +53,18 @@ export function GameStoreBootstrap(): null {
     // the stale match snapshot and return to /lobby. Reset first so the
     // /lobby → /game effect above does not immediately bounce back to /game on
     // /lobby. Invariant #1: only PlayerSnapshot.phase drives this decision.
+    //
+    // The replay player route is included alongside /game: a post-game replay is
+    // opened from the live match's summary while the session is still alive, so
+    // its Leave (host returnToLobby) also broadcasts a phase:'lobby' snapshot.
+    // Without this, the host's return-to-lobby fires the IPC but nothing
+    // navigates — the leave silently does nothing from the replay player.
     useEffect(() => {
+        const browserPath = currentBrowserPathname(pathname);
         if (
             snapshot !== null &&
             snapshot.phase === 'lobby' &&
-            isGamePath(currentBrowserPathname(pathname))
+            (isGamePath(browserPath) || isReplayPlayerPath(browserPath))
         ) {
             useGameStore.getState().reset();
             router.push('/lobby');
@@ -118,6 +125,14 @@ function isLobbyPath(pathname: string | null): boolean {
 
 function isGamePath(pathname: string | null): boolean {
     return pathname === '/game' || pathname === '/game/' || pathname === '/game/index.html';
+}
+
+function isReplayPlayerPath(pathname: string | null): boolean {
+    return (
+        pathname === '/replays/player' ||
+        pathname === '/replays/player/' ||
+        pathname === '/replays/player/index.html'
+    );
 }
 
 function currentBrowserPathname(pathname: string | null): string | null {

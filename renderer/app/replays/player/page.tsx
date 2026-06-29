@@ -23,7 +23,7 @@
  */
 
 import React from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type {
     EngineAction,
     PerspectiveReplayPlaybackInfo,
@@ -32,11 +32,13 @@ import type {
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { createAssetManager, type AssetManager } from '../../../assets/AssetManager';
 import { createRendererGameAssetResolver } from '../../../assets/AssetResolver';
+import { useLeaveGame } from '../../../bridge/useLeaveGame';
 import { GameShell } from '../../../components/shell/GameShell';
 import { ReplayControls } from '../../../components/replay/ReplayControls';
 import { parseReplayKind } from '../../../components/replay/replayKind';
 import { loadRendererGame, type LoadedRendererGame } from '../../../game/rendererGameRegistry';
 import { useReplayApi } from '../../../hooks/useReplayApi';
+import { withShellGameId } from '../../../shell/resolveMainMenuGameId';
 import { useGameContent } from '../../../state/useGameContent';
 import { useUiStore } from '../../../state/uiStore';
 
@@ -109,6 +111,10 @@ function useLoadedRendererGame(
 
 function ReplayPlayerView(): React.ReactElement {
     const replayApi = useReplayApi();
+    const router = useRouter();
+    // The role-aware live-match leave (host → returnToLobby), used only for a
+    // post-game replay where the session is still alive — see `handleLeaveReplay`.
+    const liveLeave = useLeaveGame();
     // `useSearchParams` reflects the live router state, so the `?path=`/`?kind=`
     // query is read reactively: a client (soft) navigation can mount the player
     // before the URL is committed, and this re-renders once it settles rather
@@ -335,6 +341,21 @@ function ReplayPlayerView(): React.ReactElement {
         setPlaybackSpeed(speed);
     }, []);
 
+    // Context-aware leave for the in-game menu (the live-match IPC leave does not
+    // apply to a replay). `saveable` is the entry-point signal: it is set only when
+    // the player was opened for the just-finished match (the post-game Replay), so
+    // a live lobby session is still alive — reuse the role-aware live leave (host →
+    // returnToLobby), and the app-global `GameStoreBootstrap` returns to the lobby
+    // once the broadcast phase:'lobby' snapshot lands. A library-opened replay has
+    // no session to return to, so it goes back to the replay library it came from.
+    const handleLeaveReplay = React.useCallback(async (): Promise<void> => {
+        if (saveable) {
+            await liveLeave();
+            return;
+        }
+        router.push(withShellGameId('/replays', info?.gameId ?? null));
+    }, [saveable, liveLeave, router, info]);
+
     // Save the just-finished match's replay. Idempotent on the main side (the
     // recording auto-finalised at game-over), so this is really a "keep + confirm":
     // the deterministic export raises the "Replay saved" toast, while the
@@ -420,6 +441,7 @@ function ReplayPlayerView(): React.ReactElement {
                     currentTick={currentTick}
                     sendAction={NOOP_SEND_ACTION}
                     canEndTurn={false}
+                    leaveGame={handleLeaveReplay}
                     localPlayerId={info.viewerId as PlayerSnapshot['viewerId']}
                 />
             </div>

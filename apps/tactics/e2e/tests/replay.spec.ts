@@ -21,6 +21,7 @@ import { gunzipSync } from 'node:zlib';
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/game.fixture';
 import { GamePage } from '../pages/GamePage';
+import { LobbyPage } from '../pages/LobbyPage';
 import { MainMenuPage } from '../pages/MainMenuPage';
 import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
 // F49 / #715 — §13.4 renderer-heap budget during replay playback, from the single
@@ -329,6 +330,63 @@ test.describe('Tactics replay lifecycle', () => {
         await player.play();
         await player.waitForFinalTick();
         expect(await player.currentTick()).toBe(totalTicks);
+    });
+
+    test('leaving a post-game replay returns the host to the lobby', async ({ hostWindow }) => {
+        const hostGame = new GamePage(hostWindow);
+        const hostLobby = new LobbyPage(hostWindow);
+        await playToGameOver(hostGame);
+        await goToPostGameSummary(hostWindow, hostGame);
+
+        // Open the just-finished match in the player (saveable=1 → post-game replay).
+        await hostGame.replayButton.click();
+        const player = new ReplayPlayerPage(hostWindow);
+        await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+
+        // Esc opens the in-game leave dialog; confirming Leave must take the host
+        // back to the lobby (the reported bug: it did nothing from the replay route).
+        await hostWindow.keyboard.press('Escape');
+        const leaveConfirm = hostWindow.getByTestId('tactics-leave-confirm');
+        await expect(leaveConfirm).toBeVisible();
+        await leaveConfirm.click();
+
+        await expect(hostLobby.lobbyScreen).toBeVisible({ timeout: 30_000 });
+    });
+
+    test('leaving a library-opened replay returns to the replay library', async ({
+        hostWindow,
+    }) => {
+        const hostGame = new GamePage(hostWindow);
+        await playToGameOver(hostGame);
+        await goToPostGameSummary(hostWindow, hostGame);
+
+        // Persist a deterministic replay so the library has a row to open, and wait
+        // for the auto-finalised perspective replay that gates the Replays button.
+        await hostGame.replayButton.click();
+        const player = new ReplayPlayerPage(hostWindow);
+        await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+        await expect(player.saveButton).toBeEnabled();
+        await player.save();
+        await waitForPerspectiveReplaySaved(hostWindow);
+
+        // Reach the library the way a player does: main menu → Replays.
+        const mainMenu = new MainMenuPage(hostWindow);
+        await mainMenu.goto({ gameId: TACTICS_GAME_ID });
+        await expect(mainMenu.replaysButton).toBeEnabled();
+        await mainMenu.replaysButton.click();
+        await expect(hostWindow.getByTestId('replays-page')).toBeVisible();
+
+        // Open a saved replay from the library (saveable=0 → no live session).
+        await hostWindow.getByTestId('replay-open-btn').first().click();
+        await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+
+        // Esc → Leave must return to the replay library (not strand the player).
+        await hostWindow.keyboard.press('Escape');
+        const leaveConfirm = hostWindow.getByTestId('tactics-leave-confirm');
+        await expect(leaveConfirm).toBeVisible();
+        await leaveConfirm.click();
+
+        await expect(hostWindow.getByTestId('replays-page')).toBeVisible({ timeout: 30_000 });
     });
 
     test('replay playback keeps the renderer heap within the §13.4 budget', async ({

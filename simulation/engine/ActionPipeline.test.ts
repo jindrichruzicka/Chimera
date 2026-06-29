@@ -47,6 +47,7 @@ import {
     engineRedoDefinition,
     engineEndTurnDefinition,
     engineSyncRequestDefinition,
+    engineReturnToLobbyDefinition,
     engineTickDefinition,
 } from './EngineActions.js';
 
@@ -487,6 +488,28 @@ describe('ActionPipeline — post-reduce game-result resolution', () => {
         expect(next).toBe(resolvedSnapshot);
         expect(broadcast).toHaveBeenCalledOnce();
         expect(broadcast).toHaveBeenCalledWith(resolvedSnapshot, PID);
+    });
+
+    it('allows engine:return_to_lobby after a resolved match so the host can abandon to the lobby', () => {
+        // return_to_lobby is the host-only reset-out-of-a-finished-match action
+        // (the reverse of start_game). The terminal gate must not block it, or the
+        // host could never leave a finished match back to the lobby — the bug
+        // behind "Return to lobby does nothing" from the post-game summary/replay.
+        const r = new ActionRegistry<BaseGameSnapshot>();
+        r.registerEngineAction(engineReturnToLobbyDefinition);
+        const p = new ActionPipeline(r, { gameId: 'test-game' });
+        const resolvedSnapshot = {
+            ...makeSnapshot(8),
+            hostPlayerId: PID,
+            players: { [PID]: { id: PID } },
+            phase: 'ended' as BaseGameSnapshot['phase'],
+            gameResult: { winnerIds: [PID] },
+        };
+
+        const next = p.process(resolvedSnapshot, makeEnvelope(8, 'engine:return_to_lobby'));
+
+        expect(next.phase).toBe('lobby');
+        expect(next.gameResult).toBeNull();
     });
 });
 

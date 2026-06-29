@@ -33,9 +33,12 @@ vi.mock('../../../components/shell/GameShell', () => ({
 }));
 
 // The page reads `?path=`/`?kind=` via `useSearchParams`; back it with the URL
-// each test sets through `window.history.replaceState`.
+// each test sets through `window.history.replaceState`. `useRouter` backs the
+// in-game-menu leave navigation (library replays push back to the library).
+const mockRouterPush = vi.fn();
 vi.mock('next/navigation', () => ({
     useSearchParams: () => new URLSearchParams(window.location.search),
+    useRouter: () => ({ push: mockRouterPush }),
 }));
 
 import { useUiStore } from '../../../state/uiStore';

@@ -21,6 +21,7 @@ import {
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
+import type { LeaveGame } from '../../bridge/useLeaveGame.js';
 import { AssetManagerContext } from '../../assets/AssetManagerContext.js';
 import type { AssetResolver } from '../../assets/AssetResolver';
 import type { AudioManager } from '../../audio/AudioManager.js';
@@ -89,6 +90,12 @@ interface GameShellRegistryProps {
      */
     readonly isHost?: boolean;
     readonly canEndTurn?: boolean;
+    /**
+     * Overrides the in-game menu's leave action (see {@link InGameMenuHost}).
+     * Omitted for a live match (the role-aware live leave is used); the replay
+     * player injects its own context-aware leave.
+     */
+    readonly leaveGame?: LeaveGame;
     readonly fadeOutMs?: number;
     readonly fadeInMs?: number;
     readonly onUndo?: () => void | Promise<void>;
@@ -123,6 +130,7 @@ function RegistryGameShell({
     reveal,
     isHost,
     canEndTurn,
+    leaveGame,
     fadeOutMs,
     fadeInMs,
     onUndo,
@@ -177,6 +185,7 @@ function RegistryGameShell({
                             : { inGameMenu: registry.inGameMenu })}
                         {...(isHost === undefined ? {} : { isHost })}
                         {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                        {...(leaveGame === undefined ? {} : { leaveGame })}
                     />
                 </FadeProvider>
             </ContentDatabaseProvider>
