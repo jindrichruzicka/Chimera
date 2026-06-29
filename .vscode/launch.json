@@ -91,6 +91,28 @@
             "autoAttachChildProcesses": true,
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
             "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Package: Tactics — macOS (folder)",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["run", "package:tactics:mac-dir"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Package: Tactics — macOS (.dmg)",
+            "runtimeExecutable": "pnpm",
+            "runtimeArgs": ["run", "package:tactics:mac-dmg"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"],
+            "smartStep": true
         }
     ]
 }
