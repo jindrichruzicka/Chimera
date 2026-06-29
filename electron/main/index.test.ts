@@ -905,6 +905,41 @@ describe('createMainWindow', () => {
         expect(appDockSetIcon).toHaveBeenCalledWith(ICON_PATH);
     });
 
+    it('does not let an app.dock.setIcon failure abort window creation; logs a warning (F67 icon-load resilience)', () => {
+        // Reproduces the e2e regression: when the resolved icon file is missing,
+        // Electron's app.dock.setIcon throws "Failed to load image from path …".
+        // A cosmetic dock icon must never prevent the main window from opening.
+        appDockSetIcon.mockImplementationOnce(() => {
+            throw new Error(`Failed to load image from path '${ICON_PATH}'`);
+        });
+        const mockLogger = {
+            trace: vi.fn(),
+            debug: vi.fn(),
+            info: vi.fn(),
+            warn: vi.fn<(msg: string, ctx?: Record<string, unknown>) => void>(),
+            error: vi.fn(),
+            fatal: vi.fn(),
+            child: vi.fn(),
+        };
+
+        let returned: unknown;
+        withPlatform('darwin', () => {
+            expect(() => {
+                returned = createMainWindow({
+                    preloadPath: PRELOAD,
+                    rendererEntry: RENDERER_ENTRY,
+                    env: 'production',
+                    logger: mockLogger,
+                    icon: ICON_PATH,
+                });
+            }).not.toThrow();
+        });
+
+        expect(appDockSetIcon).toHaveBeenCalledWith(ICON_PATH);
+        expect(returned).toBe(browserWindowInstances[0]);
+        expect(mockLogger.warn).toHaveBeenCalledTimes(1);
+    });
+
     it('does not touch the dock on non-darwin platforms, but still wires the window icon', () => {
         withPlatform('linux', () => {
             createMainWindow({

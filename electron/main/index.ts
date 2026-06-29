@@ -859,8 +859,19 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
     // macOS shows the app icon in the dock, not just the window chrome; the
     // `BrowserWindow` `icon` alone does not cover it. `app.dock` exists only on
     // darwin (`Dock | undefined`), so guard on the platform and chain defensively.
+    // `setIcon` throws ("Failed to load image from path …") when the icon file is
+    // missing; a cosmetic dock icon must never abort window creation, so swallow
+    // and warn rather than letting it bubble out of createMainWindow (WARN-6 idiom).
     if (options.icon !== undefined && process.platform === 'darwin') {
-        app.dock?.setIcon(options.icon);
+        try {
+            app.dock?.setIcon(options.icon);
+        } catch (err) {
+            options.logger.warn(
+                `[chimera] createMainWindow: failed to set dock icon "${options.icon}": ${
+                    err instanceof Error ? err.message : String(err)
+                }`,
+            );
+        }
     }
 
     const urlToLoad = options.initialUrl ?? CHIMERA_RENDERER_URL;

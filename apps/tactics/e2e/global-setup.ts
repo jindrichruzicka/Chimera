@@ -1,5 +1,5 @@
 import { execSync } from 'child_process';
-import { mkdirSync, readFileSync, rmSync } from 'node:fs';
+import { cpSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'path';
 import { buildSync } from 'esbuild';
@@ -13,6 +13,31 @@ import { buildAppBundles, VERIFY_PACK_NODE_MODULES_ENV } from '../electron/build
  * and this setup share it, so the esbuild alias / nodePaths logic cannot drift.
  */
 export { VERIFY_PACK_NODE_MODULES_ENV };
+
+/** Source → destination dir pair for the e2e app-asset copy. */
+export interface E2eAssetCopy {
+    readonly from: string;
+    readonly to: string;
+}
+
+/**
+ * The default-app-icon asset copy the E2E build must perform.
+ *
+ * The bundled main lands at `<e2eBuildRoot>/electron/main/index.js`, and the host's
+ * `resolveAppIcon` falls back to `<mainDir>/../../assets/icons/chimera.png` when a
+ * game declares no icon override — i.e. `<e2eBuildRoot>/assets/icons/chimera.png`.
+ * Production ships `electron/assets/` as a sibling of `dist/` via electron-builder,
+ * but the `.e2e-build` layout has no packager, so global-setup mirrors the host
+ * package's in-tree `electron/assets/` into it. Without this the default icon 404s
+ * and `app.dock.setIcon` throws mid-`createMainWindow`, so the window never opens
+ * and every window-opening spec times out at `firstWindow`.
+ */
+export function resolveE2eAssetCopy(root: string, e2eBuildRoot: string): E2eAssetCopy {
+    return {
+        from: path.join(root, 'electron', 'assets'),
+        to: path.join(e2eBuildRoot, 'assets'),
+    };
+}
 
 /**
  * Playwright global setup — runs once before all E2E tests.
@@ -87,4 +112,10 @@ export default function globalSetup(): void {
         // automatically skipped in verify:pack mode by buildAppBundles.
         debugPreloadEntry: path.join(root, 'electron/preload/debug-api.ts'),
     });
+
+    // Mirror the host package's app icons into the .e2e-build layout so the bundled
+    // main's default-icon resolution lands on a real file (production ships these via
+    // electron-builder; the .e2e-build layout has no packager). See resolveE2eAssetCopy.
+    const assets = resolveE2eAssetCopy(root, e2eBuildRoot);
+    cpSync(assets.from, assets.to, { recursive: true });
 }
