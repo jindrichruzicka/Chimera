@@ -401,6 +401,13 @@ vi.mock('electron', () => ({
         getPath: appGetPath,
         getLocale: appGetLocale,
         getVersion: appGetVersion,
+        // This suite runs the real main() with the SOURCE file's __dirname
+        // (electron/main), where the game-assets root walk resolves to the repo
+        // <root>/apps via the packaged branch (../../apps). The dev/source branch
+        // (isPackaged:false) assumes the deeper runtime bundle layout
+        // (apps/<game>/dist/electron) and is covered directly by the
+        // resolveRuntimePaths unit tests above.
+        isPackaged: true,
         // macOS-only dock handle (undefined on other platforms in real Electron).
         dock: { setIcon: appDockSetIcon },
     },
@@ -1206,7 +1213,7 @@ describe('resolveRuntimePaths', () => {
     const moduleDirname = path.join('/app', 'electron', 'main');
 
     it('uses source-tree runtime paths by default', () => {
-        const paths = resolveRuntimePaths({ moduleDirname, env: {} });
+        const paths = resolveRuntimePaths({ moduleDirname, env: {}, isPackaged: false });
 
         expect(paths.preloadPath).toBe(path.join(moduleDirname, '..', 'preload', 'api.js'));
         expect(paths.rendererEntry).toBe(
@@ -1214,9 +1221,30 @@ describe('resolveRuntimePaths', () => {
         );
     });
 
+    it('resolves the game assets root to the parent apps/ dir when running from source', () => {
+        // The Electron main bundle lives at <root>/apps/<gameId>/dist/electron/main.js, so
+        // the game's data is at <root>/apps/<gameId>/data and the asset root (the apps/ dir
+        // that loadGameContent appends <gameId>/data to) is <root>/apps — the parent of the
+        // app dir. The stale ../../apps default produced the doubled
+        // apps/<gameId>/apps/<gameId>/data ENOENT when launched from source.
+        const paths = resolveRuntimePaths({ moduleDirname, env: {}, isPackaged: false });
+
+        expect(paths.gameAssetsRoot).toBe(path.join(moduleDirname, '..', '..', '..'));
+    });
+
+    it('resolves the game assets root to <appRoot>/apps when packaged', () => {
+        // electron-builder remaps each game's data into an apps/<gameId>/ subtree that sits
+        // inside the app root (a sibling of dist/electron), so the packaged walk stays
+        // ../../apps. Changing this would break the packaged content load.
+        const paths = resolveRuntimePaths({ moduleDirname, env: {}, isPackaged: true });
+
+        expect(paths.gameAssetsRoot).toBe(path.join(moduleDirname, '..', '..', 'apps'));
+    });
+
     it('uses E2E bundle overrides when CHIMERA_E2E is enabled', () => {
         const paths = resolveRuntimePaths({
             moduleDirname,
+            isPackaged: false,
             env: {
                 CHIMERA_E2E: '1',
                 CHIMERA_E2E_PRELOAD_PATH: '/tmp/chimera-e2e/preload/api.js',
@@ -1231,6 +1259,7 @@ describe('resolveRuntimePaths', () => {
     it('ignores E2E bundle overrides outside CHIMERA_E2E', () => {
         const paths = resolveRuntimePaths({
             moduleDirname,
+            isPackaged: false,
             env: {
                 CHIMERA_E2E_PRELOAD_PATH: '/tmp/chimera-e2e/preload/api.js',
                 CHIMERA_E2E_RENDERER_ENTRY: '/tmp/chimera-renderer/index.html',

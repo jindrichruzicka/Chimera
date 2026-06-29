@@ -4,6 +4,39 @@
         {
             "type": "node",
             "request": "launch",
+            "name": "Run Tactics",
+            "cwd": "${workspaceFolder}",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+            "args": ["apps/tactics"],
+            "env": {
+                "NODE_ENV": "development",
+                "CHIMERA_ENV": "development"
+            },
+            "console": "integratedTerminal",
+            "preLaunchTask": "Build Tactics (Electron bundle)",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Debug Tactics",
+            "cwd": "${workspaceFolder}",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+            "args": ["apps/tactics"],
+            "env": {
+                "NODE_ENV": "development",
+                "CHIMERA_ENV": "development"
+            },
+            "console": "integratedTerminal",
+            "preLaunchTask": "Build Tactics (Electron bundle)",
+            "outFiles": ["${workspaceFolder}/apps/tactics/dist/electron/**/*.js"],
+            "sourceMaps": true,
+            "smartStep": true,
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+        },
+        {
+            "type": "node",
+            "request": "launch",
             "name": "Vitest: run all tests",
             "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/vitest",
             "runtimeArgs": ["run"],

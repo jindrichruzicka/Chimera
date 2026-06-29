@@ -399,6 +399,13 @@ export interface RegisterAppLifecycleOptions {
 export interface ResolveRuntimePathOptions {
     readonly moduleDirname: string;
     readonly env: Readonly<Record<string, string | undefined>>;
+    /**
+     * `app.isPackaged`. The packaged layout (electron-builder) and the
+     * run-from-source layout nest the Electron main bundle at different depths
+     * relative to the game's `data`/`assets`, so the {@link RuntimePaths.gameAssetsRoot}
+     * walk differs between them. See {@link resolveRuntimePaths}.
+     */
+    readonly isPackaged: boolean;
 }
 
 export interface RuntimePaths {
@@ -689,8 +696,22 @@ export function resolveRuntimePaths(options: ResolveRuntimePathOptions): Runtime
         'out',
         'index.html',
     );
-    // Game apps live under apps/<gameId>/ (relocated from games/ in F63 #782).
-    const gameAssetsRoot = path.join(options.moduleDirname, '..', '..', 'apps');
+    // Game content/assets are read at `<gameAssetsRoot>/<gameId>/data` (and
+    // `/assets`) by loadGameContent / app-icon. The bundle sits at
+    // `<app>/dist/electron/main.js`, so two levels up (`appDir`) is the app dir.
+    //
+    // Packaged (electron-builder): each game's `data`/`assets` are remapped INTO
+    // an `apps/<gameId>/` subtree that is a sibling of `dist/` inside the app
+    // root, so the asset root is `<appDir>/apps` (see apps/<game>/electron-builder.yml).
+    //
+    // Run-from-source (dev / `electron apps/<game>`): the app dir IS
+    // `<root>/apps/<gameId>`, the bundle is nested one level deeper, and the
+    // game's `data` is at `<root>/apps/<gameId>/data`, so the asset root (the
+    // `apps/` dir) is the PARENT of the app dir. Using the packaged `../../apps`
+    // walk here overshoots to `apps/<gameId>/apps`, the ENOENT seen when
+    // launching the dev app from source (relocation gap from F63 #783).
+    const appDir = path.join(options.moduleDirname, '..', '..');
+    const gameAssetsRoot = options.isPackaged ? path.join(appDir, 'apps') : path.dirname(appDir);
 
     if (options.env['CHIMERA_E2E'] !== '1') {
         return { preloadPath, rendererEntry, gameAssetsRoot };
@@ -1020,6 +1041,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     const { preloadPath, rendererEntry, gameAssetsRoot } = resolveRuntimePaths({
         moduleDirname: __dirname,
         env: process.env,
+        isPackaged: app.isPackaged,
     });
     const env = resolveChimeraEnv(process.env['CHIMERA_ENV']);
     const userData = app.getPath('userData');

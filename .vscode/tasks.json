@@ -1,0 +1,14 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Tactics (Electron bundle)",
+            "type": "shell",
+            "command": "pnpm",
+            "args": ["--filter", "@chimera-engine/tactics", "build:app"],
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "silent", "panel": "shared", "clear": true }
+        }
+    ]
+}

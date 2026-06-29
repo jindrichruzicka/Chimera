@@ -265,6 +265,11 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
             platform: 'node',
             format: 'cjs',
             target: 'node20',
+            // Emit external `.map` files so a debugger (VSCode "Debug Tactics"
+            // launch config) can bind breakpoints in the original TypeScript
+            // source rather than the bundled output. Harmless in packaged
+            // builds (a sibling `.map` next to each bundle).
+            sourcemap: true,
             external: [...spec.external],
             alias: { ...spec.alias },
             nodePaths: [...spec.nodePaths],
