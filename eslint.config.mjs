@@ -46,6 +46,8 @@ export default tseslint.config(
             // Per-app Next host build output (F65 Phase 2c): apps/<game>/renderer/{out,.next}.
             '**/.next/**',
             'apps/*/renderer/out/**',
+            // electron-builder app-bundle output (#813): apps/<game>/release — generated installers/bundles.
+            'apps/*/release/**',
             '**/*.d.ts',
             // Fixture files used by ESLint smoke tests; they intentionally violate lint rules.
             'simulation/engine/__tests__/fixtures/**',

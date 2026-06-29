@@ -31,3 +31,6 @@ electron/preload/api.js
 apps/tactics/e2e/playwright-report/
 apps/tactics/e2e/results/
 test-results/
+
+# electron-builder app-bundle output (apps/tactics, #813) — generated installers/bundles
+apps/tactics/release/

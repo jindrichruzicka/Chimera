@@ -35,6 +35,7 @@
         "verify:toolchain-snapshot": "tsx tools/gen-toolchain.ts --check",
         "gen:toolchain": "tsx tools/gen-toolchain.ts",
         "icons:generate": "tsx tools/generate-icons.ts",
+        "package:tactics": "pnpm build:packages && next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app && pnpm --filter @chimera-engine/tactics run package",
         "changeset": "changeset",
         "version-packages": "changeset version && pnpm install --lockfile-only",
         "release": "pnpm build:packages && changeset publish",
