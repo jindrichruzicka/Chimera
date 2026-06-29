@@ -28,6 +28,8 @@ import type {
     SceneId,
 } from '../engine/types.js';
 import { entityId, gamePhase, playerId, sceneId } from '../engine/types.js';
+import { parseSetup } from '../engine/EngineActions.js';
+import type { GameSetupConfig } from '../foundation/game-lobby-contract.js';
 import type { RecordedAction, ReplayFile } from './ReplayFile.js';
 
 const DEFAULT_TURN_DEADLINE_MS = 30_000;
@@ -312,6 +314,16 @@ export function createBaseReplayInitialSnapshot(file: ReplayFile): BaseGameSnaps
     // baseline action and reconstructs at tick 0.
     const baseTick = file.actions[0]?.tick ?? 0;
 
+    // Host-authored lobby setup (player colours and every other seat attribute) is
+    // initialization data, not a gameplay action: it rides on the engine:start_game
+    // payload, and the replay's gameConfig is frozen at lobby-start before setup
+    // exists. Seed it into the reconstructed initial state so the very first frame
+    // renders with the chosen attributes, instead of materialising only once the
+    // recorded engine:start_game action replays (which flashed default colours
+    // first). Determinism is preserved: that action re-applies the same value, so
+    // every post-action frame stays bit-identical (invariants #70/#71/#42).
+    const initialSetup = deriveReplayInitialSetup(file.actions);
+
     const snapshot: BaseGameSnapshot = {
         tick: baseTick,
         seed: file.seed,
@@ -320,6 +332,7 @@ export function createBaseReplayInitialSnapshot(file: ReplayFile): BaseGameSnaps
         phase: config.phase,
         events: [],
         turnNumber: 0,
+        ...(initialSetup !== undefined ? { setup: initialSetup } : {}),
         ...(config.hostPlayerId !== undefined ? { hostPlayerId: config.hostPlayerId } : {}),
         ...(activePlayerId !== undefined
             ? {
@@ -336,6 +349,21 @@ export function createBaseReplayInitialSnapshot(file: ReplayFile): BaseGameSnaps
     };
 
     return snapshot;
+}
+
+/**
+ * Lift the host-authored `setup` config from the replay's first
+ * `engine:start_game` action — the canonical match-initialization event. Returns
+ * `undefined` when no such action exists (empty replays, setup-less games), and
+ * reuses {@link parseSetup} so the value is validated by the exact same sanitiser
+ * the live pipeline applies when the action replays (no divergent second parser).
+ */
+function deriveReplayInitialSetup(actions: readonly RecordedAction[]): GameSetupConfig | undefined {
+    const startGame = actions.find((entry) => entry.action.type === 'engine:start_game');
+    if (startGame === undefined) {
+        return undefined;
+    }
+    return parseSetup(startGame.action.payload['setup']);
 }
 
 function parseReplayGameConfig(raw: Readonly<Record<string, unknown>>): ParsedReplayGameConfig {

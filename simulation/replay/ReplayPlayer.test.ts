@@ -301,6 +301,67 @@ describe('ReplayPlayer.initialize', () => {
     });
 });
 
+describe('createBaseReplayInitialSnapshot setup seeding', () => {
+    // Player colour (and every other seat attribute) is host-authored lobby
+    // setup, not a gameplay action. It rides on the engine:start_game payload and
+    // the reducer writes it to snapshot.setup. The replay's gameConfig is frozen
+    // at lobby-start (before setup exists), so the reconstructed base snapshot
+    // must lift setup from the first engine:start_game action — otherwise the
+    // first replay frame renders with default colours until that action replays.
+    const startGameSetup = {
+        matchSettings: {},
+        playerAttributes: {
+            p1: { color: 'green' },
+            p2: { color: 'red' },
+        },
+    };
+
+    function makeStartGameLedReplayFile(): ReplayFile {
+        return makeReplayFile({
+            gameConfig: {
+                hostPlayerId: P1,
+                playerIds: [P1, P2],
+                phase: 'lobby',
+            },
+            actions: [
+                {
+                    tick: 0,
+                    playerId: P1,
+                    action: {
+                        type: 'engine:start_game',
+                        playerId: P1,
+                        tick: 0,
+                        payload: {
+                            playerIds: [P1, P2],
+                            firstPlayerId: P1,
+                            setup: startGameSetup,
+                        },
+                    },
+                },
+            ],
+        });
+    }
+
+    it('seeds the initial snapshot with setup from the first engine:start_game action', () => {
+        const snapshot = createBaseReplayInitialSnapshot(makeStartGameLedReplayFile());
+
+        expect(snapshot.setup).toEqual(startGameSetup);
+    });
+
+    it('leaves setup undefined when no recorded action carries one', () => {
+        // Default fixture: only test:add actions, gameConfig without setup.
+        const snapshot = createBaseReplayInitialSnapshot(makeReplayFile());
+
+        expect(snapshot.setup).toBeUndefined();
+    });
+
+    it('leaves setup undefined for an empty replay', () => {
+        const snapshot = createBaseReplayInitialSnapshot(makeReplayFile({ actions: [] }));
+
+        expect(snapshot.setup).toBeUndefined();
+    });
+});
+
 describe('ReplayPlayer.step', () => {
     it('applies the next recorded action through the injected ActionPipeline', () => {
         const player = makePlayer();

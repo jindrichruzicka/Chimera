@@ -201,7 +201,7 @@ function parseStringMap(raw: unknown, context: string): Record<string, string> {
  * `parseInitialEntities` — `setup` originates from the wire and crosses to every
  * client via projection, so it must be sanitised at the engine boundary.
  */
-function parseSetup(raw: unknown): GameSetupConfig | undefined {
+export function parseSetup(raw: unknown): GameSetupConfig | undefined {
     if (raw === undefined) {
         return undefined;
     }
