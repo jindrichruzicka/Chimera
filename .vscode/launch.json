@@ -10,7 +10,8 @@
             "args": ["apps/tactics"],
             "env": {
                 "NODE_ENV": "development",
-                "CHIMERA_ENV": "development"
+                "CHIMERA_ENV": "development",
+                "CHIMERA_DEBUG": "1"
             },
             "console": "integratedTerminal",
             "preLaunchTask": "Build Tactics (Electron bundle)",
@@ -25,7 +26,8 @@
             "args": ["apps/tactics"],
             "env": {
                 "NODE_ENV": "development",
-                "CHIMERA_ENV": "development"
+                "CHIMERA_ENV": "development",
+                "CHIMERA_DEBUG": "1"
             },
             "console": "integratedTerminal",
             "preLaunchTask": "Build Tactics (Electron bundle)",

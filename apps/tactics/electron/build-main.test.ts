@@ -8,6 +8,7 @@ import {
     appBundleOutfiles,
     planBundles,
     buildAppBundles,
+    resolveDevDebugPreloadEntry,
     type BuildFn,
     type BundleSpec,
 } from './build-main.js';
@@ -145,6 +146,26 @@ describe('planBundles', () => {
         expect(specs.find((s) => s.label === 'main')?.outfile).toBe(outfiles.main);
         expect(specs.find((s) => s.label === 'preload')?.outfile).toBe(outfiles.preload);
         expect(specs.find((s) => s.label === 'debug-preload')?.outfile).toBe(outfiles.debugPreload);
+    });
+});
+
+describe('resolveDevDebugPreloadEntry', () => {
+    it('returns the host debug preload SOURCE when it exists (monorepo dev build)', () => {
+        const entry = resolveDevDebugPreloadEntry(ROOT, () => true);
+        expect(entry).toBe(path.join(ROOT, 'electron/preload/debug-api.ts'));
+    });
+
+    it('returns undefined when the host source is absent (a scaffolded game copies this verbatim)', () => {
+        expect(resolveDevDebugPreloadEntry(ROOT, () => false)).toBeUndefined();
+    });
+
+    it('probes exactly the <root>/electron/preload/debug-api.ts path', () => {
+        const probed: string[] = [];
+        resolveDevDebugPreloadEntry(ROOT, (file) => {
+            probed.push(file);
+            return false;
+        });
+        expect(probed).toEqual([path.join(ROOT, 'electron/preload/debug-api.ts')]);
     });
 });
 

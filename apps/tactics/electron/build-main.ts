@@ -26,7 +26,7 @@
 // dropped and the preload is resolved from the packed artifact instead of source.
 
 import path from 'node:path';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { buildSync } from 'esbuild';
 
@@ -105,6 +105,25 @@ export function appBundleOutfiles(appDir: string): BundleOutfiles {
         preload: path.join(appDir, 'dist/preload/api.js'),
         debugPreload: path.join(appDir, 'dist/preload/debug-api.js'),
     };
+}
+
+/**
+ * The host's Inspector-window debug preload SOURCE entry for the everyday dev
+ * `build:app`, or `undefined` when it is absent. ONLY the monorepo carries that
+ * source (`<root>/electron/preload/debug-api.ts`); a scaffolded game copies this
+ * file verbatim but has no host source, so `fileExists` returns false and the
+ * debug bundle is skipped — matching `@chimera-engine/electron/preload/debug-api`
+ * being a private, non-public export (Invariant #27). Without this, `build:app`
+ * emitted only `api.js` and never `debug-api.js`, so a dev launch's F9 opened an
+ * Inspector window whose preload bridge could not load (the e2e `global-setup`
+ * already builds the same entry into `.e2e-build`, which is why e2e stayed green).
+ */
+export function resolveDevDebugPreloadEntry(
+    root: string,
+    fileExists: (file: string) => boolean,
+): string | undefined {
+    const entry = path.join(root, 'electron/preload/debug-api.ts');
+    return fileExists(entry) ? entry : undefined;
 }
 
 export interface PlanBundlesOptions {
@@ -286,6 +305,12 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
         return createRequire(fromPackageJson).resolve('@chimera-engine/electron/preload/api');
     };
 
+    // Bundle the Inspector-window debug preload too when the monorepo host source is
+    // present (it is for any in-repo app; absent for a scaffolded game that copies this
+    // file verbatim). `buildAppBundles` itself drops it in verify:pack mode. Spread in
+    // only when defined — exactOptionalPropertyTypes forbids an explicit `undefined`.
+    const debugPreloadEntry = resolveDevDebugPreloadEntry(root, existsSync);
+
     buildAppBundles({
         build,
         readJson: (file) => JSON.parse(readFileSync(file, 'utf8')) as { name?: string },
@@ -293,6 +318,7 @@ if (process.env['VITEST'] === undefined && isDirectRun()) {
         env: process.env,
         root,
         appDir,
+        ...(debugPreloadEntry !== undefined ? { debugPreloadEntry } : {}),
         log: (message) => console.log(`[build:app] ${message}`),
     });
 }
