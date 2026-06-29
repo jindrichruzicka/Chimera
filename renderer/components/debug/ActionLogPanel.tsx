@@ -14,8 +14,8 @@ import type {
     ActionHistoryEntry,
     ChimeraDebugApi,
 } from '@chimera-engine/simulation/bridge/debug-api-types.js';
-import { Button } from '../ui/Button';
 import { Caption } from '../ui/Caption';
+import { IconButton } from '../ui/IconButton';
 import { ScrollArea } from '../ui/ScrollArea';
 import { Spinner } from '../ui/Spinner';
 import { TextInput } from '../ui/TextInput';
@@ -149,15 +149,16 @@ export function ActionLogPanel({
                     onValueChange={setToText}
                     value={toText}
                 />
-                <Button
+                <IconButton
+                    aria-label="Refresh"
                     onClick={() => {
                         setRefreshNonce((nonce) => nonce + 1);
                     }}
-                    size="sm"
+                    title="Refresh"
                     variant="secondary"
                 >
-                    Refresh
-                </Button>
+                    ↻
+                </IconButton>
             </div>
 
             {state.kind === 'loading' && <Spinner label="Loading action log" />}

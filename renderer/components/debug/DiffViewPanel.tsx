@@ -25,8 +25,8 @@ import type {
     SnapshotDiff,
 } from '@chimera-engine/simulation/bridge/debug-api-types.js';
 import { Badge } from '../ui/Badge';
-import { Button } from '../ui/Button';
 import { Caption } from '../ui/Caption';
+import { IconButton } from '../ui/IconButton';
 import { ScrollArea } from '../ui/ScrollArea';
 import { Select } from '../ui/Select';
 import { Spinner } from '../ui/Spinner';
@@ -206,15 +206,16 @@ export function DiffViewPanel({ api, selectedTick }: DiffViewPanelProps): React.
                             />
                         </>
                     )}
-                <Button
+                <IconButton
+                    aria-label="Refresh"
                     onClick={() => {
                         setRefreshNonce((nonce) => nonce + 1);
                     }}
-                    size="sm"
+                    title="Refresh"
                     variant="secondary"
                 >
-                    Refresh
-                </Button>
+                    ↻
+                </IconButton>
             </div>
 
             {tickList.kind === 'loading' && <Spinner label="Loading ticks" />}

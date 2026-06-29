@@ -2,13 +2,32 @@
     "version": "2.0.0",
     "tasks": [
         {
-            "label": "Build Tactics (Electron bundle)",
+            // Default launch build. Rebuilds the whole runnable app from current
+            // source so renderer/UI edits actually reach a launch:
+            //   1. build:packages — refresh the @chimera-engine/* dist the Next app consumes
+            //   2. next build     — re-emit the renderer static export (apps/tactics/renderer/out)
+            //   3. build:app      — re-bundle the Electron main + preload
+            // Incremental (warm .next cache): ~9s. The old task ran only step 3,
+            // so renderer changes never appeared in a launch.
+            "label": "Build Tactics (renderer + bundle)",
             "type": "shell",
-            "command": "pnpm",
-            "args": ["--filter", "@chimera-engine/tactics", "build:app"],
+            "command": "pnpm build:packages && pnpm exec next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app",
             "options": { "cwd": "${workspaceFolder}" },
             "problemMatcher": [],
-            "presentation": { "reveal": "silent", "panel": "shared", "clear": true }
+            "presentation": { "reveal": "always", "focus": false, "panel": "shared", "clear": true }
+        },
+        {
+            // Scorched-earth variant for the "Run Tactics (Clean)" launch. Wipes the
+            // Next build cache, the renderer static export, and the Electron bundle
+            // output before the same full rebuild, so no stale chunk can survive.
+            // Slower (~25-35s) — use only when you suspect a stale cache; the default
+            // incremental task above already picks up source changes reliably.
+            "label": "Build Tactics (clean renderer + bundle)",
+            "type": "shell",
+            "command": "rm -rf apps/tactics/renderer/.next apps/tactics/renderer/out apps/tactics/dist && pnpm build:packages && pnpm exec next build apps/tactics/renderer && pnpm --filter @chimera-engine/tactics build:app",
+            "options": { "cwd": "${workspaceFolder}" },
+            "problemMatcher": [],
+            "presentation": { "reveal": "always", "focus": false, "panel": "shared", "clear": true }
         }
     ]
 }

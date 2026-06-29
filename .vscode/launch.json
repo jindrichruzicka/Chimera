@@ -14,7 +14,23 @@
                 "CHIMERA_DEBUG": "1"
             },
             "console": "integratedTerminal",
-            "preLaunchTask": "Build Tactics (Electron bundle)",
+            "preLaunchTask": "Build Tactics (renderer + bundle)",
+            "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
+        },
+        {
+            "type": "node",
+            "request": "launch",
+            "name": "Run Tactics (Clean)",
+            "cwd": "${workspaceFolder}",
+            "runtimeExecutable": "${workspaceFolder}/node_modules/.bin/electron",
+            "args": ["apps/tactics"],
+            "env": {
+                "NODE_ENV": "development",
+                "CHIMERA_ENV": "development",
+                "CHIMERA_DEBUG": "1"
+            },
+            "console": "integratedTerminal",
+            "preLaunchTask": "Build Tactics (clean renderer + bundle)",
             "skipFiles": ["<node_internals>/**", "**/node_modules/**"]
         },
         {
@@ -30,7 +46,7 @@
                 "CHIMERA_DEBUG": "1"
             },
             "console": "integratedTerminal",
-            "preLaunchTask": "Build Tactics (Electron bundle)",
+            "preLaunchTask": "Build Tactics (renderer + bundle)",
             "outFiles": ["${workspaceFolder}/apps/tactics/dist/electron/**/*.js"],
             "sourceMaps": true,
             "smartStep": true,
