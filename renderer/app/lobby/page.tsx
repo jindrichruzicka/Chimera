@@ -225,7 +225,11 @@ export default function LobbyPage() {
             setPendingAction('starting');
             setError(null);
             await lobbyApi.startGame();
-            router.push('/game');
+            // Preserve the active game context in the URL: the main-menu override
+            // is resolved from `?gameId=`, and a later return-to-lobby / leave reads
+            // it back from the URL. Mirrors handleClose below.
+            const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+            router.push(withShellGameId('/game', explicitGameId));
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to start game');

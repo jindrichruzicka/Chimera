@@ -342,6 +342,17 @@ describe('GamePage — client leave-to-main-menu (#741)', () => {
         expect(mockReplace).toHaveBeenCalledWith('/main-menu');
     });
 
+    it('preserves the game context (?gameId) when routing /game → /main-menu', () => {
+        window.history.replaceState({}, '', '/game?gameId=tactics');
+        mockLeavingToMainMenu = true;
+        mockSnapshot = null;
+        mockLobbyState = null;
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
     it('drops the stale snapshot and consumes the flag on the leave transition', () => {
         mockLeavingToMainMenu = true;
         mockSnapshot = makeSnapshot();

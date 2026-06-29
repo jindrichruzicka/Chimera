@@ -149,6 +149,9 @@ describe('LobbyPage pending actions', () => {
         mockLocalPlayerId = null;
         mockLobbyState = null;
         mockPush.mockReset();
+        // jsdom location persists across tests in a file; start each from a clean,
+        // gameId-less URL so navigation that now reads `?gameId=` is deterministic.
+        window.history.replaceState({}, '', '/lobby');
 
         Object.defineProperty(window, '__chimera', {
             value: {
@@ -313,6 +316,26 @@ describe('LobbyPage pending actions', () => {
 
         await waitFor(() => {
             expect(mockPush).toHaveBeenCalledWith('/game');
+        });
+    });
+
+    it('preserves the game context (?gameId) when starting the game', async () => {
+        window.history.pushState({}, '', '/lobby?gameId=tactics');
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [
+                { playerId: 'p1', displayName: 'Host', ready: true },
+                { playerId: 'p2', displayName: 'Guest', ready: true },
+            ],
+        };
+
+        renderLobbyPage();
+
+        fireEvent.click(screen.getByTestId('start-game'));
+
+        await waitFor(() => {
+            expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
         });
     });
 

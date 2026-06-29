@@ -92,7 +92,10 @@ export default function GamePage(): React.ReactElement | null {
             leavingRef.current = true;
             useGameStore.getState().reset();
             useLobbyUiStore.getState().setLeavingToMainMenu(false);
-            router.replace('/main-menu');
+            // Preserve the game context so the main menu resolves the game's shell
+            // (its override) rather than falling back to the engine default.
+            const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+            router.replace(withShellGameId('/main-menu', explicitGameId));
         }
     }, [leavingToMainMenu, router]);
 

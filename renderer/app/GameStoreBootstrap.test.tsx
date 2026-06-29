@@ -111,6 +111,16 @@ describe('GameStoreBootstrap — /game → /lobby on a phase:lobby snapshot (#74
         expect(mockPush).toHaveBeenCalledWith('/lobby');
     });
 
+    it('preserves the game context (?gameId) when returning to /lobby', () => {
+        window.history.replaceState({}, '', '/game?gameId=tactics');
+        mockPathname = '/game';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockPush).toHaveBeenCalledWith('/lobby?gameId=tactics');
+    });
+
     it('does not navigate for a non-lobby snapshot on /game', () => {
         window.history.replaceState({}, '', '/game');
         mockPathname = '/game';
@@ -169,6 +179,17 @@ describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)
         render(<GameStoreBootstrap />);
 
         expect(mockPush).toHaveBeenCalledWith('/game');
+        expect(mockReset).not.toHaveBeenCalled();
+    });
+
+    it('preserves the game context (?gameId) when redirecting to /game', () => {
+        window.history.replaceState({}, '', '/lobby?gameId=tactics');
+        mockPathname = '/lobby';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
         expect(mockReset).not.toHaveBeenCalled();
     });
 });

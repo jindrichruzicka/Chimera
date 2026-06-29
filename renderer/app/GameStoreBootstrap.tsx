@@ -29,6 +29,7 @@ import type { StoreApi } from 'zustand';
 import { bootstrapGameStore } from '../state/gameStoreBootstrap';
 import { useGameStore, type GameStore } from '../state/gameStore';
 import { useLobbyUiStore } from '../state/lobbyUiStore';
+import { resolveShellGameId, withShellGameId } from '../shell/resolveMainMenuGameId';
 import { bootstrapPerfStore } from '../components/shell/perf/perfStoreBootstrap.js';
 import { usePerfStore, type PerfStoreState } from '../components/shell/perf/perfStore.js';
 import type { GameAPI, LobbyAPI } from '@chimera-engine/simulation/bridge/api-types.js';
@@ -43,7 +44,7 @@ export function GameStoreBootstrap(): null {
     // handleStartGame(). Both end up at /game automatically.
     useEffect(() => {
         if (snapshot !== null && isLobbyPath(currentBrowserPathname(pathname))) {
-            router.push('/game');
+            router.push(withShellGameId('/game', currentBrowserGameId()));
         }
     }, [snapshot, router, pathname]);
 
@@ -67,7 +68,7 @@ export function GameStoreBootstrap(): null {
             (isGamePath(browserPath) || isReplayPlayerPath(browserPath))
         ) {
             useGameStore.getState().reset();
-            router.push('/lobby');
+            router.push(withShellGameId('/lobby', currentBrowserGameId()));
         }
     }, [snapshot, router, pathname]);
 
@@ -141,4 +142,15 @@ function currentBrowserPathname(pathname: string | null): string | null {
     }
 
     return window.location.pathname;
+}
+
+// The active game id from the live URL — `withShellGameId` carries it onto the
+// /lobby ⇄ /game hops so the game's shell (incl. the main-menu override) keeps
+// resolving after the match. Returns null off-window or when no game is selected.
+function currentBrowserGameId(): string | null {
+    if (typeof window === 'undefined') {
+        return null;
+    }
+
+    return resolveShellGameId(new URLSearchParams(window.location.search));
 }
