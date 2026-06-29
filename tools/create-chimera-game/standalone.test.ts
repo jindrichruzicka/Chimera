@@ -121,6 +121,35 @@ describe('rewriteAppPackageForStandalone', () => {
         expect(JSON.stringify(out)).not.toContain('workspace:*');
     });
 
+    it('rewrites @chimera-engine/* workspace deps declared in devDependencies (#817 template shape)', () => {
+        // The blank template declares the engine packages under devDependencies (they are
+        // esbuild-inlined at build time and must stay out of electron-builder's prod tree).
+        // A surviving `workspace:*` in any section makes a standalone `npm install` reject the
+        // app, so the rewrite must reach devDependencies too.
+        const devOnly = JSON.stringify({
+            name: '@chimera-engine/my-game',
+            devDependencies: {
+                '@chimera-engine/simulation': 'workspace:*',
+                '@chimera-engine/renderer': 'workspace:*',
+                electron: '^33.2.0',
+            },
+        });
+        const out = JSON.parse(
+            rewriteAppPackageForStandalone(devOnly, {
+                engineRanges: {
+                    '@chimera-engine/simulation': '^0.9.0',
+                    '@chimera-engine/renderer': '^0.9.0',
+                },
+                nodeModulesEnv: 'node_modules',
+            }),
+        );
+        expect(out.devDependencies['@chimera-engine/simulation']).toBe('^0.9.0');
+        expect(out.devDependencies['@chimera-engine/renderer']).toBe('^0.9.0');
+        // Non-engine devDeps are untouched; no workspace:* spec survives in any section.
+        expect(out.devDependencies.electron).toBe('^33.2.0');
+        expect(JSON.stringify(out)).not.toContain('workspace:*');
+    });
+
     it('injects CHIMERA_VERIFY_PACK_NODE_MODULES into build:app + test:e2e only, leaving test untouched', () => {
         const out = JSON.parse(
             rewriteAppPackageForStandalone(raw, {

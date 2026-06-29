@@ -11,13 +11,11 @@
         "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
         "lint": "eslint ."
     },
-    "dependencies": {
+    "devDependencies": {
         "@chimera-engine/simulation": "workspace:*",
         "@chimera-engine/ai": "workspace:*",
         "@chimera-engine/renderer": "workspace:*",
-        "@chimera-engine/electron": "workspace:*"
-    },
-    "devDependencies": {
+        "@chimera-engine/electron": "workspace:*",
         "electron": "^33.2.0",
         "electron-builder": "^25.1.8"
     }

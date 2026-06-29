@@ -72,6 +72,33 @@ describe('blank template smoke harness', () => {
         expect(pkg.devDependencies?.['electron']).toBeDefined();
     });
 
+    // Bundle-trim contract (#817), mirrored from apps/tactics/electron-builder.test.ts. The
+    // app's `build:app` esbuild-INLINES every @chimera-engine/* package into dist/electron/main.js
+    // + dist/preload/api.js, and electron-builder ALWAYS ships the production `dependencies` tree
+    // (a `!node_modules` glob does NOT exclude it — #813). So declaring the engine packages as
+    // production deps would dereference ~hundreds of MB of already-bundled code into every
+    // scaffolded game's packaged .app. They stay build-time-only: in `devDependencies` so the
+    // pnpm workspace symlink (esbuild resolution, `tsc -b` references, the icon file set) still
+    // resolves, and OUT of `dependencies` so electron-builder collects nothing to copy.
+    const ENGINE_PACKAGES = [
+        '@chimera-engine/simulation',
+        '@chimera-engine/ai',
+        '@chimera-engine/renderer',
+        '@chimera-engine/electron',
+    ] as const;
+
+    it.each(ENGINE_PACKAGES)(
+        'declares %s as a devDependency, never a production dependency (#817 bundle-trim)',
+        async (name) => {
+            const pkg = JSON.parse(await read('package.json')) as {
+                dependencies?: Record<string, string>;
+                devDependencies?: Record<string, string>;
+            };
+            expect(pkg.devDependencies ?? {}).toHaveProperty(name);
+            expect(pkg.dependencies ?? {}).not.toHaveProperty(name);
+        },
+    );
+
     it('ships a tokenised electron-builder packaging config mirroring apps/tactics (#814)', async () => {
         const yml = await read('electron-builder.yml');
         // Identity fields are tokenised so each scaffolded game gets its own app identity.

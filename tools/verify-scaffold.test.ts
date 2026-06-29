@@ -231,6 +231,29 @@ describe('rewriteAppChimeraDeps', () => {
         // No workspace:* spec survives (pnpm would reject it without a matching member).
         expect(JSON.stringify(rewritten)).not.toContain('workspace:*');
     });
+
+    it('rewrites @chimera-engine deps declared in devDependencies too (#817 template shape)', () => {
+        // The blank template carries the engine packages in devDependencies (build-time-inlined,
+        // kept out of electron-builder's prod tree). The gate must still resolve them onto tarballs
+        // there, or the surviving workspace:* makes pnpm install reject the scaffolded app.
+        const raw = JSON.stringify({
+            name: PROBE_GAME.pkg,
+            devDependencies: {
+                '@chimera-engine/renderer': 'workspace:*',
+                '@chimera-engine/simulation': 'workspace:*',
+                electron: '^33.2.0',
+            },
+        });
+        const rewritten = JSON.parse(rewriteAppChimeraDeps(raw, TARBALLS));
+        expect(rewritten.devDependencies['@chimera-engine/renderer']).toBe(
+            `file:${TARBALLS['@chimera-engine/renderer']}`,
+        );
+        expect(rewritten.devDependencies['@chimera-engine/simulation']).toBe(
+            `file:${TARBALLS['@chimera-engine/simulation']}`,
+        );
+        expect(rewritten.devDependencies.electron).toBe('^33.2.0');
+        expect(JSON.stringify(rewritten)).not.toContain('workspace:*');
+    });
 });
 
 // ── Orchestration ───────────────────────────────────────────────────────────────

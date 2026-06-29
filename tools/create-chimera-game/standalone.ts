@@ -142,7 +142,11 @@ export interface StandaloneAppRewriteParams {
  * Transform a scaffolded app's `package.json` for a STANDALONE (out-of-monorepo) install:
  *
  *   1. rewrite every `@chimera-engine/*` dependency (a `workspace:*` spec inside the monorepo) onto its
- *      published `^x.y.z` range, so a plain `pnpm/npm install` resolves them from the registry; and
+ *      published `^x.y.z` range, so a plain `pnpm/npm install` resolves them from the registry —
+ *      across BOTH `dependencies` and `devDependencies`. The blank template carries the engine
+ *      packages under `devDependencies` (they are esbuild-inlined at build time and kept out of
+ *      electron-builder's prod tree, #817), so a section-blind rewrite would leave a `workspace:*`
+ *      spec that a standalone `npm install` rejects; and
  *   2. prefix `build:app` + `test:e2e` with `cross-env CHIMERA_VERIFY_PACK_NODE_MODULES=<value>` so
  *      the app's Electron bundler resolves `@chimera-engine/electron`'s host/preload from `node_modules`
  *      (there is no monorepo `electron/` source to alias). The script's semantics are unchanged
@@ -156,18 +160,22 @@ export function rewriteAppPackageForStandalone(
 ): string {
     const pkg = JSON.parse(rawAppPkg) as {
         dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
         scripts?: Record<string, string>;
         [key: string]: unknown;
     };
 
-    const deps = pkg.dependencies ?? {};
-    for (const name of Object.keys(deps)) {
-        if (name.startsWith('@chimera-engine/')) {
-            const range = params.engineRanges[name];
-            if (range !== undefined) deps[name] = range;
+    const rewriteSection = (section: Record<string, string> | undefined): void => {
+        if (section === undefined) return;
+        for (const name of Object.keys(section)) {
+            if (name.startsWith('@chimera-engine/')) {
+                const range = params.engineRanges[name];
+                if (range !== undefined) section[name] = range;
+            }
         }
-    }
-    pkg.dependencies = deps;
+    };
+    rewriteSection(pkg.dependencies);
+    rewriteSection(pkg.devDependencies);
 
     const scripts = pkg.scripts ?? {};
     for (const key of ['build:app', 'test:e2e']) {

@@ -168,21 +168,31 @@ export function applyTarballOverrides(
  * Rewrite the generated app's `@chimera-engine/*` `workspace:*` deps onto `file:<tarball>`. The
  * standalone root has no `@chimera-engine/*` workspace members, so a surviving `workspace:*` spec
  * would make `pnpm install` reject the app; pointing each at its tarball resolves it through
- * the packed `exports`.
+ * the packed `exports`. Rewrites BOTH `dependencies` and `devDependencies`: the blank template
+ * carries the engine packages under `devDependencies` (esbuild-inlined, kept out of
+ * electron-builder's prod tree, #817), so a section-blind rewrite would leave a `workspace:*` the
+ * gate's `pnpm install` then rejects. The root `pnpm.overrides` may already mask this, but this
+ * function's own contract must hold regardless.
  */
 export function rewriteAppChimeraDeps(
     rawAppPkg: string,
     tarballs: Readonly<Record<string, string>>,
 ): string {
-    const pkg = JSON.parse(rawAppPkg) as { dependencies?: Record<string, string> };
-    const deps = pkg.dependencies ?? {};
-    for (const name of Object.keys(deps)) {
-        const tgz = tarballs[name];
-        if (name.startsWith('@chimera-engine/') && tgz !== undefined) {
-            deps[name] = `file:${tgz}`;
+    const pkg = JSON.parse(rawAppPkg) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+    };
+    const rewriteSection = (section: Record<string, string> | undefined): void => {
+        if (section === undefined) return;
+        for (const name of Object.keys(section)) {
+            const tgz = tarballs[name];
+            if (name.startsWith('@chimera-engine/') && tgz !== undefined) {
+                section[name] = `file:${tgz}`;
+            }
         }
-    }
-    pkg.dependencies = deps;
+    };
+    rewriteSection(pkg.dependencies);
+    rewriteSection(pkg.devDependencies);
     return `${JSON.stringify(pkg, null, 4)}\n`;
 }
 
