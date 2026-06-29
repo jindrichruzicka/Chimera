@@ -32,6 +32,8 @@ import {
     buildStandaloneVitestConfig,
     buildStandaloneWorkspaceYaml,
     rewriteAppPackageForStandalone,
+    rewriteAppTsconfigBuildForStandalone,
+    rewriteE2eTsconfigForStandalone,
 } from './standalone';
 import { ENGINE_DEP_RANGES, ROOT_COMPILER_OPTIONS, TOOLCHAIN_DEPS } from './toolchain.generated';
 import { findLeftoverTokens, renameTokensInPath, substituteTokens } from './tokens';
@@ -272,6 +274,29 @@ async function emitStandaloneProject(
         }),
         'utf8',
     );
+
+    // The template's `tsconfig.build.json` references + `e2e/tsconfig.json` paths point at sibling
+    // monorepo packages (`../../simulation/...`, `simulation/dist/*`, …) — correct in `--workspace`
+    // mode, broken out-of-repo. Neutralise them so `tsc` / Playwright resolve the npm-installed
+    // `@chimera-engine/*` from `node_modules` instead. The template stays workspace-valid; only the
+    // emitted copies are rewritten. Tolerant of a template that omits either file (a no-op then).
+    await rewriteFileIfPresent(
+        path.join(appDir, 'tsconfig.build.json'),
+        rewriteAppTsconfigBuildForStandalone,
+    );
+    await rewriteFileIfPresent(
+        path.join(appDir, 'e2e', 'tsconfig.json'),
+        rewriteE2eTsconfigForStandalone,
+    );
+}
+
+/** Read a file, apply `transform`, write it back — skipping silently if the file does not exist. */
+async function rewriteFileIfPresent(
+    filePath: string,
+    transform: (raw: string) => string,
+): Promise<void> {
+    if (!(await pathExists(filePath))) return;
+    await writeFile(filePath, transform(await readFile(filePath, 'utf8')), 'utf8');
 }
 
 /**

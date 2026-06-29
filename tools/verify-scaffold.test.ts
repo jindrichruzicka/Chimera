@@ -133,6 +133,11 @@ function makeFakeRun(
                 'registerRendererGame(contribution);\n',
             );
         }
+        // The package step (electron-builder --dir) writes the unsigned bundle under <app>/release;
+        // emulate that so the gate's post-package release-dir guard sees it.
+        if (args.includes('exec') && args.includes('electron-builder')) {
+            files.set(path.join(appDir, 'release'), 'bundle');
+        }
         return { status: 0, stdout: '', stderr: '' };
     };
     return { run, calls };
@@ -231,7 +236,7 @@ describe('rewriteAppChimeraDeps', () => {
 // ── Orchestration ───────────────────────────────────────────────────────────────
 
 describe('verifyScaffold', () => {
-    it('runs build -> pack -> scaffold -> install -> unit -> e2e and cleans up the tmp root', async () => {
+    it('runs build -> pack -> scaffold -> install -> unit -> e2e -> prod-build -> package and cleans up the tmp root', async () => {
         const { fs, files, removed } = makeFakeFs();
         const tmpRoot = TMP_ROOT;
         const { run, calls } = makeFakeRun(files, tmpRoot);
@@ -254,10 +259,44 @@ describe('verifyScaffold', () => {
         expect(unit?.args).toEqual(['--filter', PROBE_GAME.pkg, 'test']);
         const e2e = calls.find((c) => c.args.includes('test:e2e'));
         expect(e2e?.args).toEqual(['--filter', PROBE_GAME.pkg, 'test:e2e']);
-        // Ordering: install before unit before e2e.
+
+        // Production build (#816): the app's `build` (tsc, proves the standalone refs rewrite) and
+        // `build:app` (esbuild bundles), then the package step: a Next renderer export + an unsigned
+        // electron-builder `--dir` bundle, all run from the standalone root by --filter.
+        const prodBuild = calls.find(
+            (c) => c.args.join(' ') === `--filter ${PROBE_GAME.pkg} build`,
+        );
+        expect(prodBuild?.cwd).toBe(tmpRoot);
+        const buildApp = calls.find(
+            (c) => c.args.join(' ') === `--filter ${PROBE_GAME.pkg} build:app`,
+        );
+        expect(buildApp?.cwd).toBe(tmpRoot);
+        const nextBuild = calls.find((c) => c.args[0] === 'exec' && c.args[1] === 'next');
+        expect(nextBuild?.args).toEqual([
+            'exec',
+            'next',
+            'build',
+            `apps/${PROBE_GAME.kebab}/renderer`,
+        ]);
+        const pkg = calls.find((c) => c.args.includes('--dir'));
+        expect(pkg?.args).toEqual([
+            '--filter',
+            PROBE_GAME.pkg,
+            'exec',
+            'electron-builder',
+            '--dir',
+        ]);
+        // The bundle lands under <app>/release.
+        expect(files.has(path.join(tmpRoot, 'apps', PROBE_GAME.kebab, 'release'))).toBe(true);
+
+        // Ordering: install < unit < e2e < prod-build (build) < build:app < next build < package.
         const idx = (pred: (c: RecordedCall) => boolean): number => calls.findIndex(pred);
         expect(idx((c) => c.args[0] === 'install')).toBeLessThan(idx((c) => c === unit));
         expect(idx((c) => c === unit)).toBeLessThan(idx((c) => c === e2e));
+        expect(idx((c) => c === e2e)).toBeLessThan(idx((c) => c === prodBuild));
+        expect(idx((c) => c === prodBuild)).toBeLessThan(idx((c) => c === buildApp));
+        expect(idx((c) => c === buildApp)).toBeLessThan(idx((c) => c === nextBuild));
+        expect(idx((c) => c === nextBuild)).toBeLessThan(idx((c) => c === pkg));
 
         // The gate layered tarball overrides onto the CLI-emitted root (it no longer synthesizes
         // the root — the CLI emits package.json/pnpm-workspace.yaml/vitest/tsconfig; that is the
@@ -288,6 +327,38 @@ describe('verifyScaffold', () => {
 
         expect(result.ok).toBe(false);
         expect(result.failedStep).toBe('unit');
+        expect(removed).toContain(tmpRoot);
+    });
+
+    it('reports prod-build when the standalone tsc build fails (the refs rewrite regressed)', async () => {
+        const { fs, files, removed } = makeFakeFs();
+        const tmpRoot = TMP_ROOT;
+        const { run } = makeFakeRun(files, tmpRoot, (cmd, args) =>
+            args.join(' ') === `--filter ${PROBE_GAME.pkg} build`
+                ? { status: 2, stdout: '', stderr: 'tsc: cannot find referenced project' }
+                : undefined,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('prod-build');
+        expect(removed).toContain(tmpRoot);
+    });
+
+    it('reports package when the electron-builder --dir step fails', async () => {
+        const { fs, files, removed } = makeFakeFs();
+        const tmpRoot = TMP_ROOT;
+        const { run } = makeFakeRun(files, tmpRoot, (cmd, args) =>
+            args.includes('--dir')
+                ? { status: 1, stdout: '', stderr: 'electron-builder: icon not found' }
+                : undefined,
+        );
+
+        const result = await verifyScaffold(makeDeps(run, fs));
+
+        expect(result.ok).toBe(false);
+        expect(result.failedStep).toBe('package');
         expect(removed).toContain(tmpRoot);
     });
 

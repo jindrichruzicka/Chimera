@@ -24,6 +24,11 @@
  *   5. `pnpm install`                 — install the tarballs + toolchain into `<tmp>`
  *   6. `pnpm --filter <app> test`     — the generated app's UNIT smoke (manifest + screen render)
  *   7. `pnpm --filter <app> test:e2e` — the generated app's Electron BOOT-smoke
+ *   8. `pnpm --filter <app> build` + `build:app` — the PRODUCTION build: `tsc -p tsconfig.build.json`
+ *      (proves the standalone refs rewrite resolves the engine from `node_modules`) + the esbuild
+ *      main/preload bundles. This is what fails out-of-repo today (#816).
+ *   9. `next build` the renderer + an UNSIGNED `electron-builder --dir` — proves the #814 tokenised
+ *      packaging config produces a branded local app bundle from the standalone-emitted project.
  *
  * `--self-test` proves the gate bites: it drops the required renderer registration from
  * the freshly-scaffolded app (in the temp dir only — never the template) and asserts the
@@ -74,7 +79,15 @@ export interface VerifyScaffoldDeps {
     readonly repoRoot: string;
 }
 
-export type VerifyScaffoldStep = 'build' | 'pack' | 'scaffold' | 'install' | 'unit' | 'e2e';
+export type VerifyScaffoldStep =
+    | 'build'
+    | 'pack'
+    | 'scaffold'
+    | 'install'
+    | 'unit'
+    | 'e2e'
+    | 'prod-build'
+    | 'package';
 
 export interface VerifyScaffoldResult {
     readonly ok: boolean;
@@ -299,6 +312,51 @@ async function scaffoldPipeline(
     //    the shipped script behaviour.
     if (options.skipE2e !== true) {
         assertStepOk('e2e', runAppScript(deps, tmp, 'test:e2e'));
+    }
+
+    // 8. production build (#816). `build` runs `tsc -p tsconfig.build.json`: out-of-repo it only
+    //    succeeds because the standalone emit neutralised the template's monorepo `references` (the
+    //    engine now resolves from `node_modules`). `build:app` esbuild-bundles main/preload — the
+    //    EMITTED script self-sets `CHIMERA_VERIFY_PACK_NODE_MODULES`, so the host resolves from the
+    //    installed `@chimera-engine/electron`, not absent monorepo source.
+    deps.log('production-building the generated app (tsc + app bundle)…');
+    assertStepOk(
+        'prod-build',
+        deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build'], { cwd: tmp }),
+    );
+    assertStepOk(
+        'prod-build',
+        deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'build:app'], { cwd: tmp }),
+    );
+
+    // 9. package (#816). Export the Next renderer (populates `renderer/out`), then build an UNSIGNED
+    //    `electron-builder --dir` bundle from the standalone-emitted project. electron-builder
+    //    validates + consumes the per-game top-level `icon`, so a missing/invalid icon fails here.
+    //    `--dir` skips dmg/nsis/AppImage (no python, CI-feasible — signing stays out of scope, #813).
+    deps.log('packaging the generated app (electron-builder --dir, unsigned)…');
+    assertStepOk(
+        'package',
+        deps.run('pnpm', ['exec', 'next', 'build', `apps/${PROBE_GAME.kebab}/renderer`], {
+            cwd: tmp,
+        }),
+    );
+    // `exec electron-builder --dir` (NOT `run package -- --dir`): pnpm's `--` separator is forwarded
+    // to the script verbatim, so `run package -- --dir` becomes `electron-builder -- --dir` — yargs
+    // then treats `--dir` as a positional and electron-builder builds the DEFAULT targets (incl. the
+    // dmg, which shells out to python). `exec` passes `--dir` as a real flag → dir-only, python-free.
+    // It reads the same app `electron-builder.yml`; the app's `package` script stays the real
+    // distributable flow.
+    assertStepOk(
+        'package',
+        deps.run('pnpm', ['--filter', PROBE_GAME.pkg, 'exec', 'electron-builder', '--dir'], {
+            cwd: tmp,
+        }),
+    );
+    if (!(await deps.fs.exists(path.join(appDir, 'release')))) {
+        throw new VerifyScaffoldStepError(
+            'package',
+            'verify:scaffold: step "package" produced no <app>/release bundle',
+        );
     }
 }
 

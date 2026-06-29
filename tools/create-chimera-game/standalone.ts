@@ -183,6 +183,51 @@ export function rewriteAppPackageForStandalone(
 }
 
 /**
+ * Neutralise the scaffolded app's `tsconfig.build.json` `references` for a STANDALONE build.
+ *
+ * In the monorepo the app's composite build references its engine deps as sibling projects
+ * (`../../simulation/tsconfig.build.json`, …) so `tsc -b` orders the graph (Invariant #1). OUTSIDE
+ * the monorepo those directories do not exist — `tsc -p tsconfig.build.json` would error TS6053
+ * ("file not found") / TS6306 on every reference. The installed `@chimera-engine/*` packages ship
+ * their own built `.d.ts`, so the app's production typecheck resolves the engine through ordinary
+ * `node_modules` resolution with NO project references. This empties the `references` array to `[]`,
+ * leaving every comment + the composite `compilerOptions` (which are still valid with no references)
+ * intact.
+ *
+ * Pure regex splice (the template is JSONC — comments — so it cannot be `JSON.parse`d). The
+ * `references` value holds only `{ "path": … }` objects (no nested `[`), so a non-greedy match to
+ * the first `]` is the array close. Idempotent: an already-emptied `[]` re-matches to `[]`, and a
+ * config with no `references` key is left unchanged.
+ */
+export function rewriteAppTsconfigBuildForStandalone(rawTsconfig: string): string {
+    return rawTsconfig.replace(/"references"\s*:\s*\[[\s\S]*?\]/, '"references": []');
+}
+
+/**
+ * Neutralise the scaffolded app's `e2e/tsconfig.json` `paths` for a STANDALONE run.
+ *
+ * The Playwright runner resolves bare `@chimera-engine/*` specifiers via tsconfig `paths` (it has no
+ * vite/webpack alias hook). In the monorepo those map onto each engine package's built `dist`
+ * (`simulation/dist/*`, …) — repo-root directories that do not exist standalone. Installed
+ * standalone, the engine packages live in the app's own `node_modules`, so the runner resolves them
+ * by ordinary node-resolution from `apps/<game>/e2e/`; the monorepo dist mappings must go. The
+ * game's OWN path (`@chimera-engine/<game>` glob → `apps/<game>` glob) is already standalone-valid
+ * (the app source lives at the standalone root's `apps/` dir) and is kept, alongside `baseUrl` +
+ * comments.
+ *
+ * Pure regex splice. Each engine entry's target is a monorepo `dist` path, so we drop every
+ * `@chimera-engine` line whose target array contains `dist`; the game entry's target (`apps/<game>`)
+ * carries no `dist`, so it survives — and it is the last entry (no trailing comma), so the object
+ * stays valid JSONC. Idempotent: once the `dist` entries are gone, a re-run matches nothing.
+ */
+export function rewriteE2eTsconfigForStandalone(rawTsconfig: string): string {
+    return rawTsconfig.replace(
+        /^[ \t]*"@chimera-engine\/[^"]*"\s*:\s*\[[^\]]*dist[^\]]*\],?\n/gm,
+        '',
+    );
+}
+
+/**
  * The unit-arm vitest config the generated app's `test` script loads via
  * `--config ../../vitest.config.mts`. It maps the app's OWN relative `.js` smoke imports onto
  * co-located TS source (never node_modules), and deliberately does NOT remap bare `@chimera-engine/*`

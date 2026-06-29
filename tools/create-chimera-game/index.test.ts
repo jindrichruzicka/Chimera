@@ -85,6 +85,42 @@ describe('scaffoldGame', () => {
             'templates/blank/screens/__GamePascal__Board.tsx',
             'export function __GamePascal__Board() { return null; }',
         );
+        // The build + e2e tsconfigs carry monorepo-relative refs/paths (workspace-correct); the
+        // standalone emit must neutralise them (#816). JSONC with comments — emitted verbatim then
+        // rewritten by string-splice.
+        await write(
+            'templates/blank/tsconfig.build.json',
+            [
+                '{',
+                '    // Composite build for this @chimera-engine/<game> consumer app.',
+                '    "extends": "../../tsconfig.json",',
+                '    "compilerOptions": { "composite": true, "outDir": "./dist" },',
+                '    "references": [',
+                '        { "path": "../../simulation/tsconfig.build.json" },',
+                '        { "path": "../../electron/tsconfig.build.json" }',
+                '    ],',
+                '    "include": ["**/*.ts", "**/*.tsx"]',
+                '}',
+                '',
+            ].join('\n'),
+        );
+        await write(
+            'templates/blank/e2e/tsconfig.json',
+            [
+                '{',
+                '    "extends": "../../../tsconfig.json",',
+                '    "compilerOptions": {',
+                '        "baseUrl": "../../..",',
+                '        "paths": {',
+                '            "@chimera-engine/simulation/*": ["simulation/dist/*"],',
+                '            "@chimera-engine/electron/*": ["electron/dist/*"],',
+                '            "@chimera-engine/__game_kebab__/*": ["apps/__game_kebab__/*"]',
+                '        }',
+                '    }',
+                '}',
+                '',
+            ].join('\n'),
+        );
         await write('templates/blank/node_modules/junk.js', 'module.exports = {};');
 
         // A SECOND template, used to prove template parametrisation with no CLI code change.
@@ -335,6 +371,25 @@ describe('scaffoldGame', () => {
             expect(appPkg.name).toBe('@chimera-engine/my-card-game');
             expect(appPkg.dependencies['@chimera-engine/simulation']).toMatch(/^\^\d+\.\d+\.\d+$/);
             expect(JSON.stringify(appPkg)).not.toContain('workspace:*');
+
+            // The app's build/e2e tsconfigs no longer reference monorepo sibling packages (#816):
+            // `tsc` / Playwright resolve the engine from node_modules instead.
+            const appTsconfigBuild = await readFile(
+                path.join(result.appDir, 'tsconfig.build.json'),
+                'utf8',
+            );
+            expect(appTsconfigBuild).not.toContain('../../simulation/tsconfig.build.json');
+            expect(appTsconfigBuild).not.toContain('../../electron/tsconfig.build.json');
+            expect(appTsconfigBuild).toContain('"references": []');
+
+            const appE2eTsconfig = await readFile(
+                path.join(result.appDir, 'e2e', 'tsconfig.json'),
+                'utf8',
+            );
+            expect(appE2eTsconfig).not.toContain('simulation/dist');
+            expect(appE2eTsconfig).not.toContain('electron/dist');
+            // The game's own path (standalone-valid) is kept.
+            expect(appE2eTsconfig).toContain('apps/my-card-game');
 
             // The monorepo root is untouched: no dependency added, no tsconfig reference.
             expect(await readFile(path.join(repoRoot, 'package.json'), 'utf8')).toBe(pkgBefore);

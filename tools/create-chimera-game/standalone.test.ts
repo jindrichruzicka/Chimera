@@ -6,6 +6,8 @@ import {
     buildStandaloneVitestConfig,
     buildStandaloneWorkspaceYaml,
     rewriteAppPackageForStandalone,
+    rewriteAppTsconfigBuildForStandalone,
+    rewriteE2eTsconfigForStandalone,
 } from './standalone';
 
 /**
@@ -145,6 +147,101 @@ describe('rewriteAppPackageForStandalone', () => {
             engineRanges: {},
             nodeModulesEnv: 'node_modules',
         });
+        expect(twice).toBe(once);
+    });
+});
+
+describe('rewriteAppTsconfigBuildForStandalone', () => {
+    // Mirrors the blank template's tsconfig.build.json: a leading comment block, the composite
+    // compilerOptions, the monorepo-relative `references`, and an `exclude` after it.
+    const raw = `{
+    // Composite \`tsc -b\` build for this @chimera-engine/<game> consumer app.
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "composite": true,
+        "outDir": "./dist"
+    },
+    "references": [
+        { "path": "../../simulation/tsconfig.build.json" },
+        { "path": "../../ai/tsconfig.build.json" },
+        { "path": "../../renderer/tsconfig.build.json" },
+        { "path": "../../electron/tsconfig.build.json" }
+    ],
+    "include": ["**/*.ts", "**/*.tsx"],
+    "exclude": ["node_modules", "dist", "electron/**", "e2e/**"]
+}
+`;
+
+    it('empties the monorepo references so tsc resolves the engine from node_modules', () => {
+        const out = rewriteAppTsconfigBuildForStandalone(raw);
+        // No monorepo-relative project references survive…
+        expect(out).not.toContain('../../simulation/tsconfig.build.json');
+        expect(out).not.toContain('../../electron/tsconfig.build.json');
+        expect(out).not.toMatch(/"references":\s*\[\s*\{/);
+        expect(out).toContain('"references": []');
+    });
+
+    it('preserves the surrounding compilerOptions, comments, include + exclude', () => {
+        const out = rewriteAppTsconfigBuildForStandalone(raw);
+        expect(out).toContain('// Composite `tsc -b` build');
+        expect(out).toContain('"composite": true');
+        expect(out).toContain('"outDir": "./dist"');
+        expect(out).toContain('"include": ["**/*.ts", "**/*.tsx"]');
+        expect(out).toContain('"exclude": ["node_modules", "dist", "electron/**", "e2e/**"]');
+    });
+
+    it('is idempotent — re-running leaves an already-emptied references untouched', () => {
+        const once = rewriteAppTsconfigBuildForStandalone(raw);
+        const twice = rewriteAppTsconfigBuildForStandalone(once);
+        expect(twice).toBe(once);
+    });
+});
+
+describe('rewriteE2eTsconfigForStandalone', () => {
+    // Mirrors the blank template's e2e/tsconfig.json: a comment block, baseUrl, and the
+    // monorepo-relative engine `paths` plus the standalone-valid game path (last, no comma).
+    const raw = `{
+    // Playwright-runner resolution shim ONLY.
+    "extends": "../../../tsconfig.json",
+    "compilerOptions": {
+        "baseUrl": "../../..",
+        "paths": {
+            "@chimera-engine/simulation/*": ["simulation/dist/*"],
+            "@chimera-engine/ai/*": ["ai/dist/*"],
+            "@chimera-engine/networking": ["networking/dist/index.d.ts"],
+            "@chimera-engine/networking/*": ["networking/dist/*"],
+            "@chimera-engine/renderer/*": ["renderer/dist/*"],
+            "@chimera-engine/electron/*": ["electron/dist/*"],
+            "@chimera-engine/verify-scaffold-probe/*": ["apps/verify-scaffold-probe/*"]
+        }
+    }
+}
+`;
+
+    it('drops the monorepo engine paths (the dist mappings)', () => {
+        const out = rewriteE2eTsconfigForStandalone(raw);
+        for (const pkg of ['simulation', 'ai', 'networking', 'renderer', 'electron']) {
+            expect(out).not.toContain(`${pkg}/dist`);
+        }
+        // No monorepo `*/dist/*` path target survives.
+        expect(out).not.toContain('dist/*');
+    });
+
+    it('keeps the standalone-valid game path + baseUrl + comments', () => {
+        const out = rewriteE2eTsconfigForStandalone(raw);
+        expect(out).toContain(
+            '"@chimera-engine/verify-scaffold-probe/*": ["apps/verify-scaffold-probe/*"]',
+        );
+        expect(out).toContain('"baseUrl": "../../.."');
+        expect(out).toContain('// Playwright-runner resolution shim');
+        // The result must still parse as JSON once comments are stripped (no dangling comma).
+        const stripped = out.replace(/^\s*\/\/.*$/gm, '');
+        expect(() => JSON.parse(stripped) as unknown).not.toThrow();
+    });
+
+    it('is idempotent — re-running leaves the engine-stripped paths untouched', () => {
+        const once = rewriteE2eTsconfigForStandalone(raw);
+        const twice = rewriteE2eTsconfigForStandalone(once);
         expect(twice).toBe(once);
     });
 });
