@@ -412,6 +412,65 @@ export const engineEndTurnDefinition: ActionDefinition<EngineEndTurnPayload> = {
     },
 } satisfies ActionDefinition<EngineEndTurnPayload>;
 
+// ─── match-boundary snapshot reset (game-agnostic) ───────────────────────────
+//
+// The engine owns `BaseGameSnapshot`. Games bolt their own match-scoped fields
+// onto the snapshot at runtime (e.g. tactics' `playerStamina`); those fields are
+// NOT part of `BaseGameSnapshot`. At a match boundary — `engine:start_game`
+// (entering a match) and `engine:return_to_lobby` (ending one) — the new match
+// MUST start from a clean engine-owned base: the prior match's game-specific
+// state must never ride forward, or e.g. spent stamina leaks into the next game.
+// The engine cannot name a game's fields, so it instead keeps ONLY its own
+// declared fields and drops the rest (games re-derive their start state from the
+// absence of their ledger). Contract: only `BaseGameSnapshot` fields survive a
+// match boundary; game-specific extension fields are match-scoped.
+
+const BASE_SNAPSHOT_KEYS = [
+    'tick',
+    'seed',
+    'players',
+    'entities',
+    'phase',
+    'events',
+    'turnClock',
+    'turnNumber',
+    'hostPlayerId',
+    'timers',
+    'gameResult',
+    'sceneId',
+    'sceneDefaultScreen',
+    'sceneTransition',
+    'setup',
+    'committedTurns',
+] as const satisfies readonly (keyof BaseGameSnapshot)[];
+
+// Exhaustiveness guard: resolves to `never` unless every `BaseGameSnapshot` key
+// is listed in `BASE_SNAPSHOT_KEYS`. Adding a field to the interface without
+// listing it here then fails to compile (`true` is not assignable to `never`),
+// so the allowlist can never silently drift and drop an engine-owned field.
+type UnlistedSnapshotKey = Exclude<keyof BaseGameSnapshot, (typeof BASE_SNAPSHOT_KEYS)[number]>;
+const _allSnapshotKeysListed: UnlistedSnapshotKey extends never ? true : never = true;
+void _allSnapshotKeysListed;
+
+/**
+ * Project `state` down to only the engine-owned `BaseGameSnapshot` fields,
+ * dropping any game-specific extension fields a game added at runtime. Pure;
+ * never mutates `state`. Optional keys whose value is `undefined` are omitted to
+ * satisfy `exactOptionalPropertyTypes`.
+ */
+function baseSnapshotOnly(state: Readonly<BaseGameSnapshot>): BaseGameSnapshot {
+    const out: Partial<BaseGameSnapshot> = {};
+    for (const key of BASE_SNAPSHOT_KEYS) {
+        const value = state[key];
+        if (value !== undefined) {
+            // The key/value types are correlated through the union but TypeScript
+            // cannot track that across a loop, so write through an index signature.
+            (out as Record<string, unknown>)[key] = value;
+        }
+    }
+    return out as BaseGameSnapshot;
+}
+
 // ─── engine:start_game ──────────────────────────────────────────────────────
 
 /**
@@ -500,7 +559,10 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
                   };
 
         const nextState: BaseGameSnapshot = {
-            ...state,
+            // Start from the engine-owned base only: drop any game-specific
+            // extension state carried from a prior match (e.g. tactics'
+            // `playerStamina`) so the new match begins fresh (§match boundary).
+            ...baseSnapshotOnly(state),
             tick: state.tick + 1,
             players: nextPlayers,
             entities: payload.initialEntities ?? state.entities,
@@ -529,7 +591,10 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
  * it does NOT set `gameResult` and must NOT trigger any game-end path.
  *
  * The reducer resets the match while preserving the lobby roster (`players`),
- * `seed`, `hostPlayerId`, and `setup` so a fresh match can be started again.
+ * `seed`, `hostPlayerId`, and `setup` so a fresh match can be started again. It
+ * also drops any game-specific extension state (non-`BaseGameSnapshot` fields a
+ * game added at runtime, e.g. tactics' `playerStamina`) so the lobby snapshot is
+ * clean and the next match cannot inherit the abandoned match's values.
  */
 export const engineReturnToLobbyDefinition: ActionDefinition<EngineReturnToLobbyPayload> = {
     type: 'engine:return_to_lobby',
@@ -546,14 +611,16 @@ export const engineReturnToLobbyDefinition: ActionDefinition<EngineReturnToLobby
     },
 
     reduce(state: Readonly<BaseGameSnapshot>): BaseGameSnapshot {
-        // Drop `turnClock` via rest-destructure: `exactOptionalPropertyTypes`
-        // forbids assigning `undefined` to an optional property, so the key must
-        // be omitted rather than set.
-        const { turnClock: _turnClock, ...rest } = state;
+        // Project to engine-owned base fields only — this drops any game-specific
+        // extension state (e.g. tactics' `playerStamina`) so it cannot ride into
+        // the next match. Then drop `turnClock` via rest-destructure:
+        // `exactOptionalPropertyTypes` forbids assigning `undefined` to an
+        // optional property, so the key must be omitted rather than set.
+        const { turnClock: _turnClock, ...lobbyBase } = baseSnapshotOnly(state);
         return {
-            // `rest` preserves the lobby roster, seed, hostPlayerId, and setup so a
-            // new match can be started from the same lobby.
-            ...rest,
+            // `lobbyBase` preserves the lobby roster, seed, hostPlayerId, and setup
+            // so a new match can be started from the same lobby.
+            ...lobbyBase,
             tick: state.tick + 1,
             phase: gamePhase('lobby'),
             sceneId: sceneId('engine:lobby'),

@@ -5,6 +5,8 @@ import {
 } from '@chimera-engine/tactics/constants.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
+import { engineStartGameDefinition } from '@chimera-engine/simulation/engine/EngineActions.js';
+import { createRng } from '@chimera-engine/simulation/engine/DeterministicRng.js';
 import type { TacticsStaminaEntry, TacticsSnapshot } from './stamina.js';
 import { consumeStamina, readStamina, withSeededStamina } from './stamina.js';
 
@@ -179,5 +181,30 @@ describe('withSeededStamina', () => {
         const seeded = withSeededStamina(makeSnapshot(), [P1], 1_000);
 
         expect(readStamina(seeded, P1)).toEqual({ current: 1_000, max: 1_000 });
+    });
+});
+
+describe('stamina resets across a match boundary (engine:start_game)', () => {
+    it('starts a new match at full stamina even when the prior match spent it all', () => {
+        // The prior match left P1 with an empty, stale ledger. `refreshedTurn` is
+        // high enough that readStamina's own start-of-turn refresh (turnNumber >
+        // refreshedTurn) would NOT re-fill it — so the only thing that yields full
+        // stamina is the engine clearing the ledger at the match boundary.
+        const ended = makeSnapshot({
+            turnNumber: 5,
+            playerStamina: { [P1]: { current: 0, max: 3, refreshedTurn: 5 } },
+        });
+
+        const next = engineStartGameDefinition.reduce(
+            ended,
+            { playerIds: [P1, P2] },
+            P1,
+            { rng: createRng(ended.seed, ended.tick), dispatchDepth: 0 },
+        );
+
+        expect(readStamina(next, P1)).toEqual({
+            current: TACTICS_MAX_STAMINA,
+            max: TACTICS_MAX_STAMINA,
+        });
     });
 });

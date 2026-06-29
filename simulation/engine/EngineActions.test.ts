@@ -921,6 +921,51 @@ describe('engine:start_game definition', () => {
         ).not.toThrow();
         expect(frozen).not.toHaveProperty('setup');
     });
+
+    // ─── game-extension match state must not survive a match boundary ────────
+    //
+    // A game (e.g. tactics' `playerStamina`) bolts non-`BaseGameSnapshot` fields
+    // onto the snapshot at runtime. They are match-scoped by contract: a new match
+    // must start from a clean engine-owned base and never inherit the prior
+    // match's values (the "ending a game shall not preserve game-state values"
+    // rule). The engine drops them without naming any game.
+
+    it('reduce drops game-specific extension fields carried from a prior match', () => {
+        const snapshot = {
+            ...makeSnapshot(hostId),
+            playerStamina: { [hostId]: { current: 0, max: 3, refreshedTurn: 5 } },
+            someOtherGameField: 'stale',
+        } as BaseGameSnapshot;
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next).not.toHaveProperty('playerStamina');
+        expect(next).not.toHaveProperty('someOtherGameField');
+    });
+
+    it('reduce preserves the engine-owned BaseGameSnapshot fields it does not reset', () => {
+        const snapshot = {
+            ...makeSnapshot(hostId),
+            seed: 777,
+            turnNumber: 4,
+        } as BaseGameSnapshot;
+
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId] },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.seed).toBe(777);
+        expect(next.turnNumber).toBe(4);
+        expect(next.hostPlayerId).toBe(hostId);
+    });
 });
 
 // ─── engine:return_to_lobby definition ──────────────────────────────────────
@@ -1015,6 +1060,20 @@ describe('engine:return_to_lobby definition', () => {
         expect(snapshot.entities).toEqual({ [unit]: { id: unit } });
         expect(snapshot.turnClock).toEqual({ activePlayerId: hostId, deadlineMs: 30_000 });
         expect(snapshot.gameResult).toEqual({ winnerIds: [hostId] });
+    });
+
+    it('reduce drops game-specific extension fields so the lobby snapshot is clean', () => {
+        // Abandoning/finishing a match must not leave a game's match-scoped
+        // extension state (e.g. tactics' `playerStamina`) lingering on the lobby
+        // snapshot, where it would otherwise ride into the next match.
+        const snapshot = {
+            ...makePlayingSnapshot(),
+            playerStamina: { [hostId]: { current: 0, max: 3, refreshedTurn: 5 } },
+        } as BaseGameSnapshot;
+
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+
+        expect(next).not.toHaveProperty('playerStamina');
     });
 });
 
