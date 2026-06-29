@@ -1,0 +1,85 @@
+# __Game Title__ — Electron app packaging config (scaffolded from the create-chimera-game
+# blank template; the reference app's config established this layout in M9 / F67, #813).
+#
+# Produces a MINIMAL, UNSIGNED local app bundle on the host platform, branded with THIS
+# game's own icon + app identity. The identity fields below (appId, productName) and the
+# icon are tokenised per game, so the bundle carries your game's brand, not the engine's.
+#
+# OUT OF SCOPE: code signing, notarisation, and any CI release matrix. The bundle is
+# unsigned (mac `identity: null`).
+#
+# This config lives in the consumer app, never in @chimera-engine/electron, which stays
+# game-agnostic (Invariants #94/#106/#107). It must not embed the debug-mode env flag
+# (Invariant #27 — the invariants gate scans this file for it).
+
+appId: com.chimera.__game_kebab__
+productName: __GamePascal__
+
+# The app's own branding icon — a single committed PNG under the game's asset directory
+# (Invariant #97). electron-builder generates the platform formats (.icns / .ico) from it,
+# so one file drives the whole installer set. The SAME PNG is the runtime window/dock icon
+# (manifest `icon`, resolved to apps/__game_kebab__/assets/icons/icon.png), so replacing
+# assets/icons/icon.png rebrands the bundle AND the running window in one step.
+icon: assets/icons/icon.png
+
+directories:
+  # Installers/bundles go to release/ — NOT dist/, which holds the esbuild-bundled
+  # main/preload JS (and is gitignored separately); writing here would clobber it.
+  output: release
+
+# Plain directory layout (no asar): the host reads game content via a directory loader
+# (readdir) and serves the renderer through a custom protocol — both do ordinary filesystem
+# reads, so an unpacked app "just works" exactly as in dev.
+asar: false
+
+# The app has NO native node modules: dist/electron/main.js and dist/preload/api.js are
+# fully esbuild-bundled (only `electron` + node builtins stay external). Skip
+# @electron/rebuild — it has nothing to rebuild and would otherwise walk the pnpm virtual
+# store and fail.
+npmRebuild: false
+
+# Packaged file layout is dictated by the host's resolveRuntimePaths
+# (@chimera-engine/electron), which walks UP from the main bundle's __dirname:
+#   preload   = __dirname/../preload/api.js
+#   renderer  = __dirname/../../renderer/out/index.html
+#   content   = __dirname/../../apps/<gameId>/data   (gameAssetsRoot = ../../apps)
+#   assets    = __dirname/../../apps/<gameId>/assets
+# So assets/ (and, once you add content, data/) are remapped INTO an apps/__game_kebab__/
+# subtree. `files` (not extraResources) is required — extraResources lands one level above
+# the app root, unreachable by the ../../ walk.
+files:
+  - dist/electron/main.js
+  - dist/preload/api.js
+  - from: renderer/out
+    to: renderer/out
+  - from: assets
+    to: apps/__game_kebab__/assets
+  # When your game ships content, add its data dir here so the host's content loader finds
+  # it (it must match apps/<gameId>/data):
+  #   - from: data
+  #     to: apps/__game_kebab__/data
+  # Default RUNTIME window icon fallback: the bundled host's createMainWindow (resolveAppIcon,
+  # @chimera-engine/electron) falls back to the default Chimera PNG at <app>/assets/icons/
+  # chimera.png when a game declares no manifest `icon`. The blank template DOES declare one
+  # (see manifest.ts), so this is only a safety net; ship the engine's icon set there so a
+  # later manifest change that drops the override never logs an unhandled rejection. `from`
+  # is a DIRECTORY (a file set); sourced from the installed @chimera-engine/electron package.
+  - from: node_modules/@chimera-engine/electron/assets/icons
+    to: assets/icons
+
+mac:
+  category: public.app-category.games
+  identity: null # unsigned — code signing is OUT OF SCOPE
+  target:
+    - dir
+    - dmg
+
+win:
+  target:
+    - nsis
+
+linux:
+  category: Game
+  target:
+    - dir
+    - AppImage

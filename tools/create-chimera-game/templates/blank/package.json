@@ -6,6 +6,7 @@
     "scripts": {
         "build": "tsc -p tsconfig.build.json",
         "build:app": "tsx electron/build-main.ts",
+        "package": "electron-builder",
         "test": "vitest run --config ../../vitest.config.mts --dir .",
         "test:e2e": "playwright test --config=e2e/playwright.config.ts --project=electron-e2e",
         "lint": "eslint ."
@@ -15,5 +16,9 @@
         "@chimera-engine/ai": "workspace:*",
         "@chimera-engine/renderer": "workspace:*",
         "@chimera-engine/electron": "workspace:*"
+    },
+    "devDependencies": {
+        "electron": "^33.2.0",
+        "electron-builder": "^25.1.8"
     }
 }

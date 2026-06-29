@@ -19,7 +19,9 @@ describe('__gameCamel__Manifest', () => {
         expect(__gameCamel__Manifest.realtime).toBe(false);
     });
 
-    it('does not override the app icon (defaults to the Chimera icon)', () => {
-        expect(__gameCamel__Manifest.icon).toBeUndefined();
+    it('brands the app with its own committed icon under the game asset dir', () => {
+        // Renderer-relative path the F67 resolver maps to apps/<gameId>/assets/icons/icon.png;
+        // electron-builder reuses the same PNG for the distributable bundle icon.
+        expect(__gameCamel__Manifest.icon).toBe('icons/icon.png');
     });
 });

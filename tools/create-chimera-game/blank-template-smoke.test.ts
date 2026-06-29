@@ -60,6 +60,48 @@ describe('blank template smoke harness', () => {
         expect(pkg.scripts['test:e2e']).toContain('playwright test');
     });
 
+    it('ships the electron-builder packaging script + deps in the template package.json (#814)', async () => {
+        const pkg = JSON.parse(await read('package.json')) as {
+            scripts: Record<string, string>;
+            devDependencies?: Record<string, string>;
+        };
+        expect(pkg.scripts['package']).toBe('electron-builder');
+        // electron-builder + electron at the app level so `pnpm --filter <game> run package`
+        // resolves in both the workspace and standalone install modes (mirrors apps/tactics).
+        expect(pkg.devDependencies?.['electron-builder']).toBeDefined();
+        expect(pkg.devDependencies?.['electron']).toBeDefined();
+    });
+
+    it('ships a tokenised electron-builder packaging config mirroring apps/tactics (#814)', async () => {
+        const yml = await read('electron-builder.yml');
+        // Identity fields are tokenised so each scaffolded game gets its own app identity.
+        expect(yml).toContain('appId: com.chimera.__game_kebab__');
+        expect(yml).toContain('productName: __GamePascal__');
+        // The bundle + runtime icon is the game's own committed placeholder (electron-builder
+        // generates .icns/.ico from this single PNG).
+        expect(yml).toContain('icon: assets/icons/icon.png');
+        // The assets file set is remapped under the game's own apps/<id> subtree so the host's
+        // resolveRuntimePaths (../../apps/<gameId>/assets) finds it in the bundle.
+        expect(yml).toContain('to: apps/__game_kebab__/assets');
+    });
+
+    it('ships a committed per-game placeholder icon under the game asset dir, not renderer/public (Invariant #97)', async () => {
+        const png = await readFile(path.join(blankTemplateDir, 'assets', 'icons', 'icon.png'));
+        // PNG magic number — a real raster placeholder, not a stub text file.
+        const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+        expect(png.subarray(0, 8).equals(pngSignature)).toBe(true);
+        // Invariant #97: game-owned, NOT under renderer/public.
+        await expect(
+            readFile(path.join(blankTemplateDir, 'renderer', 'public', 'icon.png')),
+        ).rejects.toThrow();
+    });
+
+    it('declares a per-game icon override in the manifest, resolvable under the asset dir (#814)', async () => {
+        const manifest = await read('manifest.ts');
+        // Renderer-relative path the F67 resolver maps to apps/<gameId>/assets/icons/icon.png.
+        expect(manifest).toContain("icon: 'icons/icon.png'");
+    });
+
     it('names no model game in any smoke file (tokens only)', async () => {
         const files = [
             'manifest.test.ts',
@@ -70,6 +112,7 @@ describe('blank template smoke harness', () => {
             'e2e/global-setup.ts',
             'e2e/playwright.config.ts',
             'e2e/tsconfig.json',
+            'electron-builder.yml',
         ];
         for (const rel of files) {
             expect((await read(rel)).toLowerCase()).not.toContain('tactics');

@@ -74,11 +74,15 @@ export interface BuildStandaloneRootManifestParams {
 
 /**
  * The standalone workspace-root `package.json`. Declares the toolchain, optionally forces
- * `@chimera-engine/*` onto the gate's tarballs, and stubs `build:packages` to a no-op — the generated
+ * `@chimera-engine/*` onto the gate's tarballs, stubs `build:packages` to a no-op — the generated
  * app's e2e `global-setup` runs `pnpm build:packages` from this root, but the engine packages
  * arrive prebuilt (npm or tarball), so it must not (and cannot) run the engine's real `tsc`
- * build here. The `onlyBuiltDependencies` allowlist lets pnpm run electron's + esbuild's install
- * scripts so the e2e arm has a usable Electron binary + esbuild platform binary.
+ * build here — and carries a `package` script: the standalone twin of the monorepo's
+ * `package:<game>` distributable flow (build the Next renderer + app bundle, then run the app's
+ * electron-builder). It omits `build:packages` (the engine is prebuilt) and drives the app by
+ * filter; `electron-builder` rides along from the app's own devDependencies. The
+ * `onlyBuiltDependencies` allowlist lets pnpm run electron's + esbuild's install scripts so the
+ * e2e arm has a usable Electron binary + esbuild platform binary.
  */
 export function buildStandaloneRootManifest(
     params: BuildStandaloneRootManifestParams,
@@ -89,7 +93,13 @@ export function buildStandaloneRootManifest(
         version: '0.0.0',
         private: true,
         devDependencies: { ...toolchainDeps },
-        scripts: { 'build:packages': 'node -e ""' },
+        scripts: {
+            'build:packages': 'node -e ""',
+            package:
+                `next build apps/${name}/renderer && ` +
+                `pnpm --filter @chimera-engine/${name} build:app && ` +
+                `pnpm --filter @chimera-engine/${name} run package`,
+        },
         pnpm: {
             ...(overrides !== undefined ? { overrides: { ...overrides } } : {}),
             onlyBuiltDependencies: ['electron', 'esbuild'],

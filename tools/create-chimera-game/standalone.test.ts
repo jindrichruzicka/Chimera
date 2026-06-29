@@ -52,6 +52,13 @@ describe('buildStandaloneRootManifest', () => {
         // arrive prebuilt), never the engine's real build.
         expect(manifest.scripts['build:packages']).toBeDefined();
         expect(manifest.scripts['build:packages']).not.toContain('tsc');
+        // The standalone root carries the per-game packaging flow (the standalone twin of the
+        // monorepo's `package:<game>`): build the renderer + app bundle, then electron-builder.
+        // It omits `build:packages` (the engine arrives prebuilt) and drives the app by filter.
+        expect(manifest.scripts['package']).toContain('next build apps/my-game/renderer');
+        expect(manifest.scripts['package']).toContain('@chimera-engine/my-game build:app');
+        expect(manifest.scripts['package']).toContain('@chimera-engine/my-game run package');
+        expect(manifest.scripts['package']).not.toContain('build:packages');
     });
 
     it('carries the supplied pnpm.overrides for the gate tarball-resolved form', () => {

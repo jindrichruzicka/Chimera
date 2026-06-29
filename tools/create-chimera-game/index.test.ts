@@ -203,6 +203,21 @@ describe('scaffoldGame', () => {
         });
     });
 
+    it('wires a per-game packaging script into root package.json (workspace mode)', async () => {
+        // F67/#814: a scaffolded app inherits the same package-from-monorepo flow as
+        // apps/tactics' root `package:tactics` — build the packages + renderer + app bundle,
+        // then run the app's electron-builder. The script is tokenised on the kebab name.
+        await scaffoldGame({ repoRoot, name: 'My Card Game' });
+
+        const pkg = await readRootPkg();
+        const script = pkg.scripts['package:my-card-game'];
+        expect(script).toBeDefined();
+        expect(script).toContain('pnpm build:packages');
+        expect(script).toContain('next build apps/my-card-game/renderer');
+        expect(script).toContain('pnpm --filter @chimera-engine/my-card-game build:app');
+        expect(script).toContain('pnpm --filter @chimera-engine/my-card-game run package');
+    });
+
     it('resolves an arbitrary --template id with no CLI code change', async () => {
         const result = await scaffoldGame({ repoRoot, name: 'Space Duel', template: 'other' });
 
@@ -308,6 +323,10 @@ describe('scaffoldGame', () => {
                 await readFile(path.join(outputRoot, 'tsconfig.json'), 'utf8'),
             );
             expect(rootTsconfig.compilerOptions.strict).toBe(true);
+            // The standalone root carries the per-game packaging flow too (#814).
+            expect(rootPkg.scripts.package).toContain(
+                'pnpm --filter @chimera-engine/my-card-game run package',
+            );
 
             // The app's @chimera-engine/* deps are rewritten onto published ranges — no workspace:* survives.
             const appPkg = JSON.parse(

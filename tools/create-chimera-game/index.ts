@@ -156,9 +156,11 @@ async function collectFiles(dir: string, segments: string[] = []): Promise<strin
 }
 
 /**
- * Add `@chimera-engine/<kebab>` to the root `package.json` dependencies (kept alphabetically sorted)
- * and append the per-app `tsc --noEmit` line to the `typecheck` script — matching how
- * `apps/tactics` is wired. `package.json` is plain JSON, so it is parsed and reserialised.
+ * Add `@chimera-engine/<kebab>` to the root `package.json` dependencies (kept alphabetically sorted),
+ * append the per-app `tsc --noEmit` line to the `typecheck` script, and register a per-game
+ * `package:<kebab>` script — matching how `apps/tactics` is wired (deps + typecheck + the
+ * `package:tactics` build-and-package flow). `package.json` is plain JSON, so it is parsed and
+ * reserialised.
  */
 async function wireRootPackageJson(repoRoot: string, kebab: string): Promise<void> {
     const pkgPath = path.join(repoRoot, 'package.json');
@@ -180,6 +182,15 @@ async function wireRootPackageJson(repoRoot: string, kebab: string): Promise<voi
     ) {
         pkg.scripts['typecheck'] = `${pkg.scripts['typecheck']} && ${typecheckLine}`;
     }
+
+    // The per-game distributable flow, mirroring the root `package:tactics`: rebuild the engine
+    // packages, build the app's Next renderer, bundle main/preload, then run electron-builder.
+    // `??=` keeps it idempotent — a re-scaffold never clobbers a hand-edited script.
+    pkg.scripts ??= {};
+    pkg.scripts[`package:${kebab}`] ??=
+        `pnpm build:packages && next build apps/${kebab}/renderer && ` +
+        `pnpm --filter @chimera-engine/${kebab} build:app && ` +
+        `pnpm --filter @chimera-engine/${kebab} run package`;
 
     await writeFile(pkgPath, `${JSON.stringify(pkg, null, 4)}\n`, 'utf8');
 }
