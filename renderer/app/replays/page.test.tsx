@@ -184,7 +184,9 @@ describe('ReplaysPage', () => {
         expect(push).not.toHaveBeenCalled();
     });
 
-    it('opens a perspective replay by routing with kind=perspective', async () => {
+    it('opens a perspective replay by routing with kind=perspective, carrying the active gameId', async () => {
+        // The active `?gameId=` (set in beforeEach) must ride along onto the player
+        // route — otherwise leaving the replay drops back to the engine-default menu.
         installBridge({ perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_PATH])) });
 
         render(<ReplaysPage />);
@@ -195,7 +197,7 @@ describe('ReplaysPage', () => {
         await userEvent.click(openButton);
 
         expect(push).toHaveBeenCalledWith(
-            `/replays/player/?path=${encodeURIComponent(PERSPECTIVE_PATH)}&kind=perspective`,
+            `/replays/player/?path=${encodeURIComponent(PERSPECTIVE_PATH)}&kind=perspective&gameId=tactics`,
         );
     });
 });

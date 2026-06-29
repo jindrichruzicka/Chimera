@@ -195,12 +195,10 @@ describe('stamina resets across a match boundary (engine:start_game)', () => {
             playerStamina: { [P1]: { current: 0, max: 3, refreshedTurn: 5 } },
         });
 
-        const next = engineStartGameDefinition.reduce(
-            ended,
-            { playerIds: [P1, P2] },
-            P1,
-            { rng: createRng(ended.seed, ended.tick), dispatchDepth: 0 },
-        );
+        const next = engineStartGameDefinition.reduce(ended, { playerIds: [P1, P2] }, P1, {
+            rng: createRng(ended.seed, ended.tick),
+            dispatchDepth: 0,
+        });
 
         expect(readStamina(next, P1)).toEqual({
             current: TACTICS_MAX_STAMINA,

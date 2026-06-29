@@ -24,7 +24,7 @@ import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
 import { Badge, Button, Caption, Heading } from '../../components/ui';
 import { useReplayApi } from '../../hooks/useReplayApi';
-import { resolveShellGameId } from '../../shell/resolveMainMenuGameId';
+import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 
 type LoadState =
     | { readonly status: 'loading' }
@@ -186,8 +186,13 @@ export default function ReplaysPage(): React.ReactElement {
         (path: string) => {
             // Trailing slash matches next.config `trailingSlash: true`. The
             // player reads `?path=`/`?kind=` reactively via `useSearchParams`,
-            // so the query survives this soft navigation.
-            router.push(`/replays/player/?path=${encodeURIComponent(path)}&kind=perspective`);
+            // so the query survives this soft navigation. Carry the active
+            // `?gameId=` from the URL onto the player route (resolved fresh, not the
+            // page's 'tactics' fallback) so leaving the replay keeps resolving the
+            // game's shell/menu instead of dropping to the engine default.
+            const target = `/replays/player/?path=${encodeURIComponent(path)}&kind=perspective`;
+            const shellGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+            router.push(withShellGameId(target, shellGameId));
         },
         [router],
     );

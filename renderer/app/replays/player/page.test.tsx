@@ -23,12 +23,26 @@ vi.mock('../../../game/rendererGameRegistry', () => ({
 // draws. The game-specific board derives its colour palette from `content`, so a
 // replay that omits it renders every unit in the default colour.
 vi.mock('../../../components/shell/GameShell', () => ({
-    GameShell: ({ snapshot, content }: { snapshot?: PlayerSnapshot; content?: GameContent }) => (
+    GameShell: ({
+        snapshot,
+        content,
+        leaveGame,
+    }: {
+        snapshot?: PlayerSnapshot;
+        content?: GameContent;
+        leaveGame?: () => void;
+    }) => (
         <div
             data-testid="game-shell"
             data-tick={snapshot?.tick ?? 'none'}
             data-content={content === undefined ? 'none' : JSON.stringify(content)}
-        />
+        >
+            {/* Surfaces the in-game-menu leave so the player's `handleLeaveReplay`
+                navigation can be exercised without the real shell UI. */}
+            <button type="button" data-testid="shell-leave-btn" onClick={() => leaveGame?.()}>
+                leave
+            </button>
+        </div>
     ),
 }));
 
@@ -78,6 +92,7 @@ function makeBridge(overrides: Partial<ReplayAPI> = {}): Partial<ReplayAPI> {
 }
 
 beforeEach(() => {
+    mockRouterPush.mockClear();
     window.history.replaceState({}, '', `/replays/player?path=${encodeURIComponent(PATH)}`);
 });
 
@@ -328,6 +343,37 @@ describe('ReplayPlayerPage', () => {
         await screen.findByTestId('game-shell');
 
         expect(useUiStore.getState().activeScreenKey).toBe('board');
+    });
+
+    describe('leaving a library-opened replay', () => {
+        it('returns to the library carrying the shell gameId from the URL, not the recorded one', async () => {
+            // A library replay has no live session, so Leave routes back to the
+            // library. The shell (incl. the main-menu override) resolves only from
+            // the `?gameId=` shell context, so the hop must carry THE URL's gameId —
+            // not the replay's own recorded gameId — or closing the library lands on
+            // the engine-default menu. URL and recorded id differ here to lock that.
+            window.history.replaceState(
+                {},
+                '',
+                `/replays/player?path=${encodeURIComponent(PATH)}&gameId=tactics`,
+            );
+            installReplayBridge(
+                makeBridge({
+                    openPlayback: vi.fn(() =>
+                        Promise.resolve({ ...INFO, gameId: 'some-other-game' }),
+                    ),
+                }),
+            );
+
+            render(<ReplayPlayerPage />);
+            await screen.findByTestId('game-shell');
+
+            await userEvent.click(screen.getByTestId('shell-leave-btn'));
+
+            await waitFor(() => {
+                expect(mockRouterPush).toHaveBeenCalledWith('/replays?gameId=tactics');
+            });
+        });
     });
 
     describe('save affordance (?saveable=1)', () => {

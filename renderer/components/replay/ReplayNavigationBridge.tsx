@@ -16,6 +16,7 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getReplayBridge, useReplayApi } from '../../hooks/useReplayApi';
+import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 
 export function ReplayNavigationBridge(): null {
     const router = useRouter();
@@ -36,9 +37,14 @@ export function ReplayNavigationBridge(): null {
             // through the deterministic surface and fail. `saveable=1` (only for a
             // just-finished match) tells the player to show its save icon.
             const saveableQuery = saveable ? '&saveable=1' : '';
-            router.push(
-                `/replays/player/?path=${encodeURIComponent(path)}&kind=${encodeURIComponent(kind)}${saveableQuery}`,
-            );
+            const target = `/replays/player/?path=${encodeURIComponent(path)}&kind=${encodeURIComponent(kind)}${saveableQuery}`;
+            // Carry the active `?gameId=` from the current URL onto the player
+            // route. The shell (incl. the main-menu override) resolves only from
+            // this param, and leaving the replay (saveable → returnToLobby via
+            // GameStoreBootstrap, or library → /replays) re-reads it from the URL —
+            // dropping it here lands the eventual menu on the engine default.
+            const gameId = resolveShellGameId(new URLSearchParams(window.location.search));
+            router.push(withShellGameId(target, gameId));
         });
     }, [replayApi, router]);
 

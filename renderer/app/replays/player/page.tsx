@@ -38,7 +38,7 @@ import { ReplayControls } from '../../../components/replay/ReplayControls';
 import { parseReplayKind } from '../../../components/replay/replayKind';
 import { loadRendererGame, type LoadedRendererGame } from '../../../game/rendererGameRegistry';
 import { useReplayApi } from '../../../hooks/useReplayApi';
-import { withShellGameId } from '../../../shell/resolveMainMenuGameId';
+import { resolveShellGameId, withShellGameId } from '../../../shell/resolveMainMenuGameId';
 import { useGameContent } from '../../../state/useGameContent';
 import { useUiStore } from '../../../state/uiStore';
 
@@ -353,7 +353,13 @@ function ReplayPlayerView(): React.ReactElement {
             await liveLeave();
             return;
         }
-        router.push(withShellGameId('/replays', info?.gameId ?? null));
+        // Carry the shell's `?gameId=` (the param the main-menu override resolves
+        // from) back onto /replays. Prefer the live URL over the replay's own
+        // recorded gameId so the hop survives even if `info` has not loaded, and
+        // never strands the eventual menu on the engine default.
+        const explicitGameId =
+            resolveShellGameId(new URLSearchParams(window.location.search)) ?? info?.gameId ?? null;
+        router.push(withShellGameId('/replays', explicitGameId));
     }, [saveable, liveLeave, router, info]);
 
     // Save the just-finished match's replay. Idempotent on the main side (the

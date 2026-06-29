@@ -36,7 +36,9 @@ test.describe('stamina resets when a new match starts after returning to the lob
         // ── First match: spend one stamina ──────────────────────────────────
         const host = new GamePage(hostWindow);
         await expect(host.canvas).toBeVisible({ timeout: CANVAS_TIMEOUT_MS });
-        await expect.poll(() => host.turnStatusText(), { timeout: NAV_TIMEOUT_MS }).toBe('Your turn');
+        await expect
+            .poll(() => host.turnStatusText(), { timeout: NAV_TIMEOUT_MS })
+            .toBe('Your turn');
         await expect.poll(() => host.staminaText(), { timeout: NAV_TIMEOUT_MS }).toBe('3/3');
 
         // Move the unit one tile (a central neighbour keeps it well-projected) so
@@ -70,8 +72,6 @@ test.describe('stamina resets when a new match starts after returning to the lob
         // The leak: before the fix this read '2/3' (the prior match's spent ledger
         // rode forward). After the fix the ledger is dropped at the match boundary,
         // so the unit starts the new match at full stamina.
-        await expect
-            .poll(() => hostNext.staminaText(), { timeout: NAV_TIMEOUT_MS })
-            .toBe('3/3');
+        await expect.poll(() => hostNext.staminaText(), { timeout: NAV_TIMEOUT_MS }).toBe('3/3');
     });
 });
