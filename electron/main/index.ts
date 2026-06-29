@@ -379,6 +379,14 @@ export interface CreateMainWindowOptions {
      * absolute path.
      */
     readonly icon?: string;
+    /**
+     * Open the window in borderless "windowed fullscreen" covering the primary
+     * display (macOS: `simpleFullscreen` — fills the screen with no separate
+     * Space/animation; Windows/Linux: native `fullscreen`). Enabled only for
+     * packaged production runs — never dev, never E2E (computed at the call
+     * site from `env` + `CHIMERA_E2E`). Default false.
+     */
+    readonly windowedFullscreen?: boolean;
 }
 
 export interface RegisterAppLifecycleOptions {
@@ -837,6 +845,14 @@ export function sanitiseE2eInitialUrl(raw: string | undefined): ChimeraRendererU
  */
 export function createMainWindow(options: CreateMainWindowOptions): BrowserWindow {
     const resolvedTitle = options.windowTitle ?? DEFAULT_WINDOW_TITLE;
+    // "Windowed fullscreen" (borderless, covers the display) for packaged
+    // production only. On macOS use pre-Lion `simpleFullscreen` so the window
+    // fills the screen WITHOUT switching to a separate Space (native fullscreen
+    // would animate into its own desktop); on Windows/Linux native `fullscreen`
+    // already yields a borderless window over the taskbar. `width`/`height` stay
+    // as the restore size for when the window leaves fullscreen.
+    const isDarwin = process.platform === 'darwin';
+    const fullscreen = options.windowedFullscreen === true;
     const window = new BrowserWindow({
         width: DEFAULT_WINDOW_WIDTH,
         height: DEFAULT_WINDOW_HEIGHT,
@@ -845,6 +861,7 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
         // Only set `icon` when supplied so the no-icon case leaves Electron's
         // stock icon untouched (F67 T1).
         ...(options.icon !== undefined ? { icon: options.icon } : {}),
+        ...(fullscreen ? (isDarwin ? { simpleFullscreen: true } : { fullscreen: true }) : {}),
         show: true,
         webPreferences: {
             nodeIntegration: false,
@@ -855,6 +872,12 @@ export function createMainWindow(options: CreateMainWindowOptions): BrowserWindo
             additionalArguments: [`--chimera-env=${options.env}`],
         },
     });
+
+    // On macOS, guarantee entry into simple fullscreen via the documented setter;
+    // relying on the constructor option alone to enter has been version-sensitive.
+    if (fullscreen && isDarwin) {
+        window.setSimpleFullScreen(true);
+    }
 
     // macOS shows the app icon in the dock, not just the window chrome; the
     // `BrowserWindow` `icon` alone does not cover it. `app.dock` exists only on
@@ -2704,6 +2727,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     ? sanitiseE2eInitialUrl(process.env['CHIMERA_E2E_INITIAL_URL'])
                     : rendererLaunchUrl,
             env,
+            // Packaged production launches in windowed fullscreen; dev keeps the
+            // chrome+DevTools window and E2E keeps a deterministic window. Note
+            // `env` is 'production' under E2E too (the fixture sets CHIMERA_E2E
+            // but not CHIMERA_ENV), so E2E must be excluded explicitly.
+            windowedFullscreen: env === 'production' && process.env['CHIMERA_E2E'] !== '1',
             logger,
             windowTitle: resolveWindowTitle(hostedGame.manifest),
             icon: resolveAppIcon(hostedGame.manifest, gameAssetsRoot, __dirname),

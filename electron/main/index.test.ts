@@ -302,6 +302,8 @@ interface FakeBrowserWindowOptions {
     readonly backgroundColor?: string;
     readonly title?: string;
     readonly icon?: string;
+    readonly fullscreen?: boolean;
+    readonly simpleFullscreen?: boolean;
     readonly webPreferences?: FakeWebPreferences;
 }
 
@@ -323,6 +325,7 @@ class FakeBrowserWindow {
     public readonly loadURL = vi.fn();
     public readonly reload = vi.fn<() => void>();
     public readonly setTitle = vi.fn<(title: string) => void>();
+    public readonly setSimpleFullScreen = vi.fn<(flag: boolean) => void>();
     public readonly webContents = new FakeWebContents();
     public readonly isDestroyed = vi.fn<() => boolean>(() => false);
     public readonly getContentSize = vi.fn<() => [number, number]>(() => [1280, 720]);
@@ -986,6 +989,58 @@ describe('createMainWindow', () => {
         expect(win?.options.webPreferences?.nodeIntegration).toBe(false);
         expect(win?.options.webPreferences?.contextIsolation).toBe(true);
         expect(win?.options.webPreferences?.sandbox).toBe(true);
+    });
+
+    it('opens windowed-fullscreen via macOS simpleFullscreen when windowedFullscreen is set on darwin', () => {
+        let win: FakeBrowserWindow | undefined;
+        withPlatform('darwin', () => {
+            win = createMainWindow({
+                preloadPath: PRELOAD,
+                rendererEntry: RENDERER_ENTRY,
+                env: 'production',
+                logger: createNoopLogger(),
+                windowedFullscreen: true,
+            }) as unknown as FakeBrowserWindow;
+        });
+
+        // macOS gets pre-Lion simple fullscreen (no Spaces switch), not native fullscreen.
+        expect(win?.options.simpleFullscreen).toBe(true);
+        expect(win?.options.fullscreen).toBeUndefined();
+        // Entry is guaranteed via the documented setter (constructor-only entry is version-sensitive).
+        expect(win?.setSimpleFullScreen).toHaveBeenCalledWith(true);
+    });
+
+    it('opens windowed-fullscreen via native fullscreen on non-darwin when windowedFullscreen is set', () => {
+        let win: FakeBrowserWindow | undefined;
+        withPlatform('win32', () => {
+            win = createMainWindow({
+                preloadPath: PRELOAD,
+                rendererEntry: RENDERER_ENTRY,
+                env: 'production',
+                logger: createNoopLogger(),
+                windowedFullscreen: true,
+            }) as unknown as FakeBrowserWindow;
+        });
+
+        expect(win?.options.fullscreen).toBe(true);
+        expect(win?.options.simpleFullscreen).toBeUndefined();
+        expect(win?.setSimpleFullScreen).not.toHaveBeenCalled();
+    });
+
+    it('stays windowed (no fullscreen flags) when windowedFullscreen is omitted', () => {
+        let win: FakeBrowserWindow | undefined;
+        withPlatform('darwin', () => {
+            win = createMainWindow({
+                preloadPath: PRELOAD,
+                rendererEntry: RENDERER_ENTRY,
+                env: 'production',
+                logger: createNoopLogger(),
+            }) as unknown as FakeBrowserWindow;
+        });
+
+        expect(win?.options.fullscreen).toBeUndefined();
+        expect(win?.options.simpleFullscreen).toBeUndefined();
+        expect(win?.setSimpleFullScreen).not.toHaveBeenCalled();
     });
 });
 
