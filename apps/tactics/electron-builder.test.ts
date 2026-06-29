@@ -96,3 +96,39 @@ describe('apps/tactics electron-builder.yml packaging config', () => {
         expect(content).not.toMatch(/CHIMERA_DEBUG/);
     });
 });
+
+// Bundle-trim contract (issue #817): electron-builder ALWAYS ships the production
+// `dependencies` tree (a `files: !node_modules/**` glob does NOT exclude it, as #813
+// discovered). But `build:app` esbuild-bundles the `@chimera-engine/*` engine code straight
+// into dist/electron/main.js + dist/preload/api.js, so at runtime the packaged app needs
+// none of those `node_modules` — shipping them dereferenced cost ~477MB of dead weight.
+// The fix keeps those engine packages out of `dependencies` (they are build-time-only here),
+// so electron-builder collects nothing to copy. They stay in `devDependencies` so the pnpm
+// workspace symlinks (esbuild resolution, `tsc -b` references, the build-time icon file set)
+// still resolve. This guard locks the trim without running a multi-minute package.
+describe('apps/tactics package.json — bundle-trim contract (#817)', () => {
+    const ENGINE_PACKAGES = [
+        '@chimera-engine/simulation',
+        '@chimera-engine/ai',
+        '@chimera-engine/renderer',
+        '@chimera-engine/electron',
+    ] as const;
+
+    const pkg = JSON.parse(readFileSync(path.join(appRoot, 'package.json'), 'utf-8')) as {
+        dependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
+    };
+
+    // The whole point: electron-builder ships `dependencies`, so the app must declare none
+    // of the bundled engine packages there (any production dep would be dereferenced into
+    // the bundle's node_modules at ~hundreds of MB).
+    it.each(ENGINE_PACKAGES)('does NOT declare %s as a production dependency', (name) => {
+        expect(pkg.dependencies ?? {}).not.toHaveProperty(name);
+    });
+
+    // They are build-time-only, hence devDependencies — keeping the workspace symlink that
+    // esbuild, `tsc -b`, and the electron-builder icon file set all read at build time.
+    it.each(ENGINE_PACKAGES)('still declares %s as a devDependency (build-time only)', (name) => {
+        expect(pkg.devDependencies ?? {}).toHaveProperty(name);
+    });
+});

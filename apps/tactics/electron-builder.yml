@@ -33,11 +33,13 @@ asar: false
 # fully esbuild-bundled (only `electron` + node builtins stay external). Skip
 # @electron/rebuild — it has nothing to rebuild and would otherwise walk the pnpm virtual
 # store and fail.
-# NOTE (size, follow-up): electron-builder still ships this app's production `dependencies`
-# (the @chimera-engine/* workspace packages, ~500MB once symlinks are dereferenced) even
-# though main.js already bundles them — a `files: !node_modules/**` rule does NOT exclude
-# production deps. Trimming them needs reclassifying those deps (a layer-model change),
-# tracked separately; the bundle is correct and runnable as-is.
+# SIZE (issue #817): electron-builder ALWAYS ships the production `dependencies` tree (a
+# `files: !node_modules/**` rule does NOT exclude it). Because main.js/api.js already inline
+# the @chimera-engine/* engine code, those packages are build-time-only here and are declared
+# as `devDependencies` (not `dependencies`) in package.json — so electron-builder collects
+# nothing to copy. This dropped ~477MB of dereferenced engine node_modules (731MB → ~254MB
+# .app). The devDependency workspace symlinks still resolve for esbuild, `tsc -b`, and the
+# build-time icon file set below.
 npmRebuild: false
 
 # Packaged file layout is dictated by the host's resolveRuntimePaths

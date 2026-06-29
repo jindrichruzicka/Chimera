@@ -170,7 +170,7 @@ importers:
         version: link:../simulation
 
   apps/tactics:
-    dependencies:
+    devDependencies:
       '@chimera-engine/ai':
         specifier: workspace:*
         version: link:../../ai
@@ -183,7 +183,6 @@ importers:
       '@chimera-engine/simulation':
         specifier: workspace:*
         version: link:../../simulation
-    devDependencies:
       electron:
         specifier: ^33.2.0
         version: 33.4.11

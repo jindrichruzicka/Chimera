@@ -121,7 +121,18 @@ function referencedPackageDirs(config: TsconfigShape, configDir: string): string
         .sort();
 }
 
-/** Composite @chimera-engine/* runtime dependencies of a package, expressed as package dirs. */
+/**
+ * Composite @chimera-engine/* dependencies of a package, expressed as package dirs.
+ *
+ * Reads ALL three dependency fields. Engine packages ship at runtime, so they declare
+ * their workspace deps under `dependencies`/`peerDependencies`. The layer-3 consumer apps
+ * (`apps/<game>`) instead declare them under `devDependencies`: electron-builder ships only
+ * production `dependencies`, and the app esbuild-bundles the engine code into its main/preload,
+ * so declaring the engine packages as production deps would dereference ~hundreds of MB of
+ * already-bundled code into the package (#817). Either way the composite build IMPORTS those
+ * packages, so the `tsc -b` references must mirror them — regardless of which field carries
+ * the `workspace:*` spec.
+ */
 function compositeDependencyDirs(packageDir: string): string[] {
     // @chimera-review: intentional filesystem read — structural guard; mocking defeats the purpose
     const pkg = JSON.parse(
@@ -129,8 +140,9 @@ function compositeDependencyDirs(packageDir: string): string[] {
     ) as {
         dependencies?: Record<string, string>;
         peerDependencies?: Record<string, string>;
+        devDependencies?: Record<string, string>;
     };
-    const declared = { ...pkg.dependencies, ...pkg.peerDependencies };
+    const declared = { ...pkg.dependencies, ...pkg.peerDependencies, ...pkg.devDependencies };
     return Object.keys(declared)
         .map((name) => CHIMERA_NAME_TO_DIR.get(name))
         .filter(
