@@ -59,9 +59,10 @@ export function GameStoreBootstrap(): null {
     }, []);
 
     // Navigate to /game when a snapshot arrives on the lobby page — fading out to
-    // black first. This is the single owner of the lobby→game transition for both
-    // windows: the host also pushes from handleStartGame(), but both converge on a
-    // black overlay + /game, and the latch keeps this from double-firing.
+    // black first. This is the SOLE owner of the lobby→game transition for both
+    // windows: the host's handleStartGame() only calls startGame() and lets this
+    // fire when the snapshot lands, so the fade-out runs to completion uncontested
+    // (a second fade-out from the lobby would cancel this one and skip the fade).
     useEffect(() => {
         if (
             snapshot === null ||

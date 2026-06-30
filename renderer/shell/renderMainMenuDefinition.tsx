@@ -227,17 +227,15 @@ export function RenderMainMenuDefinition({
         switch (action.type) {
             case 'open-lobby':
                 return (): void => {
-                    // /lobby fades itself in on mount, so fade out to black first.
-                    void fadeOutThenNavigate(() => {
-                        router.push(withShellGameId('/lobby', gameId));
-                    });
+                    // menu → lobby are both UI screens: no fade (the fade marks
+                    // entering/leaving the game scene, not this hop).
+                    router.push(withShellGameId('/lobby', gameId));
                 };
             case 'navigate': {
                 const target = action.target;
-                // Only fade toward screens that fade back in (lobby, game); a
-                // fade-out to settings/saves/replays would strand the overlay on
-                // black since those pages have no fade-in.
-                const fadesIn = target === '/lobby' || target === '/game';
+                // Fade only when entering the game scene; everything else from the
+                // menu (lobby, settings, saves, replays) is an instant UI hop.
+                const fadesIn = target === '/game';
                 return (): void => {
                     const doNavigate = (): void => {
                         router.push(withShellGameId(target, gameId));

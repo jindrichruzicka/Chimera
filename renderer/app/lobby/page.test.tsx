@@ -40,6 +40,9 @@ interface MockLobbyUiStoreState {
 let mockLocalSeatIds: readonly string[] = [];
 let mockLocalPlayerId: string | null = null;
 let mockLobbyState: MockLobbyStoreState['lobbyState'] = null;
+// Reassigned fresh per test in the pending-actions beforeEach so start-game tests
+// can assert the lobby invoked startGame() (navigation is GameStoreBootstrap's job).
+let mockStartGame = vi.fn(async (): Promise<void> => undefined);
 
 // Game shell returned by the mocked registry. Defaults to an empty shell (no
 // LobbyScreen) so the engine-default ActiveLobbyPanel renders and the existing
@@ -149,6 +152,7 @@ describe('LobbyPage pending actions', () => {
         mockLocalPlayerId = null;
         mockLobbyState = null;
         mockPush.mockReset();
+        mockStartGame = vi.fn(async () => undefined);
         // jsdom location persists across tests in a file; start each from a clean,
         // gameId-less URL so navigation that now reads `?gameId=` is deterministic.
         window.history.replaceState({}, '', '/lobby');
@@ -160,7 +164,7 @@ describe('LobbyPage pending actions', () => {
                     join: vi.fn(async () => ({ sessionId: 's', hostId: 'h', gameId: 'tactics' })),
                     getLocalPlayerId: vi.fn(async () => 'p2'),
                     leave: vi.fn(async () => undefined),
-                    startGame: vi.fn(async () => undefined),
+                    startGame: mockStartGame,
                     updatePlayerReadyState: vi.fn(async () => undefined),
                 },
                 system: {
@@ -300,7 +304,7 @@ describe('LobbyPage pending actions', () => {
         expect(screen.queryByTestId('game-canvas')).toBeNull();
     });
 
-    it('calls router.push("/game") after handleStartGame succeeds', async () => {
+    it('starts the match via the lobby API and does NOT navigate itself (GameStoreBootstrap owns lobby→game + its fade)', async () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
             info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
@@ -315,28 +319,13 @@ describe('LobbyPage pending actions', () => {
         fireEvent.click(screen.getByTestId('start-game'));
 
         await waitFor(() => {
-            expect(mockPush).toHaveBeenCalledWith('/game');
+            expect(mockStartGame).toHaveBeenCalledTimes(1);
         });
-    });
-
-    it('preserves the game context (?gameId) when starting the game', async () => {
-        window.history.pushState({}, '', '/lobby?gameId=tactics');
-        mockLocalPlayerId = 'p1';
-        mockLobbyState = {
-            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
-            players: [
-                { playerId: 'p1', displayName: 'Host', ready: true },
-                { playerId: 'p2', displayName: 'Guest', ready: true },
-            ],
-        };
-
-        renderLobbyPage();
-
-        fireEvent.click(screen.getByTestId('start-game'));
-
-        await waitFor(() => {
-            expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
-        });
+        // Navigation to /game (and ?gameId= preservation) is owned by
+        // GameStoreBootstrap when the snapshot lands. The lobby pushing too would
+        // race that fade and cancel it — so it must NOT navigate here.
+        expect(mockPush).not.toHaveBeenCalledWith('/game');
+        expect(mockPush).not.toHaveBeenCalledWith('/game?gameId=tactics');
     });
 
     it('renders the active lobby with separated info and player sections and a grouped action bar', () => {

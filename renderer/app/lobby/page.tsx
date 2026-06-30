@@ -9,7 +9,6 @@ import { LobbyEntryTabs } from './LobbyEntryTabs';
 import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
-import { useScreenFadeNavigate } from '../../components/shell/useScreenFadeNavigate';
 import { Button } from '../../components/ui/Button';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
@@ -72,7 +71,6 @@ export default function LobbyPage() {
     const fade = useOptionalFade();
     const fadeRef = useRef(fade);
     fadeRef.current = fade;
-    const fadeOutThenNavigate = useScreenFadeNavigate();
     const [lobbyCode, setLobbyCode] = useState('');
     const [hostPassword, setHostPassword] = useState('');
     const [joinPassword, setJoinPassword] = useState('');
@@ -127,8 +125,8 @@ export default function LobbyPage() {
     }, []);
 
     // App-level screen fade: ease the lobby in on mount. Visible only when
-    // arriving from a fade-out (game→lobby, or menu→lobby); a no-op when the
-    // overlay is already transparent.
+    // arriving from a fade-out — i.e. game→lobby (end match / leave). menu→lobby
+    // leaves the overlay transparent, so this is a no-op there (no fade).
     useEffect(() => {
         void fadeRef.current?.fadeIn(screenFadeMs());
     }, []);
@@ -214,10 +212,10 @@ export default function LobbyPage() {
     };
 
     const handleClose = (): void => {
+        // menu ↔ lobby are both UI screens — no fade between them (the fade marks
+        // entering/leaving the game scene, not this hop).
         const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-        void fadeOutThenNavigate(() => {
-            router.push(withShellGameId('/main-menu', explicitGameId));
-        });
+        router.push(withShellGameId('/main-menu', explicitGameId));
     };
 
     const handleToggleReady = async (ready: boolean): Promise<void> => {
@@ -240,17 +238,12 @@ export default function LobbyPage() {
         try {
             setPendingAction('starting');
             setError(null);
+            // Only start the match — GameStoreBootstrap owns the lobby→game
+            // navigation (and its fade to black) when the first snapshot lands, for
+            // both host and client. Navigating here too would race that fade and
+            // cancel it (the lobby→game fade then never shows). It also preserves
+            // the `?gameId=` URL context via currentBrowserGameId().
             await lobbyApi.startGame();
-            // Preserve the active game context in the URL: the main-menu override
-            // is resolved from `?gameId=`, and a later return-to-lobby / leave reads
-            // it back from the URL. Mirrors handleClose below.
-            const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-            // Fade to black before entering the game. GameStoreBootstrap also
-            // drives this navigation when the snapshot lands (the client path);
-            // both converge on a black overlay + /game, so the redundancy is benign.
-            await fadeOutThenNavigate(() => {
-                router.push(withShellGameId('/game', explicitGameId));
-            });
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to start game');
