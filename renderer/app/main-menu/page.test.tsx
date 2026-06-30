@@ -9,7 +9,7 @@ import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import { FadeProvider } from '../../components/shell/FadeContext';
 import { ScreenFadeOverlay } from '../../components/shell/ScreenFadeOverlay';
 import { ThemeProvider } from '../../theme/ThemeProvider';
-import MainMenuPage from './page';
+import MainMenuPage, { __resetMainMenuFadeForTest } from './page';
 
 const { mockLoadRendererGameShell } = vi.hoisted(() => ({
     mockLoadRendererGameShell: vi.fn(),
@@ -348,6 +348,10 @@ describe('MainMenuPage — no engine fallback flash while game shell is loading'
 
 describe('MainMenuPage — app-level screen fade', () => {
     beforeEach(() => {
+        // The "first menu appearance of the session" flag is module state that
+        // persists across renders in this file — reset it so each test starts as
+        // a fresh boot.
+        __resetMainMenuFadeForTest();
         vi.useFakeTimers();
         vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
             return globalThis.setTimeout(() => {
@@ -364,7 +368,7 @@ describe('MainMenuPage — app-level screen fade', () => {
         vi.useRealTimers();
     });
 
-    it('starts the overlay black (pre-paint) and then eases it in to reveal the menu', async () => {
+    it('on the first appearance (boot) starts black (pre-paint) and eases in to reveal the menu', async () => {
         render(
             <ThemeProvider>
                 <FadeProvider>
@@ -383,6 +387,73 @@ describe('MainMenuPage — app-level screen fade', () => {
         });
 
         // The fade-in completed and the overlay is fully transparent.
+        expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
+    });
+
+    it('does not fade when re-entering the menu from a non-fading screen (e.g. settings)', async () => {
+        // First appearance consumes the one-time boot black-then-fade.
+        render(
+            <ThemeProvider>
+                <FadeProvider>
+                    <MainMenuPage />
+                    <ScreenFadeOverlay />
+                </FadeProvider>
+            </ThemeProvider>,
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+        cleanup();
+
+        // Re-entering the menu later with a transparent overlay (no fade-out
+        // preceded — e.g. back from settings/saves/replays) must NOT force black
+        // or play any fade.
+        render(
+            <ThemeProvider>
+                <FadeProvider>
+                    <MainMenuPage />
+                    <ScreenFadeOverlay />
+                </FadeProvider>
+            </ThemeProvider>,
+        );
+        expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+        expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
+    });
+
+    it('still eases in from black when arriving from a faded-out screen (game/lobby)', async () => {
+        // Consume the one-time boot appearance with a throwaway mount so the flag
+        // is set; this return is NOT the boot appearance.
+        render(
+            <ThemeProvider>
+                <FadeProvider>
+                    <MainMenuPage />
+                    <ScreenFadeOverlay />
+                </FadeProvider>
+            </ThemeProvider>,
+        );
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+        cleanup();
+
+        // A game/lobby fade-out already left the overlay black (initialOpacity 1):
+        // the menu's fadeIn reveals it even though it did NOT force the black.
+        render(
+            <ThemeProvider>
+                <FadeProvider initialOpacity={1}>
+                    <MainMenuPage />
+                    <ScreenFadeOverlay />
+                </FadeProvider>
+            </ThemeProvider>,
+        );
+
+        expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('1');
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
         expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
     });
 });

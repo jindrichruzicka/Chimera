@@ -102,21 +102,35 @@ type MenuLoadState =
     | { status: 'loaded'; gameId: string; shell: LoadedRendererGameShell }
     | { status: 'load-failed' };
 
-// The main menu always appears from black and fades in (the app-level screen
-// fade). `useLayoutEffect` snaps the overlay to black before the browser paints
-// the menu, so there is no 1-frame flash; the `useEffect` then eases it in.
-// `useOptionalFade` degrades to a no-op when the page is rendered without the
-// app shell's provider (unit tests).
+// True once the menu has appeared at least once this session. Module scope so it
+// survives the menu route unmounting/remounting (the menu is a separate Next page).
+let menuHasAppeared = false;
+
+/** Test seam: reset the session "menu has appeared" flag between tests. */
+export function __resetMainMenuFadeForTest(): void {
+    menuHasAppeared = false;
+}
+
+// The app-level screen fade for the menu. On the FIRST appearance of the session
+// (app boot) the overlay snaps black pre-paint (`useLayoutEffect`, no 1-frame
+// flash) and then eases in. On later mounts it only `fadeIn`s: arriving from a
+// faded-out screen (game/lobby) already left the overlay black so it reveals;
+// arriving from a non-fading screen (settings/saves/replays) left it transparent
+// so the fadeIn is a no-op and the menu does NOT fade. `useOptionalFade` degrades
+// to a no-op when the page is rendered without the app shell's provider.
 function useMainMenuFadeIn(): void {
     const fade = useOptionalFade();
     const fadeRef = React.useRef(fade);
     fadeRef.current = fade;
 
     React.useLayoutEffect(() => {
-        void fadeRef.current?.fadeOut(0);
+        if (!menuHasAppeared) {
+            void fadeRef.current?.fadeOut(0);
+        }
     }, []);
 
     React.useEffect(() => {
+        menuHasAppeared = true;
         void fadeRef.current?.fadeIn(screenFadeMs());
     }, []);
 }
