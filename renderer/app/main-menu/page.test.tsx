@@ -2,10 +2,12 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
+import { FadeProvider } from '../../components/shell/FadeContext';
+import { ScreenFadeOverlay } from '../../components/shell/ScreenFadeOverlay';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import MainMenuPage from './page';
 
@@ -341,5 +343,46 @@ describe('MainMenuPage — no engine fallback flash while game shell is loading'
         // After the shell loads, only the tactics buttons are present.
         await screen.findByRole('button', { name: 'New Game' });
         expect(screen.queryByRole('button', { name: 'Play' })).toBeNull();
+    });
+});
+
+describe('MainMenuPage — app-level screen fade', () => {
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+            return globalThis.setTimeout(() => {
+                callback(Date.now());
+            }, 16) as unknown as number;
+        });
+        vi.stubGlobal('cancelAnimationFrame', (frameId: number): void => {
+            globalThis.clearTimeout(frameId);
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+    });
+
+    it('starts the overlay black (pre-paint) and then eases it in to reveal the menu', async () => {
+        render(
+            <ThemeProvider>
+                <FadeProvider>
+                    <MainMenuPage />
+                    <ScreenFadeOverlay />
+                </FadeProvider>
+            </ThemeProvider>,
+        );
+
+        // The useLayoutEffect snapped the overlay fully black before any fade-in
+        // frame ran — the menu never flashes before the fade.
+        expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('1');
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+
+        // The fade-in completed and the overlay is fully transparent.
+        expect(screen.getByTestId('screen-fade-overlay').style.opacity).toBe('0');
     });
 });

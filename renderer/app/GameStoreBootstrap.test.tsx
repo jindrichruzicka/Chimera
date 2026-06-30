@@ -17,7 +17,7 @@
  * Invariant #1: only PlayerSnapshot.phase is consumed for routing decisions.
  */
 
-import { cleanup, render } from '@testing-library/react';
+import { act, cleanup, render } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -25,6 +25,7 @@ import {
     playerId,
     type PlayerSnapshot,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { FadeProvider } from '../components/shell/FadeContext';
 import { GameStoreBootstrap } from './GameStoreBootstrap';
 
 const mockPush = vi.fn();
@@ -190,6 +191,76 @@ describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)
         render(<GameStoreBootstrap />);
 
         expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
+        expect(mockReset).not.toHaveBeenCalled();
+    });
+});
+
+describe('GameStoreBootstrap — app-level screen fade gates the navigation', () => {
+    // These mount GameStoreBootstrap inside a real <FadeProvider>, so the
+    // navigation effects take the fade path (fadeOut → then navigate) instead of
+    // the no-provider instant path the tests above exercise.
+    beforeEach(() => {
+        vi.useFakeTimers();
+        vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback): number => {
+            return globalThis.setTimeout(() => {
+                callback(Date.now());
+            }, 16) as unknown as number;
+        });
+        vi.stubGlobal('cancelAnimationFrame', (frameId: number): void => {
+            globalThis.clearTimeout(frameId);
+        });
+    });
+
+    afterEach(() => {
+        vi.unstubAllGlobals();
+        vi.useRealTimers();
+    });
+
+    it('fades out to black BEFORE resetting + navigating on a phase:lobby snapshot (game→lobby)', async () => {
+        window.history.replaceState({}, '', '/game');
+        mockPathname = '/game';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
+
+        render(
+            <FadeProvider>
+                <GameStoreBootstrap />
+            </FadeProvider>,
+        );
+
+        // The fade-out is in flight — navigation must not have happened yet, and
+        // the store must NOT have been reset (the game scene is still mounted).
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(mockReset).not.toHaveBeenCalled();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+
+        // Once the overlay is fully black, reset + navigate fire exactly once.
+        expect(mockReset).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledWith('/lobby');
+    });
+
+    it('fades out before navigating to /game on a snapshot arriving in the lobby (lobby→game)', async () => {
+        window.history.replaceState({}, '', '/lobby');
+        mockPathname = '/lobby';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(
+            <FadeProvider>
+                <GameStoreBootstrap />
+            </FadeProvider>,
+        );
+
+        expect(mockPush).not.toHaveBeenCalled();
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(400);
+        });
+
+        expect(mockPush).toHaveBeenCalledTimes(1);
+        expect(mockPush).toHaveBeenCalledWith('/game');
         expect(mockReset).not.toHaveBeenCalled();
     });
 });

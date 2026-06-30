@@ -3,6 +3,8 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { GameMainMenuButton } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import { useOptionalFade } from '../../components/shell/FadeContext';
+import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { IconButton } from '../../components/ui/IconButton';
 import { Tooltip } from '../../components/ui/Tooltip';
 import { isGalleryEnabled } from '../component-gallery/galleryGate';
@@ -100,8 +102,28 @@ type MenuLoadState =
     | { status: 'loaded'; gameId: string; shell: LoadedRendererGameShell }
     | { status: 'load-failed' };
 
+// The main menu always appears from black and fades in (the app-level screen
+// fade). `useLayoutEffect` snaps the overlay to black before the browser paints
+// the menu, so there is no 1-frame flash; the `useEffect` then eases it in.
+// `useOptionalFade` degrades to a no-op when the page is rendered without the
+// app shell's provider (unit tests).
+function useMainMenuFadeIn(): void {
+    const fade = useOptionalFade();
+    const fadeRef = React.useRef(fade);
+    fadeRef.current = fade;
+
+    React.useLayoutEffect(() => {
+        void fadeRef.current?.fadeOut(0);
+    }, []);
+
+    React.useEffect(() => {
+        void fadeRef.current?.fadeIn(screenFadeMs());
+    }, []);
+}
+
 export default function MainMenuPage() {
     const [menuState, setMenuState] = React.useState<MenuLoadState>({ status: 'unresolved' });
+    useMainMenuFadeIn();
 
     React.useEffect(() => {
         const gameId = resolveMainMenuGameId(new URLSearchParams(window.location.search));

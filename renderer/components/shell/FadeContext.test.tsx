@@ -3,6 +3,7 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { easeOut } from '../../utils/curves.js';
 import { FadeProvider, useFade } from './FadeContext.js';
 
 afterEach(() => {
@@ -88,5 +89,62 @@ describe('FadeContext', () => {
         });
         expect(screen.getByTestId('fade-phase').textContent).toBe('idle');
         expect(screen.getByTestId('fade-opacity').textContent).toBe('0');
+    });
+
+    it('starts at the provided initialOpacity (start black for the app-level fade)', () => {
+        function Consumer(): React.ReactElement {
+            const fade = useFade();
+            return <output data-testid="fade-opacity">{fade.opacity}</output>;
+        }
+
+        render(
+            <FadeProvider initialOpacity={1}>
+                <Consumer />
+            </FadeProvider>,
+        );
+
+        expect(screen.getByTestId('fade-opacity').textContent).toBe('1');
+    });
+
+    it('applies the easing curve during the animation while landing exactly on the endpoint', async () => {
+        vi.useFakeTimers();
+
+        function Consumer(): React.ReactElement {
+            const fade = useFade();
+            return (
+                <div>
+                    <output data-testid="fade-opacity">{fade.opacity}</output>
+                    <button
+                        type="button"
+                        onClick={() => {
+                            void fade.fadeOut(100);
+                        }}
+                    >
+                        Fade out
+                    </button>
+                </div>
+            );
+        }
+
+        render(
+            <FadeProvider easing={easeOut}>
+                <Consumer />
+            </FadeProvider>,
+        );
+
+        fireEvent.click(screen.getByText('Fade out'));
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(48);
+        });
+        // Near the start, easeOut accelerates faster than linear: at ~progress
+        // 0.48 a linear fade sits at ~0.48 opacity, easeOut sits well above it.
+        const easedOpacity = Number(screen.getByTestId('fade-opacity').textContent);
+        expect(easedOpacity).toBeGreaterThan(0.6);
+
+        await act(async () => {
+            await vi.advanceTimersByTimeAsync(64);
+        });
+        // The completion still snaps to the exact target — no easing rounding drift.
+        expect(screen.getByTestId('fade-opacity').textContent).toBe('1');
     });
 });

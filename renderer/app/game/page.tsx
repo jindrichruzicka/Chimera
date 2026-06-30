@@ -25,6 +25,8 @@ import {
 } from '@chimera-engine/simulation/bridge/api-types.js';
 import { createAssetManager, type AssetManager } from '../../assets/AssetManager';
 import { createRendererGameAssetResolver } from '../../assets/AssetResolver';
+import { useOptionalFade } from '../../components/shell/FadeContext';
+import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
@@ -51,6 +53,9 @@ type RendererGameLoadState =
 
 export default function GamePage(): React.ReactElement | null {
     const router = useRouter();
+    const fade = useOptionalFade();
+    const fadeRef = React.useRef(fade);
+    fadeRef.current = fade;
     const snapshot = useGameStore((state) => state.snapshot);
     const currentTick = useGameStore((state) => state.currentTick);
     const lastReveal = useGameStore((state) => state.lastReveal);
@@ -90,12 +95,23 @@ export default function GamePage(): React.ReactElement | null {
     useEffect(() => {
         if (leavingToMainMenu && !leavingRef.current) {
             leavingRef.current = true;
-            useGameStore.getState().reset();
             useLobbyUiStore.getState().setLeavingToMainMenu(false);
             // Preserve the game context so the main menu resolves the game's shell
             // (its override) rather than falling back to the engine default.
             const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-            router.replace(withShellGameId('/main-menu', explicitGameId));
+            // Fade the game out to black BEFORE resetting + navigating, so the
+            // GameShell unmount (reset() nulls the snapshot) is hidden behind the
+            // overlay; the main menu fades itself back in on mount.
+            const finishLeave = (): void => {
+                useGameStore.getState().reset();
+                router.replace(withShellGameId('/main-menu', explicitGameId));
+            };
+            const control = fadeRef.current;
+            if (control === null) {
+                finishLeave();
+            } else {
+                void control.fadeOut(screenFadeMs()).then(finishLeave);
+            }
         }
     }, [leavingToMainMenu, router]);
 
@@ -185,6 +201,22 @@ export default function GamePage(): React.ReactElement | null {
     useInputAction('engine:undo', onUndoKey);
     useInputAction('engine:redo', onRedoKey);
     useInputAction('game:end-turn', onEndTurnKey);
+
+    // App-level screen fade: once the game is actually here (snapshot + game +
+    // assets all loaded, i.e. GameShell is about to render), ease in from the
+    // black overlay that the lobby→game transition faded to. Latched so it fires
+    // once per entry, and re-armed if we drop back out of the ready state.
+    const sceneReady =
+        snapshot !== null && gameId !== null && loadedGame !== null && assetManager !== null;
+    const fadedInRef = React.useRef(false);
+    React.useEffect(() => {
+        if (sceneReady && !fadedInRef.current) {
+            fadedInRef.current = true;
+            void fadeRef.current?.fadeIn(screenFadeMs());
+        } else if (!sceneReady) {
+            fadedInRef.current = false;
+        }
+    }, [sceneReady]);
 
     if (snapshot === null) {
         return null;

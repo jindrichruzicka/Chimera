@@ -7,6 +7,7 @@ import { ReplayExportToastBridge } from '../components/replay/ReplayExportToastB
 import { ReplayNavigationBridge } from '../components/replay/ReplayNavigationBridge';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
+import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
 import { ToastHost } from '../components/shell/ToastHost';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -22,26 +23,37 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
     return (
         <Providers>
             <ThemeProvider>
-                <GameRegistrationBootstrap />
-                <LoggingBootstrap />
-                <SettingsBootstrap />
-                <LobbyStoreBootstrap />
-                <GameStoreBootstrap />
-                <SaveStoreBootstrap />
-                <ReplayNavigationBridge />
-                <ReplayExportToastBridge />
-                <PlayerConnectionToastBridge />
-                <PlayerLeftToastBridge />
-                <ProfileRejectedToastBridge />
-                <React.Suspense fallback={null}>
-                    <ShellBackgroundHost />
-                </React.Suspense>
-                <div style={{ position: 'relative', zIndex: 1 }}>
-                    <CrashRecoveryBanner />
-                    <ConnectionStatusIndicator />
-                    <RootErrorBoundary>{children}</RootErrorBoundary>
-                    <ToastHost />
-                </div>
+                {/*
+                 * App-level fade for cross-screen route transitions
+                 * (main-menu ↔ lobby ↔ game). Lives above {children} so its
+                 * opacity survives Next.js soft navigation; the bootstraps
+                 * (GameStoreBootstrap drives the lobby⇄game fades) and the
+                 * pages all consume this provider via useFade(). Distinct from
+                 * GameShell's own inner FadeProvider, which only fades in-game
+                 * scene swaps.
+                 */}
+                <ScreenFadeRoot>
+                    <GameRegistrationBootstrap />
+                    <LoggingBootstrap />
+                    <SettingsBootstrap />
+                    <LobbyStoreBootstrap />
+                    <GameStoreBootstrap />
+                    <SaveStoreBootstrap />
+                    <ReplayNavigationBridge />
+                    <ReplayExportToastBridge />
+                    <PlayerConnectionToastBridge />
+                    <PlayerLeftToastBridge />
+                    <ProfileRejectedToastBridge />
+                    <React.Suspense fallback={null}>
+                        <ShellBackgroundHost />
+                    </React.Suspense>
+                    <div style={{ position: 'relative', zIndex: 1 }}>
+                        <CrashRecoveryBanner />
+                        <ConnectionStatusIndicator />
+                        <RootErrorBoundary>{children}</RootErrorBoundary>
+                        <ToastHost />
+                    </div>
+                </ScreenFadeRoot>
             </ThemeProvider>
         </Providers>
     );

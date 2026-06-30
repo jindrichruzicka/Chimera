@@ -7,6 +7,9 @@ import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { ActiveLobbyPanel } from './ActiveLobbyPanel';
 import { LobbyEntryTabs } from './LobbyEntryTabs';
 import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
+import { useOptionalFade } from '../../components/shell/FadeContext';
+import { screenFadeMs } from '../../components/shell/screenFadeDuration';
+import { useScreenFadeNavigate } from '../../components/shell/useScreenFadeNavigate';
 import { Button } from '../../components/ui/Button';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
@@ -66,6 +69,10 @@ function useLobbyGameShell(gameId: string | null): LoadedRendererGameShell | nul
 
 export default function LobbyPage() {
     const router = useRouter();
+    const fade = useOptionalFade();
+    const fadeRef = useRef(fade);
+    fadeRef.current = fade;
+    const fadeOutThenNavigate = useScreenFadeNavigate();
     const [lobbyCode, setLobbyCode] = useState('');
     const [hostPassword, setHostPassword] = useState('');
     const [joinPassword, setJoinPassword] = useState('');
@@ -117,6 +124,13 @@ export default function LobbyPage() {
         return () => {
             isMountedRef.current = false;
         };
+    }, []);
+
+    // App-level screen fade: ease the lobby in on mount. Visible only when
+    // arriving from a fade-out (game→lobby, or menu→lobby); a no-op when the
+    // overlay is already transparent.
+    useEffect(() => {
+        void fadeRef.current?.fadeIn(screenFadeMs());
     }, []);
 
     const handleHost = async () => {
@@ -201,7 +215,9 @@ export default function LobbyPage() {
 
     const handleClose = (): void => {
         const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-        router.push(withShellGameId('/main-menu', explicitGameId));
+        void fadeOutThenNavigate(() => {
+            router.push(withShellGameId('/main-menu', explicitGameId));
+        });
     };
 
     const handleToggleReady = async (ready: boolean): Promise<void> => {
@@ -229,7 +245,12 @@ export default function LobbyPage() {
             // is resolved from `?gameId=`, and a later return-to-lobby / leave reads
             // it back from the URL. Mirrors handleClose below.
             const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
-            router.push(withShellGameId('/game', explicitGameId));
+            // Fade to black before entering the game. GameStoreBootstrap also
+            // drives this navigation when the snapshot lands (the client path);
+            // both converge on a black overlay + /game, so the redundancy is benign.
+            await fadeOutThenNavigate(() => {
+                router.push(withShellGameId('/game', explicitGameId));
+            });
         } catch (err) {
             if (isMountedRef.current) {
                 setError(err instanceof Error ? err.message : 'Failed to start game');

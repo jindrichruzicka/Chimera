@@ -19,6 +19,7 @@ import type {
     GameMenuCommandId,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import { Button } from '../components/ui/Button';
+import { useScreenFadeNavigate } from '../components/shell/useScreenFadeNavigate';
 import { getSystemBridge } from '../bridge/system-bridge';
 import { withShellGameId } from './resolveMainMenuGameId';
 
@@ -156,6 +157,7 @@ export function RenderMainMenuDefinition({
     getButtonTestId,
 }: RenderMainMenuDefinitionProps): React.ReactElement {
     const router = useRouter();
+    const fadeOutThenNavigate = useScreenFadeNavigate();
 
     const def = definition ?? ENGINE_DEFAULT_DEFINITION;
     const { layout, buttons } = def;
@@ -225,12 +227,28 @@ export function RenderMainMenuDefinition({
         switch (action.type) {
             case 'open-lobby':
                 return (): void => {
-                    router.push(withShellGameId('/lobby', gameId));
+                    // /lobby fades itself in on mount, so fade out to black first.
+                    void fadeOutThenNavigate(() => {
+                        router.push(withShellGameId('/lobby', gameId));
+                    });
                 };
-            case 'navigate':
+            case 'navigate': {
+                const target = action.target;
+                // Only fade toward screens that fade back in (lobby, game); a
+                // fade-out to settings/saves/replays would strand the overlay on
+                // black since those pages have no fade-in.
+                const fadesIn = target === '/lobby' || target === '/game';
                 return (): void => {
-                    router.push(withShellGameId(action.target, gameId));
+                    const doNavigate = (): void => {
+                        router.push(withShellGameId(target, gameId));
+                    };
+                    if (fadesIn) {
+                        void fadeOutThenNavigate(doNavigate);
+                    } else {
+                        doNavigate();
+                    }
                 };
+            }
             case 'quit':
                 return (): void => {
                     const system = getSystemBridge();

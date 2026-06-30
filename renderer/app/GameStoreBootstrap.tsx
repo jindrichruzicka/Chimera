@@ -23,12 +23,14 @@
  *          (bootstrapGameStore wires this); components never call them.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import type { StoreApi } from 'zustand';
 import { bootstrapGameStore } from '../state/gameStoreBootstrap';
 import { useGameStore, type GameStore } from '../state/gameStore';
 import { useLobbyUiStore } from '../state/lobbyUiStore';
+import { useOptionalFade } from '../components/shell/FadeContext.js';
+import { screenFadeMs } from '../components/shell/screenFadeDuration.js';
 import { resolveShellGameId, withShellGameId } from '../shell/resolveMainMenuGameId';
 import { bootstrapPerfStore } from '../components/shell/perf/perfStoreBootstrap.js';
 import { usePerfStore, type PerfStoreState } from '../components/shell/perf/perfStore.js';
@@ -38,13 +40,46 @@ export function GameStoreBootstrap(): null {
     const router = useRouter();
     const pathname = usePathname();
     const snapshot = useGameStore((state) => state.snapshot);
+    // App-level screen fade. Kept in a ref so the navigation effects don't
+    // re-run on the per-frame opacity changes; `useOptionalFade` degrades to
+    // instant (no-fade) navigation when rendered without the provider (tests).
+    const fade = useOptionalFade();
+    const fadeRef = useRef(fade);
+    fadeRef.current = fade;
+    // Shared latch across BOTH navigation effects below: once a lobby⇄game
+    // transition starts, it owns the fade-out and the navigation, and the other
+    // effect (and re-runs of this one during the async fade) must stand down.
+    // This also prevents the effect-B reset()→snapshot-null→effect-A bounce.
+    const transitioningRef = useRef(false);
 
-    // Navigate to /game when a snapshot arrives on the lobby page.
-    // This handles the CLIENT window — the host navigates via router.push in
-    // handleStartGame(). Both end up at /game automatically.
     useEffect(() => {
-        if (snapshot !== null && isLobbyPath(currentBrowserPathname(pathname))) {
+        return () => {
+            transitioningRef.current = false;
+        };
+    }, []);
+
+    // Navigate to /game when a snapshot arrives on the lobby page — fading out to
+    // black first. This is the single owner of the lobby→game transition for both
+    // windows: the host also pushes from handleStartGame(), but both converge on a
+    // black overlay + /game, and the latch keeps this from double-firing.
+    useEffect(() => {
+        if (
+            snapshot === null ||
+            !isLobbyPath(currentBrowserPathname(pathname)) ||
+            transitioningRef.current
+        ) {
+            return;
+        }
+        transitioningRef.current = true;
+        const go = (): void => {
             router.push(withShellGameId('/game', currentBrowserGameId()));
+            transitioningRef.current = false;
+        };
+        const control = fadeRef.current;
+        if (control === null) {
+            go();
+        } else {
+            void control.fadeOut(screenFadeMs()).then(go);
         }
     }, [snapshot, router, pathname]);
 
@@ -63,12 +98,25 @@ export function GameStoreBootstrap(): null {
     useEffect(() => {
         const browserPath = currentBrowserPathname(pathname);
         if (
-            snapshot !== null &&
-            snapshot.phase === 'lobby' &&
-            (isGamePath(browserPath) || isReplayPlayerPath(browserPath))
+            snapshot?.phase !== 'lobby' ||
+            !(isGamePath(browserPath) || isReplayPlayerPath(browserPath)) ||
+            transitioningRef.current
         ) {
+            return;
+        }
+        transitioningRef.current = true;
+        // Fade out FIRST, then reset (nulls the snapshot → GameShell unmounts) and
+        // navigate. Doing reset() under the fully-black overlay hides the unmount.
+        const go = (): void => {
             useGameStore.getState().reset();
             router.push(withShellGameId('/lobby', currentBrowserGameId()));
+            transitioningRef.current = false;
+        };
+        const control = fadeRef.current;
+        if (control === null) {
+            go();
+        } else {
+            void control.fadeOut(screenFadeMs()).then(go);
         }
     }, [snapshot, router, pathname]);
 
