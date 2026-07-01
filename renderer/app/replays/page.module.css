@@ -1,0 +1,59 @@
+.page {
+    box-sizing: border-box;
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-ui);
+    inline-size: 100%;
+    padding: calc(var(--ch-space-md) * 2);
+}
+
+.header {
+    align-items: center;
+    display: flex;
+    gap: var(--ch-space-md);
+    justify-content: space-between;
+    margin-block-end: var(--ch-space-md);
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* Each row is a full-width <button> reset styled as a divider row; hovering tints
+   it and focus-visible surfaces the shared ring (Invariant #91: tokens only). */
+.row {
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-subtle);
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    font: inherit;
+    gap: var(--ch-space-md);
+    inline-size: 100%;
+    justify-content: space-between;
+    padding: var(--ch-space-sm) var(--ch-space-md);
+    text-align: start;
+    transition: background-color var(--ch-duration-fast) var(--ch-easing-standard);
+}
+
+.row:hover {
+    background: var(--ch-color-surface-raised);
+}
+
+.row:focus-visible {
+    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
+    outline-offset: var(--ch-focus-ring-offset);
+}
+
+.error {
+    background: var(--ch-color-error-surface-muted);
+    border: var(--ch-border-width-sm) solid var(--ch-color-error-border-muted);
+    border-radius: var(--ch-radius-sm);
+    color: var(--ch-color-error-text-muted);
+    margin-bottom: var(--ch-space-md);
+    padding: calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md);
+}

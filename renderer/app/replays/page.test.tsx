@@ -200,4 +200,29 @@ describe('ReplaysPage', () => {
             `/replays/player/?path=${encodeURIComponent(PERSPECTIVE_PATH)}&kind=perspective&gameId=tactics`,
         );
     });
+
+    it('closes back to the main menu, carrying the active gameId', async () => {
+        installBridge({});
+
+        render(<ReplaysPage />);
+
+        const closeButton = screen.getByTestId('replays-close-btn');
+        await userEvent.click(closeButton);
+
+        expect(push).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
+    it('closes to the main menu without injecting a gameId when the URL has none', async () => {
+        // No `?gameId=` in the URL → the close route must NOT fabricate the page's
+        // 'tactics' fallback (main-menu deliberately has no default-game fallback).
+        window.history.replaceState({}, '', '/replays');
+        installBridge({});
+
+        render(<ReplaysPage />);
+
+        const closeButton = screen.getByTestId('replays-close-btn');
+        await userEvent.click(closeButton);
+
+        expect(push).toHaveBeenCalledWith('/main-menu');
+    });
 });

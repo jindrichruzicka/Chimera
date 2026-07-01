@@ -22,9 +22,10 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Badge, Button, Caption, Heading } from '../../components/ui';
+import { Badge, Caption, Heading, IconButton } from '../../components/ui';
 import { useReplayApi } from '../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
+import styles from './page.module.css';
 
 type LoadState =
     | { readonly status: 'loading' }
@@ -35,35 +36,10 @@ type LoadState =
       }
     | { readonly status: 'error'; readonly message: string };
 
-const pageStyle: React.CSSProperties = {
-    fontFamily: 'var(--ch-font-ui)',
-    padding: 'calc(var(--ch-space-md) * 2)',
-};
-
-const listStyle: React.CSSProperties = { listStyle: 'none', padding: 0, margin: 0 };
-
-const rowStyle: React.CSSProperties = {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 'var(--ch-space-md)',
-    padding: 'var(--ch-space-sm) var(--ch-space-md)',
-    borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-border-subtle)',
-};
-
 const titleRowStyle: React.CSSProperties = {
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--ch-space-sm)',
-};
-
-const errorStyle: React.CSSProperties = {
-    padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
-    marginBottom: 'var(--ch-space-md)',
-    background: 'var(--ch-color-error-surface-muted)',
-    border: 'var(--ch-border-width-sm) solid var(--ch-color-error-border-muted)',
-    borderRadius: 'var(--ch-radius-sm)',
-    color: 'var(--ch-color-error-text-muted)',
 };
 
 function formatRecordedAt(recordedAt: string): string {
@@ -84,27 +60,32 @@ function ReplayRow({
     readonly onOpen: (path: string) => void;
 }): React.ReactElement {
     return (
-        <li style={rowStyle}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ch-space-xs)' }}>
-                <span style={titleRowStyle}>
-                    <Badge variant="neutral">Deterministic</Badge>
-                    <span>
-                        v{item.gameVersion} · {item.durationTicks} ticks
-                    </span>
-                </span>
-                <Caption tone="muted">
-                    {formatRecordedAt(item.recordedAt)} · {item.playerIds.join(', ')}
-                </Caption>
-            </div>
-            <Button
-                size="sm"
-                variant="primary"
+        <li>
+            <button
+                type="button"
+                className={styles['row']}
                 aria-label={`Open replay recorded ${formatRecordedAt(item.recordedAt)}`}
                 data-testid="replay-open-btn"
                 onClick={() => onOpen(item.path)}
             >
-                Open
-            </Button>
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 'var(--ch-space-xs)',
+                    }}
+                >
+                    <span style={titleRowStyle}>
+                        <Badge variant="neutral">Deterministic</Badge>
+                        <span>
+                            v{item.gameVersion} · {item.durationTicks} ticks
+                        </span>
+                    </span>
+                    <Caption tone="muted">
+                        {formatRecordedAt(item.recordedAt)} · {item.playerIds.join(', ')}
+                    </Caption>
+                </div>
+            </button>
         </li>
     );
 }
@@ -118,23 +99,28 @@ function PerspectiveReplayRow({
 }): React.ReactElement {
     const label = perspectiveLabel(path);
     return (
-        <li style={rowStyle}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--ch-space-xs)' }}>
-                <span style={titleRowStyle}>
-                    <Badge variant="success">Perspective</Badge>
-                    <span>{label}</span>
-                </span>
-                <Caption tone="muted">Single-viewer replay</Caption>
-            </div>
-            <Button
-                size="sm"
-                variant="primary"
+        <li>
+            <button
+                type="button"
+                className={styles['row']}
                 aria-label={`Open perspective replay ${label}`}
                 data-testid="replay-open-btn"
                 onClick={() => onOpen(path)}
             >
-                Open
-            </Button>
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 'var(--ch-space-xs)',
+                    }}
+                >
+                    <span style={titleRowStyle}>
+                        <Badge variant="success">Perspective</Badge>
+                        <span>{label}</span>
+                    </span>
+                    <Caption tone="muted">Single-viewer replay</Caption>
+                </div>
+            </button>
         </li>
     );
 }
@@ -197,16 +183,34 @@ export default function ReplaysPage(): React.ReactElement {
         [router],
     );
 
+    const handleClose = React.useCallback(() => {
+        // Return to the main menu, carrying the active `?gameId=` from the URL
+        // (resolved fresh, nullable) so we don't fabricate the page's 'tactics'
+        // fallback — main-menu deliberately has no default-game fallback.
+        const shellGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+        router.push(withShellGameId('/main-menu', shellGameId));
+    }, [router]);
+
     const isEmpty =
         state.status === 'loaded' &&
         state.items.length === 0 &&
         state.perspectivePaths.length === 0;
 
     return (
-        <main style={pageStyle} data-testid="replays-page">
-            <Heading level={1} size="xl">
-                Replays
-            </Heading>
+        <main className={styles['page']} data-testid="replays-page">
+            <div className={styles['header']}>
+                <Heading level={1} size="xl">
+                    Replays
+                </Heading>
+                <IconButton
+                    variant="danger"
+                    aria-label="Close replays"
+                    data-testid="replays-close-btn"
+                    onClick={handleClose}
+                >
+                    <span aria-hidden="true">X</span>
+                </IconButton>
+            </div>
 
             {state.status === 'loading' && (
                 <div role="status" aria-label="Loading replays">
@@ -215,7 +219,7 @@ export default function ReplaysPage(): React.ReactElement {
             )}
 
             {state.status === 'error' && (
-                <div style={errorStyle} role="alert">
+                <div className={styles['error']} role="alert">
                     {state.message}
                 </div>
             )}
@@ -227,7 +231,7 @@ export default function ReplaysPage(): React.ReactElement {
             )}
 
             {state.status === 'loaded' && !isEmpty && (
-                <ul style={listStyle}>
+                <ul className={styles['list']}>
                     {state.items.map((item) => (
                         <ReplayRow key={item.path} item={item} onOpen={handleOpenDeterministic} />
                     ))}
