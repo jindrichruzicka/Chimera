@@ -22,10 +22,20 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Badge, Caption, Heading, IconButton } from '../../components/ui';
+import { Badge, Button, Caption, Heading, IconButton, Modal } from '../../components/ui';
 import { useReplayApi } from '../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
+import { useToastStore } from '../../state/toastStore.js';
 import styles from './page.module.css';
+
+/** Which replay surface a pending deletion targets (deterministic vs perspective). */
+type ReplayKind = 'deterministic' | 'perspective';
+
+/** The replay a confirm dialog is currently gating for deletion. */
+interface PendingDelete {
+    readonly path: string;
+    readonly kind: ReplayKind;
+}
 
 type LoadState =
     | { readonly status: 'loading' }
@@ -52,19 +62,48 @@ function perspectiveLabel(path: string): string {
     return path.split('/').pop() ?? path;
 }
 
+/**
+ * Compact trailing delete control for a replay row. Rendered as a **sibling** of
+ * the open button (a `<button>` may not nest another), so clicking it never
+ * triggers the row's open handler. Ghost at rest; the icon shifts to the danger
+ * tokens on hover/focus (Invariant #91: tokens only).
+ */
+function DeleteReplayButton({
+    onDelete,
+    label,
+}: {
+    readonly onDelete: () => void;
+    readonly label: string;
+}): React.ReactElement {
+    return (
+        <IconButton
+            variant="ghost"
+            className={styles['deleteBtn']}
+            aria-label={label}
+            data-testid="replay-delete-btn"
+            onClick={onDelete}
+        >
+            <span aria-hidden="true">🗑</span>
+        </IconButton>
+    );
+}
+
 function ReplayRow({
     item,
     onOpen,
+    onDelete,
 }: {
     readonly item: ReplayListItem;
     readonly onOpen: (path: string) => void;
+    readonly onDelete: (path: string) => void;
 }): React.ReactElement {
+    const recorded = formatRecordedAt(item.recordedAt);
     return (
-        <li>
+        <li className={styles['rowItem']}>
             <button
                 type="button"
                 className={styles['row']}
-                aria-label={`Open replay recorded ${formatRecordedAt(item.recordedAt)}`}
+                aria-label={`Open replay recorded ${recorded}`}
                 data-testid="replay-open-btn"
                 onClick={() => onOpen(item.path)}
             >
@@ -82,10 +121,14 @@ function ReplayRow({
                         </span>
                     </span>
                     <Caption tone="muted">
-                        {formatRecordedAt(item.recordedAt)} · {item.playerIds.join(', ')}
+                        {recorded} · {item.playerIds.join(', ')}
                     </Caption>
                 </div>
             </button>
+            <DeleteReplayButton
+                label={`Delete replay recorded ${recorded}`}
+                onDelete={() => onDelete(item.path)}
+            />
         </li>
     );
 }
@@ -93,13 +136,15 @@ function ReplayRow({
 function PerspectiveReplayRow({
     path,
     onOpen,
+    onDelete,
 }: {
     readonly path: string;
     readonly onOpen: (path: string) => void;
+    readonly onDelete: (path: string) => void;
 }): React.ReactElement {
     const label = perspectiveLabel(path);
     return (
-        <li>
+        <li className={styles['rowItem']}>
             <button
                 type="button"
                 className={styles['row']}
@@ -121,6 +166,10 @@ function PerspectiveReplayRow({
                     <Caption tone="muted">Single-viewer replay</Caption>
                 </div>
             </button>
+            <DeleteReplayButton
+                label={`Delete perspective replay ${label}`}
+                onDelete={() => onDelete(path)}
+            />
         </li>
     );
 }
@@ -138,11 +187,19 @@ export default function ReplaysPage(): React.ReactElement {
         [],
     );
     const [state, setState] = React.useState<LoadState>({ status: 'loading' });
+    const [pendingDelete, setPendingDelete] = React.useState<PendingDelete | null>(null);
+
+    // Shared fetch for both replay kinds; the mount effect (with an unmount guard)
+    // and the post-delete reload both funnel through it.
+    const fetchReplays = React.useCallback(
+        () => Promise.all([replayApi.list(gameId), replayApi.perspective.list(gameId)]),
+        [replayApi, gameId],
+    );
 
     React.useEffect(() => {
         let active = true;
         setState({ status: 'loading' });
-        Promise.all([replayApi.list(gameId), replayApi.perspective.list(gameId)])
+        fetchReplays()
             .then(([items, perspectivePaths]) => {
                 if (active) {
                     setState({ status: 'loaded', items, perspectivePaths });
@@ -159,7 +216,20 @@ export default function ReplaysPage(): React.ReactElement {
         return () => {
             active = false;
         };
-    }, [replayApi, gameId]);
+    }, [fetchReplays]);
+
+    const reloadReplays = React.useCallback(async (): Promise<void> => {
+        setState({ status: 'loading' });
+        try {
+            const [items, perspectivePaths] = await fetchReplays();
+            setState({ status: 'loaded', items, perspectivePaths });
+        } catch (error: unknown) {
+            setState({
+                status: 'error',
+                message: error instanceof Error ? error.message : 'Failed to load replays',
+            });
+        }
+    }, [fetchReplays]);
 
     const handleOpenDeterministic = React.useCallback(
         (path: string) => {
@@ -190,6 +260,41 @@ export default function ReplaysPage(): React.ReactElement {
         const shellGameId = resolveShellGameId(new URLSearchParams(window.location.search));
         router.push(withShellGameId('/main-menu', shellGameId));
     }, [router]);
+
+    const handleRequestDelete = React.useCallback((path: string, kind: ReplayKind) => {
+        setPendingDelete({ path, kind });
+    }, []);
+
+    const handleRequestDeleteDeterministic = React.useCallback(
+        (path: string) => handleRequestDelete(path, 'deterministic'),
+        [handleRequestDelete],
+    );
+
+    const handleRequestDeletePerspective = React.useCallback(
+        (path: string) => handleRequestDelete(path, 'perspective'),
+        [handleRequestDelete],
+    );
+
+    const handleCancelDelete = React.useCallback(() => {
+        setPendingDelete(null);
+    }, []);
+
+    const handleConfirmDelete = React.useCallback(async () => {
+        if (pendingDelete === null) return;
+        const { path, kind } = pendingDelete;
+        // Close the dialog up front — the delete + reload run in the background.
+        setPendingDelete(null);
+        try {
+            await (kind === 'perspective'
+                ? replayApi.perspective.delete(path)
+                : replayApi.delete(path));
+            // §4.30: static-literal toast title — carries no replay metadata.
+            useToastStore.getState().push({ severity: 'success', title: 'Replay deleted' });
+            await reloadReplays();
+        } catch {
+            useToastStore.getState().push({ severity: 'error', title: 'Delete failed' });
+        }
+    }, [pendingDelete, replayApi, reloadReplays]);
 
     const isEmpty =
         state.status === 'loaded' &&
@@ -233,16 +338,61 @@ export default function ReplaysPage(): React.ReactElement {
             {state.status === 'loaded' && !isEmpty && (
                 <ul className={styles['list']}>
                     {state.items.map((item) => (
-                        <ReplayRow key={item.path} item={item} onOpen={handleOpenDeterministic} />
+                        <ReplayRow
+                            key={item.path}
+                            item={item}
+                            onOpen={handleOpenDeterministic}
+                            onDelete={handleRequestDeleteDeterministic}
+                        />
                     ))}
                     {state.perspectivePaths.map((path) => (
                         <PerspectiveReplayRow
                             key={path}
                             path={path}
                             onOpen={handleOpenPerspective}
+                            onDelete={handleRequestDeletePerspective}
                         />
                     ))}
                 </ul>
+            )}
+
+            {pendingDelete !== null && (
+                <Modal
+                    open
+                    title="Delete replay?"
+                    onClose={handleCancelDelete}
+                    data-testid="replay-delete-dialog"
+                >
+                    <div style={{ display: 'grid', gap: 'var(--ch-space-md)' }}>
+                        <Caption tone="muted">
+                            This replay will be permanently deleted. This cannot be undone.
+                        </Caption>
+                        <div
+                            style={{
+                                display: 'flex',
+                                gap: 'var(--ch-space-sm)',
+                                justifyContent: 'flex-end',
+                            }}
+                        >
+                            <Button
+                                variant="secondary"
+                                data-testid="replay-delete-cancel"
+                                onClick={handleCancelDelete}
+                            >
+                                Cancel
+                            </Button>
+                            <Button
+                                variant="danger"
+                                data-testid="replay-delete-confirm"
+                                onClick={() => {
+                                    void handleConfirmDelete();
+                                }}
+                            >
+                                Delete
+                            </Button>
+                        </div>
+                    </div>
+                </Modal>
             )}
         </main>
     );

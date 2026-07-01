@@ -10,6 +10,8 @@ import type {
     ReplayAPI,
     ReplayListItem,
 } from '@chimera-engine/simulation/bridge/api-types.js';
+import { EscapeStackProvider } from '../../components/ui';
+import { useToastStore } from '../../state/toastStore.js';
 import ReplaysPage from './page';
 
 // Perspective rows navigate to the player with a client `router.push` (the
@@ -45,24 +47,42 @@ function installBridge(
         list?: ReplayAPI['list'];
         perspectiveList?: PerspectiveReplayAPI['list'];
         openInPlayer?: ReplayAPI['openInPlayer'];
+        delete?: ReplayAPI['delete'];
+        perspectiveDelete?: PerspectiveReplayAPI['delete'];
     } = {},
 ): void {
     const replay = {
         list: opts.list ?? vi.fn(() => Promise.resolve([])),
         openInPlayer: opts.openInPlayer ?? vi.fn(() => Promise.resolve()),
-        perspective: { list: opts.perspectiveList ?? vi.fn(() => Promise.resolve([])) },
+        delete: opts.delete ?? vi.fn(() => Promise.resolve()),
+        perspective: {
+            list: opts.perspectiveList ?? vi.fn(() => Promise.resolve([])),
+            delete: opts.perspectiveDelete ?? vi.fn(() => Promise.resolve()),
+        },
     } as unknown as ReplayAPI;
     Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });
 }
 
+// The confirm dialog is a <Modal>, which registers Escape-to-close on the shared
+// overlay stack; render the page under the provider so `useEscapeLayer` resolves.
+function renderPage(): ReturnType<typeof render> {
+    return render(
+        <EscapeStackProvider>
+            <ReplaysPage />
+        </EscapeStackProvider>,
+    );
+}
+
 beforeEach(() => {
     push.mockClear();
+    useToastStore.getState().dismissAll();
     window.history.replaceState({}, '', '/replays?gameId=tactics');
 });
 
 afterEach(() => {
     cleanup();
     Reflect.deleteProperty(window, '__chimera');
+    useToastStore.getState().dismissAll();
     vi.restoreAllMocks();
 });
 
@@ -224,5 +244,110 @@ describe('ReplaysPage', () => {
         await userEvent.click(closeButton);
 
         expect(push).toHaveBeenCalledWith('/main-menu');
+    });
+
+    it('renders a delete button on every row of both kinds', async () => {
+        installBridge({
+            list: vi.fn(() => Promise.resolve([makeItem()])),
+            perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_PATH])),
+        });
+
+        render(<ReplaysPage />);
+
+        await waitFor(() => {
+            expect(screen.getAllByTestId('replay-delete-btn')).toHaveLength(2);
+        });
+    });
+
+    it('opens a confirm dialog on delete click without deleting or opening the replay', async () => {
+        const del = vi.fn(() => Promise.resolve());
+        const openInPlayer = vi.fn(() => Promise.resolve());
+        installBridge({
+            list: vi.fn(() => Promise.resolve([makeItem()])),
+            delete: del,
+            openInPlayer,
+        });
+
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('replay-delete-btn'));
+
+        expect(screen.getByTestId('replay-delete-dialog')).toBeInTheDocument();
+        expect(del).not.toHaveBeenCalled();
+        expect(openInPlayer).not.toHaveBeenCalled();
+    });
+
+    it('cancelling the confirm dialog deletes nothing and closes the dialog', async () => {
+        const del = vi.fn(() => Promise.resolve());
+        installBridge({ list: vi.fn(() => Promise.resolve([makeItem()])), delete: del });
+
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('replay-delete-btn'));
+        await userEvent.click(screen.getByTestId('replay-delete-cancel'));
+
+        expect(del).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(screen.queryByTestId('replay-delete-dialog')).not.toBeInTheDocument();
+        });
+    });
+
+    it('confirming deletes a deterministic replay, drops the row, and toasts', async () => {
+        const del = vi.fn(() => Promise.resolve());
+        // The list resolves the item on mount, then empty on the post-delete reload.
+        const list = vi
+            .fn()
+            .mockResolvedValueOnce([makeItem({ path: '/replays/tactics/gone.chimera-replay' })])
+            .mockResolvedValue([]);
+        installBridge({ list, delete: del });
+
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('replay-delete-btn'));
+        await userEvent.click(screen.getByTestId('replay-delete-confirm'));
+
+        await waitFor(() => {
+            expect(del).toHaveBeenCalledWith('/replays/tactics/gone.chimera-replay');
+        });
+        await waitFor(() => {
+            expect(screen.queryByTestId('replay-open-btn')).not.toBeInTheDocument();
+        });
+        expect(useToastStore.getState().queue.some((toast) => /deleted/i.test(toast.title))).toBe(
+            true,
+        );
+    });
+
+    it('confirming a perspective row deletes via perspective.delete', async () => {
+        const perspectiveDelete = vi.fn(() => Promise.resolve());
+        const perspectiveList = vi
+            .fn()
+            .mockResolvedValueOnce([PERSPECTIVE_PATH])
+            .mockResolvedValue([]);
+        installBridge({ perspectiveList, perspectiveDelete });
+
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('replay-delete-btn'));
+        await userEvent.click(screen.getByTestId('replay-delete-confirm'));
+
+        await waitFor(() => {
+            expect(perspectiveDelete).toHaveBeenCalledWith(PERSPECTIVE_PATH);
+        });
+    });
+
+    it('surfaces a failure toast when deletion rejects', async () => {
+        const del = vi.fn(() => Promise.reject(new Error('disk gone')));
+        installBridge({ list: vi.fn(() => Promise.resolve([makeItem()])), delete: del });
+
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('replay-delete-btn'));
+        await userEvent.click(screen.getByTestId('replay-delete-confirm'));
+
+        await waitFor(() => {
+            expect(
+                useToastStore.getState().queue.some((toast) => /failed/i.test(toast.title)),
+            ).toBe(true);
+        });
     });
 });

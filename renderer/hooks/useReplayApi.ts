@@ -70,6 +70,8 @@ export interface PerspectiveReplayApi {
     openPlayback(path: string): Promise<PerspectiveReplayPlaybackInfo>;
     snapshotAt(tick: number): Promise<PlayerSnapshot>;
     closePlayback(): Promise<void>;
+    /** Permanently delete the perspective replay at `path` (replay browser). */
+    delete(path: string): Promise<void>;
 }
 
 export interface ReplayApi {
@@ -150,6 +152,8 @@ export function useReplayApi(): ReplayApi {
                     requireBridge().perspective.snapshotAt(tick),
                 closePlayback: async (): Promise<void> =>
                     requireBridge().perspective.closePlayback(),
+                delete: async (path: string): Promise<void> =>
+                    requireBridge().perspective.delete(path),
             },
         }),
         [],

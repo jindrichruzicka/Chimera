@@ -104,6 +104,19 @@ describe('useReplayApi', () => {
         }
     });
 
+    it('delegates perspective.delete to the bridge (replay browser delete)', async () => {
+        const replay = makeReplayBridge();
+        Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });
+
+        try {
+            const { result } = renderHook(() => useReplayApi());
+            await result.current.perspective.delete('/p');
+            expect(replay.perspective.delete).toHaveBeenCalledWith('/p');
+        } finally {
+            Reflect.deleteProperty(window, '__chimera');
+        }
+    });
+
     it('returns a stable reference across re-renders', () => {
         const replay = makeReplayBridge();
         Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });
