@@ -221,9 +221,8 @@ describe('ComponentGalleryClient — Select present in Forms panel (AC #6b)', ()
 // ── AC #7 — Server page gate (notFound) — isGalleryEnabled unit + page integration ─
 
 describe('ComponentGalleryPage server wrapper — gate (AC #7)', () => {
-    it('calls notFound() when ComponentGalleryPage renders in production without E2E flag', () => {
-        vi.stubEnv('NODE_ENV', 'production');
-        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '');
+    it('calls notFound() when ComponentGalleryPage renders in the packaged production build', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
 
         vi.mocked(notFoundMock).mockClear();
         render(
@@ -236,8 +235,8 @@ describe('ComponentGalleryPage server wrapper — gate (AC #7)', () => {
         vi.unstubAllEnvs();
     });
 
-    it('does not call notFound() when ComponentGalleryPage renders in development', () => {
-        vi.stubEnv('NODE_ENV', 'development');
+    it('does not call notFound() in a non-packaged build', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
 
         vi.mocked(notFoundMock).mockClear();
         render(
@@ -250,8 +249,8 @@ describe('ComponentGalleryPage server wrapper — gate (AC #7)', () => {
         vi.unstubAllEnvs();
     });
 
-    it('isGalleryEnabled returns true when NODE_ENV is development', async () => {
-        vi.stubEnv('NODE_ENV', 'development');
+    it('isGalleryEnabled returns true in a non-packaged build', async () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
 
         const { isGalleryEnabled } = await import('./galleryGate.js');
         expect(isGalleryEnabled()).toBe(true);
@@ -259,12 +258,11 @@ describe('ComponentGalleryPage server wrapper — gate (AC #7)', () => {
         vi.unstubAllEnvs();
     });
 
-    it('isGalleryEnabled returns true when NEXT_PUBLIC_CHIMERA_E2E is "1"', async () => {
-        vi.stubEnv('NODE_ENV', 'production');
-        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
+    it('isGalleryEnabled returns false in the packaged production build', async () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
 
         const { isGalleryEnabled } = await import('./galleryGate.js');
-        expect(isGalleryEnabled()).toBe(true);
+        expect(isGalleryEnabled()).toBe(false);
 
         vi.unstubAllEnvs();
     });

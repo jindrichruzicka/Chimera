@@ -105,8 +105,8 @@ describe('MainMenuPage — engine fallback (no active lobby game)', () => {
         );
     });
 
-    it('renders a dev-only icon button for the component gallery outside production', () => {
-        vi.stubEnv('NODE_ENV', 'development');
+    it('renders the dev-only component gallery icon button in non-packaged builds', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
 
         renderMainMenuPage();
 
@@ -114,26 +114,16 @@ describe('MainMenuPage — engine fallback (no active lobby game)', () => {
         expect(screen.getByRole('button', { name: /component gallery/i })).toBeTruthy();
     });
 
-    it('does not render the component gallery icon button in production', () => {
-        vi.stubEnv('NODE_ENV', 'production');
-        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '');
+    it('does not render the component gallery icon button in the packaged production build', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
 
         renderMainMenuPage();
 
         expect(screen.queryByTestId('main-menu-component-gallery')).toBeNull();
     });
 
-    it('renders the component gallery icon button in E2E-enabled production exports', () => {
-        vi.stubEnv('NODE_ENV', 'production');
-        vi.stubEnv('NEXT_PUBLIC_CHIMERA_E2E', '1');
-
-        renderMainMenuPage();
-
-        expect(screen.getByTestId('main-menu-component-gallery')).toBeTruthy();
-    });
-
     it('navigates to /component-gallery when the dev-only gallery icon button is clicked', () => {
-        vi.stubEnv('NODE_ENV', 'development');
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
 
         renderMainMenuPage();
         fireEvent.click(screen.getByTestId('main-menu-component-gallery'));
