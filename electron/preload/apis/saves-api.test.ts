@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
-    SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
     SAVES_LOAD_CHANNEL,
@@ -176,43 +175,6 @@ describe('createSavesApi', () => {
             }
             expect(cbA).not.toHaveBeenCalled();
             expect(cbB).toHaveBeenCalledOnce();
-        });
-    });
-
-    describe('checkCrashRecovery()', () => {
-        it('invokes chimera:saves:check-crash-recovery with no argument and resolves to the response', async () => {
-            const stub = makeIpcStub();
-            const expected = { needsRecovery: true, slotId: 'slot-crash-1' };
-            stub.invokeResults.set(SAVES_CHECK_CRASH_RECOVERY_CHANNEL, expected);
-            const api = createSavesApi(stub.port);
-
-            const result = await api.checkCrashRecovery();
-
-            expect(stub.invocations).toEqual([
-                { channel: SAVES_CHECK_CRASH_RECOVERY_CHANNEL, arg: undefined },
-            ]);
-            expect(result).toStrictEqual(expected);
-        });
-
-        it('resolves with needsRecovery: false and slotId: null when main reports no crash', async () => {
-            const stub = makeIpcStub();
-            const expected = { needsRecovery: false, slotId: null };
-            stub.invokeResults.set(SAVES_CHECK_CRASH_RECOVERY_CHANNEL, expected);
-            const api = createSavesApi(stub.port);
-
-            const result = await api.checkCrashRecovery();
-
-            expect(result).toStrictEqual(expected);
-        });
-
-        it('rejects with PreloadIpcValidationError when main returns a malformed payload', async () => {
-            const stub = makeIpcStub();
-            stub.invokeResults.set(SAVES_CHECK_CRASH_RECOVERY_CHANNEL, 'bad-payload');
-            const api = createSavesApi(stub.port);
-
-            await expect(api.checkCrashRecovery()).rejects.toBeInstanceOf(
-                PreloadIpcValidationError,
-            );
         });
     });
 });

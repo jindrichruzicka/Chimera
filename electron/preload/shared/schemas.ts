@@ -29,7 +29,6 @@ import type {
     ActionRejection,
     ChatMessage,
     CommitmentReveal,
-    CrashRecoveryStatus,
     DeviceInfo,
     LocalProfileSlot,
     LobbyInfo,
@@ -184,15 +183,6 @@ export const SaveSlotMetaSchema: z.ZodType<SaveSlotMeta> = z.object({
 
 /** Schema for the array returned by `chimera:saves:list`. */
 export const SaveSlotListSchema: z.ZodType<readonly SaveSlotMeta[]> = z.array(SaveSlotMetaSchema);
-
-/**
- * Schema for {@link CrashRecoveryStatus} returned by
- * `chimera:saves:check-crash-recovery`.
- */
-export const CrashRecoveryStatusSchema = z.object({
-    needsRecovery: z.boolean(),
-    slotId: z.string().transform(toSlotId).nullable(),
-}) satisfies z.ZodType<CrashRecoveryStatus>;
 
 /**
  * Schema for {@link ResolvedSettings} returned by `chimera:settings:*`. The

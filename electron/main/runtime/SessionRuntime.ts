@@ -344,9 +344,9 @@ export class SessionRuntime {
 
     /**
      * Replace the live snapshot from a previously persisted save.
-     * Called by `SaveManager.restoreFromSave(...)` consumers (load and
-     * "Resume last session") so the running session reflects the loaded
-     * state without going through the pipeline (Invariant #24).
+     * Called by `SaveManager.restoreFromSave(...)` consumers (the load flow)
+     * so the running session reflects the loaded state without going through
+     * the pipeline (Invariant #24).
      */
     applyRestoredFile(file: SaveFile): void {
         this.snapshot = file.checkpoint;

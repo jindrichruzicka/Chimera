@@ -36,7 +36,6 @@ import {
     toSlotId,
     type SaveSlotMeta as PreloadSaveSlotMeta,
     type SaveRequest,
-    type CrashRecoveryStatus,
 } from '../../preload/api-types.js';
 import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 import type { SaveSlotMeta as SimSaveSlotMeta } from '@chimera-engine/simulation/persistence/SaveRepository.js';
@@ -77,17 +76,6 @@ export interface CreateSavesIpcPortOptions {
      */
     readonly applyRestoredFile?: SaveFileRestore;
     readonly logger: Logger;
-    /**
-     * Cached result of {@link SaveManager.checkCrashRecovery} captured once at
-     * application startup (before the clean-exit flag is cleared).  Served
-     * verbatim by every `chimera:saves:check-crash-recovery` invocation —
-     * re-running the underlying check would always return `null` because the
-     * flag has been cleared by then.
-     *
-     * `null` means the previous session exited cleanly (or no autosave was
-     * found); a non-null value carries the autosave's qualified slot ID.
-     */
-    readonly crashRecoveryStatus: CrashRecoveryStatus;
 }
 
 /**
@@ -96,8 +84,7 @@ export interface CreateSavesIpcPortOptions {
  * `electron/main/index.ts`.
  */
 export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpcPort {
-    const { saveManager, captureSaveFile, applyRestoredFile, logger, crashRecoveryStatus } =
-        options;
+    const { saveManager, captureSaveFile, applyRestoredFile, logger } = options;
     const log = logger.child({ module: 'saves-ipc-adapter' });
 
     return {
@@ -127,8 +114,6 @@ export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpc
         delete: async (slotId) => {
             await saveManager.delete(slotId);
         },
-        checkCrashRecovery: (): Promise<CrashRecoveryStatus> =>
-            Promise.resolve(crashRecoveryStatus),
     };
 }
 

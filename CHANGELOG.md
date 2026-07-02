@@ -7,6 +7,10 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Removed
+
+- Crash recovery — removed the `CrashRecoveryBanner` "Resume last session" prompt and the entire unclean-shutdown detection mechanism: the `lastCleanExit.flag` sentinel, `SaveManager.checkCrashRecovery` / `markCleanExit` / `clearCleanExitFlag`, the `chimera:saves:check-crash-recovery` and `chimera:system:was-clean-exit` IPC channels, `CrashRecoveryStatus`, and the `triggerCrashSave` E2E hook. Autosave (including the crash reporter's autosave-before-crash-dump) and manual save/load are unaffected.
+
 ## [0.8.0] — 2026-06-19
 
 ### Added
@@ -73,7 +77,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Full ActionPipeline Integration — 7-stage pipeline complete (`validate → auth → intercept → reduce → history → project → broadcast`); `UnknownActionTypeError`, `ActionSchemaError`, `ValidationResult`; `PipelineContext` constructor; `engine:` namespace collision guard; Stage 7 skip on undo/redo (F15)
 - UndoManager and Turn Memento — `UndoManager`, `InMemoryUndoManager`, `TurnMemento`, `ActionHistory` (with `TurnMemento`-bounded pruning), `UndoPolicy` + `DEFAULT_UNDO_POLICY`; `engine:undo` / `engine:redo` intercepted at Stage 3; `canUndo` / `canRedo` reflected in `PlayerSnapshot.undoMeta` (F16)
 - Client Prediction — `ClientPredictor` and `ReconcileBuffer`; wired into `ipcClient.sendAction()`; limited to `predictable: true`, own-player-only actions; reconciles on authoritative snapshot receipt (F17)
-- Save Manager IPC and SaveScreen UI — `chimera:saves:*` IPC handlers (`listSaves`, `saveGame`, `loadGame`, `deleteSave`, `onSlotUpdate`); `saveStore` Zustand slice; `saves/page.tsx` SaveScreen; `CrashRecoveryBanner` with "Resume last session" prompt; autosave wired to `engine:end_turn`; `SaveRepository` contract test suite (F18)
+- Save Manager IPC and SaveScreen UI — `chimera:saves:*` IPC handlers (`listSaves`, `saveGame`, `loadGame`, `deleteSave`, `onSlotUpdate`); `saveStore` Zustand slice; `saves/page.tsx` SaveScreen; autosave wired to `engine:end_turn`; `SaveRepository` contract test suite (F18)
 - Settings UI — `settings/page.tsx` with engine-wide and game-specific settings fields; wired to `window.__chimera.settings.update()` / `reset()`; `settingsStore` keeps UI live via `onChange` subscription (F19)
 - Fixed-Point Math — `FixedPoint` (Q32.32 `bigint`); full arithmetic suite (`add`, `sub`, `mul`, `div`), comparisons, `sqrt`, `sin`, `cos`, `atan2`; conversion helpers (`fromInt`, `fromRatio`, `fromFloat`, `toFloat`, `toInt`); constants `FP_ZERO`, `FP_ONE`, `FP_HALF`, `FP_PI`, `FP_HALF_PI`, `FP_TWO_PI`; `chimera/no-fromfloat-in-simulation` ESLint rule; golden-vector determinism test suite (F20)
 - Game Timers — `GameTimer`, `TimerRegistry`, `TimerManager` (`create`, `cancel`, `advance`); `TimerManager.advance()` wired into `engine:tick` reducer via bounded re-entrant `ctx.dispatch()` (`MAX_NESTED_DISPATCH = 16`); `snapshot.timers` serialised in saves; `GameReduceContext` ISP split enforcing dispatch visibility (F21)
@@ -93,7 +97,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
-- Electron Application Shell — BrowserWindow lifecycle, environment-specific config, clean-shutdown `lastCleanExit.flag` (F01)
+- Electron Application Shell — BrowserWindow lifecycle, environment-specific config (F01)
 - Preload / IPC Bridge — full `window.__chimera` contextBridge surface, five typed namespaces (`game-api`, `lobby-api`, `saves-api`, `settings-api`, `system-api`) (F02)
 - Simulation Engine Stub — `BaseGameSnapshot`, `ActionEnvelope`, `ActionRegistry`, `ActionPipeline` (7-stage), `StateReducer`, `EngineActions` (F03)
 - Deterministic RNG and Clock — splitmix64 → xoshiro256\*\*, `SimulationClock`, `chimera/no-restricted-globals` ESLint rule (F04)
@@ -109,7 +113,7 @@ Versioning: [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - `setWindowOpenHandler` deny-all; `will-navigate` blocks non-`file://` navigation
 - `session.defaultSession.setPermissionRequestHandler` deny-all registered before `app.whenReady()`
 - All `ipcMain.handle` inputs validated with Zod at IPC boundary; `SETTINGS_UPDATE` additionally validates via `validatePatchForGame`
-- `FileSaveRepository` wired in production (not `InMemorySaveRepository`); crash-recovery `knownGameIds` populated
+- `FileSaveRepository` wired in production (not `InMemorySaveRepository`)
 - `did-fail-load` diagnostic handler; `isDestroyed()` guard before all `webContents.send` calls
 - Renderer logger: `addEventListener` over `window.onerror`; idempotent install with teardown; `LogEntry.source.process` not renderer-forgeable
 - Pino sink uses async writes with `flushSync` on crash/quit paths; SonicBoom destination closed before day-rollover

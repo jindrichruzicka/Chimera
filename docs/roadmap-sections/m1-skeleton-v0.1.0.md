@@ -13,7 +13,7 @@ tags: [milestone, m1, electron, ipc, simulation, persistence, settings, dev-tool
 
 ## F01 — Electron Application Shell `§3 electron/main/index.ts`
 
-Bootstrap the Electron entry point: create and manage the `BrowserWindow`, inject environment-specific configuration, load the Next.js static export from `renderer/out/`, and implement the clean-shutdown `lastCleanExit.flag` mechanism.
+Bootstrap the Electron entry point: create and manage the `BrowserWindow`, inject environment-specific configuration, and load the Next.js static export from `renderer/out/`.
 
 ---
 
@@ -45,7 +45,7 @@ Implement `DataRef<T>`, `AssetRef<T>`, `ContentDatabase`, `ContentLoader` (direc
 
 ## F06 — Save / Load Persistence `§4.11`
 
-Implement `SaveFile`, `JsonSaveSerializer`, `CompressedSaveSerializer`, `SaveMigrator`, `SaveRepository` interface, `FileSaveRepository` (atomic `.tmp` rename), `InMemorySaveRepository`, and `SaveManager`. Wire `engine:save` and `engine:load` as reserved actions. Implement crash-recovery check (`lastCleanExit.flag`).
+Implement `SaveFile`, `JsonSaveSerializer`, `CompressedSaveSerializer`, `SaveMigrator`, `SaveRepository` interface, `FileSaveRepository` (atomic `.tmp` rename), `InMemorySaveRepository`, and `SaveManager`. Wire `engine:save` and `engine:load` as reserved actions.
 
 ---
 

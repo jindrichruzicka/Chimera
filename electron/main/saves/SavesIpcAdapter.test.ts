@@ -71,7 +71,7 @@ describe('createSavesIpcPort', () => {
 
     beforeEach(() => {
         repo = new InMemorySaveRepository();
-        manager = new SaveManager(repo, '/tmp/data', createNoopLogger());
+        manager = new SaveManager(repo, createNoopLogger());
         captured = [];
         nextCaptured = null;
         port = createSavesIpcPort({
@@ -84,7 +84,6 @@ describe('createSavesIpcPort', () => {
                 return nextCaptured;
             },
             logger: createNoopLogger(),
-            crashRecoveryStatus: { needsRecovery: false, slotId: null },
         });
     });
 
@@ -184,7 +183,6 @@ describe('createSavesIpcPort', () => {
                     restored.push(file);
                 },
                 logger: createNoopLogger(),
-                crashRecoveryStatus: { needsRecovery: false, slotId: null },
             });
 
             await restorePort.load(toSlotId('tactics/alpha'));
@@ -206,34 +204,6 @@ describe('createSavesIpcPort', () => {
             await expect(port.delete(toSlotId('tactics/missing'))).rejects.toBeInstanceOf(
                 SaveNotFoundError,
             );
-        });
-    });
-
-    describe('checkCrashRecovery', () => {
-        it('returns the captured crash-recovery status verbatim (clean exit)', async () => {
-            const cleanPort = createSavesIpcPort({
-                saveManager: manager,
-                captureSaveFile: () => Promise.reject(new Error('not used')),
-                logger: createNoopLogger(),
-                crashRecoveryStatus: { needsRecovery: false, slotId: null },
-            });
-            await expect(cleanPort.checkCrashRecovery()).resolves.toEqual({
-                needsRecovery: false,
-                slotId: null,
-            });
-        });
-
-        it('returns the captured crash-recovery status verbatim (autosave found)', async () => {
-            const crashPort = createSavesIpcPort({
-                saveManager: manager,
-                captureSaveFile: () => Promise.reject(new Error('not used')),
-                logger: createNoopLogger(),
-                crashRecoveryStatus: { needsRecovery: true, slotId: toSlotId('tactics/autosave') },
-            });
-            await expect(crashPort.checkCrashRecovery()).resolves.toEqual({
-                needsRecovery: true,
-                slotId: 'tactics/autosave',
-            });
         });
     });
 });

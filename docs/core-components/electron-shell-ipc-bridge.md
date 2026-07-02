@@ -89,13 +89,6 @@ interface SavesAPI {
     /** Permanently delete a slot. */
     delete(slotId: string): Promise<void>;
     /**
-     * Cached crash-recovery status captured once at app startup
-     * (before the clean-exit flag is cleared).  `needsRecovery: true`
-     * means the previous session crashed and the autosave at
-     * `slotId` is available to resume from.
-     */
-    checkCrashRecovery(): Promise<CrashRecoveryStatus>;
-    /**
      * Subscribe to slot-list updates pushed via
      * `chimera:saves:slot-update` after every save / delete.  The
      * callback receives the full refreshed `SaveSlotMeta[]` for the
@@ -111,7 +104,6 @@ Channels:
 - `chimera:saves:save` — invoke
 - `chimera:saves:load` — invoke
 - `chimera:saves:delete` — invoke
-- `chimera:saves:check-crash-recovery` — invoke
 - `chimera:saves:slot-update` — push (main → renderer)
 
 ---

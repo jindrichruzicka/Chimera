@@ -180,7 +180,7 @@ export function createDebugApiMock(overrides: Partial<ChimeraDebugApi> = {}): De
 /**
  * Expose the mock as `window.__chimeraDebug`. The augmentation declares the
  * property `readonly`, so plain assignment fails — `defineProperty` with
- * `configurable: true` is the repo convention (see CrashRecoveryBanner.test).
+ * `configurable: true` is the repo convention for stubbing a `readonly` global.
  */
 export function installDebugApi(api: ChimeraDebugApi): void {
     Object.defineProperty(window, '__chimeraDebug', { configurable: true, value: api });

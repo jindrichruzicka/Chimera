@@ -15,9 +15,6 @@ beforeEach(() => {
             system: {
                 platform: vi.fn(async () => ({ os: 'macos', version: 'test' })),
             },
-            saves: {
-                checkCrashRecovery: vi.fn(async () => ({ needsRecovery: false, slotId: null })),
-            },
         },
     });
 });

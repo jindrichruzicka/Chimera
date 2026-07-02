@@ -42,7 +42,7 @@ Implement `ClientPredictor` and `ReconcileBuffer` for actions where `predictable
 
 ## F18 — Save Manager IPC and SaveScreen UI `§4.11`
 
-Complete `SaveManager` IPC handlers (`listSaves`, `saveGame`, `loadGame`, `deleteSave`, `onSlotUpdate`). Implement `SaveScreen` renderer page reading `saveStore.slots`. Wire autosave after `engine:end_turn`. Implement crash-recovery "Resume last session" prompt.
+Complete `SaveManager` IPC handlers (`listSaves`, `saveGame`, `loadGame`, `deleteSave`, `onSlotUpdate`). Implement `SaveScreen` renderer page reading `saveStore.slots`. Wire autosave after `engine:end_turn`.
 
 ---
 

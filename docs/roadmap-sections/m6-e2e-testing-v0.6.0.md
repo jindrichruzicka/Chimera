@@ -39,7 +39,7 @@ Write and green all mandatory specs: `lobby.spec.ts`, `game-flow.spec.ts`, `undo
 
 ## F34 — Save and Settings E2E Specs `§10.1`
 
-Write: (a) save/load E2E — play to turn 3, save, relaunch, load, assert tick matches; (b) crash recovery E2E — force-kill, relaunch, accept "Resume", assert correct tick; (c) settings E2E — change `masterVolume`, relaunch, assert persists, reset returns defaults.
+Write: (a) save/load E2E — play to turn 3, save, relaunch, load, assert tick matches; (b) settings E2E — change `masterVolume`, relaunch, assert persists, reset returns defaults.
 
 ---
 

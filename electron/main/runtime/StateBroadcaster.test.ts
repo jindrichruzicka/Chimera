@@ -142,8 +142,6 @@ function makeE2eHooks(): E2eHooks {
         wsFrames: undefined,
         // no-op in this test double — StateBroadcaster does not call dispatchTick
         dispatchTick: () => {},
-        // no-op in this test double — StateBroadcaster does not call triggerCrashSave
-        triggerCrashSave: () => {},
         // no-op in this test double — StateBroadcaster does not call deliverChat
         deliverChat: () => {},
     };

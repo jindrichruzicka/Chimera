@@ -17,7 +17,6 @@
 
 import { useMemo } from 'react';
 import type {
-    CrashRecoveryStatus,
     SaveRequest,
     SaveSlotMeta,
     SavesAPI,
@@ -52,7 +51,6 @@ export interface SavesApi {
     save(request: SaveRequest): Promise<SaveSlotMeta>;
     load(slotId: SlotId): Promise<void>;
     delete(slotId: SlotId): Promise<void>;
-    checkCrashRecovery(): Promise<CrashRecoveryStatus>;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -91,14 +89,6 @@ export function useSavesApi(): SavesApi {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
                 return api.delete(slotId);
-            },
-
-            async checkCrashRecovery(): Promise<CrashRecoveryStatus> {
-                const api = getSavesBridge();
-                if (!api) {
-                    throw new Error(MISSING_BRIDGE_ERROR);
-                }
-                return api.checkCrashRecovery();
             },
         }),
         [],

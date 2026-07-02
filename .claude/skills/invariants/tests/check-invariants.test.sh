@@ -562,7 +562,7 @@ test_missing_is_debug_mode_assignment_detected() {
     trap 'rm -rf "${tmp}"' RETURN
 
     plant_file "${tmp}" "shared/constants.ts" \
-        "export const CLEAN_EXIT_FLAG_FILENAME = 'lastCleanExit.flag';"
+        "export const DEBUG_CHANNEL = 'chimera:debug';"
 
     local out exit_code
     out=$(run_from_root "${tmp}" 2>&1) && exit_code=0 || exit_code=$?

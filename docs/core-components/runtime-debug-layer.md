@@ -177,7 +177,7 @@ export type DebugResponse =
 
 ### IPC channels
 
-Channel constants are plain strings in `shared/constants.ts` (precedent: `CLEAN_EXIT_IPC_CHANNEL`) so the Inspector preload mirrors them without importing the debug module graph (Invariant #27). In production no handler or listener exists on any of them — renderer sends are true no-ops.
+Channel constants are plain strings in `shared/constants.ts` so the Inspector preload mirrors them without importing the debug module graph (Invariant #27). In production no handler or listener exists on any of them — renderer sends are true no-ops.
 
 | Constant                         | Channel                          | Direction                 | Payload                                                             |
 | -------------------------------- | -------------------------------- | ------------------------- | ------------------------------------------------------------------- |

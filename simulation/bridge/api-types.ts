@@ -300,21 +300,6 @@ export interface SaveRequest {
     readonly label?: string;
 }
 
-/**
- * Result returned by {@link SavesAPI.checkCrashRecovery}.
- *
- * When `needsRecovery` is `true`, `slotId` identifies the autosave slot from
- * the interrupted session that the renderer may offer to resume.
- * `slotId` is `null` when `needsRecovery` is `false`.
- *
- * Invariant #1: only the opaque `slotId` string crosses the IPC boundary —
- * never the full `SaveFile` or `GameSnapshot`.
- */
-export interface CrashRecoveryStatus {
-    readonly needsRecovery: boolean;
-    readonly slotId: SlotId | null;
-}
-
 // ─── Settings domain stubs ────────────────────────────────────────────────────
 // Superseded by simulation/ settings module (F07).
 
@@ -1036,17 +1021,6 @@ export interface SavesAPI {
     delete(slotId: SlotId): Promise<void>;
     /** Fires after save / delete / autosave. */
     onSlotUpdate(cb: (slots: SaveSlotMeta[]) => void): Unsubscribe;
-    /**
-     * Check whether a previous session terminated unexpectedly.
-     *
-     * Called once on renderer startup. When `needsRecovery` is `true` the
-     * renderer should surface a {@link CrashRecoveryBanner} offering to
-     * resume the interrupted session via `load(slotId)`.
-     *
-     * Invariant #1: only the opaque `slotId` string is returned — never the
-     * full `SaveFile` or `GameSnapshot`.
-     */
-    checkCrashRecovery(): Promise<CrashRecoveryStatus>;
 }
 
 // ─── settings namespace ───────────────────────────────────────────────────────

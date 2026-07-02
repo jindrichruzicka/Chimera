@@ -52,7 +52,6 @@ describe('registerE2eHooks', () => {
         expect(typeof hooks.onTick).toBe('function');
         expect(typeof hooks.onBroadcastChecksum).toBe('function');
         expect(typeof hooks.dispatchTick).toBe('function');
-        expect(typeof hooks.triggerCrashSave).toBe('function');
     });
 
     it('dispatchTick throws before the session runtime wires it — fails loudly in CI', () => {
@@ -67,24 +66,6 @@ describe('registerE2eHooks', () => {
 
         hooks.dispatchTick = stub;
         hooks.dispatchTick();
-
-        expect(stub).toHaveBeenCalledOnce();
-    });
-
-    it('triggerCrashSave throws before the session runtime wires it — fails loudly in CI', () => {
-        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
-
-        expect(() => hooks.triggerCrashSave()).toThrow(
-            /triggerCrashSave.*not.*wired|session runtime/i,
-        );
-    });
-
-    it('triggerCrashSave can be replaced by the session runtime', () => {
-        const hooks = requireHooks(registerE2eHooks({ CHIMERA_E2E: '1' }));
-        const stub = vi.fn();
-
-        hooks.triggerCrashSave = stub;
-        hooks.triggerCrashSave();
 
         expect(stub).toHaveBeenCalledOnce();
     });

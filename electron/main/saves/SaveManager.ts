@@ -9,12 +9,9 @@
  *   - Thin delegation: list / load / save / delete / has → repository
  *   - autoSave: forces slotId to 'autosave' before delegating
  *   - restoreFromSave: loads and returns a SaveFile for session restoration
- *   - Crash recovery: markCleanExit / clearCleanExitFlag / checkCrashRecovery
- *     via a `lastCleanExit.flag` file written to `dataDir`
  *
- * The concrete repository and `dataDir` are wired once in
- * `electron/main/index.ts`. Tests use `InMemorySaveRepository` and a
- * real temp directory for the flag-file tests.
+ * The concrete repository is wired once in `electron/main/index.ts`. Tests
+ * use `InMemorySaveRepository`.
  *
  * Architecture reference: §4.11
  * Task: F06 / T5 (issue #124)
@@ -24,8 +21,6 @@
  *   #67 — Constructed with an injected Logger child.
  */
 
-import * as fs from 'fs/promises';
-import * as path from 'path';
 import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 import type {
     SaveRepository,
@@ -33,23 +28,15 @@ import type {
 } from '@chimera-engine/simulation/persistence/SaveRepository.js';
 import type { Logger } from '../logging/logger.js';
 
-/** Filename of the clean-exit sentinel written on graceful shutdown. */
-const CLEAN_EXIT_FILENAME = 'lastCleanExit.flag';
-
 /**
- * Manages all save/load persistence and crash-recovery detection for the
- * main process. Constructed once in `electron/main/index.ts`; wired into
- * the saves IPC namespace and the app lifecycle.
- *
- * `dataDir` is the base directory for the clean-exit flag file —
- * in production this is `app.getPath('userData')`.
+ * Manages all save/load persistence for the main process. Constructed once in
+ * `electron/main/index.ts`; wired into the saves IPC namespace.
  */
 export class SaveManager {
     private readonly log: Logger;
 
     constructor(
         private readonly repository: SaveRepository,
-        private readonly dataDir: string,
         logger: Logger,
     ) {
         this.log = logger.child({ module: 'save-manager' });
@@ -107,75 +94,5 @@ export class SaveManager {
     async restoreFromSave(slotId: string): Promise<SaveFile> {
         this.log.info('restoreFromSave', { slotId });
         return this.repository.load(slotId);
-    }
-
-    // ── Crash recovery ────────────────────────────────────────────────────────
-
-    private get cleanExitFlagPath(): string {
-        return path.join(this.dataDir, CLEAN_EXIT_FILENAME);
-    }
-
-    /**
-     * Write the clean-exit sentinel to `dataDir`.
-     * Call this inside the `app.on('before-quit')` handler.
-     */
-    async markCleanExit(): Promise<void> {
-        await fs.writeFile(this.cleanExitFlagPath, '');
-        this.log.debug('markCleanExit: flag written');
-    }
-
-    /**
-     * Remove the clean-exit sentinel from `dataDir`.
-     * Call this at application start so the next launch can detect a crash.
-     *
-     * Returns `true` if the flag was present (previous exit was clean), or
-     * `false` if it was absent (previous session may have crashed).
-     */
-    async clearCleanExitFlag(): Promise<boolean> {
-        try {
-            await fs.unlink(this.cleanExitFlagPath);
-            this.log.debug('clearCleanExitFlag: flag removed');
-            return true;
-        } catch {
-            this.log.debug('clearCleanExitFlag: flag was absent');
-            return false;
-        }
-    }
-
-    /**
-     * Check whether the previous session crashed.
-     *
-     * Returns the `SaveSlotMeta` for the first autosave found across the
-     * provided `knownGameIds` if:
-     *   1. The clean-exit flag is absent (previous session crashed), AND
-     *   2. An autosave slot exists for at least one of the `knownGameIds`.
-     *
-     * Returns `null` if the flag is present, or if no autosave exists.
-     *
-     * @param knownGameIds  All game IDs to scan for autosaves. In production
-     *                      this is the list of installed games.
-     */
-    async checkCrashRecovery(knownGameIds: readonly string[]): Promise<SaveSlotMeta | null> {
-        const hadCleanExit = await fs
-            .access(this.cleanExitFlagPath)
-            .then(() => true)
-            .catch(() => false);
-
-        if (hadCleanExit) {
-            return null;
-        }
-
-        for (const gameId of knownGameIds) {
-            const slots = await this.repository.list(gameId);
-            const autosave = slots.find((s) => s.slotId === `${gameId}/autosave`);
-            if (autosave !== undefined) {
-                this.log.warn('checkCrashRecovery: autosave found after unclean exit', {
-                    slotId: autosave.slotId,
-                });
-                return autosave;
-            }
-        }
-
-        return null;
     }
 }

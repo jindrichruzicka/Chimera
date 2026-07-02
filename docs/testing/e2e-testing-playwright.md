@@ -1,6 +1,6 @@
 ---
 title: 'E2E Testing Layer (Playwright)'
-description: 'Playwright-driven E2E suite for real Electron instances. Covers tooling rationale, directory structure, fixtures, page objects, helpers, mandatory specs including save/load, crash recovery, settings persistence, the __e2eHooks main-process contract, CHIMERA_E2E flag, CI YAML, and security notes.'
+description: 'Playwright-driven E2E suite for real Electron instances. Covers tooling rationale, directory structure, fixtures, page objects, helpers, mandatory specs including save/load, settings persistence, the __e2eHooks main-process contract, CHIMERA_E2E flag, CI YAML, and security notes.'
 tags: [testing, e2e, playwright, electron, multiplayer, fixtures, page-objects, ci]
 ---
 
@@ -74,7 +74,6 @@ apps/tactics/e2e/
     ├── reconnect.spec.ts
     ├── multiplayer-soak.spec.ts
     ├── save-load.spec.ts
-    ├── crash-recovery.spec.ts
     ├── settings-persistence.spec.ts
     └── game-3d-render.spec.ts
 ```
@@ -727,42 +726,6 @@ test.describe('Save / load', () => {
 });
 ```
 
-### crash-recovery.spec.ts
-
-Single-player crash-recovery spec built on the same pass-and-play direct-game boot path. It advances the match, calls the CHIMERA_E2E-only `triggerCrashSave()` hook to exercise the crash autosave path, exits the Electron process without `before-quit` so `lastCleanExit.flag` is not written, relaunches with the same `--user-data-dir`, asserts the Resume prompt is visible, accepts it through the renderer UI, and asserts the simulation tick matches the crash-save checkpoint.
-
-The spec validates recovery through the preload bridge and normal save/load IPC path. It does not import `electron/main/`, `simulation/`, or `networking/` helpers directly.
-
-```typescript
-// apps/tactics/e2e/tests/crash-recovery.spec.ts
-test.describe('Crash recovery', () => {
-    test('tick is restored to crash-save value after unclean exit, relaunch, and Resume', async ({
-        crashApp,
-        crashWindow,
-    }) => {
-        const match = new GamePage(crashWindow);
-        await expect(match.canvas).toBeVisible({ timeout: 30_000 });
-        await playThreePassAndPlayTurns(match);
-
-        await triggerCrashSave(crashApp);
-        const savedSlotId = await getLastSavedSlotId(crashApp);
-        const savedTick = await getLastSavedTick(crashApp);
-        expect(savedSlotId).toMatch(/\/autosave$/);
-        expect(savedTick).toBeGreaterThan(0);
-
-        const relaunchConfig = await captureRelaunchConfig(crashApp);
-        await exitWithoutCleanQuit(crashApp);
-
-        const relaunchedApp = await relaunchElectronApplication(relaunchConfig);
-        const relaunchedWindow = await relaunchedApp.firstWindow();
-        await expect(relaunchedWindow.getByTestId('crash-recovery-banner')).toBeVisible();
-        await relaunchedWindow.getByRole('button', { name: /resume last session/i }).click();
-
-        await expect.poll(() => getSimulationTick(relaunchedApp)).toBe(savedTick);
-    });
-});
-```
-
 ### settings-persistence.spec.ts
 
 Settings persistence spec built on an Electron instance launched directly to `/settings`. It changes `audio.masterVolume` through the `SettingsPage` page object, verifies the value through the renderer-facing settings bridge, relaunches with the same `--user-data-dir`, and asserts the displayed value persists. A second test resets settings to defaults, verifies the engine default immediately, relaunches again, and verifies the reset persisted.
@@ -820,7 +783,6 @@ export interface E2eHooks {
     onTick(tick: number, checksum: number, snapshot: PlayerSnapshot): void;
     onClockTick(tick: number, viewerId: string): void;
     dispatchTick: () => void;
-    triggerCrashSave: () => void;
 }
 
 export function registerE2eHooks(env = process.env): E2eHooks | undefined {
@@ -835,9 +797,9 @@ export function registerE2eHooks(env = process.env): E2eHooks | undefined {
 }
 ```
 
-The hook object is created by `createE2eHooks()` and registered only when `CHIMERA_E2E=1`; absent or `0` deletes the global hook. The surface is primarily **read-only from tests** — tests inspect state and do not mutate snapshots directly. `lastSavedSlotId` and `lastSavedTick` are set internally after successful save operations so persistence specs can load the exact saved slot without hardcoding. `wsFrames` is activated by `tapWebSocketFrames()` and written through `pushWsFrame()` so capture remains bounded by `MAX_WS_FRAMES`. `dispatchTick` allows soak specs to programmatically advance the simulation clock through the wired `ActionPipeline` path, and `triggerCrashSave` allows crash-recovery specs to exercise autosave-before-crash-dump behavior without sending an OS kill signal.
+The hook object is created by `createE2eHooks()` and registered only when `CHIMERA_E2E=1`; absent or `0` deletes the global hook. The surface is primarily **read-only from tests** — tests inspect state and do not mutate snapshots directly. `lastSavedSlotId` and `lastSavedTick` are set internally after successful save operations so persistence specs can load the exact saved slot without hardcoding. `wsFrames` is activated by `tapWebSocketFrames()` and written through `pushWsFrame()` so capture remains bounded by `MAX_WS_FRAMES`. `dispatchTick` allows soak specs to programmatically advance the simulation clock through the wired `ActionPipeline` path.
 
-Until the session runtime wires active methods, `dispatchTick` throws loudly and `triggerCrashSave` is a no-op. Session startup replaces both with functions that route through the real pipeline/crash-autosave path; no test code injects snapshot state.
+Until the session runtime wires active methods, `dispatchTick` throws loudly. Session startup replaces it with a function that routes through the real pipeline; no test code injects snapshot state.
 
 ---
 
@@ -853,7 +815,7 @@ The flag is not forwarded to the renderer process. Main-process code paths that 
 | Location                                          | Effect                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `runtime/e2e-hooks.ts`                            | Registers `__e2eHooks` on `globalThis` only when `CHIMERA_E2E=1`; deletes the hook otherwise.                                                                                                                                                                                                                                                                          |
-| `runtime/SessionRuntime.ts`                       | Wires `dispatchTick` through the real tick action path and `triggerCrashSave` through the crash-autosave callback.                                                                                                                                                                                                                                                     |
+| `runtime/SessionRuntime.ts`                       | Wires `dispatchTick` through the real tick action path.                                                                                                                                                                                                                                                                                                                |
 | `lobby-manager.ts`                                | Binds to a fixed `CHIMERA_PORT`; skips NAT checks.                                                                                                                                                                                                                                                                                                                     |
 | `electron/main/index.ts` — `createWindow` closure | Reads `CHIMERA_E2E_INITIAL_URL` and, after validation through `sanitiseE2eInitialUrl`, passes it as `initialUrl` to `createMainWindow` so the window opens on a specific app route. Only `chimera://renderer/…` URLs are accepted; any other value (remote URL, wrong protocol, malformed string) is silently replaced by the default `chimera://renderer/index.html`. |
 
@@ -893,12 +855,12 @@ On macOS runners, `DISPLAY` is not required. On Linux, an `Xvfb` step is needed 
 
 ## §13.12 Security Notes
 
-| Concern               | Rule                                                                                                                                                                                                                                                          |
-| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Test hook surface     | `__e2eHooks` exposes only `dispatchTick` and `triggerCrashSave` as active methods; all other fields are read-only from tests. All dispatched ticks go through `ActionPipeline`; crash saves go through the same autosave callback used by the crash reporter. |
-| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `workers: 1` prevents fixed-port collision.                                                                                                                                                           |
-| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                                                                                                                                         |
-| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                                                                                                                                    |
+| Concern               | Rule                                                                                                                                                       |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Test hook surface     | `__e2eHooks` exposes only `dispatchTick` as an active method; all other fields are read-only from tests. All dispatched ticks go through `ActionPipeline`. |
+| Isolated ports        | Each test suite uses a dedicated port (`CHIMERA_PORT`). `workers: 1` prevents fixed-port collision.                                                        |
+| No credentials in env | `CHIMERA_E2E` env block must never log or expose lobby tokens, seeds, or player data.                                                                      |
+| Production gate       | `CHIMERA_E2E` is never set in production packaging scripts. `electron-builder` config explicitly omits it.                                                 |
 
 ---
 

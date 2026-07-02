@@ -84,20 +84,6 @@ export interface E2eHooks {
      */
     dispatchTick: () => void;
     /**
-     * Trigger the crash-reporter autosave path without terminating the process.
-     *
-     * No-op until wired by the session runtime. The runtime replaces this
-     * property after creating the hooks object so crash-recovery E2E specs can
-     * exercise autosave-before-crash-dump behavior deterministically.
-     *
-     * Must NOT be called from `simulation/` or `renderer/` — this property
-     * exists only for the CHIMERA_E2E test path.
-     *
-     * @chimera-review: intentionally mutable — replaced by session runtime
-     *   to connect the hook to the real crash autosave path.
-     */
-    triggerCrashSave: () => void;
-    /**
      * Deliver a synthetic {@link ChatMessage} straight to the local `ChatHub`,
      * bypassing the relay + rate limit (both irrelevant to the renderer rolling
      * buffer cap). Lets E2E exercise the 500-entry `chatStore` trimming through
@@ -203,19 +189,6 @@ export function createE2eHooks(): E2eHooks {
                 'dispatchTick has not been wired by the session runtime. ' +
                     'Assign hooks.dispatchTick = () => pipeline.dispatch(tickAction) ' +
                     'in SessionRuntime (or equivalent) before calling tick() from E2E specs.',
-            );
-        },
-        // Guard: throw loudly if called before the session runtime wires a real save
-        // function. A silent no-op here would let crash-recovery E2E specs (e.g.
-        // crash-recovery.spec.ts) complete their poll on a stale lastSavedTick value
-        // and silently pass without triggering any save at all.
-        // The session runtime must assign: hooks.triggerCrashSave = () => autosaveActiveSessionBeforeCrash()
-        // before any E2E spec calls triggerCrashSave() (§13.7).
-        triggerCrashSave: () => {
-            throw new Error(
-                'triggerCrashSave has not been wired by the session runtime. ' +
-                    'Assign hooks.triggerCrashSave = () => autosaveActiveSessionBeforeCrash() ' +
-                    'in SessionRuntime (or equivalent) before calling triggerCrashSave() from E2E specs.',
             );
         },
         // Guard: throw loudly if called before the composition root wires the

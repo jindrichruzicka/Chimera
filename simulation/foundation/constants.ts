@@ -5,30 +5,12 @@
  */
 
 /**
- * IPC channel that exposes the captured crash-recovery status to the
- * renderer. The main process registers a single `ipcMain.handle` for this
- * channel at startup; the renderer calls it via the preload bridge.
- *
- * Namespaced per architecture convention: `chimera:<domain>:<name>`.
- */
-export const CLEAN_EXIT_IPC_CHANNEL = 'chimera:system:was-clean-exit';
-
-/**
- * File name of the clean-exit sentinel written under `app.getPath("userData")`
- * on shutdown. Its presence at startup means the previous session exited via
- * the `before-quit` hook; its absence means the process was killed (crash,
- * SIGKILL, power loss).
- */
-export const CLEAN_EXIT_FLAG_FILENAME = 'lastCleanExit.flag';
-
-/**
  * Runtime Debug Layer IPC channels (§4.12 — F47 T5/T6). Plain string
- * constants declared here — mirroring `CLEAN_EXIT_IPC_CHANNEL` — so the
- * Inspector preload (`debug-api.ts`) and the main-process debug bridge share
- * the same literals without the preload importing the debug module graph
- * (Invariant #27: no debug code lives in `shared/`). In production no
- * handler or listener is ever registered on any of them, so renderer sends
- * are true no-ops.
+ * constants declared here so the Inspector preload (`debug-api.ts`) and the
+ * main-process debug bridge share the same literals without the preload
+ * importing the debug module graph (Invariant #27: no debug code lives in
+ * `shared/`). In production no handler or listener is ever registered on any
+ * of them, so renderer sends are true no-ops.
  */
 /** Invoke channel for all `DebugRequest` variants (Invariant #29). */
 export const DEBUG_CHANNEL = 'chimera:debug';

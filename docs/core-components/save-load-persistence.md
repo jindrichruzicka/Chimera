@@ -1,7 +1,7 @@
 ---
 title: 'Save / Load Persistence'
-description: 'SaveFile schema, SaveSerializer strategies (JSON/Compressed), SaveRepository interface, FileSaveRepository atomic write, SaveMigrator chain, crash recovery, multiplayer save constraints, and saveStore.'
-tags: [save-load, persistence, memento, repository, migration, crash-recovery]
+description: 'SaveFile schema, SaveSerializer strategies (JSON/Compressed), SaveRepository interface, FileSaveRepository atomic write, SaveMigrator chain, multiplayer save constraints, and saveStore.'
+tags: [save-load, persistence, memento, repository, migration]
 ---
 
 # Save / Load Persistence
@@ -169,12 +169,6 @@ export class SaveMigrator {
   4. Broadcast fresh PlayerSnapshot to all clients (standard reconnect path)
   5. Renderer navigates to match screen
 ```
-
----
-
-## Crash Recovery
-
-On startup, `save-manager.ts` checks for `lastCleanExit.flag` in `userData`. If absent (crash) and an `autosave` exists, the renderer is offered "Resume last session". The flag is written on clean `app.before-quit`.
 
 ---
 

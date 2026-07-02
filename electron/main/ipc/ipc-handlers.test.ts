@@ -26,7 +26,6 @@ import {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
-    SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
     SETTINGS_CHANGE_CHANNEL,
     SETTINGS_GET_CHANNEL,
     SETTINGS_RESET_CHANNEL,
@@ -39,7 +38,6 @@ import {
     CHAT_HISTORY_CHANNEL,
     CHAT_MUTE_CHANNEL,
     CHAT_UNMUTE_CHANNEL,
-    CLEAN_EXIT_IPC_CHANNEL,
     mapPlatform,
     registerChatHandlers,
     registerGameHandlers,
@@ -258,7 +256,6 @@ describe('registerSystemHandlers', () => {
         expect([...stub.handled.keys()]).toEqual([
             SYSTEM_PLATFORM_CHANNEL,
             SYSTEM_DEVICE_INFO_CHANNEL,
-            CLEAN_EXIT_IPC_CHANNEL,
         ]);
         expect([...stub.listeners.keys()]).toEqual([SYSTEM_QUIT_CHANNEL, SYSTEM_RELAUNCH_CHANNEL]);
     });
@@ -308,50 +305,6 @@ describe('registerSystemHandlers', () => {
         const result = await handler?.();
         // Should return a minimally valid DeviceInfo with at least an os field
         expect(result).toMatchObject({ os: 'linux' });
-    });
-
-    it('registers chimera:system:was-clean-exit as an invoke handler returning the injected wasCleanExit flag (true)', async () => {
-        const stub = makeIpcMainStub();
-        registerSystemHandlers({
-            ipcMain: stub.ipcMain,
-            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
-            platform: 'linux',
-            electronVersion: '33.4.11',
-            wasCleanExit: true,
-        });
-
-        const handler = stub.handled.get(CLEAN_EXIT_IPC_CHANNEL);
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.())).resolves.toBe(true);
-    });
-
-    it('chimera:system:was-clean-exit handler returns false when startup observed an unclean exit', async () => {
-        const stub = makeIpcMainStub();
-        registerSystemHandlers({
-            ipcMain: stub.ipcMain,
-            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
-            platform: 'linux',
-            electronVersion: '33.4.11',
-            wasCleanExit: false,
-        });
-
-        const handler = stub.handled.get(CLEAN_EXIT_IPC_CHANNEL);
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
-    });
-
-    it('chimera:system:was-clean-exit handler defaults to false when wasCleanExit is not injected', async () => {
-        const stub = makeIpcMainStub();
-        registerSystemHandlers({
-            ipcMain: stub.ipcMain,
-            app: { quit: vi.fn(), relaunch: vi.fn(), exit: vi.fn() },
-            platform: 'linux',
-            electronVersion: '33.4.11',
-        });
-
-        const handler = stub.handled.get(CLEAN_EXIT_IPC_CHANNEL);
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
     });
 });
 
@@ -916,7 +869,6 @@ function makeNoopSavesPort(): SavesIpcPort {
             } satisfies SaveSlotMeta),
         load: () => Promise.resolve(),
         delete: () => Promise.resolve(),
-        checkCrashRecovery: () => Promise.resolve({ needsRecovery: false, slotId: null }),
     };
 }
 
@@ -972,27 +924,9 @@ describe('registerSavesHandlers', () => {
                 SAVES_LIST_CHANNEL,
                 SAVES_LOAD_CHANNEL,
                 SAVES_SAVE_CHANNEL,
-                SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
             ].sort(),
         );
         expect(stub.handled.has(SAVES_SLOT_UPDATE_CHANNEL)).toBe(false);
-    });
-
-    it('registers chimera:saves:check-crash-recovery delegating to the port', async () => {
-        const stub = makeSavesIpcMainStub();
-        const port: SavesIpcPort = {
-            ...makeNoopSavesPort(),
-            checkCrashRecovery: () =>
-                Promise.resolve({ needsRecovery: true, slotId: toSlotId('tactics/autosave') }),
-        };
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: port });
-
-        const handler = stub.handled.get(SAVES_CHECK_CRASH_RECOVERY_CHANNEL);
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.({}))).resolves.toEqual({
-            needsRecovery: true,
-            slotId: 'tactics/autosave',
-        });
     });
 
     describe('with injected SavesIpcPort', () => {
@@ -1041,7 +975,6 @@ describe('registerSavesHandlers', () => {
                     deleteCalls.push(slotId);
                     return Promise.resolve();
                 },
-                checkCrashRecovery: () => Promise.resolve({ needsRecovery: false, slotId: null }),
                 ...overrides,
             };
             return { port, listCalls, saveCalls, loadCalls, deleteCalls, slotsByGameId };

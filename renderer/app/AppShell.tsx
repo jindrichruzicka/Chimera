@@ -1,5 +1,4 @@
 import React, { type ReactNode } from 'react';
-import { CrashRecoveryBanner } from '../components/CrashRecoveryBanner';
 import { PlayerConnectionToastBridge } from '../components/lobby/PlayerConnectionToastBridge';
 import { PlayerLeftToastBridge } from '../components/lobby/PlayerLeftToastBridge';
 import { ProfileRejectedToastBridge } from '../components/lobby/ProfileRejectedToastBridge';
@@ -48,7 +47,6 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                         <ShellBackgroundHost />
                     </React.Suspense>
                     <div style={{ position: 'relative', zIndex: 1 }}>
-                        <CrashRecoveryBanner />
                         <ConnectionStatusIndicator />
                         <RootErrorBoundary>{children}</RootErrorBoundary>
                         <ToastHost />

@@ -129,7 +129,7 @@ export interface MainGameRegistryView {
      * set — the host never names a game. F18 replaces this with a runtime choice.
      */
     readonly hostedGame: MainGameContribution;
-    /** All injected game ids — drives the crash-recovery scan and content load. */
+    /** All injected game ids, in contribution order. */
     readonly knownGameIds: readonly string[];
     /** `gameId → version` — the identity map ReplayManager stamps onto replays. */
     readonly gameVersions: ReadonlyMap<string, string>;

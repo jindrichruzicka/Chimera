@@ -9,10 +9,7 @@ import {
     screen as electronScreen,
     session,
 } from 'electron';
-import {
-    CLEAN_EXIT_IPC_CHANNEL,
-    IS_DEBUG_MODE,
-} from '@chimera-engine/simulation/foundation/constants.js';
+import { IS_DEBUG_MODE } from '@chimera-engine/simulation/foundation/constants.js';
 // Type-only import — erased at compile time, so the debug-bridge module graph
 // stays out of the production bundle (Invariant #27); the runtime import is
 // the dynamic one behind the IS_DEBUG_MODE gate in main().
@@ -49,7 +46,6 @@ import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
 import { ProfileManager } from './profile/ProfileManager.js';
 import { FileProfileRepository } from './profile/FileProfileRepository.js';
-import { toSlotId } from '../preload/api-types.js';
 import type {
     PlayerLeftMatchEvent,
     ReplayNavigateKind,
@@ -179,7 +175,6 @@ import {
     type ChimeraRendererUrl,
 } from './renderer-url.js';
 
-export { CLEAN_EXIT_IPC_CHANNEL };
 export {
     buildRendererGameLaunchUrl,
     CHIMERA_RENDERER_HOST,
@@ -735,67 +730,6 @@ export interface RegisterClientRevealForwardingOptions {
     readonly logger: Logger;
 }
 
-// ─── SaveManager lifecycle wiring ─────────────────────────────────────────────
-
-import type { SaveSlotMeta } from '@chimera-engine/simulation/persistence/SaveRepository.js';
-
-/**
- * Narrow slice of `Electron.App` required by the SaveManager lifecycle hook.
- */
-export interface SaveManagerLifecycleAppHost {
-    on(event: 'before-quit', handler: () => void): unknown;
-}
-
-export interface RegisterSaveManagerLifecycleOptions {
-    readonly app: SaveManagerLifecycleAppHost;
-    readonly saveManager: {
-        clearCleanExitFlag(): Promise<boolean>;
-        markCleanExit(): Promise<void>;
-        checkCrashRecovery(knownGameIds: readonly string[]): Promise<SaveSlotMeta | null>;
-    };
-    readonly knownGameIds: readonly string[];
-}
-
-export interface SaveManagerLifecycleResult {
-    /** The autosave slot meta if the previous session crashed and a save was found; null otherwise. */
-    readonly autosaveMeta: SaveSlotMeta | null;
-    /**
-     * `true` when the clean-exit flag was present at startup (graceful shutdown);
-     * `false` when it was absent (crash or first run).
-     */
-    readonly wasCleanExit: boolean;
-}
-
-/**
- * Wire `SaveManager` into the application lifecycle:
- *   1. Clear the clean-exit flag at startup so the next launch detects a crash.
- *   2. Register `markCleanExit()` on `before-quit` for graceful shutdown.
- *   3. Run `checkCrashRecovery()` to detect an unclean previous exit.
- *
- * Returns `{ autosaveMeta }` — non-null when the previous session crashed and
- * an autosave was found. The caller can surface the "Resume last session" prompt
- * based on this value.
- */
-export async function registerSaveManagerLifecycle(
-    options: RegisterSaveManagerLifecycleOptions,
-): Promise<SaveManagerLifecycleResult> {
-    const { app: appHost, saveManager, knownGameIds } = options;
-
-    // 1. Check if the previous session crashed (flag present = clean exit).
-    //    Must happen BEFORE clearing the flag; otherwise the evidence is gone.
-    const autosaveMeta = await saveManager.checkCrashRecovery(knownGameIds);
-
-    // 2. Clear the flag and capture whether it was present (true = clean exit).
-    const wasCleanExit = await saveManager.clearCleanExitFlag();
-
-    // 3. Write the flag on graceful shutdown.
-    appHost.on('before-quit', () => {
-        void saveManager.markCleanExit();
-    });
-
-    return { autosaveMeta, wasCleanExit };
-}
-
 export function registerClientRevealForwarding(
     options: RegisterClientRevealForwardingOptions,
 ): Unsubscribe {
@@ -1030,7 +964,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     const {
         mainGameRegistry,
         hostedGame,
-        knownGameIds,
         gameVersions,
         visibilityRulesByGameId,
         contentSchemasByGameId,
@@ -1131,14 +1064,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             createDefaultMigrator(),
             path.join(userData, 'saves'),
         ),
-        userData,
         logger.child({ module: 'saves' }),
     );
 
-    // Wire the SaveManager lifecycle: checks crash recovery, clears the flag,
-    // and registers the before-quit handler. Returns wasCleanExit for the IPC
-    // channel so the renderer can prompt crash-recovery on startup, and
-    // autosaveMeta for the chimera:saves:check-crash-recovery handler.
     // ReplayManager owns live-match recording and replay persistence (§4.28,
     // F44). Concrete repository/serializer/migrator are chosen here at the DIP
     // wiring point; the manager itself imports none of them. Replays are stored
@@ -1193,16 +1121,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         abort: () => perspectiveReplayManager.abort(),
     };
 
-    const { wasCleanExit, autosaveMeta } = await registerSaveManagerLifecycle({
-        app,
-        saveManager,
-        knownGameIds,
-    });
-    const crashRecoveryStatus =
-        autosaveMeta === null
-            ? { needsRecovery: false, slotId: null }
-            : { needsRecovery: true, slotId: toSlotId(autosaveMeta.slotId) };
-
     // Flush the async Pino sink on graceful shutdown so buffered log entries
     // reach disk before the process exits (§4.27).
     let deviceProbeWatcher: DeviceProbeWatcher | null = null;
@@ -1212,8 +1130,8 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     });
 
     // Register the `chimera:system:*` channels (platform info, quit, relaunch,
-    // device info, and the startup-captured clean-exit status). Runs before the
-    // first window opens so the renderer never races the handler registration.
+    // device info). Runs before the first window opens so the renderer never
+    // races the handler registration.
     registerSystemHandlers({
         ipcMain,
         app,
@@ -1222,7 +1140,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         logger: logger.child({ module: 'system' }),
         isE2e: process.env['CHIMERA_E2E'] === '1',
         getDeviceInfo: () => deviceProbeWatcher?.getCurrentInfo(),
-        wasCleanExit,
     });
 
     // Runtime Debug Layer (§4.12, F47 T5). The bridge module is loaded ONLY
@@ -1636,9 +1553,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 metadata.e2eHooks.dispatchTick = () => {
                     e2eRuntime.dispatchTick(metadata.hostId);
                     simulationHost.afterTick(sessionRuntime.getSnapshot());
-                };
-                metadata.e2eHooks.triggerCrashSave = () => {
-                    void autosaveActiveSessionBeforeCrash();
                 };
             }
 
@@ -2151,9 +2065,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
-                    if (metadata.e2eHooks !== undefined) {
-                        metadata.e2eHooks.triggerCrashSave = () => undefined;
-                    }
                     activeE2eHooks = undefined;
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
@@ -2487,7 +2398,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // `applyRestoredFile` writes the loaded `SaveFile.checkpoint` back into
     // the active session's snapshot (Invariant #24, WARN-2 fix).  When no
     // session is active the call is silently skipped — load can be
-    // triggered before host start (e.g. "Resume last session" flow) and
+    // triggered before host start (a renderer-driven load from the menu) and
     // the snapshot will be applied when the next session is hosted.
     const savesLogger = logger.child({ module: 'saves' });
     registerSavesHandlers({
@@ -2520,7 +2431,6 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 broadcastRestoredSnapshot?.();
             },
             logger: savesLogger,
-            crashRecoveryStatus,
         }),
         broadcastSlotsChanged: (_gameId, slots) => {
             BrowserWindow.getAllWindows().forEach((win) => {

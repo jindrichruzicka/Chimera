@@ -3,15 +3,11 @@
  *
  * Unit tests for SaveManager (§4.11, invariant #37).
  *
- * All I/O is handled by InMemorySaveRepository. File-system operations for
- * crash recovery (markCleanExit / clearCleanExitFlag / checkCrashRecovery)
- * use a real temp directory so the atomic-write contract is observable.
+ * All I/O is handled by InMemorySaveRepository — SaveManager itself is a thin
+ * delegation layer with no filesystem access of its own.
  */
 
-import * as fs from 'fs/promises';
-import * as os from 'os';
-import * as path from 'path';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 import {
     InMemorySaveRepository,
     SaveNotFoundError,
@@ -22,37 +18,25 @@ import { SaveManager } from './SaveManager.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-async function makeTmpDir(): Promise<string> {
-    return fs.mkdtemp(path.join(os.tmpdir(), 'chimera-savemanager-test-'));
-}
-
-function makeManager(dataDir: string): SaveManager {
-    return new SaveManager(new InMemorySaveRepository(), dataDir, createNoopLogger());
+function makeManager(): SaveManager {
+    return new SaveManager(new InMemorySaveRepository(), createNoopLogger());
 }
 
 // ── Construction ─────────────────────────────────────────────────────────────
 
 describe('SaveManager — construction', () => {
-    it('constructs with an InMemorySaveRepository', async () => {
-        const tmpDir = await makeTmpDir();
-        expect(() => makeManager(tmpDir)).not.toThrow();
-        await fs.rm(tmpDir, { recursive: true, force: true });
+    it('constructs with an InMemorySaveRepository', () => {
+        expect(() => makeManager()).not.toThrow();
     });
 });
 
 // ── Delegation to repository ──────────────────────────────────────────────────
 
 describe('SaveManager — repository delegation', () => {
-    let tmpDir: string;
     let manager: SaveManager;
 
-    beforeEach(async () => {
-        tmpDir = await makeTmpDir();
-        manager = makeManager(tmpDir);
-    });
-
-    afterEach(async () => {
-        await fs.rm(tmpDir, { recursive: true, force: true });
+    beforeEach(() => {
+        manager = makeManager();
     });
 
     it('list returns [] for an unknown game', async () => {
@@ -93,16 +77,10 @@ describe('SaveManager — repository delegation', () => {
 // ── autoSave ─────────────────────────────────────────────────────────────────
 
 describe('SaveManager — autoSave', () => {
-    let tmpDir: string;
     let manager: SaveManager;
 
-    beforeEach(async () => {
-        tmpDir = await makeTmpDir();
-        manager = makeManager(tmpDir);
-    });
-
-    afterEach(async () => {
-        await fs.rm(tmpDir, { recursive: true, force: true });
+    beforeEach(() => {
+        manager = makeManager();
     });
 
     it('writes the file to <gameId>/autosave regardless of input slotId', async () => {
@@ -136,16 +114,10 @@ describe('SaveManager — autoSave', () => {
 // ── restoreFromSave ───────────────────────────────────────────────────────────
 
 describe('SaveManager — restoreFromSave', () => {
-    let tmpDir: string;
     let manager: SaveManager;
 
-    beforeEach(async () => {
-        tmpDir = await makeTmpDir();
-        manager = makeManager(tmpDir);
-    });
-
-    afterEach(async () => {
-        await fs.rm(tmpDir, { recursive: true, force: true });
+    beforeEach(() => {
+        manager = makeManager();
     });
 
     it('returns the full SaveFile for a known slot', async () => {
@@ -160,69 +132,5 @@ describe('SaveManager — restoreFromSave', () => {
         await expect(manager.restoreFromSave('tactics/missing')).rejects.toBeInstanceOf(
             SaveNotFoundError,
         );
-    });
-});
-
-// ── Crash recovery ────────────────────────────────────────────────────────────
-
-describe('SaveManager — crash recovery', () => {
-    let tmpDir: string;
-    let manager: SaveManager;
-
-    beforeEach(async () => {
-        tmpDir = await makeTmpDir();
-        manager = makeManager(tmpDir);
-    });
-
-    afterEach(async () => {
-        await fs.rm(tmpDir, { recursive: true, force: true });
-    });
-
-    it('checkCrashRecovery returns null when clean-exit flag is present', async () => {
-        await manager.markCleanExit();
-
-        const result = await manager.checkCrashRecovery([]);
-        expect(result).toBeNull();
-    });
-
-    it('checkCrashRecovery returns null when flag is absent but no autosave exists', async () => {
-        // Flag absent (never written) + no autosave for any game.
-        const result = await manager.checkCrashRecovery(['tactics']);
-        expect(result).toBeNull();
-    });
-
-    it('checkCrashRecovery returns autosave meta when flag is absent and autosave exists', async () => {
-        await manager.save(makeFile('tactics', 'autosave'));
-
-        const result = await manager.checkCrashRecovery(['tactics']);
-        expect(result).not.toBeNull();
-        expect(result?.slotId).toBe('tactics/autosave');
-    });
-
-    it('checkCrashRecovery returns null after markCleanExit even with an autosave', async () => {
-        await manager.save(makeFile('tactics', 'autosave'));
-        await manager.markCleanExit();
-
-        const result = await manager.checkCrashRecovery(['tactics']);
-        expect(result).toBeNull();
-    });
-
-    it('clearCleanExitFlag removes the flag file', async () => {
-        await manager.markCleanExit();
-        await manager.clearCleanExitFlag();
-
-        // With flag cleared and autosave present, checkCrashRecovery should fire again.
-        await manager.save(makeFile('tactics', 'autosave'));
-        const result = await manager.checkCrashRecovery(['tactics']);
-        expect(result).not.toBeNull();
-    });
-
-    it('clearCleanExitFlag returns false when the flag does not exist', async () => {
-        await expect(manager.clearCleanExitFlag()).resolves.toBe(false);
-    });
-
-    it('clearCleanExitFlag returns true when the flag was present', async () => {
-        await manager.markCleanExit();
-        await expect(manager.clearCleanExitFlag()).resolves.toBe(true);
     });
 });

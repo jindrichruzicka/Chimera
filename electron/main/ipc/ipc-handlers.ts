@@ -22,7 +22,6 @@ import {
     SYSTEM_DEVICE_INFO_CHANNEL,
     type PlatformInfo,
 } from '../../preload/apis/system-api.js';
-import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera-engine/simulation/foundation/constants.js';
 import { CURRENT_MATCH_REPLAY_PATH } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
@@ -54,7 +53,6 @@ import {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
-    SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
 } from '../../preload/apis/saves-api.js';
 import {
     SETTINGS_CHANGE_CHANNEL,
@@ -101,7 +99,6 @@ import type {
     ActionRejection,
     ChatMessage,
     ChatScope,
-    CrashRecoveryStatus,
     DeviceInfo,
     EngineAction,
     PerspectiveReplayPlaybackInfo,
@@ -165,7 +162,6 @@ export {
     SYSTEM_QUIT_CHANNEL,
     SYSTEM_RELAUNCH_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANNEL,
-    CLEAN_EXIT_IPC_CHANNEL,
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_REVEAL_CHANNEL,
     GAME_SEND_ACTION_CHANNEL,
@@ -190,7 +186,6 @@ export {
     SAVES_LOAD_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
-    SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
     SETTINGS_CHANGE_CHANNEL,
     SETTINGS_GET_CHANNEL,
     SETTINGS_RESET_CHANNEL,
@@ -267,15 +262,6 @@ export interface RegisterSystemHandlersOptions {
      * from the platform and electronVersion fields available here.
      */
     readonly getDeviceInfo?: () => DeviceInfo | undefined;
-    /**
-     * Startup-captured clean-exit flag served on `chimera:system:was-clean-exit`.
-     * The value is observed once during `main()` (before any window opens) and
-     * does not change over the process lifetime; the renderer reads it to decide
-     * whether to surface crash recovery. Optional (matching the other injected
-     * deps here) and defaults to `false` — the conservative assumption that the
-     * previous run did not exit cleanly.
-     */
-    readonly wasCleanExit?: boolean;
 }
 
 /**
@@ -315,7 +301,6 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
             SYSTEM_QUIT_CHANNEL,
             SYSTEM_RELAUNCH_CHANNEL,
             SYSTEM_DEVICE_INFO_CHANNEL,
-            CLEAN_EXIT_IPC_CHANNEL,
         ],
     });
 
@@ -347,12 +332,6 @@ export function registerSystemHandlers(options: RegisterSystemHandlersOptions): 
     ipcMain.handle(SYSTEM_DEVICE_INFO_CHANNEL, () => {
         return options.getDeviceInfo?.() ?? fallbackDeviceInfo;
     });
-
-    // Expose the startup-captured clean-exit status. The value is fixed for the
-    // process lifetime; registering it here (alongside the other system
-    // channels, before the first window opens) keeps all IPC declared in
-    // ipc-handlers.ts (Invariant #5) and the renderer from racing the handler.
-    ipcMain.handle(CLEAN_EXIT_IPC_CHANNEL, () => options.wasCleanExit ?? false);
 
     ipcMain.on(SYSTEM_QUIT_CHANNEL, () => {
         if (isE2e) return;
@@ -784,11 +763,6 @@ export interface SavesIpcPort {
     save(request: SaveRequest): Promise<SaveSlotMeta>;
     load(slotId: SlotId): Promise<void>;
     delete(slotId: SlotId): Promise<void>;
-    /**
-     * Check whether the previous session ended unclean and an autosave is
-     * available to recover from. Pure read; never mutates persistence.
-     */
-    checkCrashRecovery(): Promise<CrashRecoveryStatus>;
 }
 
 export interface RegisterSavesHandlersOptions {
@@ -850,7 +824,6 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
             SAVES_SAVE_CHANNEL,
             SAVES_LOAD_CHANNEL,
             SAVES_DELETE_CHANNEL,
-            SAVES_CHECK_CRASH_RECOVERY_CHANNEL,
         ],
     });
 
@@ -904,8 +877,6 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
         }
         return undefined;
     });
-
-    ipcMain.handle(SAVES_CHECK_CRASH_RECOVERY_CHANNEL, () => saves.checkCrashRecovery());
 }
 
 /**

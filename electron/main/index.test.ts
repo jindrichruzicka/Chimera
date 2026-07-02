@@ -29,18 +29,7 @@ vi.mock('pino', () => {
 });
 
 // ── SaveManager mock (used by main() after the sync-helper removal) ──────────
-const {
-    mockSaveManagerClearFlag,
-    mockSaveManagerMarkExit,
-    mockSaveManagerCheckCrash,
-    mockSaveManagerAutoSave,
-    capturedSaveManagerRepoClassName,
-} = vi.hoisted(() => ({
-    mockSaveManagerClearFlag: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
-    mockSaveManagerMarkExit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-    mockSaveManagerCheckCrash: vi.fn<(ids: readonly string[]) => Promise<null>>(() =>
-        Promise.resolve(null),
-    ),
+const { mockSaveManagerAutoSave, capturedSaveManagerRepoClassName } = vi.hoisted(() => ({
     mockSaveManagerAutoSave: vi.fn<(file: unknown) => Promise<void>>(() => Promise.resolve()),
     // Stores the constructor name of the first arg passed to SaveManager
     // for the BLOCK-1 assertion (avoids importing the real class).
@@ -51,9 +40,6 @@ vi.mock('./saves/SaveManager.js', () => ({
     SaveManager: vi.fn((repo: { constructor?: { name?: string } }) => {
         capturedSaveManagerRepoClassName.value = repo?.constructor?.name ?? '';
         return {
-            clearCleanExitFlag: mockSaveManagerClearFlag,
-            markCleanExit: mockSaveManagerMarkExit,
-            checkCrashRecovery: mockSaveManagerCheckCrash,
             autoSave: mockSaveManagerAutoSave,
         };
     }),
@@ -460,7 +446,6 @@ const {
     createMainWindow,
     registerAppLifecycle,
     resolveChimeraEnv,
-    registerSaveManagerLifecycle,
     parseHarnessFlags,
     registerClientRevealForwarding,
     resolveRuntimePaths,
@@ -1530,11 +1515,6 @@ describe('main', () => {
         fsExistsSync.mockClear();
         fsWriteFileSync.mockClear();
         fsUnlinkSync.mockClear();
-        mockSaveManagerClearFlag.mockClear();
-        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
-        mockSaveManagerMarkExit.mockClear();
-        mockSaveManagerCheckCrash.mockClear();
-        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockSaveManagerAutoSave.mockClear();
         mockRegisterCrashReporter.mockClear();
         mockAgentManagerCtor.mockClear();
@@ -1553,26 +1533,6 @@ describe('main', () => {
         await main(makeTestContributions());
 
         expect(capturedSaveManagerRepoClassName.value).toBe('FileSaveRepository');
-    });
-
-    it('does not call fsExistsSync — only the async SaveManager path owns the clean-exit flag', async () => {
-        await main(makeTestContributions());
-        expect(fsExistsSync).not.toHaveBeenCalled();
-    });
-
-    it('registers the clean-exit IPC handler before opening any window', async () => {
-        await main(makeTestContributions());
-
-        expect(ipcMainHandle).toHaveBeenCalledWith(
-            'chimera:system:was-clean-exit',
-            expect.any(Function),
-        );
-    });
-
-    it('registers the before-quit clean-exit hook via SaveManager', async () => {
-        await main(makeTestContributions());
-
-        expect(appOn).toHaveBeenCalledWith('before-quit', expect.any(Function));
     });
 
     // ── Runtime Debug Layer gate (§4.12, F47 T5, Invariant #27) ──────────────
@@ -2592,34 +2552,6 @@ describe('main', () => {
         expect(win?.loadURL).toHaveBeenCalledWith(buildRendererGameLaunchUrl(TACTICS_GAME_ID));
     });
 
-    it('propagates wasCleanExit=true when SaveManager.clearCleanExitFlag returns true', async () => {
-        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(true));
-        const handlers = new Map<string, () => unknown>();
-        ipcMainHandle.mockImplementation((channel, handler) => {
-            handlers.set(channel, handler);
-        });
-
-        await main(makeTestContributions());
-
-        const handler = handlers.get('chimera:system:was-clean-exit');
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.())).resolves.toBe(true);
-    });
-
-    it('propagates wasCleanExit=false when SaveManager.clearCleanExitFlag returns false', async () => {
-        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
-        const handlers = new Map<string, () => unknown>();
-        ipcMainHandle.mockImplementation((channel, handler) => {
-            handlers.set(channel, handler);
-        });
-
-        await main(makeTestContributions());
-
-        const handler = handlers.get('chimera:system:was-clean-exit');
-        expect(handler).toBeDefined();
-        await expect(Promise.resolve(handler?.())).resolves.toBe(false);
-    });
-
     it('wires the BrowserWindow preload script to electron/preload/api.js', async () => {
         let resolveReady: () => void = () => {
             // assigned synchronously below
@@ -2749,62 +2681,6 @@ describe('main', () => {
         expect(calledWithFile?.header?.gameId).toBe('tactics');
     });
 
-    it('triggerCrashSave routes through the crash autosave path and records E2E save metadata', async () => {
-        const e2eHooks = {
-            lastSavedSlotId: null as string | null,
-            lastSavedTick: null as number | null,
-            triggerCrashSave: vi.fn(),
-        };
-        mockGetE2eHooks.mockReturnValue(e2eHooks);
-        mockLobbyManagerCtor.mockClear();
-        await main(makeTestContributions());
-
-        const onSessionHosted = (
-            mockLobbyManagerCtor.mock.calls[0]?.[2] as
-                | {
-                      onSessionHosted?: (
-                          transport: {
-                              onPlayerJoined(
-                                  cb: (args: { playerId: ReturnType<typeof playerId> }) => void,
-                              ): () => void;
-                              onPlayerLeft(
-                                  cb: (id: ReturnType<typeof playerId>) => void,
-                              ): () => void;
-                              onActionReceived(
-                                  cb: (from: ReturnType<typeof playerId>, action: unknown) => void,
-                              ): () => void;
-                          },
-                          metadata: {
-                              readonly hostId: ReturnType<typeof playerId>;
-                              readonly maxPlayers: number;
-                              readonly e2eHooks?: typeof e2eHooks;
-                          },
-                      ) => () => void;
-                  }
-                | undefined
-        )?.onSessionHosted;
-        expect(onSessionHosted).toBeTypeOf('function');
-
-        const fakeTransport = {
-            onPlayerJoined: vi.fn(() => () => {}),
-            onPlayerLeft: vi.fn(() => () => {}),
-            onActionReceived: vi.fn(() => () => {}),
-        };
-        onSessionHosted?.(fakeTransport, {
-            hostId: playerId('host-1'),
-            maxPlayers: 1,
-            e2eHooks,
-        });
-
-        e2eHooks.triggerCrashSave();
-        await vi.waitFor(() => {
-            expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
-        });
-
-        expect(e2eHooks.lastSavedSlotId).toBe('tactics/autosave');
-        expect(e2eHooks.lastSavedTick).toBeTypeOf('number');
-    });
-
     it('autosave callback does not call saveManager.autoSave when no session is active', async () => {
         await main(makeTestContributions());
 
@@ -2813,12 +2689,6 @@ describe('main', () => {
         await options?.autosave?.();
 
         expect(mockSaveManagerAutoSave).not.toHaveBeenCalled();
-    });
-
-    it('calls checkCrashRecovery with ["tactics"] as knownGameIds (BLOCK-2)', async () => {
-        await main(makeTestContributions());
-
-        expect(mockSaveManagerCheckCrash).toHaveBeenCalledWith(['tactics']);
     });
 
     it('calls session.defaultSession.setPermissionRequestHandler with a deny-all handler (WARN-4)', async () => {
@@ -2875,166 +2745,6 @@ describe('main', () => {
         capturedSettingsBroadcastFn.current?.('tactics', { volume: 80 });
 
         expect(win.webContents.send).not.toHaveBeenCalled();
-    });
-});
-
-// ─── registerSaveManagerLifecycle ────────────────────────────────────────────
-
-describe('registerSaveManagerLifecycle', () => {
-    it('calls clearCleanExitFlag() once at startup', async () => {
-        const saveManager = {
-            clearCleanExitFlag: vi.fn<() => Promise<boolean>>(() => Promise.resolve(false)),
-            markCleanExit: vi.fn<() => Promise<void>>(() => Promise.resolve()),
-            checkCrashRecovery: vi.fn<(gameIds: readonly string[]) => Promise<null>>(() =>
-                Promise.resolve(null),
-            ),
-        };
-        const fakeApp = { on: vi.fn() };
-
-        await registerSaveManagerLifecycle({
-            app: fakeApp,
-            saveManager,
-            knownGameIds: [],
-        });
-
-        expect(saveManager.clearCleanExitFlag).toHaveBeenCalledTimes(1);
-    });
-
-    it('registers markCleanExit on before-quit', async () => {
-        const markCleanExit = vi.fn<() => Promise<void>>(() => Promise.resolve());
-        const beforeQuitHandlers: (() => void)[] = [];
-        const fakeApp = {
-            on: vi.fn((event: string, handler: () => void) => {
-                if (event === 'before-quit') beforeQuitHandlers.push(handler);
-            }),
-        };
-
-        await registerSaveManagerLifecycle({
-            app: fakeApp,
-            saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
-                markCleanExit,
-                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
-            },
-            knownGameIds: [],
-        });
-
-        expect(beforeQuitHandlers).toHaveLength(1);
-        beforeQuitHandlers[0]?.();
-        await Promise.resolve();
-        expect(markCleanExit).toHaveBeenCalledTimes(1);
-    });
-
-    it('calls checkCrashRecovery with the supplied knownGameIds', async () => {
-        const checkCrashRecovery = vi.fn<(ids: readonly string[]) => Promise<null>>(() =>
-            Promise.resolve(null),
-        );
-        const fakeApp = { on: vi.fn() };
-
-        await registerSaveManagerLifecycle({
-            app: fakeApp,
-            saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
-                markCleanExit: vi.fn(() => Promise.resolve()),
-                checkCrashRecovery,
-            },
-            knownGameIds: ['tactics', 'chess'],
-        });
-
-        expect(checkCrashRecovery).toHaveBeenCalledWith(['tactics', 'chess']);
-    });
-
-    it('returns autosaveMeta: null when checkCrashRecovery returns null', async () => {
-        const fakeApp = { on: vi.fn() };
-
-        const result = await registerSaveManagerLifecycle({
-            app: fakeApp,
-            saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
-                markCleanExit: vi.fn(() => Promise.resolve()),
-                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
-            },
-            knownGameIds: [],
-        });
-
-        expect(result.autosaveMeta).toBeNull();
-    });
-
-    it('returns autosaveMeta with the slot info when an autosave is detected', async () => {
-        const meta = {
-            slotId: 'tactics/autosave',
-            gameId: 'tactics',
-            savedAt: 1_000_000,
-            turnNumber: 3,
-            playerNames: ['Alice', 'Bob'] as readonly string[],
-            schemaVersion: 1,
-            sizeBytes: 512,
-        };
-        const fakeApp = { on: vi.fn() };
-
-        const result = await registerSaveManagerLifecycle({
-            app: fakeApp,
-            saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
-                markCleanExit: vi.fn(() => Promise.resolve()),
-                checkCrashRecovery: vi.fn(() => Promise.resolve(meta)),
-            },
-            knownGameIds: ['tactics'],
-        });
-
-        expect(result.autosaveMeta).toStrictEqual(meta);
-    });
-
-    it('returns wasCleanExit: true when clearCleanExitFlag returns true', async () => {
-        const fakeApp = { on: vi.fn() };
-
-        const result = await registerSaveManagerLifecycle({
-            app: fakeApp,
-            saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve(true)),
-                markCleanExit: vi.fn(() => Promise.resolve()),
-                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
-            },
-            knownGameIds: [],
-        });
-
-        expect(result.wasCleanExit).toBe(true);
-    });
-
-    it('returns wasCleanExit: false when clearCleanExitFlag returns false', async () => {
-        const fakeApp = { on: vi.fn() };
-
-        const result = await registerSaveManagerLifecycle({
-            app: fakeApp,
-            saveManager: {
-                clearCleanExitFlag: vi.fn(() => Promise.resolve(false)),
-                markCleanExit: vi.fn(() => Promise.resolve()),
-                checkCrashRecovery: vi.fn(() => Promise.resolve(null)),
-            },
-            knownGameIds: [],
-        });
-
-        expect(result.wasCleanExit).toBe(false);
-    });
-
-    it('checks crash recovery BEFORE clearing the clean-exit flag (order invariant — BLOCK-2)', async () => {
-        const callOrder: string[] = [];
-        const saveManager = {
-            clearCleanExitFlag: vi.fn(() => {
-                callOrder.push('clear');
-                return Promise.resolve(false);
-            }),
-            markCleanExit: vi.fn(() => Promise.resolve()),
-            checkCrashRecovery: vi.fn(() => {
-                callOrder.push('check');
-                return Promise.resolve(null);
-            }),
-        };
-        const fakeApp = { on: vi.fn() };
-
-        await registerSaveManagerLifecycle({ app: fakeApp, saveManager, knownGameIds: [] });
-
-        expect(callOrder).toStrictEqual(['check', 'clear']);
     });
 });
 
@@ -3329,11 +3039,6 @@ describe('onSessionHosted agent-ordering: onGameStart deferred until all expecte
         appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
         ipcMainHandle.mockClear();
         fsExistsSync.mockClear();
-        mockSaveManagerClearFlag.mockClear();
-        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
-        mockSaveManagerMarkExit.mockClear();
-        mockSaveManagerCheckCrash.mockClear();
-        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockSaveManagerAutoSave.mockClear();
         mockRegisterCrashReporter.mockClear();
         mockLobbyManagerCtor.mockClear();
@@ -3468,11 +3173,6 @@ describe('onSessionHosted agent-ordering: onGameStart fires at most once on leav
         appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
         ipcMainHandle.mockClear();
         fsExistsSync.mockClear();
-        mockSaveManagerClearFlag.mockClear();
-        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
-        mockSaveManagerMarkExit.mockClear();
-        mockSaveManagerCheckCrash.mockClear();
-        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockSaveManagerAutoSave.mockClear();
         mockRegisterCrashReporter.mockClear();
         mockLobbyManagerCtor.mockClear();
@@ -3560,11 +3260,6 @@ describe('onSessionHosted session teardown: onGameEnd not called when gameResult
         appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
         ipcMainHandle.mockClear();
         fsExistsSync.mockClear();
-        mockSaveManagerClearFlag.mockClear();
-        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
-        mockSaveManagerMarkExit.mockClear();
-        mockSaveManagerCheckCrash.mockClear();
-        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockSaveManagerAutoSave.mockClear();
         mockRegisterCrashReporter.mockClear();
         mockLobbyManagerCtor.mockClear();
@@ -4021,10 +3716,6 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
         appGetPath.mockImplementation(() => '/tmp/chimera-userData-fake');
         ipcMainHandle.mockClear();
         fsExistsSync.mockClear();
-        mockSaveManagerClearFlag.mockClear();
-        mockSaveManagerClearFlag.mockImplementation(() => Promise.resolve(false));
-        mockSaveManagerCheckCrash.mockClear();
-        mockSaveManagerCheckCrash.mockImplementation(() => Promise.resolve(null));
         mockRegisterCrashReporter.mockClear();
         mockLobbyManagerCtor.mockClear();
         mockStateBroadcasterInstance.broadcast.mockClear();
