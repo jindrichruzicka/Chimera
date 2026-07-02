@@ -88,11 +88,16 @@ export class ReplayPlayerPage {
 
     /**
      * Save the just-finished match via the compact save icon, then wait for the
-     * icon to disable — the saved state that prevents a repeat save.
+     * SAVED confirmation — the aria-label flips to "Replay saved" only after the
+     * async persist resolves. (The icon also disables during the transient
+     * "saving" state, so waiting on `toBeDisabled` alone would return before the
+     * write lands; a match is written on save now, not at game-over, so callers
+     * that read the replay off disk immediately after must wait for the real
+     * confirmation.)
      */
     public async save(): Promise<void> {
         await this.saveButton.click();
-        await expect(this.saveButton).toBeDisabled();
+        await expect(this.saveButton).toHaveAttribute('aria-label', 'Replay saved');
     }
 
     /**

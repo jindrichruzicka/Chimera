@@ -12,9 +12,10 @@ import {
     type PlayerSnapshot,
 } from '@chimera-engine/electron/preload/api-types.js';
 import type { GameScreenProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
-import type {
-    PerspectiveReplayExportBridge,
-    ReplayExportBridge,
+import {
+    CURRENT_MATCH_REPLAY_PATH,
+    type PerspectiveReplayExportBridge,
+    type ReplayExportBridge,
 } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import { TacticsPostGameSummary } from './TacticsPostGameSummary.js';
 
@@ -220,7 +221,7 @@ describe('TacticsPostGameSummary — replay actions', () => {
         expect(screen.queryByTestId('post-game-replay-btn')).toBeNull();
     });
 
-    it('exports for a path then opens the player as saveable when Replay is clicked', async () => {
+    it('previews the in-memory match (no export/write) and opens the player as saveable when Replay is clicked', async () => {
         const exportCurrentMatch = vi.fn(() =>
             Promise.resolve('/replays/tactics/done.chimera-replay'),
         );
@@ -231,13 +232,13 @@ describe('TacticsPostGameSummary — replay actions', () => {
         await user.click(screen.getByTestId('post-game-replay-btn'));
 
         await waitFor(() => {
-            // `true` marks the just-finished match so the player shows its save icon.
-            expect(openInPlayer).toHaveBeenCalledWith('/replays/tactics/done.chimera-replay', true);
+            // The current-match sentinel opens the in-memory recording; `true` marks
+            // the just-finished match so the player shows its save icon.
+            expect(openInPlayer).toHaveBeenCalledWith(CURRENT_MATCH_REPLAY_PATH, true);
         });
-        expect(exportCurrentMatch).toHaveBeenCalledOnce();
-        // 'view' intent → main suppresses the "Replay saved" toast (§4.30): the
-        // export only obtains a stable on-disk path for the player.
-        expect(exportCurrentMatch).toHaveBeenCalledWith('view');
+        // Nothing is written to disk on Replay — the export (save) only happens when
+        // the player's save icon is pressed.
+        expect(exportCurrentMatch).not.toHaveBeenCalled();
     });
 
     it('renders the replay error to the left of the action buttons', async () => {
@@ -267,11 +268,12 @@ describe('TacticsPostGameSummary — client perspective replay', () => {
 
         await waitFor(() => {
             expect(bridges.perspective.openInPlayer).toHaveBeenCalledWith(
-                '/perspective-replays/tactics/p.chimera-perspective-replay',
+                CURRENT_MATCH_REPLAY_PATH,
                 true,
             );
         });
-        expect(bridges.perspective.exportCurrent).toHaveBeenCalledOnce();
+        // Previewing does not persist — no export on either surface.
+        expect(bridges.perspective.exportCurrent).not.toHaveBeenCalled();
         // The authoritative deterministic replay re-runs the full sim and would
         // leak hidden information, so a client must never touch it (Invariant #71).
         expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
@@ -303,12 +305,11 @@ describe('TacticsPostGameSummary — client perspective replay', () => {
         await user.click(screen.getByTestId('post-game-replay-btn'));
 
         await waitFor(() => {
-            expect(bridges.openInPlayer).toHaveBeenCalledWith(
-                '/replays/tactics/m.chimera-replay',
-                true,
-            );
+            expect(bridges.openInPlayer).toHaveBeenCalledWith(CURRENT_MATCH_REPLAY_PATH, true);
         });
-        expect(bridges.exportCurrentMatch).toHaveBeenCalledWith('view');
+        // Previewing the just-finished match writes nothing — no export on either
+        // surface until the player's save icon is pressed.
+        expect(bridges.exportCurrentMatch).not.toHaveBeenCalled();
         expect(bridges.perspective.exportCurrent).not.toHaveBeenCalled();
     });
 });

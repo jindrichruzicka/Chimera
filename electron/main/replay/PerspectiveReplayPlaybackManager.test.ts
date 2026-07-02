@@ -101,6 +101,51 @@ async function seedPlayback(
     return { playback, path, sink };
 }
 
+/**
+ * Record a perspective replay but leave it **in progress** (not finalised), so
+ * `openCurrent` can preview it straight from memory. Returns a playback manager
+ * wired to the still-recording manager.
+ */
+function seedCurrentPlayback(ticks: readonly number[]): {
+    playback: PerspectiveReplayPlaybackManager;
+} {
+    const repo = new InMemoryPerspectiveReplayRepository();
+    const recorder = new PerspectiveReplayManager(
+        repo,
+        { engineVersion: ENGINE_VERSION },
+        makeLogger().logger,
+    );
+    recorder.start(makeStartHeader());
+    for (const tick of ticks) {
+        recorder.recordSnapshot({ tick, snapshot: makeSnapshot(tick) });
+    }
+    const playback = new PerspectiveReplayPlaybackManager(recorder, makeLogger().logger);
+    return { playback };
+}
+
+// ── openCurrent (in-memory preview, no write) ─────────────────────────────────
+
+describe('PerspectiveReplayPlaybackManager — openCurrent', () => {
+    it('previews the in-progress recording without loading a stored file', async () => {
+        const { playback } = seedCurrentPlayback([0, 1, 5]);
+
+        const info = await playback.openCurrent();
+
+        expect(info.gameId).toBe('tactics');
+        expect(info.totalTicks).toBe(5);
+        expect(info.viewerId).toBe(VIEWER);
+    });
+
+    it('serves the in-memory frames verbatim', async () => {
+        const { playback } = seedCurrentPlayback([0, 2, 4]);
+        await playback.openCurrent();
+
+        expect(playback.snapshotAt(0).tick).toBe(0);
+        expect(playback.snapshotAt(2).tick).toBe(2);
+        expect(playback.snapshotAt(4).tick).toBe(4);
+    });
+});
+
 // ── open ─────────────────────────────────────────────────────────────────────
 
 describe('PerspectiveReplayPlaybackManager — open', () => {
@@ -180,7 +225,12 @@ describe('PerspectiveReplayPlaybackManager — snapshotAt', () => {
     it('throws when no session is open', () => {
         const { logger } = makeLogger();
         const playback = new PerspectiveReplayPlaybackManager(
-            { load: () => Promise.reject(new Error('unused')) },
+            {
+                load: () => Promise.reject(new Error('unused')),
+                getCurrentFile: () => {
+                    throw new Error('unused');
+                },
+            },
             logger,
         );
 
@@ -237,7 +287,12 @@ describe('PerspectiveReplayPlaybackManager — snapshotRange', () => {
     it('throws when no session is open', () => {
         const { logger } = makeLogger();
         const playback = new PerspectiveReplayPlaybackManager(
-            { load: () => Promise.reject(new Error('unused')) },
+            {
+                load: () => Promise.reject(new Error('unused')),
+                getCurrentFile: () => {
+                    throw new Error('unused');
+                },
+            },
             logger,
         );
 
@@ -260,7 +315,12 @@ describe('PerspectiveReplayPlaybackManager — close', () => {
     it('is a no-op when no session is open', () => {
         const { logger } = makeLogger();
         const playback = new PerspectiveReplayPlaybackManager(
-            { load: () => Promise.reject(new Error('unused')) },
+            {
+                load: () => Promise.reject(new Error('unused')),
+                getCurrentFile: () => {
+                    throw new Error('unused');
+                },
+            },
             logger,
         );
 

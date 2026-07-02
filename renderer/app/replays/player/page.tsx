@@ -362,12 +362,12 @@ function ReplayPlayerView(): React.ReactElement {
         router.push(withShellGameId('/replays', explicitGameId));
     }, [saveable, liveLeave, router, info]);
 
-    // Save the just-finished match's replay. Idempotent on the main side (the
-    // recording auto-finalised at game-over), so this is really a "keep + confirm":
-    // the deterministic export raises the "Replay saved" toast, while the
-    // perspective export raises none — the disabled "saved" icon is its only
-    // confirmation. Each surface uses its own export so the deterministic replay
-    // stays host-only (Invariants #71 / #98).
+    // Save the just-finished match's replay. This is the SOLE persistence gate: the
+    // match is not written at game-over, so the export here performs the first (and,
+    // being idempotent on the main side, only) disk write. The deterministic export
+    // raises the "Replay saved" toast; the perspective export raises none — the
+    // disabled "saved" icon is its only confirmation. Each surface uses its own
+    // export so the deterministic replay stays host-only (Invariants #71 / #98).
     const handleSaveReplay = React.useCallback(async (): Promise<void> => {
         setSaveState('saving');
         try {

@@ -1307,16 +1307,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // `onClientSnapshotReceived` lazily starts recording on the first snapshot
     // (the client has no session-start header — `viewerId` is read off the first
     // projected snapshot, which is always the local seat). Set back to null once
-    // the match finalises so trailing snapshots neither re-start nor record after
-    // finalise. Host recording is independent (scoped inside `onSessionHosted`).
+    // the match ends so trailing snapshots neither re-start nor record after
+    // game-over. Host recording is independent (scoped inside `onSessionHosted`).
     let clientPerspective: { started: boolean } | null = null;
 
     // Whether a joined-client session is currently live. Unlike `clientPerspective`
-    // (nulled at finalise so trailing snapshots don't re-record), this stays true
+    // (nulled at game-over so trailing snapshots don't re-record), this stays true
     // for the whole joined session — `onSessionJoined` sets it, the cleanup fn
-    // clears it. It gates the perspective `exportCurrent` so the client can export
-    // its OWN perspective replay from the post-game summary even after the
-    // recording has already finalised at game-over (the deterministic export
+    // clears it. It gates the perspective `exportCurrent` so the client can save
+    // its OWN retained perspective replay from the post-game summary after the match
+    // ends (the recording is not persisted until then; the deterministic export
     // remains host-only via `activeSession`).
     let joinedSessionActive = false;
 
@@ -1411,15 +1411,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             });
 
             // Live-match replay recording adapter (F44 / T4, Issue #658).
-            // Delegates to the shared `ReplayManager`; `recordAction` /
-            // `finaliseRecording` are driven by the pipeline, `startRecording`
-            // by the composition root just below.
+            // Delegates to the shared `ReplayManager`; `recordAction` is driven by
+            // the pipeline, `startRecording` by the composition root just below. The
+            // match is NOT persisted at game-over — the recording is retained and
+            // written only on an explicit save (`replayManager.exportCurrentMatch`),
+            // or discarded via `abortRecording` at teardown (§4.28).
             const replayPort: ReplayPort = {
                 startRecording: (header) => replayManager.startRecording(header),
                 recordAction: (entry) => replayManager.recordAction(entry),
-                finaliseRecording: async () => {
-                    await replayManager.finaliseRecording();
-                },
             };
 
             // Runtime Debug Layer per-session attach (§4.12, F47 T5).
@@ -1495,22 +1494,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // The replay `gameConfig` mirrors the inputs to
             // `buildInitialHostedSessionSnapshot` so a replay can reconstruct the
             // same initial snapshot from seed + config (see
-            // `createBaseReplayInitialSnapshot`). Recording finalises on match end
-            // (in the pipeline) or is discarded on session close / return-to-lobby.
-            // A startup failure must not break hosting (each recorder has its own
-            // try/catch so one's failure never suppresses the other).
+            // `createBaseReplayInitialSnapshot`). The recording is NOT persisted at
+            // match end — it is retained in memory and written only on an explicit
+            // save from the replay player, or discarded (`abortRecording`) on session
+            // close / return-to-lobby. A startup failure must not break hosting (each
+            // recorder has its own try/catch so one's failure never suppresses the
+            // other).
             //
-            // Intentional trade-off: a single `replayManager` is shared across all
-            // hosted sessions, and `finaliseRecording` is fire-and-forget (it clears
-            // `recording` only after the async `repository.save` resolves). If a new
-            // `startRecording` were to fire before a slow finalise resolved,
-            // `startRecording` would throw "a recording is already in progress"; the
-            // catch below keeps hosting alive and that recording is dropped rather
-            // than corrupting the in-flight one. `abortRecording()` (teardown and
-            // the return-to-lobby reset) clears state between matches, so this only
-            // bites on a back-to-back start with a still-saving prior replay. We
-            // accept that narrow, gracefully-degrading loss over blocking startup on
-            // a disk write; the live transport path must never wait on replay I/O.
+            // The return-to-lobby reset and teardown always `abortRecording()` before
+            // re-arming, so a retained finished-but-unsaved recording is cleared first
+            // and `startRecording` below never trips its "already in progress" guard.
             const startSessionRecordings = (): void => {
                 const playerDirectorySnapshot = playerDirectory.snapshot();
                 try {
@@ -1690,21 +1683,17 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(GAME_SNAPSHOT_CHANNEL, snapshot);
                 }
-                // Perspective recording (F44b T5): append this projected frame,
-                // then finalise once the match resolves. The manager skips frames
-                // for any seat other than the locked one (post-handoff), so no
-                // call-site filtering is needed; finalise is fire-and-forget.
+                // Perspective recording (F44b T5): append this projected frame while
+                // the match is live. At game-over, stop appending (lock the frame
+                // set) but do NOT persist — the recording is retained in memory and
+                // written only on an explicit save from the replay player; an unsaved
+                // match is discarded by `perspectiveReplayPort.abort()` at teardown
+                // (§4.28). The manager skips frames for any seat other than the locked
+                // one (post-handoff), so no call-site filtering is needed.
                 if (hostPerspectiveActive) {
                     perspectiveReplayPort.recordSnapshot({ tick: snapshot.tick, snapshot });
                     if (snapshot.gameResult !== null) {
                         hostPerspectiveActive = false;
-                        void perspectiveReplayPort.finalise().catch((err: unknown) => {
-                            lobbyLogger.error(
-                                'perspective replay finalise failed at match end',
-                                err instanceof Error ? err : new Error(String(err)),
-                                { gameId: HOSTED_GAME_ID },
-                            );
-                        });
                     }
                 }
             };
@@ -1996,13 +1985,15 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 // Per-session host-local state must not bleed into the next
                 // match (host-local state-ownership theme, Invariant #3).
                 clearUndoHistory([...activePlayers]);
-                // Discard, don't finalise: an abandoned match produces no replay
-                // file (a finished match already finalised+cleared its recording).
+                // Discard, don't finalise: returning to lobby without saving must
+                // drop the recording — whether the match was abandoned mid-play or
+                // finished-but-unsaved (matches are no longer persisted at game-over;
+                // the replay player's save icon is the sole gate). `abort()` is
+                // idempotent (a no-op if the user already saved, clearing it), so it
+                // runs unconditionally rather than only while a recording is "active".
                 replayManager.abortRecording();
-                if (hostPerspectiveActive) {
-                    hostPerspectiveActive = false;
-                    perspectiveReplayPort.abort();
-                }
+                hostPerspectiveActive = false;
+                perspectiveReplayPort.abort();
                 // Re-arm both recordings for the next match so a restarted match
                 // records a fresh replay + host perspective rather than running
                 // dark. Safe after the aborts above: the prior recording is cleared
@@ -2147,18 +2138,15 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 unsubLeft();
                 unsubAction();
                 clearUndoHistory([...activePlayers]);
-                // Discard any still-in-progress replay recording (F44 / T4): a
-                // match that ended already finalised+cleared the recording, so
-                // this is a no-op then; an abandoned mid-match session produces
-                // no replay file. Also guarantees the next session starts clean.
+                // Discard any retained replay recording on session close (F44 / T4).
+                // Matches are no longer persisted at game-over, so this drops both an
+                // abandoned mid-match recording AND a finished-but-unsaved one — the
+                // replay player's save icon is the only path that writes a file.
+                // `abort()` is idempotent (a no-op once the user has saved), so both
+                // run unconditionally, and the next session starts clean.
                 replayManager.abortRecording();
-                // Same for the perspective recording (F44b T5): a finalised
-                // match has cleared `hostPerspectiveActive`, so only an abandoned
-                // mid-match session aborts here — no partial perspective file.
-                if (hostPerspectiveActive) {
-                    hostPerspectiveActive = false;
-                    perspectiveReplayPort.abort();
-                }
+                hostPerspectiveActive = false;
+                perspectiveReplayPort.abort();
                 unsubscribeHostRenderer();
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
@@ -2206,12 +2194,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             });
 
             return () => {
-                // Abnormal teardown: discard any unfinalised perspective
-                // recording so an abandoned joined match leaves no partial file.
-                if (clientPerspective !== null) {
-                    perspectiveReplayPort.abort();
-                    clientPerspective = null;
-                }
+                // Teardown: discard any retained perspective recording so leaving
+                // without saving leaves no file — whether the joined match was
+                // abandoned mid-play or finished-but-unsaved (matches are no longer
+                // persisted at game-over; the save icon is the sole gate). `abort()`
+                // is idempotent, so it runs unconditionally even after game-over has
+                // cleared `clientPerspective`.
+                perspectiveReplayPort.abort();
+                clientPerspective = null;
                 // The joined session is over: a later perspective export has no
                 // session to draw from (the deterministic export was already
                 // host-only). Clearing this re-closes the export gate.
@@ -2425,14 +2415,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                         snapshot: projected,
                     });
                     if (projected.gameResult !== null) {
+                        // Stop appending at game-over, but do NOT persist: the
+                        // recording is retained in memory and written only on an
+                        // explicit save from the replay player; an unsaved match is
+                        // discarded by `perspectiveReplayPort.abort()` at teardown
+                        // (§4.28). Clearing the flag halts further frame capture.
                         clientPerspective = null;
-                        void perspectiveReplayPort.finalise().catch((err: unknown) => {
-                            lobbyLogger.error(
-                                'perspective replay finalise failed at match end',
-                                err instanceof Error ? err : new Error(String(err)),
-                                { gameId: HOSTED_GAME_ID },
-                            );
-                        });
                     }
                 }
             }
@@ -2547,9 +2535,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // ReplayManager (§4.28, F44 / T5). `exportCurrentMatch` is gated on an
     // active hosted session here because only this scope knows the live
     // session graph; the manager's `exportCurrentMatch` is idempotent — it
-    // finalises an in-progress recording, or returns the path already written
-    // when the host pipeline auto-finalised at game-over (the post-game summary
-    // buttons run only after that point, F44 / T8). `navigateToPlayer` pushes
+    // finalises the retained recording on the first save press, or returns the path
+    // already written on a repeat press (the match is not persisted at game-over;
+    // the player's save icon is the sole gate, F44 / T8). `navigateToPlayer` pushes
     // the validated path so the renderer can switch to the replay player route.
     // Playback session (§4.28, F44 / T6): loads a replay and serves projected
     // per-viewer PlayerSnapshots tick-by-tick to the renderer's replay player.
@@ -2620,11 +2608,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // Register the `chimera:replay:perspective:*` channels backed by the shared
     // PerspectiveReplayManager (read/delete + gated export) and a verbatim
     // PerspectiveReplayPlaybackManager (§4.28, ADR F44b, F44b / T7). The manager
-    // satisfies `PerspectiveReplayLoaderPort` via its `load` (engineVersion
-    // guard). `exportCurrent` is gated on an active hosted session and is
-    // idempotent — it flushes in-progress frames, or returns the path already
-    // written when the egress path auto-finalised at game-over (mirrors the
-    // deterministic `exportCurrentMatch`). Path arguments are confined to
+    // satisfies `PerspectiveReplayLoaderPort` via its `load` (engineVersion guard)
+    // and `getCurrentFile` (in-memory preview of the just-finished match).
+    // `exportCurrent` is gated on an active session and is idempotent — it flushes
+    // the retained frames on the first save press, or returns the path already
+    // written on a repeat press (the match is not persisted at game-over; mirrors
+    // the deterministic `exportCurrentMatch`). Path arguments are confined to
     // `perspectiveReplayDir`; `open-in-player` reuses the shared navigate push.
     const perspectiveReplayPlaybackManager = new PerspectiveReplayPlaybackManager(
         perspectiveReplayManager,

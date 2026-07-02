@@ -84,7 +84,9 @@ export interface GameEndPort {
  * `startRecording` is called by the composition root at session initialisation
  * (after `seed` and `gameConfig` are resolved); the pipeline itself only calls
  * `recordAction` (per successfully applied `EngineAction`, while the match is
- * live) and `finaliseRecording` (once, when the match resolves).
+ * live). The match is deliberately NOT persisted at game-over — the in-progress
+ * recording is retained in memory and written only when the user presses the
+ * replay player's save icon (§4.28); an unsaved match is discarded at teardown.
  *
  * Recording is a best-effort side effect: a failure must never propagate to the
  * live transport path (same guarantee as `AutoSavePort`, invariant #25 spirit).
@@ -97,8 +99,6 @@ export interface ReplayPort {
      * `EngineAction` payload only — never a `GameSnapshot` (invariants #3/#71).
      */
     recordAction(entry: RecordedAction): void;
-    /** Finalise and persist the in-progress recording at match end. */
-    finaliseRecording(): Promise<void>;
 }
 
 // ─── Debug port ──────────────────────────────────────────────────────────────
@@ -397,16 +397,11 @@ export function buildHostSessionPipeline(
         }
 
         if (!wasResolved && nextState.gameResult !== null) {
+            // Signal match end, but do NOT persist the replay here: the recording
+            // is retained in memory (invariant of `ReplayPort`) and written only on
+            // an explicit save from the replay player. This is what keeps every
+            // finished match from silently accumulating a replay file (§4.28).
             gameEndPort?.onGameEnd(nextState, nextState.gameResult);
-            if (replayPort !== undefined) {
-                void replayPort.finaliseRecording().catch((err: unknown) => {
-                    log.error(
-                        'replay finalise failed at match end',
-                        err instanceof Error ? err : new Error(String(err)),
-                        gameId !== undefined ? { gameId } : {},
-                    );
-                });
-            }
         }
 
         if (action.type === 'engine:end_turn' && gameId !== undefined && savePort !== undefined) {

@@ -14,10 +14,10 @@ import {
     type GameScreenProps,
     type GameResultOutcome,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
-import type {
-    PerspectiveReplayExportBridge,
-    ReplayExportBridge,
-    ReplayExportIntent,
+import {
+    CURRENT_MATCH_REPLAY_PATH,
+    type PerspectiveReplayExportBridge,
+    type ReplayExportBridge,
 } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import styles from './TacticsPostGameSummary.module.css';
 
@@ -119,35 +119,24 @@ function requirePerspectiveReplayBridge(): PerspectiveReplayExportBridge {
 }
 
 /**
- * Uniform export/open surface for the post-game actions, resolved by role:
+ * Uniform open-in-player surface for the post-game Replay action, resolved by
+ * role. Opening the just-finished match previews it straight from the host's/
+ * client's in-memory recording ({@link CURRENT_MATCH_REPLAY_PATH}) — the match is
+ * NOT written to disk here; the replay player's save icon is the sole persistence
+ * gate. Selecting by role only decides which player surface opens:
  *
- * - **host** → the authoritative deterministic replay (`exportCurrentMatch`).
- * - **client** → its OWN perspective replay (`perspective.exportCurrent`). The
- *   deterministic replay re-runs the full simulation from `seed` + `actions` and
- *   would reveal every player's hidden information, so it never reaches a client
- *   (Invariants #71 / #98).
- *
- * The perspective export ignores `intent` — its channel raises no "Replay saved"
- * toast; the summary's inline caption confirms a save instead.
+ * - **host** → the authoritative deterministic replay player.
+ * - **client** → its OWN perspective replay player. The deterministic replay
+ *   re-runs the full simulation from `seed` + `actions` and would reveal every
+ *   player's hidden information, so it never reaches a client (Invariants #71/#98).
  */
 interface PostGameReplayBridge {
-    export(intent: ReplayExportIntent): Promise<string>;
     openInPlayer(path: string, saveable: boolean): Promise<void>;
 }
 
 function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
-    if (isHost) {
-        const bridge = requireReplayBridge();
-        return {
-            export: (intent) => bridge.exportCurrentMatch(intent),
-            openInPlayer: (path, saveable) => bridge.openInPlayer(path, saveable),
-        };
-    }
-    const bridge = requirePerspectiveReplayBridge();
-    return {
-        export: () => bridge.exportCurrent(),
-        openInPlayer: (path, saveable) => bridge.openInPlayer(path, saveable),
-    };
+    const bridge = isHost ? requireReplayBridge() : requirePerspectiveReplayBridge();
+    return { openInPlayer: (path, saveable) => bridge.openInPlayer(path, saveable) };
 }
 
 /**
@@ -158,11 +147,11 @@ function requirePostGameReplayBridge(isHost: boolean): PostGameReplayBridge {
  * fixed user-facing copy so raw main-process error text never reaches the UI,
  * because game code may not reach the renderer toast store.
  *
- * Saving is no longer a button here: **Replay** opens the player with
- * `saveable = true`, and the player itself surfaces a compact save icon for the
- * just-finished match. `isHost` selects which replay opens — the host's
- * authoritative deterministic replay, or a joined client's own perspective
- * replay (F44b).
+ * Saving is not a button here: **Replay** previews the just-finished match from
+ * the in-memory recording (nothing is written to disk) with `saveable = true`, and
+ * the player itself surfaces a compact save icon — the sole path that persists the
+ * replay. `isHost` selects which replay opens — the host's authoritative
+ * deterministic replay, or a joined client's own perspective replay (F44b).
  */
 function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.ReactElement {
     const [status, setStatus] = React.useState<ReplayActionStatus>(REPLAY_ACTION_IDLE);
@@ -172,13 +161,11 @@ function PostGameReplayActions({ isHost }: { readonly isHost: boolean }): React.
         setStatus({ kind: 'working' });
         try {
             const bridge = requirePostGameReplayBridge(isHost);
-            // 'view' intent: export only to obtain a stable on-disk path for the
-            // player — main suppresses the "Replay saved" toast (§4.30). The
-            // perspective surface ignores the intent (it raises no toast).
-            const path = await bridge.export('view');
-            // `saveable = true`: this is the just-finished match, so the player
-            // shows its save icon (the navigate push forwards the flag).
-            await bridge.openInPlayer(path, true);
+            // Preview the just-finished match from the in-memory recording — nothing
+            // is written to disk (no export). `saveable = true`: the player shows its
+            // save icon (the navigate push forwards the flag), which is the only path
+            // that persists the replay.
+            await bridge.openInPlayer(CURRENT_MATCH_REPLAY_PATH, true);
             // Success navigates to the replay player via the main-pushed
             // `chimera:replay:navigate`; the summary unmounts, so no terminal
             // status is set here.

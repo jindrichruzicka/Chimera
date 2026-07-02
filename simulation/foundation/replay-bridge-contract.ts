@@ -25,6 +25,40 @@
  */
 
 /**
+ * Reserved, opaque handle that stands in for the **in-progress, not-yet-saved**
+ * recording of the just-finished match, instead of a real on-disk replay path.
+ *
+ * The post-game **Replay** action passes this to `openInPlayer` so the player
+ * previews the match straight from the host's in-memory recording — the match is
+ * NOT written to disk at game-over; the player's compact save icon is the sole
+ * thing that persists it. Main recognises this token by exact equality **before**
+ * any path-schema parse or directory-containment check and routes it to in-memory
+ * playback (`openCurrent`), so it never reaches the filesystem — it is deliberately
+ * NOT a valid path and can never escape the replay directory (OWASP A01 unaffected).
+ *
+ * Shared here (not in `electron/*`) so both the main-process IPC handlers and a
+ * game screen (which may import only `simulation/`/`ai/`/`shared/`, Invariant #96)
+ * reference one source of truth for the token.
+ */
+export const CURRENT_MATCH_REPLAY_PATH = '::chimera-current-match::';
+
+/**
+ * The read-only `list` slice of `window.__chimera.replay` (the deterministic
+ * `ReplayAPI`, §4.28) that a game's shell module may read off `globalThis` to
+ * decide whether a replay-related menu affordance is available. Companion to
+ * {@link PerspectiveReplayListBridge}: a game whose Replays affordance should
+ * reflect BOTH saved deterministic and perspective replays reads both slices.
+ *
+ * The item shape is intentionally opaque (`unknown`) — only the presence of
+ * entries is consumed here — so this slice stays free of the electron-only
+ * `ReplayListItem` type while remaining assignable from it.
+ */
+export interface ReplayListBridge {
+    /** List stored deterministic-replay entries for `gameId`, newest-first. */
+    list(gameId: string): Promise<readonly unknown[]>;
+}
+
+/**
  * The read-only `list` slice of `window.__chimera.replay.perspective`
  * (`PerspectiveReplayAPI`, §4.28 ADR F44b) that a game's shell module may read
  * off `globalThis` to decide whether a replay-related menu affordance is
@@ -85,7 +119,10 @@ export interface ReplayExportBridge {
     exportCurrentMatch(intent?: ReplayExportIntent): Promise<string>;
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
-     * inside the replay directory, then pushes `chimera:replay:navigate`.
+     * inside the replay directory, then pushes `chimera:replay:navigate` — unless
+     * `path` is {@link CURRENT_MATCH_REPLAY_PATH}, which bypasses containment and
+     * opens the in-memory recording of the just-finished match (nothing is written
+     * to disk until the player's save icon is pressed).
      *
      * `saveable` (default `false`) marks the opened replay as the just-finished
      * match, so the player surfaces its compact save affordance; it travels on
@@ -126,7 +163,9 @@ export interface PerspectiveReplayExportBridge {
     /**
      * Ask main to open `path` in the replay player. Main validates the path is
      * inside the perspective-replay directory, then pushes the shared
-     * `chimera:replay:navigate` with `kind: 'perspective'`.
+     * `chimera:replay:navigate` with `kind: 'perspective'` — unless `path` is
+     * {@link CURRENT_MATCH_REPLAY_PATH}, which bypasses containment and opens the
+     * in-memory perspective recording of the just-finished match.
      *
      * `saveable` (default `false`) marks the opened replay as the just-finished
      * match so the player surfaces its compact save affordance — see

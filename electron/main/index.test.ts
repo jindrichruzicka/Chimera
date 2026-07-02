@@ -3679,6 +3679,22 @@ describe('main() — perspective replay recording (F44b T5)', () => {
     const getLobbyOptions = (): LobbyOptionsForPerspective =>
         mockLobbyManagerCtor.mock.calls[0]?.[2] as LobbyOptionsForPerspective;
 
+    /**
+     * Persist the current perspective recording via the injected export-current
+     * gate — the sole persistence path now that matches are NOT saved at game-over
+     * (the replay player's save icon drives this). Uses the LATEST registration
+     * because this describe does not clear ipcMain.handle between main() runs.
+     */
+    const saveCurrentPerspective = async (): Promise<void> => {
+        const exportCurrent = [...ipcMainHandle.mock.calls]
+            .reverse()
+            .find(([channel]) => channel === PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL)?.[1] as
+            | (() => unknown)
+            | undefined;
+        await Promise.resolve(exportCurrent?.());
+        await flush();
+    };
+
     beforeEach(() => {
         perspectiveSaves.value = [];
         mockLobbyManagerCtor.mockClear();
@@ -3691,7 +3707,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         expect(mockFilePerspectiveReplayRepoCtor).toHaveBeenCalledOnce();
     });
 
-    it('host egress: starts, records each snapshot, and finalises for the host viewerId', async () => {
+    it('host egress: records each snapshot, but persists for the host viewerId only on explicit save', async () => {
         await main(makeTestContributions());
         const hostId = playerId('host-perspective');
 
@@ -3704,6 +3720,13 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
 
         await flush();
+
+        // Game-over no longer auto-saves — nothing is on disk yet.
+        expect(perspectiveSaves.value).toHaveLength(0);
+
+        // The explicit save (player's save icon → export-current) persists the
+        // retained recording with exactly the frames it captured.
+        await saveCurrentPerspective();
 
         expect(perspectiveSaves.value).toHaveLength(1);
         const file = perspectiveSaves.value[0] as PerspectiveTestFile;
@@ -3729,6 +3752,8 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
 
         await flush();
+        // Persist the retained recording explicitly to inspect its captured frames.
+        await saveCurrentPerspective();
 
         const file = perspectiveSaves.value[0] as PerspectiveTestFile;
         expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 2]);
@@ -3755,7 +3780,7 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         expect(perspectiveSaves.value).toHaveLength(0);
     });
 
-    it('client egress: starts on first snapshot, records, and finalises for the client viewerId', async () => {
+    it('client egress: starts on first snapshot, records, and persists for the client viewerId only on explicit save', async () => {
         await main(makeTestContributions());
         const options = getLobbyOptions();
         const clientId = playerId('client-perspective');
@@ -3766,6 +3791,10 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         options.onClientSnapshotReceived?.(makeSnapshot(clientId, 2, { winnerIds: [clientId] }), 0);
 
         await flush();
+
+        // Game-over no longer auto-saves.
+        expect(perspectiveSaves.value).toHaveLength(0);
+        await saveCurrentPerspective();
 
         expect(perspectiveSaves.value).toHaveLength(1);
         const file = perspectiveSaves.value[0] as PerspectiveTestFile;
@@ -3807,9 +3836,12 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         options.onSessionJoined?.(makeClientTransport());
         options.onClientSnapshotReceived?.(makeSnapshot(clientId, 1), 0);
 
-        // The host recording is unaffected and finalises cleanly to the host seat.
+        // The host recording is unaffected; on an explicit save it persists cleanly
+        // to the host seat.
         recipient?.sendSnapshot(makeSnapshot(hostId, 2, { winnerIds: [hostId] }));
         await flush();
+        expect(perspectiveSaves.value).toHaveLength(0);
+        await saveCurrentPerspective();
 
         expect(perspectiveSaves.value).toHaveLength(1);
         const file = perspectiveSaves.value[0] as PerspectiveTestFile;
@@ -3822,14 +3854,15 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         const options = getLobbyOptions();
         const clientId = playerId('client-export');
 
-        // Join, record, and finalise a client perspective replay at game-over.
+        // Join and record a client perspective replay through game-over. The match
+        // is NOT saved at game-over — the recording is retained for an explicit save.
         options.onSessionJoined?.(makeClientTransport());
         options.onClientSnapshotReceived?.(makeSnapshot(clientId, 0), 0);
         options.onClientSnapshotReceived?.(makeSnapshot(clientId, 1, { winnerIds: [clientId] }), 0);
         await flush();
-        expect(perspectiveSaves.value).toHaveLength(1);
+        expect(perspectiveSaves.value).toHaveLength(0);
 
-        // The injected gate must now let a joined client export its OWN finalised
+        // The injected gate must let a joined client export (save) its OWN retained
         // perspective replay (the deterministic export stays host-only). Take the
         // latest registration since this describe does not clear ipcMain.handle.
         const exportCurrent = [...ipcMainHandle.mock.calls]
@@ -3841,6 +3874,9 @@ describe('main() — perspective replay recording (F44b T5)', () => {
         await expect(Promise.resolve(exportCurrent?.())).resolves.toBe(
             '/tmp/perspective-1.chimera-perspective-replay',
         );
+        // The save wrote exactly one file.
+        await flush();
+        expect(perspectiveSaves.value).toHaveLength(1);
     });
 });
 

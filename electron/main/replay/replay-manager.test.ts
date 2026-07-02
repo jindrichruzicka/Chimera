@@ -203,6 +203,63 @@ describe('ReplayManager — exportCurrentMatch', () => {
     });
 });
 
+// ── getCurrentMatchFile (in-memory preview, no write) ────────────────────────
+
+describe('ReplayManager — getCurrentMatchFile', () => {
+    it('assembles the in-progress recording as a ReplayFile without writing or clearing', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+        manager.recordAction(recordAction(3));
+
+        const file = manager.getCurrentMatchFile();
+
+        // Matches what finaliseRecording would assemble…
+        expect(file.formatVersion).toBe(1);
+        expect(file.gameId).toBe('tactics');
+        expect(file.seed).toBe(123);
+        expect(file.actions).toHaveLength(2);
+        expect(file.metadata.durationTicks).toBe(3);
+        expect(file.metadata.players).toHaveLength(1);
+        // …but nothing was persisted (the match is only saved on an explicit save).
+        expect(await manager.list('tactics')).toStrictEqual([]);
+        // …and the recording survives: a later save still succeeds.
+        await expect(manager.finaliseRecording()).resolves.toBeTruthy();
+    });
+
+    it('is repeatable and leaves the recording intact for a later save', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const first = manager.getCurrentMatchFile();
+        const second = manager.getCurrentMatchFile();
+
+        expect(second.actions).toHaveLength(first.actions.length);
+        const savedPath = await manager.finaliseRecording();
+        const loaded = await manager.load(savedPath);
+        expect(loaded.actions).toHaveLength(1);
+    });
+
+    it('returns a defensively-copied actions array (mutation cannot corrupt the pending save)', async () => {
+        const { manager } = makeManager();
+        manager.startRecording(makeHeader());
+        manager.recordAction(recordAction(0));
+
+        const file = manager.getCurrentMatchFile();
+        (file.actions as unknown[]).push(recordAction(99));
+
+        const savedPath = await manager.finaliseRecording();
+        const loaded = await manager.load(savedPath);
+        expect(loaded.actions).toHaveLength(1);
+    });
+
+    it('throws when no recording is in progress', () => {
+        const { manager } = makeManager();
+        expect(() => manager.getCurrentMatchFile()).toThrow(/no recording/);
+    });
+});
+
 // ── Abort (mid-match session close) ──────────────────────────────────────────
 
 describe('ReplayManager — abortRecording', () => {

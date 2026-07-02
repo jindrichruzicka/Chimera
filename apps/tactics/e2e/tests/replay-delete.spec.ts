@@ -8,9 +8,9 @@
  *   3. Cancel dismisses the dialog and keeps every replay;
  *   4. Confirm deletes the targeted replay and drops its row from the list.
  *
- * Seeds real replays: a finished match auto-saves a perspective replay, and
- * saving from the player adds a deterministic one, so the browser lists at least
- * two rows to delete from (deleting one leaves the list still rendered).
+ * Seeds a real replay by SAVING from the player: a finished match is not written
+ * at game-over, so the host opens the just-finished match and presses the save
+ * icon to persist one deterministic replay, giving the browser a row to delete.
  */
 
 import type { Page } from '@playwright/test';
@@ -20,18 +20,6 @@ import { MainMenuPage } from '../pages/MainMenuPage';
 import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
 
 const TACTICS_GAME_ID = 'tactics';
-
-// The preload exposes this on `globalThis.__chimera`; the e2e root tsconfig is
-// DOM-less, so the slice this spec reaches through `page.evaluate` is typed here.
-interface ChimeraReplayGlobal {
-    readonly __chimera: {
-        readonly replay: {
-            readonly perspective: {
-                list(gameId: string): Promise<readonly string[]>;
-            };
-        };
-    };
-}
 
 /** Drive the host to game-over through the canonical move + attack flow. */
 async function playToGameOver(hostGame: GamePage): Promise<void> {
@@ -49,23 +37,6 @@ async function goToPostGameSummary(hostWindow: Page, hostGame: GamePage): Promis
     await expect(hostGame.postGameSummary).toBeVisible();
 }
 
-/** Wait until the auto-finalised perspective replay (which gates Replays) is on disk. */
-async function waitForPerspectiveReplaySaved(window: Page): Promise<void> {
-    await expect
-        .poll(
-            () =>
-                window.evaluate(
-                    (gameId) =>
-                        (globalThis as unknown as ChimeraReplayGlobal).__chimera.replay.perspective
-                            .list(gameId)
-                            .then((paths) => paths.length),
-                    TACTICS_GAME_ID,
-                ),
-            { timeout: 15_000 },
-        )
-        .toBeGreaterThan(0);
-}
-
 test.describe('Replay browser — delete', () => {
     test('deletes a replay through the confirm dialog and drops its row', async ({
         hostWindow,
@@ -74,14 +45,13 @@ test.describe('Replay browser — delete', () => {
         await playToGameOver(hostGame);
         await goToPostGameSummary(hostWindow, hostGame);
 
-        // Seed a deterministic replay (player save) alongside the auto-saved
-        // perspective one, so the browser lists at least two rows.
+        // Seed a deterministic replay by explicitly saving from the player (the
+        // match is not persisted at game-over), giving the browser a row to delete.
         await hostGame.replayButton.click();
         const player = new ReplayPlayerPage(hostWindow);
         await expect(player.playButton).toBeVisible({ timeout: 30_000 });
         await expect(player.saveButton).toBeEnabled();
         await player.save();
-        await waitForPerspectiveReplaySaved(hostWindow);
 
         // Reach the library the way a player does: main menu → Replays.
         const mainMenu = new MainMenuPage(hostWindow);

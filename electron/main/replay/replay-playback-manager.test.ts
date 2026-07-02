@@ -104,7 +104,7 @@ function makeManager(file: ReplayFile = makeReplayFile()): ReplayPlaybackManager
     return new ReplayPlaybackManager(
         makeRegistry(),
         (gameId) => (gameId === 'tactics' ? passthroughRules : undefined),
-        { load: () => Promise.resolve(file) },
+        { load: () => Promise.resolve(file), getCurrentMatchFile: () => file },
         makeLogger(),
     );
 }
@@ -147,6 +147,39 @@ describe('ReplayPlaybackManager', () => {
             const manager = makeManager(file);
 
             await expect(manager.open('/replays/x.chimera-replay')).rejects.toThrow(/visibility/i);
+        });
+    });
+
+    describe('openCurrent', () => {
+        it('builds playback from the in-memory current-match file (no path load)', async () => {
+            const manager = makeManager();
+
+            const info = await manager.openCurrent();
+
+            expect(info).toEqual({
+                gameId: 'tactics',
+                totalTicks: 3,
+                playerIds: ['p1', 'p2'],
+                viewerId: 'p1',
+            });
+        });
+
+        it('projects snapshots from the in-memory file exactly as a path-opened replay does', async () => {
+            const manager = makeManager();
+            await manager.openCurrent();
+
+            const snaps = manager.snapshotRange(0, 3);
+
+            expect(snaps.map((s) => s.tick)).toEqual([0, 1, 2, 3]);
+            // Invariant #3: still only projected PlayerSnapshots cross the boundary.
+            expect(snaps.every((s) => !('seed' in s))).toBe(true);
+        });
+
+        it('rejects when the in-memory file has no visibility rules', async () => {
+            const file: ReplayFile = { ...makeReplayFile(), gameId: 'unknown-game' };
+            const manager = makeManager(file);
+
+            await expect(manager.openCurrent()).rejects.toThrow(/visibility/i);
         });
     });
 

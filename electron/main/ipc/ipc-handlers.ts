@@ -23,6 +23,7 @@ import {
     type PlatformInfo,
 } from '../../preload/apis/system-api.js';
 import { CLEAN_EXIT_IPC_CHANNEL } from '@chimera-engine/simulation/foundation/constants.js';
+import { CURRENT_MATCH_REPLAY_PATH } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
     GAME_REVEAL_CHANNEL,
@@ -967,6 +968,12 @@ export interface ReplayIpcPort {
  */
 export interface ReplayPlaybackPort {
     open(path: string): Promise<ReplayPlaybackInfo>;
+    /**
+     * Open playback for the in-memory recording of the just-finished match (the
+     * post-game preview, before any save). Backs the {@link CURRENT_MATCH_REPLAY_PATH}
+     * sentinel — no filesystem read, so no path is validated.
+     */
+    openCurrent(): Promise<ReplayPlaybackInfo>;
     snapshotAt(tick: number): PlayerSnapshot;
     snapshotRange(from: number, to: number): PlayerSnapshot[];
     close(): void;
@@ -1080,15 +1087,24 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
     });
 
     ipcMain.handle(REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath, saveable) => {
-        const validated = parseInvokeRequest(
-            ReplayPathSchema,
-            REPLAY_OPEN_IN_PLAYER_CHANNEL,
-            replayPath,
-        );
         const validatedSaveable = parseInvokeRequest(
             ReplaySaveableFlagSchema,
             REPLAY_OPEN_IN_PLAYER_CHANNEL,
             saveable,
+        );
+        // Current-match preview: the sentinel is not a filesystem path (it opens
+        // the in-memory recording), so it is matched by exact equality BEFORE any
+        // path-schema parse or containment check and forwarded verbatim. It can
+        // never reach `isInsidePath` nor the repository, so it cannot escape the
+        // replay directory (OWASP A01 unaffected). See CURRENT_MATCH_REPLAY_PATH.
+        if (replayPath === CURRENT_MATCH_REPLAY_PATH) {
+            navigateToPlayer(CURRENT_MATCH_REPLAY_PATH, validatedSaveable);
+            return undefined;
+        }
+        const validated = parseInvokeRequest(
+            ReplayPathSchema,
+            REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            replayPath,
         );
         if (!isInsidePath(replayDir, validated)) {
             throw new Error(
@@ -1117,6 +1133,13 @@ export function registerReplayHandlers(options: RegisterReplayHandlersOptions): 
     });
 
     ipcMain.handle(REPLAY_OPEN_PLAYBACK_CHANNEL, (_event, replayPath) => {
+        // Current-match preview: the sentinel opens the in-memory recording, never
+        // a stored file, so it is matched by exact equality BEFORE any path parse
+        // or containment check and routed to `openCurrent`. It never reaches
+        // `isInsidePath` nor the repository (OWASP A01 unaffected).
+        if (replayPath === CURRENT_MATCH_REPLAY_PATH) {
+            return playback.openCurrent();
+        }
         const validated = parseInvokeRequest(
             ReplayPathSchema,
             REPLAY_OPEN_PLAYBACK_CHANNEL,
@@ -1186,6 +1209,12 @@ export interface PerspectiveReplayIpcPort {
  */
 export interface PerspectiveReplayPlaybackPort {
     open(path: string): Promise<PerspectiveReplayPlaybackInfo>;
+    /**
+     * Open playback for the in-memory perspective recording of the just-finished
+     * match (post-game preview, before any save). Backs the
+     * {@link CURRENT_MATCH_REPLAY_PATH} sentinel — no filesystem read.
+     */
+    openCurrent(): Promise<PerspectiveReplayPlaybackInfo>;
     snapshotAt(tick: number): PlayerSnapshot;
     snapshotRange(from: number, to: number): PlayerSnapshot[];
     close(): void;
@@ -1263,15 +1292,22 @@ export function registerPerspectiveReplayHandlers(
     ipcMain.handle(PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL, () => exportCurrent());
 
     ipcMain.handle(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL, (_event, replayPath, saveable) => {
-        const validated = parseInvokeRequest(
-            ReplayPathSchema,
-            PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
-            replayPath,
-        );
         const validatedSaveable = parseInvokeRequest(
             ReplaySaveableFlagSchema,
             PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
             saveable,
+        );
+        // Current-match preview sentinel (see the deterministic open-in-player):
+        // not a filesystem path, matched before any parse/containment check, so it
+        // never reaches `isInsidePath` (OWASP A01 unaffected).
+        if (replayPath === CURRENT_MATCH_REPLAY_PATH) {
+            navigateToPlayer(CURRENT_MATCH_REPLAY_PATH, validatedSaveable);
+            return undefined;
+        }
+        const validated = parseInvokeRequest(
+            ReplayPathSchema,
+            PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL,
+            replayPath,
         );
         if (!isInsidePath(perspectiveReplayDir, validated)) {
             throw new Error(
@@ -1301,6 +1337,12 @@ export function registerPerspectiveReplayHandlers(
     });
 
     ipcMain.handle(PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL, (_event, replayPath) => {
+        // Current-match preview sentinel: opens the in-memory perspective recording,
+        // never a stored file — matched before any parse/containment check (OWASP
+        // A01 unaffected).
+        if (replayPath === CURRENT_MATCH_REPLAY_PATH) {
+            return playback.openCurrent();
+        }
         const validated = parseInvokeRequest(
             ReplayPathSchema,
             PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL,

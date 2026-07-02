@@ -33,6 +33,7 @@ import { test as gameTest } from '../fixtures/game.fixture';
 import { ChatPanelPage } from '../pages/ChatPanelPage';
 import { LobbyPage } from '../pages/LobbyPage';
 import { GamePage } from '../pages/GamePage';
+import { ReplayPlayerPage } from '../pages/ReplayPlayerPage';
 import { getSimulationTick } from '../helpers/ipc-spy';
 
 const TACTICS_GAME_ID = 'tactics';
@@ -242,24 +243,15 @@ gameTest.describe('Tactics chat — in-match', () => {
             expect(tickAfter).toBe(tickBefore);
 
             // Resolve the match through the real pipeline, then assert no chat ever
-            // entered ActionHistory. The deterministic replay auto-finalises at
-            // game-over (fire-and-forget), so wait until it is on disk rather than
-            // pressing a save button (saving now lives in the replay player).
+            // entered ActionHistory. The match is no longer written at game-over —
+            // the replay player's save icon is the sole persistence gate — so open
+            // the just-finished match and save it before reading it off disk.
             await playToGameOver(hostGame);
             await goToPostGameSummary(hostWindow, hostGame);
-            await expect
-                .poll(
-                    () =>
-                        hostWindow.evaluate(
-                            (gameId) =>
-                                (globalThis as unknown as ChimeraReplayGlobal).__chimera.replay
-                                    .list(gameId)
-                                    .then((r) => r.length),
-                            TACTICS_GAME_ID,
-                        ),
-                    { timeout: 15_000 },
-                )
-                .toBeGreaterThan(0);
+            await hostGame.replayButton.click();
+            const player = new ReplayPlayerPage(hostWindow);
+            await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+            await player.save();
 
             const replays = await hostWindow.evaluate(
                 (gameId) =>

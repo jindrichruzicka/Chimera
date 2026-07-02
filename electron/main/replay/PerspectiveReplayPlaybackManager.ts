@@ -55,6 +55,12 @@ import type { Logger } from '../logging/logger.js';
  */
 export interface PerspectiveReplayLoaderPort {
     load(path: string): Promise<PerspectiveReplayFile>;
+    /**
+     * Assemble the in-progress perspective recording of the just-finished match as
+     * a {@link PerspectiveReplayFile} for in-memory preview, without persisting it
+     * (backs {@link PerspectiveReplayPlaybackManager.openCurrent}).
+     */
+    getCurrentFile(): PerspectiveReplayFile;
 }
 
 interface ActivePlayback {
@@ -88,6 +94,28 @@ export class PerspectiveReplayPlaybackManager {
     async open(path: string): Promise<PerspectiveReplayPlaybackInfo> {
         this.log.debug('open', { path });
         const file = await this.loader.load(path);
+        return this.#ready(file);
+    }
+
+    /**
+     * Open playback for the **in-memory** perspective recording of the
+     * just-finished match — the preview path for the post-game **Replay** action
+     * (the player's save icon is the sole persistence gate). Mirrors {@link open}
+     * but sources the {@link PerspectiveReplayFile} from the loader's in-progress
+     * recording instead of a stored file, so no path is validated and nothing is
+     * read from the filesystem.
+     *
+     * @throws when no perspective recording is in progress.
+     */
+    openCurrent(): Promise<PerspectiveReplayPlaybackInfo> {
+        this.log.debug('openCurrent');
+        // Symmetric with `open`: return a promise so a "no recording in progress"
+        // throw from the loader surfaces as a rejection, not a synchronous throw.
+        return Promise.resolve().then(() => this.#ready(this.loader.getCurrentFile()));
+    }
+
+    /** Ready `file`'s stored frames for verbatim playback and return its metadata. */
+    #ready(file: PerspectiveReplayFile): PerspectiveReplayPlaybackInfo {
         this.#active = { viewerId: file.viewerId, frames: file.frames };
         return {
             gameId: file.gameId,

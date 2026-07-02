@@ -74,9 +74,9 @@ export class PerspectiveReplayManager {
     /**
      * Path of the most recently finalised perspective replay for the current
      * match, or `null` when none has been finalised since the last `start`.
-     * Lets {@link exportCurrent} stay idempotent after the egress path has
-     * already auto-finalised the recording at game-over (mirrors
-     * `ReplayManager.exportCurrentMatch`).
+     * Lets {@link exportCurrent} stay idempotent: once the player's save icon has
+     * persisted the match, a repeat press returns the same path rather than writing
+     * a duplicate (mirrors `ReplayManager.exportCurrentMatch`).
      */
     private lastSavedPath: string | null = null;
 
@@ -183,11 +183,7 @@ export class PerspectiveReplayManager {
             throw new Error('PerspectiveReplayManager.finalise: no recording in progress');
         }
 
-        const file: PerspectiveReplayFile = {
-            ...state.header,
-            durationTicks: PerspectiveReplayManager.computeDurationTicks(state.frames),
-            frames: state.frames,
-        };
+        const file = PerspectiveReplayManager.assembleFile(state);
 
         try {
             const savedPath = await this.repository.save(file);
@@ -230,11 +226,34 @@ export class PerspectiveReplayManager {
     }
 
     /**
+     * Assemble (but do NOT persist) the current in-progress recording as a
+     * {@link PerspectiveReplayFile}, so the replay player can preview the
+     * just-finished match straight from memory. The perspective counterpart to
+     * {@link ReplayManager.getCurrentMatchFile}: the match is written to disk only
+     * when the user presses the player's save icon (which routes to
+     * {@link exportCurrent}); an unsaved match is discarded by {@link abort} at
+     * teardown. The frames array is defensively shallow-copied so playback cannot
+     * mutate the frames still held for a later save. Non-destructive.
+     *
+     * @throws {Error} if no recording is in progress.
+     */
+    getCurrentFile(): PerspectiveReplayFile {
+        this.log.debug('getCurrentFile', { recording: this.recording !== null });
+        const state = this.recording;
+        if (state === null) {
+            throw new Error('PerspectiveReplayManager.getCurrentFile: no recording in progress');
+        }
+        return { ...PerspectiveReplayManager.assembleFile(state), frames: [...state.frames] };
+    }
+
+    /**
      * Discard the in-progress recording without persisting it.
      *
-     * Called when a host session closes mid-match (an abandoned game produces no
-     * perspective file). Idempotent: a no-op when no recording is in progress, so
-     * it is safe to call unconditionally at session teardown.
+     * Called when a joined/hosted session closes without the match being saved —
+     * either abandoned mid-match, or finished but left unsaved (the match is no
+     * longer finalised at game-over; the player's save icon is the sole persistence
+     * gate). Idempotent: a no-op when no recording is in progress, so it is safe to
+     * call unconditionally at session teardown.
      */
     abort(): void {
         this.log.debug('abort', { active: this.recording !== null });
@@ -285,6 +304,19 @@ export class PerspectiveReplayManager {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Build the `PerspectiveReplayFile` for a recording state (shared by
+     * {@link finalise} and {@link getCurrentFile}). Pure — reads the state, writes
+     * nothing.
+     */
+    private static assembleFile(state: RecordingState): PerspectiveReplayFile {
+        return {
+            ...state.header,
+            durationTicks: PerspectiveReplayManager.computeDurationTicks(state.frames),
+            frames: state.frames,
+        };
+    }
 
     private static computeDurationTicks(frames: readonly PerspectiveReplayFrame[]): number {
         let max = 0;

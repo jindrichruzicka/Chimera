@@ -79,9 +79,6 @@ interface ChimeraReplayGlobal {
         readonly replay: {
             list(gameId: string): Promise<readonly ReplayListEntry[]>;
             snapshotAt(tick: number): Promise<ReplayPlayerSnapshot>;
-            readonly perspective: {
-                list(gameId: string): Promise<readonly string[]>;
-            };
         };
         readonly game: {
             sendAction(action: unknown): void;
@@ -125,25 +122,20 @@ async function listDeterministicReplays(window: Page): Promise<readonly ReplayLi
 }
 
 /**
- * Wait until a perspective replay for Tactics has been finalised to disk. The
- * host pipeline finalises it fire-and-forget at game-over, and the main-menu
- * Replays button evaluates its (async) disabled-state once on mount — so the
- * file must exist before navigating, or the button would render disabled.
+ * Save the just-finished match from the post-game summary → replay player → save
+ * icon. Persisting is the SOLE gate now (the match is not written at game-over):
+ * this seeds one deterministic replay, which is what enables the main-menu Replays
+ * button and gives the library a row.
  */
-async function waitForPerspectiveReplaySaved(window: Page): Promise<void> {
-    await expect
-        .poll(
-            () =>
-                window.evaluate(
-                    (gameId) =>
-                        (globalThis as unknown as ChimeraReplayGlobal).__chimera.replay.perspective
-                            .list(gameId)
-                            .then((paths) => paths.length),
-                    TACTICS_GAME_ID,
-                ),
-            { timeout: 15_000 },
-        )
-        .toBeGreaterThan(0);
+async function saveDeterministicReplayFromSummary(
+    hostWindow: Page,
+    hostGame: GamePage,
+): Promise<void> {
+    await hostGame.replayButton.click();
+    const player = new ReplayPlayerPage(hostWindow);
+    await expect(player.playButton).toBeVisible({ timeout: 30_000 });
+    await expect(player.saveButton).toBeEnabled();
+    await player.save();
 }
 
 /** Read a saved replay file off disk and project the fields invariant #71 cares about. */
@@ -228,14 +220,15 @@ test.describe('Tactics replay lifecycle', () => {
         await expect(mainMenu.replaysButton).toBeDisabled();
     });
 
-    test('main-menu Replays button enables after a match and opens the browser', async ({
+    test('main-menu Replays button enables after saving a replay and opens the browser', async ({
         hostWindow,
     }) => {
         const hostGame = new GamePage(hostWindow);
-        // Completing a match auto-finalises a perspective replay, which is what
-        // gates the Replays button — wait until it is on disk before navigating.
+        // A finished match saves nothing on its own; the Replays button gates on a
+        // saved replay (deterministic OR perspective), so persist one explicitly.
         await playToGameOver(hostGame);
-        await waitForPerspectiveReplaySaved(hostWindow);
+        await goToPostGameSummary(hostWindow, hostGame);
+        await saveDeterministicReplayFromSummary(hostWindow, hostGame);
 
         const mainMenu = new MainMenuPage(hostWindow);
         await mainMenu.goto({ gameId: TACTICS_GAME_ID });
@@ -244,6 +237,22 @@ test.describe('Tactics replay lifecycle', () => {
         await mainMenu.replaysButton.click();
 
         await expect(hostWindow.getByTestId('replays-page')).toBeVisible();
+    });
+
+    test('main-menu Replays button stays disabled after a match that is not saved', async ({
+        hostWindow,
+    }) => {
+        const hostGame = new GamePage(hostWindow);
+        // Regression guard for the "save-only" model: finishing (and abandoning) a
+        // match must NOT auto-save any replay, so the Replays button stays disabled.
+        await playToGameOver(hostGame);
+        await goToPostGameSummary(hostWindow, hostGame);
+
+        const mainMenu = new MainMenuPage(hostWindow);
+        await mainMenu.goto({ gameId: TACTICS_GAME_ID });
+
+        await expect(mainMenu.replaysButton).toBeVisible();
+        await expect(mainMenu.replaysButton).toBeDisabled();
     });
 
     test('replaying a finished match advances to the final tick', async ({ hostWindow }) => {
@@ -299,14 +308,14 @@ test.describe('Tactics replay lifecycle', () => {
         const clientGame = new GamePage(clientWindow);
 
         // Drive the shared two-peer match to game-over from the host; the client
-        // receives the resolved snapshot and auto-finalises its own perspective
-        // replay (waiting on that also confirms the client reached game-over).
+        // receives the resolved snapshot (its result banner confirms it reached
+        // game-over) and retains — but does NOT auto-save — its perspective replay.
         await playToGameOver(hostGame);
-        await waitForPerspectiveReplaySaved(clientWindow);
+        await expect(clientGame.gameResultBanner).toBeVisible({ timeout: 60_000 });
 
-        // The client reaches its post-game summary and presses Replay. Before this
-        // fix the client hit the host-only deterministic export and saw
-        // "Could not open replay."; now it exports and opens its perspective replay.
+        // The client reaches its post-game summary and presses Replay. The client
+        // previews its OWN perspective replay from memory (the deterministic replay
+        // stays host-only); nothing is written to disk unless it presses save.
         await goToPostGameSummary(clientWindow, clientGame);
         await expect(clientGame.replayButton).toBeVisible();
         await clientGame.replayButton.click();
@@ -360,14 +369,10 @@ test.describe('Tactics replay lifecycle', () => {
         await playToGameOver(hostGame);
         await goToPostGameSummary(hostWindow, hostGame);
 
-        // Persist a deterministic replay so the library has a row to open, and wait
-        // for the auto-finalised perspective replay that gates the Replays button.
-        await hostGame.replayButton.click();
+        // Persist a deterministic replay so the library has a row to open; saving
+        // it also enables the Replays button (which gates on any saved replay).
+        await saveDeterministicReplayFromSummary(hostWindow, hostGame);
         const player = new ReplayPlayerPage(hostWindow);
-        await expect(player.playButton).toBeVisible({ timeout: 30_000 });
-        await expect(player.saveButton).toBeEnabled();
-        await player.save();
-        await waitForPerspectiveReplaySaved(hostWindow);
 
         // Reach the library the way a player does: main menu → Replays.
         const mainMenu = new MainMenuPage(hostWindow);

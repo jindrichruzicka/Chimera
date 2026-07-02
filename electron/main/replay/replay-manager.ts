@@ -58,10 +58,9 @@ export class ReplayManager {
     /**
      * Path of the most recently finalised replay for the current match, or
      * `null` when no match has been finalised since the last `startRecording`.
-     * Lets {@link exportCurrentMatch} stay idempotent after the host pipeline has
-     * already auto-finalised the recording at game-over (the post-game summary
-     * mounts only after that point, so its buttons would otherwise have nothing
-     * left to finalise).
+     * Lets {@link exportCurrentMatch} stay idempotent: once the player's save icon
+     * has persisted the match, a repeat press (or any second call) returns the same
+     * path rather than writing a duplicate file.
      */
     private lastSavedPath: string | null = null;
 
@@ -119,20 +118,7 @@ export class ReplayManager {
             throw new Error('ReplayManager.finaliseRecording: no recording in progress');
         }
 
-        const file: ReplayFile = {
-            formatVersion: FORMAT_VERSION,
-            engineVersion: state.header.engineVersion,
-            gameId: state.header.gameId,
-            gameVersion: state.header.gameVersion,
-            gameConfig: state.header.gameConfig,
-            seed: state.header.seed,
-            actions: state.actions,
-            metadata: {
-                recordedAt: state.header.recordedAt,
-                durationTicks: ReplayManager.computeDurationTicks(state.actions),
-                players: state.header.players,
-            },
-        };
+        const file = ReplayManager.assembleFile(state);
 
         try {
             const savedPath = await this.repository.save(file);
@@ -147,16 +133,17 @@ export class ReplayManager {
     /**
      * Idempotent "ensure this match's replay is on disk, and give me its path".
      *
-     * Backs the post-game summary's Replay button and the replay player's save
-     * icon (F44 / T8), which run only after the match has resolved — by which
-     * point the host pipeline has already auto-finalised the recording at
-     * game-over. So unlike
-     * the destructive {@link finaliseRecording}, this method does not require an
-     * in-progress recording:
+     * Backs the replay player's save icon (F44 / T8) — the sole gate that persists
+     * a match (the match is NOT finalised at game-over; the post-game summary's
+     * Replay button now previews the in-memory recording via
+     * {@link getCurrentMatchFile} instead of exporting). So unlike the destructive
+     * {@link finaliseRecording}, this method does not require an in-progress
+     * recording:
      *
-     *   - recording still in progress → finalise it and return the new path;
-     *   - already finalised this match → return the remembered path (no second
-     *     file is written);
+     *   - recording still in progress (first save press) → finalise it and return
+     *     the new path;
+     *   - already saved this match (repeat press) → return the remembered path (no
+     *     second file is written);
      *   - nothing recorded or saved yet → throw.
      *
      * @throws {Error} when no recording is in progress and none was finalised
@@ -179,12 +166,36 @@ export class ReplayManager {
     }
 
     /**
+     * Assemble (but do NOT persist) the current in-progress match as a
+     * {@link ReplayFile}, so the replay player can preview the just-finished match
+     * straight from memory. The match is written to disk only when the user presses
+     * the player's save icon (which routes to {@link exportCurrentMatch}); a match
+     * left unsaved is discarded by {@link abortRecording} at session teardown.
+     *
+     * The action log is defensively shallow-copied so replay playback cannot mutate
+     * the array still held for a later save. Non-destructive — the recording is left
+     * intact.
+     *
+     * @throws {Error} if no recording is in progress.
+     */
+    getCurrentMatchFile(): ReplayFile {
+        this.log.debug('getCurrentMatchFile', { recording: this.recording !== null });
+        const state = this.recording;
+        if (state === null) {
+            throw new Error('ReplayManager.getCurrentMatchFile: no recording in progress');
+        }
+        return { ...ReplayManager.assembleFile(state), actions: [...state.actions] };
+    }
+
+    /**
      * Discard the in-progress recording without persisting it.
      *
-     * Called when a host session closes mid-match (an abandoned game produces no
-     * replay file). Idempotent: a no-op when no recording is in progress, so it
-     * is safe to call unconditionally at session teardown — and it guarantees the
-     * next session's `startRecording` starts from a clean state.
+     * Called when a host session closes without the match being saved — either
+     * abandoned mid-match, or finished but left unsaved (the match is no longer
+     * finalised at game-over; the player's save icon is the sole persistence gate).
+     * Idempotent: a no-op when no recording is in progress, so it is safe to call
+     * unconditionally at session teardown — and it guarantees the next session's
+     * `startRecording` starts from a clean state.
      */
     abortRecording(): void {
         this.log.debug('abortRecording', { active: this.recording !== null });
@@ -245,6 +256,28 @@ export class ReplayManager {
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    /**
+     * Build the `ReplayFile` for a recording state (shared by
+     * {@link finaliseRecording} and {@link getCurrentMatchFile}). Pure — reads the
+     * state, writes nothing.
+     */
+    private static assembleFile(state: RecordingState): ReplayFile {
+        return {
+            formatVersion: FORMAT_VERSION,
+            engineVersion: state.header.engineVersion,
+            gameId: state.header.gameId,
+            gameVersion: state.header.gameVersion,
+            gameConfig: state.header.gameConfig,
+            seed: state.header.seed,
+            actions: state.actions,
+            metadata: {
+                recordedAt: state.header.recordedAt,
+                durationTicks: ReplayManager.computeDurationTicks(state.actions),
+                players: state.header.players,
+            },
+        };
+    }
 
     private static computeDurationTicks(actions: readonly RecordedAction[]): number {
         let max = 0;

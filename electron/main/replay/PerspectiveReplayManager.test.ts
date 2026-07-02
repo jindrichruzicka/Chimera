@@ -338,6 +338,46 @@ describe('PerspectiveReplayManager — exportCurrent', () => {
     });
 });
 
+// ── getCurrentFile (in-memory preview, no write) ─────────────────────────────
+
+describe('PerspectiveReplayManager — getCurrentFile', () => {
+    it('assembles the in-progress recording as a PerspectiveReplayFile without writing or clearing', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+        manager.recordSnapshot(frame(VIEWER, 4));
+
+        const file = manager.getCurrentFile();
+
+        expect(file.kind).toBe('perspective');
+        expect(file.viewerId).toBe(VIEWER);
+        expect(file.frames.map((f) => f.tick)).toStrictEqual([0, 4]);
+        expect(file.durationTicks).toBe(4);
+        // Nothing persisted…
+        expect(await manager.list('tactics')).toStrictEqual([]);
+        // …and the recording survives for a later explicit save.
+        await expect(manager.finalise()).resolves.toBeTruthy();
+    });
+
+    it('returns a defensively-copied frames array (mutation cannot corrupt the pending save)', async () => {
+        const { manager } = makeManager();
+        manager.start(makeStartHeader());
+        manager.recordSnapshot(frame(VIEWER, 0));
+
+        const file = manager.getCurrentFile();
+        (file.frames as unknown[]).push(frame(VIEWER, 99));
+
+        const savedPath = await manager.finalise();
+        const loaded = await manager.load(savedPath);
+        expect(loaded.frames).toHaveLength(1);
+    });
+
+    it('throws when no recording is in progress', () => {
+        const { manager } = makeManager();
+        expect(() => manager.getCurrentFile()).toThrow(/no recording/);
+    });
+});
+
 // ── abort (mid-match session close) ──────────────────────────────────────────
 
 describe('PerspectiveReplayManager — abort', () => {

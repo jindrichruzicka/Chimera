@@ -61,10 +61,11 @@ export function getReplayBridge(source: unknown = globalThis): ReplayAPI | null 
 export interface PerspectiveReplayApi {
     list(gameId: string): Promise<string[]>;
     /**
-     * Finalise the joined client's in-progress perspective recording and resolve
-     * with the saved path. Idempotent (the egress path auto-finalises at
-     * game-over). Backs the replay player's save icon for a perspective replay
-     * opened from the post-game summary; rejects when no session is active.
+     * Finalise the joined client's retained perspective recording and resolve with
+     * the saved path — the SOLE persistence gate (the match is not written at
+     * game-over). Idempotent: a repeat save press returns the same path. Backs the
+     * replay player's save icon for a perspective replay opened from the post-game
+     * summary; rejects when no session is active.
      */
     exportCurrent(): Promise<string>;
     openPlayback(path: string): Promise<PerspectiveReplayPlaybackInfo>;

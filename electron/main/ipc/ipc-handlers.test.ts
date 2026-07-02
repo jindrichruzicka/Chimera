@@ -1,4 +1,5 @@
 import { buildAssetRef, type TextureAsset } from '@chimera-engine/simulation/content/AssetRef.js';
+import { CURRENT_MATCH_REPLAY_PATH } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import { describe, expect, it, vi } from 'vitest';
 import {
     GAME_ACTION_REJECTED_CHANNEL,
@@ -2495,6 +2496,13 @@ function makeNoopPlaybackPort(): ReplayPlaybackPort {
                 playerIds: ['p1'],
                 viewerId: 'p1',
             }),
+        openCurrent: () =>
+            Promise.resolve({
+                gameId: 'tactics',
+                totalTicks: 0,
+                playerIds: ['p1'],
+                viewerId: 'p1',
+            }),
         snapshotAt: (tick) => makePlayerSnapshotAt(tick),
         snapshotRange: (from, to) =>
             Array.from({ length: to - from + 1 }, (_unused, i) => makePlayerSnapshotAt(from + i)),
@@ -2733,6 +2741,19 @@ describe('registerReplayHandlers', () => {
             const handler = stub.handled.get(REPLAY_OPEN_IN_PLAYER_CHANNEL);
             expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
         });
+
+        it('forwards the current-match sentinel verbatim without a containment check', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
+            registerReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const handler = stub.handled.get(REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            handler?.({}, CURRENT_MATCH_REPLAY_PATH, true);
+
+            // The sentinel is not a filesystem path, so it is passed through as-is
+            // (it never reaches isInsidePath) with the saveable flag preserved.
+            expect(navigateToPlayer).toHaveBeenCalledWith(CURRENT_MATCH_REPLAY_PATH, true);
+        });
     });
 
     describe('chimera:replay:delete', () => {
@@ -2825,6 +2846,25 @@ describe('registerReplayHandlers', () => {
 
             const handler = stub.handled.get(REPLAY_OPEN_PLAYBACK_CHANNEL);
             expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(open).not.toHaveBeenCalled();
+        });
+
+        it('routes the current-match sentinel to openCurrent (in-memory, no path load)', async () => {
+            const stub = makeReplayIpcMainStub();
+            const info = { gameId: 'tactics', totalTicks: 4, playerIds: ['p1'], viewerId: 'p1' };
+            const open = vi.fn();
+            const openCurrent = vi.fn(() => Promise.resolve(info));
+            registerReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPlaybackPort(), open, openCurrent },
+            });
+
+            const handler = stub.handled.get(REPLAY_OPEN_PLAYBACK_CHANNEL);
+            await expect(
+                Promise.resolve(handler?.({}, CURRENT_MATCH_REPLAY_PATH)),
+            ).resolves.toStrictEqual(info);
+            expect(openCurrent).toHaveBeenCalledOnce();
+            // The stored-file path is never touched for the current match.
             expect(open).not.toHaveBeenCalled();
         });
     });
@@ -2984,6 +3024,12 @@ function makeNoopPerspectiveReplayPort(): PerspectiveReplayIpcPort {
 function makeNoopPerspectivePlaybackPort(): PerspectiveReplayPlaybackPort {
     return {
         open: () =>
+            Promise.resolve({
+                gameId: 'tactics',
+                totalTicks: 0,
+                viewerId: 'p1',
+            }),
+        openCurrent: () =>
             Promise.resolve({
                 gameId: 'tactics',
                 totalTicks: 0,
@@ -3160,6 +3206,17 @@ describe('registerPerspectiveReplayHandlers', () => {
             const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL);
             expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
         });
+
+        it('forwards the current-match sentinel verbatim without a containment check', () => {
+            const stub = makeReplayIpcMainStub();
+            const navigateToPlayer = vi.fn<(path: string, saveable: boolean) => void>();
+            registerPerspectiveReplay({ ipcMain: stub.ipcMain, navigateToPlayer });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_IN_PLAYER_CHANNEL);
+            handler?.({}, CURRENT_MATCH_REPLAY_PATH, true);
+
+            expect(navigateToPlayer).toHaveBeenCalledWith(CURRENT_MATCH_REPLAY_PATH, true);
+        });
     });
 
     describe('chimera:replay:perspective:delete', () => {
@@ -3259,6 +3316,28 @@ describe('registerPerspectiveReplayHandlers', () => {
 
             const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL);
             expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
+            expect(open).not.toHaveBeenCalled();
+        });
+
+        it('routes the current-match sentinel to openCurrent (in-memory, no path load)', async () => {
+            const stub = makeReplayIpcMainStub();
+            const info: PerspectiveReplayPlaybackInfo = {
+                gameId: 'tactics',
+                totalTicks: 4,
+                viewerId: 'p1',
+            };
+            const open = vi.fn();
+            const openCurrent = vi.fn(() => Promise.resolve(info));
+            registerPerspectiveReplay({
+                ipcMain: stub.ipcMain,
+                playback: { ...makeNoopPerspectivePlaybackPort(), open, openCurrent },
+            });
+
+            const handler = stub.handled.get(PERSPECTIVE_REPLAY_OPEN_PLAYBACK_CHANNEL);
+            await expect(
+                Promise.resolve(handler?.({}, CURRENT_MATCH_REPLAY_PATH)),
+            ).resolves.toStrictEqual(info);
+            expect(openCurrent).toHaveBeenCalledOnce();
             expect(open).not.toHaveBeenCalled();
         });
     });

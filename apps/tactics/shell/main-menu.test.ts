@@ -11,7 +11,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { GameMainMenuDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
-import type { PerspectiveReplayListBridge } from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
+import type {
+    PerspectiveReplayListBridge,
+    ReplayListBridge,
+} from '@chimera-engine/simulation/foundation/replay-bridge-contract.js';
 import { tacticsMainMenuDefinition, tacticsMenuCommands } from './main-menu';
 
 // ─── Export shape ─────────────────────────────────────────────────────────────
@@ -126,25 +129,39 @@ describe('button variants', () => {
 
 // ─── Replays button availability check (F44 T7 — #661) ──────────────────────────
 //
-// The Replays button is disabled when there are no *perspective* replays to
-// browse. The check reads the Chimera bridge off `globalThis` (the renderer
-// process exposes `window.__chimera`, which is `globalThis.__chimera` at
-// runtime). These tests stub that global — no jsdom/window required.
+// The Replays button is disabled when there are no replays to browse — of EITHER
+// kind (deterministic or perspective; both are saved only on an explicit save, not
+// at game-over). The check reads the Chimera bridge off `globalThis` (the renderer
+// process exposes `window.__chimera`, which is `globalThis.__chimera` at runtime).
+// These tests stub that global — no jsdom/window required.
 
 describe('Replays button disabled() check', () => {
-    // The stub is typed against the SHARED bridge contract the production module
-    // reads (`PerspectiveReplayListBridge`), so the test and `main-menu.ts` stay
-    // pinned to the same surface — no drift between them.
-    function setBridge(perspective: PerspectiveReplayListBridge | undefined): void {
-        if (perspective) {
-            (
-                globalThis as {
-                    __chimera?: { replay: { perspective: PerspectiveReplayListBridge } };
-                }
-            ).__chimera = { replay: { perspective } };
-        } else {
+    // The stub is typed against the SHARED bridge contracts the production module
+    // reads (`ReplayListBridge` + `PerspectiveReplayListBridge`), so the test and
+    // `main-menu.ts` stay pinned to the same surface — no drift between them.
+    interface Bridges {
+        deterministic?: ReplayListBridge;
+        perspective?: PerspectiveReplayListBridge;
+    }
+
+    function setBridge(bridges: Bridges | undefined): void {
+        if (bridges === undefined) {
             Reflect.deleteProperty(globalThis, '__chimera');
+            return;
         }
+        const deterministic = bridges.deterministic ?? {
+            list: async (): Promise<readonly unknown[]> => [],
+        };
+        const perspective = bridges.perspective ?? {
+            list: async (): Promise<readonly string[]> => [],
+        };
+        (
+            globalThis as {
+                __chimera?: {
+                    replay: ReplayListBridge & { perspective: PerspectiveReplayListBridge };
+                };
+            }
+        ).__chimera = { replay: { ...deterministic, perspective } };
     }
 
     function getDisabledCheck(): () => Promise<boolean> {
@@ -163,16 +180,39 @@ describe('Replays button disabled() check', () => {
         expect(typeof getDisabledCheck()).toBe('function');
     });
 
-    it('disables the button when no perspective replays exist', async () => {
-        const list = vi.fn(async (): Promise<readonly string[]> => []);
-        setBridge({ list });
+    it('disables the button when neither deterministic nor perspective replays exist', async () => {
+        const deterministicList = vi.fn(async (): Promise<readonly unknown[]> => []);
+        const perspectiveList = vi.fn(async (): Promise<readonly string[]> => []);
+        setBridge({
+            deterministic: { list: deterministicList },
+            perspective: { list: perspectiveList },
+        });
 
         await expect(getDisabledCheck()()).resolves.toBe(true);
-        expect(list).toHaveBeenCalledWith('tactics');
+        expect(deterministicList).toHaveBeenCalledWith('tactics');
+        expect(perspectiveList).toHaveBeenCalledWith('tactics');
     });
 
-    it('enables the button when at least one perspective replay exists', async () => {
-        setBridge({ list: async (): Promise<readonly string[]> => ['/saves/p1.chimera-replay'] });
+    it('enables the button when at least one DETERMINISTIC replay exists (none perspective)', async () => {
+        setBridge({
+            deterministic: {
+                list: async (): Promise<readonly unknown[]> => [
+                    { path: '/saves/d1.chimera-replay' },
+                ],
+            },
+        });
+
+        await expect(getDisabledCheck()()).resolves.toBe(false);
+    });
+
+    it('enables the button when at least one PERSPECTIVE replay exists (none deterministic)', async () => {
+        setBridge({
+            perspective: {
+                list: async (): Promise<readonly string[]> => [
+                    '/saves/p1.chimera-perspective-replay',
+                ],
+            },
+        });
 
         await expect(getDisabledCheck()()).resolves.toBe(false);
     });

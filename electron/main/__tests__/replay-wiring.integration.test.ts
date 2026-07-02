@@ -91,16 +91,13 @@ function makeFakeReplayPort(): {
     port: ReplayPort;
     startRecording: ReturnType<typeof vi.fn>;
     recordAction: ReturnType<typeof vi.fn>;
-    finaliseRecording: ReturnType<typeof vi.fn>;
 } {
     const startRecording = vi.fn();
     const recordAction = vi.fn();
-    const finaliseRecording = vi.fn().mockResolvedValue(undefined);
     return {
-        port: { startRecording, recordAction, finaliseRecording },
+        port: { startRecording, recordAction },
         startRecording,
         recordAction,
-        finaliseRecording,
     };
 }
 
@@ -159,11 +156,15 @@ describe('buildHostSessionPipeline — replay recording (AC2)', () => {
     });
 });
 
-// ── AC3: match end triggers finaliseRecording ─────────────────────────────────
+// ── AC3: match end retains the recording, but never persists it ───────────────
+// The match is no longer written at game-over; the recording is retained in
+// memory and persisted only on an explicit save (ReplayManager.exportCurrentMatch),
+// so no finished match silently accumulates a replay file. The pipeline's
+// `ReplayPort` therefore exposes no persistence hook at all.
 
-describe('buildHostSessionPipeline — replay finalisation (AC3)', () => {
-    it('finalises recording exactly once when the match resolves', () => {
-        const { port, recordAction, finaliseRecording } = makeFakeReplayPort();
+describe('buildHostSessionPipeline — match end retains, does not persist (AC3)', () => {
+    it('captures the resolving action but the pipeline exposes no persistence hook', () => {
+        const { port, recordAction } = makeFakeReplayPort();
         const { processAction } = buildHostSessionPipeline(makeRegistryResolvingAt(1), vi.fn(), {
             gameId: 'tactics',
             savePort: noopSavePort,
@@ -173,23 +174,11 @@ describe('buildHostSessionPipeline — replay finalisation (AC3)', () => {
         // advance 0 → 1 resolves the match.
         processAction(makeBaseSnapshot(0, [P1]), advanceEnvelope(0));
 
-        expect(recordAction).toHaveBeenCalledTimes(1); // the resolving action is captured
-        expect(finaliseRecording).toHaveBeenCalledTimes(1);
-    });
-
-    it('does not finalise while the match is still unresolved', () => {
-        const { port, finaliseRecording } = makeFakeReplayPort();
-        const { processAction } = buildHostSessionPipeline(makeRegistryResolvingAt(99), vi.fn(), {
-            gameId: 'tactics',
-            savePort: noopSavePort,
-            replayPort: port,
-        });
-
-        const s0 = makeBaseSnapshot(0, [P1]);
-        const s1 = processAction(s0, advanceEnvelope(0));
-        processAction(s1, advanceEnvelope(1));
-
-        expect(finaliseRecording).not.toHaveBeenCalled();
+        // The resolving action is still recorded…
+        expect(recordAction).toHaveBeenCalledTimes(1);
+        // …but there is no `finaliseRecording` on the port — persistence is gated on
+        // an explicit save, never driven by the pipeline at game-over.
+        expect(port).not.toHaveProperty('finaliseRecording');
     });
 });
 
@@ -209,7 +198,7 @@ describe('buildHostSessionPipeline — replay scope (AC4)', () => {
 
         // The pipeline rejects ordinary gameplay actions on a resolved match, and
         // the `!wasResolved` guard ensures any action still allowed afterwards is
-        // not appended to the (already finalised) recording either.
+        // not appended to the retained recording either.
         expect(() => processAction(s1, advanceEnvelope(s1.tick))).toThrow(/match_already_resolved/);
         expect(recordAction).not.toHaveBeenCalled();
         // NOTE (AC4 — side channels): chat / profile / toast traffic never reaches
@@ -227,7 +216,6 @@ describe('buildHostSessionPipeline — replay robustness', () => {
             recordAction: vi.fn(() => {
                 throw new Error('record boom');
             }),
-            finaliseRecording: vi.fn().mockResolvedValue(undefined),
         };
         const { processAction } = buildHostSessionPipeline(makeRegistry(), vi.fn(), {
             gameId: 'tactics',
@@ -240,21 +228,6 @@ describe('buildHostSessionPipeline — replay robustness', () => {
             result = processAction(makeBaseSnapshot(0, [P1]), advanceEnvelope(0));
         }).not.toThrow();
         expect(result?.tick).toBe(1);
-    });
-
-    it('a rejecting finaliseRecording does not propagate from processAction', () => {
-        const port: ReplayPort = {
-            startRecording: vi.fn(),
-            recordAction: vi.fn(),
-            finaliseRecording: vi.fn().mockRejectedValue(new Error('finalise boom')),
-        };
-        const { processAction } = buildHostSessionPipeline(makeRegistryResolvingAt(1), vi.fn(), {
-            gameId: 'tactics',
-            savePort: noopSavePort,
-            replayPort: port,
-        });
-
-        expect(() => processAction(makeBaseSnapshot(0, [P1]), advanceEnvelope(0))).not.toThrow();
     });
 
     it('works without a replayPort (the hook is purely additive)', () => {
@@ -297,7 +270,7 @@ describe('replay wiring — end-to-end persistence', () => {
         };
     }
 
-    it('a resolved 3-action match writes one .chimera-replay (3 actions, correct ticks, no .tmp)', async () => {
+    it('a resolved 3-action match writes NOTHING until an explicit save, then one .chimera-replay (3 actions, no .tmp)', async () => {
         const sink = createMemorySink();
         const logger = createLogger({ source: { process: 'main', module: 'test' }, sink });
         const manager = new ReplayManager(
@@ -309,9 +282,6 @@ describe('replay wiring — end-to-end persistence', () => {
         const replayPort: ReplayPort = {
             startRecording: (header) => manager.startRecording(header),
             recordAction: (entry) => manager.recordAction(entry),
-            finaliseRecording: async () => {
-                await manager.finaliseRecording();
-            },
         };
 
         const { processAction } = buildHostSessionPipeline(makeRegistryResolvingAt(3), vi.fn(), {
@@ -324,14 +294,20 @@ describe('replay wiring — end-to-end persistence', () => {
         const s0 = makeBaseSnapshot(0, [P1]);
         const s1 = processAction(s0, advanceEnvelope(0));
         const s2 = processAction(s1, advanceEnvelope(1));
-        processAction(s2, advanceEnvelope(2)); // tick → 3 resolves; finalise fires
+        processAction(s2, advanceEnvelope(2)); // tick → 3 resolves — but nothing is written
 
-        // finaliseRecording is fire-and-forget — wait for the write to land.
-        await vi.waitFor(async () => {
-            expect(await manager.list('tactics')).toHaveLength(1);
-        });
+        // Game-over does NOT persist: the disk stays empty and the recording is
+        // retained in memory (the preview player can still read it via
+        // getCurrentMatchFile).
+        expect(await manager.list('tactics')).toHaveLength(0);
+        expect(manager.getCurrentMatchFile().actions).toHaveLength(3);
+
+        // The explicit save (player's save icon → exportCurrentMatch) writes the
+        // single file.
+        await manager.exportCurrentMatch();
 
         const paths = await manager.list('tactics');
+        expect(paths).toHaveLength(1);
         const loaded = await manager.load(paths[0]!);
         expect(loaded.actions).toHaveLength(3);
         expect(loaded.actions.map((a) => a.tick)).toStrictEqual([0, 1, 2]);

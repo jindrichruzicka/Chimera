@@ -47,6 +47,12 @@ export type VisibilityRulesResolver = (gameId: string) => VisibilityRules | unde
 /** Narrow slice of `ReplayManager` the playback manager depends on. */
 export interface ReplayLoaderPort {
     load(path: string): Promise<ReplayFile>;
+    /**
+     * Assemble the in-progress recording of the just-finished match as a
+     * {@link ReplayFile} for in-memory preview, without persisting it (backs
+     * {@link ReplayPlaybackManager.openCurrent}).
+     */
+    getCurrentMatchFile(): ReplayFile;
 }
 
 interface ActivePlayback {
@@ -98,7 +104,29 @@ export class ReplayPlaybackManager {
     async open(path: string): Promise<ReplayPlaybackInfo> {
         this.#logger.debug('open', { path });
         const file = await this.#loader.load(path);
+        return this.#openFile(file);
+    }
 
+    /**
+     * Open playback for the **in-memory** recording of the just-finished match —
+     * the preview path for the post-game **Replay** action, which previews the
+     * match before it is written to disk (the player's save icon is the sole
+     * persistence gate). Mirrors {@link open} but sources the {@link ReplayFile}
+     * from the loader's in-progress recording instead of a stored file, so no path
+     * is validated and nothing is read from the filesystem.
+     *
+     * @throws when no recording is in progress, or the game has no visibility rules.
+     */
+    openCurrent(): Promise<ReplayPlaybackInfo> {
+        this.#logger.debug('openCurrent');
+        // Build synchronously from the in-memory recording, but return a promise
+        // (symmetric with `open`) so a throw from the loader or a missing-visibility-
+        // rules error surfaces as a rejection rather than a synchronous throw.
+        return Promise.resolve().then(() => this.#openFile(this.#loader.getCurrentMatchFile()));
+    }
+
+    /** Build a `ReplayPlayer` over the live pipeline for `file` and ready it at tick 0. */
+    #openFile(file: ReplayFile): ReplayPlaybackInfo {
         const rules = this.#resolveVisibilityRules(file.gameId);
         if (rules === undefined) {
             throw new Error(
