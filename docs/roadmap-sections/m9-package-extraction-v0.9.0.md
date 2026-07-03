@@ -1,6 +1,6 @@
 ---
 title: 'M9 — Package Extraction & Game Scaffolding (v0.9.0)'
-description: 'F57–F67: pnpm Workspace Foundation, Extract @chimera-engine/simulation, @chimera-engine/ai, @chimera-engine/networking, @chimera-engine/renderer, @chimera-engine/electron, Tactics Standalone Consumer App + E2E Migration, Package Build/Link/Update Pipeline, create-chimera-game CLI + Blank Template, Engine Package Publishing, and App Icon & Per-Game Branding. Executes Appendix C — from a single-package monorepo to a published package hierarchy — and adds a CLI that scaffolds new games from a template.'
+description: 'F57–F68: pnpm Workspace Foundation, Extract @chimera-engine/simulation, @chimera-engine/ai, @chimera-engine/networking, @chimera-engine/renderer, @chimera-engine/electron, Tactics Standalone Consumer App + E2E Migration, Package Build/Link/Update Pipeline, create-chimera-game CLI + Blank Template, Engine Package Publishing, App Icon & Per-Game Branding, and Save System: In-Game Save & Restorable Sessions. Executes Appendix C — from a single-package monorepo to a published package hierarchy — and adds a CLI that scaffolds new games from a template.'
 tags:
     [
         milestone,
@@ -23,6 +23,8 @@ tags:
         semver,
         branding,
         icons,
+        save-load,
+        multiplayer,
     ]
 ---
 
@@ -102,6 +104,12 @@ The extension-library on-ramp is documented in the [Extension-Library Adopter On
 ## F67 — App Icon & Per-Game Branding `Appendix C.4, C.6`
 
 Replace the stock Electron icon with the Chimera logo as the default application and window icon, overridable per game through the `GameManifest` `icon` field (the same manifest that drives the per-game window title and the `realtime` heartbeat flag). Two layers ship together: (1) **runtime** — `createMainWindow` sets the `BrowserWindow` `icon` and, on macOS, calls `app.dock.setIcon`, resolving either the bundled default Chimera icon asset or a game's manifest override at window creation; (2) **packaging** — generate the platform icon set (`.icns` / `.ico` / PNG) from the Chimera logo source and wire it into the electron build configuration introduced by the build/release pipeline (**F64** / **F66**) so distributed bundles carry the icon, not just the dev runtime. Tactics keeps the default (no manifest override); a scaffolded game (**F65**) drops one icon path into its manifest to rebrand both window and dock. Deferred out of the initial game-manifest work — which delivers `displayName` / window title and the `realtime` flag — because a true installer icon depends on the packaging pipeline this milestone introduces.
+
+---
+
+## F68 — Save System: In-Game Save & Restorable Sessions `§4.11, §4.14`
+
+Close the three user-facing gaps in the existing save backend (F06/F18): saves can only be created from the saves screen's "New Save" form, loading a save cannot start a game (`applyRestoredFile` no-ops without an active session), and multiplayer saves cannot be resumed because provider-assigned `PlayerId`s are minted per-lobby and AI-vs-human seat composition is not persisted. Four deliverables ship together: (1) **UI** — the saves screen is rebuilt on the replay-browser pattern (load/delete rows, confirm dialog, close button; the "New Save" form and per-row overwrite are removed) and a compact host-only Save button joins the tactics HUD footer, prompting for a save name via a modal backed by a reusable engine `SaveGameButton`; (2) **save format v6** — `SaveFile` gains a game-agnostic `session` manifest (`matchId` + seat roster with `host|local|remote|ai` control) and `BaseGameSnapshot` gains a `matchId` minted at `engine:start_game`, so a save fully describes who sat where without profile data (Invariant #59); (3) **restorable sessions** — a `SessionRestoreCoordinator` makes menu-load host a fresh session seeded with the saved roster, apply the checkpoint via the existing Invariant #24 path, and — for saves with remote human seats — hold the game behind a "Waiting for other players" modal (spinner, join code, cancel) until every human reconnects; (4) **seat reattachment** — clients persist per-match session tickets locally and present bounded `claims` in the JOIN frame, which the host resolves against the restored roster (falling back to join-order for unclaimed seats) so returning humans reclaim their original `PlayerId`s and control their original entities. Lobby-agreed match settings (e.g. simultaneous turns) and player colors already ride the checkpoint's `setup` and restore for free. Covered by two new Playwright specs: a single-app save→leave→load→verify→delete flow and a two-process multiplayer save→waiting-overlay→reclaim→resume flow.
 
 ---
 
