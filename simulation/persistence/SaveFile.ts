@@ -15,9 +15,52 @@
  *          fields in BaseGameSnapshot are integers (upheld by the engine types).
  */
 
-import type { BaseGameSnapshot, EngineAction } from '../engine/types.js';
+import type { BaseGameSnapshot, EngineAction, PlayerId } from '../engine/types.js';
 import type { CommitmentEnvelope, CommitmentId } from '../projection/CommitmentScheme.js';
 import type { StagedReveals } from '../projection/RevealStaging.js';
+
+// ─── Session manifest (F68, #820) ─────────────────────────────────────────────
+
+/**
+ * One seat in the saved session composition.
+ *
+ * Carries the raw player id and how that seat was controlled at save time —
+ * never profile data (avatar, display name, locale; Invariant #59). A later
+ * restore uses `control` to decide which seats the host re-seats locally, which
+ * are AI-driven, and which wait for a remote reclaim.
+ */
+export interface SaveSeat {
+    /** Raw player id exactly as it appears in `checkpoint.players`. */
+    readonly playerId: PlayerId;
+    /** How the seat was controlled at save time. */
+    readonly control: 'host' | 'local' | 'remote' | 'ai';
+    /** Lobby slot index the seat occupied. */
+    readonly slotIndex: number;
+    /** AI-only: whether the agent saw the full unprojected snapshot. */
+    readonly omniscient?: boolean;
+}
+
+/**
+ * Host-local session composition captured alongside the checkpoint (F68, #820).
+ *
+ * Orchestration metadata, not gameplay state: it is neither header (not needed
+ * to pick a migration) nor checkpoint (the simulation never reads it). It stays
+ * main-side with the rest of the `SaveFile` (Invariant #1 — a save never
+ * crosses IPC); clients learn the `matchId` only via their projected snapshots.
+ */
+export interface SaveSessionManifest {
+    /** Stable match identity, mirroring `checkpoint.matchId`. */
+    readonly matchId: string;
+    /**
+     * Lobby capacity at save time. Live manifests record the real capacity;
+     * checkpoint-derived backfills (`deriveSessionManifest`) can only record a
+     * floor — `max(seat count, highest slotIndex + 1)` — so restore consumers
+     * must treat a migrated value as a lower bound, not exact capacity.
+     */
+    readonly maxPlayers: number;
+    /** Session composition, one entry per seated player. */
+    readonly seats: readonly SaveSeat[];
+}
 
 // ─── SaveFileHeader ───────────────────────────────────────────────────────────
 
@@ -121,4 +164,19 @@ export interface SaveFile {
      * backfills it.
      */
     readonly stagedReveals: StagedReveals;
+
+    /**
+     * Saved session composition (F68, #820): match identity, lobby capacity,
+     * and per-seat control kinds so a restore can rebuild the session. Host-local
+     * orchestration metadata — no profile data (Invariant #59), never projected
+     * or sent over IPC (Invariant #1), and deliberately excluded from the body
+     * checksum (like the header) so pre-v6 checksums still verify after the
+     * v5→v6 migration backfills it.
+     *
+     * Typed non-optional following the `stagedReveals` precedent: every writer
+     * (`captureSaveFile`) and the migrator guarantee presence; the serializer
+     * schema marks it `.optional()` only so legacy v5 JSON still parses before
+     * the migrator runs.
+     */
+    readonly session: SaveSessionManifest;
 }

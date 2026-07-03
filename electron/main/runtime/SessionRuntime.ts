@@ -36,7 +36,9 @@ import type {
 } from '@chimera-engine/simulation/engine/types.js';
 import {
     CURRENT_SCHEMA_VERSION,
+    deriveSessionManifest,
     type SaveFile,
+    type SaveSessionManifest,
 } from '@chimera-engine/simulation/persistence/index.js';
 import {
     DEFAULT_SCENE_CLIENT_TIMEOUT_POLICY,
@@ -226,6 +228,15 @@ export interface SessionRuntimeOptions {
      * alongside `pendingCommitments` (Invariant #26).  Injectable for tests.
      */
     readonly revealStaging?: RevealStagingPort;
+    /**
+     * Live session-composition provider for `SaveFile.session` (F68, #820).
+     * Wired in `index.ts` from the lobby roster + agent slots so captured
+     * saves record who controlled each seat.  May return `null` (and defaults
+     * to absent) when no live composition exists — `captureSaveFile` then
+     * falls back to a checkpoint-derived manifest via
+     * `deriveSessionManifest`, the same heuristic the v5→v6 migration uses.
+     */
+    readonly getSessionManifest?: () => SaveSessionManifest | null;
 }
 
 /**
@@ -241,6 +252,7 @@ export class SessionRuntime {
     private readonly now: () => number;
     private readonly commitments: CommitmentRuntimePort;
     private readonly staging: RevealStagingPort;
+    private readonly getSessionManifest: () => SaveSessionManifest | null;
 
     constructor(options: SessionRuntimeOptions) {
         this.snapshot = options.initialSnapshot;
@@ -250,6 +262,7 @@ export class SessionRuntime {
         this.now = options.now ?? Date.now;
         this.commitments = options.commitmentRuntime ?? new SessionCommitmentRuntime();
         this.staging = options.revealStaging ?? new RevealStaging();
+        this.getSessionManifest = options.getSessionManifest ?? ((): null => null);
     }
 
     /** The game identifier for this session (e.g. `'tactics'`). */
@@ -478,6 +491,10 @@ export class SessionRuntime {
             deltaActions: [],
             pendingCommitments: this.commitments.capturePendingCommitments(),
             stagedReveals: this.staging.capture(),
+            // Live composition when the host wired a provider; otherwise a
+            // best-effort checkpoint-derived manifest (same heuristic as the
+            // v5→v6 migration) so every captured file carries `session`.
+            session: this.getSessionManifest() ?? deriveSessionManifest(snapshot),
         };
     }
 }

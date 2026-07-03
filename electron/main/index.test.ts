@@ -104,9 +104,19 @@ vi.mock('./settings/SettingsManager.js', () => ({
 }));
 
 // ── LobbyManager mock — captures constructor args for wiring assertions ────────
-const { mockLobbyManagerCtor } = vi.hoisted(() => ({
-    mockLobbyManagerCtor: vi.fn(),
-}));
+// The instance exposes `isLocalSeat` because the live session-manifest closure
+// (#820) consults it when a save is captured after game start; the default is
+// "no local seats" and individual tests override the shared fn.
+const { mockLobbyManagerCtor, mockLobbyManagerIsLocalSeat } = vi.hoisted(() => {
+    const mockLobbyManagerIsLocalSeat = vi.fn<(id: string) => boolean>(() => false);
+    return {
+        mockLobbyManagerIsLocalSeat,
+        mockLobbyManagerCtor: vi.fn((...args: unknown[]) => {
+            void args;
+            return { isLocalSeat: mockLobbyManagerIsLocalSeat };
+        }),
+    };
+});
 
 vi.mock('./lobby/LobbyManager.js', () => ({
     LobbyManager: mockLobbyManagerCtor,
@@ -1734,7 +1744,9 @@ describe('main', () => {
 
         // Verify LobbyManager was constructed with e2eHooks in the options
         expect(mockLobbyManagerCtor).toHaveBeenCalledOnce();
-        const lobbyManagerOptions = mockLobbyManagerCtor.mock.calls[0]?.[2];
+        const lobbyManagerOptions = mockLobbyManagerCtor.mock.calls[0]?.[2] as
+            | { e2eHooks?: unknown }
+            | undefined;
         expect(lobbyManagerOptions).toBeDefined();
         expect(lobbyManagerOptions?.e2eHooks).toBe(stubE2eHooks);
 
@@ -2689,6 +2701,169 @@ describe('main', () => {
         await options?.autosave?.();
 
         expect(mockSaveManagerAutoSave).not.toHaveBeenCalled();
+    });
+
+    describe('session manifest + matchId wiring (#820)', () => {
+        const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+        interface CapturedSaveFile {
+            readonly checkpoint: { readonly matchId?: string };
+            readonly session: {
+                readonly matchId: string;
+                readonly maxPlayers: number;
+                readonly seats: readonly {
+                    readonly playerId: string;
+                    readonly control: string;
+                    readonly slotIndex: number;
+                    readonly omniscient?: boolean;
+                }[];
+            };
+        }
+
+        interface LobbyCallbacks {
+            onSessionHosted?: (
+                transport: {
+                    onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                    onPlayerLeft(cb: (id: string) => void): () => void;
+                    onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+                },
+                metadata: { hostId: ReturnType<typeof playerId>; maxPlayers: number },
+            ) => void;
+            onGameStartRequested?: (state: unknown) => void;
+            onReturnToLobbyRequested?: (state: unknown) => void;
+        }
+
+        /** Boot main, host a session, and return the lobby callbacks + a join trigger. */
+        async function hostSession(maxPlayers: number): Promise<{
+            callbacks: LobbyCallbacks;
+            hostId: ReturnType<typeof playerId>;
+            join: (id: ReturnType<typeof playerId>) => void;
+            autosave: () => Promise<CapturedSaveFile>;
+        }> {
+            mockLobbyManagerCtor.mockClear();
+            mockSaveManagerAutoSave.mockClear();
+            mockLobbyManagerIsLocalSeat.mockReset();
+            mockLobbyManagerIsLocalSeat.mockImplementation(() => false);
+            await main(makeTestContributions());
+
+            const callbacks = mockLobbyManagerCtor.mock.calls[0]?.[2] as LobbyCallbacks | undefined;
+            expect(callbacks?.onSessionHosted).toBeTypeOf('function');
+            if (callbacks === undefined) {
+                throw new Error('Expected LobbyManager callbacks to be wired');
+            }
+
+            const joinRef: { current?: (args: { playerId: string }) => void } = {};
+            const transport = {
+                onPlayerJoined: vi.fn((cb: (args: { playerId: string }) => void) => {
+                    joinRef.current = cb;
+                    return () => {};
+                }),
+                onPlayerLeft: vi.fn(() => () => {}),
+                onActionReceived: vi.fn(() => () => {}),
+            };
+            const hostId = playerId('host-manifest');
+            callbacks.onSessionHosted?.(transport, { hostId, maxPlayers });
+
+            const crashOptions = mockRegisterCrashReporter.mock.calls[0]?.[0];
+            return {
+                callbacks,
+                hostId,
+                join: (id) => joinRef.current?.({ playerId: id }),
+                autosave: async () => {
+                    mockSaveManagerAutoSave.mockClear();
+                    await crashOptions?.autosave?.();
+                    expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
+                    return mockSaveManagerAutoSave.mock.calls[0]?.[0] as CapturedSaveFile;
+                },
+            };
+        }
+
+        function makeLobbyState(
+            hostId: ReturnType<typeof playerId>,
+            players: readonly ReturnType<typeof playerId>[],
+            agentSlots?: readonly { slotIndex: number; kind: string; omniscient?: boolean }[],
+        ): unknown {
+            return {
+                info: { sessionId: 'session-manifest', hostId, gameId: 'tactics' },
+                players: players.map((id) => ({
+                    playerId: id,
+                    displayName: `Player ${id}`,
+                    ready: true,
+                })),
+                ...(agentSlots !== undefined ? { agentSlots } : {}),
+            };
+        }
+
+        it('start_game mints a UUID matchId that lands on the snapshot and the autosaved manifest', async () => {
+            const { callbacks, hostId, join, autosave } = await hostSession(4);
+            const guestId = playerId('guest-manifest');
+            join(guestId);
+
+            callbacks.onGameStartRequested?.(
+                makeLobbyState(
+                    hostId,
+                    [hostId, guestId],
+                    [{ slotIndex: 2, kind: 'ai', omniscient: true }],
+                ),
+            );
+
+            const file = await autosave();
+
+            expect(file.checkpoint.matchId).toMatch(UUID_RE);
+            expect(file.session.matchId).toBe(file.checkpoint.matchId);
+            expect(file.session.maxPlayers).toBe(4);
+            expect(file.session.seats).toContainEqual({
+                playerId: hostId,
+                control: 'host',
+                slotIndex: 0,
+            });
+            expect(file.session.seats).toContainEqual({
+                playerId: guestId,
+                control: 'remote',
+                slotIndex: 1,
+            });
+            expect(file.session.seats).toContainEqual({
+                playerId: 'ai-2',
+                control: 'ai',
+                slotIndex: 2,
+                omniscient: true,
+            });
+        });
+
+        it('classifies a non-host local seat as local via lobbyManager.isLocalSeat', async () => {
+            const { callbacks, hostId, join, autosave } = await hostSession(2);
+            const localId = playerId('pass-and-play-local');
+            mockLobbyManagerIsLocalSeat.mockImplementation((id) => id === localId);
+            join(localId);
+
+            callbacks.onGameStartRequested?.(makeLobbyState(hostId, [hostId, localId]));
+
+            const file = await autosave();
+
+            expect(file.session.seats).toContainEqual({
+                playerId: localId,
+                control: 'local',
+                slotIndex: 1,
+            });
+        });
+
+        it('keeps the matchId through return-to-lobby and mints a fresh one on the next start', async () => {
+            const { callbacks, hostId, autosave } = await hostSession(2);
+            const state = makeLobbyState(hostId, [hostId]);
+
+            callbacks.onGameStartRequested?.(state);
+            const firstMatchId = (await autosave()).session.matchId;
+
+            callbacks.onReturnToLobbyRequested?.(state);
+            const afterAbandon = await autosave();
+            expect(afterAbandon.checkpoint.matchId).toBe(firstMatchId);
+            expect(afterAbandon.session.matchId).toBe(firstMatchId);
+
+            callbacks.onGameStartRequested?.(state);
+            const secondMatchId = (await autosave()).session.matchId;
+            expect(secondMatchId).toMatch(UUID_RE);
+            expect(secondMatchId).not.toBe(firstMatchId);
+        });
     });
 
     it('calls session.defaultSession.setPermissionRequestHandler with a deny-all handler (WARN-4)', async () => {

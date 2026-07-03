@@ -19,6 +19,7 @@ import type { SaveSlotMeta as PreloadSaveSlotMeta, SaveRequest } from '../../pre
 import { InMemorySaveRepository } from '@chimera-engine/simulation/persistence/InMemorySaveRepository.js';
 import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 import { SaveNotFoundError } from '@chimera-engine/simulation/persistence/SaveMigrator.js';
+import { playerId } from '@chimera-engine/simulation/engine/index.js';
 import { createNoopLogger } from '../logging/logger.js';
 import { SaveManager } from './SaveManager.js';
 import { createSavesIpcPort } from './SavesIpcAdapter.js';
@@ -59,6 +60,14 @@ function makeFile(
         deltaActions: [],
         pendingCommitments: {},
         stagedReveals: {},
+        session: {
+            matchId: 'match-fixture',
+            maxPlayers: 2,
+            seats: [
+                { playerId: playerId('Alice'), control: 'host', slotIndex: 0 },
+                { playerId: playerId('Bob'), control: 'remote', slotIndex: 1 },
+            ],
+        },
     };
 }
 

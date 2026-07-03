@@ -21,10 +21,12 @@ import {
     SaveMigrator,
     SaveNotFoundError,
     SaveSchemaTooNewError,
+    sessionManifestMigration,
     stagedRevealsMigration,
 } from './SaveMigrator.js';
 import type { SaveFile } from './SaveFile.js';
 import type { GamePhase } from '../engine/types.js';
+import { playerId as toPlayerId } from '../engine/types.js';
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -54,14 +56,22 @@ function makeFileAtVersion(schemaVersion: number): SaveFile {
         deltaActions: [],
         pendingCommitments: {},
         stagedReveals: {},
+        session: {
+            matchId: 'match-fixture',
+            maxPlayers: 1,
+            seats: [{ playerId: toPlayerId('Alice'), control: 'host', slotIndex: 0 }],
+        },
     };
 }
+
+/** UUID v4 shape produced by `crypto.randomUUID()`. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 // ─── CURRENT_SCHEMA_VERSION ───────────────────────────────────────────────────
 
 describe('CURRENT_SCHEMA_VERSION', () => {
-    it('equals 5', () => {
-        expect(CURRENT_SCHEMA_VERSION).toBe(5);
+    it('equals 6', () => {
+        expect(CURRENT_SCHEMA_VERSION).toBe(6);
     });
 });
 
@@ -218,6 +228,112 @@ describe('stagedRevealsMigration (v4 → v5)', () => {
         const result = stagedRevealsMigration.apply(file);
 
         expect((result as unknown as Record<string, unknown>)['stagedReveals']).toBe(staged);
+    });
+});
+
+// ─── sessionManifestMigration (v5 → v6, F68 #820) ────────────────────────────
+
+describe('sessionManifestMigration (v5 → v6)', () => {
+    /**
+     * A v5 file (no `session`) whose checkpoint carries a mixed roster covering
+     * every control heuristic: host id, `-local-` id, synthetic `ai-<n>` id, and
+     * an unrecognised (remote) id.
+     */
+    function makeLegacyV5File(checkpointOverrides: Record<string, unknown> = {}): SaveFile {
+        const v5 = makeFileAtVersion(5);
+        const checkpoint = {
+            ...v5.checkpoint,
+            hostPlayerId: 'host-1',
+            players: {
+                'host-1': { id: 'host-1' },
+                'p-local-2': { id: 'p-local-2' },
+                'ai-5': { id: 'ai-5' },
+                stranger: { id: 'stranger' },
+            },
+            ...checkpointOverrides,
+        };
+        const widened = { ...v5, checkpoint } as unknown as Record<string, unknown>;
+        delete widened['session'];
+        return widened as unknown as SaveFile;
+    }
+
+    it('is a SaveMigration with fromVersion 5', () => {
+        expect(sessionManifestMigration.fromVersion).toBe(5);
+    });
+
+    it('backfills seats from the checkpoint per the control heuristics', () => {
+        const result = sessionManifestMigration.apply(makeLegacyV5File());
+
+        // AI seats claim their authoritative `ai-<n>` suffix slot first; non-AI
+        // seats fill the lowest free indexes in key order (so `stranger` lands
+        // on 2, not its raw key index) — no collisions possible.
+        expect(result.session.seats).toEqual([
+            { playerId: 'host-1', control: 'host', slotIndex: 0 },
+            { playerId: 'p-local-2', control: 'local', slotIndex: 1 },
+            { playerId: 'ai-5', control: 'ai', slotIndex: 5 },
+            { playerId: 'stranger', control: 'remote', slotIndex: 2 },
+        ]);
+    });
+
+    it('sets maxPlayers to cover the highest backfilled slotIndex', () => {
+        const result = sessionManifestMigration.apply(makeLegacyV5File());
+
+        // 4 seats but the AI sits at slot 5, so the original lobby capacity was
+        // at least 6 — maxPlayers = max(seat count, highest slotIndex + 1).
+        expect(result.session.maxPlayers).toBe(6);
+    });
+
+    it('mints a fresh UUID matchId for a legacy save whose checkpoint has none', () => {
+        const result = sessionManifestMigration.apply(makeLegacyV5File());
+
+        expect(result.session.matchId).toMatch(UUID_RE);
+    });
+
+    it('adopts the checkpoint matchId when the legacy checkpoint carries one', () => {
+        const result = sessionManifestMigration.apply(
+            makeLegacyV5File({ matchId: 'match-from-checkpoint' }),
+        );
+
+        expect(result.session.matchId).toBe('match-from-checkpoint');
+    });
+
+    it('classifies a lone player with no hostPlayerId as remote', () => {
+        const result = sessionManifestMigration.apply(
+            makeLegacyV5File({ hostPlayerId: undefined, players: { solo: { id: 'solo' } } }),
+        );
+
+        expect(result.session.seats).toEqual([
+            { playerId: 'solo', control: 'remote', slotIndex: 0 },
+        ]);
+        expect(result.session.maxPlayers).toBe(1);
+    });
+
+    it('preserves an existing session manifest untouched (idempotent)', () => {
+        const file = makeFileAtVersion(5);
+
+        const result = sessionManifestMigration.apply(file);
+
+        expect(result.session).toBe(file.session);
+    });
+
+    it('does not mutate the input file', () => {
+        const legacy = makeLegacyV5File();
+        const originalCheckpoint = legacy.checkpoint;
+
+        sessionManifestMigration.apply(legacy);
+
+        expect(legacy).not.toHaveProperty('session');
+        expect(legacy.checkpoint).toBe(originalCheckpoint);
+    });
+
+    it('createDefaultMigrator upgrades a v5 file to v6 with a backfilled session', () => {
+        const migrator = createDefaultMigrator();
+
+        const result = migrator.migrate(makeLegacyV5File());
+
+        expect(result.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        expect(result.session.matchId).toMatch(UUID_RE);
+        expect(result.session.seats).toHaveLength(4);
     });
 });
 

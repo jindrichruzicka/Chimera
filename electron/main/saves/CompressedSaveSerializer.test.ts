@@ -46,6 +46,14 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
         deltaActions: [],
         pendingCommitments: {},
         stagedReveals: {},
+        session: {
+            matchId: 'match-fixture',
+            maxPlayers: 2,
+            seats: [
+                { playerId: toPlayerId('Alice'), control: 'host', slotIndex: 0 },
+                { playerId: toPlayerId('Bob'), control: 'remote', slotIndex: 1 },
+            ],
+        },
         ...overrides,
     };
 }

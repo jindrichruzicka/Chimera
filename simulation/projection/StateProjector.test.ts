@@ -564,6 +564,44 @@ describe('DefaultStateProjector.project()', () => {
         });
     });
 
+    describe('matchId passthrough (host-minted match identity, #820)', () => {
+        it('matchId is passed through verbatim and identical for every viewer', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot({ matchId: 'match-uuid-1' });
+
+            const viewP1 = projector.project(snapshot, P1);
+            const viewP2 = projector.project(snapshot, P2);
+
+            expect(viewP1.matchId).toBe('match-uuid-1');
+            expect(viewP2.matchId).toBe('match-uuid-1');
+            expect(viewP1.matchId).toBe(viewP2.matchId);
+        });
+
+        it('matchId is absent from the projected snapshot when the full state has none', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            const snapshot = makeSnapshot(); // no matchId
+
+            const view = projector.project(snapshot, P1);
+
+            expect('matchId' in view).toBe(false);
+        });
+
+        it('a save-file session manifest never crosses projection (allowlist)', () => {
+            const projector = new DefaultStateProjector(fogRules);
+            // Widen deliberately: even if host-side code accidentally bolts a
+            // `session` manifest onto the snapshot, the explicit projection
+            // allowlist must not let it reach any viewer (Invariant #1).
+            const snapshot = {
+                ...makeSnapshot({ matchId: 'match-uuid-1' }),
+                session: { matchId: 'match-uuid-1', maxPlayers: 2, seats: [] },
+            } as TestSnapshot;
+
+            const view = projector.project(snapshot, P1);
+
+            expect('session' in view).toBe(false);
+        });
+    });
+
     describe('isMyTurn (turn clock)', () => {
         it('isMyTurn is true when the viewer is the active player', () => {
             const projector = new DefaultStateProjector(fogRules);

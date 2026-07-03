@@ -97,6 +97,16 @@ const dummyEnvelope: ActionEnvelope = {
     payload: {},
 };
 
+/** Minimal valid session manifest for restore fixtures (#820). */
+const TEST_SESSION: SaveFile['session'] = {
+    matchId: 'match-test-fixture',
+    maxPlayers: 2,
+    seats: [
+        { playerId: P1, control: 'host', slotIndex: 0 },
+        { playerId: P2, control: 'remote', slotIndex: 1 },
+    ],
+};
+
 describe('SessionRuntime', () => {
     it('returns the initial snapshot from getSnapshot() before any action is applied', () => {
         const initial = makeSnapshot(0);
@@ -346,6 +356,7 @@ describe('SessionRuntime', () => {
             deltaActions: [],
             pendingCommitments: {},
             stagedReveals: {},
+            session: TEST_SESSION,
         };
         const runtime = new SessionRuntime({
             gameId: 'tactics',
@@ -377,6 +388,7 @@ describe('SessionRuntime', () => {
             deltaActions: [],
             pendingCommitments: makePendingCommitments(),
             stagedReveals: {},
+            session: TEST_SESSION,
         };
         const runtime = new SessionRuntime({
             gameId: 'tactics',
@@ -484,6 +496,14 @@ describe('SessionRuntime', () => {
                 deltaActions: [],
                 pendingCommitments,
                 stagedReveals: {},
+                session: {
+                    matchId: 'match-restored',
+                    maxPlayers: 2,
+                    seats: [
+                        { playerId: P1, control: 'host', slotIndex: 0 },
+                        { playerId: P2, control: 'remote', slotIndex: 1 },
+                    ],
+                },
             });
 
             const file = runtime.captureSaveFile({
@@ -492,6 +512,81 @@ describe('SessionRuntime', () => {
             });
 
             expect(file.pendingCommitments).toEqual(pendingCommitments);
+        });
+
+        describe('session manifest stamping (#820)', () => {
+            const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+
+            it('stamps session from the injected getSessionManifest provider', () => {
+                const manifest = {
+                    matchId: 'match-live-1',
+                    maxPlayers: 4,
+                    seats: [
+                        { playerId: P1, control: 'host' as const, slotIndex: 0 },
+                        { playerId: P2, control: 'remote' as const, slotIndex: 1 },
+                        {
+                            playerId: toPlayerId('ai-2'),
+                            control: 'ai' as const,
+                            slotIndex: 2,
+                            omniscient: true,
+                        },
+                    ],
+                };
+                const runtime = new SessionRuntime({
+                    gameId: 'tactics',
+                    gameVersion: '0.1.0',
+                    initialSnapshot: initial,
+                    applyAction: vi.fn(),
+                    now: () => NOW,
+                    getSessionManifest: () => manifest,
+                });
+
+                const file = runtime.captureSaveFile({ gameId: 'tactics' });
+
+                expect(file.session).toBe(manifest);
+            });
+
+            it('falls back to a checkpoint-derived manifest when the option is absent', () => {
+                const file = makeRuntime().captureSaveFile({ gameId: 'tactics' });
+
+                expect(file.session.matchId).toMatch(UUID_RE);
+                expect(file.session.maxPlayers).toBe(2);
+                expect(file.session.seats).toEqual([
+                    { playerId: P1, control: 'remote', slotIndex: 0 },
+                    { playerId: P2, control: 'remote', slotIndex: 1 },
+                ]);
+            });
+
+            it('falls back to a checkpoint-derived manifest when the provider returns null', () => {
+                const runtime = new SessionRuntime({
+                    gameId: 'tactics',
+                    gameVersion: '0.1.0',
+                    initialSnapshot: initial,
+                    applyAction: vi.fn(),
+                    now: () => NOW,
+                    getSessionManifest: () => null,
+                });
+
+                const file = runtime.captureSaveFile({ gameId: 'tactics' });
+
+                expect(file.session.matchId).toMatch(UUID_RE);
+                expect(file.session.seats).toHaveLength(2);
+            });
+
+            it('adopts the snapshot matchId in the fallback manifest when present', () => {
+                const withMatchId = { ...initial, matchId: 'match-from-snapshot' };
+                const runtime = new SessionRuntime({
+                    gameId: 'tactics',
+                    gameVersion: '0.1.0',
+                    initialSnapshot: withMatchId,
+                    applyAction: vi.fn(),
+                    now: () => NOW,
+                });
+
+                const file = runtime.captureSaveFile({ gameId: 'tactics' });
+
+                expect(file.session.matchId).toBe('match-from-snapshot');
+            });
         });
     });
 
@@ -534,6 +629,7 @@ describe('SessionRuntime', () => {
                 deltaActions: [],
                 pendingCommitments: maliciousCommitments,
                 stagedReveals: {},
+                session: TEST_SESSION,
             });
 
             // Verify that Object.prototype was not polluted

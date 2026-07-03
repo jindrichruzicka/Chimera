@@ -550,6 +550,53 @@ describe('ServerMessageSchema — SNAPSHOT setup (synced lobby config)', () => {
     });
 });
 
+describe('ServerMessageSchema — SNAPSHOT matchId (host-minted match identity, #820)', () => {
+    const baseSnapshot = {
+        tick: 1,
+        viewerId: toPlayerId('p1'),
+        players: {},
+        entities: {},
+        phase: 'game',
+        events: [],
+        gameResult: null,
+        undoMeta: { canUndo: false, canRedo: false },
+        isMyTurn: true,
+    };
+
+    it('parses SNAPSHOT with a matchId and preserves it for clients', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: { ...baseSnapshot, matchId: 'match-uuid-1' },
+            checksum: 42,
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'SNAPSHOT') {
+            expect(result.data.snapshot.matchId).toBe('match-uuid-1');
+        }
+    });
+
+    it('parses SNAPSHOT with matchId absent (backward compatible)', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: { ...baseSnapshot },
+            checksum: 42,
+        });
+        expect(result.success).toBe(true);
+        if (result.success && result.data.type === 'SNAPSHOT') {
+            expect(result.data.snapshot.matchId).toBeUndefined();
+        }
+    });
+
+    it('rejects SNAPSHOT with a non-string matchId', () => {
+        const result = ServerMessageSchema.safeParse({
+            type: 'SNAPSHOT',
+            snapshot: { ...baseSnapshot, matchId: 7 },
+            checksum: 42,
+        });
+        expect(result.success).toBe(false);
+    });
+});
+
 describe('ServerMessageSchema — PROFILE_REJECT', () => {
     it('parses a valid PROFILE_REJECT message', () => {
         const result = ServerMessageSchema.safeParse({

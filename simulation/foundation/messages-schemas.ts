@@ -199,6 +199,9 @@ const PlayerSnapshot = z.object({
     // per-player attributes), passed through projection verbatim. Optional and
     // backward-compatible.
     setup: GameSetupConfig.optional(),
+    // Host-minted stable match identity, projected verbatim like `setup`
+    // (Invariant #101, F68/#820). Optional and backward-compatible.
+    matchId: z.string().optional(),
     undoMeta: z.object({ canUndo: z.boolean(), canRedo: z.boolean() }),
     isMyTurn: z.boolean(),
 });

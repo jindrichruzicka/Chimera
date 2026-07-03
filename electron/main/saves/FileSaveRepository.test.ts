@@ -15,12 +15,14 @@ import * as path from 'path';
 import { afterEach, afterAll, beforeEach, describe, expect, it } from 'vitest';
 import {
     JsonSaveSerializer,
+    computeBodyChecksum,
     createDefaultMigrator,
     CURRENT_SCHEMA_VERSION,
     SaveNotFoundError,
     SaveIntegrityError,
     SaveSchemaTooNewError,
 } from '@chimera-engine/simulation/persistence/index.js';
+import type { SaveBody } from '@chimera-engine/simulation/persistence/index.js';
 import {
     runSaveRepositoryContractTests,
     makeFile,
@@ -314,6 +316,29 @@ describe('FileSaveRepository — integrity checksum', () => {
 
         // Should load without throwing
         await expect(repo.load('tactics/autosave')).resolves.toMatchObject(file);
+    });
+
+    it('a v5 save with a valid stored checksum still verifies after the v5→v6 session backfill (#820)', async () => {
+        const repo = makeRepo(tmpDir);
+
+        // Build the exact on-disk v5 shape: no `session`, schemaVersion 5, and a
+        // checksum computed over the v5 body (load verifies the checksum on the
+        // MIGRATED file, so this only passes if `session` stays out of the hash).
+        const v6 = makeFile('tactics', 'autosave');
+        const widened = { ...v6 } as Record<string, unknown>;
+        delete widened['session'];
+        const checksum = await computeBodyChecksum(widened as unknown as SaveBody);
+        widened['header'] = { ...v6.header, schemaVersion: 5, checksum };
+
+        const dir = path.join(tmpDir, 'tactics');
+        await fs.mkdir(dir, { recursive: true });
+        await fs.writeFile(path.join(dir, 'autosave.chimera'), JSON.stringify(widened, null, 2));
+
+        const loaded = await repo.load('tactics/autosave');
+
+        expect(loaded.header.schemaVersion).toBe(CURRENT_SCHEMA_VERSION);
+        expect(loaded.session).toBeDefined();
+        expect(typeof loaded.session.matchId).toBe('string');
     });
 });
 

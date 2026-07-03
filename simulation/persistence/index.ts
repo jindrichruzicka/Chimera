@@ -12,7 +12,8 @@
  *   - T3 (#122): SaveRepository, SaveSlotMeta, InMemorySaveRepository
  */
 
-export type { SaveFileHeader, SaveFile } from './SaveFile.js';
+export type { SaveFileHeader, SaveFile, SaveSeat, SaveSessionManifest } from './SaveFile.js';
+export { deriveSessionManifest } from './SessionManifest.js';
 export type { SaveSerializer } from './SaveSerializer.js';
 export { JsonSaveSerializer } from './JsonSaveSerializer.js';
 export {

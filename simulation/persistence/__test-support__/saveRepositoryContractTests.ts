@@ -21,6 +21,7 @@ import type { SaveRepository } from '../SaveRepository.js';
 import { CURRENT_SCHEMA_VERSION, SaveNotFoundError } from '../SaveMigrator.js';
 import type { SaveFile } from '../SaveFile.js';
 import type { GamePhase } from '../../engine/types.js';
+import { playerId } from '../../engine/types.js';
 
 // ── Shared test factory ────────────────────────────────────────────────────────
 
@@ -55,6 +56,14 @@ export function makeFile(gameId: string, slotId: string, savedAt = 1_700_000_000
         deltaActions: [],
         pendingCommitments: {},
         stagedReveals: {},
+        session: {
+            matchId: 'match-contract-fixture',
+            maxPlayers: 2,
+            seats: [
+                { playerId: playerId('Alice'), control: 'host', slotIndex: 0 },
+                { playerId: playerId('Bob'), control: 'remote', slotIndex: 1 },
+            ],
+        },
     };
 }
 

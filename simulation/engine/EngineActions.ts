@@ -100,6 +100,13 @@ export interface EngineStartGamePayload {
      * Optional and backward-compatible.
      */
     readonly setup?: GameSetupConfig;
+    /**
+     * Host-minted stable match identity (F68, #820), written onto
+     * `BaseGameSnapshot.matchId` by the reducer. Carried in the payload (not
+     * generated in the reducer) so deterministic replay reproduces the same id.
+     * Optional and backward-compatible.
+     */
+    readonly matchId?: string;
 }
 
 /**
@@ -441,6 +448,7 @@ const BASE_SNAPSHOT_KEYS = [
     'sceneDefaultScreen',
     'sceneTransition',
     'setup',
+    'matchId',
     'committedTurns',
 ] as const satisfies readonly (keyof BaseGameSnapshot)[];
 
@@ -522,11 +530,23 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
         const initialEntities = parseInitialEntities(raw['initialEntities']);
         const setup = parseSetup(raw['setup']);
 
+        const rawMatchId = raw['matchId'];
+        if (
+            rawMatchId !== undefined &&
+            (typeof rawMatchId !== 'string' || rawMatchId.length === 0)
+        ) {
+            throw new TypeError(
+                'engine:start_game payload "matchId" must be a non-empty string when present; ' +
+                    `received ${JSON.stringify(raw)}.`,
+            );
+        }
+
         return {
             playerIds: parsed,
             ...(firstPlayerId !== undefined ? { firstPlayerId } : {}),
             ...(initialEntities !== undefined ? { initialEntities } : {}),
             ...(setup !== undefined ? { setup } : {}),
+            ...(rawMatchId !== undefined ? { matchId: rawMatchId } : {}),
         };
     },
 
@@ -573,6 +593,9 @@ export const engineStartGameDefinition: ActionDefinition<EngineStartGamePayload>
             // syncs it to every client (#705). Preserve any prior `state.setup`
             // (spread above) when the payload omits one.
             ...(payload.setup !== undefined ? { setup: payload.setup } : {}),
+            // Host-minted match identity (#820); same preserve-when-omitted
+            // semantics as `setup` via the base spread above.
+            ...(payload.matchId !== undefined ? { matchId: payload.matchId } : {}),
         };
 
         return nextTurnClock === undefined ? nextState : { ...nextState, turnClock: nextTurnClock };

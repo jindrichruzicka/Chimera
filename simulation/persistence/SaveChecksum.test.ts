@@ -115,4 +115,22 @@ describe('computeBodyChecksum', () => {
 
         expect(withEmpty).toBe(withoutField);
     });
+
+    it('excludes the session manifest entirely, like the header (#820)', async () => {
+        // A v5 file's stored checksum was computed without `session`; after the
+        // v5→v6 migration backfills a manifest, recomputing must still match —
+        // even for a POPULATED manifest (unlike stagedReveals, `session` is
+        // host-local orchestration metadata and is never integrity-protected).
+        const without = await computeBodyChecksum(makeBody());
+        const withSession = await computeBodyChecksum({
+            ...makeBody(),
+            session: {
+                matchId: 'match-uuid-1',
+                maxPlayers: 2,
+                seats: [{ playerId: 'p1', control: 'host', slotIndex: 0 }],
+            },
+        } as SaveBody);
+
+        expect(withSession).toBe(without);
+    });
 });

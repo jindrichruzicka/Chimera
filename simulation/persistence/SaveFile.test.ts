@@ -57,6 +57,14 @@ function makeSaveFile(overrides: Partial<SaveFile> = {}): SaveFile {
         deltaActions: [],
         pendingCommitments: {},
         stagedReveals: {},
+        session: {
+            matchId: 'match-fixture',
+            maxPlayers: 2,
+            seats: [
+                { playerId: toPlayerId('player-1'), control: 'host', slotIndex: 0 },
+                { playerId: toPlayerId('player-2'), control: 'remote', slotIndex: 1 },
+            ],
+        },
         ...restOverrides,
     };
 }
@@ -189,6 +197,71 @@ describe('JsonSaveSerializer', () => {
         const result = await serializer.deserialize(JSON.stringify(legacy));
 
         expect(result.stagedReveals).toBeUndefined();
+    });
+
+    it('round-trip preserves the session manifest including an omniscient ai seat (#820)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const session = {
+            matchId: 'match-uuid-1',
+            maxPlayers: 4,
+            seats: [
+                { playerId: toPlayerId('host-1'), control: 'host' as const, slotIndex: 0 },
+                { playerId: toPlayerId('p-local-2'), control: 'local' as const, slotIndex: 1 },
+                {
+                    playerId: toPlayerId('ai-2'),
+                    control: 'ai' as const,
+                    slotIndex: 2,
+                    omniscient: true,
+                },
+                { playerId: toPlayerId('guest-9'), control: 'remote' as const, slotIndex: 3 },
+            ],
+        };
+        const file = makeSaveFile({ session });
+
+        const result = await serializer.deserialize(await serializer.serialize(file));
+
+        expect(result.session).toStrictEqual(session);
+    });
+
+    it('parses a legacy save that predates the session manifest (optional field, #820)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = await serializer.serialize(makeSaveFile());
+        const legacy = JSON.parse(raw) as Record<string, unknown>;
+        delete legacy['session'];
+
+        const result = await serializer.deserialize(JSON.stringify(legacy));
+
+        expect(result.session).toBeUndefined();
+    });
+
+    it('rejects with SaveParseError when a session seat has an unknown control kind', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = await serializer.serialize(makeSaveFile());
+        const tampered = JSON.parse(raw) as Record<string, unknown>;
+        tampered['session'] = {
+            matchId: 'match-uuid-1',
+            maxPlayers: 1,
+            seats: [{ playerId: 'p1', control: 'spectator', slotIndex: 0 }],
+        };
+
+        await expect(serializer.deserialize(JSON.stringify(tampered))).rejects.toBeInstanceOf(
+            SaveParseError,
+        );
+    });
+
+    it('rejects with SaveParseError when a session seat slotIndex is a float (invariant #44)', async () => {
+        const serializer = new JsonSaveSerializer();
+        const raw = await serializer.serialize(makeSaveFile());
+        const tampered = JSON.parse(raw) as Record<string, unknown>;
+        tampered['session'] = {
+            matchId: 'match-uuid-1',
+            maxPlayers: 1,
+            seats: [{ playerId: 'p1', control: 'host', slotIndex: 0.5 }],
+        };
+
+        await expect(serializer.deserialize(JSON.stringify(tampered))).rejects.toBeInstanceOf(
+            SaveParseError,
+        );
     });
 
     it('matches the projection CommitmentEnvelope shape for invariant #26 load wiring', () => {

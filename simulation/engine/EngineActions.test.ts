@@ -922,6 +922,74 @@ describe('engine:start_game definition', () => {
         expect(frozen).not.toHaveProperty('setup');
     });
 
+    // ─── host-minted match identity passthrough (#820) ───────────────────────
+
+    it('parsePayload parses a well-formed matchId', () => {
+        expect(
+            definition().parsePayload({
+                playerIds: ['p1', 'p2'],
+                matchId: 'match-uuid-1',
+            }),
+        ).toEqual({ playerIds: ['p1', 'p2'], matchId: 'match-uuid-1' });
+    });
+
+    it('parsePayload omits matchId when the payload has none', () => {
+        expect(definition().parsePayload({ playerIds: ['p1'] })).not.toHaveProperty('matchId');
+    });
+
+    it('parsePayload rejects a non-string matchId', () => {
+        expect(() => definition().parsePayload({ playerIds: ['p1'], matchId: 7 })).toThrow(
+            TypeError,
+        );
+    });
+
+    it('parsePayload rejects an empty-string matchId', () => {
+        expect(() => definition().parsePayload({ playerIds: ['p1'], matchId: '' })).toThrow(
+            TypeError,
+        );
+    });
+
+    it('reduce writes snapshot.matchId from the payload', () => {
+        const snapshot = makeSnapshot(hostId);
+        const next = definition().reduce(
+            snapshot,
+            { playerIds: [hostId, guestId], matchId: 'match-uuid-1' },
+            hostId,
+            stubCtx,
+        );
+
+        expect(next.matchId).toBe('match-uuid-1');
+    });
+
+    it('reduce preserves the prior matchId when the payload omits one', () => {
+        const snapshot = { ...makeSnapshot(hostId), matchId: 'match-uuid-prior' };
+        const next = definition().reduce(snapshot, { playerIds: [hostId] }, hostId, stubCtx);
+
+        expect(next.matchId).toBe('match-uuid-prior');
+    });
+
+    it('reduce leaves matchId absent when neither payload nor state has one', () => {
+        const snapshot = makeSnapshot(hostId);
+        const next = definition().reduce(snapshot, { playerIds: [hostId] }, hostId, stubCtx);
+
+        expect(next).not.toHaveProperty('matchId');
+    });
+
+    it('reduce does not mutate the input snapshot when matchId is present', () => {
+        const snapshot = makeSnapshot(hostId);
+        const frozen = Object.freeze({ ...snapshot });
+
+        expect(() =>
+            definition().reduce(
+                frozen,
+                { playerIds: [hostId], matchId: 'match-uuid-1' },
+                hostId,
+                stubCtx,
+            ),
+        ).not.toThrow();
+        expect(frozen).not.toHaveProperty('matchId');
+    });
+
     // ─── game-extension match state must not survive a match boundary ────────
     //
     // A game (e.g. tactics' `playerStamina`) bolts non-`BaseGameSnapshot` fields
@@ -997,6 +1065,7 @@ describe('engine:return_to_lobby definition', () => {
             turnClock: { activePlayerId: hostId, deadlineMs: 30_000 },
             gameResult: { winnerIds: [hostId] },
             setup,
+            matchId: 'match-uuid-return',
         }) satisfies BaseGameSnapshot;
 
     it('has type string "engine:return_to_lobby"', () => {
@@ -1049,6 +1118,13 @@ describe('engine:return_to_lobby definition', () => {
         expect(next.seed).toBe(snapshot.seed);
         expect(next.hostPlayerId).toBe(hostId);
         expect(next.setup).toEqual(setup);
+    });
+
+    it('reduce preserves the matchId so post-abandon saves still correlate to the match (#820)', () => {
+        const snapshot = makePlayingSnapshot();
+        const next = definition().reduce(snapshot, {}, hostId, stubCtx);
+
+        expect(next.matchId).toBe('match-uuid-return');
     });
 
     it('reduce does not mutate the input snapshot', () => {

@@ -92,6 +92,23 @@ const SaveFileSchema = z.object({
             }),
         )
         .optional(),
+    // Optional so pre-#820 (v5) saves parse without the field; the v5→v6
+    // migration backfills a manifest derived from the checkpoint. `slotIndex`
+    // and `maxPlayers` are integers (invariant #44).
+    session: z
+        .object({
+            matchId: z.string(),
+            maxPlayers: z.number().int(),
+            seats: z.array(
+                z.object({
+                    playerId: z.string(),
+                    control: z.enum(['host', 'local', 'remote', 'ai']),
+                    slotIndex: z.number().int(),
+                    omniscient: z.boolean().optional(),
+                }),
+            ),
+        })
+        .optional(),
 });
 
 // ─── Prototype-pollution defence ─────────────────────────────────────────────

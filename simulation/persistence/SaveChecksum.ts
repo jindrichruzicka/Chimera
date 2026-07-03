@@ -21,6 +21,14 @@ import type { SaveFile } from './SaveFile.js';
 /**
  * The portion of a `SaveFile` that participates in the integrity checksum.
  * The header is excluded because `header.checksum` itself is stored there.
+ *
+ * `session` is deliberately excluded too (F68, #820): the v5→v6 migration
+ * backfills a manifest onto legacy files AFTER their checksum was stored, and
+ * the repository verifies the checksum on the migrated file — including
+ * `session` in the hash would fail every migrated v5 save. Unlike
+ * `stagedReveals` (conditionally hashed because a populated map is gameplay
+ * state needing integrity protection), the manifest is host-local
+ * orchestration metadata and is never hashed at all, exactly like the header.
  */
 export type SaveBody = Pick<
     SaveFile,

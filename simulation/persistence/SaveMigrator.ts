@@ -14,6 +14,7 @@
  */
 
 import type { SaveFile } from './SaveFile.js';
+import { deriveSessionManifest } from './SessionManifest.js';
 
 // ─── Schema version ───────────────────────────────────────────────────────────
 
@@ -23,7 +24,7 @@ import type { SaveFile } from './SaveFile.js';
  * of its nested types, and add a corresponding `SaveMigration` so that
  * older saves are automatically upgraded.
  */
-export const CURRENT_SCHEMA_VERSION = 5;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 // ─── SaveMigration interface ──────────────────────────────────────────────────
 
@@ -326,6 +327,34 @@ export const stagedRevealsMigration: SaveMigration = {
 };
 
 /**
+ * Migration from schema v5 to v6: ensure every save carries a `session`
+ * manifest (F68, #820).
+ *
+ * Legacy saves predate session composition, so the manifest is backfilled
+ * best-effort from the checkpoint via `deriveSessionManifest` (control kinds
+ * from id heuristics, slot indexes in key order, `maxPlayers` = seat count,
+ * and a freshly minted matchId — no client holds a ticket for a legacy save,
+ * so the join-order fallback covers reclaim). An existing manifest is
+ * preserved verbatim so the migration is additive and idempotent. The field
+ * is top-level (alongside `pendingCommitments`), not on the checkpoint, and
+ * stays out of the body checksum so pre-v6 stored checksums still verify.
+ */
+export const sessionManifestMigration: SaveMigration = {
+    fromVersion: 5,
+    apply(file: SaveFile): SaveFile {
+        // Probe a widened copy: v5 saves legitimately predate `session`, but
+        // the static `SaveFile` type asserts it is present (so `'x' in file`
+        // would narrow `file` to `never`). Widening lets us detect the field
+        // without that narrowing and without `any`.
+        const widened = file as unknown as Record<string, unknown>;
+        if ('session' in widened) {
+            return file;
+        }
+        return { ...file, session: deriveSessionManifest(file.checkpoint) };
+    },
+};
+
+/**
  * Returns a fresh `SaveMigrator` with all built-in schema migrations
  * pre-registered in order.
  *
@@ -338,5 +367,6 @@ export function createDefaultMigrator(): SaveMigrator {
     migrator.register(checkpointTimersMigration);
     migrator.register(checkpointGameResultMigration);
     migrator.register(stagedRevealsMigration);
+    migrator.register(sessionManifestMigration);
     return migrator;
 }

@@ -56,6 +56,8 @@ import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
     JsonSaveSerializer,
     createDefaultMigrator,
+    type SaveSeat,
+    type SaveSessionManifest,
 } from '@chimera-engine/simulation/persistence/index.js';
 import { createMainGameRegistry, type MainGameContribution } from './game/mainGameRegistry.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
@@ -1039,6 +1041,16 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // so crash dumps can include the current authoritative snapshot.
     let activeSession: SessionRuntime | null = null;
 
+    // The matchId of the currently-running match (F68, #820), or `null` before
+    // the first `engine:start_game` of the session. Minted in
+    // `onGameStartRequested` and read lazily by the live session-manifest
+    // closure built in `onSessionHosted` — shared main() scope because those
+    // are sibling LobbyManager callbacks. Deliberately NOT reset on
+    // return-to-lobby (the snapshot keeps its matchId, so a post-abandon
+    // autosave still correlates to the last match); the next start mints a
+    // fresh id, and session teardown clears it.
+    let currentMatchId: string | null = null;
+
     // Register crash reporter early — before any window opens — so all
     // subsequent crashes are captured (Invariant 68).
     const crashLogger = logger.child({ module: 'crash' });
@@ -1534,12 +1546,54 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 broadcasterOptions,
             );
 
+            // Live session-composition provider for captured saves (F68, #820):
+            // one seat per registered player, classified host → ai (by agent
+            // slot) → local (`lobbyManager.isLocalSeat`) → remote. Returns
+            // `null` before the first `engine:start_game` (no match to
+            // describe), letting `captureSaveFile` fall back to its
+            // checkpoint-derived manifest. Invoked lazily at save time, so
+            // referencing `playerSlotIndexById`/`resolveLiveAgentSlot`
+            // (declared below) and the late-bound `lobbyManager` is safe —
+            // same pattern as the debugPort getters.
+            const getSessionManifest = (): SaveSessionManifest | null => {
+                if (currentMatchId === null) {
+                    return null;
+                }
+                const seats: SaveSeat[] = [...playerSlotIndexById.entries()].map(
+                    ([pid, slotIndex]) => {
+                        const agentSlot = resolveLiveAgentSlot(slotIndex);
+                        if (agentSlot.kind === 'ai') {
+                            return {
+                                playerId: pid,
+                                control: 'ai',
+                                slotIndex,
+                                ...(agentSlot.omniscient === true ? { omniscient: true } : {}),
+                            };
+                        }
+                        if (pid === metadata.hostId) {
+                            return { playerId: pid, control: 'host', slotIndex };
+                        }
+                        if (lobbyManager.isLocalSeat(pid)) {
+                            return { playerId: pid, control: 'local', slotIndex };
+                        }
+                        return { playerId: pid, control: 'remote', slotIndex };
+                    },
+                );
+                seats.sort((a, b) => a.slotIndex - b.slotIndex);
+                return {
+                    matchId: currentMatchId,
+                    maxPlayers: metadata.maxPlayers,
+                    seats,
+                };
+            };
+
             const sessionRuntime = new SessionRuntime({
                 gameId: HOSTED_GAME_ID,
                 gameVersion: HOSTED_GAME_VERSION,
                 initialSnapshot,
                 applyAction: processAction,
                 commitmentRuntime: sessionCommitmentRuntime,
+                getSessionManifest,
             });
             activeSession = sessionRuntime;
             if (metadata.e2eHooks !== undefined) {
@@ -2065,6 +2119,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 broadcasterRef.current?.dispose();
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
+                    currentMatchId = null;
                     activeE2eHooks = undefined;
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
@@ -2162,6 +2217,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             // above does not affect it. Omitted (undefined) for games with no
             // lobby setup, keeping the payload backward-compatible.
             const setup = buildSetupFromLobbyState(state);
+
+            // Mint the stable match identity here — host-side, once per match
+            // start — and carry it in the action payload so deterministic
+            // replay reproduces the same id (F68, #820). The reducer writes it
+            // onto the snapshot; projection syncs it verbatim to every client.
+            const matchId = crypto.randomUUID();
+            currentMatchId = matchId;
+
             const action: ActionEnvelope = {
                 type: 'engine:start_game',
                 playerId: state.info.hostId,
@@ -2169,6 +2232,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 payload: {
                     playerIds: allPlayerIds,
                     firstPlayerId: firstPlayer,
+                    matchId,
                     ...(Object.keys(initialEntities).length > 0 ? { initialEntities } : {}),
                     ...(setup !== undefined ? { setup } : {}),
                 },

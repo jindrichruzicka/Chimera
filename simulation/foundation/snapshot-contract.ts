@@ -74,6 +74,11 @@ export interface PlayerSnapshot {
      * backward-compatible.
      */
     readonly setup?: GameSetupConfig;
+    /**
+     * Host-minted stable match identity, passed through projection verbatim
+     * like `setup` (Invariant #101, F68/#820). Optional and backward-compatible.
+     */
+    readonly matchId?: string;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;
 }
@@ -124,6 +129,11 @@ export interface WirePlayerSnapshot {
      * config crosses).
      */
     readonly setup?: GameSetupConfig;
+    /**
+     * Host-minted stable match identity, passed through projection verbatim
+     * like `setup` (Invariant #101, F68/#820). Optional and backward-compatible.
+     */
+    readonly matchId?: string;
     readonly undoMeta: { readonly canUndo: boolean; readonly canRedo: boolean };
     readonly isMyTurn: boolean;
 }

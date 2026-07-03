@@ -75,6 +75,13 @@ export interface PlayerSnapshot {
      * games with no lobby setup and on snapshots predating #705.
      */
     readonly setup?: GameSetupConfig;
+    /**
+     * Host-minted stable match identity, passed through projection verbatim
+     * like `setup` so every viewer sees the identical id (Invariant #101,
+     * F68/#820). Optional: absent before the first `engine:start_game` and on
+     * snapshots predating #820.
+     */
+    readonly matchId?: string;
 }
 
 export interface StateProjectorOptions<TState extends BaseGameSnapshot = BaseGameSnapshot> {
@@ -218,6 +225,7 @@ export class DefaultStateProjector<
                 ? {}
                 : { sceneTransition: fullState.sceneTransition }),
             ...(fullState.setup === undefined ? {} : { setup: fullState.setup }),
+            ...(fullState.matchId === undefined ? {} : { matchId: fullState.matchId }),
             players,
             entities,
             events,

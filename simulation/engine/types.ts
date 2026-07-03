@@ -219,6 +219,18 @@ export interface BaseGameSnapshot {
      */
     readonly setup?: GameSetupConfig;
     /**
+     * Stable identity of the current match (F68, #820). Minted host-side
+     * (`crypto.randomUUID()` in `onGameStartRequested`) and carried in the
+     * `engine:start_game` payload, so deterministic replay reproduces the same
+     * id. Projected verbatim by `StateProjector.project()` like `setup` — this
+     * is how clients learn the matchId from their normal snapshot stream
+     * (Invariant #101). Preserved by `engine:return_to_lobby` so post-abandon
+     * saves still correlate to the match; the next `engine:start_game` mints a
+     * fresh one. Optional and backward-compatible: absent on pre-#820
+     * fixtures/saves.
+     */
+    readonly matchId?: string;
+    /**
      * Per-player commitment status for the current turn, for turn modes that gate
      * turn advance on every seated player having committed (commit-then-sync;
      * §4.6/§8, F54). Maps a player ID to the `turnNumber` they last committed for;
