@@ -22,7 +22,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Badge, Button, Caption, Heading, IconButton, Modal } from '../../components/ui';
+import { Badge, Caption, Heading, IconButton, Modal } from '../../components/ui';
 import { useReplayApi } from '../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useToastStore } from '../../state/toastStore.js';
@@ -362,36 +362,21 @@ export default function ReplaysPage(): React.ReactElement {
                     title="Delete replay?"
                     onClose={handleCancelDelete}
                     data-testid="replay-delete-dialog"
+                    actions={[
+                        { label: 'Cancel', testId: 'replay-delete-cancel' },
+                        {
+                            label: 'Delete',
+                            variant: 'danger',
+                            testId: 'replay-delete-confirm',
+                            onClick: () => {
+                                void handleConfirmDelete();
+                            },
+                        },
+                    ]}
                 >
-                    <div style={{ display: 'grid', gap: 'var(--ch-space-md)' }}>
-                        <Caption tone="muted">
-                            This replay will be permanently deleted. This cannot be undone.
-                        </Caption>
-                        <div
-                            style={{
-                                display: 'flex',
-                                gap: 'var(--ch-space-sm)',
-                                justifyContent: 'flex-end',
-                            }}
-                        >
-                            <Button
-                                variant="secondary"
-                                data-testid="replay-delete-cancel"
-                                onClick={handleCancelDelete}
-                            >
-                                Cancel
-                            </Button>
-                            <Button
-                                variant="danger"
-                                data-testid="replay-delete-confirm"
-                                onClick={() => {
-                                    void handleConfirmDelete();
-                                }}
-                            >
-                                Delete
-                            </Button>
-                        </div>
-                    </div>
+                    <Caption tone="muted">
+                        This replay will be permanently deleted. This cannot be undone.
+                    </Caption>
                 </Modal>
             )}
         </main>

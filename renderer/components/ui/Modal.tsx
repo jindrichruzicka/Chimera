@@ -2,9 +2,26 @@
 
 import React, { useEffect, useId, useRef } from 'react';
 import type { CSSProperties, HTMLAttributes } from 'react';
+import type { ButtonVariant } from '../../theme/types';
 import { useEscapeLayer } from '../shell/EscapeStack';
-import { IconButton } from './IconButton';
+import { Button } from './Button';
 import styles from './Modal.module.css';
+
+/**
+ * A single control button in a {@link Modal}'s centered action row. Clicking it
+ * runs the optional `onClick` and then always dismisses the modal — a modal is a
+ * one-shot decision surface, so every button closes it.
+ */
+export interface ModalAction {
+    /** The button caption. */
+    readonly label: React.ReactNode;
+    /** Optional side effect run before the modal closes. Omit for a plain dismiss. */
+    readonly onClick?: () => void;
+    /** Button styling; defaults to `secondary`. Use `danger` for destructive actions. */
+    readonly variant?: ButtonVariant;
+    /** Optional `data-testid` forwarded to the rendered button. */
+    readonly testId?: string;
+}
 
 export type ModalProps = Readonly<
     Omit<HTMLAttributes<HTMLDivElement>, 'style' | 'title'> & {
@@ -12,9 +29,18 @@ export type ModalProps = Readonly<
         readonly title: React.ReactNode;
         readonly onClose: () => void;
         readonly children: React.ReactNode;
+        /**
+         * The centered control buttons. When omitted, the modal renders a single
+         * `Close` button that just dismisses it. When provided, exactly these
+         * buttons render — supply your own cancel as a labelled action with no
+         * `onClick` (it dismisses like any other).
+         */
+        readonly actions?: readonly ModalAction[];
         readonly style?: CSSProperties;
     }
 >;
+
+const DEFAULT_ACTIONS: readonly ModalAction[] = [{ label: 'Close', variant: 'primary' }];
 
 const focusableSelector = [
     'button:not([disabled])',
@@ -30,6 +56,7 @@ export function Modal({
     title,
     onClose,
     children,
+    actions,
     className,
     style,
     ...dialogProps
@@ -90,6 +117,21 @@ export function Modal({
     if (!open) return null;
 
     const classNames = [styles['overlay'], className].filter(Boolean).join(' ');
+    const controls = actions && actions.length > 0 ? actions : DEFAULT_ACTIONS;
+
+    // A modal is a one-shot decision surface: run the action, then always close.
+    // A throwing action must never wedge the dialog open — and since closing
+    // unmounts the modal, letting the throw propagate into React's dispatch would
+    // only crash the surrounding tree, so contain it here (surfaced for debugging).
+    const runAction = (action: ModalAction) => () => {
+        try {
+            action.onClick?.();
+        } catch (error) {
+            console.error('[Modal] action threw; closing anyway:', error);
+        } finally {
+            onClose();
+        }
+    };
 
     return (
         <div className={classNames}>
@@ -103,20 +145,25 @@ export function Modal({
                 style={style}
                 tabIndex={-1}
             >
-                <div className={styles['header']}>
-                    <h2 className={styles['title']} id={titleId}>
-                        {title}
-                    </h2>
-                    <IconButton
-                        aria-label="Close"
-                        className={styles['closeButton']}
-                        onClick={onClose}
-                        variant="danger"
-                    >
-                        <span aria-hidden="true">X</span>
-                    </IconButton>
-                </div>
+                <h2 className={styles['title']} id={titleId}>
+                    {title}
+                </h2>
                 <div className={styles['body']}>{children}</div>
+                <div className={styles['actions']}>
+                    {controls.map((action, index) => (
+                        <Button
+                            key={index}
+                            size="sm"
+                            variant={action.variant ?? 'secondary'}
+                            {...(action.testId === undefined
+                                ? {}
+                                : { 'data-testid': action.testId })}
+                            onClick={runAction(action)}
+                        >
+                            {action.label}
+                        </Button>
+                    ))}
+                </div>
             </div>
         </div>
     );

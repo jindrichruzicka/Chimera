@@ -229,6 +229,16 @@ renderer/audio/
 
 All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 
+**`Modal`** is a chrome-less, game-UI overlay — no panel, border, radius, or shadow.
+It renders only a full-screen backdrop (`--ch-color-overlay-backdrop`, opaque by default;
+override the token for a semi-transparent, see-through scrim), a **centered title**, the
+content (which scrolls vertically past a height threshold while the title and buttons stay
+pinned), and a **horizontally-centered** control row. There is no header close (×) button.
+Buttons are supplied via the `actions` prop — `readonly { label, onClick?, variant?, testId? }[]`;
+each button runs its optional `onClick` and then **always dismisses the modal** (a modal is a
+one-shot decision surface). When `actions` is omitted, a single `Close` button is rendered that
+just dismisses. Escape also dismisses (via the shared `EscapeStack`).
+
 ### Game Surface Consumption
 
 Game-owned renderer surfaces may use the shared component library for HUDs,
@@ -297,6 +307,7 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-color-surface: #111113;
 --ch-color-surface-raised: #1b1b1f;
 --ch-color-surface-overlay: #27272a;
+--ch-color-overlay-backdrop: #27272a; /* Modal full-screen scrim; games override for a see-through backdrop */
 --ch-color-accent: #3f3f46;
 --ch-color-accent-hover: #52525b;
 --ch-color-text-primary: #f4f4f5;

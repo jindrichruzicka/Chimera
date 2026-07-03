@@ -214,7 +214,6 @@ describe('InGameMenuHost', () => {
         toggleMenu();
 
         fireEvent.click(screen.getByRole('button', { name: /leave match/i }));
-        fireEvent.click(screen.getByRole('button', { name: /confirm leave/i }));
 
         await waitFor(() => expect(returnToLobby).toHaveBeenCalledOnce());
         expect(leave).not.toHaveBeenCalled();
@@ -231,7 +230,6 @@ describe('InGameMenuHost', () => {
         toggleMenu();
 
         fireEvent.click(screen.getByRole('button', { name: /leave match/i }));
-        fireEvent.click(screen.getByRole('button', { name: /confirm leave/i }));
 
         await waitFor(() => expect(leave).toHaveBeenCalledOnce());
         expect(returnToLobby).not.toHaveBeenCalled();
@@ -253,7 +251,6 @@ describe('InGameMenuHost', () => {
         toggleMenu();
 
         fireEvent.click(screen.getByRole('button', { name: /leave match/i }));
-        fireEvent.click(screen.getByRole('button', { name: /confirm leave/i }));
 
         await waitFor(() => expect(override).toHaveBeenCalledOnce());
         expect(returnToLobby).not.toHaveBeenCalled();

@@ -4,7 +4,7 @@
 
 import React from 'react';
 import type { InGameMenuProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
-import { Button, Modal } from '@chimera-engine/renderer/components/ui';
+import { Modal } from '@chimera-engine/renderer/components/ui';
 
 /**
  * Tactics Leave-game confirmation dialog (F55 · §4.33). Adopted via the
@@ -27,48 +27,33 @@ export function TacticsInGameMenu({
         ? 'Leaving ends the battle for everyone and returns all players to the lobby.'
         : 'Leaving disconnects you from the battle and returns you to the main menu.';
 
-    // Cancel resumes the match: the Modal's `onClose` covers the close (×)
-    // button, the backdrop, and Escape, so all three paths funnel to `closeMenu`.
+    // Cancel resumes the match: the Modal's `onClose` covers Escape and the
+    // Cancel action (no `onClick` → dismiss only), both funnelling to `closeMenu`.
+    // Leave runs `leaveGame`, then the modal closes like any action.
     return (
-        <Modal open title="Leave the battle?" onClose={closeMenu}>
-            <div style={bodyStyle}>
-                <p data-testid="tactics-leave-prompt" style={promptStyle}>
-                    {prompt}
-                </p>
-                <div style={actionsStyle}>
-                    <Button
-                        data-testid="tactics-leave-cancel"
-                        variant="secondary"
-                        onClick={closeMenu}
-                    >
-                        Cancel
-                    </Button>
-                    <Button
-                        data-testid="tactics-leave-confirm"
-                        variant="danger"
-                        onClick={leaveGame}
-                    >
-                        Leave battle
-                    </Button>
-                </div>
-            </div>
+        <Modal
+            open
+            title="Leave the battle?"
+            onClose={closeMenu}
+            actions={[
+                { label: 'Cancel', testId: 'tactics-leave-cancel' },
+                {
+                    label: 'Leave battle',
+                    variant: 'danger',
+                    testId: 'tactics-leave-confirm',
+                    onClick: leaveGame,
+                },
+            ]}
+        >
+            <p data-testid="tactics-leave-prompt" style={promptStyle}>
+                {prompt}
+            </p>
         </Modal>
     );
 }
 
-const bodyStyle: React.CSSProperties = {
-    display: 'grid',
-    gap: 'var(--ch-space-md)',
-};
-
 const promptStyle: React.CSSProperties = {
     margin: 'var(--ch-space-none)',
-};
-
-const actionsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 'var(--ch-space-sm)',
-    justifyContent: 'flex-end',
 };
 
 export default TacticsInGameMenu;

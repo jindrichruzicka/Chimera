@@ -10,7 +10,6 @@ import type {
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { useLeaveGame, type LeaveGame } from '../../bridge/useLeaveGame.js';
 import { useInputAction } from '../../input/useInputAction.js';
-import { Button } from '../ui/Button.js';
 import { Modal } from '../ui/Modal.js';
 import { useEscapeLayer } from './EscapeStack.js';
 
@@ -109,58 +108,31 @@ export function InGameMenuHost({
 
 /**
  * Engine-default in-game menu rendered when a game omits the `inGameMenu` slot.
- * Resume returns to the match; Leave routes through `useLeaveGame` (role-aware)
- * behind a confirmation step. Built on the design-system `Modal` (focus-trap,
- * `aria-modal`, backdrop) and `Button`, using `var(--ch-*)` tokens only.
+ * A single decisive step: Resume dismisses (returns to the match); Leave routes
+ * through `useLeaveGame` (role-aware) and then closes. The warning copy conveys
+ * the gravity — the modal itself is the confirmation. Built on the design-system
+ * `Modal` (focus-trap, `aria-modal`, backdrop), using `var(--ch-*)` tokens only.
  */
 function DefaultInGameMenu({ closeMenu, leaveGame, isHost }: InGameMenuProps): React.ReactElement {
-    const [confirming, setConfirming] = useState(false);
-
     const leavePrompt = isHost
         ? 'Leave the match? This ends it for everyone and returns all players to the lobby.'
         : 'Leave the match? You will disconnect and return to the main menu.';
 
     return (
-        <Modal open title="Menu" onClose={closeMenu}>
-            <div style={menuBodyStyle}>
-                {confirming ? (
-                    <>
-                        <p style={leavePromptStyle}>{leavePrompt}</p>
-                        <div style={confirmActionsStyle}>
-                            <Button variant="secondary" onClick={() => setConfirming(false)}>
-                                Cancel
-                            </Button>
-                            <Button variant="danger" onClick={leaveGame}>
-                                Confirm leave
-                            </Button>
-                        </div>
-                    </>
-                ) : (
-                    <>
-                        <Button variant="primary" onClick={closeMenu}>
-                            Resume
-                        </Button>
-                        <Button variant="danger" onClick={() => setConfirming(true)}>
-                            Leave match
-                        </Button>
-                    </>
-                )}
-            </div>
+        <Modal
+            open
+            title="Menu"
+            onClose={closeMenu}
+            actions={[
+                { label: 'Resume' },
+                { label: 'Leave match', variant: 'danger', onClick: leaveGame },
+            ]}
+        >
+            <p style={leavePromptStyle}>{leavePrompt}</p>
         </Modal>
     );
 }
 
-const menuBodyStyle: React.CSSProperties = {
-    display: 'grid',
-    gap: 'var(--ch-space-sm)',
-};
-
 const leavePromptStyle: React.CSSProperties = {
     margin: 'var(--ch-space-none)',
-};
-
-const confirmActionsStyle: React.CSSProperties = {
-    display: 'flex',
-    gap: 'var(--ch-space-sm)',
-    justifyContent: 'flex-end',
 };

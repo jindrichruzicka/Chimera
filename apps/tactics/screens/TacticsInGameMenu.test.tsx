@@ -42,13 +42,14 @@ function renderMenu(props: Partial<React.ComponentProps<typeof TacticsInGameMenu
 }
 
 describe('TacticsInGameMenu', () => {
-    it('invokes leaveGame (and not closeMenu) when the leave action is confirmed', () => {
+    it('invokes leaveGame then closes the menu when the leave action is confirmed', () => {
         const { closeMenu, leaveGame } = renderMenu();
 
         fireEvent.click(screen.getByTestId('tactics-leave-confirm'));
 
+        // Every modal action runs, then the modal always dismisses (onClose).
         expect(leaveGame).toHaveBeenCalledTimes(1);
-        expect(closeMenu).not.toHaveBeenCalled();
+        expect(closeMenu).toHaveBeenCalledTimes(1);
     });
 
     it('invokes closeMenu (and not leaveGame) when cancelled', () => {

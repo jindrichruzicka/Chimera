@@ -77,6 +77,7 @@ const expectedTokens = [
     '--ch-color-surface-raised',
     '--ch-color-surface-overlay',
     '--ch-color-scrim',
+    '--ch-color-overlay-backdrop',
     '--ch-color-accent',
     '--ch-color-accent-hover',
     '--ch-color-text-primary',

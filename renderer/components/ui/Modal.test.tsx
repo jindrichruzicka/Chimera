@@ -40,32 +40,7 @@ describe('Modal', () => {
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 
-    it('traps focus and closes on Escape', () => {
-        const onClose = vi.fn();
-
-        render(
-            <Modal open title="Controls" onClose={onClose}>
-                <button type="button">First</button>
-                <button type="button">Second</button>
-            </Modal>,
-        );
-
-        const closeButton = screen.getByRole('button', { name: /close/i });
-        const second = screen.getByRole('button', { name: 'Second' });
-
-        // Initial focus lands on the first focusable element (close button)
-        expect(closeButton).toHaveFocus();
-
-        // Tab from last element wraps back to the close button
-        second.focus();
-        fireEvent.keyDown(document, { key: 'Tab' });
-        expect(closeButton).toHaveFocus();
-
-        fireEvent.keyDown(document, { key: 'Escape' });
-        expect(onClose).toHaveBeenCalledOnce();
-    });
-
-    it('renders a close button that calls onClose when clicked', () => {
+    it('renders a single default Close button that dismisses when no actions are given', () => {
         const onClose = vi.fn();
 
         render(
@@ -74,35 +49,152 @@ describe('Modal', () => {
             </Modal>,
         );
 
-        const closeButton = screen.getByRole('button', { name: /close/i });
-        expect(closeButton).toHaveTextContent('X');
+        const buttons = screen.getAllByRole('button');
+        expect(buttons).toHaveLength(1);
 
-        fireEvent.click(closeButton);
+        const close = screen.getByRole('button', { name: /close/i });
+        expect(close).toBeInTheDocument();
+
+        fireEvent.click(close);
         expect(onClose).toHaveBeenCalledOnce();
     });
 
-    it('renders the close affordance as a danger icon button', () => {
+    it('does not render a header close (X) affordance', () => {
         render(
             <Modal open title="Settings" onClose={vi.fn()}>
                 Modal content
             </Modal>,
         );
 
-        const closeButton = screen.getByRole('button', { name: /^close$/i });
-        expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'danger');
-        expect(closeButton).toHaveTextContent('X');
-        expect(closeButton).not.toHaveTextContent('Close');
+        expect(screen.queryByText('X')).not.toBeInTheDocument();
     });
 
-    it('renders overlay and close affordance while open', () => {
+    it('renders the provided action buttons by label instead of the default', () => {
         render(
-            <Modal open title="Settings" onClose={vi.fn()}>
-                Modal content
+            <Modal
+                open
+                title="Delete replay?"
+                onClose={vi.fn()}
+                actions={[{ label: 'Cancel' }, { label: 'Delete', variant: 'danger' }]}
+            >
+                Body
             </Modal>,
         );
 
-        const dialog = screen.getByRole('dialog', { name: 'Settings' });
-        expect(dialog.parentElement).toBeInTheDocument();
-        expect(screen.getByRole('button', { name: /close/i })).toHaveTextContent('X');
+        expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument();
+        expect(screen.queryByRole('button', { name: /close/i })).not.toBeInTheDocument();
+    });
+
+    it('runs an action then always closes the modal', () => {
+        const onClose = vi.fn();
+        const onDelete = vi.fn();
+
+        render(
+            <Modal
+                open
+                title="Delete replay?"
+                onClose={onClose}
+                actions={[
+                    { label: 'Cancel' },
+                    { label: 'Delete', variant: 'danger', onClick: onDelete },
+                ]}
+            >
+                Body
+            </Modal>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Delete' }));
+
+        expect(onDelete).toHaveBeenCalledOnce();
+        expect(onClose).toHaveBeenCalledOnce();
+        // The action runs before the modal closes.
+        expect(onDelete.mock.invocationCallOrder[0]).toBeLessThan(
+            onClose.mock.invocationCallOrder[0] ?? Infinity,
+        );
+    });
+
+    it('closes when an action without an onClick is clicked', () => {
+        const onClose = vi.fn();
+
+        render(
+            <Modal
+                open
+                title="Delete replay?"
+                onClose={onClose}
+                actions={[{ label: 'Cancel' }, { label: 'Delete', variant: 'danger' }]}
+            >
+                Body
+            </Modal>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+        expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('still closes even if an action throws', () => {
+        const onClose = vi.fn();
+        const boom = vi.fn(() => {
+            throw new Error('boom');
+        });
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        render(
+            <Modal open title="Danger" onClose={onClose} actions={[{ label: 'Go', onClick: boom }]}>
+                Body
+            </Modal>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Go' }));
+        expect(boom).toHaveBeenCalledOnce();
+        expect(onClose).toHaveBeenCalledOnce();
+        expect(errorSpy).toHaveBeenCalledOnce();
+    });
+
+    it('applies the action variant and test id to the rendered button', () => {
+        render(
+            <Modal
+                open
+                title="Settings"
+                onClose={vi.fn()}
+                actions={[{ label: 'Delete', variant: 'danger', testId: 'confirm-delete' }]}
+            >
+                Body
+            </Modal>,
+        );
+
+        const button = screen.getByTestId('confirm-delete');
+        expect(button).toHaveAttribute('data-ch-button-variant', 'danger');
+        expect(button).toHaveAttribute('data-ch-button-size', 'sm');
+        expect(button).toHaveTextContent('Delete');
+    });
+
+    it('traps focus and closes on Escape', () => {
+        const onClose = vi.fn();
+
+        render(
+            <Modal
+                open
+                title="Controls"
+                onClose={onClose}
+                actions={[{ label: 'First' }, { label: 'Second' }]}
+            >
+                Body content
+            </Modal>,
+        );
+
+        const first = screen.getByRole('button', { name: 'First' });
+        const second = screen.getByRole('button', { name: 'Second' });
+
+        // Initial focus lands on the first focusable element (the first action)
+        expect(first).toHaveFocus();
+
+        // Tab from the last element wraps back to the first
+        second.focus();
+        fireEvent.keyDown(document, { key: 'Tab' });
+        expect(first).toHaveFocus();
+
+        fireEvent.keyDown(document, { key: 'Escape' });
+        expect(onClose).toHaveBeenCalledOnce();
     });
 });

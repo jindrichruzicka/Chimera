@@ -1,6 +1,6 @@
 .overlay {
     align-items: center;
-    background-color: var(--ch-color-surface-overlay);
+    background-color: var(--ch-color-overlay-backdrop);
     display: flex;
     inset: var(--ch-space-none);
     justify-content: center;
@@ -9,13 +9,12 @@
     z-index: var(--ch-z-modal);
 }
 
+/*
+ * The dialog is an invisible, width-constrained rectangle — no panel, border,
+ * radius, or shadow. It centres on the backdrop, grows with its content up to a
+ * height threshold, then hands overflow to the scrolling body below.
+ */
 .dialog {
-    background-color: var(--ch-color-surface-raised);
-    border-color: var(--ch-color-border);
-    border-radius: var(--ch-radius-md);
-    border-style: solid;
-    border-width: var(--ch-button-border-width);
-    box-shadow: var(--ch-shadow-lg);
     color: var(--ch-color-text-primary);
     display: flex;
     flex-direction: column;
@@ -27,26 +26,25 @@
     width: calc(var(--ch-space-xl) * 12);
 }
 
-.header {
-    align-items: center;
-    display: flex;
-    justify-content: space-between;
-}
-
 .title {
     font-size: var(--ch-font-size-xl);
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
     margin: var(--ch-space-none);
+    text-align: center;
 }
 
-.closeButton {
-    flex: none;
-}
-
+/*
+ * Only the content scrolls once the dialog hits its height threshold; the title
+ * and the action row stay pinned. `min-height: 0` lets this flex child shrink
+ * below its content size so `overflow-y` engages instead of overflowing the box.
+ */
 .body {
     color: var(--ch-color-text-secondary);
+    flex: 1 1 auto;
     font-size: var(--ch-font-size-md);
+    min-height: 0;
+    overflow-y: auto;
 }
 
 .body > :first-child {
@@ -55,4 +53,16 @@
 
 .body > :last-child {
     margin-block-end: var(--ch-space-none);
+}
+
+/*
+ * The control row is a distinct footer zone: an extra top margin (on top of the
+ * dialog's column gap) sets the buttons lower, away from the content above.
+ */
+.actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--ch-space-md);
+    justify-content: flex-end;
+    margin-block-start: var(--ch-space-md);
 }
