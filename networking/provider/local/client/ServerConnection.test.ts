@@ -438,6 +438,71 @@ describe('ServerConnection — PlayerId stable across reconnect (T03)', () => {
     });
 });
 
+// ─── F68/#821: saved-seat claims on JOIN ──────────────────────────────────────
+
+describe('ServerConnection — saved-seat claims (F68/#821)', () => {
+    /** socketFactory seam that captures every outbound JOIN frame. */
+    function makeCapturingConn(): {
+        conn: ServerConnection;
+        joinFrames: Record<string, unknown>[];
+    } {
+        const joinFrames: Record<string, unknown>[] = [];
+        const conn = new ServerConnection({
+            maxRetries: 0,
+            socketFactory: (u) => {
+                const ws = new WebSocket(u);
+                const realSend = ws.send.bind(ws);
+                (ws as unknown as { send: (data: string) => void }).send = (data: string): void => {
+                    try {
+                        const parsed = JSON.parse(data) as Record<string, unknown>;
+                        if (parsed['type'] === 'JOIN') joinFrames.push(parsed);
+                    } catch {
+                        // non-JSON frame — ignore for capture purposes
+                    }
+                    realSend(data);
+                };
+                return ws;
+            },
+        });
+        return { conn, joinFrames };
+    }
+
+    it('places claims passed to connect() verbatim on the outbound JOIN frame', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { conn, joinFrames } = makeCapturingConn();
+
+        const claims = [
+            { matchId: 'match-1', playerId: 'seat-a' },
+            { matchId: 'match-1', playerId: 'seat-b' },
+        ];
+        await conn.connect(
+            `ws://127.0.0.1:${server.port}`,
+            server.token,
+            defaultProfile,
+            undefined,
+            undefined,
+            claims,
+        );
+
+        expect(joinFrames).toHaveLength(1);
+        expect(joinFrames[0]?.['claims']).toEqual(claims);
+        await conn.close();
+    });
+
+    it('omits the claims key entirely when none are passed (old-server compat)', async () => {
+        const server = makeServer();
+        await server.ready();
+        const { conn, joinFrames } = makeCapturingConn();
+
+        await conn.connect(`ws://127.0.0.1:${server.port}`, server.token, defaultProfile);
+
+        expect(joinFrames).toHaveLength(1);
+        expect(joinFrames[0] !== undefined && 'claims' in joinFrames[0]).toBe(false);
+        await conn.close();
+    });
+});
+
 // ─── #718: STUN/relay endpoint seam ───────────────────────────────────────────
 
 describe('ServerConnection — endpoint seam (#718)', () => {

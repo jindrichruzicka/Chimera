@@ -23,6 +23,7 @@ import type {
     LobbyInfo,
 } from '../MultiplayerProvider.js';
 import { playerId as toPlayerId } from '../MultiplayerProvider.js';
+import { sanitizeSeatClaims } from '../seat-claims.js';
 import type { ServerConnectionOptions } from './client/ServerConnection.js';
 import { LobbyServer } from './server/LobbyServer.js';
 import { MessageRouter } from './server/MessageRouter.js';
@@ -59,6 +60,15 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             maxPlayers: params.maxPlayers,
             // F56: an empty/whitespace host password leaves the lobby open.
             ...(params.password !== undefined ? { password: params.password } : {}),
+            // F68/#821: a restored session seeds its saved seats for join-time
+            // id resolution and reclaims its saved host id.
+            ...(params.restore !== undefined
+                ? {
+                      matchId: params.restore.matchId,
+                      hostPlayerId: params.restore.hostPlayerId,
+                      restoredSeats: params.restore.humanSeats,
+                  }
+                : {}),
         });
 
         // Add to openServers only AFTER ready() succeeds to avoid resource leaks (W-1)
@@ -70,7 +80,9 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
         const lobbyCode = `127.0.0.1:${server.port}:${server.token}`;
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyCode,
-            hostId: toPlayerId(`host-${server.token.slice(0, 8)}`),
+            // F68/#821: a restored host reclaims its saved id; this must match
+            // what LobbyServer mints into WELCOME lobby states.
+            hostId: params.restore?.hostPlayerId ?? toPlayerId(`host-${server.token.slice(0, 8)}`),
             gameId: params.gameId,
         };
 
@@ -106,6 +118,10 @@ export class LocalWebSocketProvider implements MultiplayerProvider {
             },
             params.reconnectPlayerId,
             params.password,
+            // F68/#821: out-of-bounds claims are sanitized before the wire —
+            // the host silently drops schema-invalid JOIN frames, so sending
+            // them raw would hang the join instead of degrading to a fresh id.
+            sanitizeSeatClaims(params.claims),
         );
 
         const transport = new WsClientTransport(conn, assignedPlayerId);

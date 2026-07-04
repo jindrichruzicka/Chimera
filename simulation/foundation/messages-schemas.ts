@@ -68,6 +68,36 @@ export const WIRE_MAX_PROFILE_REJECT_REASON_LENGTH = 256;
 export const WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH = 256;
 
 /**
+ * Coarse bound on the number of saved-seat claims an inbound `JOIN` may carry
+ * (F68/#821). A restoring client presents one claim per saved seat it might
+ * reclaim; real sessions have at most a handful of human seats, so this cap is
+ * generous — anything past it is clearly abusive and dropped as a malformed
+ * frame.
+ */
+export const WIRE_MAX_JOIN_CLAIMS = 16;
+
+/**
+ * Coarse bound on a `JOIN` claim's `matchId`/`playerId`, in UTF-16 code units
+ * (F68/#821). Both are opaque host-minted ids (UUIDs, `player-N`, `host-…`),
+ * so 64 is well above any real value.
+ */
+export const WIRE_MAX_JOIN_CLAIM_ID_LENGTH = 64;
+
+/**
+ * One saved-seat claim on a `JOIN` frame (F68/#821). Strict and opaque by
+ * design: claims carry ids only — no display names or other profile data may
+ * cross the wire here (Invariants #59/#60). The host matches `matchId` against
+ * its own restored match and `playerId` against its known seats; a claim that
+ * matches nothing degrades to a fresh id.
+ */
+const JoinSeatClaim = z
+    .object({
+        matchId: z.string().min(1).max(WIRE_MAX_JOIN_CLAIM_ID_LENGTH),
+        playerId: z.string().min(1).max(WIRE_MAX_JOIN_CLAIM_ID_LENGTH),
+    })
+    .strict();
+
+/**
  * Routing scope for a CHAT frame. Reuses the canonical {@link ChatScopeSchema}
  * from `shared/chat-schemas.ts` so the wire boundary, the IPC boundary, and the
  * preload boundary all validate the same shape — the discriminated union rejects
@@ -219,6 +249,9 @@ const JoinMessage = z
         profile: z.record(z.string(), z.unknown()),
         // Optional lobby password (F56) — validated timing-safe by the host.
         password: z.string().optional(),
+        // Optional saved-seat claims from a restoring client (F68/#821) —
+        // bounded, strict, opaque ids only.
+        claims: z.array(JoinSeatClaim).max(WIRE_MAX_JOIN_CLAIMS).optional(),
     })
     .strict();
 

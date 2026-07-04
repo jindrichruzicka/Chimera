@@ -39,6 +39,8 @@ import type { PlayerId, EngineAction } from '@chimera-engine/simulation/contract
 import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
 import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 import { playerId as toPlayerId, JoinRejectedError } from './MultiplayerProvider.js';
+import { resolveRestoredSeat, sanitizeSeatClaims } from './seat-claims.js';
+import type { SeatResolutionContext } from './seat-claims.js';
 
 // ─── Internal types ───────────────────────────────────────────────────────────
 
@@ -95,9 +97,33 @@ class InMemoryChannel {
 
     closed = false;
 
-    constructor(lobbyCode: string, lobbyInfo: LobbyInfo) {
+    // Restored-session seams (F68/#821) — the resolution policy itself lives
+    // in the shared `resolveRestoredSeat`; seats are seeded for id resolution
+    // only, never fabricated into a roster.
+    /** Host-filtered restored seats in slotIndex order (insertion-ordered). */
+    readonly restoredSeats = new Set<PlayerId>();
+    /** Seats handed out at least once — the claimless fallback never re-hands them. */
+    readonly claimedSeats = new Set<PlayerId>();
+    /** Every identity that completed a join — the only reconnectable ids. */
+    readonly everConnected = new Set<PlayerId>();
+    /** Lookups handed to the shared seat resolver. */
+    readonly seatResolutionCtx: SeatResolutionContext;
+
+    constructor(lobbyCode: string, lobbyInfo: LobbyInfo, restore: HostLobbyParams['restore']) {
         this.lobbyCode = lobbyCode;
         this.lobbyInfo = lobbyInfo;
+        for (const pid of restore?.humanSeats ?? []) {
+            if (pid === restore?.hostPlayerId) continue;
+            this.restoredSeats.add(pid);
+        }
+        this.seatResolutionCtx = {
+            matchId: restore?.matchId,
+            hostPlayerId: restore?.hostPlayerId,
+            restoredSeats: this.restoredSeats,
+            isConnected: (pid) => this.clients.has(pid),
+            isReconnectable: (pid) => this.everConnected.has(pid),
+            isHandedOut: (pid) => this.claimedSeats.has(pid),
+        };
     }
 
     addClient(playerId: PlayerId): ClientRecord {
@@ -158,10 +184,11 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         const lobbyCode = `in-memory-${this.nextId()}`;
         const lobbyInfo: LobbyInfo = {
             sessionId: lobbyCode,
-            hostId: toPlayerId(`host-${this.nextId()}`),
+            // F68/#821: a restored session reclaims its saved host id.
+            hostId: params.restore?.hostPlayerId ?? toPlayerId(`host-${this.nextId()}`),
             gameId: params.gameId,
         };
-        const channel = new InMemoryChannel(lobbyCode, lobbyInfo);
+        const channel = new InMemoryChannel(lobbyCode, lobbyInfo, params.restore);
         this.sessions.set(lobbyCode, channel);
 
         const transport: HostTransport = {
@@ -260,10 +287,21 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
             );
         }
 
-        const clientPlayerId: PlayerId = toPlayerId(`client-${this.nextId()}`);
+        // Sanitize at the join boundary — same seam as LocalWebSocketProvider,
+        // so the shared resolver receives bounded, shape-exact claims.
+        const clientPlayerId =
+            resolveRestoredSeat(
+                channel.seatResolutionCtx,
+                params.reconnectPlayerId,
+                sanitizeSeatClaims(params.claims),
+            ) ?? this.mintFreshClientId(channel);
 
         // Profile gate check (Invariant #61 — gate is the only path to admission)
-        let displayName = `Player-${clientPlayerId}`;
+        // Reclaimed restored seats default to the seat id, matching LobbyServer's
+        // seeded-displayName behavior.
+        let displayName = channel.restoredSeats.has(clientPlayerId)
+            ? String(clientPlayerId)
+            : `Player-${clientPlayerId}`;
         if (channel.profileGate !== null) {
             const gateResult = channel.profileGate(clientPlayerId, params.profile);
             if (!gateResult.admitted) {
@@ -275,6 +313,13 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         }
 
         const record = channel.addClient(clientPlayerId);
+        // Only now is the identity consumed (F68/#821) — marking any earlier
+        // would let a gate-rejected join burn a restored seat for the
+        // claimless fallback or open it to reconnect claims.
+        channel.everConnected.add(clientPlayerId);
+        if (channel.restoredSeats.has(clientPlayerId)) {
+            channel.claimedSeats.add(clientPlayerId);
+        }
 
         const playerEntry: LobbyPlayerEntry = {
             playerId: clientPlayerId,
@@ -390,6 +435,17 @@ export class InMemoryMultiplayerProvider implements MultiplayerProvider {
         };
 
         return Promise.resolve(session);
+    }
+
+    private mintFreshClientId(channel: InMemoryChannel): PlayerId {
+        // Restored seats saved from a prior InMemory session are themselves
+        // 'client-N' ids while the counter restarts per provider — skip
+        // occupied ids so a "fresh" mint can never collide (F68/#821).
+        let pid: PlayerId;
+        do {
+            pid = toPlayerId(`client-${this.nextId()}`);
+        } while (channel.restoredSeats.has(pid) || channel.clients.has(pid));
+        return pid;
     }
 
     dispose(): void {

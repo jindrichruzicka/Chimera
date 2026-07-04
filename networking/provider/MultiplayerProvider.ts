@@ -21,7 +21,10 @@
 
 import type { PlayerId, EngineAction, GameResult } from '@chimera-engine/simulation/contracts';
 import { playerId as _makePlayerId } from '@chimera-engine/simulation/engine/types.js';
-import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
+import type {
+    JoinSeatClaim,
+    WireCommitmentReveal,
+} from '@chimera-engine/simulation/foundation/messages.js';
 import type { ChatScope, ChatRejectReason } from '@chimera-engine/simulation/foundation/chat.js';
 // The projected wire snapshot and the lobby roster contracts now live in the
 // foundation leaf `@chimera-engine/simulation/foundation` (issue #758). `WirePlayerSnapshot` is the
@@ -77,6 +80,19 @@ export const playerId = _makePlayerId;
 // and re-exported above (issue #758). The host-/join-param and transport
 // interfaces below build on them.
 
+/**
+ * One saved-seat claim a restoring client presents on join (F68/#821).
+ *
+ * Alias of the wire-level {@link JoinSeatClaim} so the claim shape has exactly
+ * one declaration. Plain strings on purpose: claims carry opaque host-minted
+ * ids only — no display names or other profile data (Invariants #59/#60). The
+ * host brands a claimed playerId only after matching it against its own
+ * restored seats. Wire bounds: ≤16 claims per JOIN, each id ≤64 chars;
+ * out-of-bounds entries are sanitized away client-side and degrade to a
+ * fresh id.
+ */
+export type SeatClaim = JoinSeatClaim;
+
 /** Parameters for hosting a new lobby session. */
 export interface HostLobbyParams {
     readonly gameId: string;
@@ -89,6 +105,20 @@ export interface HostLobbyParams {
      * broadcast in `LobbyState`/`LobbyInfo` or logged.
      */
     readonly password?: string;
+    /**
+     * Restored-session seed (F68/#821). When set, the provider mints
+     * `hostPlayerId` as the lobby's host id (the host reclaims its saved seat)
+     * and seeds `humanSeats` — the non-host restored human seats, pre-sorted
+     * slotIndex-ascending — for join-time id resolution: a joining client may
+     * reclaim one via a matching {@link SeatClaim}, and claimless joins fill
+     * the seats in order. The initial `LobbyState` still contains only the
+     * host entry; restored seats are never broadcast as a fabricated roster.
+     */
+    readonly restore?: {
+        readonly matchId: string;
+        readonly hostPlayerId: PlayerId;
+        readonly humanSeats: readonly PlayerId[];
+    };
 }
 
 /** Parameters for joining an existing lobby session. */
@@ -108,6 +138,15 @@ export interface JoinLobbyParams {
      * before it reaches any other subsystem (Invariant #61).
      */
     readonly profile?: unknown;
+    /**
+     * Saved-seat claims presented on join (F68/#821). The host grants the
+     * first claim whose `matchId` matches its restored match and whose seat is
+     * known but not connected; anything else — stale matchId, unknown or
+     * already-connected seat, out-of-bounds entries — degrades to a fresh id.
+     * Presenting claims (even an empty array after sanitization) opts the join
+     * out of the claimless restored-seat fallback.
+     */
+    readonly claims?: readonly SeatClaim[];
 }
 
 // `LobbyInfo`, `LobbyPlayerEntry`, and `LobbyState` are declared in the

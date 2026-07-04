@@ -19,7 +19,7 @@ import { describe, it, expect, afterEach } from 'vitest';
 import WebSocket from 'ws';
 import type { PlayerId } from '@chimera-engine/simulation/contracts';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
-import type { DisconnectReason } from '../../MultiplayerProvider.js';
+import type { DisconnectReason, LobbyState } from '../../MultiplayerProvider.js';
 import type {
     ClientMessage,
     ServerMessage,
@@ -72,12 +72,21 @@ afterEach(async () => {
     servers.length = 0;
 });
 
-function makeServer(opts?: { maxPlayers?: number; password?: string }): LobbyServer {
+function makeServer(opts?: {
+    maxPlayers?: number;
+    password?: string;
+    matchId?: string;
+    hostPlayerId?: PlayerId;
+    restoredSeats?: readonly PlayerId[];
+}): LobbyServer {
     const s = new LobbyServer({
         port: 0,
         gameId: 'test',
         maxPlayers: opts?.maxPlayers ?? 4,
         ...(opts?.password === undefined ? {} : { password: opts.password }),
+        ...(opts?.matchId === undefined ? {} : { matchId: opts.matchId }),
+        ...(opts?.hostPlayerId === undefined ? {} : { hostPlayerId: opts.hostPlayerId }),
+        ...(opts?.restoredSeats === undefined ? {} : { restoredSeats: opts.restoredSeats }),
     });
     servers.push(s);
     return s;
@@ -225,6 +234,266 @@ describe('LobbyServer — JOIN handshake', () => {
         });
         expect(rejected.type).toBe('REJECT');
         first.ws.close();
+    });
+});
+
+// ─── Restored-session seams (F68/#821) ───────────────────────────────────────
+
+describe('LobbyServer — restored-session seams (#821)', () => {
+    const hostSaved = toPlayerId('host-saved');
+    const seatA = toPlayerId('seat-a');
+    const seatB = toPlayerId('seat-b');
+
+    function makeRestoredServer(): LobbyServer {
+        return makeServer({
+            matchId: 'match-1',
+            hostPlayerId: hostSaved,
+            restoredSeats: [seatA, seatB],
+        });
+    }
+
+    /**
+     * Like connectAndJoin, but supports seat claims and resolves with the full
+     * WELCOME payload so tests can assert on the lobby state the joiner saw.
+     */
+    function joinRestored(
+        server: LobbyServer,
+        opts: {
+            reconnectPlayerId?: PlayerId;
+            claims?: readonly { matchId: string; playerId: string }[];
+        } = {},
+    ): Promise<{ ws: WebSocket; playerId: PlayerId; lobbyState: LobbyState }> {
+        return new Promise((resolve, reject) => {
+            const ws = new WebSocket(`ws://127.0.0.1:${server.port}`);
+            ws.on('error', reject);
+            ws.on('open', () => {
+                const joinMsg: ClientMessage = {
+                    type: 'JOIN',
+                    token: server.token,
+                    profile: { playerId: toPlayerId('pending'), displayName: 'Restorer' },
+                    ...(opts.reconnectPlayerId === undefined
+                        ? {}
+                        : { reconnectPlayerId: opts.reconnectPlayerId }),
+                    ...(opts.claims === undefined ? {} : { claims: opts.claims }),
+                };
+                ws.send(JSON.stringify(joinMsg));
+            });
+            ws.on('message', (raw) => {
+                const msg = JSON.parse(rawToString(raw)) as ServerMessage;
+                if (msg.type === 'WELCOME') {
+                    resolve({ ws, playerId: msg.playerId, lobbyState: msg.lobbyState });
+                } else if (msg.type === 'REJECT') {
+                    reject(new Error(`JOIN rejected: ${msg.reason}`));
+                }
+            });
+        });
+    }
+
+    /** Close a socket WITHOUT sending LEAVE (a bare drop keeps the seat known). */
+    function drop(ws: WebSocket): Promise<void> {
+        return new Promise((resolve) => {
+            ws.once('close', () => resolve());
+            ws.close();
+        });
+    }
+
+    const sockets: WebSocket[] = [];
+    function track<T extends { ws: WebSocket }>(joined: T): T {
+        sockets.push(joined.ws);
+        return joined;
+    }
+
+    afterEach(() => {
+        for (const ws of sockets) ws.close();
+        sockets.length = 0;
+    });
+
+    it('fills restored seats in slotIndex order for claimless joins, then mints fresh', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const first = track(await joinRestored(server));
+        const second = track(await joinRestored(server));
+        const third = track(await joinRestored(server));
+        expect(first.playerId).toBe(seatA);
+        expect(second.playerId).toBe(seatB);
+        expect(third.playerId).toMatch(/^player-\d+$/);
+    });
+
+    it('grants a claim whose matchId matches and whose seat is free', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(
+            await joinRestored(server, { claims: [{ matchId: 'match-1', playerId: seatB }] }),
+        );
+        expect(joined.playerId).toBe(seatB);
+    });
+
+    it('mints a fresh id for a stale-matchId claim — never the seat fallback', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(
+            await joinRestored(server, {
+                claims: [{ matchId: 'other-match', playerId: seatA }],
+            }),
+        );
+        expect(joined.playerId).toMatch(/^player-\d+$/);
+    });
+
+    it('mints a fresh id for a matching-matchId claim on an unknown playerId', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(
+            await joinRestored(server, {
+                claims: [{ matchId: 'match-1', playerId: 'never-saved' }],
+            }),
+        );
+        expect(joined.playerId).toMatch(/^player-\d+$/);
+    });
+
+    it('treats an empty claims array as claims-presented: fresh id, no seat fallback', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(await joinRestored(server, { claims: [] }));
+        expect(joined.playerId).toMatch(/^player-\d+$/);
+    });
+
+    it('does not let a connected seat be double-claimed', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const holder = track(
+            await joinRestored(server, { claims: [{ matchId: 'match-1', playerId: seatA }] }),
+        );
+        expect(holder.playerId).toBe(seatA);
+        const intruder = track(
+            await joinRestored(server, { claims: [{ matchId: 'match-1', playerId: seatA }] }),
+        );
+        expect(intruder.playerId).toMatch(/^player-\d+$/);
+    });
+
+    it('never grants the saved host id to a claim', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(
+            await joinRestored(server, {
+                claims: [{ matchId: 'match-1', playerId: hostSaved }],
+            }),
+        );
+        expect(joined.playerId).toMatch(/^player-\d+$/);
+    });
+
+    it('skips a claimed-then-dropped seat in the fallback but honors a claim for it', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const holder = await joinRestored(server, {
+            claims: [{ matchId: 'match-1', playerId: seatB }],
+        });
+        expect(holder.playerId).toBe(seatB);
+        await drop(holder.ws);
+
+        const claimless1 = track(await joinRestored(server));
+        expect(claimless1.playerId).toBe(seatA);
+        const claimless2 = track(await joinRestored(server));
+        expect(claimless2.playerId).toMatch(/^player-\d+$/);
+
+        const reclaimer = track(
+            await joinRestored(server, { claims: [{ matchId: 'match-1', playerId: seatB }] }),
+        );
+        expect(reclaimer.playerId).toBe(seatB);
+    });
+
+    it('lets reconnectPlayerId win over claims', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const first = await joinRestored(server);
+        expect(first.playerId).toBe(seatA);
+        await drop(first.ws);
+
+        const second = track(
+            await joinRestored(server, {
+                reconnectPlayerId: seatA,
+                claims: [{ matchId: 'match-1', playerId: seatB }],
+            }),
+        );
+        expect(second.playerId).toBe(seatA);
+    });
+
+    it('never mints a fresh id that collides with a restored seat or live connection', async () => {
+        // Restored seats are themselves prior-session 'player-N' ids while
+        // idCounter restarts at 0 per server — a naive mint would re-issue
+        // 'player-1' and overwrite the seated player's connection.
+        const server = makeServer({
+            matchId: 'match-1',
+            hostPlayerId: hostSaved,
+            restoredSeats: [toPlayerId('player-1'), toPlayerId('player-2')],
+        });
+        await server.ready();
+        const first = track(await joinRestored(server));
+        const second = track(await joinRestored(server));
+        const third = track(await joinRestored(server));
+        expect(first.playerId).toBe('player-1');
+        expect(second.playerId).toBe('player-2');
+        expect(third.playerId).not.toBe('player-1');
+        expect(third.playerId).not.toBe('player-2');
+        expect(third.playerId).toMatch(/^player-\d+$/);
+    });
+
+    it('honors a matchId-proof claim even after the seat holder sent LEAVE', async () => {
+        // LEAVE forgets the player (#687) but must not orphan the SAVED seat:
+        // the claim presents matchId proof from the save file, so the seat
+        // stays reclaimable for the lobby's lifetime.
+        const server = makeRestoredServer();
+        await server.ready();
+        const holder = await joinRestored(server);
+        expect(holder.playerId).toBe(seatA);
+        await new Promise<void>((resolve) => {
+            holder.ws.once('close', () => resolve());
+            holder.ws.send(JSON.stringify({ type: 'LEAVE' } satisfies ClientMessage));
+        });
+
+        const reclaimer = track(
+            await joinRestored(server, { claims: [{ matchId: 'match-1', playerId: seatA }] }),
+        );
+        expect(reclaimer.playerId).toBe(seatA);
+    });
+
+    it('does not grant a never-connected restored seat to a bare reconnectPlayerId', async () => {
+        // Restored seats are reclaimed via matchId-proof claims; the reconnect
+        // path is reserved for players who actually connected this session,
+        // so a stale ticket from another match cannot hijack a saved seat.
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(await joinRestored(server, { reconnectPlayerId: seatB }));
+        expect(joined.playerId).toBe(seatA);
+    });
+
+    it('never grants the saved host id to a reconnectPlayerId', async () => {
+        // The saved host id is distributed in every save file and appears in
+        // knownPlayers once the host broadcasts a roster — but the host never
+        // occupies a client connection, so without a guard a client could be
+        // admitted under the host's identity.
+        const server = makeRestoredServer();
+        await server.ready();
+        server.broadcastLobbyState({
+            info: { sessionId: server.token, hostId: hostSaved, gameId: 'test' },
+            players: [{ playerId: hostSaved, displayName: 'Host', ready: true }],
+        });
+        const joined = track(await joinRestored(server, { reconnectPlayerId: hostSaved }));
+        expect(joined.playerId).not.toBe(hostSaved);
+    });
+
+    it('mints the saved host id into the WELCOME lobby state', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(await joinRestored(server));
+        expect(joined.lobbyState.info.hostId).toBe(hostSaved);
+    });
+
+    it('does not fabricate restored seats into the broadcast roster', async () => {
+        const server = makeRestoredServer();
+        await server.ready();
+        const joined = track(await joinRestored(server));
+        const rosterIds = joined.lobbyState.players.map((p) => p.playerId);
+        expect(rosterIds).toEqual([seatA]);
     });
 });
 

@@ -28,6 +28,9 @@ type ClientMessage =
           type: 'JOIN';
           token: string;
           profile: PlayerProfile; // Client attestation; admitted via ProfileSanitizer.admit()
+          reconnectPlayerId?: PlayerId; // Reclaim a dropped identity that connected this session (#687)
+          password?: string; // Lobby password, compared timing-safe by the host (F56)
+          claims?: JoinSeatClaim[]; // Saved-seat claims: ≤16 opaque {matchId, playerId} entries, ids ≤64 chars (F68/#821)
       }
     | {
           type: 'ACTION';
@@ -56,6 +59,9 @@ type ClientMessage =
     | {
           type: 'PING';
           sentAt: number; // performance.now() on sender (renderer-local; not simulation time)
+      }
+    | {
+          type: 'LEAVE'; // Deliberate departure sent before socket close; suppresses presence toasts (#687)
       };
 
 // Server → Client

@@ -29,7 +29,14 @@ import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { WebSocketServer, WebSocket } from 'ws';
 import type { PlayerId } from '@chimera-engine/simulation/contracts';
 import { playerId as toPlayerId } from '../../MultiplayerProvider.js';
-import type { JoinGateResult, LobbyPlayerEntry, LobbyState } from '../../MultiplayerProvider.js';
+import type {
+    JoinGateResult,
+    LobbyPlayerEntry,
+    LobbyState,
+    SeatClaim,
+} from '../../MultiplayerProvider.js';
+import { resolveRestoredSeat } from '../../seat-claims.js';
+import type { SeatResolutionContext } from '../../seat-claims.js';
 import type {
     ClientMessage,
     ServerMessage,
@@ -62,6 +69,25 @@ export interface LobbyServerOptions {
     readonly password?: string;
     /** Optional structured logger. Logs join/leave events and validation failures. */
     readonly logger?: Logger;
+    /**
+     * Stable match identity of a restored session (F68/#821). A JOIN seat
+     * claim is only honored when its `matchId` equals this value; absent on
+     * non-restored lobbies, so no claim can ever match.
+     */
+    readonly matchId?: string;
+    /**
+     * Saved host PlayerId of a restored session (F68/#821). Minted as the
+     * lobby's `hostId` instead of the default `host-${token}`, and never
+     * grantable to a joining client's claim.
+     */
+    readonly hostPlayerId?: PlayerId;
+    /**
+     * Non-host restored human seats, pre-sorted slotIndex-ascending
+     * (F68/#821). Seeded into `knownPlayers` for id resolution only — never
+     * broadcast as a fabricated roster — and handed out in order to claimless
+     * joins as the join-order fallback.
+     */
+    readonly restoredSeats?: readonly PlayerId[];
 }
 
 // ─── LobbyServer ──────────────────────────────────────────────────────────────
@@ -87,6 +113,27 @@ export class LobbyServer implements MessageBus {
     private readonly disconnectedCbs = new Set<DisconnectCallback>();
     private latestLobbyState: LobbyState | null = null;
     private readonly knownPlayers = new Map<PlayerId, LobbyPlayerEntry>();
+    /**
+     * Host-filtered restored seats in slotIndex order (F68/#821) — the claim
+     * universe and the claimless join-order fallback.
+     */
+    private readonly restoredSeatSet = new Set<PlayerId>();
+    /**
+     * Restored seats that have been handed out at least once (F68/#821). The
+     * join-order fallback never re-hands such a seat — after a drop it stays
+     * reclaimable via an explicit claim or reconnectPlayerId only.
+     */
+    private readonly claimedRestoredSeats = new Set<PlayerId>();
+    /**
+     * Every identity that completed a JOIN on this server instance
+     * (F68/#821). `reconnectPlayerId` is only honored for these — never for
+     * merely-seeded restored seats — so a stale ticket cannot bypass the
+     * matchId gate that claims enforce, and the never-connecting host id
+     * cannot be seized.
+     */
+    private readonly everConnected = new Set<PlayerId>();
+    /** Lookups handed to the shared seat resolver (F68/#821). */
+    private readonly seatResolutionCtx: SeatResolutionContext;
 
     private readonly opts: LobbyServerOptions;
     private readonly logger: Logger | undefined;
@@ -103,6 +150,26 @@ export class LobbyServer implements MessageBus {
         this.opts = opts;
         this.logger = opts.logger;
         this._token = randomBytes(16).toString('hex');
+
+        // Seed restored seats for join-time id resolution (F68/#821). The
+        // knownPlayers entry only provides the seat's displayName default —
+        // this never touches latestLobbyState, so the roster the host
+        // broadcasts still starts with the host entry only.
+        for (const pid of opts.restoredSeats ?? []) {
+            if (pid === opts.hostPlayerId) continue;
+            this.restoredSeatSet.add(pid);
+            this.knownPlayers.set(pid, { playerId: pid, displayName: pid, ready: false });
+        }
+        this.seatResolutionCtx = {
+            matchId: opts.matchId,
+            hostPlayerId: opts.hostPlayerId,
+            restoredSeats: this.restoredSeatSet,
+            isConnected: (pid) => this.connections.has(pid),
+            // knownPlayers preserves the LEAVE-forgets semantics (#687);
+            // everConnected keeps merely-seeded seats out of the reconnect path.
+            isReconnectable: (pid) => this.knownPlayers.has(pid) && this.everConnected.has(pid),
+            isHandedOut: (pid) => this.claimedRestoredSeats.has(pid),
+        };
 
         this.wss = new WebSocketServer({
             port: opts.port,
@@ -342,7 +409,7 @@ export class LobbyServer implements MessageBus {
                     return;
                 }
 
-                const pid = this.resolveJoinPlayerId(msg.reconnectPlayerId);
+                const pid = this.resolveJoinPlayerId(msg.reconnectPlayerId, msg.claims);
 
                 // Profile gate check (Invariant #61)
                 let displayName: string = this.knownPlayers.get(pid)?.displayName ?? pid;
@@ -363,6 +430,13 @@ export class LobbyServer implements MessageBus {
                 }
 
                 this.connections.set(pid, ws);
+                // Only now is the identity consumed (F68/#821) — marking any
+                // earlier would let a gate-rejected join burn a restored seat
+                // for the claimless fallback or open it to reconnect claims.
+                this.everConnected.add(pid);
+                if (this.restoredSeatSet.has(pid)) {
+                    this.claimedRestoredSeats.add(pid);
+                }
                 playerId = pid;
                 authenticated = true;
                 this.logger?.info('player connected', { playerId: pid });
@@ -432,7 +506,8 @@ export class LobbyServer implements MessageBus {
             ({
                 info: {
                     sessionId: this._token,
-                    hostId: toPlayerId(`host-${this._token}`),
+                    // A restored session reclaims its saved host id (F68/#821).
+                    hostId: this.opts.hostPlayerId ?? toPlayerId(`host-${this._token}`),
                     gameId: this.opts.gameId,
                 },
                 players: [],
@@ -455,17 +530,39 @@ export class LobbyServer implements MessageBus {
         return lobbyState;
     }
 
-    private resolveJoinPlayerId(reconnectPlayerId: PlayerId | undefined): PlayerId {
-        if (
-            reconnectPlayerId !== undefined &&
-            !this.connections.has(reconnectPlayerId) &&
-            this.knownPlayers.has(reconnectPlayerId)
-        ) {
-            return reconnectPlayerId;
-        }
+    /**
+     * Resolve the PlayerId a JOIN is admitted under. The F68/#821 priority
+     * chain (reconnect → claims → claimless restored-seat fallback) lives in
+     * the shared `resolveRestoredSeat` so it cannot drift between providers;
+     * this method only adds the fresh `player-N` mint.
+     *
+     * Pure — hand-out bookkeeping happens at admission time only, so a
+     * profile-gate rejection cannot burn a seat.
+     */
+    private resolveJoinPlayerId(
+        reconnectPlayerId: PlayerId | undefined,
+        claims: readonly SeatClaim[] | undefined,
+    ): PlayerId {
+        return (
+            resolveRestoredSeat(this.seatResolutionCtx, reconnectPlayerId, claims) ??
+            this.mintFreshId()
+        );
+    }
 
-        this.idCounter += 1;
-        return toPlayerId(`player-${this.idCounter}`);
+    private mintFreshId(): PlayerId {
+        // Restored seats carry prior-session 'player-N' ids while idCounter
+        // restarts at 0 per server — skip occupied ids so a "fresh" mint can
+        // never collide with a restored seat or a live connection (F68/#821).
+        let pid: PlayerId;
+        do {
+            this.idCounter += 1;
+            pid = toPlayerId(`player-${this.idCounter}`);
+        } while (
+            this.restoredSeatSet.has(pid) ||
+            this.knownPlayers.has(pid) ||
+            this.connections.has(pid)
+        );
+        return pid;
     }
 
     private rememberPlayers(players: readonly LobbyPlayerEntry[]): void {

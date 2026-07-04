@@ -31,6 +31,7 @@ export type {
     LobbyState,
     HostLobbyParams,
     JoinLobbyParams,
+    SeatClaim,
     LobbyListEntry,
     DisconnectReason,
     WireChatPayload,

@@ -14,6 +14,8 @@ import {
     ClientMessageSchema,
     ServerMessageSchema,
     WIRE_MAX_CHAT_BODY_LENGTH,
+    WIRE_MAX_JOIN_CLAIMS,
+    WIRE_MAX_JOIN_CLAIM_ID_LENGTH,
     WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH,
     WIRE_MAX_PROFILE_REJECT_REASON_LENGTH,
 } from './messages-schemas.js';
@@ -67,6 +69,100 @@ describe('ClientMessageSchema — JOIN', () => {
         // Zod strips unknown fields by default in strict mode or passes in passthrough
         // We use .strict() so extra fields are rejected
         expect(result.success).toBe(false);
+    });
+});
+
+describe('ClientMessageSchema — JOIN claims (F68/#821)', () => {
+    const baseJoin = {
+        type: 'JOIN',
+        token: 'abc123',
+        profile: { playerId: toPlayerId('p1'), displayName: 'Alice' },
+    };
+
+    it('parses a JOIN carrying a single seat claim', () => {
+        const result = ClientMessageSchema.safeParse({
+            ...baseJoin,
+            claims: [{ matchId: 'match-1', playerId: 'seat-a' }],
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('parses a JOIN with an empty claims array (claims presented but sanitized away)', () => {
+        const result = ClientMessageSchema.safeParse({ ...baseJoin, claims: [] });
+        expect(result.success).toBe(true);
+    });
+
+    it('accepts claims at the wire caps (16 entries, 64-char ids)', () => {
+        const claim = {
+            matchId: 'm'.repeat(WIRE_MAX_JOIN_CLAIM_ID_LENGTH),
+            playerId: 'p'.repeat(WIRE_MAX_JOIN_CLAIM_ID_LENGTH),
+        };
+        const result = ClientMessageSchema.safeParse({
+            ...baseJoin,
+            claims: Array.from({ length: WIRE_MAX_JOIN_CLAIMS }, () => claim),
+        });
+        expect(result.success).toBe(true);
+    });
+
+    it('rejects claims exceeding the entry cap (coarse DoS bound)', () => {
+        const result = ClientMessageSchema.safeParse({
+            ...baseJoin,
+            claims: Array.from({ length: WIRE_MAX_JOIN_CLAIMS + 1 }, () => ({
+                matchId: 'match-1',
+                playerId: 'seat-a',
+            })),
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a claim with an overlong matchId', () => {
+        const result = ClientMessageSchema.safeParse({
+            ...baseJoin,
+            claims: [
+                { matchId: 'm'.repeat(WIRE_MAX_JOIN_CLAIM_ID_LENGTH + 1), playerId: 'seat-a' },
+            ],
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a claim with an overlong playerId', () => {
+        const result = ClientMessageSchema.safeParse({
+            ...baseJoin,
+            claims: [
+                { matchId: 'match-1', playerId: 'p'.repeat(WIRE_MAX_JOIN_CLAIM_ID_LENGTH + 1) },
+            ],
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects a claim with an empty matchId or playerId', () => {
+        for (const claim of [
+            { matchId: '', playerId: 'seat-a' },
+            { matchId: 'match-1', playerId: '' },
+        ]) {
+            const result = ClientMessageSchema.safeParse({ ...baseJoin, claims: [claim] });
+            expect(result.success).toBe(false);
+        }
+    });
+
+    it('rejects a claim with unknown extra fields (strict schema — opaque ids only)', () => {
+        const result = ClientMessageSchema.safeParse({
+            ...baseJoin,
+            claims: [{ matchId: 'match-1', playerId: 'seat-a', displayName: 'Mallory' }],
+        });
+        expect(result.success).toBe(false);
+    });
+
+    it('rejects non-array claims and non-object claim entries', () => {
+        for (const claims of ['seat-a', [{ matchId: 'match-1' }], ['seat-a']]) {
+            const result = ClientMessageSchema.safeParse({ ...baseJoin, claims });
+            expect(result.success).toBe(false);
+        }
+    });
+
+    it('still parses a JOIN without claims (backward compatible)', () => {
+        const result = ClientMessageSchema.safeParse(baseJoin);
+        expect(result.success).toBe(true);
     });
 });
 

@@ -23,7 +23,7 @@ import type {
     ClientMessage,
     ServerMessage,
 } from '@chimera-engine/simulation/foundation/messages.js';
-import type { DisconnectReason, Unsubscribe } from '../../MultiplayerProvider.js';
+import type { DisconnectReason, SeatClaim, Unsubscribe } from '../../MultiplayerProvider.js';
 import type { LobbyState } from '../../MultiplayerProvider.js';
 import { JoinRejectedError } from '../../MultiplayerProvider.js';
 import type { Logger } from '@chimera-engine/simulation/foundation/logging.js';
@@ -139,6 +139,12 @@ export class ServerConnection {
      * re-authenticates against a password-protected host without re-prompting.
      */
     private password: string | undefined = undefined;
+    /**
+     * Optional saved-seat claims (F68/#821) presented in every JOIN, including
+     * auto-reconnect attempts. Resending them on reconnect is harmless: once a
+     * WELCOME assigned an id, `reconnectPlayerId` outranks claims server-side.
+     */
+    private claims: readonly SeatClaim[] | undefined = undefined;
     // profile is typed Record<string,unknown> internally; connect() widens to unknown so
     // callers never need a cast — the server-side Zod schema validates the shape on receipt.
 
@@ -183,10 +189,12 @@ export class ServerConnection {
         profile: unknown,
         reconnectPlayerId?: PlayerId,
         password?: string,
+        claims?: readonly SeatClaim[],
     ): Promise<ConnectResult> {
         this.url = url;
         this.token = token;
         this.password = password;
+        this.claims = claims;
         this._assignedPlayerId = reconnectPlayerId ?? this._assignedPlayerId;
         // Cast: caller-supplied profile is unknown; server-side Zod schema (ClientMessageSchema)
         // validates the record structure on receipt — widening here is safe.
@@ -262,6 +270,9 @@ export class ServerConnection {
                             : { reconnectPlayerId: this._assignedPlayerId }),
                         profile: this.profile!, // profile is always set before attemptConnect
                         ...(this.password === undefined ? {} : { password: this.password }),
+                        // Omitted (not []) when absent: older hosts validate JOIN
+                        // with a .strict() schema and would drop the whole frame.
+                        ...(this.claims === undefined ? {} : { claims: this.claims }),
                     } satisfies ClientMessage),
                 );
             });

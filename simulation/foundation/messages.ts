@@ -70,10 +70,23 @@ export interface WireCommitmentReveal {
 // ─── Client → Server messages ─────────────────────────────────────────────────
 
 /**
+ * One saved-seat claim on a `JOIN` frame (F68/#821). Opaque bounded ids only —
+ * no display names or other profile data may cross the wire here (Invariants
+ * #59/#60). This is the single wire-level declaration of the claim shape; the
+ * provider layer re-exports it as `SeatClaim`.
+ */
+export interface JoinSeatClaim {
+    readonly matchId: string;
+    readonly playerId: string;
+}
+
+/**
  * All messages a client may send to the LocalWebSocketProvider host.
  *
  * - JOIN          Initial authentication handshake. The `token` is the lobby
  *                 token embedded in the lobby code returned by `hostLobby()`.
+ *                 May carry `reconnectPlayerId` (#687), `password` (F56), and
+ *                 saved-seat `claims` (F68/#821).
  * - ACTION        A game action to be processed by the ActionPipeline on the
  *                 host. `checksum` is CRC32 of JSON(action) — integrity guard,
  *                 not a cryptographic control (§4.3). Populated since F308.
@@ -112,6 +125,14 @@ export type ClientMessage =
            * `REJECT 'invalid_password'`. Absent on open lobbies and older clients.
            */
           readonly password?: string;
+          /**
+           * Optional saved-seat claims presented by a restoring client
+           * (F68/#821). The host matches `matchId` against its restored match
+           * and `playerId` against its restored seats; a claim that matches
+           * nothing degrades to a fresh id. ≤16 entries, each id ≤64 chars
+           * (enforced by the wire schema).
+           */
+          readonly claims?: readonly JoinSeatClaim[];
       }
     | {
           readonly type: 'ACTION';
