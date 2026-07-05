@@ -182,14 +182,19 @@ describe('createSavesIpcPort', () => {
             );
         });
 
-        it('invokes applyRestoredFile with the loaded SaveFile when supplied', async () => {
+        it('awaits restoreSession with the loaded SaveFile when supplied', async () => {
             await repo.save(makeFile('alpha', 1_700_000_000_000, 7));
             const restored: SaveFile[] = [];
+            let restoreSettled = false;
             const restorePort = createSavesIpcPort({
                 saveManager: manager,
                 captureSaveFile: () => Promise.reject(new Error('not used')),
-                applyRestoredFile: (file) => {
+                restoreSession: async (file) => {
                     restored.push(file);
+                    // Force an extra microtask so a fire-and-forget call (missing
+                    // await) would resolve load before this flag flips.
+                    await Promise.resolve();
+                    restoreSettled = true;
                 },
                 logger: createNoopLogger(),
             });
@@ -199,6 +204,22 @@ describe('createSavesIpcPort', () => {
             expect(restored).toHaveLength(1);
             expect(restored[0]?.header.slotId).toBe('alpha');
             expect(restored[0]?.header.gameId).toBe(TACTICS);
+            expect(restoreSettled).toBe(true);
+        });
+
+        it('propagates a restoreSession rejection to the caller', async () => {
+            await repo.save(makeFile('alpha', 1_700_000_000_000, 7));
+            const restorePort = createSavesIpcPort({
+                saveManager: manager,
+                captureSaveFile: () => Promise.reject(new Error('not used')),
+                restoreSession: () =>
+                    Promise.reject(new Error('saves:load: this save belongs to a different match')),
+                logger: createNoopLogger(),
+            });
+
+            await expect(restorePort.load(toSlotId('tactics/alpha'))).rejects.toThrow(
+                /different match/,
+            );
         });
     });
 

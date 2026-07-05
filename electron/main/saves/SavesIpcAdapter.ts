@@ -53,28 +53,27 @@ import type { SaveManager } from './SaveManager.js';
 export type SaveFileCapture = (request: SaveRequest) => Promise<SaveFile>;
 
 /**
- * Apply a previously persisted {@link SaveFile} to the running simulation.
+ * Restore a previously persisted {@link SaveFile} into a playable session.
  *
- * Lives in F18 / SimulationHost wiring — the adapter is intentionally
- * agnostic of how state is restored so this module remains testable
- * without spinning up a host.  When no session is active, callers should
- * skip restoration silently (loading a save before any game is running
- * is a renderer-driven flow that ends with the next host start).
+ * Lives in composition-root wiring (`electron/main/index.ts`), which decides
+ * between the two supported flows (#823): with an active session the file is
+ * live-applied via `SessionRuntime.applyRestoredFile` (Invariant #24); with
+ * no active session the `SessionRestoreCoordinator` hosts a restored session
+ * seeded from `SaveFile.session` and applies the checkpoint through that same
+ * entry point.  Rejections (e.g. loading a different match into a live
+ * session) propagate to the renderer as the load IPC rejection.
  */
-export type SaveFileRestore = (file: SaveFile) => void;
+export type SessionRestoreRequest = (file: SaveFile) => Promise<void>;
 
 export interface CreateSavesIpcPortOptions {
     readonly saveManager: SaveManager;
     readonly captureSaveFile: SaveFileCapture;
     /**
-     * Called after `SaveManager.load(slotId)` resolves with the loaded
-     * {@link SaveFile}.  Production wires this to
-     * `SessionRuntime.applyRestoredFile(file)` so the live snapshot is
-     * replaced by the restored checkpoint (Invariant #24).  When omitted,
-     * load behaves as a pure file fetch — useful for tests and for the
-     * pre-host startup window before any session exists.
+     * Awaited after `SaveManager.restoreFromSave(slotId)` resolves with the
+     * loaded {@link SaveFile}.  When omitted, load behaves as a pure file
+     * fetch — useful for tests exercising only the fetch/convert half.
      */
-    readonly applyRestoredFile?: SaveFileRestore;
+    readonly restoreSession?: SessionRestoreRequest;
     readonly logger: Logger;
 }
 
@@ -84,7 +83,7 @@ export interface CreateSavesIpcPortOptions {
  * `electron/main/index.ts`.
  */
 export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpcPort {
-    const { saveManager, captureSaveFile, applyRestoredFile, logger } = options;
+    const { saveManager, captureSaveFile, restoreSession, logger } = options;
     const log = logger.child({ module: 'saves-ipc-adapter' });
 
     return {
@@ -104,8 +103,8 @@ export function createSavesIpcPort(options: CreateSavesIpcPortOptions): SavesIpc
         },
         load: async (slotId) => {
             const file = await saveManager.restoreFromSave(slotId);
-            if (applyRestoredFile !== undefined) {
-                applyRestoredFile(file);
+            if (restoreSession !== undefined) {
+                await restoreSession(file);
                 log.info('save restored', { slotId });
             }
             // The preload contract returns void; the renderer's role is

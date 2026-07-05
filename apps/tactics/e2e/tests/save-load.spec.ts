@@ -2,16 +2,21 @@
  * F34 — save-load.spec.ts
  * §13.8 Core E2E Test Specifications · §4.11 Save/Load Persistence
  *
- * Part of #526. Implements issue #527.
+ * Part of #526. Implements issue #527; menu-restore relaunch leg from #823.
  *
- * Verifies the full save → close → relaunch → load lifecycle:
+ * Verifies the full save → close → relaunch → menu-load lifecycle:
  *   1. Launch a single-player (pass-and-play) match.
  *   2. Play exactly 3 turns via GamePage actions to advance the simulation tick.
  *   3. Save via chimera:saves:save IPC; read saved slot/tick from __e2eHooks.
  *   4. Close the Electron process.
- *   5. Relaunch using the captured process args + env (same userData dir).
- *   6. Load the saved slot via chimera:saves:load IPC.
- *   7. Assert getSimulationTick() post-relaunch equals the saved checkpoint tick.
+ *   5. Relaunch with the direct-game bootstrap DISABLED (menu boot, same
+ *      userData dir) — since #823 an in-session load of a different match
+ *      rejects, so the relaunched load exercises the real menu-restore path:
+ *      SessionRestoreCoordinator hosts a session seeded from the SaveFile's
+ *      session manifest and applies the checkpoint.
+ *   6. Load the saved slot via chimera:saves:load IPC with NO session active.
+ *   7. Assert getSimulationTick() equals the saved checkpoint tick — the
+ *      all-local (host + pass-and-play) roster starts immediately.
  *
  * Invariants upheld:
  *   #23 — FileSaveRepository writes via .tmp rename; test observes only the
@@ -19,12 +24,17 @@
  *          saves.save() and trust it resolves only after the atomic write).
  *   #24 — SessionRuntime.applyRestoredFile() is the only load entry point;
  *          test dispatches load via IPC (window.__chimera.saves.load), never
- *          calls internal APIs.
+ *          calls internal APIs (the menu flow funnels through the same helper).
  *   #25 — engine:save/engine:load only accepted from host player; single-player
- *          pass-and-play fixture is always the host.
+ *          pass-and-play fixture is always the host, and the menu loader
+ *          becomes the restored session's host.
  *   #26 — pendingCommitments restored on load; the tick assertion implicitly
  *          validates the full end-to-end restore (Invariant #26 fails if
  *          commitments are dropped and the simulation diverges).
+ *
+ * The cross-match rejection branch (loading this save into a DIFFERENT live
+ * match) is covered at unit level in electron/main/index.test.ts (#823); the
+ * menu-driven UI flow (saves screen → waiting overlay) arrives with #826-#829.
  *
  * Module boundary: must NOT import from electron/main/, simulation/, or networking/.
  */
@@ -155,24 +165,28 @@ test.describe('Save / load', () => {
         // Close — fixture teardown will also call close() and suppress the error.
         await saveLoadApp.close();
 
-        // Relaunch with the same userData dir; CHIMERA_E2E=1 is preserved in env.
-        const relaunchedApp = await relaunchElectronApplication(relaunchConfig);
+        // Relaunch with the same userData dir but WITHOUT the direct-game
+        // bootstrap: the empty-string overrides fail the strict role check
+        // (menu boot) and fall back to the renderer root. No session is
+        // active, so the load below exercises the #823 menu-restore path.
+        const relaunchedApp = await relaunchElectronApplication(relaunchConfig, {
+            CHIMERA_E2E_DIRECT_GAME_ROLE: '',
+            CHIMERA_E2E_INITIAL_URL: '',
+        });
         try {
             const relaunchedWindow = await relaunchedApp.firstWindow();
             await relaunchedWindow.waitForLoadState('domcontentloaded');
 
-            // Wait for the match session to become active before loading.
-            // applyRestoredFile silently no-ops when activeSession === null;
-            // the canvas becoming visible is the reliable signal that both
-            // local seats are ready and auto-start has fired.
-            await expect(new GamePage(relaunchedWindow).canvas).toBeVisible({ timeout: 30_000 });
-
-            // Load the saved slot — dispatches load via IPC (Invariant #24).
+            // Load the saved slot — dispatches load via IPC. With no active
+            // session the SessionRestoreCoordinator hosts a session seeded
+            // from the save's session manifest, applies the checkpoint
+            // (Invariant #24), re-adds the pass-and-play seat, and starts
+            // immediately (all-local roster — no waiting state).
             await loadSavedState(relaunchedWindow, slotId);
 
-            // Assert tick equality: SessionRuntime.restoreFromSave() must have
-            // replaced the live GameSnapshot with the checkpoint and restored
-            // pendingCommitments (Invariants #24, #26).
+            // Assert tick equality: the restored session's live GameSnapshot
+            // must be the saved checkpoint with pendingCommitments restored
+            // (Invariants #24, #26).
             await expect
                 .poll(() => getSimulationTick(relaunchedApp), { timeout: 30_000 })
                 .toBe(savedTick);

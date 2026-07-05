@@ -29,8 +29,17 @@ vi.mock('pino', () => {
 });
 
 // ── SaveManager mock (used by main() after the sync-helper removal) ──────────
-const { mockSaveManagerAutoSave, capturedSaveManagerRepoClassName } = vi.hoisted(() => ({
+const {
+    mockSaveManagerAutoSave,
+    mockSaveManagerRestoreFromSave,
+    capturedSaveManagerRepoClassName,
+} = vi.hoisted(() => ({
     mockSaveManagerAutoSave: vi.fn<(file: unknown) => Promise<void>>(() => Promise.resolve()),
+    // Backs the saves:load wiring tests (#823): individual tests seed the
+    // SaveFile the "repository" returns for a load.
+    mockSaveManagerRestoreFromSave: vi.fn<(slotId: string) => Promise<unknown>>(() =>
+        Promise.reject(new Error('test did not seed mockSaveManagerRestoreFromSave')),
+    ),
     // Stores the constructor name of the first arg passed to SaveManager
     // for the BLOCK-1 assertion (avoids importing the real class).
     capturedSaveManagerRepoClassName: { value: '' },
@@ -41,6 +50,7 @@ vi.mock('./saves/SaveManager.js', () => ({
         capturedSaveManagerRepoClassName.value = repo?.constructor?.name ?? '';
         return {
             autoSave: mockSaveManagerAutoSave,
+            restoreFromSave: mockSaveManagerRestoreFromSave,
         };
     }),
 }));
@@ -107,13 +117,87 @@ vi.mock('./settings/SettingsManager.js', () => ({
 // The instance exposes `isLocalSeat` because the live session-manifest closure
 // (#820) consults it when a save is captured after game start; the default is
 // "no local seats" and individual tests override the shared fn.
-const { mockLobbyManagerCtor, mockLobbyManagerIsLocalSeat } = vi.hoisted(() => {
+//
+// For the session-restore wiring tests (#823) the instance also exposes
+// `hostLobby` / `addLocalSeat` / `closeLobby` mirroring the real manager's
+// observable contract: `hostLobby` synchronously invokes the captured
+// `onSessionHosted` callback with a fake transport + metadata derived from the
+// params (the real LobbyManager also calls it synchronously before resolving),
+// `addLocalSeat` fires the captured `onLocalSeatAdded` and marks the seat
+// local, and `closeLobby` runs the teardown returned by `onSessionHosted`.
+const {
+    mockLobbyManagerCtor,
+    mockLobbyManagerIsLocalSeat,
+    mockLobbyManagerHostLobby,
+    mockLobbyManagerAddLocalSeat,
+    mockLobbyManagerCloseLobby,
+    mockLobbyManagerLocalSeatIds,
+    hostedTeardownRef,
+    hostedTransportJoinRef,
+} = vi.hoisted(() => {
+    interface HoistedLobbyCallbacks {
+        onSessionHosted?: (
+            transport: unknown,
+            metadata: { hostId: string; maxPlayers: number },
+        ) => (() => void) | void;
+        onLocalSeatAdded?: (entry: {
+            playerId: string;
+            displayName: string;
+            ready: boolean;
+        }) => void;
+    }
     const mockLobbyManagerIsLocalSeat = vi.fn<(id: string) => boolean>(() => false);
+    const mockLobbyManagerLocalSeatIds = new Set<string>();
+    const hostedTeardownRef = { current: null as (() => void) | null };
+    const hostedTransportJoinRef = {
+        current: null as ((args: { playerId: string }) => void) | null,
+    };
+    const lastCallbacks = (): HoistedLobbyCallbacks | undefined =>
+        mockLobbyManagerCtor.mock.calls.at(-1)?.[2] as HoistedLobbyCallbacks | undefined;
+    const mockLobbyManagerHostLobby = vi.fn(
+        (params: { maxPlayers: number; restore?: { hostPlayerId: string } }) => {
+            const transport = {
+                onPlayerJoined: (cb: (args: { playerId: string }) => void) => {
+                    hostedTransportJoinRef.current = cb;
+                    return () => {};
+                },
+                onPlayerLeft: () => () => {},
+                onActionReceived: () => () => {},
+            };
+            const teardown = lastCallbacks()?.onSessionHosted?.(transport, {
+                hostId: params.restore?.hostPlayerId ?? 'host-fallback',
+                maxPlayers: params.maxPlayers,
+            });
+            hostedTeardownRef.current = typeof teardown === 'function' ? teardown : null;
+            return Promise.resolve({ sessionId: 'restored-session' });
+        },
+    );
+    const mockLobbyManagerAddLocalSeat = vi.fn((pid: string) => {
+        mockLobbyManagerLocalSeatIds.add(pid);
+        lastCallbacks()?.onLocalSeatAdded?.({ playerId: pid, displayName: pid, ready: false });
+        return Promise.resolve();
+    });
+    const mockLobbyManagerCloseLobby = vi.fn(() => {
+        hostedTeardownRef.current?.();
+        hostedTeardownRef.current = null;
+        return Promise.resolve();
+    });
     return {
         mockLobbyManagerIsLocalSeat,
+        mockLobbyManagerHostLobby,
+        mockLobbyManagerAddLocalSeat,
+        mockLobbyManagerCloseLobby,
+        mockLobbyManagerLocalSeatIds,
+        hostedTeardownRef,
+        hostedTransportJoinRef,
         mockLobbyManagerCtor: vi.fn((...args: unknown[]) => {
             void args;
-            return { isLocalSeat: mockLobbyManagerIsLocalSeat };
+            return {
+                isLocalSeat: mockLobbyManagerIsLocalSeat,
+                hostLobby: mockLobbyManagerHostLobby,
+                addLocalSeat: mockLobbyManagerAddLocalSeat,
+                closeLobby: mockLobbyManagerCloseLobby,
+            };
         }),
     };
 });
@@ -475,6 +559,7 @@ const {
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
 } = await import('../preload/apis/system-api.js');
 const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
+const { SAVES_LOAD_CHANNEL } = await import('../preload/apis/saves-api.js');
 const {
     PERSPECTIVE_REPLAY_LIST_CHANNEL,
     PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
@@ -4046,5 +4131,395 @@ describe('main() — host return-to-lobby orchestration (#737)', () => {
 
         expect(broadcastsWithPhase('lobby')).toHaveLength(0);
         expect(mockAgentManagerInstance.clear).not.toHaveBeenCalled();
+    });
+});
+
+// ── Session restore wiring (#823) ─────────────────────────────────────────────
+// Covers the saves:load composition-root wiring in main(): with no active
+// session the SessionRestoreCoordinator hosts a restored lobby seeded from the
+// SaveFile session manifest (hostLobby restore params, #821), applies the
+// checkpoint through the single Invariant #24 helper, seats the saved roster
+// (exact slotIndexes, saved playerIds, AI omniscience), and defers onGameStart
+// behind the existing tryStartGame gate until saved remote seats reconnect.
+// With an active session, a same-match load live-applies and a different-match
+// load rejects renderer-friendly. The coordinator's own state machine is
+// unit-tested in SessionRestoreCoordinator.test.ts; these tests assert the
+// observable main() effects (hostLobby params, broadcasts, game start, the
+// re-captured session manifest).
+describe('main() — session restore wiring (#823)', () => {
+    interface RestoreCapturedSaveFile {
+        readonly checkpoint: { readonly tick: number; readonly matchId?: string };
+        readonly session: {
+            readonly matchId: string;
+            readonly maxPlayers: number;
+            readonly seats: readonly {
+                readonly playerId: string;
+                readonly control: string;
+                readonly slotIndex: number;
+                readonly omniscient?: boolean;
+            }[];
+        };
+    }
+
+    interface RestoreLobbyCallbacks {
+        onSessionHosted?: (
+            transport: {
+                onPlayerJoined(cb: (args: { playerId: string }) => void): () => void;
+                onPlayerLeft(cb: (id: string) => void): () => void;
+                onActionReceived(cb: (from: string, action: unknown) => void): () => void;
+            },
+            metadata: { hostId: ReturnType<typeof playerId>; maxPlayers: number },
+        ) => (() => void) | void;
+        onGameStartRequested?: (state: unknown) => void;
+    }
+
+    interface RestoreSeatFixture {
+        readonly playerId: string;
+        readonly control: 'host' | 'local' | 'remote' | 'ai';
+        readonly slotIndex: number;
+        readonly omniscient?: boolean;
+    }
+
+    const RESTORED_MATCH_ID = 'match-restored';
+
+    function makeRestoreSaveFile(
+        seats: readonly RestoreSeatFixture[],
+        overrides: { matchId?: string; gameId?: string; tick?: number; maxPlayers?: number } = {},
+    ): unknown {
+        const tick = overrides.tick ?? 42;
+        return {
+            header: {
+                schemaVersion: 6,
+                engineVersion: '0.0.0',
+                gameId: overrides.gameId ?? TACTICS_GAME_ID,
+                gameVersion: '0.1.0',
+                slotId: 'restore-slot',
+                savedAt: 1_700_000_000_000,
+                turnNumber: 4,
+                playerNames: seats.map((s) => s.playerId),
+            },
+            checkpoint: {
+                tick,
+                phase: 'playing',
+                turnNumber: 4,
+                players: Object.fromEntries(seats.map((s) => [s.playerId, {}])),
+                matchId: overrides.matchId ?? RESTORED_MATCH_ID,
+            },
+            deltaActions: [],
+            pendingCommitments: {},
+            stagedReveals: {},
+            session: {
+                matchId: overrides.matchId ?? RESTORED_MATCH_ID,
+                maxPlayers: overrides.maxPlayers ?? seats.length,
+                seats,
+            },
+        };
+    }
+
+    const MIXED_ROSTER: readonly RestoreSeatFixture[] = [
+        { playerId: 'host-restored', control: 'host', slotIndex: 0 },
+        { playerId: 'local-restored', control: 'local', slotIndex: 1 },
+        { playerId: 'ai-2', control: 'ai', slotIndex: 2, omniscient: true },
+        { playerId: 'remote-restored', control: 'remote', slotIndex: 3 },
+    ];
+
+    const ALL_LOCAL_ROSTER: readonly RestoreSeatFixture[] = [
+        { playerId: 'host-restored', control: 'host', slotIndex: 0 },
+        { playerId: 'local-restored', control: 'local', slotIndex: 1 },
+        { playerId: 'ai-2', control: 'ai', slotIndex: 2, omniscient: true },
+    ];
+
+    const findSavesLoadHandler = ():
+        | ((event: unknown, slotId: string) => Promise<unknown>)
+        | undefined =>
+        ipcMainHandle.mock.calls.find(([channel]) => channel === SAVES_LOAD_CHANNEL)?.[1] as
+            | ((event: unknown, slotId: string) => Promise<unknown>)
+            | undefined;
+
+    async function loadSlot(file: unknown): Promise<unknown> {
+        mockSaveManagerRestoreFromSave.mockResolvedValueOnce(file);
+        const handler = findSavesLoadHandler();
+        expect(handler).toBeTypeOf('function');
+        return handler?.(undefined, 'tactics/restore-slot');
+    }
+
+    async function autosaveManifest(): Promise<RestoreCapturedSaveFile> {
+        const crashOptions = mockRegisterCrashReporter.mock.calls[0]?.[0];
+        mockSaveManagerAutoSave.mockClear();
+        await crashOptions?.autosave?.();
+        expect(mockSaveManagerAutoSave).toHaveBeenCalledOnce();
+        return mockSaveManagerAutoSave.mock.calls[0]?.[0] as RestoreCapturedSaveFile;
+    }
+
+    beforeEach(() => {
+        ipcMainHandle.mockClear();
+        mockLobbyManagerCtor.mockClear();
+        mockLobbyManagerHostLobby.mockClear();
+        mockLobbyManagerAddLocalSeat.mockClear();
+        mockLobbyManagerCloseLobby.mockClear();
+        mockLobbyManagerLocalSeatIds.clear();
+        mockLobbyManagerIsLocalSeat.mockReset();
+        mockLobbyManagerIsLocalSeat.mockImplementation((id) =>
+            mockLobbyManagerLocalSeatIds.has(id),
+        );
+        mockRegisterCrashReporter.mockClear();
+        mockSaveManagerAutoSave.mockClear();
+        mockSaveManagerRestoreFromSave.mockReset();
+        mockSimulationHostInstance.onGameStart.mockClear();
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        hostedTeardownRef.current = null;
+        hostedTransportJoinRef.current = null;
+    });
+
+    it('menu load with no active session hosts a restored lobby with remote-only humanSeats', async () => {
+        await main(makeTestContributions());
+
+        await loadSlot(makeRestoreSaveFile(MIXED_ROSTER));
+
+        expect(mockLobbyManagerHostLobby).toHaveBeenCalledTimes(1);
+        expect(mockLobbyManagerHostLobby).toHaveBeenCalledWith({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 4,
+            restore: {
+                matchId: RESTORED_MATCH_ID,
+                hostPlayerId: 'host-restored',
+                // Remote seats only — local seats must never be claimable by a
+                // claimless join-order fallback join.
+                humanSeats: ['remote-restored'],
+            },
+        });
+    });
+
+    it('all-local menu load applies the checkpoint and starts immediately with the restored snapshot', async () => {
+        await main(makeTestContributions());
+
+        await loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER));
+
+        // onGameStart fired exactly once, with the RESTORED checkpoint — not the
+        // pre-restore lobby snapshot (the start-suppression gate guarantees the
+        // apply happens first).
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledTimes(1);
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledWith(
+            expect.objectContaining({ tick: 42 }),
+        );
+        // The restored snapshot was broadcast to the host renderer seat.
+        expect(mockStateBroadcasterInstance.broadcast).toHaveBeenCalledWith(
+            expect.objectContaining({ tick: 42 }),
+            'host-restored',
+        );
+
+        // A re-capture (crash autosave) reproduces the restored composition:
+        // same matchId, capacity, and every seat at its exact saved slotIndex.
+        const file = await autosaveManifest();
+        expect(file.session.matchId).toBe(RESTORED_MATCH_ID);
+        expect(file.session.maxPlayers).toBe(3);
+        expect(file.session.seats).toEqual([
+            { playerId: 'host-restored', control: 'host', slotIndex: 0 },
+            { playerId: 'local-restored', control: 'local', slotIndex: 1 },
+            { playerId: 'ai-2', control: 'ai', slotIndex: 2, omniscient: true },
+        ]);
+    });
+
+    it('re-adds restored local seats with their saved playerIds without burning a fresh slot', async () => {
+        await main(makeTestContributions());
+
+        await loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER));
+
+        expect(mockLobbyManagerAddLocalSeat).toHaveBeenCalledTimes(1);
+        expect(mockLobbyManagerAddLocalSeat).toHaveBeenCalledWith('local-restored');
+        // The onLocalSeatAdded guard kept the seat at its saved slot: a second
+        // (fresh-slot) registration would have moved it off slotIndex 1.
+        const file = await autosaveManifest();
+        expect(file.session.seats).toContainEqual({
+            playerId: 'local-restored',
+            control: 'local',
+            slotIndex: 1,
+        });
+    });
+
+    it('defers game start until a saved remote seat reconnects through the re-sync path', async () => {
+        await main(makeTestContributions());
+
+        await loadSlot(makeRestoreSaveFile(MIXED_ROSTER));
+
+        // Remote seat missing: the start gate must stay closed (no AI can act).
+        expect(mockSimulationHostInstance.onGameStart).not.toHaveBeenCalled();
+
+        mockStateBroadcasterInstance.broadcast.mockClear();
+        hostedTransportJoinRef.current?.({ playerId: 'remote-restored' });
+
+        // The last reconnect opens the gate with the restored snapshot…
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledTimes(1);
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledWith(
+            expect.objectContaining({ tick: 42 }),
+        );
+        // …and the rejoining player was re-synced (reconnect path — no fresh
+        // seat registration), keeping its saved slotIndex.
+        expect(mockStateBroadcasterInstance.broadcast).toHaveBeenCalledWith(
+            expect.objectContaining({ tick: 42 }),
+            'remote-restored',
+        );
+        const file = await autosaveManifest();
+        expect(file.session.seats).toContainEqual({
+            playerId: 'remote-restored',
+            control: 'remote',
+            slotIndex: 3,
+        });
+    });
+
+    it('rejects a menu load whose save belongs to a different game', async () => {
+        await main(makeTestContributions());
+
+        await expect(
+            loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER, { gameId: 'other-game' })),
+        ).rejects.toThrow(/save is for game/);
+        expect(mockLobbyManagerHostLobby).not.toHaveBeenCalled();
+    });
+
+    it('starts immediately even when a migrated manifest overstates maxPlayers', async () => {
+        await main(makeTestContributions());
+
+        // A sparse migrated v5 manifest records maxPlayers = highestSlot + 1,
+        // which can exceed the seat count. The start gate must wait for the
+        // ROSTER, not the inflated hint — otherwise the restore reports
+        // complete while the game never starts.
+        await loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER, { maxPlayers: 6 }));
+
+        expect(mockLobbyManagerHostLobby).toHaveBeenCalledWith(
+            expect.objectContaining({ maxPlayers: 3 }),
+        );
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledTimes(1);
+        const file = await autosaveManifest();
+        expect(file.session.maxPlayers).toBe(3);
+    });
+
+    it('a failed restore hosting does not wedge the next hosted session', async () => {
+        await main(makeTestContributions());
+        mockLobbyManagerHostLobby.mockRejectedValueOnce(new Error('port already in use'));
+
+        await expect(loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER))).rejects.toThrow(
+            /port already in use/,
+        );
+
+        // Host a normal session directly: if the failed restore left the
+        // start-suppression gate latched, this session would never start.
+        const callbacks = mockLobbyManagerCtor.mock.calls.at(-1)?.[2] as
+            | RestoreLobbyCallbacks
+            | undefined;
+        const joinRef: { current?: (args: { playerId: string }) => void } = {};
+        callbacks?.onSessionHosted?.(
+            {
+                onPlayerJoined: (cb) => {
+                    joinRef.current = cb;
+                    return () => {};
+                },
+                onPlayerLeft: () => () => {},
+                onActionReceived: () => () => {},
+            },
+            { hostId: playerId('host-after-failed-restore'), maxPlayers: 2 },
+        );
+        joinRef.current?.({ playerId: 'guest-after-failed-restore' });
+
+        expect(mockSimulationHostInstance.onGameStart).toHaveBeenCalledTimes(1);
+    });
+
+    it('rejects a menu load while a joined-client session is active', async () => {
+        await main(makeTestContributions());
+
+        const callbacks = mockLobbyManagerCtor.mock.calls.at(-1)?.[2] as
+            | {
+                  onSessionJoined?: (transport: unknown) => (() => void) | void;
+              }
+            | undefined;
+        expect(callbacks?.onSessionJoined).toBeTypeOf('function');
+        callbacks?.onSessionJoined?.({
+            onSnapshotReceived: vi.fn(() => () => {}),
+            onReveal: vi.fn(() => () => {}),
+        });
+
+        // activeSession stays null on a joined client, but routing into the
+        // menu-restore flow would surface LobbyManager's "session already
+        // active" hosting error — the guard must reject renderer-friendly.
+        await expect(loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER))).rejects.toThrow(
+            /joined to another session/,
+        );
+        expect(mockLobbyManagerHostLobby).not.toHaveBeenCalled();
+    });
+
+    describe('with an active session', () => {
+        function makeStartLobbyState(
+            hostId: ReturnType<typeof playerId>,
+            players: readonly ReturnType<typeof playerId>[],
+        ): unknown {
+            return {
+                info: { sessionId: 'session-restore-wire', hostId, gameId: 'tactics' },
+                players: players.map((id) => ({
+                    playerId: id,
+                    displayName: `Player ${id}`,
+                    ready: true,
+                })),
+            };
+        }
+
+        /** Host a session directly (bypassing hostLobby) and start a match. */
+        async function hostAndStartMatch(): Promise<{ matchId: string }> {
+            await main(makeTestContributions());
+
+            const callbacks = mockLobbyManagerCtor.mock.calls.at(-1)?.[2] as
+                | RestoreLobbyCallbacks
+                | undefined;
+            expect(callbacks?.onSessionHosted).toBeTypeOf('function');
+            if (callbacks === undefined) {
+                throw new Error('Expected LobbyManager callbacks to be wired');
+            }
+            const joinRef: { current?: (args: { playerId: string }) => void } = {};
+            const transport = {
+                onPlayerJoined: vi.fn((cb: (args: { playerId: string }) => void) => {
+                    joinRef.current = cb;
+                    return () => {};
+                }),
+                onPlayerLeft: vi.fn(() => () => {}),
+                onActionReceived: vi.fn(() => () => {}),
+            };
+            const hostId = playerId('host-restwire');
+            callbacks.onSessionHosted?.(transport, { hostId, maxPlayers: 2 });
+            const guestId = playerId('guest-restwire');
+            joinRef.current?.({ playerId: guestId });
+            callbacks.onGameStartRequested?.(makeStartLobbyState(hostId, [hostId, guestId]));
+
+            const { session } = await autosaveManifest();
+            return { matchId: session.matchId };
+        }
+
+        it('live-applies an in-session load of the same match without hosting a new lobby', async () => {
+            const { matchId } = await hostAndStartMatch();
+            mockStateBroadcasterInstance.broadcast.mockClear();
+
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER, { matchId, tick: 77 }));
+
+            expect(mockLobbyManagerHostLobby).not.toHaveBeenCalled();
+            expect(mockStateBroadcasterInstance.broadcast).toHaveBeenCalledWith(
+                expect.objectContaining({ tick: 77 }),
+                'host-restwire',
+            );
+        });
+
+        it('rejects an in-session load of a different match and leaves the snapshot untouched', async () => {
+            const { matchId } = await hostAndStartMatch();
+            mockStateBroadcasterInstance.broadcast.mockClear();
+
+            await expect(
+                loadSlot(makeRestoreSaveFile(MIXED_ROSTER, { matchId: 'other-match', tick: 99 })),
+            ).rejects.toThrow(/different match/);
+
+            expect(mockLobbyManagerHostLobby).not.toHaveBeenCalled();
+            expect(mockStateBroadcasterInstance.broadcast).not.toHaveBeenCalledWith(
+                expect.objectContaining({ tick: 99 }),
+                expect.anything(),
+            );
+            // The live match identity is unchanged.
+            const file = await autosaveManifest();
+            expect(file.session.matchId).toBe(matchId);
+        });
     });
 });

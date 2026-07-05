@@ -58,6 +58,7 @@ import { FileSettingsRepository } from './settings/FileSettingsRepository.js';
 import {
     JsonSaveSerializer,
     createDefaultMigrator,
+    type SaveFile,
     type SaveSeat,
     type SaveSessionManifest,
 } from '@chimera-engine/simulation/persistence/index.js';
@@ -107,6 +108,7 @@ import {
     type E2eSessionRuntime,
 } from './runtime/SessionRuntime.js';
 import { wireDefaultSceneActions } from './runtime/SceneActionWiring.js';
+import { SessionRestoreCoordinator } from './runtime/SessionRestoreCoordinator.js';
 import { PlayerDirectory } from './profile/PlayerDirectory.js';
 import { createProfileGate } from './profile/ProfileGate.js';
 import { ChatRelay } from './ChatRelay.js';
@@ -1232,6 +1234,18 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     let seatLobbyAgentsForGameStart:
         | ((agentSlots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
+    // Seats a restored save's roster into the freshly hosted session (F68 #823).
+    // Assigned inside `onSessionHosted` (the `seatLobbyAgentsForGameStart`
+    // pattern) so the SessionRestoreCoordinator can drive seating from outside;
+    // null when no hosted session is live.
+    let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
+    // Suppresses `tryStartGame` between restore-hosting and roster completion:
+    // `onSessionHosted` fires a start attempt DURING `hostLobby` and local-seat
+    // re-adds fire more, all before the checkpoint is applied — without this
+    // gate a small roster could start the game on the pre-restore lobby
+    // snapshot. Raised by the coordinator's hostLobby port, cleared at the tail
+    // of `seatRestoredRoster` (which then retries the start itself).
+    let restoreSeatingActive = false;
 
     // Joined-client perspective recording state (F44b T5). Non-null only inside a
     // joined session: `onSessionJoined` arms it, the cleanup fn disarms it, and
@@ -1962,6 +1976,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             };
 
             const tryStartGame = (): void => {
+                // Mid-restore the roster is incomplete and the checkpoint may not
+                // be applied yet — `seatRestoredRoster` retries once seating is
+                // done (F68 #823).
+                if (restoreSeatingActive) {
+                    return;
+                }
                 if (!gameStarted && activePlayers.size >= metadata.maxPlayers) {
                     gameStarted = true;
                     simulationHost.onGameStart(sessionRuntime.getSnapshot());
@@ -2026,6 +2046,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             };
 
             handleHostedLocalSeatAdded = (entry): void => {
+                // A restored local seat was already registered at its SAVED
+                // slotIndex by `seatRestoredRoster` before `addLocalSeat` fired
+                // this callback — re-registering here would burn a fresh slot
+                // (F68 #823). Fresh pass-and-play seats are never pre-active.
+                if (activePlayers.has(entry.playerId)) {
+                    return;
+                }
                 activePlayers.add(entry.playerId);
                 registerSlotAgent(entry.playerId, nextHumanSlotIndex());
                 tryStartGame();
@@ -2053,6 +2080,55 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 return aiSlots.map((slot) => slot.playerId);
             };
 
+            // Seat a restored save's roster (F68 #823). Driven by the
+            // SessionRestoreCoordinator AFTER the checkpoint is applied, so
+            // every agent registers over the restored snapshot. Mirrors
+            // `seatLobbyAgentsForGameStart`: re-points `currentAgentSlots` at
+            // the saved AI roster (so `registerSlotAgent` resolves kind +
+            // omniscience, and a re-save reproduces the manifest), then seeds
+            // the seating state from the saved seats at their EXACT slot
+            // indexes. ALL seats join `registeredPlayers` so a returning
+            // remote takes the reconnect re-sync path in `onPlayerJoined`;
+            // only host/ai/local seats join `activePlayers` — missing remotes
+            // keep the `tryStartGame` gate closed until they reconnect.
+            seatRestoredRoster = async (seats): Promise<void> => {
+                try {
+                    currentAgentSlots = seats
+                        .filter((seatEntry) => seatEntry.control === 'ai')
+                        .map((seatEntry) => ({
+                            slotIndex: seatEntry.slotIndex,
+                            kind: 'ai' as const,
+                            ...(seatEntry.omniscient === true ? { omniscient: true } : {}),
+                        }));
+                    // Rebuild slot assignments from the saved roster — the hosting
+                    // preamble seated the host at slot 0, which the manifest's own
+                    // host seat re-asserts below.
+                    assignedSlotIndexes.clear();
+                    for (const seatEntry of seats) {
+                        assignedSlotIndexes.add(seatEntry.slotIndex);
+                        registeredPlayers.add(seatEntry.playerId);
+                        registerSlotAgent(seatEntry.playerId, seatEntry.slotIndex);
+                        if (seatEntry.control !== 'remote') {
+                            activePlayers.add(seatEntry.playerId);
+                        }
+                        if (seatEntry.control === 'local') {
+                            // Re-adding under the SAVED playerId keeps seat handoff
+                            // and manifest classification working; the pre-seeded
+                            // `activePlayers` entry makes `handleHostedLocalSeatAdded`
+                            // a no-op for this seat. Resolves without real I/O.
+                            await lobbyManager.addLocalSeat(seatEntry.playerId);
+                        }
+                    }
+                } finally {
+                    // Always release the start-suppression gate — a mid-seating
+                    // failure is unwound by the coordinator's closeLobby, but if
+                    // that unwind itself failed the gate must not stay latched
+                    // for the next session.
+                    restoreSeatingActive = false;
+                }
+                tryStartGame();
+            };
+
             const registeredPlayers = new Set<PlayerId>(initialPlayerIds);
             for (const slot of initialPlayerSlots) {
                 registerSlotAgent(slot.playerId, slot.slotIndex);
@@ -2076,6 +2152,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 if (isReconnect) {
                     broadcastCurrentGameSnapshot(pid);
                 }
+                // Fill a missing restored seat (F68 #823) — a no-op outside an
+                // in-flight restore.
+                sessionRestoreCoordinator.notePlayerJoined(pid);
             });
             const unsubLeft = transport.onPlayerLeft((pid, reason) => {
                 activePlayers.delete(pid);
@@ -2158,6 +2237,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     seatLobbyAgentsForGameStart = null;
                     broadcastRestoredSnapshot = null;
                     resetActiveSessionToLobby = null;
+                    seatRestoredRoster = null;
+                    restoreSeatingActive = false;
+                    // Aborts an in-flight restore / re-arms a completed one so
+                    // a later menu-load can restore again (F68 #823).
+                    sessionRestoreCoordinator.noteSessionClosed();
                 }
             };
         },
@@ -2446,6 +2530,52 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         ...(resolvedE2eHooks !== undefined ? { e2eHooks: resolvedE2eHooks } : {}),
     });
 
+    // The ONE live-restore apply path (Invariant #24), shared by the in-session
+    // load branch and the menu-restore coordinator below. Re-pointing
+    // `currentMatchId` at the file keeps the in-session same-match guard and a
+    // later re-save's manifest coherent with the restored checkpoint.
+    const applyRestoredFileToActiveSession = (file: SaveFile): void => {
+        if (activeSession === null) {
+            throw new Error('saves:load: no active session to apply the restored save to.');
+        }
+        activeSession.applyRestoredFile(file);
+        currentMatchId = file.session.matchId;
+        broadcastRestoredSnapshot?.();
+    };
+
+    // Menu-load restore orchestrator (F68 #823): hosts a lobby pre-seeded with
+    // the saved roster, applies the checkpoint through the Invariant #24 helper
+    // above, seats the roster, and tracks missing remote seats until the
+    // `tryStartGame` gate can open. `onStatusChanged` is the seam the
+    // restore-status IPC push (#826) will attach to.
+    const sessionRestoreCoordinator = new SessionRestoreCoordinator({
+        logger,
+        ports: {
+            hostLobby: async ({ maxPlayers, restore }) => {
+                // Suppress start attempts until the checkpoint is applied and
+                // the roster is seated (see `restoreSeatingActive`). Cleared on
+                // failure so an aborted hosting never wedges the next session.
+                restoreSeatingActive = true;
+                try {
+                    await lobbyManager.hostLobby({ gameId: HOSTED_GAME_ID, maxPlayers, restore });
+                } catch (error) {
+                    restoreSeatingActive = false;
+                    throw error;
+                }
+            },
+            applyRestoredFile: applyRestoredFileToActiveSession,
+            seatRestoredRoster: async (seats) => {
+                if (seatRestoredRoster === null) {
+                    throw new Error(
+                        'saves:load: hosted session wiring incomplete — cannot seat the roster.',
+                    );
+                }
+                await seatRestoredRoster(seats);
+            },
+            closeLobby: () => lobbyManager.closeLobby(),
+        },
+    });
+
     // Register the `chimera:game:*` channels.
     registerGameHandlers({
         ipcMain,
@@ -2493,11 +2623,12 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // can surface the error rather than silently writing a half-built
     // file.
     //
-    // `applyRestoredFile` writes the loaded `SaveFile.checkpoint` back into
-    // the active session's snapshot (Invariant #24, WARN-2 fix).  When no
-    // session is active the call is silently skipped — load can be
-    // triggered before host start (a renderer-driven load from the menu) and
-    // the snapshot will be applied when the next session is hosted.
+    // `restoreSession` routes a loaded `SaveFile` (F68 #823): with an active
+    // session a SAME-match file is live-applied via the Invariant #24 helper
+    // (a different match rejects renderer-friendly); with no active session
+    // the SessionRestoreCoordinator hosts a restored session seeded from the
+    // file's `session` manifest and applies the checkpoint through that same
+    // helper.
     const savesLogger = logger.child({ module: 'saves' });
     registerSavesHandlers({
         ipcMain,
@@ -2516,17 +2647,40 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
                 return Promise.resolve(activeSession.captureSaveFile(request));
             },
-            applyRestoredFile: (file) => {
-                if (activeSession === null) {
-                    savesLogger.warn(
-                        'saves:load received before any session was hosted; ' +
-                            'snapshot will not be applied to the live session.',
-                        { slotId: file.header.slotId },
+            restoreSession: async (file) => {
+                if (file.header.gameId !== HOSTED_GAME_ID) {
+                    throw new Error(
+                        `saves:load: save is for game "${file.header.gameId}" — ` +
+                            `this host runs "${HOSTED_GAME_ID}".`,
                     );
-                    return;
                 }
-                activeSession.applyRestoredFile(file);
-                broadcastRestoredSnapshot?.();
+                if (activeSession !== null) {
+                    // In-session load: only the SAME match may be live-applied.
+                    // A different match (or a hosted-but-unstarted lobby, where
+                    // no match identity exists yet) must go through the menu
+                    // flow so the roster is re-seated from the manifest.
+                    if (currentMatchId !== null && file.session.matchId === currentMatchId) {
+                        applyRestoredFileToActiveSession(file);
+                        return;
+                    }
+                    throw new Error(
+                        'saves:load: this save belongs to a different match than the ' +
+                            'active session — return to the main menu to load it.',
+                    );
+                }
+                // A joined client has no `activeSession` but does hold a live
+                // provider session — routing into the menu-restore flow would
+                // surface LobbyManager's hosting-conflict error. Only the host
+                // may restore (Invariant #25); reject renderer-friendly.
+                if (joinedSessionActive) {
+                    throw new Error(
+                        'saves:load: cannot load a save while joined to another session — ' +
+                            'leave the session first.',
+                    );
+                }
+                // Menu flow: host a session seeded from the saved roster and
+                // apply the checkpoint (F68 #823).
+                await sessionRestoreCoordinator.restoreSession(file);
             },
             logger: savesLogger,
         }),
