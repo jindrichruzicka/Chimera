@@ -30,6 +30,7 @@ import type {
     PlayerId,
     PlayerSnapshot,
     LobbyAgentSlot,
+    SeatClaim,
     Unsubscribe,
     WireChatPayload,
 } from '@chimera-engine/networking';
@@ -124,6 +125,17 @@ export interface LobbyManagerOptions {
      * `undefined` — all seeding no-ops and behavior stays backward-compatible.
      */
     readonly resolveLobbySetup?: (gameId: string) => GameLobbySetup | undefined;
+    /**
+     * Supplies this client's remembered seat claims for outbound JOIN requests
+     * (F68 #822). Injected from the composition root (`electron/main/index.ts`),
+     * which sources them from the `SessionTicketStore` — the manager never
+     * touches the store directly (Invariant #37). Consulted only when the
+     * caller did not supply `claims` itself; returning `undefined` (a fresh
+     * client) omits the key entirely so the host's claimless join-order
+     * fallback stays available (#821). A resolver failure degrades to a
+     * claimless join — reclaiming a seat is a convenience, joining is not.
+     */
+    readonly resolveJoinClaims?: () => Promise<readonly SeatClaim[] | undefined>;
 }
 
 export interface AddLocalSeatOptions {
@@ -182,6 +194,7 @@ export class LobbyManager {
     private readonly onProfileRejected: LobbyManagerOptions['onProfileRejected'];
     private readonly e2eHooks: LobbyManagerOptions['e2eHooks'];
     private readonly resolveLobbySetup: LobbyManagerOptions['resolveLobbySetup'];
+    private readonly resolveJoinClaims: LobbyManagerOptions['resolveJoinClaims'];
     /**
      * Opponents currently in a transient-drop state (left with a non-deliberate
      * reason, not yet reconnected). Gates the "reconnected" toast so it fires
@@ -212,6 +225,7 @@ export class LobbyManager {
         this.onProfileRejected = options.onProfileRejected;
         this.e2eHooks = options.e2eHooks;
         this.resolveLobbySetup = options.resolveLobbySetup;
+        this.resolveJoinClaims = options.resolveJoinClaims;
     }
 
     /**
@@ -732,6 +746,24 @@ export class LobbyManager {
                 'LobbyManager: session already active — call closeLobby() before joining',
             );
         }
+
+        // Present this client's remembered seat claims (F68 #822) unless the
+        // caller supplied its own. `undefined` keeps the key absent — a fresh
+        // client must not send `claims: []`, which would opt it out of the
+        // host's claimless join-order fallback (#821).
+        if (params.claims === undefined && this.resolveJoinClaims !== undefined) {
+            try {
+                const claims = await this.resolveJoinClaims();
+                if (claims !== undefined) {
+                    params = { ...params, claims };
+                }
+            } catch (error) {
+                this.log.warn('resolveJoinClaims failed — joining without claims', {
+                    error: error instanceof Error ? error.message : String(error),
+                });
+            }
+        }
+
         let session: JoinedSession;
         try {
             session = await this.provider.joinLobby(params);

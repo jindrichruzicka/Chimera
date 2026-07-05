@@ -195,6 +195,17 @@ describe('JoinLobbyParamsSchema', () => {
             }).success,
         ).toBe(false);
     });
+
+    it('strips renderer-supplied claims — seat claims are main-side only (#822)', () => {
+        // Session-ticket claims are injected by the composition root after
+        // this schema runs; a renderer must never be able to smuggle them in.
+        const result = JoinLobbyParamsSchema.safeParse({
+            address: 'ws://127.0.0.1:7777',
+            claims: [{ matchId: 'match-a', playerId: 'p-stolen-seat' }],
+        });
+        expect(result.success).toBe(true);
+        if (result.success) expect('claims' in result.data).toBe(false);
+    });
 });
 
 describe('SetMatchSettingPayloadSchema', () => {

@@ -46,6 +46,8 @@ import { FileSaveRepository } from './saves/FileSaveRepository.js';
 import { createSavesIpcPort } from './saves/SavesIpcAdapter.js';
 import { ProfileManager } from './profile/ProfileManager.js';
 import { FileProfileRepository } from './profile/FileProfileRepository.js';
+import { FileSessionTicketStore } from './session/FileSessionTicketStore.js';
+import { createSnapshotTicketRecorder } from './session/snapshot-ticket-recorder.js';
 import type {
     PlayerLeftMatchEvent,
     ReplayNavigateKind,
@@ -1272,6 +1274,21 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // exactOptionalPropertyTypes. Absent for a game that declares no content.
     const hostedContentDb = contentDbs.get(HOSTED_GAME_ID);
 
+    // Session tickets remember which seat this client held per match (F68 #822)
+    // so the next joinLobby can present them as JOIN claims and reclaim the
+    // seat on a restored session (#821). Concrete store chosen here (invariant
+    // #37); tickets hold opaque ids only and never cross IPC (Inv #59/#60).
+    const sessionTicketLogger = logger.child({ module: 'session-tickets' });
+    const sessionTicketStore = new FileSessionTicketStore(
+        path.join(userData, 'session-tickets.json'),
+        sessionTicketLogger,
+    );
+    const recordSessionTicket = createSnapshotTicketRecorder({
+        store: sessionTicketStore,
+        gameId: HOSTED_GAME_ID,
+        logger: sessionTicketLogger,
+    });
+
     // Register E2E hooks at the wiring point so no module-level side effects
     // are needed in SimulationHost.ts (WARN-1 / §2 DIP).
     registerE2eHooks(process.env);
@@ -1309,6 +1326,20 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         // so the manager can seed host-authored defaults without importing
         // `games/*` (Invariant #2). Empty registry → no-op seeding (#706).
         resolveLobbySetup,
+        // Present this client's remembered seats as JOIN claims (F68 #822).
+        // `undefined` when no ticket matches the hosted game — a fresh client
+        // must omit the key entirely to keep the host's claimless join-order
+        // fallback available (#821); the provider sanitizes and caps the list.
+        resolveJoinClaims: async () => {
+            const tickets = await sessionTicketStore.claims();
+            const relevant = tickets.filter((ticket) => ticket.gameId === HOSTED_GAME_ID);
+            return relevant.length > 0
+                ? relevant.map((ticket) => ({
+                      matchId: ticket.matchId,
+                      playerId: ticket.playerId,
+                  }))
+                : undefined;
+        },
         onSessionHosted: (transport, metadata) => {
             activeE2eHooks = metadata.e2eHooks;
             const agentManager = new AgentManager({ logger: lobbyLogger });
@@ -2327,6 +2358,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         },
         onClientSnapshotReceived: (snapshot, checksum) => {
             lastSentPlayerSnapshot = snapshot;
+            // Remember this seat for restored-session reclaim (F68 #822) —
+            // fire-and-forget inside the recorder; never blocks live egress.
+            recordSessionTicket(snapshot);
             resolvedE2eHooks?.onBroadcastChecksum(snapshot.tick, snapshot.viewerId, checksum);
             const win = mainWindow;
             if (win !== null && !win.isDestroyed() && !win.webContents.isDestroyed()) {
