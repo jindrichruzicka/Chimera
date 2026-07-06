@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
+import { MAX_SAVE_LABEL_LENGTH } from '../../preload/api-types.js';
 import {
     EngineActionSchema,
     GameIdSchema,
@@ -321,6 +322,24 @@ describe('SaveRequestSchema', () => {
         expect(SaveRequestSchema.safeParse({ gameId: 'sample-game', label: 42 }).success).toBe(
             false,
         );
+    });
+
+    it('accepts a label at the shared maximum length', () => {
+        expect(
+            SaveRequestSchema.safeParse({
+                gameId: 'sample-game',
+                label: 'a'.repeat(MAX_SAVE_LABEL_LENGTH),
+            }).success,
+        ).toBe(true);
+    });
+
+    it('rejects a label over the shared maximum length', () => {
+        expect(
+            SaveRequestSchema.safeParse({
+                gameId: 'sample-game',
+                label: 'a'.repeat(MAX_SAVE_LABEL_LENGTH + 1),
+            }).success,
+        ).toBe(false);
     });
 
     it('rejects an empty slotId (if provided)', () => {

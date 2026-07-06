@@ -78,6 +78,15 @@ export interface GameHudProps extends GameScreenProps {
     readonly handleUndo: () => void;
     readonly handleRedo: () => void;
     readonly handleEndTurn: () => void;
+    /**
+     * Saves the running match under the given name (host-only — Invariant #25).
+     * Deliberately not a `saveDisabled`/`handleSave` pair: ABSENCE of this prop
+     * is the withholding mechanism — the shell omits it for non-hosts, when no
+     * save handler is wired, or once controls lock after the match resolves.
+     * `label` is the trimmed player-entered name; `''` means "no name given"
+     * and callers fall back to the engine's default save naming.
+     */
+    readonly saveGame?: (label: string) => void;
 }
 
 export type GameEventAudioBinding = Readonly<

@@ -49,9 +49,23 @@ interface GameShellBaseProps {
     readonly gameResult?: GameResult | null;
     readonly gameResultBanner?: GameScreenComponent<GameResultBannerProps>;
     readonly localPlayerId?: PlayerId;
+    /**
+     * Passed through to the HUD as `GameHudProps.isHost`, and consulted by the
+     * frame's `saveGame` withholding: an explicit `false` suppresses the
+     * capability even when `onSaveGame` is wired (Invariant #25); absent means
+     * "role unknown — treat as host".
+     */
+    readonly isHost?: boolean;
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
     readonly onEndTurn?: () => void | Promise<void>;
+    /**
+     * Receives the trimmed save name when the HUD's save affordance confirms.
+     * The frame synthesizes `GameHudProps.saveGame` from it — withheld entirely
+     * (prop absent, not disabled) while controls are locked or when this
+     * callback is missing (Invariant #25: non-hosts are never offered it).
+     */
+    readonly onSaveGame?: (label: string) => void | Promise<void>;
 }
 
 interface GameShellDefaultHudProps extends GameShellBaseProps {
@@ -101,6 +115,8 @@ interface GameShellRegistryProps {
     readonly onUndo?: () => void | Promise<void>;
     readonly onRedo?: () => void | Promise<void>;
     readonly onEndTurn?: () => void | Promise<void>;
+    /** See {@link GameShellBaseProps.onSaveGame}; forwarded to the frame. */
+    readonly onSaveGame?: (label: string) => void | Promise<void>;
 }
 
 export type GameShellProps =
@@ -136,6 +152,7 @@ function RegistryGameShell({
     onUndo,
     onRedo,
     onEndTurn,
+    onSaveGame,
 }: GameShellRegistryProps): React.ReactElement {
     const resolvedAssetManager = useGameAssetManager(assetManager, assetManifest);
     const eventAudioBinding = registry.eventAudioBinding;
@@ -163,9 +180,11 @@ function RegistryGameShell({
                             ? {}
                             : { gameResultBanner: registry.gameResultBanner })}
                         {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                        {...(isHost === undefined ? {} : { isHost })}
                         {...(onUndo === undefined ? {} : { onUndo })}
                         {...(onRedo === undefined ? {} : { onRedo })}
                         {...(onEndTurn === undefined ? {} : { onEndTurn })}
+                        {...(onSaveGame === undefined ? {} : { onSaveGame })}
                     >
                         <SceneRouter
                             registry={registry}
@@ -305,9 +324,11 @@ function GameShellFrame(
         gameResult,
         gameResultBanner: GameResultBanner = DefaultGameResultBanner,
         localPlayerId,
+        isHost,
         onUndo,
         onRedo,
         onEndTurn,
+        onSaveGame,
     } = props;
     // The result banner is an overlay on the live board. Once the player advances
     // to another screen (e.g. the post-game summary), suppress it so it does not
@@ -340,6 +361,20 @@ function GameShellFrame(
         }
     }
 
+    // Unlike undo/redo/end-turn there is no disabled pair: the capability is
+    // WITHHELD (prop absent) when unavailable — Invariant #25. An explicit
+    // isHost === false withholds it even if a caller wrongly wires onSaveGame
+    // for a client; an absent isHost means "role unknown — treat as host"
+    // (GameScreenProps contract). DefaultGameHud deliberately renders no save
+    // affordance; games opt in via their registry HUD (e.g. with the ui
+    // barrel's SaveGameButton).
+    const saveGame =
+        controlsLocked || onSaveGame === undefined || isHost === false
+            ? undefined
+            : (label: string): void => {
+                  void onSaveGame(label);
+              };
+
     const hud =
         props.hud === undefined ? (
             <DefaultGameHud
@@ -364,6 +399,8 @@ function GameShellFrame(
                 handleRedo={handleRedo}
                 handleEndTurn={handleEndTurn}
                 {...(localPlayerId === undefined ? {} : { localPlayerId })}
+                {...(isHost === undefined ? {} : { isHost })}
+                {...(saveGame === undefined ? {} : { saveGame })}
             />
         );
 

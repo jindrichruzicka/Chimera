@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { WIRE_MAX_PLAYER_ATTRIBUTE_LENGTH } from '@chimera-engine/simulation/foundation/messages-schemas.js';
 import { ChatScopeSchema } from '@chimera-engine/simulation/foundation/chat-schemas.js';
 import type { ChatScope } from '@chimera-engine/simulation/foundation/chat.js';
-import { toSlotId, playerId } from '../../preload/api-types.js';
+import { MAX_SAVE_LABEL_LENGTH, toSlotId, playerId } from '../../preload/api-types.js';
 import type {
     EngineAction,
     HostLobbyParams,
@@ -316,11 +316,15 @@ export const RemoveAiPayloadSchema = z
  * SlotIdSchema validates the qualified format on the load/delete channels;
  * save accepts any non-empty string hint; and (2) the `label?: string` field
  * triggers the `exactOptionalPropertyTypes` + `.optional()` incompatibility.
+ *
+ * `label` is user-typed free text persisted into slot metadata; it is bounded
+ * to {@link MAX_SAVE_LABEL_LENGTH} (the save-name input mirrors the bound as
+ * its `maxLength`). Read paths stay unbounded so legacy saves keep loading.
  */
 export const SaveRequestSchema: z.ZodType<SaveRequest> = z.object({
     gameId: NonEmptyStringSchema,
     slotId: NonEmptyStringSchema.optional(),
-    label: z.string().optional(),
+    label: z.string().max(MAX_SAVE_LABEL_LENGTH).optional(),
 }) as unknown as z.ZodType<SaveRequest>;
 
 /**

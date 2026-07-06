@@ -294,6 +294,15 @@ export interface SaveSlotMeta {
  * No runtime hazard: the main process SaveManager internally uses the fully-qualified
  * SlotId for all repository operations and never trusts the bare hint directly.
  */
+/**
+ * Maximum accepted length for a user-entered save-slot label. Enforced at the
+ * `chimera:saves:save` IPC boundary (`SaveRequestSchema`) and mirrored as the
+ * save-name input's `maxLength` so the UI can never produce a request the wire
+ * rejects. Bounds only what new saves persist into slot metadata — read paths
+ * stay unbounded so legacy saves with longer labels keep loading.
+ */
+export const MAX_SAVE_LABEL_LENGTH = 64;
+
 export interface SaveRequest {
     readonly gameId: string;
     readonly slotId?: SlotId;

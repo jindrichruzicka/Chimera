@@ -9,6 +9,7 @@ import {
     Divider,
     Drawer,
     Panel,
+    SaveGameButton,
     type BadgeVariant,
 } from '@chimera-engine/renderer/components/ui';
 import { ChatPanel } from '@chimera-engine/renderer/components/chat';
@@ -50,6 +51,7 @@ export function TacticsGameHud({
     handleUndo,
     handleRedo,
     handleEndTurn,
+    saveGame,
 }: GameHudProps): React.ReactElement {
     const turnStatus = resolveTacticsTurnStatus(snapshot.isMyTurn);
     const [chatOpen, setChatOpen] = useState<boolean>(false);
@@ -205,6 +207,18 @@ export function TacticsGameHud({
                             >
                                 End Turn
                             </Button>
+                            {/* Host-only save (#825): the shell withholds saveGame
+                                from clients, so presence IS the gate. Disabled while
+                                the commitment buffer holds unsent moves — a save
+                                captured now would miss them. */}
+                            {saveGame !== undefined && (
+                                <SaveGameButton
+                                    data-testid="hud-save-btn"
+                                    disabled={buffer.length > 0}
+                                    onSave={saveGame}
+                                    style={tacticsHudButtonStyle}
+                                />
+                            )}
                         </div>
                     </div>
                 </Panel>

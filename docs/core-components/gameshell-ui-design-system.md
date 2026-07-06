@@ -38,6 +38,10 @@ export interface GameHudProps extends GameScreenProps {
     readonly handleUndo: () => void;
     readonly handleRedo: () => void;
     readonly handleEndTurn: () => void;
+    // Host-only in-game save (Invariant #25). Deliberately NOT a disabled/handle
+    // pair: ABSENCE of the prop is the withholding mechanism — the shell omits it
+    // for non-hosts, when no save handler is wired, or once controls lock.
+    readonly saveGame?: (label: string) => void;
 }
 
 export interface GameResultBannerProps {
@@ -220,7 +224,7 @@ renderer/audio/
 
 | Category       | Examples                                                 |
 | -------------- | -------------------------------------------------------- |
-| **Actions**    | `Button`, `IconButton`, `ToggleButton`                   |
+| **Actions**    | `Button`, `IconButton`, `ToggleButton`, `SaveGameButton` |
 | **Overlays**   | `Modal`, `Drawer`, `Tooltip`, `Popover`                  |
 | **Containers** | `Panel`, `Card`, `Divider`, `ScrollArea`, `Tabs`         |
 | **Forms**      | `Slider`, `Toggle`, `TextInput`, `Select`, `NumberInput` |
@@ -238,6 +242,13 @@ Buttons are supplied via the `actions` prop — `readonly { label, onClick?, var
 each button runs its optional `onClick` and then **always dismisses the modal** (a modal is a
 one-shot decision surface). When `actions` is omitted, a single `Close` button is rendered that
 just dismisses. Escape also dismisses (via the shared `EscapeStack`).
+
+**`SaveGameButton`** is the Actions category's one composite: a compact `Button` trigger that
+opens a save-name prompt (`Modal` + `TextInput`, name bounded to `MAX_SAVE_LABEL_LENGTH`) and
+calls `onSave(trimmedLabel)` exactly once on confirm; the label resets each time the dialog
+opens. It is a pure callback component — no stores or IPC — so a game HUD renders it only when
+it received the host-only `GameHudProps.saveGame` capability (see §4.33) and passes that
+capability through as `onSave`.
 
 ### Game Surface Consumption
 

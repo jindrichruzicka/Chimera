@@ -15,7 +15,7 @@
 //   #80 — Verified by the board being injected via registry prop.
 
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -30,6 +30,7 @@ import type {
     GameScreenRegistry,
 } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import type { DeviceInfo } from '../../device/DeviceInfo.js';
+import { useToastStore } from '../../state/toastStore';
 import { useUiStore } from '../../state/uiStore';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Providers } from '../providers';
@@ -42,6 +43,7 @@ const mockSendAction = vi.fn();
 const mockReset = vi.fn();
 const mockSetLeavingToMainMenu = vi.fn();
 const mockClearLocalLobbyContext = vi.fn();
+const mockSave = vi.fn();
 let mockSnapshot: PlayerSnapshot | null = null;
 let mockCurrentTick: number | undefined = undefined;
 let mockLocalPlayerId: string | null = null;
@@ -162,6 +164,27 @@ const testRegistry: GameScreenRegistry = {
                 >
                     End Turn
                 </button>
+                {/* Capability-style prop (#825): rendered only when the shell
+                    forwards saveGame — plain buttons stand in for the ui
+                    barrel's SaveGameButton, whose dialog has its own tests. */}
+                {props.saveGame === undefined ? null : (
+                    <>
+                        <button
+                            data-testid="hud-save"
+                            type="button"
+                            onClick={() => props.saveGame?.('Alpha')}
+                        >
+                            Save
+                        </button>
+                        <button
+                            data-testid="hud-save-blank"
+                            type="button"
+                            onClick={() => props.saveGame?.('')}
+                        >
+                            Save unnamed
+                        </button>
+                    </>
+                )}
             </footer>
         );
     },
@@ -255,10 +278,12 @@ beforeEach(() => {
     mockClearLocalLobbyContext.mockReset();
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
+    mockSave.mockReset();
     inputActionCallbacks.clear();
-    // uiStore is a module singleton shared across tests; reset screen navigation
-    // so each test starts on the default 'board' screen.
+    // uiStore and toastStore are module singletons shared across tests; reset
+    // screen navigation and the toast queue so each test starts clean.
     useUiStore.getState().resetScreenNavigation();
+    useToastStore.getState().dismissAll();
     window.history.replaceState({}, '', '/game');
 
     Object.defineProperty(window, '__chimera', {
@@ -268,6 +293,7 @@ beforeEach(() => {
                 getDeviceInfo: vi.fn().mockResolvedValue(makeDeviceInfo()),
                 onDeviceInfoChange: vi.fn().mockReturnValue(vi.fn()),
             },
+            saves: { save: mockSave },
         },
         configurable: true,
     });
@@ -276,6 +302,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup();
     Reflect.deleteProperty(window, '__chimera');
+    useToastStore.getState().dismissAll();
     vi.restoreAllMocks();
 });
 
@@ -769,5 +796,91 @@ describe('GamePage — post-game summary navigation', () => {
 
         expect(useUiStore.getState().activeScreenKey).toBe('board');
         expect(mockSendAction).not.toHaveBeenCalled();
+    });
+});
+
+describe('GamePage — in-game save (#825)', () => {
+    function makeSaveSlotMeta(): Record<string, unknown> {
+        return {
+            slotId: 'slot-1',
+            gameId: 'test-game',
+            tick: 5,
+            savedAt: 1700000000000,
+            label: 'Alpha',
+        };
+    }
+
+    it('exposes saveGame to the registry HUD and saves with the given label when hosting', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot();
+        mockSave.mockResolvedValue(makeSaveSlotMeta());
+        renderGamePage();
+
+        fireEvent.click(await screen.findByTestId('hud-save'));
+
+        expect(mockSave).toHaveBeenCalledTimes(1);
+        expect(mockSave).toHaveBeenCalledWith({ gameId: 'test-game', label: 'Alpha' });
+    });
+
+    it('withholds saveGame from a joined client (viewer is not the lobby host)', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot();
+        const clientLobby = makeLobbyState();
+        mockLobbyState = {
+            ...clientLobby,
+            info: { ...clientLobby.info, hostId: 'p2' },
+        };
+        renderGamePage();
+
+        await screen.findByTestId('registry-hud');
+
+        expect(screen.queryByTestId('hud-save')).not.toBeInTheDocument();
+    });
+
+    it('omits the label key entirely when the save name is blank', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot();
+        mockSave.mockResolvedValue(makeSaveSlotMeta());
+        renderGamePage();
+
+        fireEvent.click(await screen.findByTestId('hud-save-blank'));
+
+        expect(mockSave).toHaveBeenCalledTimes(1);
+        expect(mockSave).toHaveBeenCalledWith({ gameId: 'test-game' });
+        expect(mockSave.mock.calls[0]?.[0]).not.toHaveProperty('label');
+    });
+
+    it('pushes a static success toast when the save resolves', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot();
+        mockSave.mockResolvedValue(makeSaveSlotMeta());
+        renderGamePage();
+
+        fireEvent.click(await screen.findByTestId('hud-save'));
+
+        // Invariant #74: static literal title, no save metadata.
+        await waitFor(() => {
+            expect(useToastStore.getState().queue).toContainEqual(
+                expect.objectContaining({ severity: 'success', title: 'Game saved' }),
+            );
+        });
+    });
+
+    it('pushes a static error toast when the save rejects', async () => {
+        mockLocalPlayerId = 'p1';
+        mockSnapshot = makeSnapshot();
+        mockSave.mockRejectedValue(new Error('boom'));
+        renderGamePage();
+
+        fireEvent.click(await screen.findByTestId('hud-save'));
+
+        await waitFor(() => {
+            expect(useToastStore.getState().queue).toContainEqual(
+                expect.objectContaining({ severity: 'error', title: 'Save failed' }),
+            );
+        });
+        expect(useToastStore.getState().queue.some((toast) => toast.severity === 'success')).toBe(
+            false,
+        );
     });
 });

@@ -30,10 +30,12 @@ import { screenFadeMs } from '../../components/shell/screenFadeDuration';
 import { GameShell } from '../../components/shell/GameShell';
 import { useSendAction } from '../../bridge/useSendAction';
 import { loadRendererGame, type LoadedRendererGame } from '../../game/rendererGameRegistry';
+import { useSavesApi } from '../../hooks/useSavesApi';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { useToastStore } from '../../state/toastStore';
 import { useUiStore } from '../../state/uiStore';
 import { useGameContent } from '../../state/useGameContent';
 import { useInputAction } from '../../input/useInputAction.js';
@@ -66,6 +68,7 @@ export default function GamePage(): React.ReactElement | null {
     const gameId = lobbyState?.info.gameId ?? null;
     const gameContent = useGameContent(gameId);
     const loadedGame = useLoadedRendererGame(gameId);
+    const savesApi = useSavesApi();
     const assetManager = React.useMemo<AssetManager | null>(() => {
         if (loadedGame === null) {
             return null;
@@ -233,6 +236,20 @@ export default function GamePage(): React.ReactElement | null {
     // here — `gameId` derives from it and is guarded above.
     const isHost = lobbyState !== null && lobbyState.info.hostId === resolvedPlayerId;
 
+    // In-game save (#825). Built ONLY for the host so GameShell never offers the
+    // saveGame capability to a joined client (Invariant #25 — main-side
+    // captureSaveFile rejects non-hosted sessions regardless, defense in depth).
+    // A blank name omits `label` so SaveManager default naming applies. Toast
+    // titles are static literals carrying no save metadata (Invariant #74).
+    const handleSaveGame = async (label: string): Promise<void> => {
+        try {
+            await savesApi.save({ gameId, ...(label === '' ? {} : { label }) });
+            useToastStore.getState().push({ severity: 'success', title: 'Game saved' });
+        } catch {
+            useToastStore.getState().push({ severity: 'error', title: 'Save failed' });
+        }
+    };
+
     return (
         <GameShell
             registry={loadedGame.registry}
@@ -261,6 +278,7 @@ export default function GamePage(): React.ReactElement | null {
                 dispatchGameAction(snapshot, resolvedPlayerId, 'engine:redo', { steps: 1 })
             }
             onEndTurn={() => dispatchGameAction(snapshot, resolvedPlayerId, 'engine:end_turn', {})}
+            {...(isHost ? { onSaveGame: handleSaveGame } : {})}
         />
     );
 }

@@ -26,6 +26,8 @@ export { Popover } from './Popover';
 export type { PopoverAlign, PopoverPlacement, PopoverProps, PopoverTriggerProps } from './Popover';
 export { ProgressBar } from './ProgressBar';
 export type { ProgressBarProps } from './ProgressBar';
+export { SaveGameButton } from './SaveGameButton';
+export type { SaveGameButtonProps } from './SaveGameButton';
 export { ScrollArea } from './ScrollArea';
 export type { ScrollAreaProps } from './ScrollArea';
 export { Select } from './Select';

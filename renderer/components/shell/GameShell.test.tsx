@@ -855,3 +855,107 @@ function createAssetManagerStub(): AssetManager {
         dispose: vi.fn(),
     };
 }
+
+describe('GameShell saveGame capability threading (#825)', () => {
+    // The capability deliberately departs from the *Disabled/handle* pair pattern:
+    // absence of the `saveGame` prop IS the withholding mechanism (Invariant #25),
+    // so these tests assert prop presence, never a disabled flag.
+    function renderRegistryHud(options: {
+        readonly snapshot?: PlayerSnapshot;
+        readonly isHost?: boolean;
+        readonly onSaveGame?: (label: string) => void;
+    }): { readonly hudProps: () => GameHudProps } {
+        let receivedProps: GameHudProps | null = null;
+
+        function HudSpy(props: GameHudProps): React.ReactElement {
+            receivedProps = props;
+            return <footer aria-label="Spy HUD" />;
+        }
+
+        renderWithAudio(
+            <GameShell
+                registry={{
+                    board: () => <div data-testid="registry-board" />,
+                    hud: HudSpy,
+                }}
+                snapshot={
+                    options.snapshot ?? makePlayerSnapshot({ sceneId: makeSceneId('engine:game') })
+                }
+                sendAction={vi.fn()}
+                localPlayerId={playerId('p1')}
+                {...(options.isHost === undefined ? {} : { isHost: options.isHost })}
+                {...(options.onSaveGame === undefined ? {} : { onSaveGame: options.onSaveGame })}
+            />,
+        );
+
+        return {
+            hudProps: (): GameHudProps => {
+                if (receivedProps === null) {
+                    throw new Error('registry HUD was never rendered');
+                }
+                return receivedProps;
+            },
+        };
+    }
+
+    it('forwards isHost and a saveGame callback that delegates the label to onSaveGame', () => {
+        const onSaveGame = vi.fn();
+
+        const { hudProps } = renderRegistryHud({ isHost: true, onSaveGame });
+
+        expect(hudProps().isHost).toBe(true);
+        expect(typeof hudProps().saveGame).toBe('function');
+
+        hudProps().saveGame?.('Alpha');
+
+        expect(onSaveGame).toHaveBeenCalledTimes(1);
+        expect(onSaveGame).toHaveBeenCalledWith('Alpha');
+    });
+
+    it('withholds saveGame from the HUD when no onSaveGame is wired', () => {
+        const { hudProps } = renderRegistryHud({ isHost: true });
+
+        expect(hudProps()).not.toHaveProperty('saveGame');
+    });
+
+    it('withholds saveGame when the shell knows the viewer is not the host', () => {
+        // Defense in depth for Invariant #25: even a caller that wrongly wires
+        // onSaveGame for a joined client never exposes the capability.
+        const { hudProps } = renderRegistryHud({ isHost: false, onSaveGame: vi.fn() });
+
+        expect(hudProps()).not.toHaveProperty('saveGame');
+    });
+
+    it('withholds saveGame while controls are locked by a resolved match result', () => {
+        const onSaveGame = vi.fn();
+        const snapshot = makePlayerSnapshot({
+            sceneId: makeSceneId('engine:game'),
+            gameResult: { winnerIds: [playerId('p1')] },
+        });
+
+        const { hudProps } = renderRegistryHud({ snapshot, isHost: true, onSaveGame });
+
+        expect(hudProps()).not.toHaveProperty('saveGame');
+    });
+
+    it('withholds saveGame while controls are locked by a game-over phase', () => {
+        const onSaveGame = vi.fn();
+        const snapshot = makePlayerSnapshot({
+            sceneId: makeSceneId('engine:game'),
+            phase: gamePhase('ended'),
+        });
+
+        const { hudProps } = renderRegistryHud({ snapshot, isHost: true, onSaveGame });
+
+        expect(hudProps()).not.toHaveProperty('saveGame');
+    });
+
+    it('omits isHost from the HUD props and keeps saveGame when the shell does not receive it', () => {
+        // An absent isHost means "role unknown — treat as host" (GameScreenProps
+        // contract), so only an explicit false withholds the capability.
+        const { hudProps } = renderRegistryHud({ onSaveGame: vi.fn() });
+
+        expect(hudProps()).not.toHaveProperty('isHost');
+        expect(typeof hudProps().saveGame).toBe('function');
+    });
+});

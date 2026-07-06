@@ -409,3 +409,59 @@ describe('TacticsGameHud', () => {
         });
     });
 });
+
+describe('save button (#825)', () => {
+    it('renders no save affordance when the saveGame capability is absent', () => {
+        render(<TacticsGameHud {...makeHudProps()} />);
+
+        expect(screen.queryByTestId('hud-save-btn')).not.toBeInTheDocument();
+    });
+
+    it('renders the save trigger in the actions row after End Turn when saveGame is present', () => {
+        render(<TacticsGameHud {...makeHudProps({ saveGame: vi.fn() })} />);
+
+        const trigger = screen.getByTestId('hud-save-btn');
+        expect(screen.getByLabelText('Tactics actions')).toContainElement(trigger);
+
+        const endTurn = screen.getByTestId('end-turn');
+        expect(
+            endTurn.compareDocumentPosition(trigger) & Node.DOCUMENT_POSITION_FOLLOWING,
+        ).toBeTruthy();
+    });
+
+    it('invokes saveGame with the confirmed name exactly once and closes the dialog', () => {
+        const saveGame = vi.fn();
+        render(<TacticsGameHud {...makeHudProps({ saveGame })} />);
+
+        fireEvent.click(screen.getByTestId('hud-save-btn'));
+        fireEvent.change(screen.getByTestId('save-name-input'), { target: { value: 'name' } });
+        fireEvent.click(screen.getByTestId('save-name-confirm'));
+
+        expect(saveGame).toHaveBeenCalledTimes(1);
+        expect(saveGame).toHaveBeenCalledWith('name');
+        expect(screen.queryByTestId('save-name-dialog')).not.toBeInTheDocument();
+    });
+
+    it('disables the save trigger while the commitment buffer holds unsent moves', () => {
+        // A save captured now would miss the buffered-but-uncommitted moves.
+        useCommitmentBuffer.setState({ buffer: [BUFFERED_MOVE] });
+
+        render(
+            <TacticsGameHud
+                {...makeHudProps({ saveGame: vi.fn(), snapshot: makeCommitmentSnapshot() })}
+            />,
+        );
+
+        expect(screen.getByTestId('hud-save-btn')).toBeDisabled();
+    });
+
+    it('keeps the save trigger enabled once the buffer is empty', () => {
+        render(
+            <TacticsGameHud
+                {...makeHudProps({ saveGame: vi.fn(), snapshot: makeCommitmentSnapshot() })}
+            />,
+        );
+
+        expect(screen.getByTestId('hud-save-btn')).toBeEnabled();
+    });
+});
