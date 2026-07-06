@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 /**
- * renderer/app/saves/useSavesApi.test.ts
+ * renderer/hooks/useSavesApi.test.ts
  *
  * Unit tests for the useSavesApi hook and getSavesBridge factory.
  *

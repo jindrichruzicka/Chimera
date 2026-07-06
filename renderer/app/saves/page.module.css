@@ -1,0 +1,86 @@
+.page {
+    box-sizing: border-box;
+    color: var(--ch-color-text-primary);
+    font-family: var(--ch-font-ui);
+    inline-size: 100%;
+    padding: calc(var(--ch-space-md) * 2);
+}
+
+.header {
+    align-items: center;
+    display: flex;
+    gap: var(--ch-space-md);
+    justify-content: space-between;
+    margin-block-end: var(--ch-space-md);
+}
+
+.list {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+/* One list row: the load <button> plus a trailing delete control. The divider
+   and the hover tint live here so both span the row's full width — the tint would
+   otherwise stop at the load button and leave the delete slot dark (Invariant #91:
+   tokens only). */
+.rowItem {
+    align-items: center;
+    border-block-end: var(--ch-border-width-sm) solid var(--ch-color-border-subtle);
+    display: flex;
+    gap: var(--ch-space-sm);
+    padding-inline-end: var(--ch-space-md);
+    transition: background-color var(--ch-duration-fast) var(--ch-easing-standard);
+}
+
+.rowItem:hover {
+    background: var(--ch-color-surface-raised);
+}
+
+/* The load button fills the row; focus-visible surfaces the shared ring.
+   `min-inline-size: 0` lets long labels truncate instead of forcing the delete
+   control off the row. */
+.row {
+    align-items: center;
+    appearance: none;
+    background: transparent;
+    border: 0;
+    color: inherit;
+    cursor: pointer;
+    display: flex;
+    flex: 1;
+    font: inherit;
+    gap: var(--ch-space-md);
+    justify-content: space-between;
+    min-inline-size: 0;
+    padding: var(--ch-space-sm) var(--ch-space-md);
+    text-align: start;
+}
+
+.row:focus-visible {
+    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
+    outline-offset: var(--ch-focus-ring-offset);
+}
+
+/* Ghost delete control that shifts to the danger tokens on hover/focus, so the
+   trash icon only reads red when the user targets it. Overriding the IconButton's
+   local custom properties keeps this tokens-only (Invariant #91). */
+.deleteBtn {
+    flex: 0 0 auto;
+}
+
+.deleteBtn:hover,
+.deleteBtn:focus-visible {
+    --ch-icon-button-color: var(--ch-button-color-danger);
+    --ch-icon-button-bg-hover: var(--ch-button-bg-danger-hover);
+    --ch-icon-button-border-color-hover: var(--ch-button-border-danger-hover);
+}
+
+.error {
+    background: var(--ch-color-error-surface-muted);
+    border: var(--ch-border-width-sm) solid var(--ch-color-error-border-muted);
+    border-radius: var(--ch-radius-sm);
+    color: var(--ch-color-error-text-muted);
+    margin-bottom: var(--ch-space-md);
+    padding: calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md);
+}

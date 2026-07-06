@@ -3,57 +3,38 @@
 /**
  * renderer/app/saves/page.test.tsx
  *
- * Unit tests for the SavesPage component.
+ * Unit tests for the SavesPage load/delete browser (replay-browser pattern).
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #374
+ * Task: issue #824
  *
  * Invariant #1: GameSnapshot never leaves the main process — page reads only
  *   SaveSlotMeta from saveStore, never raw SaveFile or GameSnapshot.
+ * Invariant #74: toast titles are static literals (asserted by exact equality).
  */
 
-import React from 'react';
 import '@testing-library/jest-dom/vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import SavesPage from './page';
 import { toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
-import type { SaveSlotMeta } from '@chimera-engine/simulation/bridge/api-types.js';
-import { useToastStore } from '../../state/toastStore';
+import type { SaveSlotMeta, SavesAPI } from '@chimera-engine/simulation/bridge/api-types.js';
+import { EscapeStackProvider } from '../../components/ui';
+import { useToastStore } from '../../state/toastStore.js';
+import SavesPage from './page';
 
-// ── Mock window.__chimera.saves ───────────────────────────────────────────────
-
-const mockSave = vi.fn(
-    async (): Promise<SaveSlotMeta> => ({
-        slotId: toSlotId('slot-1'),
-        gameId: 'tactics',
-        tick: 1,
-        savedAt: 1_000_000,
-    }),
-);
-const mockLoad = vi.fn(async () => undefined);
-const mockDelete = vi.fn(async () => undefined);
-
-beforeEach(() => {
-    vi.resetAllMocks();
-    useToastStore.getState().dismissAll();
-    Object.defineProperty(window, '__chimera', {
-        configurable: true,
-        value: {
-            saves: {
-                save: mockSave,
-                load: mockLoad,
-                delete: mockDelete,
-            },
-        },
-    });
-});
-
-afterEach(() => {
-    cleanup();
-});
+// The close button routes back to the main menu with a client `router.push`.
+// Hoisted so the mock factory can close over a stable spy.
+const { push } = vi.hoisted(() => ({ push: vi.fn() }));
+vi.mock('next/navigation', () => ({
+    useRouter: () => ({ push }),
+}));
 
 // ── Mock useSaveStore ─────────────────────────────────────────────────────────
+// The page reads `slots`/`isLoading` through narrow selectors; tests drive these
+// module-level values instead of the real Zustand store (the store's push
+// refresh via `onSlotUpdate` is wired by SaveStoreBootstrap, not the page).
 
 let mockSlots: readonly SaveSlotMeta[] = [];
 let mockIsLoading = false;
@@ -76,16 +57,59 @@ function makeSlot(slotId: string, overrides: Partial<SaveSlotMeta> = {}): SaveSl
     };
 }
 
+/**
+ * Install a `window.__chimera.saves` bridge; each surface defaults to resolving
+ * so a test only has to supply the method it exercises.
+ */
+function installBridge(
+    opts: {
+        load?: SavesAPI['load'];
+        delete?: SavesAPI['delete'];
+    } = {},
+): void {
+    const saves = {
+        load: opts.load ?? vi.fn(() => Promise.resolve()),
+        delete: opts.delete ?? vi.fn(() => Promise.resolve()),
+    } as unknown as SavesAPI;
+    Object.defineProperty(window, '__chimera', { configurable: true, value: { saves } });
+}
+
+// The confirm dialog is a <Modal>, which registers Escape-to-close on the shared
+// overlay stack; render the page under the provider so `useEscapeLayer` resolves.
+function renderPage(): ReturnType<typeof render> {
+    return render(
+        <EscapeStackProvider>
+            <SavesPage />
+        </EscapeStackProvider>,
+    );
+}
+
+beforeEach(() => {
+    push.mockClear();
+    mockSlots = [];
+    mockIsLoading = false;
+    useToastStore.getState().dismissAll();
+    installBridge();
+    window.history.replaceState({}, '', '/saves?gameId=tactics');
+});
+
+afterEach(() => {
+    cleanup();
+    Reflect.deleteProperty(window, '__chimera');
+    useToastStore.getState().dismissAll();
+    vi.restoreAllMocks();
+});
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('SavesPage — loading state', () => {
-    it('shows a loading skeleton when isLoading is true', () => {
+    it('shows a loading status inside the tagged page while the store loads', () => {
         mockIsLoading = true;
-        mockSlots = [];
 
         render(<SavesPage />);
 
-        expect(screen.getByRole('status')).toBeTruthy();
+        expect(screen.getByTestId('saves-page')).toBeInTheDocument();
+        expect(screen.getByRole('status')).toBeInTheDocument();
     });
 
     it('does not render slot rows while loading', () => {
@@ -94,356 +118,203 @@ describe('SavesPage — loading state', () => {
 
         render(<SavesPage />);
 
-        expect(screen.queryByText('slot-1')).toBeNull();
+        expect(screen.getByTestId('saves-page')).toBeInTheDocument();
+        expect(screen.queryByTestId('save-load-btn')).not.toBeInTheDocument();
     });
 });
 
 describe('SavesPage — empty state', () => {
-    it('uses shared Typography primitives for the page heading, form label, and empty message', () => {
-        mockIsLoading = false;
-        mockSlots = [];
+    it('shows a muted empty caption when there are no saves', () => {
+        render(<SavesPage />);
+
+        expect(screen.getByText(/no saves yet/i)).toHaveAttribute('data-ch-caption-tone', 'muted');
+    });
+});
+
+describe('SavesPage — rows', () => {
+    it('renders one row per slot with a load button and a trailing delete button', () => {
+        mockSlots = [makeSlot('slot-1'), makeSlot('slot-2', { tick: 12 })];
 
         render(<SavesPage />);
 
-        expect(screen.getByRole('heading', { level: 1, name: 'Saves' })).toHaveAttribute(
-            'data-ch-heading-level',
-            '1',
-        );
-        expect(screen.getByText('Slot ID')).toHaveAttribute('data-ch-label-state', 'default');
-        expect(screen.getByText(/no save slots found/i)).toHaveAttribute(
+        expect(screen.getAllByTestId('save-load-btn')).toHaveLength(2);
+        expect(screen.getAllByTestId('save-delete-btn')).toHaveLength(2);
+    });
+
+    it('titles a row with its label when present', () => {
+        mockSlots = [makeSlot('slot-1', { label: 'Before the boss' })];
+
+        render(<SavesPage />);
+
+        expect(screen.getByText('Before the boss')).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: /load before the boss/i })).toBeInTheDocument();
+    });
+
+    it('falls back to the slot id when a slot has no label', () => {
+        mockSlots = [makeSlot('slot-1')];
+
+        render(<SavesPage />);
+
+        expect(screen.getByText('slot-1')).toBeInTheDocument();
+        expect(screen.getByTestId('save-load-btn')).toHaveAccessibleName(/load slot-1/i);
+    });
+
+    it('shows a muted caption with the saved-at timestamp and tick', () => {
+        const slot = makeSlot('slot-1', { tick: 42 });
+        mockSlots = [slot];
+
+        render(<SavesPage />);
+
+        const savedAtText = new Date(slot.savedAt).toLocaleString().replace(/\s+/g, ' ');
+        expect(screen.getByText(`${savedAtText} · tick 42`)).toHaveAttribute(
             'data-ch-caption-tone',
             'muted',
         );
     });
-
-    it('shows an empty state message when slots is empty and not loading', () => {
-        mockIsLoading = false;
-        mockSlots = [];
-
-        render(<SavesPage />);
-
-        expect(screen.getByText(/no save slots/i)).toBeTruthy();
-    });
 });
 
-describe('SavesPage — slot list', () => {
-    it('renders a row for each slot', () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1'), makeSlot('slot-2'), makeSlot('slot-3')];
-
-        render(<SavesPage />);
-
-        expect(screen.getByText('slot-1')).toBeTruthy();
-        expect(screen.getByText('slot-2')).toBeTruthy();
-        expect(screen.getByText('slot-3')).toBeTruthy();
-    });
-
-    it('displays the tick number for each slot', () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1', { tick: 42 })];
-
-        render(<SavesPage />);
-
-        expect(screen.getByText('42')).toBeTruthy();
-    });
-
-    it('displays the savedAt timestamp for each slot', () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1', { savedAt: 1_714_000_000_000 })];
-
-        render(<SavesPage />);
-
-        // The page formats the timestamp — just verify it appears
-        expect(screen.getByTestId('slot-saved-at-slot-1')).toBeTruthy();
-    });
-
-    it('displays the optional label when present', () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1', { label: 'Before boss fight' })];
-
-        render(<SavesPage />);
-
-        expect(screen.getByText('Before boss fight')).toBeTruthy();
-    });
-});
-
-describe('SavesPage — Save action', () => {
-    it('calls window.__chimera.saves.save with the correct slotId', () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('my-slot')];
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: 'Save my-slot' }));
-
-        expect(mockSave).toHaveBeenCalledTimes(1);
-        expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ slotId: 'my-slot' }));
-    });
-});
-
-describe('SavesPage — Load action', () => {
-    it('calls window.__chimera.saves.load with the correct slotId', () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('my-slot')];
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /load/i }));
-
-        expect(mockLoad).toHaveBeenCalledTimes(1);
-        expect(mockLoad).toHaveBeenCalledWith('my-slot');
-    });
-});
-
-describe('SavesPage — Delete action', () => {
-    it('calls window.__chimera.saves.delete with the correct slotId', () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('my-slot')];
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /delete/i }));
-
-        expect(mockDelete).toHaveBeenCalledTimes(1);
-        expect(mockDelete).toHaveBeenCalledWith('my-slot');
-    });
-});
-
-describe('SavesPage — multiple slots button targeting', () => {
-    it("Save button on each slot calls save with that slot's ID", () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-a'), makeSlot('slot-b')];
-
-        render(<SavesPage />);
-
-        const saveButtons = screen.getAllByRole('button', { name: /^save slot-/i });
-        fireEvent.click(saveButtons[1]!);
-
-        expect(mockSave).toHaveBeenCalledWith(
-            expect.objectContaining({ slotId: 'slot-b', gameId: 'tactics' }),
-        );
-    });
-
-    it("Load button on each slot calls load with that slot's ID", () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-a'), makeSlot('slot-b')];
-
-        render(<SavesPage />);
-
-        const loadButtons = screen.getAllByRole('button', { name: /load/i });
-        fireEvent.click(loadButtons[0]!);
-
-        expect(mockLoad).toHaveBeenCalledWith('slot-a');
-    });
-
-    it("Delete button on each slot calls delete with that slot's ID", () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-a'), makeSlot('slot-b')];
-
-        render(<SavesPage />);
-
-        const deleteButtons = screen.getAllByRole('button', { name: /delete/i });
-        fireEvent.click(deleteButtons[1]!);
-
-        expect(mockDelete).toHaveBeenCalledWith('slot-b');
-    });
-});
-
-describe('SavesPage — error reporting', () => {
-    it('renders an alert with the failure message when save rejects', async () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1')];
-        mockSave.mockRejectedValueOnce(new Error('no active session'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /save slot-1/i }));
-
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain('Save failed');
-        expect(alert.textContent).toContain('no active session');
-    });
-
-    it('renders an alert when load rejects', async () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1')];
-        mockLoad.mockRejectedValueOnce(new Error('save not found'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /load slot-1/i }));
-
-        const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain('Load failed');
-        expect(alert.textContent).toContain('save not found');
-    });
-
-    it('clears the alert on the next successful action', async () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1')];
-        mockSave.mockRejectedValueOnce(new Error('boom'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /save slot-1/i }));
-        await screen.findByRole('alert');
-
-        fireEvent.click(screen.getByRole('button', { name: /load slot-1/i }));
-
-        // Allow the promise microtask chain to settle.
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect(screen.queryByRole('alert')).toBeNull();
-    });
-});
-
-describe('SavesPage — save-failed toast (§4.30 engine-wired source)', () => {
-    it('pushes an error toast when a save action rejects', async () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1')];
-        mockSave.mockRejectedValueOnce(new Error('disk full while writing SaveFile'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /save slot-1/i }));
-
-        await screen.findByRole('alert');
-        const queue = useToastStore.getState().queue;
-        expect(queue).toHaveLength(1);
-        expect(queue[0]!.severity).toBe('error');
-        expect(queue[0]!.title).toBe('Save failed');
-        // Invariant #74: the raw error text (potentially SaveFile-derived) must
-        // not leak into the toast — only the static title surfaces. Detail stays
-        // in the inline alert.
-        expect(queue[0]!.body).toBeUndefined();
-    });
-
-    it('pushes an error toast when a new-save action rejects', async () => {
-        mockIsLoading = false;
-        mockSlots = [];
-        mockSave.mockRejectedValueOnce(new Error('no active session'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
-
-        await screen.findByRole('alert');
-        const queue = useToastStore.getState().queue;
-        expect(queue).toHaveLength(1);
-        expect(queue[0]!.title).toBe('Save failed');
-    });
-
-    it('does not push a toast when a load action rejects', async () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1')];
-        mockLoad.mockRejectedValueOnce(new Error('save not found'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /load slot-1/i }));
-
-        await screen.findByRole('alert');
-        expect(useToastStore.getState().queue).toHaveLength(0);
-    });
-
-    it('does not push a toast when a delete action rejects', async () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-1')];
-        mockDelete.mockRejectedValueOnce(new Error('permission denied'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /delete slot-1/i }));
-
-        await screen.findByRole('alert');
-        expect(useToastStore.getState().queue).toHaveLength(0);
-    });
-});
-
-describe('SavesPage — new save form', () => {
-    it('renders a "New Save" button when slot list is empty', () => {
-        mockIsLoading = false;
-        mockSlots = [];
-
-        render(<SavesPage />);
-
-        expect(screen.getByRole('button', { name: /new save/i })).toBeTruthy();
-    });
-
-    it('renders a "New Save" button when slot list is populated', () => {
-        mockIsLoading = false;
+describe('SavesPage — load', () => {
+    it('loads a save when its row is clicked, without navigating', async () => {
+        const load = vi.fn(() => Promise.resolve());
+        installBridge({ load });
         mockSlots = [makeSlot('slot-1')];
 
         render(<SavesPage />);
 
-        expect(screen.getByRole('button', { name: /new save/i })).toBeTruthy();
-    });
+        await userEvent.click(screen.getByTestId('save-load-btn'));
 
-    it('calls saves.save with gameId only when slotId input is empty', async () => {
-        mockIsLoading = false;
-        mockSlots = [];
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
-
-        expect(mockSave).toHaveBeenCalledTimes(1);
-        expect(mockSave).toHaveBeenCalledWith({ gameId: 'tactics' });
-    });
-
-    it('calls saves.save with the provided slotId', async () => {
-        mockIsLoading = false;
-        mockSlots = [];
-
-        render(<SavesPage />);
-
-        fireEvent.change(screen.getByRole('textbox', { name: /slot id/i }), {
-            target: { value: 'my-manual-slot' },
+        await waitFor(() => {
+            expect(load).toHaveBeenCalledWith(toSlotId('slot-1'));
         });
-        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
-
-        expect(mockSave).toHaveBeenCalledWith({ gameId: 'tactics', slotId: 'my-manual-slot' });
+        expect(push).not.toHaveBeenCalled();
     });
 
-    it('derives gameId from existing slots', async () => {
-        mockIsLoading = false;
-        mockSlots = [makeSlot('slot-a', { gameId: 'tactics' })];
+    it('surfaces a load rejection in the inline alert without toasting', async () => {
+        const load = vi.fn(() => Promise.reject(new Error('no active session')));
+        installBridge({ load });
+        mockSlots = [makeSlot('slot-1')];
 
         render(<SavesPage />);
 
-        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
-
-        expect(mockSave).toHaveBeenCalledWith(expect.objectContaining({ gameId: 'tactics' }));
-    });
-
-    it('clears the slotId input after a successful new save', async () => {
-        mockIsLoading = false;
-        mockSlots = [];
-
-        render(<SavesPage />);
-
-        const input = screen.getByRole('textbox', { name: /slot id/i });
-        fireEvent.change(input, { target: { value: 'my-slot' } });
-        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
-
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect((input as HTMLInputElement).value).toBe('');
-    });
-
-    it('shows an error alert when new save fails', async () => {
-        mockIsLoading = false;
-        mockSlots = [];
-        mockSave.mockRejectedValueOnce(new Error('no active session'));
-
-        render(<SavesPage />);
-
-        fireEvent.click(screen.getByRole('button', { name: /new save/i }));
+        await userEvent.click(screen.getByTestId('save-load-btn'));
 
         const alert = await screen.findByRole('alert');
-        expect(alert.textContent).toContain('Save failed');
-        expect(alert.textContent).toContain('no active session');
+        expect(alert).toHaveTextContent(/load failed/i);
+        expect(alert).toHaveTextContent(/no active session/i);
+        expect(useToastStore.getState().queue).toHaveLength(0);
+    });
+});
+
+describe('SavesPage — delete', () => {
+    it('opens a confirm dialog on delete click without deleting or loading', async () => {
+        const del = vi.fn(() => Promise.resolve());
+        const load = vi.fn(() => Promise.resolve());
+        installBridge({ delete: del, load });
+        mockSlots = [makeSlot('slot-1')];
+
+        renderPage();
+
+        await userEvent.click(screen.getByTestId('save-delete-btn'));
+
+        expect(screen.getByTestId('save-delete-dialog')).toBeInTheDocument();
+        expect(del).not.toHaveBeenCalled();
+        expect(load).not.toHaveBeenCalled();
+    });
+
+    it('cancelling the confirm dialog deletes nothing and keeps the rows', async () => {
+        const del = vi.fn(() => Promise.resolve());
+        installBridge({ delete: del });
+        mockSlots = [makeSlot('slot-1')];
+
+        renderPage();
+
+        await userEvent.click(screen.getByTestId('save-delete-btn'));
+        await userEvent.click(screen.getByTestId('save-delete-cancel'));
+
+        expect(del).not.toHaveBeenCalled();
+        await waitFor(() => {
+            expect(screen.queryByTestId('save-delete-dialog')).not.toBeInTheDocument();
+        });
+        expect(screen.getByTestId('save-load-btn')).toBeInTheDocument();
+    });
+
+    it('confirming closes the dialog, deletes the slot, and toasts success', async () => {
+        const del = vi.fn(() => Promise.resolve());
+        installBridge({ delete: del });
+        mockSlots = [makeSlot('slot-1')];
+
+        renderPage();
+
+        await userEvent.click(screen.getByTestId('save-delete-btn'));
+        await userEvent.click(screen.getByTestId('save-delete-confirm'));
+
+        await waitFor(() => {
+            expect(del).toHaveBeenCalledWith(toSlotId('slot-1'));
+        });
+        expect(screen.queryByTestId('save-delete-dialog')).not.toBeInTheDocument();
+        await waitFor(() => {
+            expect(
+                useToastStore.getState().queue.some((toast) => toast.title === 'Save deleted'),
+            ).toBe(true);
+        });
+    });
+
+    it('surfaces a failure toast when deletion rejects, without an inline alert', async () => {
+        const del = vi.fn(() => Promise.reject(new Error('disk gone')));
+        installBridge({ delete: del });
+        mockSlots = [makeSlot('slot-1')];
+
+        renderPage();
+
+        await userEvent.click(screen.getByTestId('save-delete-btn'));
+        await userEvent.click(screen.getByTestId('save-delete-confirm'));
+
+        await waitFor(() => {
+            expect(
+                useToastStore.getState().queue.some((toast) => toast.title === 'Delete failed'),
+            ).toBe(true);
+        });
+        expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
+});
+
+describe('SavesPage — close', () => {
+    it('closes back to the main menu, carrying the active gameId', async () => {
+        render(<SavesPage />);
+
+        await userEvent.click(screen.getByTestId('saves-close-btn'));
+
+        expect(push).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
+    it('closes to the main menu without injecting a gameId when the URL has none', async () => {
+        // No `?gameId=` in the URL → the close route must NOT fabricate a
+        // default (main-menu deliberately has no default-game fallback).
+        window.history.replaceState({}, '', '/saves');
+
+        render(<SavesPage />);
+
+        await userEvent.click(screen.getByTestId('saves-close-btn'));
+
+        expect(push).toHaveBeenCalledWith('/main-menu');
+    });
+});
+
+describe('SavesPage — regression (pure load/delete browser)', () => {
+    it('renders no New Save form', () => {
+        mockSlots = [makeSlot('slot-1')];
+
+        render(<SavesPage />);
+
+        expect(screen.queryByText(/new save/i)).not.toBeInTheDocument();
+        expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    });
+
+    it('renders no per-row overwrite Save button', () => {
+        mockSlots = [makeSlot('slot-1')];
+
+        render(<SavesPage />);
+
+        expect(screen.queryByRole('button', { name: /^save /i })).not.toBeInTheDocument();
     });
 });

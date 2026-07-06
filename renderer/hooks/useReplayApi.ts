@@ -2,7 +2,7 @@
  * renderer/hooks/useReplayApi.ts
  *
  * Typed hook that wraps `window.__chimera.replay.*` for the replay browser and
- * player routes. Mirrors the pattern of `renderer/app/saves/useSavesApi.ts`.
+ * player routes. Mirrors the pattern of `renderer/hooks/useSavesApi.ts`.
  *
  * Both replay pages depend on this hook so no component reaches into the preload
  * bridge directly (issue #660 acceptance criterion / Invariant boundary).

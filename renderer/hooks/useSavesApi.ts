@@ -1,10 +1,10 @@
 /**
- * renderer/app/saves/useSavesApi.ts
+ * renderer/hooks/useSavesApi.ts
  *
  * Typed hook that wraps `window.__chimera.saves.*` for use in the SavesPage
  * and any other renderer component that needs save/load/delete operations.
  *
- * Mirrors the pattern of `renderer/app/lobby/useLobbyApi.ts`.
+ * Mirrors the pattern of `renderer/hooks/useReplayApi.ts`.
  *
  * Architecture reference: §4.11 — Save / Load Persistence
  * Task: issue #374 (WARN-1)

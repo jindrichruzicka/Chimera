@@ -1,284 +1,230 @@
 'use client';
 
 /**
- * renderer/app/saves/page.tsx
+ * renderer/app/saves/page.tsx — Saves Browser (§4.11, F68 / #824).
  *
- * SaveScreen page: lists save slots from `saveStore.slots` and exposes
- * Save, Load, and Delete actions routed through `window.__chimera.saves.*`.
+ * Pure load/delete browser over the save slots in `saveStore.slots`, rebuilt on
+ * the replay-browser pattern (`renderer/app/replays/page.tsx`) so the two
+ * browsers read as one design. Saves are created in-game and by autosave —
+ * this screen never writes a slot.
  *
- * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #374
+ * Row click loads the slot; the page does not navigate on load (the shell
+ * navigates when the restored snapshot lands). Deletes are gated behind a
+ * confirm Modal; the store refreshes itself through the `onSlotUpdate` push
+ * wired by SaveStoreBootstrap, so no refetch happens here.
  *
  * Invariants:
  *   #1 — GameSnapshot never leaves the main process; this page reads only
  *         SaveSlotMeta from saveStore, never raw SaveFile or GameSnapshot.
  *   #4 — The renderer reads state; all writes go through `window.__chimera`.
- *
- * Rules:
- *   - Subscribes to saveStore through narrow typed selectors only.
- *   - All save/load/delete operations dispatched through `window.__chimera.saves`.
- *   - Must NOT import from: electron/main/, simulation/engine/, networking/.
+ *   #74 — Toast titles are static literals carrying no save metadata.
+ *   #80/#94 — Engine shell page: no `games/*` or `apps/*` imports; the active
+ *         game comes from the `?gameId=` URL param.
+ *   #91/#96 — Tokens-only CSS module; UI primitives via the components barrel.
  */
 
-import React, { useCallback, useState } from 'react';
-import { toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
+import React from 'react';
+import { useRouter } from 'next/navigation';
 import type { SaveSlotMeta, SlotId } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Button } from '../../components/ui/Button';
-import { Caption } from '../../components/ui/Caption';
-import { Heading } from '../../components/ui/Heading';
-import { Label } from '../../components/ui/Label';
+import { Caption, Heading, IconButton, Modal } from '../../components/ui';
+import { useSavesApi } from '../../hooks/useSavesApi.js';
+import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useSaveStore } from '../../state/saveStore.js';
 import { useToastStore } from '../../state/toastStore.js';
-import { useSavesApi } from './useSavesApi.js';
+import styles from './page.module.css';
 
-// ── SaveSlotRow ───────────────────────────────────────────────────────────────
-
-interface SaveSlotRowProps {
-    readonly slot: SaveSlotMeta;
-    readonly onSave: (slot: SaveSlotMeta) => void;
-    readonly onLoad: (slotId: SlotId) => void;
-    readonly onDelete: (slotId: SlotId) => void;
+function formatSavedAt(savedAt: number): string {
+    const date = new Date(savedAt);
+    return Number.isNaN(date.getTime()) ? String(savedAt) : date.toLocaleString();
 }
 
-function SaveSlotRow({ slot, onSave, onLoad, onDelete }: SaveSlotRowProps): React.ReactElement {
-    const savedAtDate = new Date(slot.savedAt).toLocaleString();
-
+/**
+ * Compact trailing delete control for a save row. Rendered as a **sibling** of
+ * the load button (a `<button>` may not nest another), so clicking it never
+ * triggers the row's load handler. Ghost at rest; the icon shifts to the danger
+ * tokens on hover/focus (Invariant #91: tokens only).
+ */
+function DeleteSaveButton({
+    onDelete,
+    label,
+}: {
+    readonly onDelete: () => void;
+    readonly label: string;
+}): React.ReactElement {
     return (
-        <li
-            style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--ch-space-md)',
-                padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
-                borderBottom: 'var(--ch-border-width-sm) solid var(--ch-color-border-subtle)',
-            }}
+        <IconButton
+            variant="ghost"
+            className={styles['deleteBtn']}
+            aria-label={label}
+            data-testid="save-delete-btn"
+            onClick={onDelete}
         >
-            <span
-                style={{
-                    minWidth: 'calc(var(--ch-space-md) * 8)',
-                    fontWeight: 'var(--ch-font-weight-semibold)',
-                }}
+            <span aria-hidden="true">🗑</span>
+        </IconButton>
+    );
+}
+
+function SaveSlotRow({
+    slot,
+    onLoad,
+    onDelete,
+}: {
+    readonly slot: SaveSlotMeta;
+    readonly onLoad: (slotId: SlotId) => void;
+    readonly onDelete: (slotId: SlotId) => void;
+}): React.ReactElement {
+    const title = slot.label ?? slot.slotId;
+    return (
+        <li className={styles['rowItem']}>
+            <button
+                type="button"
+                className={styles['row']}
+                aria-label={`Load ${title}`}
+                data-testid="save-load-btn"
+                onClick={() => onLoad(slot.slotId)}
             >
-                {slot.slotId}
-            </span>
-            <span style={{ minWidth: 'calc(var(--ch-space-md) * 4)' }}>{slot.tick}</span>
-            <span
-                data-testid={`slot-saved-at-${slot.slotId}`}
-                style={{
-                    minWidth: 'calc(var(--ch-space-md) * 12)',
-                    color: 'var(--ch-color-text-disabled)',
-                }}
-            >
-                {savedAtDate}
-            </span>
-            {slot.label !== undefined && (
-                <span style={{ flex: 1, fontStyle: 'italic' }}>{slot.label}</span>
-            )}
-            <span style={{ marginLeft: 'auto', display: 'flex', gap: 'var(--ch-space-sm)' }}>
-                <Button
-                    size="sm"
-                    variant="secondary"
-                    aria-label={`Save ${slot.slotId}`}
-                    onClick={() => {
-                        onSave(slot);
+                <div
+                    style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 'var(--ch-space-xs)',
                     }}
                 >
-                    Save
-                </Button>
-                <Button
-                    size="sm"
-                    variant="ghost"
-                    aria-label={`Load ${slot.slotId}`}
-                    onClick={() => {
-                        onLoad(slot.slotId);
-                    }}
-                >
-                    Load
-                </Button>
-                <Button
-                    size="sm"
-                    variant="danger"
-                    aria-label={`Delete ${slot.slotId}`}
-                    onClick={() => {
-                        onDelete(slot.slotId);
-                    }}
-                >
-                    Delete
-                </Button>
-            </span>
+                    <span>{title}</span>
+                    <Caption tone="muted">
+                        {formatSavedAt(slot.savedAt)} · tick {slot.tick}
+                    </Caption>
+                </div>
+            </button>
+            <DeleteSaveButton label={`Delete ${title}`} onDelete={() => onDelete(slot.slotId)} />
         </li>
     );
 }
-
-// ── NewSaveForm ───────────────────────────────────────────────────────────────
-
-interface NewSaveFormProps {
-    readonly gameId: string;
-    readonly onNewSave: (gameId: string, slotId: SlotId | undefined) => void;
-}
-
-function NewSaveForm({ gameId, onNewSave }: NewSaveFormProps): React.ReactElement {
-    const [slotId, setSlotId] = React.useState('');
-
-    const handleSubmit = (e: React.FormEvent): void => {
-        e.preventDefault();
-        const trimmed = slotId.trim();
-        onNewSave(gameId, trimmed !== '' ? toSlotId(trimmed) : undefined);
-        setSlotId('');
-    };
-
-    return (
-        <form
-            onSubmit={handleSubmit}
-            style={{
-                display: 'flex',
-                gap: 'var(--ch-space-sm)',
-                alignItems: 'center',
-                marginBottom: 'var(--ch-space-md)',
-            }}
-        >
-            <Label htmlFor="new-save-slot-id" style={{ whiteSpace: 'nowrap' }}>
-                Slot ID
-            </Label>
-            <input
-                id="new-save-slot-id"
-                type="text"
-                value={slotId}
-                onChange={(e) => {
-                    setSlotId(e.target.value);
-                }}
-                placeholder="optional — auto-generated if blank"
-                style={{ flex: 1 }}
-            />
-            <Button type="submit" variant="secondary" size="sm">
-                New Save
-            </Button>
-        </form>
-    );
-}
-
-// ── SavesPage ─────────────────────────────────────────────────────────────────
-
-/** The save-screen operations routed through {@link runSavesAction}. */
-type SavesOp = 'Save' | 'Load' | 'Delete';
 
 export default function SavesPage(): React.ReactElement {
     const slots = useSaveStore((s) => s.slots);
     const isLoading = useSaveStore((s) => s.isLoading);
     const savesApi = useSavesApi();
-    // Surface IPC failures (BLOCK-3 wiring rejects when no session is active,
-    // load can throw SaveNotFoundError, etc.) so users see what went wrong.
-    const [error, setError] = useState<string | null>(null);
+    const router = useRouter();
+    // Surface load rejections inline (BLOCK-3 wiring rejects when no session is
+    // active, load can throw SaveNotFoundError, etc.) so users see what went wrong.
+    const [error, setError] = React.useState<string | null>(null);
+    const [pendingDelete, setPendingDelete] = React.useState<SlotId | null>(null);
 
-    const runSavesAction = useCallback(
-        async (op: SavesOp, fn: () => Promise<unknown>): Promise<void> => {
-            try {
-                setError(null);
-                await fn();
-            } catch (e: unknown) {
-                const message = e instanceof Error ? e.message : String(e);
-                setError(`${op} failed: ${message}`);
-                if (op === 'Save') {
-                    // §4.30 engine-wired source: a save attempt failed. The toast
-                    // title is a static literal and carries no `message` body —
-                    // toast content must not derive from SaveFile (Invariant #74);
-                    // the detail stays in the inline alert above. Duration is the
-                    // severity default (no arbitrary durationMs).
-                    useToastStore.getState().push({ severity: 'error', title: 'Save failed' });
-                }
-            }
-        },
-        [],
-    );
-
-    const handleSave = useCallback(
-        (slot: SaveSlotMeta): void => {
-            void runSavesAction('Save', () =>
-                savesApi.save({ gameId: slot.gameId, slotId: slot.slotId }),
-            );
-        },
-        [savesApi, runSavesAction],
-    );
-
-    const handleLoad = useCallback(
+    const handleLoad = React.useCallback(
         (slotId: SlotId): void => {
-            void runSavesAction('Load', () => savesApi.load(slotId));
+            setError(null);
+            // No navigation here — the shell navigates when the restored
+            // snapshot lands. The detail stays in the inline alert (no toast).
+            void savesApi.load(slotId).catch((e: unknown) => {
+                setError(`Load failed: ${e instanceof Error ? e.message : String(e)}`);
+            });
         },
-        [savesApi, runSavesAction],
+        [savesApi],
     );
 
-    const handleDelete = useCallback(
-        (slotId: SlotId): void => {
-            void runSavesAction('Delete', () => savesApi.delete(slotId));
-        },
-        [savesApi, runSavesAction],
-    );
+    const handleClose = React.useCallback(() => {
+        // Return to the main menu, carrying the active `?gameId=` from the URL
+        // (resolved fresh, nullable) — main-menu deliberately has no
+        // default-game fallback, so never fabricate one.
+        const shellGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+        router.push(withShellGameId('/main-menu', shellGameId));
+    }, [router]);
 
-    const handleNewSave = useCallback(
-        (gameId: string, slotId: SlotId | undefined): void => {
-            const request = slotId !== undefined ? { gameId, slotId } : { gameId };
-            void runSavesAction('Save', () => savesApi.save(request));
-        },
-        [savesApi, runSavesAction],
-    );
+    const handleRequestDelete = React.useCallback((slotId: SlotId) => {
+        setPendingDelete(slotId);
+    }, []);
 
-    const activeGameId = slots[0]?.gameId ?? 'tactics';
+    const handleCancelDelete = React.useCallback(() => {
+        setPendingDelete(null);
+    }, []);
 
-    if (isLoading) {
-        return (
-            <main
-                style={{ fontFamily: 'var(--ch-font-ui)', padding: 'calc(var(--ch-space-md) * 2)' }}
-            >
+    const handleConfirmDelete = React.useCallback(async () => {
+        if (pendingDelete === null) return;
+        const slotId = pendingDelete;
+        // Close the dialog up front — the delete runs in the background and the
+        // row drops when the store's `onSlotUpdate` push lands.
+        setPendingDelete(null);
+        try {
+            await savesApi.delete(slotId);
+            // §4.30: static-literal toast title — carries no save metadata.
+            useToastStore.getState().push({ severity: 'success', title: 'Save deleted' });
+        } catch {
+            useToastStore.getState().push({ severity: 'error', title: 'Delete failed' });
+        }
+    }, [pendingDelete, savesApi]);
+
+    const isEmpty = !isLoading && slots.length === 0;
+
+    return (
+        <main className={styles['page']} data-testid="saves-page">
+            <div className={styles['header']}>
                 <Heading level={1} size="xl">
                     Saves
                 </Heading>
+                <IconButton
+                    variant="danger"
+                    aria-label="Close saves"
+                    data-testid="saves-close-btn"
+                    onClick={handleClose}
+                >
+                    <span aria-hidden="true">X</span>
+                </IconButton>
+            </div>
+
+            {isLoading && (
                 <div role="status" aria-label="Loading save slots">
                     Loading…
                 </div>
-            </main>
-        );
-    }
+            )}
 
-    return (
-        <main style={{ fontFamily: 'var(--ch-font-ui)', padding: 'calc(var(--ch-space-md) * 2)' }}>
-            <Heading level={1} size="xl">
-                Saves
-            </Heading>
             {error !== null && (
-                <div
-                    role="alert"
-                    style={{
-                        padding: 'calc(var(--ch-space-sm) + var(--ch-space-xs)) var(--ch-space-md)',
-                        marginBottom: 'var(--ch-space-md)',
-                        background: 'var(--ch-color-error-surface-muted)',
-                        border: 'var(--ch-border-width-sm) solid var(--ch-color-error-border-muted)',
-                        borderRadius: 'var(--ch-radius-sm)',
-                        color: 'var(--ch-color-error-text-muted)',
-                    }}
-                >
+                <div className={styles['error']} role="alert">
                     {error}
                 </div>
             )}
-            {slots.length === 0 ? (
-                <>
-                    <NewSaveForm gameId={activeGameId} onNewSave={handleNewSave} />
-                    <Caption tone="muted">No save slots found.</Caption>
-                </>
-            ) : (
-                <>
-                    <NewSaveForm gameId={activeGameId} onNewSave={handleNewSave} />
-                    <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                        {slots.map((slot) => (
-                            <SaveSlotRow
-                                key={slot.slotId}
-                                slot={slot}
-                                onSave={handleSave}
-                                onLoad={handleLoad}
-                                onDelete={handleDelete}
-                            />
-                        ))}
-                    </ul>
-                </>
+
+            {isEmpty && (
+                <div aria-label="No saves yet" style={{ paddingTop: 'var(--ch-space-md)' }}>
+                    <Caption tone="muted">No saves yet.</Caption>
+                </div>
+            )}
+
+            {!isLoading && !isEmpty && (
+                <ul className={styles['list']}>
+                    {slots.map((slot) => (
+                        <SaveSlotRow
+                            key={slot.slotId}
+                            slot={slot}
+                            onLoad={handleLoad}
+                            onDelete={handleRequestDelete}
+                        />
+                    ))}
+                </ul>
+            )}
+
+            {pendingDelete !== null && (
+                <Modal
+                    open
+                    title="Delete save?"
+                    onClose={handleCancelDelete}
+                    data-testid="save-delete-dialog"
+                    actions={[
+                        { label: 'Cancel', testId: 'save-delete-cancel' },
+                        {
+                            label: 'Delete',
+                            variant: 'danger',
+                            testId: 'save-delete-confirm',
+                            onClick: () => {
+                                void handleConfirmDelete();
+                            },
+                        },
+                    ]}
+                >
+                    <Caption tone="muted">
+                        This save will be permanently deleted. This cannot be undone.
+                    </Caption>
+                </Modal>
             )}
         </main>
     );
