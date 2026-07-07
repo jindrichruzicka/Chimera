@@ -2519,6 +2519,22 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
             await manager.closeLobby();
         });
 
+        it('addAi skips slot indexes occupied by joined humans (#832)', async () => {
+            const manager = makeManager();
+            await manager.hostLobby({ gameId: 'tactics', maxPlayers: 3 });
+            // A second human seat occupies slot 1 (players[1]) by the
+            // seat-index convention (a human's seat index = its `players`
+            // position). The AI must not reuse it — a collision corrupts the
+            // save manifest and makes the save restore-rejected (#832).
+            await manager.addLocalSeat(playerId('seat-1'));
+
+            await manager.addAi();
+
+            expect(manager.getCurrentState()?.agentSlots).toEqual([{ slotIndex: 2, kind: 'ai' }]);
+
+            await manager.closeLobby();
+        });
+
         it('addAi rejects when the lobby is already full (humans + AI = maxPlayers)', async () => {
             const manager = makeManager();
             // maxPlayers 2: host (seat 0) + one AI fills the lobby.

@@ -295,14 +295,26 @@ export class LobbyManager {
     }
 
     /**
-     * Lowest free AI slot index in `[1, maxPlayers)` not already taken by an
-     * existing AI slot (seat 0 is the host). Deterministic so the synthetic
-     * `ai-{slotIndex}` id and the host game-start slot resolution agree. The
-     * `maxPlayers` fallback is unreachable while {@link addAi}'s fullness guard
-     * holds.
+     * Lowest free AI slot index in `[1, maxPlayers)` taken neither by an
+     * existing AI slot nor by a human seat. Human seats occupy indexes
+     * `[0, humanSeatCount)` by the `players`-array seat-index convention (a
+     * human's seat index = its position in `players`; see
+     * {@link seedSeatAttributes}). Skipping them stops an AI from colliding
+     * with a joined remote's slot — a collision misclassifies the remote as an
+     * AI seat and emits a duplicate `slotIndex`, corrupting the save manifest
+     * and making the save restore-rejected (#832). Seat 0 is always the host.
+     * Deterministic so the synthetic `ai-{slotIndex}` id and the host
+     * game-start slot resolution agree. The `maxPlayers` fallback is
+     * unreachable while {@link addAi}'s fullness guard holds.
      */
-    private nextFreeAiSlotIndex(current: readonly LobbyAgentSlot[]): number {
+    private nextFreeAiSlotIndex(
+        current: readonly LobbyAgentSlot[],
+        humanSeatCount: number,
+    ): number {
         const used = new Set(current.map((slot) => slot.slotIndex));
+        for (let seatIndex = 0; seatIndex < humanSeatCount; seatIndex += 1) {
+            used.add(seatIndex);
+        }
         for (let slotIndex = 1; slotIndex < this.maxPlayers; slotIndex += 1) {
             if (!used.has(slotIndex)) {
                 return slotIndex;
@@ -1065,7 +1077,10 @@ export class LobbyManager {
 
         const agentSlots: readonly LobbyAgentSlot[] = [
             ...current,
-            { slotIndex: this.nextFreeAiSlotIndex(current), kind: 'ai' },
+            {
+                slotIndex: this.nextFreeAiSlotIndex(current, this.lobbyState.players.length),
+                kind: 'ai',
+            },
         ];
         const nextState = LobbyManager.withAgentSlots(this.lobbyState, agentSlots);
         this.publishLobbyState(nextState);
