@@ -275,5 +275,5 @@ class SaveSchemaTooNewError extends Error {
 - [Simulation Core](simulation-core-action-pipeline.md) — `GameSnapshot`, `ActionHistory`, `TurnMemento`
 - [Electron Shell](electron-shell-ipc-bridge.md) — `SavesAPI` IPC namespace incl. `chimera:saves:restore-status` / `chimera:saves:cancel-restore` (#826)
 - [Multiplayer Provider](multiplayer-provider-websocket.md) — `hostLobby({ restore })`, JOIN seat claims, `resolveRestoredSeat` (#821/#822)
-- [Renderer State Stores](renderer-state-stores.md) — `saveStore` (`SaveSlotMeta[]` mirror)
+- [Renderer State Stores](renderer-state-stores.md) — `saveStore` (`SaveSlotMeta[]` mirror + restore-status slice driving `RestoreWaitingOverlay`, #828)
 - [Replay System](replay-system.md) — `ReplayFile` shares the same `ActionHistory` concept

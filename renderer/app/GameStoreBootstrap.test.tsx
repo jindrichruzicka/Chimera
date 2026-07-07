@@ -195,6 +195,52 @@ describe('GameStoreBootstrap — existing /lobby → /game redirect (regression)
     });
 });
 
+describe('GameStoreBootstrap — /saves → /game redirect on a playing snapshot (#828)', () => {
+    it('pushes /game when a playing snapshot arrives on /saves (restore completed)', () => {
+        window.history.replaceState({}, '', '/saves');
+        mockPathname = '/saves';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockPush).toHaveBeenCalledWith('/game');
+        expect(mockReset).not.toHaveBeenCalled();
+    });
+
+    it('preserves the game context (?gameId) when redirecting from /saves', () => {
+        window.history.replaceState({}, '', '/saves?gameId=tactics');
+        mockPathname = '/saves';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('playing') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockPush).toHaveBeenCalledWith('/game?gameId=tactics');
+    });
+
+    it('does not navigate when there is no snapshot on /saves', () => {
+        window.history.replaceState({}, '', '/saves');
+        mockPathname = '/saves';
+        mockSnapshot = null;
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockPush).not.toHaveBeenCalled();
+    });
+
+    it('does not navigate for a phase:lobby snapshot on /saves', () => {
+        // A return-to-lobby broadcast must not bounce /saves through /game into
+        // the game→lobby effect's reset; only a live match snapshot navigates.
+        window.history.replaceState({}, '', '/saves');
+        mockPathname = '/saves';
+        mockSnapshot = makeSnapshot({ phase: gamePhase('lobby') });
+
+        render(<GameStoreBootstrap />);
+
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(mockReset).not.toHaveBeenCalled();
+    });
+});
+
 describe('GameStoreBootstrap — app-level screen fade gates the navigation', () => {
     // These mount GameStoreBootstrap inside a real <FadeProvider>, so the
     // navigation effects take the fade path (fadeOut → then navigate) instead of

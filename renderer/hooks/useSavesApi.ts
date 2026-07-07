@@ -51,6 +51,7 @@ export interface SavesApi {
     save(request: SaveRequest): Promise<SaveSlotMeta>;
     load(slotId: SlotId): Promise<void>;
     delete(slotId: SlotId): Promise<void>;
+    cancelRestore(): Promise<void>;
 }
 
 // ── Hook ──────────────────────────────────────────────────────────────────────
@@ -89,6 +90,14 @@ export function useSavesApi(): SavesApi {
                     throw new Error(MISSING_BRIDGE_ERROR);
                 }
                 return api.delete(slotId);
+            },
+
+            async cancelRestore(): Promise<void> {
+                const api = getSavesBridge();
+                if (!api) {
+                    throw new Error(MISSING_BRIDGE_ERROR);
+                }
+                return api.cancelRestore();
             },
         }),
         [],

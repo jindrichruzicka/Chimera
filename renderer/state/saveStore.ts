@@ -20,7 +20,10 @@
 
 import { createStore, useStore } from 'zustand';
 import type { StoreApi } from 'zustand';
-import type { SaveSlotMeta } from '@chimera-engine/simulation/bridge/api-types.js';
+import type {
+    RestoreStatusEvent,
+    SaveSlotMeta,
+} from '@chimera-engine/simulation/bridge/api-types.js';
 
 // ── Store shape ───────────────────────────────────────────────────────────────
 
@@ -35,6 +38,31 @@ export interface SaveStoreState {
     readonly isLoading: boolean;
 
     /**
+     * Latest session-restore transition pushed over
+     * `chimera:saves:restore-status`, or `null` while idle (no restore seen
+     * yet, or dismissed locally). Terminal events (`ready`/`cancelled`/
+     * `failed`) are kept as-is; only `waiting` drives the overlay.
+     */
+    readonly restore: RestoreStatusEvent | null;
+
+    /**
+     * Remote-seat baseline latched when a restore enters `waiting` — the wire
+     * event carries only the still-missing seats, so the "connected/expected"
+     * roster count must be derived from the first waiting push. Held while
+     * pendingSeats shrink; re-latched fresh when a different match enters
+     * waiting.
+     */
+    readonly restoreExpectedSeats: number | null;
+
+    /**
+     * The matchId `restoreExpectedSeats` was latched for. Keyed so a waiting
+     * push that resurrects the overlay after a dismissed-but-failed cancel
+     * (same match, shrunken pendingSeats) restores the original baseline
+     * instead of re-latching a too-small one.
+     */
+    readonly restoreLatchMatchId: string | null;
+
+    /**
      * Apply incoming save slot list from IPC.
      * Called by `bootstrapSaveStore` after `list()` resolves and on every
      * `onSlotUpdate` push event.
@@ -42,6 +70,23 @@ export interface SaveStoreState {
      * ipcClient / bootstrap only — do NOT call from components directly.
      */
     applySaveSlots(slots: readonly SaveSlotMeta[]): void;
+
+    /**
+     * Apply an incoming restore-status transition.
+     * Called by `bootstrapSaveStore` on every `onRestoreStatus` push event.
+     *
+     * ipcClient / bootstrap only — do NOT call from components directly.
+     */
+    applyRestoreStatus(this: void, event: RestoreStatusEvent): void;
+
+    /**
+     * Optimistic local reset back to idle. Component-callable — the
+     * RestoreWaitingOverlay's abort path dismisses immediately without
+     * waiting for the main process to push its `cancelled` transition.
+     * Deliberately keeps the latch pair: if the cancel fails main-side and
+     * the same restore pushes `waiting` again, the baseline must survive.
+     */
+    dismissRestore(this: void): void;
 }
 
 // ── Factory (for testing and production use) ──────────────────────────────────
@@ -54,11 +99,39 @@ export function createSaveStore(): StoreApi<SaveStoreState> {
     return createStore<SaveStoreState>()((set) => ({
         slots: [],
         isLoading: true,
+        restore: null,
+        restoreExpectedSeats: null,
+        restoreLatchMatchId: null,
 
         applySaveSlots(slots: readonly SaveSlotMeta[]): void {
             set(() => ({
                 slots,
                 isLoading: false,
+            }));
+        },
+
+        applyRestoreStatus(event: RestoreStatusEvent): void {
+            set((state) => {
+                if (event.state !== 'waiting') {
+                    return { restore: event };
+                }
+                // Same match: never shrink the baseline (covers waiting→waiting
+                // shrinks AND a resurrect after a dismissed-but-failed cancel);
+                // different match: latch fresh from this event.
+                const sameMatch = state.restoreLatchMatchId === event.matchId;
+                return {
+                    restore: event,
+                    restoreExpectedSeats: sameMatch
+                        ? Math.max(state.restoreExpectedSeats ?? 0, event.pendingSeats.length)
+                        : event.pendingSeats.length,
+                    restoreLatchMatchId: event.matchId,
+                };
+            });
+        },
+
+        dismissRestore(): void {
+            set(() => ({
+                restore: null,
             }));
         },
     }));

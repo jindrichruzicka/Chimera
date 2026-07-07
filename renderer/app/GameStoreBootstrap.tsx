@@ -11,8 +11,9 @@
  * `confirmPrediction` + `applySnapshot`.
  *
  * Also handles automatic navigation: when a snapshot arrives (game started)
- * and the current path is /lobby, navigates to /game. This drives the CLIENT
- * window's navigation without requiring a snapshot subscription in lobby/page.
+ * and the current path is /lobby — or /saves for a completed session restore
+ * (#828) — navigates to /game. This drives the CLIENT window's navigation
+ * without requiring a snapshot subscription in lobby/page or saves/page.
  *
  * Architecture reference: §4.4 — Renderer State Stores;
  *                         §6  — simulation/prediction · Client Prediction (F17)
@@ -63,10 +64,20 @@ export function GameStoreBootstrap(): null {
     // windows: the host's handleStartGame() only calls startGame() and lets this
     // fire when the snapshot lands, so the fade-out runs to completion uncontested
     // (a second fade-out from the lobby would cancel this one and skip the fade).
+    //
+    // /saves joins the gate for session restore (#828): the saves page issues
+    // load() and stays put; when the restored match snapshot lands, this effect
+    // carries the host (and single-player loads) into /game. Restricted to
+    // non-'lobby' phases there so a return-to-lobby broadcast cannot bounce
+    // /saves through /game into the reverse effect's reset() below.
     useEffect(() => {
+        const browserPath = currentBrowserPathname(pathname);
         if (
             snapshot === null ||
-            !isLobbyPath(currentBrowserPathname(pathname)) ||
+            !(
+                isLobbyPath(browserPath) ||
+                (isSavesPath(browserPath) && snapshot.phase !== 'lobby')
+            ) ||
             transitioningRef.current
         ) {
             return;
@@ -175,6 +186,10 @@ function isLobbyPath(pathname: string | null): boolean {
 
 function isGamePath(pathname: string | null): boolean {
     return pathname === '/game' || pathname === '/game/' || pathname === '/game/index.html';
+}
+
+function isSavesPath(pathname: string | null): boolean {
+    return pathname === '/saves' || pathname === '/saves/' || pathname === '/saves/index.html';
 }
 
 function isReplayPlayerPath(pathname: string | null): boolean {

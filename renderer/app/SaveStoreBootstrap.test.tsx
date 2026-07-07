@@ -56,7 +56,7 @@ describe('SaveStoreBootstrap', () => {
     it('invokes bootstrapSaveStore with the saves bridge and the default gameId', () => {
         const unsubscribe = vi.fn();
         bootstrapSaveStoreMock.mockReturnValue(unsubscribe);
-        const saves = { list: vi.fn(), onSlotUpdate: vi.fn() };
+        const saves = { list: vi.fn(), onSlotUpdate: vi.fn(), onRestoreStatus: vi.fn() };
         (globalThis as { __chimera?: unknown }).__chimera = { saves };
 
         act(() => {
@@ -69,7 +69,7 @@ describe('SaveStoreBootstrap', () => {
 
     it('passes the activeGameId prop through to bootstrapSaveStore', () => {
         bootstrapSaveStoreMock.mockReturnValue(vi.fn());
-        const saves = { list: vi.fn(), onSlotUpdate: vi.fn() };
+        const saves = { list: vi.fn(), onSlotUpdate: vi.fn(), onRestoreStatus: vi.fn() };
         (globalThis as { __chimera?: unknown }).__chimera = { saves };
 
         act(() => {
@@ -82,7 +82,7 @@ describe('SaveStoreBootstrap', () => {
     it('calls the unsubscribe returned by bootstrapSaveStore on unmount', () => {
         const unsubscribe = vi.fn();
         bootstrapSaveStoreMock.mockReturnValue(unsubscribe);
-        const saves = { list: vi.fn(), onSlotUpdate: vi.fn() };
+        const saves = { list: vi.fn(), onSlotUpdate: vi.fn(), onRestoreStatus: vi.fn() };
         (globalThis as { __chimera?: unknown }).__chimera = { saves };
 
         act(() => {

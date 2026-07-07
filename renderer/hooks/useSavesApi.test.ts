@@ -153,6 +153,37 @@ describe('useSavesApi', () => {
         expect(mockDelete).toHaveBeenCalledWith(toSlotId('slot-2'));
     });
 
+    it('throws when calling cancelRestore without preload bridge', async () => {
+        const { result } = renderHook(() => useSavesApi());
+
+        await expect(result.current.cancelRestore()).rejects.toThrow(
+            'Chimera saves API not available',
+        );
+    });
+
+    it('delegates cancelRestore through the bridge', async () => {
+        const mockCancelRestore = vi.fn(async () => undefined);
+
+        Object.defineProperty(globalThis, '__chimera', {
+            configurable: true,
+            value: {
+                saves: {
+                    save: vi.fn(),
+                    load: vi.fn(),
+                    delete: vi.fn(),
+                    list: vi.fn(async () => []),
+                    onSlotUpdate: vi.fn(() => () => undefined),
+                    cancelRestore: mockCancelRestore,
+                },
+            },
+        });
+
+        const { result } = renderHook(() => useSavesApi());
+        await result.current.cancelRestore();
+
+        expect(mockCancelRestore).toHaveBeenCalledOnce();
+    });
+
     it('returns a stable reference across re-renders', () => {
         Object.defineProperty(globalThis, '__chimera', {
             configurable: true,

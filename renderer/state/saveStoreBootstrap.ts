@@ -6,6 +6,10 @@
  *     save slot list.
  *  2. Registers `api.onSlotUpdate` so the renderer stays in sync whenever
  *     the main process mutates the save slot list (saves, deletes, autosaves).
+ *  3. Registers `api.onRestoreStatus` so the restore slice tracks the
+ *     session-restore lifecycle. The channel is push-only with no pull twin
+ *     (F68 #826), so this bootstrap-time subscription — before any load can
+ *     be issued — is the only way the renderer sees every transition.
  *
  * Usage (from a 'use client' component's useEffect):
  *
@@ -13,7 +17,7 @@
  *   return stop; // cleanup on unmount
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Task: issue #373
+ * Task: issue #373; restore-status subscription: issue #828
  *
  * Invariant #1: SaveSlotMeta (not GameSnapshot) is what crosses IPC.
  */
@@ -31,11 +35,15 @@ import { useSaveStore } from './saveStore.js';
  *          push events.
  */
 export function bootstrapSaveStore(
-    api: Pick<SavesAPI, 'list' | 'onSlotUpdate'>,
+    api: Pick<SavesAPI, 'list' | 'onSlotUpdate' | 'onRestoreStatus'>,
     gameId: string,
 ): Unsubscribe {
-    const unsubscribe = api.onSlotUpdate((slots) => {
+    const unsubscribeSlots = api.onSlotUpdate((slots) => {
         useSaveStore.getState().applySaveSlots(slots);
+    });
+
+    const unsubscribeRestore = api.onRestoreStatus((event) => {
+        useSaveStore.getState().applyRestoreStatus(event);
     });
 
     void api
@@ -47,5 +55,8 @@ export function bootstrapSaveStore(
             useSaveStore.getState().applySaveSlots([]);
         });
 
-    return unsubscribe;
+    return () => {
+        unsubscribeSlots();
+        unsubscribeRestore();
+    };
 }

@@ -3,12 +3,15 @@
 /**
  * renderer/app/SaveStoreBootstrap.tsx
  *
- * Thin client component that wires the chimera:saves:slot-update push
- * channel into the saveStore on mount and triggers the initial
- * `saves.list(activeGameId)` fetch. Renders nothing.
+ * Thin client component that wires the chimera:saves:slot-update and
+ * chimera:saves:restore-status push channels into the saveStore on mount
+ * and triggers the initial `saves.list(activeGameId)` fetch. Renders
+ * nothing. Mounting this at app bootstrap is load-bearing for the restore
+ * slice: restore-status is push-only (no pull twin, F68 #826), so the
+ * subscription must exist before any load can be issued.
  *
  * Architecture reference: §4.11 — Save / Load Persistence
- * Issue: review BLOCK-1 follow-up
+ * Issue: review BLOCK-1 follow-up; restore-status: issue #828
  *
  * Invariants upheld:
  *   #1 — Only SaveSlotMeta (never GameSnapshot) crosses the IPC boundary.

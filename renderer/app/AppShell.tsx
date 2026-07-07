@@ -5,6 +5,7 @@ import { ProfileRejectedToastBridge } from '../components/lobby/ProfileRejectedT
 import { ReplayExportToastBridge } from '../components/replay/ReplayExportToastBridge';
 import { ReplayNavigationBridge } from '../components/replay/ReplayNavigationBridge';
 import { ConnectionStatusIndicator } from '../components/shell/ConnectionStatusIndicator';
+import { RestoreWaitingOverlay } from '../components/shell/RestoreWaitingOverlay';
 import { RootErrorBoundary } from '../components/shell/RootErrorBoundary';
 import { ScreenFadeRoot } from '../components/shell/ScreenFadeRoot';
 import { ShellBackgroundHost } from '../components/shell/ShellBackgroundHost';
@@ -49,6 +50,11 @@ export function AppShell({ children }: { readonly children: ReactNode }): React.
                     <div style={{ position: 'relative', zIndex: 1 }}>
                         <ConnectionStatusIndicator />
                         <RootErrorBoundary>{children}</RootErrorBoundary>
+                        {/*
+                         * App-level so the waiting modal survives the
+                         * /saves → /game route hop mid-restore (#828).
+                         */}
+                        <RestoreWaitingOverlay />
                         <ToastHost />
                     </div>
                 </ScreenFadeRoot>

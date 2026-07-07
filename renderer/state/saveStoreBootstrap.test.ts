@@ -11,8 +11,9 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
+import { playerId, toSlotId } from '@chimera-engine/simulation/bridge/api-types.js';
 import type {
+    RestoreStatusEvent,
     SavesAPI,
     SaveSlotMeta,
     Unsubscribe,
@@ -29,16 +30,24 @@ function makeSlot(slotId: string, tick = 1): SaveSlotMeta {
 function makeSavesApi(
     listImpl?: (gameId: string) => Promise<SaveSlotMeta[]>,
     onSlotUpdateImpl?: (cb: (slots: SaveSlotMeta[]) => void) => Unsubscribe,
-): Pick<SavesAPI, 'list' | 'onSlotUpdate'> {
+    onRestoreStatusImpl?: (cb: (event: RestoreStatusEvent) => void) => Unsubscribe,
+): Pick<SavesAPI, 'list' | 'onSlotUpdate' | 'onRestoreStatus'> {
     return {
         list: vi.fn(listImpl ?? (() => Promise.resolve([]))),
         onSlotUpdate: vi.fn(onSlotUpdateImpl ?? (() => vi.fn())),
+        onRestoreStatus: vi.fn(onRestoreStatusImpl ?? (() => vi.fn())),
     };
 }
 
 // Reset singleton between tests
 beforeEach(() => {
-    useSaveStore.setState({ slots: [], isLoading: true });
+    useSaveStore.setState({
+        slots: [],
+        isLoading: true,
+        restore: null,
+        restoreExpectedSeats: null,
+        restoreLatchMatchId: null,
+    });
 });
 
 // ── bootstrapSaveStore ────────────────────────────────────────────────────────
@@ -113,5 +122,51 @@ describe('bootstrapSaveStore()', () => {
 
         expect(useSaveStore.getState().isLoading).toBe(false);
         expect(useSaveStore.getState().slots).toEqual([]);
+    });
+
+    it('registers an onRestoreStatus callback with the bridge', () => {
+        const api = makeSavesApi();
+        bootstrapSaveStore(api, 'tactics');
+        expect(api.onRestoreStatus).toHaveBeenCalledOnce();
+    });
+
+    it('routes onRestoreStatus push events into the store via applyRestoreStatus', () => {
+        let capturedCb: ((event: RestoreStatusEvent) => void) | undefined;
+        const api = makeSavesApi(undefined, undefined, (cb) => {
+            capturedCb = cb;
+            return vi.fn();
+        });
+
+        bootstrapSaveStore(api, 'tactics');
+
+        expect(capturedCb).toBeDefined();
+
+        const event: RestoreStatusEvent = {
+            state: 'waiting',
+            gameId: 'tactics',
+            matchId: 'match-1',
+            lobbyCode: 'ABCD',
+            pendingSeats: [playerId('p2'), playerId('p3')],
+        };
+        capturedCb!(event);
+
+        expect(useSaveStore.getState().restore).toEqual(event);
+        expect(useSaveStore.getState().restoreExpectedSeats).toBe(2);
+    });
+
+    it('calling the returned unsubscribe tears down both push subscriptions', () => {
+        const unsubscribeSlots = vi.fn();
+        const unsubscribeRestore = vi.fn();
+        const api = makeSavesApi(
+            undefined,
+            () => unsubscribeSlots,
+            () => unsubscribeRestore,
+        );
+
+        const stop = bootstrapSaveStore(api, 'tactics');
+        stop();
+
+        expect(unsubscribeSlots).toHaveBeenCalledOnce();
+        expect(unsubscribeRestore).toHaveBeenCalledOnce();
     });
 });
