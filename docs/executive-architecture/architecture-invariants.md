@@ -16,10 +16,10 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 | Theme                                  | Invariants                                                                                                          |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | **Determinism & purity**               | 1, 2, 42, 43, 44, 54, 55, 70, 71, 75, 76, 104, 105, 106, 107                                                        |
-| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101, 103, 105            |
+| **State ownership & trust boundaries** | 3, 4, 5, 6, 8, 23, 24, 26, 32, 33, 36, 57, 58, 59, 60, 61, 62, 66, 72, 73, 74, 78, 95, 99, 101, 103, 105, 108       |
 | **Action pipeline & extensibility**    | 7, 10, 11, 12, 13, 16, 17, 18, 19, 25, 79, 89, 90, 103                                                              |
 | **Content & assets**                   | 13, 14, 15, 20, 21, 22, 46, 97                                                                                      |
-| **Save / load / replay**               | 23, 24, 25, 26, 70, 71                                                                                              |
+| **Save / load / replay**               | 23, 24, 25, 26, 70, 71, 108                                                                                         |
 | **Settings, profiles, input**          | 32, 33, 34, 35, 36, 59, 60, 61, 62, 65, 66                                                                          |
 | **Debug, logging, crash**              | 27, 28, 29, 30, 31, 67, 68, 69                                                                                      |
 | **Rendering & UI boundaries**          | 47, 48, 49, 50, 51, 52, 53, 56, 57, 58, 63, 64, 74, 80, 81, 82, 83, 84, 85, 86, 87, 88, 91, 92, 93, 94, 96, 97, 100 |
@@ -228,7 +228,7 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 
 ---
 
-## Invariants 91–107
+## Invariants 91–108
 
 **91.** Shell page components (`main-menu`, `lobby`, `settings`, `saves`, `component-gallery`) must not set hardcoded colour, spacing, or radius values in any inline `style` prop. Every visual attribute must reference a `var(--ch-*)` custom property (§4.35, §4.37).
 
@@ -263,6 +263,8 @@ tags: [invariants, architecture, rules, constraints, review-gate]
 **106.** The `ai/` package is the **game-agnostic AI framework only** — its sole top-level members are `engine/` (the reusable state-machine / command / scheduler primitives), `__tests__/`, `index.ts`, and `CLAUDE.md`. Game-specific AI (concrete `AIState`/`AICommand`/policy implementations) lives in `games/<name>/ai/` (which **may** import `ai/`, `simulation/`, and `shared/`), never inside `ai/` itself. A re-introduced `ai/policies/<game>/` (or any other game-named subtree under `ai/`) is a module-boundary violation, mirroring the import-direction rule of Invariant #47 (`ai/` must not import from `games/*`) with a containment rule (§3, mechanical check 11).
 
 **107.** The game-agnostic packages `ai/` and `shared/` must not **define** game-specific gameplay tokens — per-game constants (`<GAME>_*`, e.g. `TACTICS_*`) or per-game action-string namespaces (`'<gameId>:*'`, e.g. `'tactics:move_unit'`). Such constants are owned by their game and live in `games/<name>/` (e.g. `games/tactics/constants.ts`); the `engine:` namespace (Invariant #11) is the only reserved cross-cutting namespace. This keeps the pure engine packages free of any single game's vocabulary as the monolith is decomposed (§3, mechanical check 12).
+
+**108.** `SaveFile.session` is **session-composition metadata**, never gameplay state: it is written only by the host's save capture (`SessionRuntime.captureSaveFile`, from the live lobby roster) and the v5→v6 migration backfill (`deriveSessionManifest`), and it is read only by session orchestration (`SessionRestoreCoordinator` / `sanitizeRestoreManifest` and the composition root's restore wiring). It is never projected, never read by any reducer or `validate()`, and never crosses IPC or the network as an object — the one sanctioned derived surface is the slim, schema-validated restore-status projection (`toRestoreStatusEvent` → `chimera:saves:restore-status`, #826), which carries only the `matchId` and the pending seat ids, never control kinds, slot indexes, or the manifest itself (Invariants #1, #59, #101). The `matchId` it mirrors is minted **host-side, once per match start**, in the `engine:start_game` dispatch path (Invariant #101). A restored session re-enters play **exclusively** via `hostLobby({ restore }) → applyRestoredFile → seatRestoredRoster` — the coordinator-driven menu flow (or the same-match in-session apply), both funnelling through the single Invariant #24 apply helper; no code path may fabricate a live session from a `SaveFile` any other way, and no restored seat may activate before the checkpoint is applied (the start-suppression gate keeps `onGameStart` off the pre-restore lobby snapshot) (§4.11, §4.14, F68).
 
 ---
 

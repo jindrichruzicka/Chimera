@@ -1,7 +1,7 @@
 ---
 title: 'Save / Load Persistence'
-description: 'SaveFile schema, SaveSerializer strategies (JSON/Compressed), SaveRepository interface, FileSaveRepository atomic write, SaveMigrator chain, multiplayer save constraints, and saveStore.'
-tags: [save-load, persistence, memento, repository, migration]
+description: 'SaveFile schema (v6: session manifest + matchId), SaveSerializer strategies (JSON/Compressed), SaveRepository interface, FileSaveRepository atomic write, SaveMigrator chain, SessionRestoreCoordinator menu-load restore, multiplayer save constraints, and saveStore.'
+tags: [save-load, persistence, memento, repository, migration, restore]
 ---
 
 # Save / Load Persistence
@@ -35,50 +35,58 @@ interface SaveFileHeader {
     readonly slotId: string; // plain string in simulation/; toSlotId() converts at SavesIpcAdapter boundary
     readonly savedAt: number; // Unix ms timestamp
     readonly turnNumber: number;
-    readonly playerNames: string[];
+    readonly playerNames: readonly string[];
     readonly thumbnailDataUrl?: string; // Base64 PNG (optional)
+    readonly checksum?: string; // SHA-256 of the body {checkpoint, deltaActions, pendingCommitments}; verified on load
+}
+
+interface SaveSeat {
+    readonly playerId: PlayerId; // raw id exactly as in checkpoint.players
+    readonly control: 'host' | 'local' | 'remote' | 'ai';
+    readonly slotIndex: number;
+    readonly omniscient?: boolean; // AI-only
+}
+
+interface SaveSessionManifest {
+    readonly matchId: string; // stable match identity, mirrors checkpoint.matchId
+    readonly maxPlayers: number; // lobby capacity (migrated backfills record a floor)
+    readonly seats: readonly SaveSeat[];
 }
 
 interface SaveFile {
     readonly header: SaveFileHeader;
-    readonly checkpoint: GameSnapshot; // Full snapshot at save time — O(1) restore
+    readonly checkpoint: BaseGameSnapshot; // Full snapshot at save time — O(1) restore
     readonly deltaActions: readonly EngineAction[]; // Empty at normal END_TURN saves
     readonly pendingCommitments: Record<CommitmentId, CommitmentEnvelope>; // Anti-cheat continuity
+    readonly stagedReveals: StagedReveals; // {value, nonce} per pending envelope — moves as a unit with pendingCommitments
+    readonly session: SaveSessionManifest; // F68 #820 — session composition for restore
 }
 ```
 
-> **Invariant #26** — `SaveFile.pendingCommitments` must be restored into `CommitmentScheme` on load.
+> **Invariant #26** — `SaveFile.pendingCommitments` must be restored into `CommitmentScheme` on load, together with `stagedReveals` — the two move as a unit, so a save taken mid-commit can still reveal after load.
+> **Invariant #108** — `SaveFile.session` is session-composition metadata: never projected, never read by reducers, never sent over IPC as an object (the slim, schema-validated restore-status projection is the one sanctioned derived surface). Clients learn the `matchId` only via their projected snapshots.
 
 ---
 
 ## SaveSerializer — Strategy Pattern
 
+Both methods are **async** so implementations can use non-blocking transforms
+(e.g. async gzip); synchronous implementations return a resolved Promise.
+`deserialize` validates the parsed value against the save-file Zod schema —
+legacy-optional fields (`stagedReveals`, `session`) parse as absent and are
+backfilled by the migrator.
+
 ```typescript
 export interface SaveSerializer {
-    serialize(file: SaveFile): string | Buffer;
-    deserialize(raw: string | Buffer): SaveFile;
+    serialize(file: SaveFile): Promise<string | Buffer>;
+    deserialize(raw: string | Buffer): Promise<SaveFile>;
 }
 
 // Default: pretty JSON (human-readable, debuggable)
-export class JsonSaveSerializer implements SaveSerializer {
-    serialize(file: SaveFile): string {
-        return JSON.stringify(file, null, 2);
-    }
-    deserialize(raw: string | Buffer): SaveFile {
-        return JSON.parse(raw.toString()) as SaveFile;
-    }
-}
+export class JsonSaveSerializer implements SaveSerializer { ... }
 
 // Gzip wrapper — for large-state games
-export class CompressedSaveSerializer implements SaveSerializer {
-    private readonly inner = new JsonSaveSerializer();
-    serialize(file: SaveFile): Buffer {
-        return gzipSync(Buffer.from(this.inner.serialize(file)));
-    }
-    deserialize(raw: Buffer): SaveFile {
-        return this.inner.deserialize(gunzipSync(raw).toString());
-    }
-}
+export class CompressedSaveSerializer implements SaveSerializer { ... }
 ```
 
 ---
@@ -111,7 +119,7 @@ export interface SaveRepository {
 Stores files at `userData/saves/<gameId>/<slotId>.chimera`. All writes use a `.tmp` file + atomic rename to prevent corruption on crash.
 
 > **Invariant #23** — `FileSaveRepository.save()` always writes to a `.tmp` file and renames atomically.
-> **Invariant #24** — `SimulationHost.restoreFromSave()` is the only entry point for replacing live `GameSnapshot` from a file.
+> **Invariant #24** — `SessionRuntime.applyRestoredFile()` is the only entry point for replacing the live `GameSnapshot` from a file. The two-step load flow is (1) `SaveManager.restoreFromSave(slotId)` reads and migrates the file, then (2) `SessionRuntime.applyRestoredFile(file)` replaces the live snapshot. Its two callers — the in-session same-match load branch and the `SessionRestoreCoordinator` menu-restore flow — both funnel through the composition root's single apply helper.
 > **Invariant #25** — `engine:save` and `engine:load` are validated `EngineAction` types — only the designated host player may dispatch them.
 
 ---
@@ -119,7 +127,7 @@ Stores files at `userData/saves/<gameId>/<slotId>.chimera`. All writes use a `.t
 ## SaveMigrator — Chain of Responsibility
 
 ```typescript
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 6;
 
 export interface SaveMigration {
     readonly fromVersion: number;
@@ -137,6 +145,18 @@ export class SaveMigrator {
 }
 ```
 
+`createDefaultMigrator()` returns a migrator with every built-in migration
+pre-registered — use it everywhere (wiring point and tests) instead of
+registering migrations by hand. The shipped chain:
+
+| Step  | Migration                       | Backfills                                                                                                                                      |
+| ----- | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| v1→v2 | `checkpointTurnNumberMigration` | `checkpoint.turnNumber: 0`                                                                                                                     |
+| v2→v3 | `checkpointTimersMigration`     | `checkpoint.timers: {}` (Invariant #54)                                                                                                        |
+| v3→v4 | `checkpointGameResultMigration` | `checkpoint.gameResult: null` (§4.38)                                                                                                          |
+| v4→v5 | `stagedRevealsMigration`        | top-level `stagedReveals: {}` (F54, Invariant #26)                                                                                             |
+| v5→v6 | `sessionManifestMigration`      | top-level `session` via `deriveSessionManifest(checkpoint)` — control kinds from id heuristics, `maxPlayers` = seat-count floor, fresh matchId |
+
 ---
 
 ## Save / Load Flows
@@ -144,42 +164,75 @@ export class SaveMigrator {
 ```
 ─── SAVE ──────────────────────────────────────────────────────────────────
 [Renderer] window.__chimera.saves.save({ slotId: 'slot-1' })
-  → IPC → [SaveManager]
-  1. Read GameSnapshot + ActionHistory from simulation-host
-  2. Build SaveFile { header, checkpoint, deltaActions, pendingCommitments }
-  3. SaveRepository.save(file)   ← atomic .tmp rename
-  4. Broadcast updated SaveSlotMeta[] → renderer
+  → IPC → [SavesIpcAdapter]
+  1. activeSession.captureSaveFile(request)   ← SessionRuntime stamps the
+     header (CURRENT_SCHEMA_VERSION, engine/game versions), captures
+     checkpoint + pendingCommitments + stagedReveals, and records the live
+     session manifest (matchId, maxPlayers, per-seat control kinds)
+  2. SaveManager.save(file) → SaveRepository.save(file)   ← atomic .tmp rename
+  3. Push refreshed SaveSlotMeta[] → renderer (chimera:saves:slot-update)
 
 ─── AUTO-SAVE ─────────────────────────────────────────────────────────────
-[ActionPipeline step 6: engine:end_turn detected]
-  → simulation-host calls save-manager.autoSave()
-  → slotId = '<gameId>/autosave'
+[HostSessionPipeline: engine:end_turn accepted]
+  → fire-and-forget savePort.autoSave(gameId, snapshot)
+  → SaveManager.autoSave forces slotId = 'autosave'
 
-─── LOAD ──────────────────────────────────────────────────────────────────
+─── LOAD (in-session, same match) ─────────────────────────────────────────
 [Renderer] window.__chimera.saves.load('<game>/slot-1')
-  → IPC → [SaveManager]
-  1. SaveRepository.load(slotId)   ← auto-migrates if needed
-  2. Validate header (gameId, gameVersion compatibility)
-  3. simulation-host.restoreFromSave(file)
-       a. Stop tick loop
-       b. Replace GameSnapshot with file.checkpoint
-       c. Replay deltaActions onto checkpoint (if non-empty)
-       d. Restore pendingCommitments into CommitmentScheme
-       e. Restart tick loop
-  4. Broadcast fresh PlayerSnapshot to all clients (standard reconnect path)
-  5. Renderer navigates to match screen
+  → IPC → [SavesIpcAdapter.restoreSession]
+  1. SaveManager.restoreFromSave(slotId)   ← reads + auto-migrates to v6
+  2. Guard: file.header.gameId matches the hosted game AND
+     file.session.matchId === the active session's matchId
+     (a different match rejects renderer-friendly: return to the menu first)
+  3. applyRestoredFileToActiveSession(file)   ← the ONE Invariant #24 helper:
+       a. SessionRuntime.applyRestoredFile(file)
+          — replace live snapshot with file.checkpoint
+          — restore pendingCommitments + stagedReveals as a unit (Inv #26)
+       b. currentMatchId = file.session.matchId
+       c. Re-project the restored snapshot to the host renderer
+
+─── LOAD (menu, no active session) — SessionRestoreCoordinator (F68 #823) ─
+[Renderer] window.__chimera.saves.load('<game>/slot-1') from the main menu
+  → IPC → [SavesIpcAdapter.restoreSession] → coordinator.restoreSession(file)
+  1. sanitizeRestoreManifest(file.session)   ← rejects corrupt manifests;
+     pins maxPlayers to the seat count; exactly one host seat
+  2. hostLobby({ maxPlayers, restore: { matchId, hostPlayerId, humanSeats } })
+     — the provider seeds restored seats for join-time reclaim (#821) and the
+       composition root raises the start-suppression gate so tryStartGame
+       cannot fire on the pre-restore lobby snapshot
+  3. applyRestoredFile(file)                 ← same Invariant #24 helper
+  4. seatRestoredRoster(file.session.seats)  ← registers agents at their SAVED
+     slot indexes over the restored checkpoint; host/local/AI seats activate,
+     missing remote seats keep the start gate closed; releases the gate
+  5. All-local roster → coordinator status 'complete' (game starts
+     immediately at the saved tick). Remote seats outstanding → coordinator
+     status 'waiting-for-players' { lobbyCode, missingSeats } — projected by
+     toRestoreStatusEvent onto the slim wire event
+     { state: 'waiting', lobbyCode, pendingSeats } and pushed to the renderer
+     over chimera:saves:restore-status (#826); 'complete' projects to 'ready'
+  6. Returning clients rejoin with their remembered {matchId, playerId}
+     JOIN claims (SessionTicketStore, #822); claimless joins fill open
+     restored seats in slot order. The LAST reclaimed human seat opens the
+     tryStartGame gate → onGameStart fires over the restored snapshot and
+     reconnecting peers are re-synced with a fresh PlayerSnapshot
+  7. chimera:saves:cancel-restore (#826) aborts a pending restore: the lobby
+     is fully unwound; the coordinator status flips to 'aborted', pushed to
+     the renderer as the 'cancelled' wire event
 ```
 
 ---
 
 ## Multiplayer Save Constraints
 
-| Scenario                        | Behaviour                                                               |
-| ------------------------------- | ----------------------------------------------------------------------- |
-| Host saves mid-match            | `engine:save` dispatched; clients receive `SAVE_NOTIFY` (informational) |
-| Client requests save            | Rejected by `validate()` — clients cannot trigger `engine:save`         |
-| Load during active session      | Blocked; `engine:load` only valid in `PREGAME` or `ENDED` lobby state   |
-| Rejoin after host loaded a save | Host broadcasts fresh full `PlayerSnapshot`; standard reconnect path    |
+| Scenario                          | Behaviour                                                                                                                                                              |
+| --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Host saves mid-match              | `engine:save` dispatched; clients receive `SAVE_NOTIFY` (informational)                                                                                                |
+| Client requests save              | Rejected by `validate()` — clients cannot trigger `engine:save`                                                                                                        |
+| Load during active session        | Same-match saves (`file.session.matchId === currentMatchId`) live-apply via the Invariant #24 helper; a different match rejects renderer-friendly — return to the menu |
+| Load while joined to another host | Rejected — only the host may restore (Invariant #25); leave the session first                                                                                          |
+| Load from the main menu           | `SessionRestoreCoordinator` hosts a restored session from `SaveFile.session` and waits for saved remote seats (F68 #823; flow above)                                   |
+| Rejoin a restored session         | Saved seat reclaimed via `{matchId, playerId}` JOIN claims (#822) or the claimless slot-order fallback (#821); reconnecting peers get a fresh full `PlayerSnapshot`    |
+| Mid-commitment save               | `pendingCommitments` + `stagedReveals` restore as a unit (Invariant #26): committed players stay committed; the reveal fires once the rest commit                      |
 
 ---
 
@@ -220,6 +273,7 @@ class SaveSchemaTooNewError extends Error {
 ## Cross-References
 
 - [Simulation Core](simulation-core-action-pipeline.md) — `GameSnapshot`, `ActionHistory`, `TurnMemento`
-- [Electron Shell](electron-shell-ipc-bridge.md) — `SavesAPI` IPC namespace
+- [Electron Shell](electron-shell-ipc-bridge.md) — `SavesAPI` IPC namespace incl. `chimera:saves:restore-status` / `chimera:saves:cancel-restore` (#826)
+- [Multiplayer Provider](multiplayer-provider-websocket.md) — `hostLobby({ restore })`, JOIN seat claims, `resolveRestoredSeat` (#821/#822)
 - [Renderer State Stores](renderer-state-stores.md) — `saveStore` (`SaveSlotMeta[]` mirror)
 - [Replay System](replay-system.md) — `ReplayFile` shares the same `ActionHistory` concept
