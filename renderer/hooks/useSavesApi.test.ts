@@ -37,6 +37,8 @@ describe('getSavesBridge', () => {
             load: vi.fn(),
             delete: vi.fn(),
             onSlotUpdate: vi.fn(),
+            onRestoreStatus: vi.fn(),
+            cancelRestore: vi.fn(),
         };
 
         const bridge = getSavesBridge({ __chimera: { saves } });

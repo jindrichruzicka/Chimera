@@ -29,6 +29,7 @@ import {
 } from './SessionRestoreCoordinator.js';
 
 const MATCH_ID = 'match-under-test';
+const LOBBY_CODE = 'code-under-test';
 
 function seat(
     id: string,
@@ -242,6 +243,7 @@ function makeHarness(overrides: Partial<SessionRestorePorts> = {}): Harness {
     const ports = {
         hostLobby: vi.fn(async () => {
             calls.push('hostLobby');
+            return { lobbyCode: LOBBY_CODE };
         }),
         applyRestoredFile: vi.fn(() => {
             calls.push('applyRestoredFile');
@@ -312,11 +314,12 @@ describe('SessionRestoreCoordinator', () => {
             expect(coordinator.status()).toEqual({
                 state: 'waiting-for-players',
                 matchId: MATCH_ID,
+                lobbyCode: LOBBY_CODE,
                 missingSeats: [playerId('remote-a'), playerId('remote-b')],
             });
         });
 
-        it('notePlayerJoined fills seats one by one and completes on the last', async () => {
+        it('notePlayerJoined fills seats one by one, preserving lobbyCode, and completes on the last', async () => {
             const { statuses, coordinator } = makeHarness();
             await coordinator.restoreSession(makeRestoreFile(REMOTE_SEATS));
 
@@ -324,6 +327,7 @@ describe('SessionRestoreCoordinator', () => {
             expect(coordinator.status()).toEqual({
                 state: 'waiting-for-players',
                 matchId: MATCH_ID,
+                lobbyCode: LOBBY_CODE,
                 missingSeats: [playerId('remote-a'), playerId('remote-b')],
             });
 
@@ -331,6 +335,7 @@ describe('SessionRestoreCoordinator', () => {
             expect(coordinator.status()).toEqual({
                 state: 'waiting-for-players',
                 matchId: MATCH_ID,
+                lobbyCode: LOBBY_CODE,
                 missingSeats: [playerId('remote-b')],
             });
 
@@ -364,7 +369,9 @@ describe('SessionRestoreCoordinator', () => {
                 SessionRestoreError,
             );
             expect(calls).toEqual([]);
-            expect(coordinator.status()).toMatchObject({ state: 'failed' });
+            // No validated matchId exists before sanitize passes — an
+            // unvalidated one must never surface (it would cross IPC in #826).
+            expect(coordinator.status()).toMatchObject({ state: 'failed', matchId: '' });
         });
 
         it('maps a hostLobby rejection to failed and never applies or seats', async () => {
@@ -376,7 +383,7 @@ describe('SessionRestoreCoordinator', () => {
                 coordinator.restoreSession(makeRestoreFile(ALL_LOCAL_SEATS)),
             ).rejects.toThrow(/port already in use/);
             expect(calls).toEqual([]);
-            expect(coordinator.status()).toMatchObject({ state: 'failed' });
+            expect(coordinator.status()).toMatchObject({ state: 'failed', matchId: MATCH_ID });
         });
 
         it('unwinds via closeLobby when seating fails after hosting', async () => {
@@ -388,7 +395,7 @@ describe('SessionRestoreCoordinator', () => {
                 coordinator.restoreSession(makeRestoreFile(ALL_LOCAL_SEATS)),
             ).rejects.toThrow(/seat wiring incomplete/);
             expect(calls).toEqual(['hostLobby', 'applyRestoredFile', 'closeLobby']);
-            expect(coordinator.status()).toMatchObject({ state: 'failed' });
+            expect(coordinator.status()).toMatchObject({ state: 'failed', matchId: MATCH_ID });
         });
 
         it('does not emit a transient aborted when the teardown fires during a failure unwind', async () => {
@@ -448,15 +455,17 @@ describe('SessionRestoreCoordinator', () => {
             await coordinator.cancel();
 
             expect(ports.closeLobby).toHaveBeenCalledTimes(1);
-            expect(coordinator.status()).toEqual({ state: 'aborted' });
+            expect(coordinator.status()).toEqual({ state: 'aborted', matchId: MATCH_ID });
         });
 
         it('during hosting: defers the abort until hostLobby settles, then unwinds', async () => {
             const releaseHostLobby: { current: (() => void) | null } = { current: null };
             const { calls, ports, coordinator } = makeHarness({
                 hostLobby: () =>
-                    new Promise<void>((resolve) => {
-                        releaseHostLobby.current = resolve;
+                    new Promise<{ lobbyCode: string }>((resolve) => {
+                        releaseHostLobby.current = () => {
+                            resolve({ lobbyCode: LOBBY_CODE });
+                        };
                     }),
             });
 
@@ -469,7 +478,7 @@ describe('SessionRestoreCoordinator', () => {
             expect(ports.applyRestoredFile).not.toHaveBeenCalled();
             expect(ports.seatRestoredRoster).not.toHaveBeenCalled();
             expect(calls).toContain('closeLobby');
-            expect(coordinator.status()).toEqual({ state: 'aborted' });
+            expect(coordinator.status()).toEqual({ state: 'aborted', matchId: MATCH_ID });
         });
 
         it('during seating: defers the abort until seating settles, then unwinds', async () => {
@@ -492,7 +501,7 @@ describe('SessionRestoreCoordinator', () => {
             await rejection;
 
             expect(ports.closeLobby).toHaveBeenCalledTimes(1);
-            expect(coordinator.status()).toEqual({ state: 'aborted' });
+            expect(coordinator.status()).toEqual({ state: 'aborted', matchId: MATCH_ID });
         });
 
         it('after complete: is a no-op and does not close the live session', async () => {
@@ -521,7 +530,7 @@ describe('SessionRestoreCoordinator', () => {
             coordinator.noteSessionClosed();
 
             expect(ports.closeLobby).not.toHaveBeenCalled();
-            expect(coordinator.status()).toEqual({ state: 'aborted' });
+            expect(coordinator.status()).toEqual({ state: 'aborted', matchId: MATCH_ID });
         });
 
         it('after complete: returns to idle so a later menu-load can restore again', async () => {

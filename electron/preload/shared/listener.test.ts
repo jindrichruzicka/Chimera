@@ -12,6 +12,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import {
+    subscribeGuardedPush,
     subscribePush,
     subscribeValidatedPush,
     type IpcListener,
@@ -188,6 +189,97 @@ describe('subscribeValidatedPush', () => {
 
         for (const listener of stub.listeners.get(TEST_CHANNEL) ?? []) {
             listener({}, { reason: 'ok', tick: 2 });
+        }
+        expect(cbA).not.toHaveBeenCalled();
+        expect(cbB).toHaveBeenCalledOnce();
+    });
+});
+
+describe('subscribeGuardedPush', () => {
+    const PayloadSchema = z.object({
+        reason: z.string().min(1),
+        tick: z.number().int(),
+    });
+    type Payload = z.infer<typeof PayloadSchema>;
+
+    it('forwards a validated payload to the callback', () => {
+        const stub = makePortStub();
+        const cb = vi.fn<(payload: Payload) => void>();
+
+        subscribeGuardedPush<Payload>(stub.port, TEST_CHANNEL, PayloadSchema, cb);
+
+        const listener = [...(stub.listeners.get(TEST_CHANNEL) ?? [])][0];
+        listener?.({}, { reason: 'ok', tick: 7 });
+
+        expect(cb).toHaveBeenCalledOnce();
+        expect(cb).toHaveBeenCalledWith({ reason: 'ok', tick: 7 });
+    });
+
+    it('drops a malformed payload without throwing: cb never sees it, logInvalid gets the error', () => {
+        const stub = makePortStub();
+        const cb = vi.fn<(payload: Payload) => void>();
+        const logInvalid = vi.fn<(error: PreloadIpcValidationError) => void>();
+
+        subscribeGuardedPush<Payload>(stub.port, TEST_CHANNEL, PayloadSchema, cb, logInvalid);
+        const listener = [...(stub.listeners.get(TEST_CHANNEL) ?? [])][0];
+
+        expect(() => listener?.({}, { reason: '', tick: 7 })).not.toThrow();
+        expect(() => listener?.({}, 'not-even-an-object')).not.toThrow();
+
+        expect(cb).not.toHaveBeenCalled();
+        expect(logInvalid).toHaveBeenCalledTimes(2);
+        const reported = logInvalid.mock.calls[0]?.[0];
+        expect(reported).toBeInstanceOf(PreloadIpcValidationError);
+        expect(reported?.channel).toBe(TEST_CHANNEL);
+    });
+
+    it('keeps delivering valid payloads after a malformed one was dropped', () => {
+        const stub = makePortStub();
+        const cb = vi.fn<(payload: Payload) => void>();
+
+        subscribeGuardedPush<Payload>(stub.port, TEST_CHANNEL, PayloadSchema, cb, () => {});
+        const listener = [...(stub.listeners.get(TEST_CHANNEL) ?? [])][0];
+
+        listener?.({}, { reason: '', tick: 7 });
+        listener?.({}, { reason: 'recovered', tick: 8 });
+
+        expect(cb).toHaveBeenCalledOnce();
+        expect(cb).toHaveBeenCalledWith({ reason: 'recovered', tick: 8 });
+    });
+
+    it('logs via console.error by default and still does not throw', () => {
+        const stub = makePortStub();
+        const cb = vi.fn<(payload: Payload) => void>();
+        const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+        try {
+            subscribeGuardedPush<Payload>(stub.port, TEST_CHANNEL, PayloadSchema, cb);
+            const listener = [...(stub.listeners.get(TEST_CHANNEL) ?? [])][0];
+
+            expect(() => listener?.({}, { reason: '', tick: 7 })).not.toThrow();
+
+            expect(cb).not.toHaveBeenCalled();
+            expect(consoleError).toHaveBeenCalledOnce();
+            expect(String(consoleError.mock.calls[0]?.[0])).toContain(TEST_CHANNEL);
+        } finally {
+            consoleError.mockRestore();
+        }
+    });
+
+    it('returns an Unsubscribe that removes only the wrapped listener', () => {
+        const stub = makePortStub();
+        const cbA = vi.fn<(payload: Payload) => void>();
+        const cbB = vi.fn<(payload: Payload) => void>();
+
+        const unsubA = subscribeGuardedPush<Payload>(stub.port, TEST_CHANNEL, PayloadSchema, cbA);
+        subscribeGuardedPush<Payload>(stub.port, TEST_CHANNEL, PayloadSchema, cbB);
+        expect(stub.listeners.get(TEST_CHANNEL)?.size).toBe(2);
+
+        unsubA();
+        expect(stub.listeners.get(TEST_CHANNEL)?.size).toBe(1);
+
+        for (const listener of stub.listeners.get(TEST_CHANNEL) ?? []) {
+            listener({}, { reason: 'ok', tick: 1 });
         }
         expect(cbA).not.toHaveBeenCalled();
         expect(cbB).toHaveBeenCalledOnce();

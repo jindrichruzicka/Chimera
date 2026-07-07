@@ -27,6 +27,7 @@ import type {
     JoinLobbyParams,
     LobbyAgentSlot,
     ReplayExportIntent,
+    RestoreStatusEvent,
     SaveRequest,
     UserSettings,
 } from '../../preload/api-types.js';
@@ -326,6 +327,42 @@ export const SaveRequestSchema: z.ZodType<SaveRequest> = z.object({
     slotId: NonEmptyStringSchema.optional(),
     label: z.string().max(MAX_SAVE_LABEL_LENGTH).optional(),
 }) as unknown as z.ZodType<SaveRequest>;
+
+/**
+ * Schema for the {@link RestoreStatusEvent} pushed over
+ * `chimera:saves:restore-status` (F68 #826). Main-side copy — the preload
+ * validates the same shape independently in `preload/shared/schemas.ts`
+ * (Invariant #5: no shared schema module spans the main↔preload boundary).
+ * `toRestoreStatusEvent` parses every outgoing event through this schema so
+ * a slim, validated projection is the only thing that can cross IPC
+ * (Invariant #1). `matchId` allows `''` — a load can fail before any
+ * validated matchId exists. The state↔lobbyCode and state↔pendingSeats
+ * correlations are pinned by the refinements: `waiting` must carry the join
+ * code (the overlay shows it) and at least one pending seat (a fully seated
+ * restore is `ready`, never `waiting`); every other state must carry
+ * neither. The `as unknown as` cast is the established `.optional()` ×
+ * `exactOptionalPropertyTypes` workaround (see {@link SaveRequestSchema}).
+ */
+export const RestoreStatusEventSchema: z.ZodType<RestoreStatusEvent> = z
+    .object({
+        state: z.enum(['waiting', 'ready', 'cancelled', 'failed']),
+        gameId: NonEmptyStringSchema,
+        matchId: z.string(),
+        lobbyCode: NonEmptyStringSchema.optional(),
+        pendingSeats: z.array(NonEmptyStringSchema.transform(playerId)).readonly(),
+    })
+    .refine((event) => event.state !== 'waiting' || event.lobbyCode !== undefined, {
+        message: "a 'waiting' event must carry the lobby join code",
+        path: ['lobbyCode'],
+    })
+    .refine((event) => event.state === 'waiting' || event.lobbyCode === undefined, {
+        message: "lobbyCode is only valid on a 'waiting' event",
+        path: ['lobbyCode'],
+    })
+    .refine((event) => (event.state === 'waiting') === event.pendingSeats.length > 0, {
+        message: "a 'waiting' event must carry pending seats; other states must carry none",
+        path: ['pendingSeats'],
+    }) as unknown as z.ZodType<RestoreStatusEvent>;
 
 /**
  * Maximum allowed nesting depth for a {@link UserSettings} patch.

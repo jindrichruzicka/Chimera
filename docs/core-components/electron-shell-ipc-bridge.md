@@ -95,6 +95,25 @@ interface SavesAPI {
      * currently active game.
      */
     onSlotUpdate(listener: (slots: SaveSlotMeta[]) => void): () => void;
+    /**
+     * Subscribe to session-restore lifecycle events pushed via
+     * `chimera:saves:restore-status` on every coordinator transition
+     * (F68 #826). The event is a slim projection —
+     * `{ state: 'waiting' | 'ready' | 'cancelled' | 'failed', gameId,
+     * matchId, lobbyCode?, pendingSeats }` — never a `SaveFile` or
+     * snapshot (Invariant #1); `lobbyCode` is present only while
+     * `waiting`, and `pendingSeats` carries raw seat `PlayerId`s only
+     * (Invariant #59). The channel is push-only with no pull twin:
+     * a listener registered mid-restore sees only future transitions
+     * (the restore store slice subscribes at bootstrap, before any
+     * load can be issued).
+     */
+    onRestoreStatus(listener: (event: RestoreStatusEvent) => void): () => void;
+    /**
+     * Abort a pending menu-load session restore; a no-op outside an
+     * in-flight restore (a completed live session is never touched).
+     */
+    cancelRestore(): Promise<void>;
 }
 ```
 
@@ -104,7 +123,9 @@ Channels:
 - `chimera:saves:save` — invoke
 - `chimera:saves:load` — invoke
 - `chimera:saves:delete` — invoke
+- `chimera:saves:cancel-restore` — invoke
 - `chimera:saves:slot-update` — push (main → renderer)
+- `chimera:saves:restore-status` — push (main → renderer)
 
 ---
 

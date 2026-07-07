@@ -13,10 +13,21 @@
 // the preload bridge simply forwards calls and has no opinion about who is
 // allowed to issue them.
 
-import type { SaveRequest, SaveSlotMeta, SavesAPI, Unsubscribe } from '../api-types.js';
+import type {
+    RestoreStatusEvent,
+    SaveRequest,
+    SaveSlotMeta,
+    SavesAPI,
+    Unsubscribe,
+} from '../api-types.js';
 import type { IpcListener, PushListenerPort } from '../shared/listener.js';
-import { subscribePush } from '../shared/listener.js';
-import { SaveSlotListSchema, SaveSlotMetaSchema, parseInvokeResponse } from '../shared/schemas.js';
+import { subscribeGuardedPush, subscribePush } from '../shared/listener.js';
+import {
+    RestoreStatusEventSchema,
+    SaveSlotListSchema,
+    SaveSlotMetaSchema,
+    parseInvokeResponse,
+} from '../shared/schemas.js';
 
 /** `ipcRenderer.invoke` target for {@link SavesAPI.list}. */
 export const SAVES_LIST_CHANNEL = 'chimera:saves:list';
@@ -35,6 +46,16 @@ export const SAVES_DELETE_CHANNEL = 'chimera:saves:delete';
  * full slot list via `webContents.send` after every save / delete / autosave.
  */
 export const SAVES_SLOT_UPDATE_CHANNEL = 'chimera:saves:slot-update';
+
+/**
+ * `ipcRenderer.on` target for {@link SavesAPI.onRestoreStatus}. Main pushes a
+ * slim `RestoreStatusEvent` via `webContents.send` on every session-restore
+ * transition (F68 #826).
+ */
+export const SAVES_RESTORE_STATUS_CHANNEL = 'chimera:saves:restore-status';
+
+/** `ipcRenderer.invoke` target for {@link SavesAPI.cancelRestore}. */
+export const SAVES_CANCEL_RESTORE_CHANNEL = 'chimera:saves:cancel-restore';
 
 /**
  * Back-compat alias for {@link IpcListener}. Retained so test files that
@@ -91,5 +112,17 @@ export function createSavesApi(ipc: SavesApiIpcPort): SavesAPI {
         },
         onSlotUpdate: (cb: (slots: SaveSlotMeta[]) => void): Unsubscribe =>
             subscribePush<SaveSlotMeta[]>(ipc, SAVES_SLOT_UPDATE_CHANNEL, cb),
+        // Guarded (log-and-drop): a malformed status push must not take down
+        // the renderer's long-lived restore overlay subscription (#826).
+        onRestoreStatus: (cb: (event: RestoreStatusEvent) => void): Unsubscribe =>
+            subscribeGuardedPush<RestoreStatusEvent>(
+                ipc,
+                SAVES_RESTORE_STATUS_CHANNEL,
+                RestoreStatusEventSchema,
+                cb,
+            ),
+        cancelRestore: async (): Promise<void> => {
+            await ipc.invoke(SAVES_CANCEL_RESTORE_CHANNEL);
+        },
     };
 }

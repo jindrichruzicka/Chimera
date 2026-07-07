@@ -30,6 +30,7 @@ import {
     registerReplayHandlers,
     registerPerspectiveReplayHandlers,
     registerChatHandlers,
+    toRestoreStatusEvent,
 } from './ipc/ipc-handlers.js';
 import {
     createLogger,
@@ -64,7 +65,10 @@ import {
 } from '@chimera-engine/simulation/persistence/index.js';
 import { createMainGameRegistry, type MainGameContribution } from './game/mainGameRegistry.js';
 import { SETTINGS_CHANGE_CHANNEL } from '../preload/apis/settings-api.js';
-import { SAVES_SLOT_UPDATE_CHANNEL } from '../preload/apis/saves-api.js';
+import {
+    SAVES_RESTORE_STATUS_CHANNEL,
+    SAVES_SLOT_UPDATE_CHANNEL,
+} from '../preload/apis/saves-api.js';
 import { REPLAY_NAVIGATE_CHANNEL, REPLAY_EXPORTED_CHANNEL } from '../preload/apis/replay-api.js';
 import { LobbyManager } from './lobby/LobbyManager.js';
 import { createResolveLobbySetup, buildSetupFromLobbyState } from './lobby/lobbySetupRegistry.js';
@@ -2557,7 +2561,14 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 // failure so an aborted hosting never wedges the next session.
                 restoreSeatingActive = true;
                 try {
-                    await lobbyManager.hostLobby({ gameId: HOSTED_GAME_ID, maxPlayers, restore });
+                    const info = await lobbyManager.hostLobby({
+                        gameId: HOSTED_GAME_ID,
+                        maxPlayers,
+                        restore,
+                    });
+                    // LobbyInfo.sessionId IS the join code (`<host>:<port>:<token>`)
+                    // — the waiting overlay shows it via the #826 status push.
+                    return { lobbyCode: info.sessionId };
                 } catch (error) {
                     restoreSeatingActive = false;
                     throw error;
@@ -2574,6 +2585,24 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             },
             closeLobby: () => lobbyManager.closeLobby(),
         },
+    });
+
+    // Push every renderer-relevant restore transition to all windows over
+    // `chimera:saves:restore-status` (F68 #826). `toRestoreStatusEvent`
+    // projects the coordinator status to a validated slim event (Invariant
+    // #1) and returns null for internal transitions (idle/hosting) — those
+    // are not pushed. A schema failure throws inside the listener and is
+    // caught + logged by the coordinator's listener guard (fail closed).
+    sessionRestoreCoordinator.onStatusChanged((status) => {
+        const event = toRestoreStatusEvent(status, HOSTED_GAME_ID);
+        if (event === null) {
+            return;
+        }
+        BrowserWindow.getAllWindows().forEach((win) => {
+            if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
+                win.webContents.send(SAVES_RESTORE_STATUS_CHANNEL, event);
+            }
+        });
     });
 
     // Register the `chimera:game:*` channels.
@@ -2691,6 +2720,9 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 }
             });
         },
+        // Abort a pending menu-load restore (F68 #826). A no-op outside an
+        // in-flight restore — cancel never touches a completed live session.
+        cancelRestore: () => sessionRestoreCoordinator.cancel(),
     });
 
     // Register the `chimera:replay:*` channels backed by the shared

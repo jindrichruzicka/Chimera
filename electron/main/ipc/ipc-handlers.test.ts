@@ -21,9 +21,11 @@ import {
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
+    SAVES_CANCEL_RESTORE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
     SAVES_LOAD_CHANNEL,
+    SAVES_RESTORE_STATUS_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
     SETTINGS_CHANGE_CHANNEL,
@@ -48,6 +50,7 @@ import {
     registerSavesHandlers,
     registerSettingsHandlers,
     registerSystemHandlers,
+    toRestoreStatusEvent,
     REPLAY_DELETE_CHANNEL,
     REPLAY_EXPORT_CURRENT_MATCH_CHANNEL,
     REPLAY_LIST_CHANNEL,
@@ -98,7 +101,12 @@ import {
     PERSPECTIVE_REPLAY_SNAPSHOT_AT_CHANNEL,
     PERSPECTIVE_REPLAY_SNAPSHOT_RANGE_CHANNEL,
 } from '../../preload/apis/perspective-replay-api.js';
-import { IpcRequestValidationError, MAX_SNAPSHOT_RANGE } from './ipc-schemas.js';
+import {
+    IpcRequestValidationError,
+    MAX_SNAPSHOT_RANGE,
+    RestoreStatusEventSchema,
+} from './ipc-schemas.js';
+import type { SessionRestoreStatus } from '../runtime/SessionRestoreCoordinator.js';
 import { createLogger, createMemorySink, createNoopLogger } from '../logging/logger.js';
 import { LobbyManager } from '../lobby/LobbyManager.js';
 import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
@@ -872,10 +880,97 @@ function makeNoopSavesPort(): SavesIpcPort {
     };
 }
 
+/** No-op `cancelRestore` for tests that never invoke the cancel channel. */
+const noopCancelRestore = (): Promise<void> => Promise.resolve();
+
+describe('toRestoreStatusEvent', () => {
+    const GAME_ID = 'sample-game';
+    const waiting: SessionRestoreStatus = {
+        state: 'waiting-for-players',
+        matchId: 'match-1',
+        lobbyCode: '127.0.0.1:7777:token',
+        missingSeats: [playerId('remote-a'), playerId('remote-b')],
+    };
+
+    it('maps idle and hosting to null — those transitions are not pushed', () => {
+        expect(toRestoreStatusEvent({ state: 'idle' }, GAME_ID)).toBeNull();
+        expect(toRestoreStatusEvent({ state: 'hosting', matchId: 'match-1' }, GAME_ID)).toBeNull();
+    });
+
+    it('maps waiting-for-players to a waiting event carrying lobbyCode and pendingSeats', () => {
+        expect(toRestoreStatusEvent(waiting, GAME_ID)).toEqual({
+            state: 'waiting',
+            gameId: GAME_ID,
+            matchId: 'match-1',
+            lobbyCode: '127.0.0.1:7777:token',
+            pendingSeats: ['remote-a', 'remote-b'],
+        });
+    });
+
+    it('maps complete to ready with no pending seats', () => {
+        expect(toRestoreStatusEvent({ state: 'complete', matchId: 'match-1' }, GAME_ID)).toEqual({
+            state: 'ready',
+            gameId: GAME_ID,
+            matchId: 'match-1',
+            pendingSeats: [],
+        });
+    });
+
+    it('maps aborted to cancelled, preserving the matchId', () => {
+        expect(toRestoreStatusEvent({ state: 'aborted', matchId: 'match-1' }, GAME_ID)).toEqual({
+            state: 'cancelled',
+            gameId: GAME_ID,
+            matchId: 'match-1',
+            pendingSeats: [],
+        });
+    });
+
+    it('maps failed to failed, including the empty pre-sanitize matchId', () => {
+        expect(
+            toRestoreStatusEvent({ state: 'failed', matchId: '', reason: 'corrupt' }, GAME_ID),
+        ).toEqual({
+            state: 'failed',
+            gameId: GAME_ID,
+            matchId: '',
+            pendingSeats: [],
+        });
+    });
+
+    it('emits lobbyCode only on waiting events', () => {
+        const statuses: SessionRestoreStatus[] = [
+            { state: 'complete', matchId: 'match-1' },
+            { state: 'aborted', matchId: 'match-1' },
+            { state: 'failed', matchId: 'match-1', reason: 'boom' },
+        ];
+        for (const status of statuses) {
+            const event = toRestoreStatusEvent(status, GAME_ID);
+            expect(event).not.toBeNull();
+            expect(event).not.toHaveProperty('lobbyCode');
+        }
+    });
+
+    it('produces only events that satisfy RestoreStatusEventSchema', () => {
+        const statuses: SessionRestoreStatus[] = [
+            waiting,
+            { state: 'complete', matchId: 'match-1' },
+            { state: 'aborted', matchId: 'match-1' },
+            { state: 'failed', matchId: '', reason: 'corrupt' },
+        ];
+        for (const status of statuses) {
+            const event = toRestoreStatusEvent(status, GAME_ID);
+            expect(RestoreStatusEventSchema.safeParse(event).success).toBe(true);
+        }
+    });
+});
+
 describe('registerSavesHandlers', () => {
     it('registers chimera:saves:list as an invoke handler delegating to the port', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
 
         const handler = stub.handled.get(SAVES_LIST_CHANNEL);
         expect(handler).toBeDefined();
@@ -884,7 +979,11 @@ describe('registerSavesHandlers', () => {
 
     it('registers chimera:saves:save as an invoke handler accepting a SaveRequest', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
 
         const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
         expect(handler).toBeDefined();
@@ -896,7 +995,11 @@ describe('registerSavesHandlers', () => {
 
     it('registers chimera:saves:load as an invoke handler resolving to undefined', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
 
         const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
         expect(handler).toBeDefined();
@@ -905,21 +1008,31 @@ describe('registerSavesHandlers', () => {
 
     it('registers chimera:saves:delete as an invoke handler resolving to undefined', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
 
         const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
         expect(handler).toBeDefined();
         await expect(Promise.resolve(handler?.({}, 'sample-game/slot-a'))).resolves.toBeUndefined();
     });
 
-    it('registers exactly the saves request channels (slot-update is push-only, not registered here)', () => {
+    it('registers exactly the saves request channels (pushes are not registered here)', () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
 
-        // `chimera:saves:slot-update` is a one-way push from main → renderer
-        // via `webContents.send`. It must NOT appear as an invoke handler.
+        // `chimera:saves:slot-update` and `chimera:saves:restore-status` are
+        // one-way pushes from main → renderer via `webContents.send`. They
+        // must NOT appear as invoke handlers.
         expect([...stub.handled.keys()].sort()).toEqual(
             [
+                SAVES_CANCEL_RESTORE_CHANNEL,
                 SAVES_DELETE_CHANNEL,
                 SAVES_LIST_CHANNEL,
                 SAVES_LOAD_CHANNEL,
@@ -927,6 +1040,40 @@ describe('registerSavesHandlers', () => {
             ].sort(),
         );
         expect(stub.handled.has(SAVES_SLOT_UPDATE_CHANNEL)).toBe(false);
+        expect(stub.handled.has(SAVES_RESTORE_STATUS_CHANNEL)).toBe(false);
+    });
+
+    describe('cancel-restore (#826)', () => {
+        it('registers chimera:saves:cancel-restore delegating to the injected cancelRestore', async () => {
+            const stub = makeSavesIpcMainStub();
+            const cancelRestore = vi.fn(() => Promise.resolve());
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: makeNoopSavesPort(),
+                cancelRestore,
+            });
+
+            const handler = stub.handled.get(SAVES_CANCEL_RESTORE_CHANNEL);
+            expect(handler).toBeDefined();
+            await expect(Promise.resolve(handler?.({}, undefined))).resolves.toBeUndefined();
+            expect(cancelRestore).toHaveBeenCalledTimes(1);
+        });
+
+        it('rejects a stray payload before reaching cancelRestore', async () => {
+            const stub = makeSavesIpcMainStub();
+            const cancelRestore = vi.fn(() => Promise.resolve());
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: makeNoopSavesPort(),
+                cancelRestore,
+            });
+
+            const handler = stub.handled.get(SAVES_CANCEL_RESTORE_CHANNEL);
+            await expect(Promise.resolve(handler?.({}, { junk: true }))).rejects.toBeInstanceOf(
+                IpcRequestValidationError,
+            );
+            expect(cancelRestore).not.toHaveBeenCalled();
+        });
     });
 
     describe('with injected SavesIpcPort', () => {
@@ -983,7 +1130,11 @@ describe('registerSavesHandlers', () => {
         it('list delegates to port and returns its SaveSlotMeta[]', async () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                cancelRestore: noopCancelRestore,
+            });
 
             const handler = stub.handled.get(SAVES_LIST_CHANNEL);
             const result = await Promise.resolve(handler?.({}, 'sample-game'));
@@ -999,6 +1150,7 @@ describe('registerSavesHandlers', () => {
             registerSavesHandlers({
                 ipcMain: stub.ipcMain,
                 saves: fake.port,
+                cancelRestore: noopCancelRestore,
                 broadcastSlotsChanged: (gameId, slots) => {
                     broadcasts.push({ gameId, slots });
                 },
@@ -1027,7 +1179,12 @@ describe('registerSavesHandlers', () => {
                 lastSavedSlotId: null as string | null,
                 lastSavedTick: null as number | null,
             };
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port, e2eHooks });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                e2eHooks,
+                cancelRestore: noopCancelRestore,
+            });
 
             const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
             await Promise.resolve(handler?.({}, { gameId: 'sample-game' }));
@@ -1039,7 +1196,11 @@ describe('registerSavesHandlers', () => {
         it('load delegates to port and resolves to undefined', async () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                cancelRestore: noopCancelRestore,
+            });
 
             const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
             const result = await Promise.resolve(handler?.({}, 'sample-game/slot-1'));
@@ -1055,6 +1216,7 @@ describe('registerSavesHandlers', () => {
             registerSavesHandlers({
                 ipcMain: stub.ipcMain,
                 saves: fake.port,
+                cancelRestore: noopCancelRestore,
                 broadcastSlotsChanged: (gameId, slots) => {
                     broadcasts.push({ gameId, slots });
                 },
@@ -1076,7 +1238,11 @@ describe('registerSavesHandlers', () => {
         it('rejects invalid list input before calling the port', () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                cancelRestore: noopCancelRestore,
+            });
 
             const handler = stub.handled.get(SAVES_LIST_CHANNEL);
             expect(() => handler?.({}, '')).toThrow(IpcRequestValidationError);
@@ -1086,7 +1252,11 @@ describe('registerSavesHandlers', () => {
         it('rejects invalid save input before calling the port', async () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                cancelRestore: noopCancelRestore,
+            });
 
             const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
             await expect(Promise.resolve(handler?.({}, { gameId: '' }))).rejects.toThrow(
@@ -1099,7 +1269,11 @@ describe('registerSavesHandlers', () => {
         it('rejects invalid load input before calling the port', async () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                cancelRestore: noopCancelRestore,
+            });
 
             const handler = stub.handled.get(SAVES_LOAD_CHANNEL);
             await expect(Promise.resolve(handler?.({}, ''))).rejects.toThrow(
@@ -1111,7 +1285,11 @@ describe('registerSavesHandlers', () => {
         it('rejects invalid delete input before calling the port', async () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                cancelRestore: noopCancelRestore,
+            });
 
             const handler = stub.handled.get(SAVES_DELETE_CHANNEL);
             await expect(Promise.resolve(handler?.({}, ''))).rejects.toThrow(
@@ -1124,7 +1302,11 @@ describe('registerSavesHandlers', () => {
         it('does not broadcast on save when broadcastSlotsChanged is absent', async () => {
             const stub = makeSavesIpcMainStub();
             const fake = makeFakePort();
-            registerSavesHandlers({ ipcMain: stub.ipcMain, saves: fake.port });
+            registerSavesHandlers({
+                ipcMain: stub.ipcMain,
+                saves: fake.port,
+                cancelRestore: noopCancelRestore,
+            });
 
             const request: SaveRequest = { gameId: 'sample-game' };
             const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
@@ -1145,6 +1327,7 @@ describe('registerSavesHandlers', () => {
             registerSavesHandlers({
                 ipcMain: stub.ipcMain,
                 saves: fake.port,
+                cancelRestore: noopCancelRestore,
                 broadcastSlotsChanged: (_, slots) => {
                     broadcasts.push(slots);
                 },
@@ -1169,6 +1352,7 @@ describe('registerSavesHandlers', () => {
             registerSavesHandlers({
                 ipcMain: stub.ipcMain,
                 saves: fake.port,
+                cancelRestore: noopCancelRestore,
                 broadcastSlotsChanged: (_, slots) => {
                     broadcasts.push(slots);
                 },
@@ -1525,7 +1709,11 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:saves:list rejects a non-string or empty gameId', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
         const handler = stub.handled.get(SAVES_LIST_CHANNEL);
 
         await expect(Promise.resolve().then(() => handler?.({}, ''))).rejects.toBeInstanceOf(
@@ -1538,7 +1726,11 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:saves:save rejects a malformed SaveRequest', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
         const handler = stub.handled.get(SAVES_SAVE_CHANNEL);
 
         await expect(Promise.resolve().then(() => handler?.({}, {}))).rejects.toBeInstanceOf(
@@ -1551,7 +1743,11 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:saves:load and chimera:saves:delete reject an empty slotId', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
         const loadHandler = stub.handled.get(SAVES_LOAD_CHANNEL);
         const deleteHandler = stub.handled.get(SAVES_DELETE_CHANNEL);
 
@@ -1565,7 +1761,11 @@ describe('inbound IPC request validation', () => {
 
     it('chimera:saves:load and chimera:saves:delete reject a bare (unqualified) slotId', async () => {
         const stub = makeSavesIpcMainStub();
-        registerSavesHandlers({ ipcMain: stub.ipcMain, saves: makeNoopSavesPort() });
+        registerSavesHandlers({
+            ipcMain: stub.ipcMain,
+            saves: makeNoopSavesPort(),
+            cancelRestore: noopCancelRestore,
+        });
         const loadHandler = stub.handled.get(SAVES_LOAD_CHANNEL);
         const deleteHandler = stub.handled.get(SAVES_DELETE_CHANNEL);
 

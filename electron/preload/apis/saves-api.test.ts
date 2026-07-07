@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
+    SAVES_CANCEL_RESTORE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
     SAVES_LOAD_CHANNEL,
+    SAVES_RESTORE_STATUS_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
     createSavesApi,
@@ -10,8 +12,8 @@ import {
     type SavesApiListener,
 } from './saves-api.js';
 import { PreloadIpcValidationError } from '../shared/schemas.js';
-import { toSlotId } from '../api-types.js';
-import type { SaveRequest, SaveSlotMeta } from '../api-types.js';
+import { playerId, toSlotId } from '../api-types.js';
+import type { RestoreStatusEvent, SaveRequest, SaveSlotMeta } from '../api-types.js';
 
 /**
  * Recording stub for the narrow `SavesApiIpcPort` slice. Captures every call
@@ -115,6 +117,94 @@ describe('createSavesApi', () => {
 
             await expect(api.delete(toSlotId('slot-a'))).resolves.toBeUndefined();
             expect(stub.invocations).toEqual([{ channel: SAVES_DELETE_CHANNEL, arg: 'slot-a' }]);
+        });
+    });
+
+    describe('cancelRestore()', () => {
+        it('invokes chimera:saves:cancel-restore with no payload and resolves to void', async () => {
+            const stub = makeIpcStub();
+            const api = createSavesApi(stub.port);
+
+            await expect(api.cancelRestore()).resolves.toBeUndefined();
+            expect(stub.invocations).toEqual([
+                { channel: SAVES_CANCEL_RESTORE_CHANNEL, arg: undefined },
+            ]);
+        });
+    });
+
+    describe('onRestoreStatus()', () => {
+        const waitingEvent: RestoreStatusEvent = {
+            state: 'waiting',
+            gameId: 'sample-game',
+            matchId: 'match-1',
+            lobbyCode: '127.0.0.1:7777:token',
+            pendingSeats: [playerId('remote-a')],
+        };
+
+        it('registers a listener on chimera:saves:restore-status and forwards a valid event', () => {
+            const stub = makeIpcStub();
+            const api = createSavesApi(stub.port);
+            const callback = vi.fn<(event: RestoreStatusEvent) => void>();
+
+            api.onRestoreStatus(callback);
+
+            const registered = stub.listeners.get(SAVES_RESTORE_STATUS_CHANNEL);
+            expect(registered?.size).toBe(1);
+
+            const listener = [...(registered ?? [])][0];
+            listener?.({ sender: 'fake-webcontents' }, waitingEvent);
+
+            expect(callback).toHaveBeenCalledOnce();
+            expect(callback).toHaveBeenCalledWith(waitingEvent);
+        });
+
+        it('drops a malformed push without throwing — fail closed, logged, callback unaware', () => {
+            const stub = makeIpcStub();
+            const api = createSavesApi(stub.port);
+            const callback = vi.fn<(event: RestoreStatusEvent) => void>();
+            const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+            try {
+                api.onRestoreStatus(callback);
+                const listener = [...(stub.listeners.get(SAVES_RESTORE_STATUS_CHANNEL) ?? [])][0];
+
+                expect(() =>
+                    listener?.({}, { state: 'exploded', gameId: '', pendingSeats: null }),
+                ).not.toThrow();
+
+                expect(callback).not.toHaveBeenCalled();
+                expect(consoleError).toHaveBeenCalledOnce();
+                expect(String(consoleError.mock.calls[0]?.[0])).toContain(
+                    SAVES_RESTORE_STATUS_CHANNEL,
+                );
+
+                // A valid event afterwards still reaches the callback.
+                listener?.({}, waitingEvent);
+                expect(callback).toHaveBeenCalledOnce();
+                expect(callback).toHaveBeenCalledWith(waitingEvent);
+            } finally {
+                consoleError.mockRestore();
+            }
+        });
+
+        it('returns an Unsubscribe that removes only the wrapped listener', () => {
+            const stub = makeIpcStub();
+            const api = createSavesApi(stub.port);
+            const cbA = vi.fn<(event: RestoreStatusEvent) => void>();
+            const cbB = vi.fn<(event: RestoreStatusEvent) => void>();
+
+            const unsubA = api.onRestoreStatus(cbA);
+            api.onRestoreStatus(cbB);
+            expect(stub.listeners.get(SAVES_RESTORE_STATUS_CHANNEL)?.size).toBe(2);
+
+            unsubA();
+            expect(stub.listeners.get(SAVES_RESTORE_STATUS_CHANNEL)?.size).toBe(1);
+
+            for (const listener of stub.listeners.get(SAVES_RESTORE_STATUS_CHANNEL) ?? []) {
+                listener({}, waitingEvent);
+            }
+            expect(cbA).not.toHaveBeenCalled();
+            expect(cbB).toHaveBeenCalledOnce();
         });
     });
 

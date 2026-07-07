@@ -39,6 +39,7 @@ import type {
     ReplayListItem,
     ReplayPlaybackInfo,
     ResolvedSettings,
+    RestoreStatusEvent,
     SaveSlotMeta,
     PlayerId,
 } from '../api-types.js';
@@ -183,6 +184,41 @@ export const SaveSlotMetaSchema: z.ZodType<SaveSlotMeta> = z.object({
 
 /** Schema for the array returned by `chimera:saves:list`. */
 export const SaveSlotListSchema: z.ZodType<readonly SaveSlotMeta[]> = z.array(SaveSlotMetaSchema);
+
+/**
+ * Schema for the {@link RestoreStatusEvent} pushed on
+ * `chimera:saves:restore-status` (F68 #826). Preload-side copy — main
+ * validates the same shape independently in `ipc-schemas.ts` (Invariant #5:
+ * schemas are duplicated on each side of the main↔preload boundary).
+ * `matchId` allows `''` — a load can fail before any validated matchId
+ * exists. The state↔lobbyCode and state↔pendingSeats correlations are
+ * pinned by the refinements (`waiting` requires the join code AND at least
+ * one pending seat — a fully seated restore is `ready`; other states forbid
+ * both) so producer drift is caught by the fail-closed guard, not just
+ * main-side tests. Typed via the `as unknown as` cast because of the
+ * optional `lobbyCode` × `exactOptionalPropertyTypes` interaction (same as
+ * {@link SaveSlotMetaSchema}).
+ */
+export const RestoreStatusEventSchema: z.ZodType<RestoreStatusEvent> = z
+    .object({
+        state: z.enum(['waiting', 'ready', 'cancelled', 'failed']),
+        gameId: z.string().min(1),
+        matchId: z.string(),
+        lobbyCode: z.string().min(1).optional(),
+        pendingSeats: z.array(z.string().min(1).transform(playerId)).readonly(),
+    })
+    .refine((event) => event.state !== 'waiting' || event.lobbyCode !== undefined, {
+        message: "a 'waiting' event must carry the lobby join code",
+        path: ['lobbyCode'],
+    })
+    .refine((event) => event.state === 'waiting' || event.lobbyCode === undefined, {
+        message: "lobbyCode is only valid on a 'waiting' event",
+        path: ['lobbyCode'],
+    })
+    .refine((event) => (event.state === 'waiting') === event.pendingSeats.length > 0, {
+        message: "a 'waiting' event must carry pending seats; other states must carry none",
+        path: ['pendingSeats'],
+    }) as unknown as z.ZodType<RestoreStatusEvent>;
 
 /**
  * Schema for {@link ResolvedSettings} returned by `chimera:settings:*`. The

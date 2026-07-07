@@ -1022,6 +1022,23 @@ export interface LobbyDiscoveryAPI {
 
 // ─── saves namespace (host only) ─────────────────────────────────────────────
 
+/**
+ * Slim projection of the host's session-restore lifecycle pushed over
+ * `chimera:saves:restore-status` (§4.11, F68 #826). Never carries a
+ * `SaveFile`/`GameSnapshot` (Invariant #1); `pendingSeats` holds raw seat
+ * PlayerIds only — no profile data (Invariant #59).
+ */
+export interface RestoreStatusEvent {
+    readonly state: 'waiting' | 'ready' | 'cancelled' | 'failed';
+    readonly gameId: string;
+    /** `''` only when a load fails before a validated matchId exists. */
+    readonly matchId: string;
+    /** Join code of the restored lobby; present only while `waiting`. */
+    readonly lobbyCode?: string;
+    /** Saved remote seats that have not reconnected yet, slotIndex order. */
+    readonly pendingSeats: readonly PlayerId[];
+}
+
 /** List, save, load, delete save slots — host only (§4.1). */
 export interface SavesAPI {
     list(gameId: string): Promise<SaveSlotMeta[]>;
@@ -1030,6 +1047,16 @@ export interface SavesAPI {
     delete(slotId: SlotId): Promise<void>;
     /** Fires after save / delete / autosave. */
     onSlotUpdate(cb: (slots: SaveSlotMeta[]) => void): Unsubscribe;
+    /**
+     * Fires on every session-restore transition (F68 #826). Push-only by
+     * design — there is no pull twin (unlike `onSlotUpdate`/`list`), so a
+     * listener registered mid-restore sees only future transitions. The
+     * renderer's restore store slice (#828) must subscribe at bootstrap,
+     * before any load can be issued.
+     */
+    onRestoreStatus(cb: (event: RestoreStatusEvent) => void): Unsubscribe;
+    /** Abort a pending menu-load restore; a no-op outside an in-flight restore. */
+    cancelRestore(): Promise<void>;
 }
 
 // ─── settings namespace ───────────────────────────────────────────────────────

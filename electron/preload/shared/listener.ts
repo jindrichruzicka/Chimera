@@ -22,7 +22,7 @@
 
 import type { z } from 'zod';
 import type { Unsubscribe } from '../api-types.js';
-import { parseInvokeResponse } from './schemas.js';
+import { PreloadIpcValidationError, parseInvokeResponse } from './schemas.js';
 
 /**
  * Shape of a renderer-side `ipcRenderer` listener. Electron's real
@@ -97,6 +97,50 @@ export function subscribeValidatedPush<T>(
 ): Unsubscribe {
     const listener: IpcListener = (_event, ...args) => {
         cb(parseInvokeResponse(schema, channel, args[0]));
+    };
+    port.on(channel, listener);
+    return () => {
+        port.removeListener(channel, listener);
+    };
+}
+
+/**
+ * Fail-closed variant of {@link subscribeValidatedPush}: a malformed push is
+ * logged via `logInvalid` and DROPPED — `cb` never sees it and nothing
+ * throws, so one bad push cannot take down a renderer subscription that
+ * outlives it (e.g. a status overlay). Valid pushes keep flowing afterwards.
+ *
+ * Used for lifecycle push channels the renderer merely observes (today:
+ * `chimera:saves:restore-status`, F68 #826). Channels where drift must be
+ * LOUD (a rejected action disappearing would be a debugging nightmare) stay
+ * on the throwing {@link subscribeValidatedPush}.
+ *
+ * `logInvalid` defaults to `console.error` — the preload layer has no
+ * injected logger, and the renderer devtools console is where a developer
+ * looks first. It is injectable so tests stay spy-free and a future preload
+ * logger can slot in.
+ */
+export function subscribeGuardedPush<T>(
+    port: PushListenerPort,
+    channel: string,
+    schema: z.ZodType<T>,
+    cb: (payload: T) => void,
+    logInvalid: (error: PreloadIpcValidationError) => void = (error) => {
+        console.error(error.message);
+    },
+): Unsubscribe {
+    const listener: IpcListener = (_event, ...args) => {
+        let payload: T;
+        try {
+            payload = parseInvokeResponse(schema, channel, args[0]);
+        } catch (error) {
+            if (error instanceof PreloadIpcValidationError) {
+                logInvalid(error);
+                return;
+            }
+            throw error;
+        }
+        cb(payload);
     };
     port.on(channel, listener);
     return () => {

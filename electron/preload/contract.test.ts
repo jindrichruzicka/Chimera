@@ -401,6 +401,31 @@ describe('window.__chimera.saves — contract', () => {
         unsubscribe();
         expect(listeners.get('chimera:saves:slot-update')?.size).toBe(0);
     });
+
+    it('cancelRestore() invokes chimera:saves:cancel-restore with no payload', async () => {
+        await api.saves.cancelRestore();
+        expect(invokeCalls).toEqual([{ channel: 'chimera:saves:cancel-restore', args: [] }]);
+    });
+
+    it('onRestoreStatus() registers on chimera:saves:restore-status; Unsubscribe removes it', () => {
+        const calls: unknown[] = [];
+        const unsubscribe = api.saves.onRestoreStatus((event) => {
+            calls.push(event);
+        });
+        expect(listeners.get('chimera:saves:restore-status')?.size).toBe(1);
+
+        const event = {
+            state: 'ready',
+            gameId: 'sample-game',
+            matchId: 'match-1',
+            pendingSeats: [],
+        };
+        emit('chimera:saves:restore-status', event);
+        expect(calls).toEqual([event]);
+
+        unsubscribe();
+        expect(listeners.get('chimera:saves:restore-status')?.size).toBe(0);
+    });
 });
 
 // ─── settings namespace ──────────────────────────────────────────────────────

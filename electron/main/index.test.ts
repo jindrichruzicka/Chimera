@@ -3,7 +3,7 @@ import type * as nodeFs from 'node:fs';
 import type * as AiEngine from '@chimera-engine/ai/engine';
 
 import path from 'node:path';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type {
     LocalProfileId,
     PlayerProfile,
@@ -559,7 +559,8 @@ const {
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
 } = await import('../preload/apis/system-api.js');
 const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
-const { SAVES_LOAD_CHANNEL } = await import('../preload/apis/saves-api.js');
+const { SAVES_LOAD_CHANNEL, SAVES_RESTORE_STATUS_CHANNEL, SAVES_CANCEL_RESTORE_CHANNEL } =
+    await import('../preload/apis/saves-api.js');
 const {
     PERSPECTIVE_REPLAY_LIST_CHANNEL,
     PERSPECTIVE_REPLAY_EXPORT_CURRENT_CHANNEL,
@@ -4520,6 +4521,140 @@ describe('main() — session restore wiring (#823)', () => {
             // The live match identity is unchanged.
             const file = await autosaveManifest();
             expect(file.session.matchId).toBe(matchId);
+        });
+    });
+
+    describe('restore-status push + cancel-restore (#826)', () => {
+        /** Events sent on the restore-status channel to `win`, in order. */
+        const restoreStatusSends = (win: FakeBrowserWindow): readonly unknown[] =>
+            win.webContents.send.mock.calls
+                .filter(([channel]) => channel === SAVES_RESTORE_STATUS_CHANNEL)
+                .map(([, event]) => event);
+
+        const findCancelRestoreHandler = ():
+            | ((event: unknown, payload?: unknown) => Promise<unknown>)
+            | undefined =>
+            ipcMainHandle.mock.calls.find(
+                ([channel]) => channel === SAVES_CANCEL_RESTORE_CHANNEL,
+            )?.[1] as ((event: unknown, payload?: unknown) => Promise<unknown>) | undefined;
+
+        function makeLiveWindow(): FakeBrowserWindow {
+            const win = new FakeBrowserWindow({ webPreferences: {} });
+            FakeBrowserWindow.getAllWindows.mockReturnValue([win]);
+            return win;
+        }
+
+        afterEach(() => {
+            // Restore the default getAllWindows implementation for suites
+            // that rely on the shared instance list.
+            FakeBrowserWindow.getAllWindows.mockImplementation(() => browserWindowInstances);
+        });
+
+        it('pushes a waiting event with lobbyCode and pendingSeats when a remote-roster load parks', async () => {
+            await main(makeTestContributions());
+            const win = makeLiveWindow();
+
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER));
+
+            expect(restoreStatusSends(win)).toEqual([
+                {
+                    state: 'waiting',
+                    gameId: TACTICS_GAME_ID,
+                    matchId: RESTORED_MATCH_ID,
+                    lobbyCode: 'restored-session',
+                    pendingSeats: ['remote-restored'],
+                },
+            ]);
+        });
+
+        it('pushes ready with no pending seats once the last saved remote seat reconnects', async () => {
+            await main(makeTestContributions());
+            const win = makeLiveWindow();
+
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER));
+            hostedTransportJoinRef.current?.({ playerId: 'remote-restored' });
+
+            const events = restoreStatusSends(win);
+            expect(events).toHaveLength(2);
+            expect(events[1]).toEqual({
+                state: 'ready',
+                gameId: TACTICS_GAME_ID,
+                matchId: RESTORED_MATCH_ID,
+                pendingSeats: [],
+            });
+        });
+
+        it('pushes ready only (never waiting) for an all-local load', async () => {
+            await main(makeTestContributions());
+            const win = makeLiveWindow();
+
+            await loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER));
+
+            expect(restoreStatusSends(win)).toEqual([
+                {
+                    state: 'ready',
+                    gameId: TACTICS_GAME_ID,
+                    matchId: RESTORED_MATCH_ID,
+                    pendingSeats: [],
+                },
+            ]);
+        });
+
+        it('cancel-restore invoke closes the restored lobby and pushes cancelled', async () => {
+            await main(makeTestContributions());
+            const win = makeLiveWindow();
+
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER));
+            const handler = findCancelRestoreHandler();
+            expect(handler).toBeTypeOf('function');
+            await expect(handler?.(undefined, undefined)).resolves.toBeUndefined();
+
+            expect(mockLobbyManagerCloseLobby).toHaveBeenCalledTimes(1);
+            const events = restoreStatusSends(win);
+            expect(events).toHaveLength(2);
+            expect(events[1]).toEqual({
+                state: 'cancelled',
+                gameId: TACTICS_GAME_ID,
+                matchId: RESTORED_MATCH_ID,
+                pendingSeats: [],
+            });
+        });
+
+        it('pushes failed with an empty matchId when the manifest is corrupt', async () => {
+            await main(makeTestContributions());
+            const win = makeLiveWindow();
+
+            const corrupt = makeRestoreSaveFile([
+                { playerId: 'host-restored', control: 'host', slotIndex: 0 },
+                { playerId: 'ai-x', control: 'ai', slotIndex: 999_999 },
+            ]);
+            await expect(loadSlot(corrupt)).rejects.toThrow(/slotIndex/);
+
+            expect(restoreStatusSends(win)).toEqual([
+                {
+                    state: 'failed',
+                    gameId: TACTICS_GAME_ID,
+                    matchId: '',
+                    pendingSeats: [],
+                },
+            ]);
+        });
+
+        it('skips destroyed windows and destroyed webContents (WARN-10)', async () => {
+            await main(makeTestContributions());
+
+            const deadWin = new FakeBrowserWindow({ webPreferences: {} });
+            deadWin.isDestroyed.mockReturnValue(true);
+            const deadContentsWin = new FakeBrowserWindow({ webPreferences: {} });
+            deadContentsWin.webContents.isDestroyed.mockReturnValue(true);
+            const liveWin = new FakeBrowserWindow({ webPreferences: {} });
+            FakeBrowserWindow.getAllWindows.mockReturnValue([deadWin, deadContentsWin, liveWin]);
+
+            await loadSlot(makeRestoreSaveFile(ALL_LOCAL_ROSTER));
+
+            expect(restoreStatusSends(deadWin)).toEqual([]);
+            expect(restoreStatusSends(deadContentsWin)).toEqual([]);
+            expect(restoreStatusSends(liveWin)).toHaveLength(1);
         });
     });
 });

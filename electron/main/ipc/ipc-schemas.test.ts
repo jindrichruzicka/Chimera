@@ -12,6 +12,7 @@ import {
     SetPlayerAttributePayloadSchema,
     LogEntrySchema,
     RendererLogEntrySchema,
+    RestoreStatusEventSchema,
     SaveRequestSchema,
     SlotIdSchema,
     UserSettingsPatchSchema,
@@ -346,6 +347,115 @@ describe('SaveRequestSchema', () => {
         expect(SaveRequestSchema.safeParse({ gameId: 'sample-game', slotId: '' }).success).toBe(
             false,
         );
+    });
+});
+
+describe('RestoreStatusEventSchema', () => {
+    const waiting = {
+        state: 'waiting',
+        gameId: 'sample-game',
+        matchId: 'match-1',
+        lobbyCode: '127.0.0.1:7777:token',
+        pendingSeats: ['remote-a', 'remote-b'],
+    };
+
+    it('accepts a waiting event with lobbyCode and pending seats', () => {
+        expect(RestoreStatusEventSchema.safeParse(waiting).success).toBe(true);
+    });
+
+    it('accepts ready / cancelled / failed events without a lobbyCode', () => {
+        for (const state of ['ready', 'cancelled', 'failed']) {
+            expect(
+                RestoreStatusEventSchema.safeParse({
+                    state,
+                    gameId: 'sample-game',
+                    matchId: 'match-1',
+                    pendingSeats: [],
+                }).success,
+            ).toBe(true);
+        }
+    });
+
+    it('accepts an empty matchId (failure before a validated matchId exists)', () => {
+        expect(
+            RestoreStatusEventSchema.safeParse({
+                state: 'failed',
+                gameId: 'sample-game',
+                matchId: '',
+                pendingSeats: [],
+            }).success,
+        ).toBe(true);
+    });
+
+    it('rejects unknown states', () => {
+        expect(RestoreStatusEventSchema.safeParse({ ...waiting, state: 'hosting' }).success).toBe(
+            false,
+        );
+        expect(RestoreStatusEventSchema.safeParse({ ...waiting, state: 'idle' }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects an empty gameId', () => {
+        expect(RestoreStatusEventSchema.safeParse({ ...waiting, gameId: '' }).success).toBe(false);
+    });
+
+    it('rejects missing, non-array, and empty-string pendingSeats entries', () => {
+        const { pendingSeats: _dropped, ...withoutSeats } = waiting;
+        expect(RestoreStatusEventSchema.safeParse(withoutSeats).success).toBe(false);
+        expect(
+            RestoreStatusEventSchema.safeParse({ ...waiting, pendingSeats: 'remote-a' }).success,
+        ).toBe(false);
+        expect(RestoreStatusEventSchema.safeParse({ ...waiting, pendingSeats: [''] }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects a non-string or empty lobbyCode', () => {
+        expect(RestoreStatusEventSchema.safeParse({ ...waiting, lobbyCode: 42 }).success).toBe(
+            false,
+        );
+        expect(RestoreStatusEventSchema.safeParse({ ...waiting, lobbyCode: '' }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects a waiting event without a lobbyCode (the overlay needs the join code)', () => {
+        const { lobbyCode: _dropped, ...withoutCode } = waiting;
+        expect(RestoreStatusEventSchema.safeParse(withoutCode).success).toBe(false);
+    });
+
+    it('rejects ready / cancelled / failed events carrying a lobbyCode', () => {
+        for (const state of ['ready', 'cancelled', 'failed']) {
+            expect(
+                RestoreStatusEventSchema.safeParse({
+                    state,
+                    gameId: 'sample-game',
+                    matchId: 'match-1',
+                    lobbyCode: '127.0.0.1:7777:token',
+                    pendingSeats: [],
+                }).success,
+            ).toBe(false);
+        }
+    });
+
+    it('rejects a waiting event with no pending seats (the coordinator emits ready instead)', () => {
+        expect(RestoreStatusEventSchema.safeParse({ ...waiting, pendingSeats: [] }).success).toBe(
+            false,
+        );
+    });
+
+    it('rejects ready / cancelled / failed events carrying pending seats', () => {
+        for (const state of ['ready', 'cancelled', 'failed']) {
+            expect(
+                RestoreStatusEventSchema.safeParse({
+                    state,
+                    gameId: 'sample-game',
+                    matchId: 'match-1',
+                    pendingSeats: ['remote-a'],
+                }).success,
+            ).toBe(false);
+        }
     });
 });
 

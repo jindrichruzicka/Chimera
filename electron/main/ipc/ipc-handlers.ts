@@ -48,9 +48,11 @@ import {
 } from '../../preload/apis/lobby-api.js';
 import { CONTENT_GET_COLLECTIONS_CHANNEL } from '../../preload/apis/content-api.js';
 import {
+    SAVES_CANCEL_RESTORE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
     SAVES_LOAD_CHANNEL,
+    SAVES_RESTORE_STATUS_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
 } from '../../preload/apis/saves-api.js';
@@ -109,6 +111,7 @@ import type {
     ReplayListItem,
     ReplayPlaybackInfo,
     ResolvedSettings,
+    RestoreStatusEvent,
     SaveRequest,
     SaveSlotMeta,
     SlotId,
@@ -137,6 +140,7 @@ import {
     ReplaySaveableFlagSchema,
     ReplaySnapshotRangeSchema,
     ReplayTickSchema,
+    RestoreStatusEventSchema,
     SaveRequestSchema,
     SlotIdSchema,
     SwitchLocalSlotRequestSchema,
@@ -150,6 +154,7 @@ import {
     type MemorySink,
 } from '../logging/logger.js';
 import type { E2eHooks } from '../runtime/e2e-hooks.js';
+import type { SessionRestoreStatus } from '../runtime/SessionRestoreCoordinator.js';
 import type { SettingsManager } from '../settings/SettingsManager.js';
 import type { LobbyManager } from '../lobby/LobbyManager.js';
 import { LOGS_EMIT_CHANNEL, LOGS_READ_RECENT_CHANNEL } from '../../preload/apis/logs-api.js';
@@ -181,9 +186,11 @@ export {
     LOBBY_ADD_AI_CHANNEL,
     LOBBY_REMOVE_AI_CHANNEL,
     LOBBY_UPDATE_CHANNEL,
+    SAVES_CANCEL_RESTORE_CHANNEL,
     SAVES_DELETE_CHANNEL,
     SAVES_LIST_CHANNEL,
     SAVES_LOAD_CHANNEL,
+    SAVES_RESTORE_STATUS_CHANNEL,
     SAVES_SAVE_CHANNEL,
     SAVES_SLOT_UPDATE_CHANNEL,
     SETTINGS_CHANGE_CHANNEL,
@@ -784,6 +791,64 @@ export interface RegisterSavesHandlersOptions {
      * absent, no broadcast — and no extra list call — is performed.
      */
     readonly broadcastSlotsChanged?: (gameId: string, slots: SaveSlotMeta[]) => void;
+    /**
+     * Abort a pending menu-load session restore (F68 #826). Required — the
+     * channel is always registered. Production binds
+     * `SessionRestoreCoordinator.cancel()` (a no-op outside an in-flight
+     * restore); tests inject a stub.
+     */
+    readonly cancelRestore: () => Promise<void>;
+}
+
+/**
+ * Project a coordinator {@link SessionRestoreStatus} onto the slim
+ * {@link RestoreStatusEvent} pushed over `chimera:saves:restore-status`
+ * (F68 #826). `idle` and `hosting` are internal transitions the renderer
+ * never sees — they map to `null` (no push). Every non-null event is parsed
+ * through {@link RestoreStatusEventSchema} so only a validated projection can
+ * cross IPC (Invariant #1); `gameId` is injected by the composition root
+ * (the load path already rejects saves for a foreign game before the
+ * coordinator runs). `pendingSeats` carries raw seat PlayerIds only
+ * (Invariant #59).
+ */
+export function toRestoreStatusEvent(
+    status: SessionRestoreStatus,
+    gameId: string,
+): RestoreStatusEvent | null {
+    switch (status.state) {
+        case 'idle':
+        case 'hosting':
+            return null;
+        case 'waiting-for-players':
+            return RestoreStatusEventSchema.parse({
+                state: 'waiting',
+                gameId,
+                matchId: status.matchId,
+                lobbyCode: status.lobbyCode,
+                pendingSeats: status.missingSeats,
+            });
+        case 'complete':
+            return RestoreStatusEventSchema.parse({
+                state: 'ready',
+                gameId,
+                matchId: status.matchId,
+                pendingSeats: [],
+            });
+        case 'aborted':
+            return RestoreStatusEventSchema.parse({
+                state: 'cancelled',
+                gameId,
+                matchId: status.matchId,
+                pendingSeats: [],
+            });
+        case 'failed':
+            return RestoreStatusEventSchema.parse({
+                state: 'failed',
+                gameId,
+                matchId: status.matchId,
+                pendingSeats: [],
+            });
+    }
 }
 
 /**
@@ -794,9 +859,10 @@ export interface RegisterSavesHandlersOptions {
  * slot list so the renderer's `chimera:saves:slot-update` push channel can
  * be fired by the wiring code.
  *
- * `chimera:saves:slot-update` is intentionally absent from this
- * registration: it is a one-way push from main → renderer via
- * `webContents.send`. There is no invoke handler for that channel.
+ * `chimera:saves:slot-update` and `chimera:saves:restore-status` are
+ * intentionally absent from this registration: they are one-way pushes from
+ * main → renderer via `webContents.send`. There is no invoke handler for
+ * those channels.
  *
  * Host-only enforcement (§4.1: `SavesAPI` is host-only) is the
  * responsibility of the live coordinator (`SaveManager` + wiring) — the
@@ -816,7 +882,7 @@ export interface RegisterSavesHandlersOptions {
  * `SavesIpcPort` is built and injected by the wiring layer.
  */
 export function registerSavesHandlers(options: RegisterSavesHandlersOptions): void {
-    const { ipcMain, saves, broadcastSlotsChanged, e2eHooks } = options;
+    const { ipcMain, saves, broadcastSlotsChanged, cancelRestore, e2eHooks } = options;
     const logger = options.logger ?? createNoopLogger();
     logger.info('registering chimera:saves:* handlers', {
         channels: [
@@ -824,6 +890,7 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
             SAVES_SAVE_CHANNEL,
             SAVES_LOAD_CHANNEL,
             SAVES_DELETE_CHANNEL,
+            SAVES_CANCEL_RESTORE_CHANNEL,
         ],
     });
 
@@ -875,6 +942,12 @@ export function registerSavesHandlers(options: RegisterSavesHandlersOptions): vo
                 });
             }
         }
+        return undefined;
+    });
+
+    ipcMain.handle(SAVES_CANCEL_RESTORE_CHANNEL, async (_event, payload) => {
+        parseInvokeRequest(EmptyPayloadSchema, SAVES_CANCEL_RESTORE_CHANNEL, payload);
+        await cancelRestore();
         return undefined;
     });
 }

@@ -172,12 +172,19 @@ export type SessionRestoreStatus =
     | {
           readonly state: 'waiting-for-players';
           readonly matchId: string;
+          /** Join code of the restored lobby — the waiting overlay shows it. */
+          readonly lobbyCode: string;
           /** Saved remote seats that have not reconnected yet, slotIndex order. */
           readonly missingSeats: readonly PlayerId[];
       }
     | { readonly state: 'complete'; readonly matchId: string }
-    | { readonly state: 'aborted' }
-    | { readonly state: 'failed'; readonly reason: string };
+    | { readonly state: 'aborted'; readonly matchId: string }
+    | {
+          readonly state: 'failed';
+          /** `''` when the failure precedes a validated matchId (sanitize) — an unvalidated id must never surface. */
+          readonly matchId: string;
+          readonly reason: string;
+      };
 
 /**
  * Everything the coordinator may do to the outside world. The composition
@@ -197,7 +204,7 @@ export interface SessionRestorePorts {
             readonly hostPlayerId: PlayerId;
             readonly humanSeats: readonly PlayerId[];
         };
-    }) => Promise<void>;
+    }) => Promise<{ readonly lobbyCode: string }>;
     /**
      * Apply the loaded file to the freshly hosted session. Bound to the
      * composition root's single Invariant #24 apply helper — the coordinator
@@ -263,25 +270,32 @@ export class SessionRestoreCoordinator {
         try {
             manifest = sanitizeRestoreManifest(file.session);
         } catch (error) {
-            this.setStatus({ state: 'failed', reason: describeError(error) });
+            // No validated matchId exists yet — publish '' rather than an
+            // unvalidated (possibly corrupt/oversized) id.
+            this.setStatus({ state: 'failed', matchId: '', reason: describeError(error) });
             throw error;
         }
 
         this.setStatus({ state: 'hosting', matchId: manifest.matchId });
+        let lobbyCode: string;
         try {
-            await this.ports.hostLobby({
+            ({ lobbyCode } = await this.ports.hostLobby({
                 maxPlayers: manifest.maxPlayers,
                 restore: {
                     matchId: manifest.matchId,
                     hostPlayerId: manifest.hostSeat.playerId,
                     humanSeats: manifest.remoteSeats.map((seatEntry) => seatEntry.playerId),
                 },
-            });
+            }));
         } catch (error) {
-            this.setStatus({ state: 'failed', reason: describeError(error) });
+            this.setStatus({
+                state: 'failed',
+                matchId: manifest.matchId,
+                reason: describeError(error),
+            });
             throw error;
         }
-        if (await this.abortIfRequested()) {
+        if (await this.abortIfRequested(manifest.matchId)) {
             throw new SessionRestoreError('saves:load: the session restore was cancelled.');
         }
 
@@ -293,10 +307,14 @@ export class SessionRestoreCoordinator {
             await this.ports.seatRestoredRoster(manifest.seats);
         } catch (error) {
             await this.closeLobbyBestEffort();
-            this.setStatus({ state: 'failed', reason: describeError(error) });
+            this.setStatus({
+                state: 'failed',
+                matchId: manifest.matchId,
+                reason: describeError(error),
+            });
             throw error;
         }
-        if (await this.abortIfRequested()) {
+        if (await this.abortIfRequested(manifest.matchId)) {
             throw new SessionRestoreError('saves:load: the session restore was cancelled.');
         }
 
@@ -309,6 +327,7 @@ export class SessionRestoreCoordinator {
             this.setStatus({
                 state: 'waiting-for-players',
                 matchId: manifest.matchId,
+                lobbyCode,
                 missingSeats: [...this.missing],
             });
         }
@@ -328,8 +347,9 @@ export class SessionRestoreCoordinator {
         if (this.current.state !== 'waiting-for-players') {
             return;
         }
+        const { matchId } = this.current;
         await this.closeLobbyBestEffort();
-        this.setStatus({ state: 'aborted' });
+        this.setStatus({ state: 'aborted', matchId });
     }
 
     status(): SessionRestoreStatus {
@@ -355,6 +375,7 @@ export class SessionRestoreCoordinator {
             this.setStatus({
                 state: 'waiting-for-players',
                 matchId: this.current.matchId,
+                lobbyCode: this.current.lobbyCode,
                 missingSeats: [...this.missing],
             });
         }
@@ -374,7 +395,7 @@ export class SessionRestoreCoordinator {
             return;
         }
         if (this.current.state === 'hosting' || this.current.state === 'waiting-for-players') {
-            this.setStatus({ state: 'aborted' });
+            this.setStatus({ state: 'aborted', matchId: this.current.matchId });
             return;
         }
         if (this.current.state === 'complete') {
@@ -391,13 +412,13 @@ export class SessionRestoreCoordinator {
     }
 
     /** Honour a deferred `cancel()`: unwind and mark aborted. */
-    private async abortIfRequested(): Promise<boolean> {
+    private async abortIfRequested(matchId: string): Promise<boolean> {
         if (!this.abortRequested) {
             return false;
         }
         this.abortRequested = false;
         await this.closeLobbyBestEffort();
-        this.setStatus({ state: 'aborted' });
+        this.setStatus({ state: 'aborted', matchId });
         return true;
     }
 
