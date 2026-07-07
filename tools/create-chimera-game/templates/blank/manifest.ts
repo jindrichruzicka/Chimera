@@ -4,7 +4,7 @@
 
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
-import { __GAME_CONSTANT___GAME_ID } from './constants.js';
+import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
 
 /**
  * `realtime: false` is the turn-based default — an action-driven clock with no

@@ -296,7 +296,7 @@ const { mockTacticsVisibilityRules } = vi.hoisted(() => ({
     },
 }));
 
-vi.mock('@chimera-engine/tactics/visibility-rules.js', () => ({
+vi.mock('@chimera-engine/tactics/simulation/visibility-rules.js', () => ({
     tacticsVisibilityRules: mockTacticsVisibilityRules,
 }));
 
@@ -589,14 +589,15 @@ const { PerspectiveReplayManager } = await import('./replay/PerspectiveReplayMan
 // Tactics modules are imported directly: test files are exempt from the
 // no-main-games-import boundary.
 const { registerTacticsActions, resolveTacticsFirstPlayer } =
-    await import('@chimera-engine/tactics/actions.js');
+    await import('@chimera-engine/tactics/simulation/actions.js');
 const { createTacticsAIState } = await import('@chimera-engine/tactics/ai/tacticsPolicy.js');
 const { tacticsManifest } = await import('@chimera-engine/tactics/manifest.js');
 const { tacticsCommitmentOrchestration } =
-    await import('@chimera-engine/tactics/commitment/orchestration.js');
-const { tacticsResolveIsMyTurn } = await import('@chimera-engine/tactics/commitment/turnGate.js');
+    await import('@chimera-engine/tactics/simulation/commitment/orchestration.js');
+const { tacticsResolveIsMyTurn } =
+    await import('@chimera-engine/tactics/simulation/commitment/turnGate.js');
 const { tacticsSettingsSchema } = await import('@chimera-engine/tactics/settings-schema.js');
-const { TACTICS_GAME_ID } = await import('@chimera-engine/tactics/constants.js');
+const { TACTICS_GAME_ID } = await import('@chimera-engine/tactics/simulation/constants.js');
 const { TACTICS_CONTENT_SCHEMAS, paletteFromCollections } =
     await import('@chimera-engine/tactics/content/tacticsContent.js');
 const { buildTacticsLobbySetup } = await import('@chimera-engine/tactics/lobby/lobby-setup.js');

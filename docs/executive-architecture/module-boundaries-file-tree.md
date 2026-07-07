@@ -24,14 +24,14 @@ Filename case encodes the primary export type:
 
 These boundaries are **hard constraints**. Any violation is a BLOCK finding at review.
 
-| Package                      | May import from                                                                                                                                                                                                                                                                                             | Must NOT import from                                                                        |
-| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `simulation/`                | `shared/`                                                                                                                                                                                                                                                                                                   | `renderer/`, `electron/`, `games/*`, any DOM API                                            |
-| `ai/`                        | `simulation/`, `shared/`                                                                                                                                                                                                                                                                                    | `renderer/`, `electron/`, `games/*`, any DOM API                                            |
-| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals; test files may also `import type` from `simulation/settings` for cross-boundary compatibility guards (no runtime coupling)                                                                                                             | `electron/main/`, `ai/engine/` (except IPC types), `games/*/data`                           |
-| `games/<name>/`              | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces in `screens/` and React shell contributions in `shell/` may also import the public component-library barrels `@chimera-engine/renderer/components/ui` (primitives) and `@chimera-engine/renderer/components/chat` (the shared chat component) | Other `games/` directories; renderer internals outside the public component-library barrels |
-| `electron/main/`             | All packages                                                                                                                                                                                                                                                                                                | DOM APIs                                                                                    |
-| `networking/provider/local/` | Only within `local/`                                                                                                                                                                                                                                                                                        | Engine or renderer internals                                                                |
+| Package                      | May import from                                                                                                                                                                                                                                                                                             | Must NOT import from                                                                            |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `simulation/`                | `shared/`                                                                                                                                                                                                                                                                                                   | `renderer/`, `electron/`, `apps/*`, any DOM API                                                 |
+| `ai/`                        | `simulation/`, `shared/`                                                                                                                                                                                                                                                                                    | `renderer/`, `electron/`, `apps/*`, any DOM API                                                 |
+| `renderer/`                  | `simulation/content` (types only), `shared/`, `renderer/` internals; test files may also `import type` from `simulation/settings` for cross-boundary compatibility guards (no runtime coupling)                                                                                                             | `electron/main/`, `ai/engine/` (except IPC types), `apps/*/data`                                |
+| `apps/<game>/`               | `simulation/`, `ai/`, `shared/`, own files; renderer surfaces in `screens/` and React shell contributions in `shell/` may also import the public component-library barrels `@chimera-engine/renderer/components/ui` (primitives) and `@chimera-engine/renderer/components/chat` (the shared chat component) | Other `apps/` game directories; renderer internals outside the public component-library barrels |
+| `electron/main/`             | All packages                                                                                                                                                                                                                                                                                                | DOM APIs                                                                                        |
+| `networking/provider/local/` | Only within `local/`                                                                                                                                                                                                                                                                                        | Engine or renderer internals                                                                    |
 
 ---
 
@@ -153,44 +153,34 @@ chimera/
 │   │   └── DebugProtocol.ts         # Typed request/response message shapes for debug IPC channel
 │   └── index.ts                     # Public API of simulation engine
 │
-├── games/                           # One subdirectory per game built on Chimera
-│   └── <game-name>/
-│       ├── state/
-│       │   └── GameSnapshot.ts      # Extends BaseGameSnapshot with game-specific fields
-│       ├── actions/                 # ActionDefinitions for every game-specific action type
-│       │   ├── index.ts             # Calls registry.register(...) for all definitions
-│       │   └── *.ts                 # One file per action (e.g. MoveUnitAction.ts)
-│       ├── data/                    # Pure JSON content; no behaviour, never loaded at compiled time
+├── apps/                            # One application per game built on Chimera (layer-3 consumers;
+│   └── <game>/                      #   `create-chimera-game` scaffolds this exact layout from templates/blank)
+│       ├── simulation/              # Deterministic gameplay — pure, no DOM/IPC/renderer imports; covered by the
+│       │   │                        #   apps/*/simulation ESLint purity + boundary zones (Invariants #1, #43)
+│       │   ├── actions.ts           # ActionDefinitions (validators + reducers) registered on the ActionRegistry
+│       │   ├── constants.ts         # Game tokens: gameId, '<gameId>:*' action namespace, board extents, setting keys
+│       │   ├── entities.ts          # Deterministic initial entity/board setup (optional for stateless games)
+│       │   ├── visibility-rules.ts  # Implements the VisibilityRules interface for host-side state projection
+│       │   └── <subsystem>/         # Gameplay subsystems as the game grows (turn gating, resource ledgers, ...)
+│       ├── ai/                      # Game-specific AI policy (imports @chimera-engine/ai + own simulation/ only)
+│       ├── content/                 # Typed content-collection definitions consumed by the Content DB
+│       ├── data/                    # Pure JSON content; loaded by the host at startup, shipped by electron-builder
 │       │   ├── <collection-type>/   # One directory per collection (preferred for large sets)
 │       │   └── <collection-type>.json # Flat array format (valid for small collections)
-│       ├── schemas/                 # Optional Zod schemas for load-time data validation
-│       ├── ai/                      # Game-specific AI implementation
-│       │   ├── params/              # Extends AIParams with game-specific personality fields
-│       │   ├── states/              # Concrete AIState implementations
-│       │   ├── commands/            # Concrete AICommand implementations
-│       │   └── index.ts             # Creates AIBrain with registered states + initial state
-│       ├── projection/
-│       │   └── VisibilityRules.ts   # Implements the VisibilityRules interface for this game
-│       ├── screens/                 # Game-declared React UI; registered in index.ts; hosted by GameShell
-│       │   ├── index.ts             # Exports GameScreenRegistry { board, hud?, menus?, ... }
-│       │   ├── BoardScreen.tsx      # The one mandatory screen
-│       │   └── *.tsx                # Optional named screens (TechTree, Diplomacy, etc.)
-│       ├── assets/                  # Binary assets — ONLY referenced by AssetRef strings in data/ JSON
-│       │   ├── textures/            # .webp / .png
-│       │   ├── models/              # .glb (Three.js-compatible binary GLTF)
-│       │   ├── audio/               # .ogg (sfx) / .ogg (music)
-│       │   ├── fonts/               # .woff2 game-owned font source files
-│       │   ├── particles/           # .json (particle system configs)
-│       │   └── sprites/             # .webp + .json atlas (sprite sheets)
-│       ├── shell/                   # Declarative shell contributions (menus, settings, fonts, React backgrounds)
-│       │   ├── main-menu.ts
-│       │   ├── settings-page.ts
-│       │   ├── fonts.ts             # GameFontFace[] self-hosted font declarations
-│       │   └── *.tsx                # React shell contributions may use public renderer UI barrel only
+│       ├── assets/                  # Binary assets (audio, fonts, icons, textures) — referenced by AssetRef strings
+│       ├── scene/                   # R3F scene contributions (board meshes, selection markers, camera model)
+│       ├── screens/                 # Game-declared React UI (board + HUD); exported via screens/index.tsx registry
+│       ├── shell/                   # Declarative shell contributions (main menu, settings page, fonts, backgrounds)
+│       ├── styles/                  # Design-token overrides (tokens-override.css + registration)
+│       ├── lobby/                   # Lobby-setup contribution (agent slots, match settings)
+│       ├── renderer/                # Per-app Next.js app (output: export) + register.ts game-registration seam
+│       ├── electron/                # Electron main composition root (main.ts) + build-main.ts esbuild bundler
+│       ├── e2e/                     # Playwright E2E suite (fixtures, page objects, specs)
 │       ├── asset-manifest.ts        # Declares every AssetRef this game owns + priority (critical|deferred)
 │       ├── manifest.ts              # GameManifest: displayName/window title, realtime + tickRateMs, optional icon
 │       ├── settings-schema.ts       # Zod schema extending EngineSettings with game-specific fields
-│       └── index.ts                 # Game entry: creates ActionRegistry, registers actions, loads content
+│       └── package.json             # App identity + scripts; engine packages as devDependencies (#817),
+│                                    #   plus tsconfig.json / tsconfig.build.json / electron-builder.yml
 │
 ├── networking/                      # Adapter between simulation and transport
 │   └── provider/
@@ -315,8 +305,8 @@ chimera/
 ## Key Invariants Referenced Here
 
 - **Invariant #2** — `simulation/` has zero runtime dependencies on React, DOM, or networking.
-- **Invariant #47** — `AssetManager` never imports from `games/*`.
-- **Invariant #48** — `GameShell.tsx` must never import from any `games/*` path.
+- **Invariant #47** — `AssetManager` never imports from `apps/*` game code.
+- **Invariant #48** — `GameShell.tsx` must never import from any `apps/*` game path.
 
 ---
 

@@ -7,7 +7,7 @@ import {
     TACTICS_INITIAL_UNIT_SPACING_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
-} from '@chimera-engine/tactics/constants.js';
+} from './constants.js';
 import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry.js';
 import { createRng } from '@chimera-engine/simulation/engine/DeterministicRng.js';
 import type {
@@ -30,7 +30,7 @@ import {
     tacticsRevealTileDefinition,
 } from './actions.js';
 import { buildInitialTacticsEntities } from './entities.js';
-import { parseTacticsSceneUnits } from './scene/tacticsSceneModel.js';
+import { parseTacticsSceneUnits } from '../scene/tacticsSceneModel.js';
 import type { TacticsSnapshot, TacticsStaminaEntry } from './stamina.js';
 import { tacticsVisibilityRules } from './visibility-rules.js';
 

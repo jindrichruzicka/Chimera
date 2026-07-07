@@ -20,9 +20,9 @@ import { ActionRegistry } from '@chimera-engine/simulation/engine/ActionRegistry
 import { registerEngineActions } from '@chimera-engine/simulation/engine/EngineActions.js';
 import { DefaultStateProjector } from '@chimera-engine/simulation/projection/index.js';
 import { createTacticsAIState } from '@chimera-engine/tactics/ai/tacticsPolicy.js';
-import { registerTacticsActions } from '@chimera-engine/tactics/actions.js';
-import { tacticsVisibilityRules } from '@chimera-engine/tactics/visibility-rules.js';
-import { TACTICS_MOVE_UNIT_ACTION } from '@chimera-engine/tactics/constants.js';
+import { registerTacticsActions } from '@chimera-engine/tactics/simulation/actions.js';
+import { tacticsVisibilityRules } from '@chimera-engine/tactics/simulation/visibility-rules.js';
+import { TACTICS_MOVE_UNIT_ACTION } from '@chimera-engine/tactics/simulation/constants.js';
 import type { LobbyAgentSlot } from '@chimera-engine/networking';
 import {
     buildDefaultAIPlayerAgent,

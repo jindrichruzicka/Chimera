@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { TACTICS_GAME_ID } from './constants.js';
+import { TACTICS_GAME_ID } from './simulation/constants.js';
 import { tacticsManifest } from './manifest.js';
 
 describe('tacticsManifest', () => {

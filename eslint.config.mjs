@@ -151,7 +151,12 @@ export default tseslint.config(
     // Simulation + AI layers: forbid non-deterministic globals.
     // docs/coding-standards.md §1.2, §7.
     {
-        files: ['simulation/**/*.{ts,tsx}', 'ai/**/*.{ts,tsx}', 'apps/*/actions/**/*.{ts,tsx}'],
+        files: [
+            'simulation/**/*.{ts,tsx}',
+            'ai/**/*.{ts,tsx}',
+            'apps/*/actions/**/*.{ts,tsx}',
+            'apps/*/simulation/**/*.{ts,tsx}',
+        ],
         rules: {
             'no-restricted-syntax': [
                 'error',
@@ -184,14 +189,19 @@ export default tseslint.config(
         },
     },
 
-    // AI + game-action layers: forbid importing the UI/host/game/networking
-    // layers. `@chimera-engine/ai` depends on `@chimera-engine/simulation` ONLY (Invariant #1):
+    // AI + game simulation layers (apps/*/simulation, legacy apps/*/actions):
+    // forbid importing the UI/host/game/networking layers.
+    // `@chimera-engine/ai` depends on `@chimera-engine/simulation` ONLY (Invariant #1):
     // now that the package is consumed through its `exports` map, the realistic
     // violation is the `@chimera-engine/<pkg>` workspace-alias form, so both the alias
     // and the legacy relative-path forms are forbidden. (simulation/ has its own
     // stricter zero-dependency leaf rule below.) See issue #764.
     {
-        files: ['ai/**/*.{ts,tsx}', 'apps/*/actions/**/*.{ts,tsx}'],
+        files: [
+            'ai/**/*.{ts,tsx}',
+            'apps/*/actions/**/*.{ts,tsx}',
+            'apps/*/simulation/**/*.{ts,tsx}',
+        ],
         rules: {
             'no-restricted-imports': [
                 'error',
@@ -217,7 +227,7 @@ export default tseslint.config(
                                 '**/apps/*',
                             ],
                             message:
-                                'ai/ must not import from networking, renderer, electron, or game apps (apps/*) — @chimera-engine/simulation is its only dependency (Invariant #1). See coding-standards.md §3, issue #764.',
+                                'ai/ and game simulation code (apps/*/simulation) must not import from networking, renderer, electron, or game-app aliases — @chimera-engine/simulation (plus sibling-relative game modules) is the only dependency (Invariant #1). See coding-standards.md §3, issue #764.',
                         },
                     ],
                 },

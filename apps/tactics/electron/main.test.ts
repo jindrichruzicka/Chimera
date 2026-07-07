@@ -30,7 +30,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_GAME_ID,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 
 import { tacticsContribution } from './main.js';
 

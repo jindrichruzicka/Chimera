@@ -15,7 +15,7 @@
 // populates the registry before any page reads it.
 
 import { registerRendererGame, type RendererGameContribution } from '@chimera-engine/renderer/game';
-import { TACTICS_GAME_ID } from '../constants.js';
+import { TACTICS_GAME_ID } from '../simulation/constants.js';
 import { loadTacticsRendererGame, loadTacticsRendererGameShell } from './loaders.js';
 
 /**

@@ -6,10 +6,7 @@ import type {
 } from '@chimera-engine/simulation/engine/types.js';
 import { entityId } from '@chimera-engine/simulation/engine/types.js';
 import { tacticsGridCoordinate } from './actions.js';
-import {
-    TACTICS_DEFAULT_UNIT_ID_VALUE,
-    TACTICS_START_POSITIONS,
-} from '@chimera-engine/tactics/constants.js';
+import { TACTICS_DEFAULT_UNIT_ID_VALUE, TACTICS_START_POSITIONS } from './constants.js';
 
 /**
  * Builds the initial entity set for a tactics match — one movable unit per

@@ -43,25 +43,25 @@ import { toSlotId } from '../../preload/api-types.js';
 import {
     registerTacticsActions,
     resolveTacticsFirstPlayer,
-} from '@chimera-engine/tactics/actions.js';
+} from '@chimera-engine/tactics/simulation/actions.js';
 import { createTacticsAIState } from '@chimera-engine/tactics/ai/tacticsPolicy.js';
-import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/commitment/orchestration.js';
-import { tacticsResolveIsMyTurn } from '@chimera-engine/tactics/commitment/turnGate.js';
+import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/simulation/commitment/orchestration.js';
+import { tacticsResolveIsMyTurn } from '@chimera-engine/tactics/simulation/commitment/turnGate.js';
 import {
     TACTICS_COMMIT_ACTION,
     TACTICS_GAME_ID,
     TACTICS_MAX_STAMINA,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 import {
     buildTacticsLobbySetup,
     type TacticsPalette,
 } from '@chimera-engine/tactics/lobby/lobby-setup.js';
 import { tacticsManifest } from '@chimera-engine/tactics/manifest.js';
 import { tacticsSettingsSchema } from '@chimera-engine/tactics/settings-schema.js';
-import { readStamina } from '@chimera-engine/tactics/stamina.js';
-import { tacticsVisibilityRules } from '@chimera-engine/tactics/visibility-rules.js';
+import { readStamina } from '@chimera-engine/tactics/simulation/stamina.js';
+import { tacticsVisibilityRules } from '@chimera-engine/tactics/simulation/visibility-rules.js';
 
 import type { MainGameContribution } from '../game/mainGameRegistry.js';
 import {

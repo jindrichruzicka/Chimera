@@ -22,9 +22,12 @@ import type { StoreApi } from 'zustand';
 
 import type { PlayerId, PlayerSnapshot } from '@chimera-engine/electron/preload/api-types.js';
 
-import { appendToBuffer, bufferCanUndo, popBuffer } from '../commitment/buffer.js';
-import type { BufferedTacticsAction, LocalActionBuffer } from '../commitment/contract.js';
-import type { TacticsSnapshot } from '../stamina.js';
+import { appendToBuffer, bufferCanUndo, popBuffer } from '../simulation/commitment/buffer.js';
+import type {
+    BufferedTacticsAction,
+    LocalActionBuffer,
+} from '../simulation/commitment/contract.js';
+import type { TacticsSnapshot } from '../simulation/stamina.js';
 
 /** Outcome of an append attempt — mirrors the kernel's `appendToBuffer` result. */
 export interface AppendResult {

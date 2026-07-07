@@ -9,7 +9,7 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
     readTacticsTurnMode,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 import {
     parseTacticsSceneUnits,
     parseTacticsSeatCommitted,
@@ -20,9 +20,9 @@ import {
     type TacticsSceneUnit,
     type TacticsSelectionIntent,
 } from '../scene/tacticsSceneModel.js';
-import { tacticsGridCoordinate } from '../actions.js';
-import { applyBuffer } from '../commitment/buffer.js';
-import { bufferHasAttack, type BufferedTacticsAction } from '../commitment/contract.js';
+import { tacticsGridCoordinate } from '../simulation/actions.js';
+import { applyBuffer } from '../simulation/commitment/buffer.js';
+import { bufferHasAttack, type BufferedTacticsAction } from '../simulation/commitment/contract.js';
 import { paletteFromCollections } from '../content/tacticsContent.js';
 import {
     TACTICS_CAMERA_BOUNDS,
@@ -31,7 +31,7 @@ import {
 } from '../scene/tacticsCamera.js';
 import { TacticsGroundPlane } from '../scene/TacticsGroundPlane.js';
 import { TacticsUnitPrimitive } from '../scene/TacticsUnitPrimitive.js';
-import { parseRevealedTurn } from '../commitment/revealView.js';
+import { parseRevealedTurn } from '../simulation/commitment/revealView.js';
 import {
     selectBuffer,
     selectCommittedLatch,

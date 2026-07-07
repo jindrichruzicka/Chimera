@@ -11,7 +11,7 @@
 // bootstrap populates the registry before any page reads it.
 
 import { registerRendererGame, type RendererGameContribution } from '@chimera-engine/renderer/game';
-import { __GAME_CONSTANT___GAME_ID } from '../constants.js';
+import { __GAME_CONSTANT___GAME_ID } from '../simulation/constants.js';
 import { load__GamePascal__RendererGame, load__GamePascal__RendererGameShell } from './loaders.js';
 
 /**

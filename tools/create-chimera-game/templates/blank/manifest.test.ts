@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { __GAME_CONSTANT___GAME_ID } from './constants.js';
+import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
 import { __gameCamel__Manifest } from './manifest.js';
 
 // Manifest unit smoke — proves the game's registration descriptor wires up from one

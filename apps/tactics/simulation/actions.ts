@@ -5,7 +5,7 @@ import {
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_PROXIMITY_REVEAL_RANGE_TILES_SQUARED,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera-engine/tactics/constants.js';
+} from './constants.js';
 import type {
     ActionDefinition,
     BaseEntityState,

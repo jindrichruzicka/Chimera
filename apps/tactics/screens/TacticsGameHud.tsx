@@ -13,14 +13,17 @@ import {
     type BadgeVariant,
 } from '@chimera-engine/renderer/components/ui';
 import { ChatPanel } from '@chimera-engine/renderer/components/chat';
-import { TACTICS_COMMIT_ACTION, readTacticsTurnMode } from '@chimera-engine/tactics/constants.js';
+import {
+    TACTICS_COMMIT_ACTION,
+    readTacticsTurnMode,
+} from '@chimera-engine/tactics/simulation/constants.js';
 import {
     parseTacticsAllSeatsCommitted,
     parseTacticsSeatCommitted,
     parseTacticsViewerStamina,
 } from '../scene/tacticsSceneModel.js';
-import { applyBuffer } from '../commitment/buffer.js';
-import { readStamina } from '../stamina.js';
+import { applyBuffer } from '../simulation/commitment/buffer.js';
+import { readStamina } from '../simulation/stamina.js';
 import {
     selectBuffer,
     selectCommittedLatch,

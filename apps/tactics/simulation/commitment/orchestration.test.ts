@@ -14,7 +14,7 @@ import {
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera-engine/tactics/constants.js';
+} from '../constants.js';
 import type { ActionEnvelope, BaseGameSnapshot } from '@chimera-engine/simulation/engine/types.js';
 import {
     entityId,

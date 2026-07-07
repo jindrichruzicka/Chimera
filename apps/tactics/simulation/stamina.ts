@@ -16,7 +16,7 @@
  * `simulation/engine`) — no renderer/electron/networking (Invariant #3).
  */
 
-import { TACTICS_MAX_STAMINA, readTacticsTurnMode } from '@chimera-engine/tactics/constants.js';
+import { TACTICS_MAX_STAMINA, readTacticsTurnMode } from './constants.js';
 import type {
     BaseGameSnapshot,
     BasePlayerState,

@@ -23,7 +23,7 @@ When editing files inside these directories, Claude Code automatically loads the
 
 - [`electron/main/CLAUDE.md`](electron/main/CLAUDE.md) — main process / IPC.
 - [`renderer/CLAUDE.md`](renderer/CLAUDE.md) — React/R3F renderer.
-- [`simulation/CLAUDE.md`](simulation/CLAUDE.md) and [`ai/CLAUDE.md`](ai/CLAUDE.md) — pure deterministic simulation and AI.
+- [`simulation/CLAUDE.md`](simulation/CLAUDE.md) and [`ai/CLAUDE.md`](ai/CLAUDE.md) — pure deterministic simulation and AI. The same rules apply to per-game gameplay code under `apps/<game>/simulation/` and `apps/<game>/ai/` (enforced by the `apps/*/simulation` ESLint zones).
 
 ## Test Files — Rules
 

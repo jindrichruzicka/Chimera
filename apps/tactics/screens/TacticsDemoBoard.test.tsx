@@ -18,7 +18,7 @@ import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import { TacticsDemoBoard } from './TacticsDemoBoard';
 import { useCommitmentBuffer } from './useCommitmentBuffer';

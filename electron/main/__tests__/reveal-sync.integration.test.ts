@@ -40,16 +40,16 @@ import {
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 import type { WireCommitmentReveal } from '@chimera-engine/simulation/foundation/messages.js';
 import {
     registerTacticsActions,
     tacticsGridCoordinate,
     type TacticsAttackPayload,
     type TacticsMoveUnitPayload,
-} from '@chimera-engine/tactics/actions.js';
-import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/commitment/orchestration.js';
-import type { BufferedTacticsAction } from '@chimera-engine/tactics/commitment/contract.js';
+} from '@chimera-engine/tactics/simulation/actions.js';
+import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/simulation/commitment/orchestration.js';
+import type { BufferedTacticsAction } from '@chimera-engine/tactics/simulation/commitment/contract.js';
 
 import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
 import { runRevealSync } from '../runtime/RevealOrchestrator.js';

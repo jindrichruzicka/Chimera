@@ -55,6 +55,30 @@ Both modes validate the name and resolve the template **before** any write, copy
 (skipping `node_modules` / `dist` / `out` / `.next`), substitute tokens in contents + path
 segments, and assert no token survives.
 
+## Emitted app layout
+
+The blank template follows the canonical game-app structure (mirroring `apps/tactics`; see
+`docs/executive-architecture/module-boundaries-file-tree.md`):
+
+```
+apps/<kebab>/
+├── simulation/            # deterministic gameplay — actions.ts, constants.ts, visibility-rules.ts;
+│                          #   pure (no DOM/IPC), covered by the apps/*/simulation ESLint zones
+├── content/               # content-collection definitions for the Content DB
+├── screens/               # game React UI (board screen + registry)
+├── renderer/              # per-app Next.js app + register.ts registration seam
+├── electron/              # Electron main composition root + build-main.ts bundler
+├── e2e/                   # Playwright boot-smoke suite
+├── assets/                # game-owned binary assets (icon)
+├── manifest.ts            # GameManifest (registration surface, stays at the root)
+├── settings-schema.ts     # zod settings schema extending EngineSettings
+└── package.json / tsconfig*.json / electron-builder.yml
+```
+
+Grow a game inside this shape: new deterministic gameplay modules go under `simulation/`
+(subsystem subdirectories are fine), UI under `screens/`/`scene/`/`shell/`, JSON content under
+`data/`.
+
 ## Token reference
 
 Templates embed these placeholders in file contents and in file/directory names; the scaffolder

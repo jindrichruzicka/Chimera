@@ -22,18 +22,18 @@ import { createTacticsAIState } from '@chimera-engine/tactics/ai/tacticsPolicy.j
 import {
     registerTacticsActions,
     resolveTacticsFirstPlayer,
-} from '@chimera-engine/tactics/actions.js';
+} from '@chimera-engine/tactics/simulation/actions.js';
 import {
     paletteFromCollections,
     TACTICS_CONTENT_SCHEMAS,
 } from '@chimera-engine/tactics/content/tacticsContent.js';
 import { buildTacticsLobbySetup } from '@chimera-engine/tactics/lobby/lobby-setup.js';
 import { tacticsManifest } from '@chimera-engine/tactics/manifest.js';
-import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/commitment/orchestration.js';
-import { tacticsResolveIsMyTurn } from '@chimera-engine/tactics/commitment/turnGate.js';
+import { tacticsCommitmentOrchestration } from '@chimera-engine/tactics/simulation/commitment/orchestration.js';
+import { tacticsResolveIsMyTurn } from '@chimera-engine/tactics/simulation/commitment/turnGate.js';
 import { tacticsSettingsSchema } from '@chimera-engine/tactics/settings-schema.js';
-import { tacticsVisibilityRules } from '@chimera-engine/tactics/visibility-rules.js';
-import { TACTICS_GAME_ID } from '@chimera-engine/tactics/constants.js';
+import { tacticsVisibilityRules } from '@chimera-engine/tactics/simulation/visibility-rules.js';
+import { TACTICS_GAME_ID } from '@chimera-engine/tactics/simulation/constants.js';
 
 /**
  * The tactics reference game's main-side contribution. Exported for the

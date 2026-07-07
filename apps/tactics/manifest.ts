@@ -1,6 +1,6 @@
 import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
-import { TACTICS_GAME_ID } from './constants.js';
+import { TACTICS_GAME_ID } from './simulation/constants.js';
 
 /**
  * Tactics' game manifest. Tactics is the turn-based reference game: `realtime`

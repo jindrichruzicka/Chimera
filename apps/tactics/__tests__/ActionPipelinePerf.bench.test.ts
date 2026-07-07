@@ -33,13 +33,13 @@ import type {
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import { playerId as toPlayerId } from '@chimera-engine/simulation/engine/types.js';
-import { registerTacticsActions } from '@chimera-engine/tactics/actions.js';
-import { buildInitialTacticsEntities } from '@chimera-engine/tactics/entities.js';
-import { withSeededStamina } from '@chimera-engine/tactics/stamina.js';
+import { registerTacticsActions } from '@chimera-engine/tactics/simulation/actions.js';
+import { buildInitialTacticsEntities } from '@chimera-engine/tactics/simulation/entities.js';
+import { withSeededStamina } from '@chimera-engine/tactics/simulation/stamina.js';
 import {
     TACTICS_DEFAULT_UNIT_ID_VALUE,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 import {
     MAIN_HEAP_BUDGET_MB,
     TICK_BUDGET_MS,

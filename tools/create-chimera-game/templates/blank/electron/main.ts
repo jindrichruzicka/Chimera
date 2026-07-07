@@ -13,11 +13,11 @@ import { main, type MainGameContribution } from '@chimera-engine/electron/main';
 import {
     register__GamePascal__Actions,
     resolve__GamePascal__FirstPlayer,
-} from '@chimera-engine/__game_kebab__/actions.js';
+} from '@chimera-engine/__game_kebab__/simulation/actions.js';
 import { __gameCamel__Manifest } from '@chimera-engine/__game_kebab__/manifest.js';
 import { __gameCamel__SettingsSchema } from '@chimera-engine/__game_kebab__/settings-schema.js';
-import { __gameCamel__VisibilityRules } from '@chimera-engine/__game_kebab__/visibility-rules.js';
-import { __GAME_CONSTANT___GAME_ID } from '@chimera-engine/__game_kebab__/constants.js';
+import { __gameCamel__VisibilityRules } from '@chimera-engine/__game_kebab__/simulation/visibility-rules.js';
+import { __GAME_CONSTANT___GAME_ID } from '@chimera-engine/__game_kebab__/simulation/constants.js';
 
 /**
  * __Game Title__'s main-side contribution. Exported for the composition-root

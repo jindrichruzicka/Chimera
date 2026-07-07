@@ -13,7 +13,7 @@ import type {
     GameSettingsSchema,
 } from '@chimera-engine/simulation/settings/index.js';
 
-import { __GAME_CONSTANT___GAME_ID } from './constants.js';
+import { __GAME_CONSTANT___GAME_ID } from './simulation/constants.js';
 
 export type __GamePascal__Settings = EngineSettings;
 

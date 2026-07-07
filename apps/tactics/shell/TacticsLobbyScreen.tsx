@@ -39,7 +39,7 @@ import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation
 import {
     readTacticsTurnMode,
     TACTICS_TURN_MODE_SETTING,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 import {
     DEFAULT_BOARD_COLOR,
     DEFAULT_PLAYER_COLOR,

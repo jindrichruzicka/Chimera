@@ -13,12 +13,12 @@ import {
 import {
     TACTICS_COMMIT_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera-engine/tactics/constants.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
 import type { GameHudProps } from '@chimera-engine/simulation/foundation/game-screen-contract.js';
 import { entityId } from '@chimera-engine/electron/preload/api-types.js';
 import { EscapeStackProvider } from '@chimera-engine/renderer/components/ui';
-import { tacticsGridCoordinate } from '../actions.js';
-import type { BufferedTacticsAction } from '../commitment/contract.js';
+import { tacticsGridCoordinate } from '../simulation/actions.js';
+import type { BufferedTacticsAction } from '../simulation/commitment/contract.js';
 import { TacticsGameHud } from './TacticsGameHud';
 import { useCommitmentBuffer } from './useCommitmentBuffer';
 

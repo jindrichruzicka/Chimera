@@ -73,7 +73,7 @@ A fully peer-trustless variant (client-side commit so even the host process neve
 
 The mode is a **synced, host-authored match setting**, off by default. It rides the F53 customizable-lobby plumbing with no new IPC:
 
-- Key `TACTICS_TURN_MODE_SETTING = 'turnMode'` on `GameSetupConfig.matchSettings`, union `TacticsTurnMode = 'sequential' | 'commitment'`, default `'sequential'` (`TACTICS_DEFAULT_TURN_MODE`). Defined in [`games/tactics/constants.ts`](../../games/tactics/constants.ts).
+- Key `TACTICS_TURN_MODE_SETTING = 'turnMode'` on `GameSetupConfig.matchSettings`, union `TacticsTurnMode = 'sequential' | 'commitment'`, default `'sequential'` (`TACTICS_DEFAULT_TURN_MODE`). Defined in [`apps/tactics/simulation/constants.ts`](../../apps/tactics/simulation/constants.ts).
 - T7 adds a host-only Battle Setup checkbox in `TacticsLobbyScreen.tsx` (same gating as `boardColor`), written through the existing `chimera:lobby:set-match-setting` → `LobbyManager.setMatchSetting()` path; every accepted change rebroadcasts to all peers.
 - The agreed config is carried into the match by `engine:start_game` → `snapshot.setup` and projected verbatim by `StateProjector`. Reducers and the renderer decode it with the single pure reader `readTacticsTurnMode(matchSettings)` — fail-safe: anything but the exact literal `'commitment'` is `'sequential'`.
 
@@ -82,8 +82,8 @@ The mode is a **synced, host-authored match setting**, off by default. It rides 
 While `readTacticsTurnMode(...) === 'commitment'` and it is the player's turn, selections do **not** dispatch to the host. Instead each one is appended to a **per-instance `LocalActionBuffer`** held in that player's own main process (the host's main process for the host player; the joined client's main process otherwise).
 
 - The board renders an **optimistic local view**: a pure tactics function applies the buffer to the viewer's own latest `PlayerSnapshot`. This is sufficient because a player only ever moves **owned** units and attacks **visible** enemies — everything the buffer touches is already in that viewer's projection.
-- **Stamina** is spent against the **local** view using the existing [`stamina.ts`](../../games/tactics/stamina.ts) semantics (`readStamina`, 1 per `move`/`attack`); the authoritative `playerStamina` ledger is untouched until reveal/apply, where the normal reducers spend it again identically.
-- Contract: `BufferedTacticsAction` (a discriminated union over the three existing payloads — `tactics:move_unit`, `tactics:attack`, `tactics:reveal_tile`) and `LocalActionBuffer = readonly BufferedTacticsAction[]`, in [`games/tactics/commitment/contract.ts`](../../games/tactics/commitment/contract.ts).
+- **Stamina** is spent against the **local** view using the existing [`stamina.ts`](../../apps/tactics/simulation/stamina.ts) semantics (`readStamina`, 1 per `move`/`attack`); the authoritative `playerStamina` ledger is untouched until reveal/apply, where the normal reducers spend it again identically.
+- Contract: `BufferedTacticsAction` (a discriminated union over the three existing payloads — `tactics:move_unit`, `tactics:attack`, `tactics:reveal_tile`) and `LocalActionBuffer = readonly BufferedTacticsAction[]`, in [`apps/tactics/simulation/commitment/contract.ts`](../../apps/tactics/simulation/commitment/contract.ts).
 
 ## 3. Commit (T8 / T9)
 
@@ -133,7 +133,7 @@ Restoring the full snapshot via `UndoManager` already reimplants the entire `pla
 Because `DefaultCommitmentScheme.commit()` discards the nonce, the host cannot later build a valid `CommitmentReveal`. The minimal, **additive** fix (T8) — leaving `verify()` and the existing `commit()` (and all fog-of-war usage) untouched:
 
 - Add one method to the primitive: `CommitmentScheme.commitRevealable(value): { envelope: CommitmentEnvelope; reveal: CommitmentReveal }`, returning the nonce inside `reveal`. Existing committed-value callers (decks, dice) keep using `commit()`.
-- Add a host-side **`RevealStagingPort`** next to `SessionCommitmentRuntime` that retains `PendingReveal` entries (`{ envelopeId, playerId, nonce, value }`) keyed by player and exposes `stage`, `hasCommitted`, `committedTurns`, `buildReveal`, `clearTurn`, plus `capture` / `restore` mirroring `capturePendingCommitments` / `restorePendingCommitments`. The interface + `PendingReveal` / `StagedReveals` types are defined now in [`contract.ts`](../../games/tactics/commitment/contract.ts); T8/T9 implement them.
+- Add a host-side **`RevealStagingPort`** next to `SessionCommitmentRuntime` that retains `PendingReveal` entries (`{ envelopeId, playerId, nonce, value }`) keyed by player and exposes `stage`, `hasCommitted`, `committedTurns`, `buildReveal`, `clearTurn`, plus `capture` / `restore` mirroring `capturePendingCommitments` / `restorePendingCommitments`. The interface + `PendingReveal` / `StagedReveals` types are defined now in [`contract.ts`](../../apps/tactics/simulation/commitment/contract.ts); T8/T9 implement them.
 
 ## Persistence (Invariant #26)
 
@@ -175,7 +175,7 @@ A save taken mid-commit (some players committed, awaiting others) must still be 
 
 ## Acceptance criteria → where addressed
 
-- Design note + contract types committed; T7/T8/T9 implementable with no open design question → this note + [`games/tactics/constants.ts`](../../games/tactics/constants.ts) + [`games/tactics/commitment/contract.ts`](../../games/tactics/commitment/contract.ts).
+- Design note + contract types committed; T7/T8/T9 implementable with no open design question → this note + [`apps/tactics/simulation/constants.ts`](../../apps/tactics/simulation/constants.ts) + [`apps/tactics/simulation/commitment/contract.ts`](../../apps/tactics/simulation/commitment/contract.ts).
 - Each phase mapped to a concrete existing primitive → [§Phase → primitive map](#phase--existing-primitive-map).
 - Reveal ordering specified deterministically → [§Reveal ordering](#reveal-ordering).
 - Undo-before-commit + stamina refund specified → [§6](#6-undo-before-commit--stamina-refund-t8).

@@ -4,7 +4,7 @@ import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
     TACTICS_REVEAL_TILE_ACTION,
-} from '../actions.js';
+} from '../simulation/actions.js';
 import { tacticsAudioRefs } from '../asset-manifest.js';
 // Side-effect import: redefines --ch-* tokens for the Tactics visual language.
 // Shared with shell loaders so URL-selected shell UI can wait for tokens before rendering.

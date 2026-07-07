@@ -23,9 +23,31 @@ describe('blank template smoke harness', () => {
     it('ships a co-located manifest unit smoke that asserts the manifest descriptor', async () => {
         const content = await read('manifest.test.ts');
         expect(content).toContain("from './manifest.js'");
-        expect(content).toContain("from './constants.js'");
+        expect(content).toContain("from './simulation/constants.js'");
         expect(content).toContain('__gameCamel__Manifest');
         expect(content).toContain('__GAME_CONSTANT___GAME_ID');
+    });
+
+    // Canonical game-app layout: deterministic gameplay lives under simulation/
+    // (mirrors apps/tactics — actions/constants/visibility-rules are simulation
+    // modules; manifest/settings-schema stay at the app root as the registration
+    // surface). Keeps scaffolded games inside the apps/*/simulation ESLint
+    // determinism + boundary zones.
+    it('keeps deterministic gameplay under simulation/ and wires imports through it', async () => {
+        await expect(read('simulation/actions.ts')).resolves.toContain("from './constants.js'");
+        await expect(read('simulation/constants.ts')).resolves.toContain(
+            '__GAME_CONSTANT___GAME_ID',
+        );
+        await expect(read('simulation/visibility-rules.ts')).resolves.toContain('VisibilityRules');
+        const main = await read('electron/main.ts');
+        expect(main).toContain("from '@chimera-engine/__game_kebab__/simulation/actions.js'");
+        expect(main).toContain(
+            "from '@chimera-engine/__game_kebab__/simulation/visibility-rules.js'",
+        );
+        expect(main).toContain("from '@chimera-engine/__game_kebab__/simulation/constants.js'");
+        await expect(read('renderer/register.ts')).resolves.toContain(
+            "from '../simulation/constants.js'",
+        );
     });
 
     it('ships a co-located screen render smoke through the renderer public barrels', async () => {

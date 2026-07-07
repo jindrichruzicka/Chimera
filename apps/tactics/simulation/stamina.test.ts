@@ -1,8 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import {
-    TACTICS_MAX_STAMINA,
-    TACTICS_TURN_MODE_SETTING,
-} from '@chimera-engine/tactics/constants.js';
+import { TACTICS_MAX_STAMINA, TACTICS_TURN_MODE_SETTING } from './constants.js';
 import type { BaseGameSnapshot, PlayerId } from '@chimera-engine/simulation/engine/types.js';
 import { gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import { engineStartGameDefinition } from '@chimera-engine/simulation/engine/EngineActions.js';

@@ -30,9 +30,9 @@ import {
 import {
     TACTICS_ATTACK_ACTION,
     TACTICS_MOVE_UNIT_ACTION,
-} from '@chimera-engine/tactics/constants.js';
-import { tacticsGridCoordinate } from '@chimera-engine/tactics/actions.js';
-import type { TacticsCommitmentEnvelopeValue } from '@chimera-engine/tactics/commitment/contract.js';
+} from '@chimera-engine/tactics/simulation/constants.js';
+import { tacticsGridCoordinate } from '@chimera-engine/tactics/simulation/actions.js';
+import type { TacticsCommitmentEnvelopeValue } from '@chimera-engine/tactics/simulation/commitment/contract.js';
 import { RevealStaging } from '@chimera-engine/simulation/projection/index.js';
 import { CURRENT_SCHEMA_VERSION } from '@chimera-engine/simulation/persistence/SaveMigrator.js';
 import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';

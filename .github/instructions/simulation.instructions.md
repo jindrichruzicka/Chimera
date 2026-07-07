@@ -1,8 +1,13 @@
 ---
-applyTo: 'simulation/**,ai/**'
+applyTo: 'simulation/**,ai/**,apps/*/simulation/**,apps/*/ai/**'
 ---
 
 # Simulation & AI Layer — Rules
+
+These rules also apply to per-game simulation code (`apps/<game>/simulation/`) and game AI
+policies (`apps/<game>/ai/`) — game gameplay logic is held to the same determinism and
+boundary standards as the engine packages (a game's own `simulation/` modules may additionally
+import each other by relative path).
 
 Source of truth:
 
