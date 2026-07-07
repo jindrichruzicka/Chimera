@@ -1238,6 +1238,13 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     let seatLobbyAgentsForGameStart:
         | ((agentSlots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
+    // Mirrors the live lobby AI roster into the hosted session as `addAi()`
+    // mutates it during the lobby (#833). Assigned inside `onSessionHosted` (the
+    // `seatLobbyAgentsForGameStart` pattern) so `onLobbyStateChanged` can keep
+    // the human-slot authority (`nextHumanSlotIndex`) aware of `addAi()` AI
+    // seats; without it a human joining AFTER an AI is added is handed the AI's
+    // slot index. Null when no hosted session is live.
+    let syncLiveAgentSlots: ((agentSlots: readonly LobbyAgentSlot[]) => void) | null = null;
     // Seats a restored save's roster into the freshly hosted session (F68 #823).
     // Assigned inside `onSessionHosted` (the `seatLobbyAgentsForGameStart`
     // pattern) so the SessionRestoreCoordinator can drive seating from outside;
@@ -2084,6 +2091,22 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 return aiSlots.map((slot) => slot.playerId);
             };
 
+            // Keep the live AI roster in sync with the lobby as `addAi()` mutates
+            // it (#833) — only while still in the lobby. `nextHumanSlotIndex`
+            // gates human joins on `resolveLiveAgentSlot(...).kind === 'human'`,
+            // so without this a human joining AFTER an AI is added would be
+            // handed the AI's slot index. Guarded to the lobby phase: a restored
+            // session seats its AI roster from the SAVED seats via
+            // `seatRestoredRoster` (the LobbyManager's own `agentSlots` stay
+            // empty), and reconnecting remotes rejoin post-checkpoint (in-game
+            // phase), so syncing then would wipe the restored roster.
+            syncLiveAgentSlots = (liveAgentSlots): void => {
+                if (sessionRuntime.getSnapshot().phase !== gamePhase('lobby')) {
+                    return;
+                }
+                currentAgentSlots = liveAgentSlots;
+            };
+
             // Seat a restored save's roster (F68 #823). Driven by the
             // SessionRestoreCoordinator AFTER the checkpoint is applied, so
             // every agent registers over the restored snapshot. Mirrors
@@ -2239,6 +2262,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     saveInitialTurnMemento = null;
                     handleHostedLocalSeatAdded = null;
                     seatLobbyAgentsForGameStart = null;
+                    syncLiveAgentSlots = null;
                     broadcastRestoredSnapshot = null;
                     resetActiveSessionToLobby = null;
                     seatRestoredRoster = null;
@@ -2392,6 +2416,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             resetActiveSessionToLobby?.();
         },
         onLobbyStateChanged: (state) => {
+            // Keep the hosted session's live AI roster in sync so a human joining
+            // after `addAi()` skips the AI's slot index (#833).
+            syncLiveAgentSlots?.(state.agentSlots ?? []);
+
             BrowserWindow.getAllWindows().forEach((win) => {
                 if (!win.isDestroyed() && !win.webContents.isDestroyed()) {
                     win.webContents.send(LOBBY_UPDATE_CHANNEL, state);

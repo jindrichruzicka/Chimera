@@ -153,6 +153,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
     let seatLobbyAgentsForGameStart:
         | ((slots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
+    let syncLiveAgentSlots: ((slots: readonly LobbyAgentSlot[]) => void) | null = null;
     let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
     /** Start-suppression gate for an in-flight restore (F68 #823). */
     let restoreSeatingActive = false;
@@ -462,6 +463,21 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 return aiSlots.map((slot) => slot.playerId);
             };
 
+            // mirrors index.ts::syncLiveAgentSlots (#833) — keep the live AI
+            // roster in sync as `addAi()` mutates it during the lobby, so
+            // `nextHumanSlotIndex` skips an added AI's slot when a human joins
+            // after it. Guarded to the lobby phase: a restored session seats its
+            // AI roster from the SAVED seats via `seatRestoredRoster` (the
+            // LobbyManager's own agentSlots stay empty) and reconnecting remotes
+            // rejoin post-checkpoint (in-game phase) — syncing then would wipe
+            // `currentAgentSlots`.
+            syncLiveAgentSlots = (liveAgentSlots): void => {
+                if (sessionRuntime.getSnapshot().phase !== gamePhase('lobby')) {
+                    return;
+                }
+                currentAgentSlots = liveAgentSlots;
+            };
+
             // mirrors index.ts::seatRestoredRoster (F68 #823) — including the
             // `finally` release of the start-suppression gate.
             seatRestoredRoster = async (seats): Promise<void> => {
@@ -543,6 +559,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     saveInitialTurnMemento = null;
                     handleHostedLocalSeatAdded = null;
                     seatLobbyAgentsForGameStart = null;
+                    syncLiveAgentSlots = null;
                     seatRestoredRoster = null;
                     restoreSeatingActive = false;
                     sessionRestoreCoordinator.noteSessionClosed();
@@ -551,6 +568,14 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
         },
         onLocalSeatAdded: (entry) => {
             handleHostedLocalSeatAdded?.(entry);
+        },
+
+        // mirrors electron/main/index.ts::onLobbyStateChanged (#833) — feed the
+        // live lobby roster to the hosted session so a human joining after
+        // `addAi()` skips the AI's slot. The harness has no renderer windows, so
+        // it drops production's `LOBBY_UPDATE_CHANNEL` broadcast + E2E auto-start.
+        onLobbyStateChanged: (state) => {
+            syncLiveAgentSlots?.(state.agentSlots ?? []);
         },
 
         // mirrors electron/main/index.ts::onGameStartRequested (#827) — the
