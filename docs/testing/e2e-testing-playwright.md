@@ -37,18 +37,28 @@ All cross-process, multiplayer, and full-stack scenarios are validated through P
 ```
 apps/tactics/e2e/
 ├── playwright.config.ts
-├── playwright.config.test.ts    # Vitest shape-check — validates config values without launching Electron (deliberate)
-├── lobby.fixture.test.ts        # Vitest shape-check — validates lobby.fixture exports without launching Electron (deliberate)
+├── *.test.ts                    # Vitest shape-checks (playwright.config, global-setup,
+│                                #   electron/game/lobby fixtures) — validate exports and
+│                                #   config values without launching Electron (deliberate)
 ├── global-setup.ts
+├── tsconfig.json                # Restores @chimera-engine/* path resolution for the runner
 ├── fixtures/
 │   ├── electron.fixture.ts      # Base: launch / close one ElectronApplication
-│   ├── direct-game.fixture.ts  # Host/client direct-game boot helpers
+│   ├── direct-game.fixture.ts   # Host/client direct-game boot helpers
 │   ├── lobby.fixture.ts         # Extends base: two instances + lobby helpers
-│   └── game.fixture.ts          # Extends lobby: game started, tick driver wired
-├── pages/
+│   ├── game.fixture.ts          # Extends lobby: game started, tick driver wired
+│   └── inherit-env.ts           # Sanitised env passthrough for launched apps
+├── pages/                       # POMs; co-located *.test.ts locator-wiring and
+│   │                            #   *.testid-alignment.test.ts renderer-testid guards where present
 │   ├── MainMenuPage.ts
-│   ├── LobbyPage.ts             # POM: host/join/ready/start
-│   ├── GamePage.ts             # POM: HUD, undo/redo, game-over
+│   ├── LobbyPage.ts             # POM: host/join/ready/start/leave/close
+│   ├── TacticsLobbyPage.ts      # extends LobbyPage: AI seats, colors, commitment toggle
+│   ├── GamePage.ts              # POM: HUD, canvas moves, undo/redo, game-over, HUD save
+│   ├── InGameMenuPage.ts        # POM: Escape menu, confirm-leave
+│   ├── SavesPage.ts             # POM: saves screen rows, load, delete dialog
+│   ├── ReplayPlayerPage.ts
+│   ├── ChatPanelPage.ts
+│   ├── ComponentGalleryPage.ts
 │   └── SettingsPage.ts
 ├── helpers/
 │   ├── ipc-spy.ts               # Read main-process state via electronApp.evaluate()
@@ -56,30 +66,59 @@ apps/tactics/e2e/
 │   ├── snapshot-assert.ts       # assertNoLeakedFields(), assertTickAdvanced(), assertChecksumMatch()
 │   ├── tick-driver.ts           # Programmatic tick dispatch — used in soak specs
 │   ├── canvas-pixels.ts         # RGBA pixel analysis helpers for 3D canvas assertions
+│   ├── lobby-match.ts           # readyAndStart() multi-window match bootstrap
 │   └── relaunch.ts              # Relaunch an Electron process with captured args/env
+├── types/
+│   └── e2e-hooks.d.ts           # __e2eHooks ambient (references electron dist types)
 └── tests/
     ├── boot-smoke.spec.ts
-    ├── main-menu.spec.ts
-    ├── lobby.spec.ts
-    ├── lobby-fixture.spec.ts
-    ├── game-flow.spec.ts
-    ├── match-navigation.spec.ts
-    ├── game-result.spec.ts
+    ├── chat.spec.ts
+    ├── component-gallery.spec.ts
+    ├── debug-inspector.spec.ts
     ├── end-turn.spec.ts
-    ├── pass-and-play-auto-handoff.spec.ts
-    ├── scene-transition.spec.ts
-    ├── theme.spec.ts
-    ├── undo-redo.spec.ts
-    ├── obfuscation.spec.ts
-    ├── reconnect.spec.ts
+    ├── game-flow.spec.ts
+    ├── game-navigation.spec.ts
+    ├── game-result.spec.ts
+    ├── in-game-menu-leave.spec.ts
+    ├── input-keybindings.spec.ts
+    ├── leave-to-tactics-menu.spec.ts
+    ├── lobby-fixture.spec.ts
+    ├── lobby-password.spec.ts
+    ├── lobby.spec.ts
+    ├── main-menu-custom.spec.ts
+    ├── main-menu.spec.ts
     ├── multiplayer-soak.spec.ts
-    ├── save-load.spec.ts
+    ├── obfuscation.spec.ts
+    ├── pass-and-play-auto-handoff.spec.ts
+    ├── perf-hud.spec.ts
+    ├── perf-renderer-heap.spec.ts
+    ├── player-left-toast.spec.ts
+    ├── presence-toast.spec.ts
+    ├── reconnect.spec.ts
+    ├── replay-delete.spec.ts
+    ├── replay-leave-preserves-gameid.spec.ts
+    ├── replay-sequential-matches.spec.ts
+    ├── replay.spec.ts
+    ├── save-load-ui.spec.ts     # Menu-driven save/load/delete UI flow (port 7786)
+    ├── save-load.spec.ts        # IPC-driven save + relaunch menu-restore (port 7785)
+    ├── scene-transition.spec.ts
     ├── settings-persistence.spec.ts
-    └── game-3d-render.spec.ts
+    ├── settings-tabs.spec.ts
+    ├── shell-background.spec.ts
+    ├── stamina-reset-new-match.spec.ts
+    ├── tactics-3d-render.spec.ts
+    ├── tactics-ai.spec.ts
+    ├── tactics-commitment.spec.ts
+    ├── tactics-lobby-color-sync.spec.ts
+    ├── tactics-replay-initial-color.spec.ts
+    ├── tactics-stamina-turns.spec.ts
+    ├── theme.spec.ts
+    └── undo-redo.spec.ts
 ```
 
-> **Note — Vitest shape-check files in `apps/tactics/e2e/` root:** `playwright.config.test.ts` and
-> `lobby.fixture.test.ts` are intentional Vitest unit tests co-located at the `apps/tactics/e2e/` root
+> **Note — Vitest shape-check files in `apps/tactics/e2e/` root:** the root `*.test.ts` files
+> (`playwright.config.test.ts`, `global-setup.test.ts`, and the `electron`/`game`/`lobby`
+> fixture tests) are intentional Vitest unit tests co-located at the `apps/tactics/e2e/` root
 > (§12.3 pattern). They validate module-level exports and config values without launching
 > Electron, so failures surface in the fast Vitest run rather than only during a full E2E
 > run. Playwright's `testDir: './tests'` correctly excludes them; they are picked up by

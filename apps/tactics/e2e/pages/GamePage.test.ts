@@ -257,6 +257,10 @@ describe('GamePage', () => {
         expect(gamePage.turnStatus).toBeDefined();
         expect(gamePage.commitStatus).toBeDefined();
         expect(gamePage.revealOverlay).toBeDefined();
+        expect(gamePage.saveButton).toBeDefined();
+        expect(gamePage.saveNameDialog).toBeDefined();
+        expect(gamePage.saveNameInput).toBeDefined();
+        expect(gamePage.saveNameConfirm).toBeDefined();
         expect(gamePage.selectOwnedPrimitive).toBeDefined();
         expect(gamePage.moveOwnedUnitToOpenTile).toBeDefined();
         expect(gamePage.moveSelectedPrimitiveNearOpponent).toBeDefined();
@@ -283,6 +287,10 @@ describe('GamePage', () => {
             'tactics-turn-status',
             'tactics-commit-status',
             'tactics-reveal',
+            'hud-save-btn',
+            'save-name-dialog',
+            'save-name-input',
+            'save-name-confirm',
         ]);
         expect(requestedTestIds).not.toContain('move-target');
         expect(requestedTestIds).not.toContain('reveal-target');

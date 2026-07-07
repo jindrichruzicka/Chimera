@@ -108,6 +108,10 @@ export class GamePage {
     readonly turnStatus: Locator;
     readonly commitStatus: Locator;
     readonly revealOverlay: Locator;
+    readonly saveButton: Locator;
+    readonly saveNameDialog: Locator;
+    readonly saveNameInput: Locator;
+    readonly saveNameConfirm: Locator;
 
     public constructor(
         private readonly page: Page,
@@ -135,6 +139,24 @@ export class GamePage {
         this.turnStatus = page.getByTestId('tactics-turn-status');
         this.commitStatus = page.getByTestId('tactics-commit-status');
         this.revealOverlay = page.getByTestId('tactics-reveal');
+        // HUD save flow (F68). The trigger is host-only (client shells receive
+        // no `saveGame` capability) and disabled while the commitment buffer
+        // holds unsent moves; the name dialog is a `SaveGameButton` Modal.
+        this.saveButton = page.getByTestId('hud-save-btn');
+        this.saveNameDialog = page.getByTestId('save-name-dialog');
+        this.saveNameInput = page.getByTestId('save-name-input');
+        this.saveNameConfirm = page.getByTestId('save-name-confirm');
+    }
+
+    /** HUD save flow: open the name dialog, fill it, confirm, wait for close. */
+    public async saveGame(label: string): Promise<void> {
+        await expect(this.saveButton).toBeEnabled();
+        await this.saveButton.click();
+        await expect(this.saveNameDialog).toBeVisible();
+        await this.saveNameInput.fill(label);
+        await this.saveNameConfirm.click();
+        // Modal actions always close the dialog after onClick; it unmounts.
+        await expect(this.saveNameDialog).toHaveCount(0);
     }
 
     public async attackAdjacentEnemy(): Promise<void> {

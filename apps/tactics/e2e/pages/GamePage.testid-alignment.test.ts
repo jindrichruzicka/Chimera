@@ -1,9 +1,13 @@
 /**
  * Cross-reference guard: asserts every `getByTestId` string in GamePage.ts
- * has a matching `data-testid="..."` attribute in the renderer game shell
- * source. This prevents silent POM/renderer testid drift — the same class of
- * bug that caused BLOCK-1 in the F31 review (documented in
+ * has a matching testid literal in the renderer game shell source. This
+ * prevents silent POM/renderer testid drift — the same class of bug that
+ * caused BLOCK-1 in the F31 review (documented in
  * SettingsPage.testid-alignment.test.ts).
+ *
+ * The shell sources author some ids as `data-testid="..."` JSX attributes and
+ * others as Modal action `testId: '...'` props (Modal renders those to
+ * `data-testid`), so the guard accepts either source literal.
  *
  * @chimera-review: intentional filesystem access — structural alignment guard;
  *   mocking defeats the purpose (cf. vitest-config-filename-guard.test.ts).
@@ -16,7 +20,7 @@ import { describe, expect, it } from 'vitest';
 const workspaceRoot = path.resolve(import.meta.dirname, '../../../..');
 
 describe('GamePage POM — testid alignment with renderer', () => {
-    it('every getByTestId call in GamePage.ts resolves against a data-testid in the renderer game shell', () => {
+    it('every getByTestId call in GamePage.ts resolves against a testid literal in the renderer game shell', () => {
         const pomSource = readFileSync(
             path.join(workspaceRoot, 'apps/tactics/e2e/pages/GamePage.ts'),
             'utf-8',
@@ -54,6 +58,10 @@ describe('GamePage POM — testid alignment with renderer', () => {
                 path.join(workspaceRoot, 'renderer/components/shell/perf/PerfHud.tsx'),
                 'utf-8',
             ),
+            readFileSync(
+                path.join(workspaceRoot, 'renderer/components/ui/SaveGameButton.tsx'),
+                'utf-8',
+            ),
         ];
         const rendererSource = rendererSources.join('\n');
 
@@ -68,10 +76,16 @@ describe('GamePage POM — testid alignment with renderer', () => {
         expect(pomTestIds.length).toBeGreaterThan(0);
 
         for (const testId of pomTestIds) {
+            // Some ids are authored as JSX `data-testid="..."` attributes,
+            // others as Modal action `testId: '...'` props (Modal renders
+            // those to `data-testid`) — accept either source literal.
+            const present =
+                rendererSource.includes(`data-testid="${testId}"`) ||
+                rendererSource.includes(`testId: '${testId}'`);
             expect(
-                rendererSource,
-                `GamePage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from renderer/components/shell/GameShell.tsx`,
-            ).toContain(`data-testid="${testId}"`);
+                present,
+                `GamePage.ts uses getByTestId('${testId}') but neither data-testid="${testId}" nor testId: '${testId}' is present in the renderer game shell sources`,
+            ).toBe(true);
         }
     });
 });

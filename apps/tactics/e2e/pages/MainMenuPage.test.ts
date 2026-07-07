@@ -79,11 +79,13 @@ describe('MainMenuPage', () => {
         expect(mainMenu.quitButton).toBeDefined();
         expect(mainMenu.componentGalleryButton).toBeDefined();
         expect(mainMenu.replaysButton).toBeDefined();
+        expect(mainMenu.loadGameButton).toBeDefined();
         expect(mainMenu.menu).toBeDefined();
         expect(requestedTestIds).toContain('main-menu-play');
         expect(requestedTestIds).toContain('main-menu-settings');
         expect(requestedTestIds).toContain('main-menu-quit');
         expect(requestedTestIds).toContain('main-menu-component-gallery');
+        expect(requestedTestIds).toContain('main-menu-load-game');
         expect(requestedTestIds).toContain('main-menu');
     });
 

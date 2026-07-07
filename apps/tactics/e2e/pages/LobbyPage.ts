@@ -27,6 +27,7 @@ export class LobbyPage {
     readonly errorBanner: Locator;
     readonly confirmJoinButton: Locator;
     readonly leaveButton: Locator;
+    readonly closeButton: Locator;
 
     public constructor(protected readonly page: Page) {
         this.hostButton = page.getByTestId('host-lobby');
@@ -42,6 +43,9 @@ export class LobbyPage {
         this.errorBanner = page.getByTestId('lobby-error');
         this.confirmJoinButton = page.getByTestId('confirm-join');
         this.leaveButton = page.getByTestId('lobby-leave-btn');
+        // Pre-lobby Close (shown only while no lobby is active); returns to
+        // the main menu.
+        this.closeButton = page.getByTestId('lobby-close');
     }
 
     /** Host a lobby, optionally protecting it with a password (F56). */

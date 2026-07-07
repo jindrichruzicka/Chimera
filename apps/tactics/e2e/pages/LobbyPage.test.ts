@@ -106,6 +106,7 @@ describe('LobbyPage', () => {
         expect(lobbyPage.errorBanner).toBeDefined();
         expect(lobbyPage.confirmJoinButton).toBeDefined();
         expect(lobbyPage.leaveButton).toBeDefined();
+        expect(lobbyPage.closeButton).toBeDefined();
 
         expect(requestedTestIds).toEqual([
             'host-lobby',
@@ -121,6 +122,7 @@ describe('LobbyPage', () => {
             'lobby-error',
             'confirm-join',
             'lobby-leave-btn',
+            'lobby-close',
         ]);
     });
 
