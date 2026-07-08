@@ -35,6 +35,7 @@ import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenu
 import { useGameStore } from '../../state/gameStore';
 import { useLobbyStore } from '../../state/lobbyStore';
 import { useLobbyUiStore } from '../../state/lobbyUiStore';
+import { useSaveStore } from '../../state/saveStore';
 import { useToastStore } from '../../state/toastStore';
 import { useUiStore } from '../../state/uiStore';
 import { useGameContent } from '../../state/useGameContent';
@@ -64,6 +65,7 @@ export default function GamePage(): React.ReactElement | null {
     const lobbyState = useLobbyStore((state) => state.lobbyState);
     const hasLoadedInitialLobbyState = useLobbyStore((state) => state.hasLoadedInitialState);
     const leavingToMainMenu = useLobbyUiStore((state) => state.leavingToMainMenu);
+    const restoreAbortPending = useSaveStore((state) => state.restoreAbortPending);
     const leavingRef = React.useRef(false);
     const gameId = lobbyState?.info.gameId ?? null;
     const gameContent = useGameContent(gameId);
@@ -118,8 +120,30 @@ export default function GamePage(): React.ReactElement | null {
         }
     }, [leavingToMainMenu, router]);
 
+    // Restore-abort exit (#842). Cancelling the waiting-for-players overlay
+    // unwinds the hosted session, but the mid-restore hop already parked this
+    // window on /game and the torn-down session never broadcasts the
+    // phase:'lobby' snapshot that drives the usual reverse navigation. The
+    // overlay cannot navigate either — the no-session redirect below fires
+    // once the cancelled lobby empties and would beat any exit issued there.
+    // So, mirroring the #741 leave flag above: the overlay raises the marker,
+    // this effect consumes it, drops the restored checkpoint, and returns the
+    // host to the saves screen so another slot can be loaded. Declared BEFORE
+    // the no-session redirect so the leavingRef latch lands within the same
+    // commit; no fade-out — /saves has no mount fade-in (useScreenFadeNavigate)
+    // and the abort happens on a faded-in screen.
     useEffect(() => {
-        if (leavingRef.current) return; // a leave-to-main-menu hop is in flight
+        if (restoreAbortPending && !leavingRef.current) {
+            leavingRef.current = true;
+            useSaveStore.getState().clearRestoreAbort();
+            const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
+            useGameStore.getState().reset();
+            router.replace(withShellGameId('/saves', explicitGameId));
+        }
+    }, [restoreAbortPending, router]);
+
+    useEffect(() => {
+        if (leavingRef.current) return; // a leave or restore-abort hop is in flight
         if (snapshot === null && hasLoadedInitialLobbyState && lobbyState === null) {
             const explicitGameId = resolveShellGameId(new URLSearchParams(window.location.search));
             router.replace(withShellGameId('/lobby', explicitGameId));

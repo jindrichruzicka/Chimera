@@ -558,7 +558,8 @@ const {
     SYSTEM_DEVICE_INFO_CHANNEL,
     SYSTEM_DEVICE_INFO_CHANGE_CHANNEL,
 } = await import('../preload/apis/system-api.js');
-const { GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } = await import('../preload/apis/game-api.js');
+const { GAME_GET_CURRENT_SNAPSHOT_CHANNEL, GAME_REVEAL_CHANNEL, GAME_SNAPSHOT_CHANNEL } =
+    await import('../preload/apis/game-api.js');
 const { SAVES_LOAD_CHANNEL, SAVES_RESTORE_STATUS_CHANNEL, SAVES_CANCEL_RESTORE_CHANNEL } =
     await import('../preload/apis/saves-api.js');
 const {
@@ -4619,6 +4620,79 @@ describe('main() — session restore wiring (#823)', () => {
                 matchId: RESTORED_MATCH_ID,
                 pendingSeats: [],
             });
+        });
+
+        it('cancel-restore clears the get-current-snapshot replay cache with the session (#843)', async () => {
+            mockStateBroadcasterInstance.registerRendererRecipient.mockClear();
+            await main(makeTestContributions());
+            makeLiveWindow();
+
+            await loadSlot(makeRestoreSaveFile(MIXED_ROSTER));
+
+            // Drive the hosted renderer egress once — the restore-apply
+            // broadcast lands here in production — so the match-phase
+            // checkpoint is cached for the get-current-snapshot replay.
+            const recipient =
+                mockStateBroadcasterInstance.registerRendererRecipient.mock.calls.at(-1)?.[0];
+            const restoredSnapshot = { tick: 42, viewerId: 'host-restored' };
+            recipient?.sendSnapshot(restoredSnapshot);
+
+            const getCurrentSnapshot = ipcMainHandle.mock.calls.find(
+                ([channel]) => channel === GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
+            )?.[1] as (() => unknown) | undefined;
+            expect(getCurrentSnapshot).toBeTypeOf('function');
+            expect(getCurrentSnapshot?.()).toBe(restoredSnapshot);
+
+            const handler = findCancelRestoreHandler();
+            await handler?.(undefined, undefined);
+
+            // The session is gone: a renderer reload must NOT replay the dead
+            // match's checkpoint (it would bounce /saves and /lobby back onto
+            // an empty /game — #843).
+            expect(mockLobbyManagerCloseLobby).toHaveBeenCalledTimes(1);
+            expect(getCurrentSnapshot?.()).toBeNull();
+        });
+
+        it('joined-session teardown clears the get-current-snapshot replay cache too (#843)', async () => {
+            await main(makeTestContributions());
+
+            const options = mockLobbyManagerCtor.mock.calls.at(-1)?.[2] as
+                | {
+                      onSessionJoined?: (transport: {
+                          onReveal: ReturnType<typeof vi.fn>;
+                          onSnapshotReceived: ReturnType<typeof vi.fn>;
+                      }) => (() => void) | void;
+                      onClientSnapshotReceived?: (snapshot: unknown, checksum: number) => void;
+                  }
+                | undefined;
+            const cleanup = options?.onSessionJoined?.({
+                onReveal: vi.fn(() => () => {}),
+                onSnapshotReceived: vi.fn(() => () => {}),
+            });
+
+            const clientSnapshot = {
+                tick: 3,
+                viewerId: playerId('client-843'),
+                phase: 'playing',
+                players: {},
+                entities: {},
+                events: [],
+                gameResult: null,
+                undoMeta: { canUndo: false, canRedo: false },
+                isMyTurn: false,
+            };
+            options?.onClientSnapshotReceived?.(clientSnapshot, 0);
+
+            const getCurrentSnapshot = ipcMainHandle.mock.calls.find(
+                ([channel]) => channel === GAME_GET_CURRENT_SNAPSHOT_CHANNEL,
+            )?.[1] as (() => unknown) | undefined;
+            expect(getCurrentSnapshot?.()).toBe(clientSnapshot);
+
+            if (typeof cleanup === 'function') {
+                cleanup();
+            }
+
+            expect(getCurrentSnapshot?.()).toBeNull();
         });
 
         it('pushes failed with an empty matchId when the manifest is corrupt', async () => {

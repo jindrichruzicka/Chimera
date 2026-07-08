@@ -2354,6 +2354,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 if (activeSession === sessionRuntime) {
                     activeSession = null;
                     currentMatchId = null;
+                    // A torn-down session has no "current snapshot" to replay:
+                    // left stale, a renderer reload would replay the dead
+                    // match's checkpoint and bounce /saves and /lobby back
+                    // onto an empty /game (#843).
+                    lastSentPlayerSnapshot = null;
                     activeE2eHooks = undefined;
                     dispatchRendererAction = null;
                     saveInitialTurnMemento = null;
@@ -2413,6 +2418,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 // session to draw from (the deterministic export was already
                 // host-only). Clearing this re-closes the export gate.
                 joinedSessionActive = false;
+                // Same rule as the hosted teardown: no session, no "current
+                // snapshot" — a stale cache would replay the dead match on
+                // renderer reload (#843).
+                lastSentPlayerSnapshot = null;
                 unsubSnapshotCommitments();
                 unsubReveal();
             };

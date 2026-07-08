@@ -43,17 +43,27 @@ const mockSendAction = vi.fn();
 const mockReset = vi.fn();
 const mockSetLeavingToMainMenu = vi.fn();
 const mockClearLocalLobbyContext = vi.fn();
+const mockClearRestoreAbort = vi.fn();
 const mockSave = vi.fn();
 let mockSnapshot: PlayerSnapshot | null = null;
 let mockCurrentTick: number | undefined = undefined;
 let mockLocalPlayerId: string | null = null;
 let mockLeavingToMainMenu = false;
+let mockRestoreAbortPending = false;
 let mockLobbyState: LobbyState | null = null;
 let mockHasLoadedInitialLobbyState = true;
 const loadRendererGameMock = vi.hoisted(() => vi.fn());
 
 vi.mock('next/navigation', () => ({
     useRouter: () => ({ replace: mockReplace }),
+}));
+
+vi.mock('../../state/saveStore', () => ({
+    useSaveStore: Object.assign(
+        (selector: (state: { readonly restoreAbortPending: boolean }) => unknown) =>
+            selector({ restoreAbortPending: mockRestoreAbortPending }),
+        { getState: () => ({ clearRestoreAbort: mockClearRestoreAbort }) },
+    ),
 }));
 
 vi.mock('../../state/gameStore', () => ({
@@ -271,11 +281,13 @@ beforeEach(() => {
     mockLeavingToMainMenu = false;
     mockLobbyState = makeLobbyState();
     mockHasLoadedInitialLobbyState = true;
+    mockRestoreAbortPending = false;
     mockSendAction.mockReset();
     mockReplace.mockReset();
     mockReset.mockReset();
     mockSetLeavingToMainMenu.mockReset();
     mockClearLocalLobbyContext.mockReset();
+    mockClearRestoreAbort.mockReset();
     loadRendererGameMock.mockReset();
     loadRendererGameMock.mockResolvedValue({ registry: testRegistry });
     mockSave.mockReset();
@@ -412,6 +424,62 @@ describe('GamePage — client leave-to-main-menu (#741)', () => {
 
         expect(mockReplace).toHaveBeenCalledWith('/lobby');
         expect(mockReplace).not.toHaveBeenCalledWith('/main-menu');
+    });
+});
+
+describe('GamePage — restore-abort exit to /saves (#842)', () => {
+    it('routes /game → /saves when the abort marker is set', () => {
+        mockRestoreAbortPending = true;
+        mockSnapshot = makeSnapshot();
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/saves');
+    });
+
+    it('preserves the game context (?gameId) on the abort exit', () => {
+        window.history.replaceState({}, '', '/game?gameId=tactics');
+        mockRestoreAbortPending = true;
+        mockSnapshot = makeSnapshot();
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/saves?gameId=tactics');
+    });
+
+    it('drops the restored checkpoint and consumes the marker on the abort exit', () => {
+        mockRestoreAbortPending = true;
+        mockSnapshot = makeSnapshot();
+
+        renderGamePage();
+
+        expect(mockReset).toHaveBeenCalledTimes(1);
+        expect(mockClearRestoreAbort).toHaveBeenCalledTimes(1);
+    });
+
+    it('preempts the no-session /lobby redirect (abort exit wins once the lobby empties)', () => {
+        // After the cancel unwinds the hosted session, snapshot and lobbyState
+        // are both null — the direct-boot redirect would bounce to /lobby; the
+        // abort exit must win and land on /saves instead.
+        mockRestoreAbortPending = true;
+        mockSnapshot = null;
+        mockLobbyState = null;
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/saves');
+        expect(mockReplace).not.toHaveBeenCalledWith('/lobby');
+    });
+
+    it('does not route to /saves when the marker is not set', () => {
+        mockRestoreAbortPending = false;
+        mockSnapshot = null;
+        mockLobbyState = null;
+
+        renderGamePage();
+
+        expect(mockReplace).toHaveBeenCalledWith('/lobby');
+        expect(mockReplace).not.toHaveBeenCalledWith('/saves');
     });
 });
 

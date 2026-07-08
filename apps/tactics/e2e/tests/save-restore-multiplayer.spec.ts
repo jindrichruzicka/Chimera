@@ -36,20 +36,14 @@
  *   8. Abort coverage — Cancel: host leaves the resumed match, menu-loads the
  *      save again (the missing client parks it in waiting), and Cancel
  *      dismisses the overlay, unwinds the hosted session (board unmounts),
- *      and shows the "Restore cancelled" toast.
- *   9. Abort coverage — Escape: after a HOST APP RELAUNCH (see known bugs
- *      below), menu-load the save once more and abort with Escape — same
- *      handleClose path, same outcome.
- *
- * KNOWN BUGS #842/#843 — why the abort coverage runs LAST and relaunches the
- * host between the two aborts: cancelling a waiting restore strands the host
- * on an empty /game route (#842), and the stale `lastSentPlayerSnapshot`
- * cache then bounces every later /saves or /lobby visit back into that dead
- * /game (#843) — in-process recovery is impossible, only an app restart
- * clears it. The happy path therefore runs first on pristine state, the
- * Cancel abort reuses the original host instance as its final act, and the
- * Escape abort runs in a relaunched host. Once #842/#843 land, fold the
- * aborts back into a single instance and assert the post-abort destination.
+ *      shows the "Restore cancelled" toast, and lands the host back on the
+ *      /saves screen with ?gameId preserved (#842).
+ *   9. Abort coverage — Escape, in the SAME host instance: the post-cancel
+ *      /saves screen is live (no #843 snapshot-cache bounce back to the dead
+ *      /game), so the next load starts right from it; Escape aborts through
+ *      the identical handleClose path and lands on /saves again. Staying
+ *      in-process is deliberate — it is the regression proof for #842/#843,
+ *      which used to wedge the instance until an app restart.
  *
  * CRITICAL — no `end-turn` before the step-3 slot/tick reads and the step-5/8
  * row-count assertions consume them. Autosave fires after every successful
@@ -100,7 +94,7 @@ const OVERLAY_TIMEOUT_MS = 30_000;
 const RESTORE_TIMEOUT_MS = 60_000;
 /**
  * Whole-spec budget. `test.slow()`'s 3× (270s) is too tight for two Electron
- * boots + a client relaunch + a host relaunch + three menu-load cycles.
+ * boots + a client relaunch + three load-until-waiting cycles.
  */
 const SPEC_TIMEOUT_MS = 360_000;
 
@@ -126,9 +120,7 @@ const test = electronTest.extend<MpSaveFixtures>({
     // Host boots the menu (no directGameRole) so the spec drives hosting
     // through the real UI. The gameId query is applied in-body via
     // MainMenuPage.goto — the fixture's initialRoute cannot carry a query
-    // (it appends a trailing slash that would corrupt the value). The host is
-    // closed and relaunched mid-test (see the #842/#843 note above), so
-    // teardown tolerates an already-closed app.
+    // (it appends a trailing slash that would corrupt the value).
     // eslint-disable-next-line no-empty-pattern
     hostApp: async ({}, use) => {
         const app = await launchE2eElectronApplication({
@@ -261,6 +253,15 @@ async function loadSaveUntilWaiting(
         .poll(() => menu.getButtonLabels(), { timeout: SHELL_LOAD_TIMEOUT_MS })
         .toContain('Load Game');
     await menu.loadGameButton.click();
+    return loadRowUntilWaiting(saves, hostWindow);
+}
+
+/**
+ * The tail of `loadSaveUntilWaiting`, starting from an already-open /saves
+ * screen — the post-abort re-load (step 9) begins right where the #842
+ * cancel navigation landed.
+ */
+async function loadRowUntilWaiting(saves: SavesPage, hostWindow: Page): Promise<string> {
     await expect(saves.pageRoot).toBeVisible();
     // The HUD save and the end-turn autosave share the `autosave` slot, so
     // the list holds exactly one row throughout the spec.
@@ -437,7 +438,8 @@ test.describe('Save / restore — multiplayer', () => {
 
         // 8. Abort coverage — Cancel. With the client gone again, re-loading
         //    the save parks in waiting; Cancel dismisses the overlay, unwinds
-        //    the hosted session (the restored board unmounts) and toasts.
+        //    the hosted session (the restored board unmounts), toasts, and
+        //    lands the host back on /saves with ?gameId preserved (#842).
         await expect
             .poll(() => connectedPlayerIds(hostWindow), { timeout: NAV_TIMEOUT_MS })
             .not.toContain(clientId);
@@ -446,39 +448,31 @@ test.describe('Save / restore — multiplayer', () => {
         await hostWindow.getByTestId('waiting-cancel').click();
         await expect(waitingModal).toBeHidden();
         await expect(hostWindow.getByText('Restore cancelled')).toBeVisible();
+        await expect(hostWindow).toHaveURL(/\/saves\/?\?gameId=tactics$/, {
+            timeout: NAV_TIMEOUT_MS,
+        });
+        await expect(saves.pageRoot).toBeVisible();
         await expect(hostWindow.getByTestId('game-canvas')).toHaveCount(0, {
             timeout: NAV_TIMEOUT_MS,
         });
 
-        // 9. Abort coverage — Escape. The cancelled restore wedges this host
-        //    instance (#842 strands it on a dead /game; #843's stale snapshot
-        //    bounces any /saves or /lobby re-entry back there), so recover the
-        //    way a user would: restart the app (same userData — saves persist)
-        //    and abort the next waiting restore with Escape instead.
-        const hostRelaunchConfig = await captureRelaunchConfig(hostApp);
-        await hostApp.close();
-        const relaunchedHostApp = await relaunchElectronApplication(hostRelaunchConfig, {
-            CHIMERA_ROLE: 'host',
+        // 9. Abort coverage — Escape, same host instance (the #842/#843
+        //    regression proof: this in-process re-load used to bounce into a
+        //    dead /game). Wait out the step-8 toast (info toasts expire after
+        //    4s) so the post-Escape toast assertion is unambiguous.
+        await expect(hostWindow.getByText('Restore cancelled')).toBeHidden({
+            timeout: NAV_TIMEOUT_MS,
         });
-        try {
-            const relaunchedHostWindow = await relaunchedHostApp.firstWindow();
-            await relaunchedHostWindow.waitForLoadState('domcontentloaded');
-            const relaunchedMenu = new MainMenuPage(relaunchedHostWindow);
-            const relaunchedSaves = new SavesPage(relaunchedHostWindow);
-            const relaunchedWaitingModal = relaunchedHostWindow.getByTestId(
-                'waiting-for-players-modal',
-            );
-
-            await relaunchedMenu.goto({ gameId: 'tactics' });
-            await loadSaveUntilWaiting(relaunchedMenu, relaunchedSaves, relaunchedHostWindow);
-            await relaunchedHostWindow.keyboard.press('Escape');
-            await expect(relaunchedWaitingModal).toBeHidden();
-            await expect(relaunchedHostWindow.getByText('Restore cancelled')).toBeVisible();
-            await expect(relaunchedHostWindow.getByTestId('game-canvas')).toHaveCount(0, {
-                timeout: NAV_TIMEOUT_MS,
-            });
-        } finally {
-            await relaunchedHostApp.close();
-        }
+        await loadRowUntilWaiting(saves, hostWindow);
+        await hostWindow.keyboard.press('Escape');
+        await expect(waitingModal).toBeHidden();
+        await expect(hostWindow.getByText('Restore cancelled')).toBeVisible();
+        await expect(hostWindow).toHaveURL(/\/saves\/?\?gameId=tactics$/, {
+            timeout: NAV_TIMEOUT_MS,
+        });
+        await expect(saves.pageRoot).toBeVisible();
+        await expect(hostWindow.getByTestId('game-canvas')).toHaveCount(0, {
+            timeout: NAV_TIMEOUT_MS,
+        });
     });
 });

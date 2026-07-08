@@ -11,7 +11,14 @@
  * Abort path: the Cancel action deliberately has NO onClick — Modal funnels a
  * plain dismiss into onClose, and Escape (useEscapeLayer inside Modal) lands
  * there too, so both abort through this single handler: fire-and-forget
- * cancelRestore(), optimistic local dismiss, static-literal toast.
+ * cancelRestore(), optimistic local dismiss, static-literal toast, and the
+ * `markRestoreAborted()` exit marker (#842). The waiting host sits on the
+ * mid-restore /game hop (#828), and the unwound session never broadcasts the
+ * phase:'lobby' snapshot that drives the usual reverse navigation — but this
+ * overlay must NOT navigate directly: the game page's no-session redirect
+ * fires once the cancelled lobby empties and would race (and beat) any exit
+ * issued from here. Instead the game page consumes the marker and owns the
+ * /game → /saves exit, mirroring the #741 leave-to-main-menu flag.
  *
  * Terminal pushes (`ready`/`cancelled`/`failed`) unmount the modal via the
  * waiting-only render gate without touching the abort path; main-initiated
@@ -47,6 +54,7 @@ export function RestoreWaitingOverlay(): React.ReactElement | null {
     const restore = useSaveStore((s) => s.restore);
     const expectedSeats = useSaveStore((s) => s.restoreExpectedSeats);
     const dismissRestore = useSaveStore((s) => s.dismissRestore);
+    const markRestoreAborted = useSaveStore((s) => s.markRestoreAborted);
     const savesApi = useSavesApi();
 
     const handleClose = useCallback(() => {
@@ -55,7 +63,10 @@ export function RestoreWaitingOverlay(): React.ReactElement | null {
         void savesApi.cancelRestore().catch(() => undefined);
         dismissRestore();
         useToastStore.getState().push({ severity: 'info', title: 'Restore cancelled' });
-    }, [savesApi, dismissRestore]);
+        // #842 exit marker (see module header) — the game page consumes it
+        // and routes the host back to /saves.
+        markRestoreAborted();
+    }, [savesApi, dismissRestore, markRestoreAborted]);
 
     if (restore?.state !== 'waiting') {
         return null;

@@ -248,6 +248,37 @@ describe('saveStore.dismissRestore()', () => {
     });
 });
 
+describe('saveStore — restore-abort exit marker (#842)', () => {
+    it('initialises with restoreAbortPending: false', () => {
+        const store = createSaveStore();
+        expect(store.getState().restoreAbortPending).toBe(false);
+    });
+
+    it('markRestoreAborted raises the marker', () => {
+        const store = createSaveStore();
+        store.getState().markRestoreAborted();
+        expect(store.getState().restoreAbortPending).toBe(true);
+    });
+
+    it('clearRestoreAbort consumes the marker', () => {
+        const store = createSaveStore();
+        store.getState().markRestoreAborted();
+        store.getState().clearRestoreAbort();
+        expect(store.getState().restoreAbortPending).toBe(false);
+    });
+
+    it('marking the abort leaves the restore slice and slots untouched', () => {
+        const store = createSaveStore();
+        store.getState().applySaveSlots([makeSlot('slot-1')]);
+        store.getState().applyRestoreStatus(makeRestoreEvent());
+        store.getState().dismissRestore();
+        store.getState().markRestoreAborted();
+        expect(store.getState().restore).toBeNull();
+        expect(store.getState().restoreExpectedSeats).toBe(2);
+        expect(store.getState().slots).toHaveLength(1);
+    });
+});
+
 // ── useSaveStore hook ─────────────────────────────────────────────────────────
 
 describe('useSaveStore singleton', () => {

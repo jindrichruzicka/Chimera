@@ -57,6 +57,7 @@ beforeEach(() => {
         restore: null,
         restoreExpectedSeats: null,
         restoreLatchMatchId: null,
+        restoreAbortPending: false,
     });
     useToastStore.getState().dismissAll();
     (globalThis as { __chimera?: unknown }).__chimera = { saves: { cancelRestore } };
@@ -131,6 +132,8 @@ describe('RestoreWaitingOverlay — visibility', () => {
         expect(screen.queryByTestId('waiting-for-players-modal')).not.toBeInTheDocument();
         expect(cancelRestore).not.toHaveBeenCalled();
         expect(useToastStore.getState().queue).toHaveLength(0);
+        // Terminal pushes complete the restore in place — no abort exit.
+        expect(useSaveStore.getState().restoreAbortPending).toBe(false);
     });
 });
 
@@ -151,6 +154,18 @@ describe('RestoreWaitingOverlay — abort path', () => {
         const queue = useToastStore.getState().queue;
         expect(queue).toHaveLength(1);
         expect(queue[0]).toMatchObject({ severity: 'info', title: 'Restore cancelled' });
+    });
+
+    it('Cancel raises the abort-exit marker so the game page routes the host off the dead /game (#842)', () => {
+        render(<RestoreWaitingOverlay />);
+
+        act(() => {
+            useSaveStore.getState().applyRestoreStatus(makeRestoreEvent());
+        });
+
+        fireEvent.click(screen.getByTestId('waiting-cancel'));
+
+        expect(useSaveStore.getState().restoreAbortPending).toBe(true);
     });
 
     it('resurrects with the original roster baseline when a waiting push follows a failed cancel', () => {
@@ -189,5 +204,8 @@ describe('RestoreWaitingOverlay — abort path', () => {
         const queue = useToastStore.getState().queue;
         expect(queue).toHaveLength(1);
         expect(queue[0]).toMatchObject({ severity: 'info', title: 'Restore cancelled' });
+
+        // Same #842 abort exit as the Cancel click.
+        expect(useSaveStore.getState().restoreAbortPending).toBe(true);
     });
 });

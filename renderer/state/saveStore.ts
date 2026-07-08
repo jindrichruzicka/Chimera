@@ -87,6 +87,21 @@ export interface SaveStoreState {
      * the same restore pushes `waiting` again, the baseline must survive.
      */
     dismissRestore(this: void): void;
+
+    /**
+     * True while a user-initiated restore abort (RestoreWaitingOverlay
+     * Cancel / Escape) waits for the game route to carry the host off the
+     * dead mid-restore /game hop and back to /saves (#842). Raised by the
+     * overlay's abort handler; consumed by the game page's abort-exit
+     * effect, which owns the navigation (mirrors the #741 leave flag).
+     */
+    readonly restoreAbortPending: boolean;
+
+    /** Raise the abort-exit marker. Overlay abort path only. */
+    markRestoreAborted(this: void): void;
+
+    /** Consume the abort-exit marker after routing the exit. */
+    clearRestoreAbort(this: void): void;
 }
 
 // ── Factory (for testing and production use) ──────────────────────────────────
@@ -102,6 +117,7 @@ export function createSaveStore(): StoreApi<SaveStoreState> {
         restore: null,
         restoreExpectedSeats: null,
         restoreLatchMatchId: null,
+        restoreAbortPending: false,
 
         applySaveSlots(slots: readonly SaveSlotMeta[]): void {
             set(() => ({
@@ -132,6 +148,18 @@ export function createSaveStore(): StoreApi<SaveStoreState> {
         dismissRestore(): void {
             set(() => ({
                 restore: null,
+            }));
+        },
+
+        markRestoreAborted(): void {
+            set(() => ({
+                restoreAbortPending: true,
+            }));
+        },
+
+        clearRestoreAbort(): void {
+            set(() => ({
+                restoreAbortPending: false,
             }));
         },
     }));
