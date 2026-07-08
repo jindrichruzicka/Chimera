@@ -88,6 +88,21 @@ describe('RestoreWaitingOverlay — visibility', () => {
         expect(screen.getByTestId('waiting-roster')).toHaveTextContent('0 / 2 players reconnected');
     });
 
+    it('centres the spinner horizontally and keeps clearance above the join code', () => {
+        render(<RestoreWaitingOverlay />);
+
+        act(() => {
+            useSaveStore.getState().applyRestoreStatus(makeRestoreEvent());
+        });
+
+        const spinner = screen.getByRole('status', { name: 'Waiting for players to reconnect' });
+        expect(spinner.parentElement).toHaveStyle({
+            display: 'flex',
+            justifyContent: 'center',
+            marginBlockEnd: 'var(--ch-space-md)',
+        });
+    });
+
     it('updates the roster count as pending seats shrink, keeping the latched total', () => {
         render(<RestoreWaitingOverlay />);
 

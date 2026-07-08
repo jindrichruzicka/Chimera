@@ -26,12 +26,22 @@
  */
 
 import React, { useCallback } from 'react';
+import type { CSSProperties } from 'react';
 import { useSaveStore } from '../../state/saveStore';
 import { useToastStore } from '../../state/toastStore';
 import { useSavesApi } from '../../hooks/useSavesApi';
 import { Modal } from '../ui/Modal';
 import { Spinner } from '../ui/Spinner';
 import { Caption } from '../ui/Caption';
+
+// The modal body is a plain block container and Spinner is inline-flex, so it
+// would sit flush left and flush against the join-code caption below; this row
+// centres it under the title and keeps a dialog-gap of air above the captions.
+const spinnerRowStyle: CSSProperties = {
+    display: 'flex',
+    justifyContent: 'center',
+    marginBlockEnd: 'var(--ch-space-md)',
+};
 
 export function RestoreWaitingOverlay(): React.ReactElement | null {
     const restore = useSaveStore((s) => s.restore);
@@ -64,7 +74,9 @@ export function RestoreWaitingOverlay(): React.ReactElement | null {
             data-testid="waiting-for-players-modal"
             actions={[{ label: 'Cancel', variant: 'danger', testId: 'waiting-cancel' }]}
         >
-            <Spinner label="Waiting for players to reconnect" />
+            <div style={spinnerRowStyle}>
+                <Spinner label="Waiting for players to reconnect" />
+            </div>
             <Caption data-testid="waiting-join-code">Join code: {restore.lobbyCode}</Caption>
             <Caption tone="muted" data-testid="waiting-roster">
                 {connected} / {expected} players reconnected
