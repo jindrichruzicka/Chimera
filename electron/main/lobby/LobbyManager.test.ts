@@ -2535,6 +2535,32 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
             await manager.closeLobby();
         });
 
+        it('addAi added BEFORE a human joins skips the human, so a later AI does not collide (#836)', async () => {
+            const manager = makeManager();
+            await manager.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+
+            // An AI added FIRST takes slot 1 (host at 0). A human then joins:
+            // the host seats it at the lowest NON-AI slot (2), so the humans
+            // actually occupy {0, 2} — NOT the contiguous [0, players.length)
+            // block. `nextFreeAiSlotIndex` must reserve the lowest humanSeatCount
+            // NON-AI slots to match; before #836 it reserved [0, players.length),
+            // counted the low AI slot 1 as a human seat, and re-issued slot 2 —
+            // a duplicate with the human.
+            await manager.addAi();
+            expect(manager.getCurrentState()?.agentSlots).toEqual([{ slotIndex: 1, kind: 'ai' }]);
+
+            await manager.addLocalSeat(playerId('seat-1'));
+
+            await manager.addAi();
+
+            expect(manager.getCurrentState()?.agentSlots).toEqual([
+                { slotIndex: 1, kind: 'ai' },
+                { slotIndex: 3, kind: 'ai' },
+            ]);
+
+            await manager.closeLobby();
+        });
+
         it('addAi rejects when the lobby is already full (humans + AI = maxPlayers)', async () => {
             const manager = makeManager();
             // maxPlayers 2: host (seat 0) + one AI fills the lobby.

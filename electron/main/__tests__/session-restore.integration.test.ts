@@ -460,6 +460,93 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
+    it('S1i: an AI added BEFORE a human join gets a non-colliding slot above the human, so the mixed save restores (#836)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider);
+
+        // ── Original session: host adds an AI at LOBBY time FIRST (slot 1); a
+        // remote then joins and the host seats it at the lowest NON-AI slot (2),
+        // pushing it ABOVE the AI. A SECOND addAi must land at slot 3, not
+        // re-issue the remote's slot 2. Before #836, `nextFreeAiSlotIndex`
+        // reserved the contiguous block `[0, players.length)`, counted the low AI
+        // slot as a human seat, and collided the second AI with the remote — a
+        // duplicate-slotIndex manifest that restore rejects (the #832 failure
+        // class, reachable with NO leave). ─────────────────────────────────────
+        const ai1 = playerId('ai-1');
+        const ai3 = playerId('ai-3');
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 4,
+        });
+
+        await host.lobbyManager.addAi();
+        expect(host.lobbyManager.getCurrentState()?.agentSlots).toStrictEqual([
+            { slotIndex: 1, kind: 'ai' },
+        ]);
+
+        const clientA = buildRestoreClientHarness(provider, { gameId: TACTICS_GAME_ID });
+        await clientA.manager.joinLobby({ address: hostInfo.sessionId });
+        await flushProviderEvents();
+        const seatA = clientA.manager.getLocalPlayerId();
+        expect(seatA).not.toBeNull();
+
+        // The second AI skips the remote's slot 2 and lands at slot 3.
+        await host.lobbyManager.addAi();
+        expect(host.lobbyManager.getCurrentState()?.agentSlots).toStrictEqual([
+            { slotIndex: 1, kind: 'ai' },
+            { slotIndex: 3, kind: 'ai' },
+        ]);
+
+        await clientA.manager.updatePlayerReadyState(true);
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        const matchId = runtime!.getSnapshot().matchId;
+
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+        const savedTick = runtime!.getSnapshot().tick;
+
+        // ── Save: every slotIndex unique and in-range, the remote stays
+        // `control: 'remote'`, and both AI seats keep their own slots. ──────────
+        const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        await host.saveManager.save(file);
+        expect(file.session.seats).toStrictEqual([
+            { playerId: hostInfo.hostId, control: 'host', slotIndex: 0 },
+            { playerId: ai1, control: 'ai', slotIndex: 1 },
+            { playerId: seatA, control: 'remote', slotIndex: 2 },
+            { playerId: ai3, control: 'ai', slotIndex: 3 },
+        ]);
+
+        await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+        await flushProviderEvents();
+
+        // ── Restore: accepted (no duplicate-slotIndex rejection), and completes
+        // once the remote reclaims its seat. ───────────────────────────────────
+        const loaded = await host.saveManager.restoreFromSave(QUALIFIED_SLOT);
+        await host.coordinator.restoreSession(loaded);
+        const waiting = host.coordinator.status();
+        expect(waiting.state).toBe('waiting-for-players');
+        if (waiting.state !== 'waiting-for-players') throw new Error('unreachable');
+        expect(waiting.matchId).toBe(matchId);
+        expect(waiting.missingSeats).toStrictEqual([seatA]);
+
+        await clientA.manager.joinLobby({ address: waiting.lobbyCode });
+        await flushProviderEvents();
+        expect(clientA.manager.getLocalPlayerId()).toBe(seatA);
+        expect(host.coordinator.status()).toStrictEqual({ state: 'complete', matchId });
+        expect(host.activeRuntime()!.getSnapshot().tick).toBe(savedTick);
+
+        await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
+
     it('S1e: a lobby leave frees + re-packs the host slot ledger so a later join stays contiguous, with no stale seat (#834)', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);

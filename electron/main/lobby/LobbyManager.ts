@@ -296,24 +296,38 @@ export class LobbyManager {
 
     /**
      * Lowest free AI slot index in `[1, maxPlayers)` taken neither by an
-     * existing AI slot nor by a human seat. Human seats occupy indexes
-     * `[0, humanSeatCount)` by the `players`-array seat-index convention (a
-     * human's seat index = its position in `players`; see
-     * {@link seedSeatAttributes}). Skipping them stops an AI from colliding
-     * with a joined remote's slot — a collision misclassifies the remote as an
-     * AI seat and emits a duplicate `slotIndex`, corrupting the save manifest
-     * and making the save restore-rejected (#832). Seat 0 is always the host.
-     * Deterministic so the synthetic `ai-{slotIndex}` id and the host
-     * game-start slot resolution agree. The `maxPlayers` fallback is
+     * existing AI slot nor by a human seat. Human seats occupy the **lowest
+     * `humanSeatCount` non-AI slots** — matching the host's `nextHumanSlotIndex`
+     * (index.ts), which seats each joining human at the lowest free slot that is
+     * NOT AI-designated. This is NOT `[0, humanSeatCount)`: when an AI is added
+     * *before* a human joins, the human is pushed above the AI, so a human's
+     * slot no longer equals its `players` position. Reserving the real non-AI
+     * footprint (rather than the contiguous block) stops an AI from re-issuing a
+     * joined human's slot — a collision misclassifies the human as an AI seat and
+     * emits a duplicate `slotIndex`, corrupting the save manifest and making the
+     * save restore-rejected (#832, and #836 for the AI-before-human order). Seat
+     * 0 is always the host. Deterministic so the synthetic `ai-{slotIndex}` id
+     * and the host game-start slot resolution agree. The `maxPlayers` fallback is
      * unreachable while {@link addAi}'s fullness guard holds.
      */
     private nextFreeAiSlotIndex(
         current: readonly LobbyAgentSlot[],
         humanSeatCount: number,
     ): number {
-        const used = new Set(current.map((slot) => slot.slotIndex));
-        for (let seatIndex = 0; seatIndex < humanSeatCount; seatIndex += 1) {
-            used.add(seatIndex);
+        const usedAi = new Set(current.map((slot) => slot.slotIndex));
+        const used = new Set(usedAi);
+        // Reserve the lowest `humanSeatCount` NON-AI slots as the human footprint
+        // (skipping existing AI slots), mirroring the host's placement (#836).
+        let reserved = 0;
+        for (
+            let slotIndex = 0;
+            slotIndex < this.maxPlayers && reserved < humanSeatCount;
+            slotIndex += 1
+        ) {
+            if (!usedAi.has(slotIndex)) {
+                used.add(slotIndex);
+                reserved += 1;
+            }
         }
         for (let slotIndex = 1; slotIndex < this.maxPlayers; slotIndex += 1) {
             if (!used.has(slotIndex)) {
