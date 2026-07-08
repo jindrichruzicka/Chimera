@@ -64,6 +64,7 @@ import {
     buildInitialHostedSessionSnapshot,
     collectGameStartAiPlayerSlots,
     collectInitialPlayerSlots,
+    createSyntheticAIPlayerId,
     resolveAgentSlot,
 } from '../runtime/HostedSessionAgents.js';
 import { buildHostSessionPipeline } from '../runtime/HostSessionPipeline.js';
@@ -154,6 +155,8 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
         | ((slots: readonly LobbyAgentSlot[]) => readonly PlayerId[])
         | null = null;
     let syncLiveAgentSlots: ((slots: readonly LobbyAgentSlot[]) => void) | null = null;
+    /** AI-removal host-ledger reconcile seam (#838) — assigned in `onSessionHosted`. */
+    let removeAiSeat: ((slotIndex: number) => void) | null = null;
     let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
     /** Return-to-lobby (#737) host-local reset seam — assigned in `onSessionHosted`. */
     let resetActiveSessionToLobby: (() => void) | null = null;
@@ -515,15 +518,11 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             }
             tryStartGame();
 
-            // mirrors index.ts::releaseLobbySeat (#834): free a departing lobby
-            // seat and re-pack the remaining HUMANS into contiguous human-kind
-            // slots so the host ledger stays in step with LobbyManager's
-            // compacted `players` roster. AI seats in the ledger (host-time
-            // `agentSlots` / a return-to-lobby #737) are PINNED at their slots —
-            // a position-only re-pack would misclassify an AI as `remote`.
-            const releaseLobbySeat = (pid: PlayerId): void => {
-                playerSlotIndexById.delete(pid);
-                registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
+            // mirrors index.ts::repackLobbyLedger (#834/#838): re-pack HUMANS into
+            // contiguous human-kind slots, PINNING every AI entry at its slot, so
+            // the ledger stays in step with LobbyManager's compacted roster. Shared
+            // by `releaseLobbySeat` (human leave) and `removeAiSeat` (AI removal).
+            const repackLobbyLedger = (): void => {
                 const entries = [...playerSlotIndexById.entries()].sort((a, b) => a[1] - b[1]);
                 const humanPids: PlayerId[] = [];
                 playerSlotIndexById.clear();
@@ -542,6 +541,39 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     playerSlotIndexById.set(hpid, slot);
                     assignedSlotIndexes.add(slot);
                     slot += 1;
+                }
+            };
+
+            // mirrors index.ts::releaseLobbySeat (#834): free a departing lobby seat.
+            const releaseLobbySeat = (pid: PlayerId): void => {
+                playerSlotIndexById.delete(pid);
+                registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
+                repackLobbyLedger();
+            };
+
+            // mirrors index.ts::removeAiSeat (#838): reconcile the ledger when an
+            // AI is removed from the lobby roster (removeAi / join-overflow auto-
+            // remove). Drop the removed AI's synthetic seat if seated, re-pack
+            // humans into the freed slot, and rebuild agents to drop its agent.
+            removeAiSeat = (slotIndex: number): void => {
+                if (
+                    sessionRuntime.getSnapshot().phase !== gamePhase('lobby') ||
+                    restoreSeatingActive
+                ) {
+                    return;
+                }
+                const aiPid = createSyntheticAIPlayerId(slotIndex);
+                const hadSeat = playerSlotIndexById.delete(aiPid);
+                if (hadSeat) {
+                    activePlayers.delete(aiPid);
+                    registeredPlayers.delete(aiPid);
+                }
+                repackLobbyLedger();
+                if (hadSeat) {
+                    agentManager.clear();
+                    for (const [pid, slot] of [...playerSlotIndexById]) {
+                        registerSlotAgent(pid, slot);
+                    }
                 }
             };
 
@@ -615,6 +647,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     handleHostedLocalSeatAdded = null;
                     seatLobbyAgentsForGameStart = null;
                     syncLiveAgentSlots = null;
+                    removeAiSeat = null;
                     seatRestoredRoster = null;
                     resetActiveSessionToLobby = null;
                     restoreSeatingActive = false;
@@ -632,6 +665,12 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
         // it drops production's `LOBBY_UPDATE_CHANNEL` broadcast + E2E auto-start.
         onLobbyStateChanged: (state) => {
             syncLiveAgentSlots?.(state.agentSlots ?? []);
+        },
+
+        // mirrors electron/main/index.ts::onAiSlotRemoved (#838) — reconcile the
+        // host slot ledger when an AI leaves the roster (removeAi / auto-remove).
+        onAiSlotRemoved: (slotIndex) => {
+            removeAiSeat?.(slotIndex);
         },
 
         // mirrors electron/main/index.ts::onGameStartRequested (#827) — the

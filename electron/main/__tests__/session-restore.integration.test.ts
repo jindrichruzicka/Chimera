@@ -859,6 +859,187 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         await host.lobbyManager.closeLobby();
     });
 
+    it('S1k: removeAi of a host-time AI drops its stale ledger seat, so a later join fills the freed slot (#838)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider);
+
+        // ── Host-time AI at slot 1 seeds the AI INTO the host ledger. `removeAi(1)`
+        // must drop its ledger seat + agent; before #838 the stale `ai-1` lingered
+        // as a phantom `remote` seat and the later joiner fell out of range. ─────
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+            agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+        });
+
+        await host.lobbyManager.removeAi(1);
+
+        const clientA = buildRestoreClientHarness(provider, { gameId: TACTICS_GAME_ID });
+        await clientA.manager.joinLobby({ address: hostInfo.sessionId });
+        await flushProviderEvents();
+        const seatA = clientA.manager.getLocalPlayerId();
+        expect(seatA).not.toBeNull();
+
+        await clientA.manager.updatePlayerReadyState(true);
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+
+        const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        expect(file.session.seats).toStrictEqual([
+            { playerId: hostInfo.hostId, control: 'host', slotIndex: 0 },
+            { playerId: seatA, control: 'remote', slotIndex: 1 },
+        ]);
+
+        await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
+
+    it('S1l: removeAi of a low AI re-packs a human that sat above it, so a later addAi does not collide (#838)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider);
+
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 3,
+        });
+
+        // addAi FIRST (AI@1); a remote then joins ABOVE it at slot 2.
+        await host.lobbyManager.addAi();
+        const clientA = buildRestoreClientHarness(provider, { gameId: TACTICS_GAME_ID });
+        await clientA.manager.joinLobby({ address: hostInfo.sessionId });
+        await flushProviderEvents();
+        const seatA = clientA.manager.getLocalPlayerId();
+        expect(seatA).not.toBeNull();
+
+        // removeAi(1): the remote stranded at slot 2 must re-pack down to slot 1,
+        // so a fresh addAi lands at slot 2 instead of re-issuing the remote's slot.
+        await host.lobbyManager.removeAi(1);
+        await host.lobbyManager.addAi();
+        expect(host.lobbyManager.getCurrentState()?.agentSlots).toStrictEqual([
+            { slotIndex: 2, kind: 'ai' },
+        ]);
+
+        await clientA.manager.updatePlayerReadyState(true);
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+
+        const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        expect(file.session.seats).toStrictEqual([
+            { playerId: hostInfo.hostId, control: 'host', slotIndex: 0 },
+            { playerId: seatA, control: 'remote', slotIndex: 1 },
+            { playerId: AI_SEAT, control: 'ai', slotIndex: 2 },
+        ]);
+
+        await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
+
+    it('S1m: removeAi after a return-to-lobby (#737) drops the retained AI seat, with no stale seat (#838)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider);
+
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 3,
+        });
+        const clientA = buildRestoreClientHarness(provider, { gameId: TACTICS_GAME_ID });
+        await clientA.manager.joinLobby({ address: hostInfo.sessionId });
+        await flushProviderEvents();
+        const seatA = clientA.manager.getLocalPlayerId();
+        expect(seatA).not.toBeNull();
+
+        await host.lobbyManager.addAi(); // AI@2
+        await clientA.manager.updatePlayerReadyState(true);
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        const matchId = runtime!.getSnapshot().matchId;
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+
+        // Return to lobby — the AI stays in the host ledger — then remove it.
+        await host.lobbyManager.returnToLobby();
+        await flushProviderEvents();
+        expect(host.activeRuntime()!.getSnapshot().phase).toBe(gamePhase('lobby'));
+
+        await host.lobbyManager.removeAi(2);
+
+        const file = host
+            .activeRuntime()!
+            .captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        expect(file.session.seats).toStrictEqual([
+            { playerId: hostInfo.hostId, control: 'host', slotIndex: 0 },
+            { playerId: seatA, control: 'remote', slotIndex: 1 },
+        ]);
+        expect(file.session.matchId).toBe(matchId);
+
+        await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
+
+    it('S1n: an overflowing human join auto-removes a host-time AI and drops its ledger seat (#838)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider);
+
+        // ── Host-time AI@1 fills a maxPlayers-2 lobby (host + AI). A human join
+        // overflows → LobbyManager auto-removes the AI; the host ledger must drop
+        // its stale seat too (the same reconcile as removeAi, via the join path). ─
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 2,
+            agentSlots: [{ slotIndex: 1, kind: 'ai' }],
+        });
+
+        const clientA = buildRestoreClientHarness(provider, { gameId: TACTICS_GAME_ID });
+        await clientA.manager.joinLobby({ address: hostInfo.sessionId });
+        await flushProviderEvents();
+        const seatA = clientA.manager.getLocalPlayerId();
+        expect(seatA).not.toBeNull();
+        expect(host.lobbyManager.getCurrentState()?.agentSlots ?? []).toStrictEqual([]);
+
+        await clientA.manager.updatePlayerReadyState(true);
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+
+        const file = runtime!.captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        expect(file.session.seats).toStrictEqual([
+            { playerId: hostInfo.hostId, control: 'host', slotIndex: 0 },
+            { playerId: seatA, control: 'remote', slotIndex: 1 },
+        ]);
+
+        await clientA.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
+
     it('S1b: a single-seat save restores over the restored checkpoint, never the pre-restore lobby snapshot', async () => {
         const provider = new InMemoryMultiplayerProvider();
         const host = buildHost(provider);

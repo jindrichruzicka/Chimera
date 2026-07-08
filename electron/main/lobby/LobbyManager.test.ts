@@ -2647,6 +2647,46 @@ describe('LobbyManager — host-only setMatchSetting / owner-authored setPlayerA
             await joinManager.closeLobby();
             await hostManager.closeLobby();
         });
+
+        it('removeAi notifies onAiSlotRemoved with the removed slot index — and not for an absent slot (#838)', async () => {
+            const removed: number[] = [];
+            const manager = new LobbyManager(makeProvider(), createNoopLogger(), {
+                onAiSlotRemoved: (slotIndex) => removed.push(slotIndex),
+            });
+            await manager.hostLobby({ gameId: 'tactics', maxPlayers: 4 });
+            await manager.addAi(); // AI at slot 1
+
+            // Removing an absent slot is a no-op — it must NOT notify.
+            await manager.removeAi(3);
+            expect(removed).toEqual([]);
+
+            // Removing the real AI slot notifies exactly once.
+            await manager.removeAi(1);
+            expect(removed).toEqual([1]);
+
+            await manager.closeLobby();
+        });
+
+        it('the overflow auto-remove notifies onAiSlotRemoved with the dropped slot index (#838)', async () => {
+            const provider = makeProvider();
+            const removed: number[] = [];
+            const hostManager = new LobbyManager(provider, createNoopLogger(), {
+                onAiSlotRemoved: (slotIndex) => removed.push(slotIndex),
+            });
+            const hostInfo = await hostManager.hostLobby({ gameId: 'tactics', maxPlayers: 2 });
+            await hostManager.addAi(); // AI at slot 1 fills the lobby (host + AI = 2)
+
+            // A human join overflows → the most-recently-added AI (slot 1) is dropped.
+            const joinManager = makeManager(provider);
+            await joinManager.joinLobby({ address: hostInfo.sessionId });
+            await new Promise<void>((resolve) => setTimeout(resolve, 0));
+
+            expect(hostManager.getCurrentState()?.agentSlots ?? []).toEqual([]);
+            expect(removed).toEqual([1]);
+
+            await joinManager.closeLobby();
+            await hostManager.closeLobby();
+        });
     });
 
     it('joined client sets its own attribute and the host applies it to that seat and broadcasts to all clients', async () => {

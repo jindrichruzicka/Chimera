@@ -104,6 +104,7 @@ import {
     buildReplayPlayers,
     collectGameStartAiPlayerSlots,
     collectInitialPlayerSlots,
+    createSyntheticAIPlayerId,
     resolveAgentSlot,
 } from './runtime/HostedSessionAgents.js';
 import {
@@ -1245,6 +1246,11 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
     // seats; without it a human joining AFTER an AI is added is handed the AI's
     // slot index. Null when no hosted session is live.
     let syncLiveAgentSlots: ((agentSlots: readonly LobbyAgentSlot[]) => void) | null = null;
+    // Reconciles the host slot ledger when an AI is removed from the lobby roster
+    // — `removeAi()` or the join-overflow auto-remove (#838). Assigned inside
+    // `onSessionHosted` (the `syncLiveAgentSlots` pattern) so `onAiSlotRemoved`
+    // can drive it from outside; null when no hosted session is live.
+    let removeAiSeat: ((slotIndex: number) => void) | null = null;
     // Seats a restored save's roster into the freshly hosted session (F68 #823).
     // Assigned inside `onSessionHosted` (the `seatLobbyAgentsForGameStart`
     // pattern) so the SessionRestoreCoordinator can drive seating from outside;
@@ -2162,25 +2168,17 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             }
             tryStartGame();
 
-            // Release a departing lobby seat and re-pack the remaining HUMANS
-            // into contiguous human-kind slots, so the host ledger mirrors
-            // LobbyManager's compacted `players` roster (#834). Without this the
-            // ledger only grows: `getSessionManifest` would emit the departed
-            // player's stale seat and `nextHumanSlotIndex` could hand a later
-            // join an out-of-range slot (or collide with an `addAi()` seat).
-            // Lobby-phase only — an in-match disconnect keeps its seat for
-            // reconnect/restore (#821/#823).
-            //
-            // AI seats can be present in the ledger during the lobby — host-time
-            // `agentSlots` seed them at hosting, and a return-to-lobby (#737)
-            // retains the prior match's AI seats — so PIN every AI entry at its
-            // existing slot and re-pack only the human entries; a position-only
-            // re-pack would slide an AI into a human slot and misclassify it as
-            // `remote`. Remaining humans keep their join order (== LobbyManager's
-            // compacted `players` order), re-taking the lowest human-kind slots.
-            const releaseLobbySeat = (pid: PlayerId): void => {
-                playerSlotIndexById.delete(pid);
-                registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
+            // Re-pack the host ledger's HUMANS into contiguous human-kind slots,
+            // PINNING every AI entry at its slot, so the ledger mirrors
+            // LobbyManager's compacted roster (#834). Shared by the human-leave
+            // (`releaseLobbySeat`) and AI-removal (`removeAiSeat`, #838)
+            // reconciles. AI seats can be in the ledger during the lobby (host-
+            // time `agentSlots`, or a return-to-lobby #737 that retains the prior
+            // match's AI), so a position-only re-pack would slide an AI into a
+            // human slot and misclassify it as `remote`. Remaining humans keep
+            // their join order (== LobbyManager's compacted `players` order),
+            // re-taking the lowest human-kind slots.
+            const repackLobbyLedger = (): void => {
                 const entries = [...playerSlotIndexById.entries()].sort((a, b) => a[1] - b[1]);
                 const humanPids: PlayerId[] = [];
                 playerSlotIndexById.clear();
@@ -2199,6 +2197,52 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     playerSlotIndexById.set(hpid, slot);
                     assignedSlotIndexes.add(slot);
                     slot += 1;
+                }
+            };
+
+            // Release a departing lobby seat (#834). Without this the ledger only
+            // grows: `getSessionManifest` would emit the departed player's stale
+            // seat and `nextHumanSlotIndex` could hand a later join an out-of-range
+            // slot. Lobby-phase only — an in-match disconnect keeps its seat for
+            // reconnect/restore (#821/#823).
+            const releaseLobbySeat = (pid: PlayerId): void => {
+                playerSlotIndexById.delete(pid);
+                registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
+                repackLobbyLedger();
+            };
+
+            // Reconcile the host ledger when an AI is removed from the lobby
+            // roster — `removeAi()` or the join-overflow auto-remove (#838).
+            // Lobby-phase only. Drops the removed AI's synthetic seat if it was
+            // seated (host-time `agentSlots` / return-to-lobby #737) — else the
+            // manifest keeps a phantom `remote` seat and `activePlayers` is off by
+            // one — then re-packs humans into the freed slot (so a human stranded
+            // ABOVE the removed AI does not collide with a later `addAi`).
+            // `currentAgentSlots` is already updated (the removal ran
+            // `syncLiveAgentSlots` synchronously), so the re-pack sees the freed
+            // slot as human-kind.
+            removeAiSeat = (slotIndex: number): void => {
+                if (
+                    sessionRuntime.getSnapshot().phase !== gamePhase('lobby') ||
+                    restoreSeatingActive
+                ) {
+                    return;
+                }
+                const aiPid = createSyntheticAIPlayerId(slotIndex);
+                const hadSeat = playerSlotIndexById.delete(aiPid);
+                if (hadSeat) {
+                    activePlayers.delete(aiPid);
+                    registeredPlayers.delete(aiPid);
+                }
+                repackLobbyLedger();
+                if (hadSeat) {
+                    // AgentManager has no per-agent unregister; rebuild agents over
+                    // the reconciled ledger to drop the removed AI's agent (the
+                    // `resetActiveSessionToLobby` idiom).
+                    agentManager.clear();
+                    for (const [pid, slot] of [...playerSlotIndexById]) {
+                        registerSlotAgent(pid, slot);
+                    }
                 }
             };
 
@@ -2316,6 +2360,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                     handleHostedLocalSeatAdded = null;
                     seatLobbyAgentsForGameStart = null;
                     syncLiveAgentSlots = null;
+                    removeAiSeat = null;
                     broadcastRestoredSnapshot = null;
                     resetActiveSessionToLobby = null;
                     seatRestoredRoster = null;
@@ -2467,6 +2512,10 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
                 payload: {},
             });
             resetActiveSessionToLobby?.();
+        },
+        onAiSlotRemoved: (slotIndex) => {
+            // Reconcile the host slot ledger when an AI leaves the roster (#838).
+            removeAiSeat?.(slotIndex);
         },
         onLobbyStateChanged: (state) => {
             // Keep the hosted session's live AI roster in sync so a human joining

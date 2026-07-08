@@ -82,6 +82,15 @@ export interface LobbyManagerOptions {
      */
     readonly onReturnToLobbyRequested?: (state: LobbyState) => void | Promise<void>;
     readonly onLobbyStateChanged?: (state: LobbyState) => void;
+    /**
+     * Invoked when an AI agent slot is dropped from the roster — via
+     * {@link LobbyManager.removeAi} or the join-overflow auto-remove — with the
+     * removed slot index. The composition root uses it to reconcile the host
+     * session's slot ledger (drop the removed AI's synthetic seat, re-pack
+     * humans), the way {@link onLobbyStateChanged} keeps the live AI roster in
+     * sync. Fires only on an actual removal, never for a no-op remove (#838).
+     */
+    readonly onAiSlotRemoved?: (slotIndex: number) => void;
     readonly onLocalSeatAdded?: (player: LobbyPlayerEntry) => void;
     readonly onConnectionStatusChanged?: (status: ConnectionStatus) => void;
     readonly profileGate?: ProfileGate;
@@ -183,6 +192,7 @@ export class LobbyManager {
     private readonly onGameStartRequested: LobbyManagerOptions['onGameStartRequested'];
     private readonly onReturnToLobbyRequested: LobbyManagerOptions['onReturnToLobbyRequested'];
     private readonly onLobbyStateChanged: LobbyManagerOptions['onLobbyStateChanged'];
+    private readonly onAiSlotRemoved: LobbyManagerOptions['onAiSlotRemoved'];
     private readonly onLocalSeatAdded: LobbyManagerOptions['onLocalSeatAdded'];
     private readonly onConnectionStatusChanged: LobbyManagerOptions['onConnectionStatusChanged'];
     private readonly profileGate: LobbyManagerOptions['profileGate'];
@@ -214,6 +224,7 @@ export class LobbyManager {
         this.onGameStartRequested = options.onGameStartRequested;
         this.onReturnToLobbyRequested = options.onReturnToLobbyRequested;
         this.onLobbyStateChanged = options.onLobbyStateChanged;
+        this.onAiSlotRemoved = options.onAiSlotRemoved;
         this.onLocalSeatAdded = options.onLocalSeatAdded;
         this.onConnectionStatusChanged = options.onConnectionStatusChanged;
         this.profileGate = options.profileGate;
@@ -694,17 +705,26 @@ export class LobbyManager {
                 // human is seated; a re-add / reconnect (existing !== undefined)
                 // adds no seat, so it never overflows.
                 const currentAgentSlots = this.lobbyState.agentSlots ?? [];
-                const nextState =
+                const overflow =
                     existing === undefined &&
                     currentAgentSlots.length > 0 &&
-                    nextPlayers.length + currentAgentSlots.length > this.maxPlayers
-                        ? LobbyManager.withAgentSlots(
-                              LobbyManager.withPlayers(this.lobbyState, nextPlayers),
-                              currentAgentSlots.slice(0, -1),
-                          )
-                        : LobbyManager.withPlayers(this.lobbyState, nextPlayers);
+                    nextPlayers.length + currentAgentSlots.length > this.maxPlayers;
+                const droppedAiSlot = overflow
+                    ? currentAgentSlots[currentAgentSlots.length - 1]
+                    : undefined;
+                const nextState = overflow
+                    ? LobbyManager.withAgentSlots(
+                          LobbyManager.withPlayers(this.lobbyState, nextPlayers),
+                          currentAgentSlots.slice(0, -1),
+                      )
+                    : LobbyManager.withPlayers(this.lobbyState, nextPlayers);
                 this.publishLobbyState(nextState);
                 this.broadcastLobbyStateIfHosted(nextState);
+                // The overflow auto-remove drops an AI just like `removeAi`, so
+                // reconcile the host slot ledger the same way (#838).
+                if (droppedAiSlot !== undefined) {
+                    this.onAiSlotRemoved?.(droppedAiSlot.slotIndex);
+                }
             }),
             session.transport.onPlayerLeft((playerId, reason) => {
                 if (this.lobbyState === null) {
@@ -1124,12 +1144,16 @@ export class LobbyManager {
             return Promise.reject(new Error('LobbyManager: lobby state is not available'));
         }
 
-        const agentSlots = (this.lobbyState.agentSlots ?? []).filter(
-            (slot) => slot.slotIndex !== slotIndex,
-        );
+        const current = this.lobbyState.agentSlots ?? [];
+        const agentSlots = current.filter((slot) => slot.slotIndex !== slotIndex);
         const nextState = LobbyManager.withAgentSlots(this.lobbyState, agentSlots);
         this.publishLobbyState(nextState);
         this.broadcastLobbyStateIfHosted(nextState);
+        // Reconcile the host slot ledger only when an AI slot was actually
+        // dropped — an absent `slotIndex` is a silent no-op (#838).
+        if (agentSlots.length !== current.length) {
+            this.onAiSlotRemoved?.(slotIndex);
+        }
         return Promise.resolve();
     }
 
