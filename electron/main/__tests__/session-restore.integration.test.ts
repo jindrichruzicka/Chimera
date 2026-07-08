@@ -35,7 +35,7 @@ import { describe, expect, it } from 'vitest';
 
 import { InMemoryMultiplayerProvider } from '@chimera-engine/networking/provider/InMemoryMultiplayerProvider.js';
 import type { ActionEnvelope } from '@chimera-engine/simulation/engine/types.js';
-import { entityId, playerId } from '@chimera-engine/simulation/engine/types.js';
+import { entityId, gamePhase, playerId } from '@chimera-engine/simulation/engine/types.js';
 import type { SaveFile } from '@chimera-engine/simulation/persistence/SaveFile.js';
 
 import { toSlotId } from '../../preload/api-types.js';
@@ -789,6 +789,73 @@ describe('session restore protocol (F68 / #827) — integration', () => {
         ]);
 
         await clientB.manager.closeLobby();
+        await host.lobbyManager.closeLobby();
+    });
+
+    it('S1j: a return-to-lobby (#737) then a lobby leave keeps the AI seat pinned at its slot (#834 WARN-1 / #837)', async () => {
+        const provider = new InMemoryMultiplayerProvider();
+        const host = buildHost(provider);
+
+        // ── host + one remote + an AI at slot 2 → start the match → RETURN TO
+        // LOBBY (#737). `resetActiveSessionToLobby` re-registers the AI into the
+        // host ledger and `engine:return_to_lobby` leaves phase 'lobby'. The
+        // remote then leaves that returned lobby: `releaseLobbySeat` must PIN the
+        // retained AI at slot 2 — the #834 BLOCK-1 fix exercised via the
+        // return-to-lobby trigger (the twin of S1h's host-time-agentSlots one). ─
+        const hostInfo = await host.lobbyManager.hostLobby({
+            gameId: TACTICS_GAME_ID,
+            maxPlayers: 3,
+        });
+
+        const clientA = buildRestoreClientHarness(provider, { gameId: TACTICS_GAME_ID });
+        await clientA.manager.joinLobby({ address: hostInfo.sessionId });
+        await flushProviderEvents();
+        expect(clientA.manager.getLocalPlayerId()).not.toBeNull();
+
+        await host.lobbyManager.addAi();
+        expect(host.lobbyManager.getCurrentState()?.agentSlots).toStrictEqual([
+            { slotIndex: 2, kind: 'ai' },
+        ]);
+
+        await clientA.manager.updatePlayerReadyState(true);
+        await host.lobbyManager.updatePlayerReadyState(true);
+        await flushProviderEvents();
+        await host.lobbyManager.startGame();
+        await flushProviderEvents();
+
+        const runtime = host.activeRuntime();
+        expect(runtime).not.toBeNull();
+        const matchId = runtime!.getSnapshot().matchId;
+        host.dispatchHostAction(
+            moveAction(String(hostInfo.hostId), runtime!.getSnapshot().tick, HOST_UNIT, 0, 1),
+        );
+
+        // ── Return to lobby: phase flips to 'lobby', the matchId is preserved,
+        // and the AI stays in the host ledger. ─────────────────────────────────
+        await host.lobbyManager.returnToLobby();
+        await flushProviderEvents();
+        expect(host.activeRuntime()!.getSnapshot().phase).toBe(gamePhase('lobby'));
+        expect(host.activeRuntime()!.getSnapshot().matchId).toBe(matchId);
+
+        // ── The remote leaves the returned lobby → the AI is pinned at slot 2,
+        // the remote leaves no seat, nothing is stale/out-of-range. ─────────────
+        await clientA.manager.closeLobby();
+        await flushProviderEvents();
+
+        const file = host
+            .activeRuntime()!
+            .captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        expect(file.session.seats).toStrictEqual([
+            { playerId: hostInfo.hostId, control: 'host', slotIndex: 0 },
+            { playerId: AI_SEAT, control: 'ai', slotIndex: 2 },
+        ]);
+
+        // Re-capture is idempotent — the pinned ledger is stable (S1d-style).
+        const resaved = host
+            .activeRuntime()!
+            .captureSaveFile({ gameId: TACTICS_GAME_ID, slotId: SLOT_ID });
+        expect(resaved.session.seats).toStrictEqual(file.session.seats);
+
         await host.lobbyManager.closeLobby();
     });
 

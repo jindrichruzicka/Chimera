@@ -155,6 +155,8 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
         | null = null;
     let syncLiveAgentSlots: ((slots: readonly LobbyAgentSlot[]) => void) | null = null;
     let seatRestoredRoster: ((seats: readonly SaveSeat[]) => Promise<void>) | null = null;
+    /** Return-to-lobby (#737) host-local reset seam — assigned in `onSessionHosted`. */
+    let resetActiveSessionToLobby: (() => void) | null = null;
     /** Start-suppression gate for an in-flight restore (F68 #823). */
     let restoreSeatingActive = false;
 
@@ -543,6 +545,20 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 }
             };
 
+            // mirrors index.ts::resetActiveSessionToLobby (#737, slot-ledger
+            // subset): re-arm the start gate and rebuild agents over the RETAINED
+            // slot ledger, so the prior match's AI seats stay in
+            // `playerSlotIndexById` at lobby phase. Omits the ticker/replay/
+            // perspective/FS/undo/commitment resets (renderer-/FS-facing).
+            resetActiveSessionToLobby = (): void => {
+                gameStarted = false; // never reset elsewhere; re-arms tryStartGame
+                agentManager.clear();
+                for (const [pid, slotIndex] of [...playerSlotIndexById]) {
+                    registerSlotAgent(pid, slotIndex);
+                }
+                tryStartGame();
+            };
+
             // mirrors index.ts transport wiring (join / leave / action fan-in),
             // instrumented with the ordered `player-joined` event.
             const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
@@ -600,6 +616,7 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                     seatLobbyAgentsForGameStart = null;
                     syncLiveAgentSlots = null;
                     seatRestoredRoster = null;
+                    resetActiveSessionToLobby = null;
                     restoreSeatingActive = false;
                     sessionRestoreCoordinator.noteSessionClosed();
                 }
@@ -654,6 +671,25 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
                 },
             });
             saveInitialTurnMemento?.(firstPlayer);
+        },
+
+        // mirrors electron/main/index.ts::onReturnToLobbyRequested (#737) —
+        // dispatch `engine:return_to_lobby` (phase → lobby, matchId preserved)
+        // then run the host-local slot-ledger reset. Same `applyAction` primitive
+        // as `onGameStartRequested`; `currentMatchId` is left intact so a capture
+        // after return-to-lobby still resolves a live manifest.
+        onReturnToLobbyRequested: (state) => {
+            const sessionRuntime = activeSession;
+            if (sessionRuntime === null) {
+                throw new Error('LobbyManager: no hosted session runtime is available');
+            }
+            sessionRuntime.applyAction({
+                type: 'engine:return_to_lobby',
+                playerId: state.info.hostId,
+                tick: sessionRuntime.getSnapshot().tick,
+                payload: {},
+            });
+            resetActiveSessionToLobby?.();
         },
     });
 
