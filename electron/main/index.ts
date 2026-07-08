@@ -2162,6 +2162,46 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             }
             tryStartGame();
 
+            // Release a departing lobby seat and re-pack the remaining HUMANS
+            // into contiguous human-kind slots, so the host ledger mirrors
+            // LobbyManager's compacted `players` roster (#834). Without this the
+            // ledger only grows: `getSessionManifest` would emit the departed
+            // player's stale seat and `nextHumanSlotIndex` could hand a later
+            // join an out-of-range slot (or collide with an `addAi()` seat).
+            // Lobby-phase only — an in-match disconnect keeps its seat for
+            // reconnect/restore (#821/#823).
+            //
+            // AI seats can be present in the ledger during the lobby — host-time
+            // `agentSlots` seed them at hosting, and a return-to-lobby (#737)
+            // retains the prior match's AI seats — so PIN every AI entry at its
+            // existing slot and re-pack only the human entries; a position-only
+            // re-pack would slide an AI into a human slot and misclassify it as
+            // `remote`. Remaining humans keep their join order (== LobbyManager's
+            // compacted `players` order), re-taking the lowest human-kind slots.
+            const releaseLobbySeat = (pid: PlayerId): void => {
+                playerSlotIndexById.delete(pid);
+                registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
+                const entries = [...playerSlotIndexById.entries()].sort((a, b) => a[1] - b[1]);
+                const humanPids: PlayerId[] = [];
+                playerSlotIndexById.clear();
+                assignedSlotIndexes.clear();
+                for (const [entryPid, entrySlot] of entries) {
+                    if (resolveLiveAgentSlot(entrySlot).kind === 'ai') {
+                        playerSlotIndexById.set(entryPid, entrySlot); // AI keeps its slot
+                        assignedSlotIndexes.add(entrySlot);
+                    } else {
+                        humanPids.push(entryPid);
+                    }
+                }
+                let slot = 0;
+                for (const hpid of humanPids) {
+                    while (resolveLiveAgentSlot(slot).kind !== 'human') slot += 1;
+                    playerSlotIndexById.set(hpid, slot);
+                    assignedSlotIndexes.add(slot);
+                    slot += 1;
+                }
+            };
+
             const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
                 activePlayers.add(pid);
                 const isReconnect = registeredPlayers.has(pid);
@@ -2185,6 +2225,19 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
             });
             const unsubLeft = transport.onPlayerLeft((pid, reason) => {
                 activePlayers.delete(pid);
+                // A lobby-phase leave frees + re-packs the host slot ledger so it
+                // stays in step with LobbyManager's compacted `players` roster
+                // (#834). An in-match disconnect (below) RETAINS the seat for
+                // reconnect/restore (#821/#823); a mid-restore leave is left to
+                // the coordinator (the `!restoreSeatingActive` guard keeps
+                // `seatRestoredRoster`'s rebuild intact).
+                if (
+                    sessionRuntime.getSnapshot().phase === gamePhase('lobby') &&
+                    !restoreSeatingActive
+                ) {
+                    releaseLobbySeat(pid);
+                    return; // a lobby leave is silent — the roster update is already visible
+                }
                 // In-battle only: notify the host when an opponent *deliberately*
                 // leaves a live match → "{name} left game." toast (§4.30). A
                 // transient drop ('timeout'/'error') keeps the #687 "Player

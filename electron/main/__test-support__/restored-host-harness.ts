@@ -513,6 +513,36 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             }
             tryStartGame();
 
+            // mirrors index.ts::releaseLobbySeat (#834): free a departing lobby
+            // seat and re-pack the remaining HUMANS into contiguous human-kind
+            // slots so the host ledger stays in step with LobbyManager's
+            // compacted `players` roster. AI seats in the ledger (host-time
+            // `agentSlots` / a return-to-lobby #737) are PINNED at their slots —
+            // a position-only re-pack would misclassify an AI as `remote`.
+            const releaseLobbySeat = (pid: PlayerId): void => {
+                playerSlotIndexById.delete(pid);
+                registeredPlayers.delete(pid); // a lobby rejoin is a fresh join, not a reconnect
+                const entries = [...playerSlotIndexById.entries()].sort((a, b) => a[1] - b[1]);
+                const humanPids: PlayerId[] = [];
+                playerSlotIndexById.clear();
+                assignedSlotIndexes.clear();
+                for (const [entryPid, entrySlot] of entries) {
+                    if (resolveLiveAgentSlot(entrySlot).kind === 'ai') {
+                        playerSlotIndexById.set(entryPid, entrySlot); // AI keeps its slot
+                        assignedSlotIndexes.add(entrySlot);
+                    } else {
+                        humanPids.push(entryPid);
+                    }
+                }
+                let slot = 0;
+                for (const hpid of humanPids) {
+                    while (resolveLiveAgentSlot(slot).kind !== 'human') slot += 1;
+                    playerSlotIndexById.set(hpid, slot);
+                    assignedSlotIndexes.add(slot);
+                    slot += 1;
+                }
+            };
+
             // mirrors index.ts transport wiring (join / leave / action fan-in),
             // instrumented with the ordered `player-joined` event.
             const unsubJoined = transport.onPlayerJoined(({ playerId: pid }) => {
@@ -531,6 +561,15 @@ export function buildRestoredHostHarness(options: RestoredHostHarnessOptions): R
             });
             const unsubLeft = transport.onPlayerLeft((pid) => {
                 activePlayers.delete(pid);
+                // A lobby-phase leave frees + re-packs the slot ledger (#834); an
+                // in-match disconnect retains the seat for reconnect/restore, and
+                // a mid-restore leave is left to the coordinator.
+                if (
+                    sessionRuntime.getSnapshot().phase === gamePhase('lobby') &&
+                    !restoreSeatingActive
+                ) {
+                    releaseLobbySeat(pid);
+                }
             });
             const unsubAction = transport.onActionReceived((_from, action) => {
                 try {
