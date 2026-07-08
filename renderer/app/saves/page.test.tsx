@@ -14,7 +14,7 @@
  */
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -74,8 +74,9 @@ function installBridge(
     Object.defineProperty(window, '__chimera', { configurable: true, value: { saves } });
 }
 
-// The confirm dialog is a <Modal>, which registers Escape-to-close on the shared
-// overlay stack; render the page under the provider so `useEscapeLayer` resolves.
+// The page itself and its confirm dialog are <Modal>s, which register
+// Escape-to-close on the shared overlay stack; render the page under the
+// provider so `useEscapeLayer` resolves.
 function renderPage(): ReturnType<typeof render> {
     return render(
         <EscapeStackProvider>
@@ -106,7 +107,7 @@ describe('SavesPage — loading state', () => {
     it('shows a loading status inside the tagged page while the store loads', () => {
         mockIsLoading = true;
 
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.getByTestId('saves-page')).toBeInTheDocument();
         expect(screen.getByRole('status')).toBeInTheDocument();
@@ -116,7 +117,7 @@ describe('SavesPage — loading state', () => {
         mockIsLoading = true;
         mockSlots = [makeSlot('slot-1')];
 
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.getByTestId('saves-page')).toBeInTheDocument();
         expect(screen.queryByTestId('save-load-btn')).not.toBeInTheDocument();
@@ -125,7 +126,7 @@ describe('SavesPage — loading state', () => {
 
 describe('SavesPage — empty state', () => {
     it('shows a muted empty caption when there are no saves', () => {
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.getByText(/no saves yet/i)).toHaveAttribute('data-ch-caption-tone', 'muted');
     });
@@ -135,7 +136,7 @@ describe('SavesPage — rows', () => {
     it('renders one row per slot with a load button and a trailing delete button', () => {
         mockSlots = [makeSlot('slot-1'), makeSlot('slot-2', { tick: 12 })];
 
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.getAllByTestId('save-load-btn')).toHaveLength(2);
         expect(screen.getAllByTestId('save-delete-btn')).toHaveLength(2);
@@ -144,7 +145,7 @@ describe('SavesPage — rows', () => {
     it('titles a row with its label when present', () => {
         mockSlots = [makeSlot('slot-1', { label: 'Before the boss' })];
 
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.getByText('Before the boss')).toBeInTheDocument();
         expect(screen.getByRole('button', { name: /load before the boss/i })).toBeInTheDocument();
@@ -153,7 +154,7 @@ describe('SavesPage — rows', () => {
     it('falls back to the slot id when a slot has no label', () => {
         mockSlots = [makeSlot('slot-1')];
 
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.getByText('slot-1')).toBeInTheDocument();
         expect(screen.getByTestId('save-load-btn')).toHaveAccessibleName(/load slot-1/i);
@@ -163,7 +164,7 @@ describe('SavesPage — rows', () => {
         const slot = makeSlot('slot-1', { tick: 42 });
         mockSlots = [slot];
 
-        render(<SavesPage />);
+        renderPage();
 
         const savedAtText = new Date(slot.savedAt).toLocaleString().replace(/\s+/g, ' ');
         expect(screen.getByText(`${savedAtText} · tick 42`)).toHaveAttribute(
@@ -179,7 +180,7 @@ describe('SavesPage — load', () => {
         installBridge({ load });
         mockSlots = [makeSlot('slot-1')];
 
-        render(<SavesPage />);
+        renderPage();
 
         await userEvent.click(screen.getByTestId('save-load-btn'));
 
@@ -194,7 +195,7 @@ describe('SavesPage — load', () => {
         installBridge({ load });
         mockSlots = [makeSlot('slot-1')];
 
-        render(<SavesPage />);
+        renderPage();
 
         await userEvent.click(screen.getByTestId('save-load-btn'));
 
@@ -280,7 +281,7 @@ describe('SavesPage — delete', () => {
 
 describe('SavesPage — close', () => {
     it('closes back to the main menu, carrying the active gameId', async () => {
-        render(<SavesPage />);
+        renderPage();
 
         await userEvent.click(screen.getByTestId('saves-close-btn'));
 
@@ -292,7 +293,7 @@ describe('SavesPage — close', () => {
         // default (main-menu deliberately has no default-game fallback).
         window.history.replaceState({}, '', '/saves');
 
-        render(<SavesPage />);
+        renderPage();
 
         await userEvent.click(screen.getByTestId('saves-close-btn'));
 
@@ -300,11 +301,41 @@ describe('SavesPage — close', () => {
     });
 });
 
+describe('SavesPage — Escape behaviour (chrome-less Modal conversion)', () => {
+    it('closes back to the main menu on Escape, carrying the active gameId', () => {
+        renderPage();
+
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+
+        expect(push).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
+    it('Escape closes only the confirm dialog while it is open, then the page', async () => {
+        mockSlots = [makeSlot('slot-1')];
+
+        renderPage();
+
+        await userEvent.click(screen.getByTestId('save-delete-btn'));
+        expect(screen.getByTestId('save-delete-dialog')).toBeInTheDocument();
+
+        // First Escape: the confirm (top layer) closes; the page stays.
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+        await waitFor(() => {
+            expect(screen.queryByTestId('save-delete-dialog')).not.toBeInTheDocument();
+        });
+        expect(push).not.toHaveBeenCalled();
+
+        // Second Escape: the page modal closes back to the main menu.
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+        expect(push).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+});
+
 describe('SavesPage — regression (pure load/delete browser)', () => {
     it('renders no New Save form', () => {
         mockSlots = [makeSlot('slot-1')];
 
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.queryByText(/new save/i)).not.toBeInTheDocument();
         expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
@@ -313,7 +344,7 @@ describe('SavesPage — regression (pure load/delete browser)', () => {
     it('renders no per-row overwrite Save button', () => {
         mockSlots = [makeSlot('slot-1')];
 
-        render(<SavesPage />);
+        renderPage();
 
         expect(screen.queryByRole('button', { name: /^save /i })).not.toBeInTheDocument();
     });

@@ -5,7 +5,7 @@ import { cleanup, fireEvent, render, renderHook } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { EscapeStackProvider, useEscapeLayer } from './EscapeStack.js';
+import { EscapeStackProvider, useEscapeLayer, type EscapeLayerHandle } from './EscapeStack.js';
 
 // Stand-ins for the window-level InputManager keydown listener (bubble phase).
 // The EscapeStack provider attaches a capture-phase window listener, so these
@@ -131,5 +131,71 @@ describe('EscapeStack', () => {
         fireEvent.keyDown(document, { key: 'Tab' });
 
         expect(base).toHaveBeenCalledTimes(1);
+    });
+});
+
+function HandleLayer({
+    active,
+    handles,
+    name,
+}: {
+    readonly active: boolean;
+    readonly handles: Map<string, EscapeLayerHandle>;
+    readonly name: string;
+}): null {
+    handles.set(
+        name,
+        useEscapeLayer(() => undefined, active),
+    );
+    return null;
+}
+
+describe('useEscapeLayer handle', () => {
+    it('reports it is the top layer while it is the only active layer', () => {
+        const handles = new Map<string, EscapeLayerHandle>();
+
+        render(
+            <EscapeStackProvider>
+                <HandleLayer active handles={handles} name="only" />
+            </EscapeStackProvider>,
+        );
+
+        expect(handles.get('only')?.isTopLayer()).toBe(true);
+    });
+
+    it('reports not-top while inactive', () => {
+        const handles = new Map<string, EscapeLayerHandle>();
+
+        render(
+            <EscapeStackProvider>
+                <HandleLayer active={false} handles={handles} name="idle" />
+            </EscapeStackProvider>,
+        );
+
+        expect(handles.get('idle')?.isTopLayer()).toBe(false);
+    });
+
+    it('reports not-top while a later layer sits above it, and top again once that layer deactivates', () => {
+        const handles = new Map<string, EscapeLayerHandle>();
+
+        const { rerender } = render(
+            <EscapeStackProvider>
+                <HandleLayer active handles={handles} name="below" />
+                <HandleLayer active handles={handles} name="above" />
+            </EscapeStackProvider>,
+        );
+
+        expect(handles.get('below')?.isTopLayer()).toBe(false);
+        expect(handles.get('above')?.isTopLayer()).toBe(true);
+
+        rerender(
+            <EscapeStackProvider>
+                <HandleLayer active handles={handles} name="below" />
+                <HandleLayer active={false} handles={handles} name="above" />
+            </EscapeStackProvider>,
+        );
+
+        expect(handles.get('below')?.isTopLayer()).toBe(true);
+        expect(handles.get('above')?.isTopLayer()).toBe(false);
     });
 });

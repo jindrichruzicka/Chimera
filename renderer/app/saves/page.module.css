@@ -1,18 +1,5 @@
-.page {
-    box-sizing: border-box;
-    color: var(--ch-color-text-primary);
-    font-family: var(--ch-font-ui);
-    inline-size: 100%;
-    padding: calc(var(--ch-space-md) * 2);
-}
-
-.header {
-    align-items: center;
-    display: flex;
-    gap: var(--ch-space-md);
-    justify-content: space-between;
-    margin-block-end: var(--ch-space-md);
-}
+/* The page surface (backdrop, title, geometry, Close action) is owned by the
+   shared chrome-less Modal — this module styles only the slot list. */
 
 .list {
     list-style: none;

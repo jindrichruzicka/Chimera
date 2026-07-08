@@ -237,11 +237,24 @@ All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 It renders only a full-screen backdrop (`--ch-color-overlay-backdrop`, opaque by default;
 override the token for a semi-transparent, see-through scrim), a **centered title**, the
 content (which scrolls vertically past a height threshold while the title and buttons stay
-pinned), and a **horizontally-centered** control row. There is no header close (×) button.
-Buttons are supplied via the `actions` prop — `readonly { label, onClick?, variant?, testId? }[]`;
-each button runs its optional `onClick` and then **always dismisses the modal** (a modal is a
-one-shot decision surface). When `actions` is omitted, a single `Close` button is rendered that
-just dismisses. Escape also dismisses (via the shared `EscapeStack`).
+pinned), and a **right-aligned** control row. There is no header close (×) button.
+Buttons are supplied via the `actions` prop —
+`readonly { label, onClick?, variant?, testId?, disabled?, dismiss?, ariaDescribedBy? }[]`; each button runs its
+optional `onClick` and then dismisses the modal, unless `dismiss: false` opts out for actions
+that operate in place (a settings Reset, a lobby Host/Join). When `actions` is omitted, a single
+`Close` button is rendered that just dismisses; an explicit empty array renders **no action row
+at all** (for surfaces whose controls all live in the body).
+`actionsTestId` forwards a `data-testid` to the action row. Escape also dismisses (via the
+shared `EscapeStack`).
+
+Geometry comes from the `size` preset — `md` (default; decision dialogs), `lg`
+(browser/workspace surfaces: settings, saves, replays), `xl` (the widest shell surface: the
+lobby) — surfaced on the dialog as `data-ch-modal-size`. `fixedHeight` pins the dialog to one
+static block-size regardless of content (surfaced as `data-ch-modal-fixed-height`), so body
+swaps such as settings tab switches never resize it; the body then owns internal scrolling.
+Modals nest: the focus trap is active only while a modal is the **topmost** layer of the
+`EscapeStack` (`useEscapeLayer(...).isTopLayer()`), so a confirm Modal opened over a page-level
+Modal owns both Escape and Tab until it closes.
 
 **`SaveGameButton`** is the Actions category's one composite: a compact `Button` trigger that
 opens a save-name prompt (`Modal` + `TextInput`, name bounded to `MAX_SAVE_LABEL_LENGTH`) and

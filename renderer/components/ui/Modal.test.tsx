@@ -4,8 +4,16 @@ import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render as baseRender, screen } from '@testing-library/react';
 import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { EscapeStackProvider } from '../shell/EscapeStack';
+import { EscapeStackProvider, useEscapeLayer } from '../shell/EscapeStack';
 import { Modal } from './Modal';
+
+// Simulates a non-Modal overlay layer (key-capture, Drawer, …) registered above
+// the Modal on the shared escape stack. Must mount after the Modal so its layer
+// sits on top.
+function StealTopLayer(): null {
+    useEscapeLayer(() => undefined, true);
+    return null;
+}
 
 // Modal routes Escape-to-close through the shared overlay stack, so every render
 // must sit inside an EscapeStackProvider (useEscapeLayer throws otherwise).
@@ -196,5 +204,184 @@ describe('Modal', () => {
 
         fireEvent.keyDown(document, { key: 'Escape' });
         expect(onClose).toHaveBeenCalledOnce();
+    });
+
+    it('runs a non-dismissing action without closing the modal', () => {
+        const onClose = vi.fn();
+        const onReset = vi.fn();
+
+        render(
+            <Modal
+                open
+                title="Settings"
+                onClose={onClose}
+                actions={[
+                    { label: 'Reset', variant: 'danger', dismiss: false, onClick: onReset },
+                    { label: 'Close' },
+                ]}
+            >
+                Body
+            </Modal>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Reset' }));
+
+        expect(onReset).toHaveBeenCalledOnce();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('does not close when a non-dismissing action throws', () => {
+        const onClose = vi.fn();
+        const boom = vi.fn(() => {
+            throw new Error('boom');
+        });
+        const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+        render(
+            <Modal
+                open
+                title="Danger"
+                onClose={onClose}
+                actions={[{ label: 'Go', dismiss: false, onClick: boom }]}
+            >
+                Body
+            </Modal>,
+        );
+
+        fireEvent.click(screen.getByRole('button', { name: 'Go' }));
+
+        expect(boom).toHaveBeenCalledOnce();
+        expect(errorSpy).toHaveBeenCalledOnce();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('forwards disabled to the rendered action button and ignores clicks on it', () => {
+        const onClose = vi.fn();
+        const onHost = vi.fn();
+
+        render(
+            <Modal
+                open
+                title="Lobby"
+                onClose={onClose}
+                actions={[{ label: 'Hosting...', dismiss: false, disabled: true, onClick: onHost }]}
+            >
+                Body
+            </Modal>,
+        );
+
+        const button = screen.getByRole('button', { name: 'Hosting...' });
+        expect(button).toBeDisabled();
+
+        fireEvent.click(button);
+        expect(onHost).not.toHaveBeenCalled();
+        expect(onClose).not.toHaveBeenCalled();
+    });
+
+    it('renders no action row at all when actions is an empty array', () => {
+        render(
+            <Modal
+                open
+                title="Lobby"
+                onClose={vi.fn()}
+                actions={[]}
+                actionsTestId="lobby-action-bar"
+            >
+                Body
+            </Modal>,
+        );
+
+        expect(screen.queryAllByRole('button')).toHaveLength(0);
+        expect(screen.queryByTestId('lobby-action-bar')).not.toBeInTheDocument();
+    });
+
+    it('tags the action row with actionsTestId', () => {
+        render(
+            <Modal open title="Settings" onClose={vi.fn()} actionsTestId="settings-dialog-actions">
+                Body
+            </Modal>,
+        );
+
+        const row = screen.getByTestId('settings-dialog-actions');
+        expect(row).toContainElement(screen.getByRole('button', { name: /close/i }));
+    });
+
+    it('exposes the size variant on the dialog, defaulting to md', () => {
+        const { rerender } = render(
+            <Modal open title="Sized" onClose={vi.fn()}>
+                Body
+            </Modal>,
+        );
+
+        expect(screen.getByRole('dialog')).toHaveAttribute('data-ch-modal-size', 'md');
+
+        rerender(
+            <Modal open size="xl" title="Sized" onClose={vi.fn()}>
+                Body
+            </Modal>,
+        );
+
+        expect(screen.getByRole('dialog')).toHaveAttribute('data-ch-modal-size', 'xl');
+    });
+
+    it('marks the dialog as fixed-height when fixedHeight is set', () => {
+        render(
+            <Modal open fixedHeight size="lg" title="Workspace" onClose={vi.fn()}>
+                Body
+            </Modal>,
+        );
+
+        expect(screen.getByRole('dialog')).toHaveAttribute('data-ch-modal-fixed-height', 'true');
+    });
+
+    it('forwards ariaDescribedBy to the rendered action button', () => {
+        render(
+            <Modal
+                open
+                title="Lobby"
+                onClose={vi.fn()}
+                actions={[
+                    {
+                        label: 'Leave Lobby',
+                        variant: 'danger',
+                        dismiss: false,
+                        ariaDescribedBy: 'leave-warning',
+                    },
+                ]}
+            >
+                <span id="leave-warning">This will disconnect you</span>
+            </Modal>,
+        );
+
+        expect(screen.getByRole('button', { name: 'Leave Lobby' })).toHaveAttribute(
+            'aria-describedby',
+            'leave-warning',
+        );
+    });
+
+    it('suspends the Tab focus trap while another overlay layer sits above it', () => {
+        render(
+            <>
+                <Modal
+                    open
+                    title="Below"
+                    onClose={vi.fn()}
+                    actions={[{ label: 'First' }, { label: 'Second' }]}
+                >
+                    Body
+                </Modal>
+                <StealTopLayer />
+            </>,
+        );
+
+        const first = screen.getByRole('button', { name: 'First' });
+        const second = screen.getByRole('button', { name: 'Second' });
+
+        // With a foreign layer on top, Tab from the last element must NOT wrap —
+        // the top surface owns the keyboard.
+        second.focus();
+        fireEvent.keyDown(document, { key: 'Tab' });
+        expect(first).not.toHaveFocus();
+        expect(second).toHaveFocus();
     });
 });

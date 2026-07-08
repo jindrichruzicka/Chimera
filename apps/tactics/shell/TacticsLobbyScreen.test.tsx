@@ -442,20 +442,12 @@ describe('TacticsLobbyScreen', () => {
     });
 
     describe('lifecycle controls', () => {
-        it('invokes onStartGame and onLeave from the action bar', () => {
-            const onStartGame = vi.fn(async () => undefined);
-            const onLeave = vi.fn(async () => undefined);
-            render(<TacticsLobbyScreen {...makeProps({ onStartGame, onLeave })} />);
+        it('renders no Leave/Start action bar of its own — the lobby page Modal footer owns them', () => {
+            render(<TacticsLobbyScreen {...makeProps()} />);
 
-            fireEvent.click(screen.getByTestId('start-game'));
-            fireEvent.click(screen.getByTestId('lobby-leave-btn'));
-            expect(onStartGame).toHaveBeenCalledTimes(1);
-            expect(onLeave).toHaveBeenCalledTimes(1);
-        });
-
-        it('disables Start when the game cannot start', () => {
-            render(<TacticsLobbyScreen {...makeProps({ canStartGame: false })} />);
-            expect(screen.getByTestId('start-game')).toBeDisabled();
+            expect(screen.queryByTestId('start-game')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('lobby-leave-btn')).not.toBeInTheDocument();
+            expect(screen.queryByTestId('lobby-action-bar')).not.toBeInTheDocument();
         });
 
         it('toggles the local player ready state', () => {

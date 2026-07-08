@@ -22,7 +22,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { ReplayListItem } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Badge, Caption, Heading, IconButton, Modal } from '../../components/ui';
+import { Badge, Caption, IconButton, Modal } from '../../components/ui';
 import { useReplayApi } from '../../hooks/useReplayApi';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useToastStore } from '../../state/toastStore.js';
@@ -301,22 +301,19 @@ export default function ReplaysPage(): React.ReactElement {
         state.items.length === 0 &&
         state.perspectivePaths.length === 0;
 
+    // The page renders as the shared chrome-less Modal; closing (footer button
+    // or Escape) routes back to the main menu. The delete-confirm Modal nests
+    // inside the body — the overlay stack routes Escape to it first and keeps
+    // the page modal's focus trap inert while it is open.
     return (
-        <main className={styles['page']} data-testid="replays-page">
-            <div className={styles['header']}>
-                <Heading level={1} size="xl">
-                    Replays
-                </Heading>
-                <IconButton
-                    variant="danger"
-                    aria-label="Close replays"
-                    data-testid="replays-close-btn"
-                    onClick={handleClose}
-                >
-                    <span aria-hidden="true">X</span>
-                </IconButton>
-            </div>
-
+        <Modal
+            open
+            actions={[{ label: 'Close', variant: 'secondary', testId: 'replays-close-btn' }]}
+            data-testid="replays-page"
+            onClose={handleClose}
+            size="lg"
+            title="Replays"
+        >
             {state.status === 'loading' && (
                 <div role="status" aria-label="Loading replays">
                     Loading…
@@ -379,6 +376,6 @@ export default function ReplaysPage(): React.ReactElement {
                     </Caption>
                 </Modal>
             )}
-        </main>
+        </Modal>
     );
 }

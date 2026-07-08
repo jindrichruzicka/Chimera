@@ -24,11 +24,13 @@ tags:
 ## Overview
 
 The lobby is an **engine-owned shell page** (`renderer/app/lobby/page.tsx`, §4.37.4) whose chrome —
-dialog, host/join tabs, player roster, ready and start controls — is fixed by the engine. A game
-customizes only the **match configuration** it needs: a set of host-chosen _match settings_ (e.g. board
-colour) and per-seat _player attributes_ (e.g. unit colour). A game declares this surface declaratively
-through a `GameLobbySetup` descriptor and, optionally, ships a registry-loaded `LobbyScreen` React
-component that renders those controls inside the engine dialog.
+dialog, host/join tabs, player roster, ready and start controls — is fixed by the engine. The
+Leave/Start controls in particular are the engine dialog's **modal footer actions** (§4.37.4): a
+game `LobbyScreen` must not render its own. A game customizes only the **match configuration** it
+needs: a set of host-chosen _match settings_ (e.g. board colour) and per-seat _player attributes_
+(e.g. unit colour). A game declares this surface declaratively through a `GameLobbySetup`
+descriptor and, optionally, ships a registry-loaded `LobbyScreen` React component that renders
+those controls inside the engine dialog.
 
 The contract splits authorship by scope: **match settings are host-authored** (only the host edits them;
 clients read), while **per-player attributes are owner-authored** — each player edits only its OWN seat,

@@ -17,7 +17,7 @@ export type { IconButtonProps } from './IconButton';
 export { Label } from './Label';
 export type { LabelProps, LabelState } from './Label';
 export { Modal } from './Modal';
-export type { ModalAction, ModalProps } from './Modal';
+export type { ModalAction, ModalProps, ModalSize } from './Modal';
 export { NumberInput } from './NumberInput';
 export type { NumberInputProps } from './NumberInput';
 export { Panel } from './Panel';

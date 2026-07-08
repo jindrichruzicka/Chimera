@@ -1,46 +1,11 @@
-.page {
-    align-items: center;
-    box-sizing: border-box;
-    color: var(--ch-color-text-primary);
-    display: flex;
-    font-family: var(--ch-font-ui);
-    justify-content: center;
-    inline-size: 100%;
-    min-block-size: 100vh;
-    padding: var(--ch-space-xl);
-}
-
-.settings-dialog {
-    background-color: var(--ch-color-surface-raised);
-    /* Static height so switching tabs never resizes the dialog; overflowing
-       tab content scrolls inside the active tab panel instead. */
-    block-size: min(calc(var(--ch-space-xl) * 16), calc(100vh - (var(--ch-space-xl) * 2)));
-    border-color: var(--ch-color-border);
-    border-radius: var(--ch-radius-md);
-    border-style: solid;
-    border-width: var(--ch-border-width-sm);
-    box-shadow: var(--ch-shadow-lg);
-    box-sizing: border-box;
-    display: grid;
-    gap: var(--ch-space-lg);
-    grid-template-rows: minmax(var(--ch-space-none), 1fr) auto;
-    inline-size: min(100%, calc(var(--ch-space-xl) * 16));
-    padding: var(--ch-space-lg);
-}
+/* The dialog surface itself (backdrop, geometry, action row) is owned by the
+   shared chrome-less Modal — this module styles only the settings content. */
 
 .loading {
     align-items: center;
     display: flex;
     justify-content: center;
     min-block-size: calc(var(--ch-space-xl) * 4);
-}
-
-.dialog-actions {
-    align-self: stretch;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ch-space-sm);
-    justify-content: flex-end;
 }
 
 .tab-panel-content {

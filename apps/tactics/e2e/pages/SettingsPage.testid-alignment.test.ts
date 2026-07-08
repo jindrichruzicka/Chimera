@@ -1,8 +1,12 @@
 /**
  * Cross-reference guard: asserts every `getByTestId` string in SettingsPage.ts
- * has a matching `data-testid="..."` attribute in the renderer settings page
- * source. This prevents silent POM/renderer testid drift — the bug that caused
- * BLOCK-1 in the F31 review.
+ * has a matching testid literal in the renderer settings page source. This
+ * prevents silent POM/renderer testid drift — the bug that caused BLOCK-1 in
+ * the F31 review.
+ *
+ * The settings page authors some ids as `data-testid="..."` JSX attributes and
+ * others as Modal action `testId: '...'` props (Modal renders those to
+ * `data-testid`), so the guard accepts either source literal.
  *
  * @chimera-review: intentional filesystem access — structural alignment guard;
  *   mocking defeats the purpose (cf. vitest-config-filename-guard.test.ts).
@@ -36,10 +40,13 @@ describe('SettingsPage POM — testid alignment with renderer', () => {
         expect(pomTestIds.length).toBeGreaterThan(0);
 
         for (const testId of pomTestIds) {
+            const present =
+                rendererSource.includes(`data-testid="${testId}"`) ||
+                rendererSource.includes(`testId: '${testId}'`);
             expect(
-                rendererSource,
-                `SettingsPage.ts uses getByTestId('${testId}') but data-testid="${testId}" is absent from renderer/app/settings/page.tsx`,
-            ).toContain(`data-testid="${testId}"`);
+                present,
+                `SettingsPage.ts uses getByTestId('${testId}') but neither data-testid="${testId}" nor testId: '${testId}' is present in renderer/app/settings/page.tsx`,
+            ).toBe(true);
         }
     });
 });

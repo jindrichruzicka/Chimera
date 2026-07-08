@@ -141,6 +141,12 @@ export interface GameLobbyScreenProps {
      */
     readonly removeAiPlayer: (slotIndex: number) => Promise<void>;
     readonly onToggleReady: (ready: boolean) => Promise<void>;
+    /**
+     * Async authoritative lifecycle actions. The engine renders the standard
+     * Leave/Start buttons in the lobby page's modal footer — a game
+     * `LobbyScreen` must NOT render its own; these callbacks exist so a screen
+     * can trigger the same lifecycle from a custom affordance if it needs to.
+     */
     readonly onStartGame: () => Promise<void>;
     readonly onLeave: () => Promise<void>;
 }

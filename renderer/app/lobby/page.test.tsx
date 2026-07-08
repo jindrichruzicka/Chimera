@@ -7,6 +7,8 @@ import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
 import { playerId } from '@chimera-engine/simulation/bridge/api-types.js';
+import { EscapeStackProvider } from '../../components/shell/EscapeStack';
+import modalCss from '../../components/ui/Modal.module.css?raw';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import LobbyPage from './page';
@@ -135,11 +137,15 @@ function createDeferredPromise(): DeferredPromise {
     };
 }
 
+// The page renders through the shared Modal, whose Escape handling registers on
+// the overlay stack — every render must sit inside an EscapeStackProvider.
 function renderLobbyPage(): ReturnType<typeof render> {
     return render(
-        <ThemeProvider>
-            <LobbyPage />
-        </ThemeProvider>,
+        <EscapeStackProvider>
+            <ThemeProvider>
+                <LobbyPage />
+            </ThemeProvider>
+        </EscapeStackProvider>,
     );
 }
 
@@ -275,6 +281,33 @@ describe('LobbyPage pending actions', () => {
         expect(mockPush).toHaveBeenCalledWith('/main-menu?gameId=tactics');
     });
 
+    it('closes to the main menu on Escape in entry mode, preserving game context', () => {
+        window.history.pushState({}, '', '/lobby?gameId=tactics');
+
+        renderLobbyPage();
+
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+
+        expect(mockPush).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
+    it('consumes Escape as a no-op during an active lobby session', () => {
+        mockLocalPlayerId = 'p1';
+        mockLobbyState = {
+            info: { sessionId: 'session-1', hostId: 'p1', gameId: 'tactics' },
+            players: [{ playerId: 'p1', displayName: 'Host', ready: false }],
+        };
+
+        renderLobbyPage();
+
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+
+        // Leaving a live session stays an explicit Leave action — Escape must
+        // neither navigate away nor leave the lobby.
+        expect(mockPush).not.toHaveBeenCalled();
+        expect(screen.getByTestId('active-lobby-panel')).toBeTruthy();
+    });
+
     it('renders lobby page object locators during an active lobby', () => {
         mockLocalPlayerId = 'p1';
         mockLobbyState = {
@@ -380,6 +413,12 @@ describe('LobbyPage pending actions', () => {
         expect(actionButtons).toHaveLength(2);
         expect(actionButtons[0]).toBe(leaveButton);
         expect(actionButtons[1]).toBe(startButton);
+
+        // Leave/Start are Modal footer actions — small and right-aligned like
+        // every other modal's buttons, rendered OUTSIDE the lobby panel body.
+        expect(leaveButton).toHaveAttribute('data-ch-button-size', 'sm');
+        expect(startButton).toHaveAttribute('data-ch-button-size', 'sm');
+        expect(screen.getByTestId('active-lobby-panel')).not.toContainElement(actionBar);
     });
 
     it('uses a quiet dialog surface without heading metadata badges', () => {
@@ -397,9 +436,10 @@ describe('LobbyPage pending actions', () => {
 
         const dialog = screen.getByRole('dialog', { name: 'Multiplayer Lobby' });
         expect(dialog).toHaveAttribute('data-testid', 'lobby-dialog');
-        // No aria-modal: focus is not trapped, so claiming virtual-browsing
-        // restriction would be inconsistent with keyboard behavior (WARN-2).
-        expect(dialog).not.toHaveAttribute('aria-modal');
+        // The shared Modal traps focus, so aria-modal is consistent with
+        // keyboard behaviour (resolves the old WARN-2 rationale for omitting it).
+        expect(dialog).toHaveAttribute('aria-modal', 'true');
+        expect(dialog).toHaveAttribute('data-ch-modal-size', 'xl');
         expect(screen.queryByText('Game tactics')).toBeNull();
         expect(screen.queryByText('Max 4')).toBeNull();
         expect(screen.queryByText('Connected')).toBeNull();
@@ -444,10 +484,13 @@ describe('LobbyPage pending actions', () => {
         );
     });
 
-    it('pads the dialog with the standard container spacing token', () => {
-        const dialogRule = /\.dialog\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+    it('pads the dialog with the standard container spacing token (via the shared Modal)', () => {
+        // The dialog surface is the shared chrome-less Modal; the page module
+        // paints no panel of its own.
+        const dialogRule = /\.dialog\s*\{[^}]*\}/s.exec(modalCss)?.[0] ?? '';
 
         expect(dialogRule).toContain('padding: var(--ch-space-lg)');
+        expect(pageCss).not.toContain('background-color: var(--ch-color-surface-raised)');
     });
 
     it('constrains the host/join entry fields to half the panel width (F56)', () => {
@@ -578,9 +621,11 @@ describe('Start Game button enable/disable', () => {
             ],
         };
         rerender(
-            <ThemeProvider>
-                <LobbyPage />
-            </ThemeProvider>,
+            <EscapeStackProvider>
+                <ThemeProvider>
+                    <LobbyPage />
+                </ThemeProvider>
+            </EscapeStackProvider>,
         );
         expect(screen.getByTestId('start-game').hasAttribute('disabled')).toBe(true);
     });
@@ -837,6 +882,18 @@ describe('LobbyPage game-provided lobby screen', () => {
 
         expect(await screen.findByTestId('stub-lobby-screen')).toBeTruthy();
         expect(screen.queryByTestId('active-lobby-panel')).toBeNull();
+    });
+
+    it('renders the engine Leave/Start modal footer alongside the game-provided screen', async () => {
+        renderLobbyPage();
+
+        expect(await screen.findByTestId('stub-lobby-screen')).toBeTruthy();
+
+        const actionBar = screen.getByTestId('lobby-action-bar');
+        const labels = Array.from(actionBar.querySelectorAll('button')).map(
+            (button) => button.textContent,
+        );
+        expect(labels).toEqual(['Leave Lobby', 'Start Game']);
     });
 
     it('falls back to the engine-default ActiveLobbyPanel when no LobbyScreen is provided', async () => {

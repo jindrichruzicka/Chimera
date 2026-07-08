@@ -25,9 +25,11 @@ import type {
     SettingsTabDefinition,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import type { ResolvedSettings } from '@chimera-engine/simulation/bridge/api-types.js';
+import { useEscapeLayer } from '../../components/shell/EscapeStack';
 import { Button } from '../../components/ui/Button';
 import { Caption } from '../../components/ui/Caption';
 import { Heading } from '../../components/ui/Heading';
+import { Modal } from '../../components/ui/Modal';
 import { Select } from '../../components/ui/Select';
 import { Slider } from '../../components/ui/Slider';
 import { Spinner } from '../../components/ui/Spinner';
@@ -262,6 +264,15 @@ export default function SettingsPage(): React.ReactElement {
         Partial<Record<InputActionId, { ok: boolean; conflict?: InputActionId }>>
     >({});
 
+    const cancelCapture = React.useCallback(() => {
+        setCapturingId(null);
+    }, []);
+    // While capturing a key binding, this layer registers ABOVE the page Modal's
+    // layer (it activates later), so the shared EscapeStack routes Escape here:
+    // the capture cancels and the settings modal stays open. It also makes the
+    // Modal's Tab trap inert, so Tab is capturable as a binding.
+    useEscapeLayer(cancelCapture, capturingId !== null);
+
     const actionsByCategory = groupActionsByCategory(
         inputManager.getActions().filter((action) => !isEngineAction(action)),
     );
@@ -322,6 +333,9 @@ export default function SettingsPage(): React.ReactElement {
             event.preventDefault();
             event.stopPropagation();
 
+            // Defensive only: in practice the EscapeStack layer registered above
+            // consumes Escape first (window capture phase). Kept so Escape can
+            // never be bound as a key if that ordering ever changes.
             if (event.code === 'Escape') {
                 setCapturingId(null);
                 return;
@@ -495,26 +509,34 @@ export default function SettingsPage(): React.ReactElement {
         );
     }
 
-    if (activeGameId === undefined) {
-        return (
-            <main className={styles['page']}>
+    // One Modal for every state (URL-resolving, Suspense-loading, resolved) so
+    // the chrome never pops; the fixed height keeps the dialog from resizing
+    // when the body swaps.
+    return (
+        <Modal
+            open
+            actions={[
+                {
+                    label: 'Reset',
+                    variant: 'danger',
+                    testId: 'reset-to-defaults',
+                    dismiss: false,
+                    onClick: handleReset,
+                },
+                { label: 'Close', variant: 'secondary', testId: 'settings-close' },
+            ]}
+            actionsTestId="settings-dialog-actions"
+            data-testid="settings-dialog"
+            fixedHeight
+            onClose={handleClose}
+            size="lg"
+            title="Settings"
+        >
+            {activeGameId === undefined ? (
                 <div className={styles['loading']}>
                     <Spinner label="Loading settings" />
                 </div>
-            </main>
-        );
-    }
-
-    return (
-        <main className={styles['page']}>
-            <section
-                aria-label="Settings"
-                aria-modal="true"
-                className={styles['settings-dialog']}
-                data-testid="settings-dialog"
-                role="dialog"
-            >
-                {/* POM alignment guard literal: data-testid="master-volume" */}
+            ) : (
                 <React.Suspense
                     fallback={
                         <div className={styles['loading']}>
@@ -529,27 +551,8 @@ export default function SettingsPage(): React.ReactElement {
                         resolvedSettings={resolvedSettings}
                     />
                 </React.Suspense>
-
-                <div className={styles['dialog-actions']} data-testid="settings-dialog-actions">
-                    <Button
-                        data-testid="reset-to-defaults"
-                        size="sm"
-                        variant="danger"
-                        onClick={handleReset}
-                    >
-                        Reset
-                    </Button>
-                    <Button
-                        data-testid="settings-close"
-                        size="sm"
-                        variant="secondary"
-                        onClick={handleClose}
-                    >
-                        Close
-                    </Button>
-                </div>
-            </section>
-        </main>
+            )}
+        </Modal>
     );
 }
 

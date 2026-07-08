@@ -22,8 +22,10 @@ test.describe('lobby fixture', () => {
         expect(clientRole).toBe('client');
         expect(hostPort).toBe('7779');
         expect(clientPort).toBe('7779');
-        await expect(hostWindow.locator('body')).toBeVisible();
-        await expect(clientWindow.locator('body')).toBeVisible();
+        // The /lobby route renders through the fixed-position chrome-less Modal,
+        // so <body> has a zero-height box — assert the dialog itself rendered.
+        await expect(hostWindow.getByTestId('lobby-dialog')).toBeVisible();
+        await expect(clientWindow.getByTestId('lobby-dialog')).toBeVisible();
     });
 
     test('can reuse the multiplayer port after fixture teardown', async () => {

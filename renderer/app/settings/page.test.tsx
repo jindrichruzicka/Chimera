@@ -19,9 +19,18 @@
 
 import React from 'react';
 import '@testing-library/jest-dom/vitest';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import {
+    act,
+    cleanup,
+    fireEvent,
+    render as baseRender,
+    screen,
+    within,
+} from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { GameSettingsPageDefinition } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import modalCss from '../../components/ui/Modal.module.css?raw';
+import { EscapeStackProvider } from '../../components/shell/EscapeStack';
 import pageCss from './page.module.css?raw';
 import SettingsPage from './page';
 import { useSettingsStore } from '../../state/settingsStore';
@@ -72,6 +81,11 @@ function setChimera(): void {
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// The page renders through the shared Modal, whose Escape handling registers on
+// the overlay stack — every render must sit inside an EscapeStackProvider.
+const render = (ui: React.ReactElement): ReturnType<typeof baseRender> =>
+    baseRender(ui, { wrapper: EscapeStackProvider });
 
 const GAME_ID = 'tactics';
 
@@ -457,43 +471,52 @@ describe('SettingsPage — reset to defaults (AC #3)', () => {
         expect(screen.getAllByRole('dialog')).toHaveLength(1);
     });
 
-    it('keeps the route backdrop transparent so the shared shell background stays visible', async () => {
+    it('renders the chrome-less Modal surface — the page module paints no panel of its own', async () => {
         await renderSettingsPage();
 
-        expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
-        expect(pageCss).not.toMatch(/\.page\s*{[^}]*background-color/s);
-        expect(pageCss).toMatch(
-            /\.settings-dialog\s*{[^}]*background-color: var\(--ch-color-surface-raised\)/s,
+        expect(screen.getByRole('dialog', { name: 'Settings' })).toHaveAttribute(
+            'data-ch-modal-size',
+            'lg',
         );
+        // No page-level panel chrome remains: the Modal owns the dialog surface.
+        expect(pageCss).not.toContain('background-color');
+        expect(pageCss).not.toContain('box-shadow');
     });
 
     it('keeps the dialog height static across tabs and scrolls overflowing tab content', async () => {
         await renderSettingsPage();
 
-        const dialogRule = /\.settings-dialog\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+        // Static height comes from the Modal's fixed-height variant: the dialog
+        // must not grow/shrink with the active tab's content.
+        expect(screen.getByRole('dialog', { name: 'Settings' })).toHaveAttribute(
+            'data-ch-modal-fixed-height',
+            'true',
+        );
 
-        // Static height: the dialog must not grow/shrink with the active tab's content.
-        expect(dialogRule).toMatch(/[^-]block-size: min\(/);
-        expect(dialogRule).not.toContain('max-block-size');
-        // The middle (tab panels) takes the remaining space; footer actions stay pinned.
-        expect(dialogRule).toContain('grid-template-rows: minmax(var(--ch-space-none), 1fr) auto');
-        // Scrolling happens inside the active tab panel, not on the dialog itself.
-        expect(dialogRule).not.toContain('overflow: auto');
+        const fixedRule = /\.fixed-height\s*\{[^}]*\}/s.exec(modalCss)?.[0] ?? '';
+        expect(fixedRule).toMatch(/[^-]block-size: min\(/);
+
+        // Scrolling happens inside the body (Tabs scroll the active panel), not
+        // on the dialog itself.
+        const fixedBodyRule = /\.fixed-height \.body\s*\{[^}]*\}/s.exec(modalCss)?.[0] ?? '';
+        expect(fixedBodyRule).toContain('overflow-y: hidden');
     });
 
     it('pads the dialog with the standard container spacing token', async () => {
         await renderSettingsPage();
 
-        const dialogRule = /\.settings-dialog\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+        const dialogRule = /\.dialog\s*\{[^}]*\}/s.exec(modalCss)?.[0] ?? '';
 
         expect(dialogRule).toContain('padding: var(--ch-space-lg)');
     });
 
-    it('calls window.__chimera.settings.reset with the active gameId when reset is clicked', async () => {
+    it('calls window.__chimera.settings.reset with the active gameId and keeps the modal open', async () => {
         await renderSettingsPage();
         const btn = screen.getByRole('button', { name: /^reset$/i });
         fireEvent.click(btn);
         expect(mockReset).toHaveBeenCalledWith(GAME_ID);
+        // Reset operates in place (dismiss: false) — it must not navigate away.
+        expect(mockPush).not.toHaveBeenCalled();
     });
 
     it('renders dialog-style reset and close controls aligned to the right', async () => {
@@ -502,9 +525,7 @@ describe('SettingsPage — reset to defaults (AC #3)', () => {
         const actions = screen.getByTestId('settings-dialog-actions');
         expect(actions).toContainElement(screen.getByRole('button', { name: /^close$/i }));
         expect(actions).toContainElement(screen.getByRole('button', { name: /^reset$/i }));
-        expect(pageCss).toContain('.dialog-actions');
-        expect(pageCss).toContain('justify-content: flex-end');
-        expect(pageCss).toContain('align-self: stretch');
+        expect(modalCss).toMatch(/\.actions\s*{[^}]*justify-content: flex-end/s);
     });
 
     it('places Close as the rightmost dialog action', async () => {
@@ -539,6 +560,34 @@ describe('SettingsPage — reset to defaults (AC #3)', () => {
         fireEvent.click(screen.getByRole('button', { name: /^close$/i }));
 
         expect(mockPush).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+});
+
+// ── Escape behaviour (chrome-less Modal conversion) ──────────────────────────
+
+describe('SettingsPage — Escape behaviour', () => {
+    it('closes to the main menu on Escape, preserving URL game context', async () => {
+        setSettingsUrl('?gameId=tactics');
+        useSettingsStore.setState({
+            settings: { __engine__: makeSettings() },
+            activeGameId: null,
+        });
+
+        await renderSettingsPage();
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+
+        expect(mockPush).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
+    it('cancels binding capture on Escape without closing the settings modal', async () => {
+        await renderWithInputManager(makeInputManagerDouble());
+        fireEvent.click(screen.getAllByRole('button', { name: /^edit$/i })[0]!);
+        expect(screen.getByText(/press a key/i)).toBeTruthy();
+
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+
+        expect(screen.queryByText(/press a key/i)).toBeNull();
+        expect(mockPush).not.toHaveBeenCalled();
     });
 });
 

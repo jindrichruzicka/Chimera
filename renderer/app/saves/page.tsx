@@ -26,7 +26,7 @@
 import React from 'react';
 import { useRouter } from 'next/navigation';
 import type { SaveSlotMeta, SlotId } from '@chimera-engine/simulation/bridge/api-types.js';
-import { Caption, Heading, IconButton, Modal } from '../../components/ui';
+import { Caption, IconButton, Modal } from '../../components/ui';
 import { useSavesApi } from '../../hooks/useSavesApi.js';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useSaveStore } from '../../state/saveStore.js';
@@ -156,22 +156,19 @@ export default function SavesPage(): React.ReactElement {
 
     const isEmpty = !isLoading && slots.length === 0;
 
+    // The page renders as the shared chrome-less Modal; closing (footer button
+    // or Escape) routes back to the main menu. The delete-confirm Modal nests
+    // inside the body — the overlay stack routes Escape to it first and keeps
+    // the page modal's focus trap inert while it is open.
     return (
-        <main className={styles['page']} data-testid="saves-page">
-            <div className={styles['header']}>
-                <Heading level={1} size="xl">
-                    Saves
-                </Heading>
-                <IconButton
-                    variant="danger"
-                    aria-label="Close saves"
-                    data-testid="saves-close-btn"
-                    onClick={handleClose}
-                >
-                    <span aria-hidden="true">X</span>
-                </IconButton>
-            </div>
-
+        <Modal
+            open
+            actions={[{ label: 'Close', variant: 'secondary', testId: 'saves-close-btn' }]}
+            data-testid="saves-page"
+            onClose={handleClose}
+            size="lg"
+            title="Saves"
+        >
             {isLoading && (
                 <div role="status" aria-label="Loading save slots">
                     Loading…
@@ -226,6 +223,6 @@ export default function SavesPage(): React.ReactElement {
                     </Caption>
                 </Modal>
             )}
-        </main>
+        </Modal>
     );
 }

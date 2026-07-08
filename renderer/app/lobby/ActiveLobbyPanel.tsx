@@ -4,28 +4,23 @@ import React from 'react';
 import type { LobbyState, PlayerId } from '@chimera-engine/simulation/bridge/api-types.js';
 import { PlayerList } from '../../components/shell/PlayerList';
 import { Badge } from '../../components/ui/Badge';
-import { Button } from '../../components/ui/Button';
 import { Heading } from '../../components/ui/Heading';
 import type { PendingAction } from './lobbyTypes';
 import styles from './page.module.css';
 
+// Leave/Start are NOT rendered here — they are the lobby page Modal's footer
+// actions, so they align with every other modal's button row.
 export interface ActiveLobbyPanelProps {
-    readonly canStartGame: boolean;
     readonly lobbyState: LobbyState;
     readonly localPlayerId: PlayerId | null;
     readonly pendingAction: PendingAction;
-    readonly onLeave: () => Promise<void>;
-    readonly onStartGame: () => Promise<void>;
     readonly onToggleReady: (ready: boolean) => Promise<void>;
 }
 
 export function ActiveLobbyPanel({
-    canStartGame,
     lobbyState,
     localPlayerId,
     pendingAction,
-    onLeave,
-    onStartGame,
     onToggleReady,
 }: ActiveLobbyPanelProps): React.ReactElement {
     const isHost = localPlayerId !== null && localPlayerId === lobbyState.info.hostId;
@@ -73,34 +68,6 @@ export function ActiveLobbyPanel({
                     onToggleReady={onToggleReady}
                 />
             </section>
-
-            <div className={styles['action-bar']} data-testid="lobby-action-bar">
-                <Button
-                    aria-describedby="leave-warning"
-                    data-testid="lobby-leave-btn"
-                    disabled={pendingAction !== null}
-                    onClick={() => {
-                        void onLeave();
-                    }}
-                    variant="danger"
-                >
-                    {pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby'}
-                </Button>
-                <span className={styles['sr-only']} id="leave-warning">
-                    This will disconnect you from the current lobby
-                </span>
-                <Button
-                    data-testid="start-game"
-                    disabled={!canStartGame || pendingAction !== null}
-                    onClick={() => {
-                        void onStartGame();
-                    }}
-                    type="button"
-                    variant="primary"
-                >
-                    {pendingAction === 'starting' ? 'Starting...' : 'Start Game'}
-                </Button>
-            </div>
         </div>
     );
 }

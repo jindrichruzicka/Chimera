@@ -122,23 +122,3 @@
 .you {
     color: var(--ch-color-text-secondary);
 }
-
-.action-bar {
-    align-items: center;
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--ch-space-sm);
-    justify-content: space-between;
-}
-
-.sr-only {
-    border: var(--ch-space-none);
-    block-size: var(--ch-space-screen-reader);
-    clip: rect(0, 0, 0, 0);
-    inline-size: var(--ch-space-screen-reader);
-    margin: calc(var(--ch-space-screen-reader) * -1);
-    overflow: hidden;
-    padding: var(--ch-space-none);
-    position: absolute;
-    white-space: nowrap;
-}

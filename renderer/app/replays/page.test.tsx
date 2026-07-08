@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import '@testing-library/jest-dom/vitest';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -63,8 +63,9 @@ function installBridge(
     Object.defineProperty(window, '__chimera', { configurable: true, value: { replay } });
 }
 
-// The confirm dialog is a <Modal>, which registers Escape-to-close on the shared
-// overlay stack; render the page under the provider so `useEscapeLayer` resolves.
+// The page itself and its confirm dialog are <Modal>s, which register
+// Escape-to-close on the shared overlay stack; render the page under the
+// provider so `useEscapeLayer` resolves.
 function renderPage(): ReturnType<typeof render> {
     return render(
         <EscapeStackProvider>
@@ -99,7 +100,7 @@ describe('ReplaysPage', () => {
         );
         installBridge({ list });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByText(/1\.2\.3/)).toBeInTheDocument();
@@ -113,7 +114,7 @@ describe('ReplaysPage', () => {
         const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
         installBridge({ perspectiveList });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByText(/persp-1\.chimera-perspective-replay/)).toBeInTheDocument();
@@ -127,7 +128,7 @@ describe('ReplaysPage', () => {
         const perspectiveList = vi.fn(() => Promise.resolve([PERSPECTIVE_PATH]));
         installBridge({ list, perspectiveList });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByText(/^perspective$/i)).toBeInTheDocument();
@@ -140,7 +141,7 @@ describe('ReplaysPage', () => {
     it('tags the page container and Open buttons with E2E test ids', async () => {
         installBridge({ list: vi.fn(() => Promise.resolve([makeItem()])) });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         expect(screen.getByTestId('replays-page')).toBeInTheDocument();
         expect(await screen.findByTestId('replay-open-btn')).toBeInTheDocument();
@@ -149,7 +150,7 @@ describe('ReplaysPage', () => {
     it('shows the empty state only when both kinds are empty', async () => {
         installBridge({});
 
-        render(<ReplaysPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByLabelText(/no replays saved yet/i)).toBeInTheDocument();
@@ -159,7 +160,7 @@ describe('ReplaysPage', () => {
     it('shows a loading state before the lists resolve', () => {
         installBridge({ list: vi.fn(() => new Promise<ReplayListItem[]>(() => undefined)) });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         expect(screen.getByRole('status')).toBeInTheDocument();
     });
@@ -167,7 +168,7 @@ describe('ReplaysPage', () => {
     it('shows an error state when listing deterministic replays fails', async () => {
         installBridge({ list: vi.fn(() => Promise.reject(new Error('disk gone'))) });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -179,7 +180,7 @@ describe('ReplaysPage', () => {
             perspectiveList: vi.fn(() => Promise.reject(new Error('perspective gone'))),
         });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getByRole('alert')).toBeInTheDocument();
@@ -195,7 +196,7 @@ describe('ReplaysPage', () => {
             openInPlayer,
         });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         const openButton = await screen.findByRole('button', { name: /open replay/i });
         await userEvent.click(openButton);
@@ -209,7 +210,7 @@ describe('ReplaysPage', () => {
         // route — otherwise leaving the replay drops back to the engine-default menu.
         installBridge({ perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_PATH])) });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         const openButton = await screen.findByRole('button', {
             name: /open perspective replay/i,
@@ -224,7 +225,7 @@ describe('ReplaysPage', () => {
     it('closes back to the main menu, carrying the active gameId', async () => {
         installBridge({});
 
-        render(<ReplaysPage />);
+        renderPage();
 
         const closeButton = screen.getByTestId('replays-close-btn');
         await userEvent.click(closeButton);
@@ -238,7 +239,7 @@ describe('ReplaysPage', () => {
         window.history.replaceState({}, '', '/replays');
         installBridge({});
 
-        render(<ReplaysPage />);
+        renderPage();
 
         const closeButton = screen.getByTestId('replays-close-btn');
         await userEvent.click(closeButton);
@@ -252,7 +253,7 @@ describe('ReplaysPage', () => {
             perspectiveList: vi.fn(() => Promise.resolve([PERSPECTIVE_PATH])),
         });
 
-        render(<ReplaysPage />);
+        renderPage();
 
         await waitFor(() => {
             expect(screen.getAllByTestId('replay-delete-btn')).toHaveLength(2);
@@ -349,5 +350,37 @@ describe('ReplaysPage', () => {
                 useToastStore.getState().queue.some((toast) => /failed/i.test(toast.title)),
             ).toBe(true);
         });
+    });
+});
+
+describe('ReplaysPage — Escape behaviour (chrome-less Modal conversion)', () => {
+    it('closes back to the main menu on Escape, carrying the active gameId', () => {
+        installBridge({});
+
+        renderPage();
+
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+
+        expect(push).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
+    it('Escape closes only the confirm dialog while it is open, then the page', async () => {
+        installBridge({ list: vi.fn(() => Promise.resolve([makeItem()])) });
+
+        renderPage();
+
+        await userEvent.click(await screen.findByTestId('replay-delete-btn'));
+        expect(screen.getByTestId('replay-delete-dialog')).toBeInTheDocument();
+
+        // First Escape: the confirm (top layer) closes; the page stays.
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+        await waitFor(() => {
+            expect(screen.queryByTestId('replay-delete-dialog')).not.toBeInTheDocument();
+        });
+        expect(push).not.toHaveBeenCalled();
+
+        // Second Escape: the page modal closes back to the main menu.
+        fireEvent.keyDown(document, { key: 'Escape', code: 'Escape' });
+        expect(push).toHaveBeenCalledWith('/main-menu?gameId=tactics');
     });
 });

@@ -181,10 +181,12 @@ wiring.
 
 ### Lobby Modal Surface
 
-`renderer/app/lobby/page.tsx` is a normal shell route, but it presents its content as a centered
-modal dialog over the shared shell background. The route remains `/lobby` so refresh, deep-link,
-E2E, and IPC bootstrap behavior stay unchanged. Closing the dialog navigates back to `/main-menu`,
-preserving an explicit `?gameId=` URL context when present.
+`renderer/app/lobby/page.tsx` is a normal shell route, but it presents its content through the
+shared chrome-less `Modal` (§4.35, `size="xl"`) over the shared shell background. The route
+remains `/lobby` so refresh, deep-link, E2E, and IPC bootstrap behavior stay unchanged. Closing
+the dialog navigates back to `/main-menu`, preserving an explicit `?gameId=` URL context when
+present. The dialog carries `aria-modal` with the Modal's real focus trap (superseding the old
+no-trap rationale for omitting it).
 
 When no session exists, the lobby dialog renders a two-tab entry surface and a footer action row:
 
@@ -193,14 +195,28 @@ When no session exists, the lobby dialog renders a two-tab entry surface and a f
 | `Host` | Confirms hosting with the parsed `LobbyConfig`    |
 | `Join` | Accepts a lobby code/address and confirms joining |
 
-The footer keeps `Close` on the left and the active tab's primary action (`Host Lobby` or
-`Join Lobby`) on the right. The heading area stays quiet: it does not render lobby config badges,
-connection badges, or helper captions beneath the title.
+The footer is the Modal's right-aligned action row, ordered `Close`, then the active tab's
+primary action (`Host Lobby` or `Join Lobby`). Host/Join are `dismiss: false` actions — a
+failure keeps the form open with its error banner. Escape in entry mode closes like the `Close`
+button. The heading area stays quiet: it does not render lobby config badges, connection badges,
+or helper captions beneath the title.
 
-When `lobbyStore.lobbyState` is non-null, the entry tabs disappear. The dialog instead renders
-session metadata, the player roster, ready-state controls, leave, and host-only start controls.
-All authoritative writes continue through `useLobbyApi()`; the route component never writes the
-IPC-mirrored `lobbyStore` directly.
+When `lobbyStore.lobbyState` is non-null, the entry tabs disappear and the footer becomes the
+Modal's `Leave Lobby` (danger, `aria-describedby` pointing at a visually-hidden consequence
+warning in the body) and host-gated `Start Game` (primary) actions — both `dismiss: false`, sized
+and aligned exactly like every other modal's buttons. Lobby screens (the engine default and
+game-provided ones alike) render only body content — session metadata, roster, ready-state and
+setup controls — never their own Leave/Start bar. Escape is consumed as a no-op during an active
+session — leaving stays the explicit `Leave` action. All authoritative writes continue through
+`useLobbyApi()`; the route component never writes the IPC-mirrored `lobbyStore` directly.
+
+The settings (`/settings`, `size="lg"` + `fixedHeight` so tab switches never resize the dialog),
+saves (`/saves`, `size="lg"`), and replays (`/replays`, `size="lg"`) routes present through the
+same chrome-less `Modal`: title, scrolling body, and a right-aligned footer (`Reset` +
+`Close` for settings — `Reset` is `dismiss: false`; a lone `Close` for the browsers). Their
+delete-confirm dialogs stay nested `Modal`s — the `EscapeStack` routes Escape to the confirm
+first, then the page. Escape during settings key-binding capture cancels only the capture (the
+capture registers its own escape layer above the page modal).
 
 A game may customize the in-session surface by contributing a `LobbyScreen` component
 (`GameScreenRegistry.LobbyScreen`, loaded via the renderer game registry). When present, the engine
@@ -673,11 +689,11 @@ renderer/
     ├── main-menu/
     │   └── page.tsx            # Uses <Button variant="primary|secondary|danger" />
     ├── lobby/
-    │   └── page.tsx            # Uses <Button variant="primary|secondary|danger" />
+    │   └── page.tsx            # Chrome-less <Modal size="xl">; entry footer via ModalAction (Close + Host/Join dismiss:false)
     ├── settings/
-    │   └── page.tsx            # Uses <Button variant="secondary|ghost" />
+    │   └── page.tsx            # Chrome-less <Modal size="lg" fixedHeight>; footer Reset (danger, dismiss:false) + Close
     └── saves/
-        └── page.tsx            # Uses <Button variant="primary|ghost|danger" />
+        └── page.tsx            # Chrome-less <Modal size="lg">; footer Close; nested delete-confirm Modal
 games/
 └── <game>/
     └── shell/

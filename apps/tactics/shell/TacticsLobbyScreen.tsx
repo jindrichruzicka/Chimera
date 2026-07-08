@@ -6,8 +6,9 @@
  * Tactics' custom lobby screen (§4.37). Registry-loaded into
  * `LoadedRendererGameShell.LobbyScreen`, it replaces the engine-default
  * `ActiveLobbyPanel` when a Tactics lobby is hosted, so it renders the full
- * panel — roster, ready toggle, and Leave/Start — plus the Tactics-specific
- * board-colour and per-player colour controls.
+ * panel — roster and ready toggle — plus the Tactics-specific board-colour and
+ * per-player colour controls. Leave/Start are NOT rendered here: the lobby
+ * page's Modal footer owns them, aligned with every other modal's button row.
  *
  * Authority split (F53): the board-colour select is host-authored — editable
  * only for the host (a client sees it `disabled`) and routed through
@@ -28,7 +29,6 @@
 import React from 'react';
 import {
     Badge,
-    Button,
     Heading,
     IconButton,
     Select,
@@ -62,15 +62,12 @@ export function TacticsLobbyScreen({
     localPlayerId,
     content,
     isHost,
-    canStartGame,
     pendingAction,
     setMatchSetting,
     setPlayerAttribute,
     addAiPlayer,
     removeAiPlayer,
     onToggleReady,
-    onStartGame,
-    onLeave,
 }: GameLobbyScreenProps): React.ReactElement {
     // The selectable colours come from the content database (delivered as the
     // generic `content` prop); interpret them into this game's palette. Empty
@@ -280,34 +277,6 @@ export function TacticsLobbyScreen({
                     )}
                 </section>
             ) : null}
-
-            <div className={styles['action-bar']} data-testid="lobby-action-bar">
-                <Button
-                    aria-describedby="leave-warning"
-                    data-testid="lobby-leave-btn"
-                    disabled={pendingAction !== null}
-                    onClick={() => {
-                        void onLeave();
-                    }}
-                    variant="danger"
-                >
-                    {pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby'}
-                </Button>
-                <span className={styles['sr-only']} id="leave-warning">
-                    This will disconnect you from the current lobby
-                </span>
-                <Button
-                    data-testid="start-game"
-                    disabled={!canStartGame || pendingAction !== null}
-                    onClick={() => {
-                        void onStartGame();
-                    }}
-                    type="button"
-                    variant="primary"
-                >
-                    {pendingAction === 'starting' ? 'Starting...' : 'Start Game'}
-                </Button>
-            </div>
         </div>
     );
 }

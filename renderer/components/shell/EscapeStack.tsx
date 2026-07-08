@@ -1,6 +1,14 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useId, useRef, type ReactNode } from 'react';
+import React, {
+    createContext,
+    useContext,
+    useEffect,
+    useId,
+    useMemo,
+    useRef,
+    type ReactNode,
+} from 'react';
 
 /**
  * Shared renderer Escape/overlay stack (F55 · T6).
@@ -17,6 +25,11 @@ import React, { createContext, useContext, useEffect, useId, useRef, type ReactN
  * listener; this is required because input actions fire at the window level and
  * React's `stopPropagation` cannot suppress them.
  *
+ * `useEscapeLayer` returns an {@link EscapeLayerHandle} whose `isTopLayer()`
+ * lets a layer gate other keyboard behaviour on stack position — Modal keeps
+ * its Tab focus trap active only while topmost, so nested modals (and non-Modal
+ * layers such as the settings key-capture) own the keyboard while above it.
+ *
  * Invariant #83: the context uses a `null` default with a throwing hook.
  */
 
@@ -28,6 +41,18 @@ interface EscapeLayer {
 interface EscapeStackApi {
     readonly register: (layer: EscapeLayer) => void;
     readonly unregister: (id: string) => void;
+    readonly isTop: (id: string) => boolean;
+}
+
+/**
+ * Handle returned by {@link useEscapeLayer}, letting a layer ask about its own
+ * stack position. A Modal uses this to keep its Tab focus trap inert while
+ * another overlay (a nested Modal, the key-capture layer, a Drawer) sits above
+ * it — the top surface owns the keyboard.
+ */
+export interface EscapeLayerHandle {
+    /** True while this layer is registered and is the top of the stack. */
+    readonly isTopLayer: () => boolean;
 }
 
 const EscapeStackContext = createContext<EscapeStackApi | null>(null);
@@ -46,6 +71,10 @@ export function EscapeStackProvider({ children }: EscapeStackProviderProps): Rea
         },
         unregister(id) {
             stackRef.current = stackRef.current.filter((layer) => layer.id !== id);
+        },
+        isTop(id) {
+            const stack = stackRef.current;
+            return stack[stack.length - 1]?.id === id;
         },
     };
 
@@ -81,8 +110,11 @@ export function EscapeStackProvider({ children }: EscapeStackProviderProps): Rea
  * The handler is invoked only when this layer is the top of the stack, so a
  * single Escape keydown is handled exactly once. `onEscape` need not be stable;
  * the latest reference is always used.
+ *
+ * Returns a stable {@link EscapeLayerHandle} so the caller can gate keyboard
+ * behaviour (e.g. a focus trap) on being the topmost layer.
  */
-export function useEscapeLayer(onEscape: () => void, active: boolean): void {
+export function useEscapeLayer(onEscape: () => void, active: boolean): EscapeLayerHandle {
     const api = useContext(EscapeStackContext);
     if (api === null) {
         throw new Error('useEscapeLayer() must be used within <EscapeStackProvider>.');
@@ -103,4 +135,6 @@ export function useEscapeLayer(onEscape: () => void, active: boolean): void {
             api.unregister(id);
         };
     }, [active, api, id]);
+
+    return useMemo(() => ({ isTopLayer: () => api.isTop(id) }), [api, id]);
 }

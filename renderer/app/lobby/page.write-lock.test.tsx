@@ -4,6 +4,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import React from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { EscapeStackProvider } from '../../components/shell/EscapeStack';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import LobbyPage from './page';
 
@@ -82,19 +83,19 @@ vi.mock('./useLobbyApi', () => ({
     }),
 }));
 
+// The page renders through the shared Modal, whose Escape handling registers on
+// the overlay stack — every render must sit inside an EscapeStackProvider.
 function renderLobbyPage(): ReturnType<typeof render> {
-    return render(
-        <ThemeProvider>
-            <LobbyPage />
-        </ThemeProvider>,
-    );
+    return render(renderLobbyPageElement());
 }
 
 function renderLobbyPageElement(): React.ReactElement {
     return (
-        <ThemeProvider>
-            <LobbyPage />
-        </ThemeProvider>
+        <EscapeStackProvider>
+            <ThemeProvider>
+                <LobbyPage />
+            </ThemeProvider>
+        </EscapeStackProvider>
     );
 }
 

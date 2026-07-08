@@ -20,10 +20,47 @@
     flex-direction: column;
     font-family: var(--ch-font-ui);
     gap: var(--ch-space-md);
-    max-height: calc(var(--ch-space-xl) * 16);
-    max-width: calc(var(--ch-space-xl) * 20);
+    inline-size: calc(var(--ch-space-xl) * 12);
+    max-block-size: calc(var(--ch-space-xl) * 16);
+    max-inline-size: calc(var(--ch-space-xl) * 20);
     padding: var(--ch-space-lg);
-    width: calc(var(--ch-space-xl) * 12);
+}
+
+/*
+ * Size variants: md (base) is the decision dialog; lg fits a browser/workspace
+ * surface (settings, saves, replays); xl is the widest shell surface (lobby).
+ */
+.size-lg {
+    inline-size: min(100%, calc(var(--ch-space-xl) * 16));
+    max-block-size: calc(100vh - (var(--ch-space-xl) * 2));
+    max-inline-size: none;
+}
+
+.size-xl {
+    inline-size: min(100%, calc(var(--ch-space-xl) * 18));
+    max-block-size: calc(100vh - (var(--ch-space-xl) * 2));
+    max-inline-size: none;
+}
+
+/*
+ * Static-height workspace: one block-size regardless of content, so body swaps
+ * (e.g. settings tab switches) never resize the dialog. The body becomes a
+ * column whose child stretches and owns internal scrolling (Tabs already pins
+ * its tab strip and scrolls only the active panel when height-constrained).
+ */
+.fixed-height {
+    block-size: min(calc(var(--ch-space-xl) * 16), calc(100vh - (var(--ch-space-xl) * 2)));
+}
+
+.fixed-height .body {
+    display: flex;
+    flex-direction: column;
+    overflow-y: hidden;
+}
+
+.fixed-height .body > * {
+    flex: 1 1 auto;
+    min-block-size: var(--ch-space-none);
 }
 
 .title {

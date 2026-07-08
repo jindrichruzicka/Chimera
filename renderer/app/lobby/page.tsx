@@ -9,7 +9,7 @@ import { LobbyEntryTabs } from './LobbyEntryTabs';
 import type { LobbyEntryTabId, PendingAction } from './lobbyTypes';
 import { useOptionalFade } from '../../components/shell/FadeContext';
 import { screenFadeMs } from '../../components/shell/screenFadeDuration';
-import { Button } from '../../components/ui/Button';
+import { Modal, type ModalAction } from '../../components/ui/Modal';
 import type { LoadedRendererGameShell } from '../../game/rendererGameRegistry';
 import { loadRendererGameShell } from '../../game/rendererGameRegistry';
 import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
@@ -218,6 +218,15 @@ export default function LobbyPage() {
         router.push(withShellGameId('/main-menu', explicitGameId));
     };
 
+    const handleModalClose = (): void => {
+        // Escape/Close semantics per mode: in an ACTIVE session, leaving is an
+        // explicit Leave action rendered by the lobby screen — Escape must not
+        // dump the player to the main menu, so consume it as a no-op. In entry
+        // mode it navigates back like the Close button.
+        if (lobbyState !== null) return;
+        handleClose();
+    };
+
     const handleToggleReady = async (ready: boolean): Promise<void> => {
         try {
             setPendingAction('updating-ready');
@@ -303,20 +312,71 @@ export default function LobbyPage() {
               }
             : null;
 
+    // Active-session footer: Leave/Start are Modal actions so they align with
+    // every other modal's button row. Both operate in place (dismiss: false) —
+    // navigation on leave/start is owned by the stores, never by dismissal.
+    const activeActions: readonly ModalAction[] = [
+        {
+            label: pendingAction === 'leaving' ? 'Leaving...' : 'Leave Lobby',
+            variant: 'danger',
+            testId: 'lobby-leave-btn',
+            dismiss: false,
+            disabled: pendingAction !== null,
+            ariaDescribedBy: 'leave-warning',
+            onClick: () => {
+                void handleLeave();
+            },
+        },
+        {
+            label: pendingAction === 'starting' ? 'Starting...' : 'Start Game',
+            variant: 'primary',
+            testId: 'start-game',
+            dismiss: false,
+            disabled: !canStartGame || pendingAction !== null,
+            onClick: () => {
+                void handleStartGame();
+            },
+        },
+    ];
+
+    // Entry-mode footer: Close dismisses; Host/Join operate in place
+    // (dismiss: false) so a failure keeps the form open with its error banner.
+    const entryActions: readonly ModalAction[] = [
+        { label: 'Close', variant: 'secondary', testId: 'lobby-close' },
+        activeTabId === 'host'
+            ? {
+                  label: pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby',
+                  variant: 'primary',
+                  testId: 'host-lobby',
+                  dismiss: false,
+                  disabled: pendingAction !== null,
+                  onClick: () => {
+                      void handleHost();
+                  },
+              }
+            : {
+                  label: pendingAction === 'joining' ? 'Joining...' : 'Join Lobby',
+                  variant: 'primary',
+                  testId: 'confirm-join',
+                  dismiss: false,
+                  disabled: pendingAction !== null,
+                  onClick: () => {
+                      void handleJoin();
+                  },
+              },
+    ];
+
     return (
         <ThemeProvider theme={lobbyTheme}>
-            <main className={styles['page']} role="main" aria-label="Multiplayer Lobby">
-                <section
-                    aria-label="Multiplayer Lobby"
-                    // No aria-modal: this is a full-page route — the dialog IS
-                    // the entire viewport content. Setting aria-modal without a
-                    // focus trap would tell AT to restrict virtual browsing to
-                    // the section while keyboard focus can still leave it, which
-                    // is inconsistent. role="dialog" + aria-labelledby is
-                    // sufficient to announce the surface correctly.
-                    className={styles['dialog']}
+            <main aria-label="Multiplayer Lobby" role="main">
+                <Modal
+                    open
+                    actions={lobbyState === null ? entryActions : activeActions}
+                    actionsTestId="lobby-action-bar"
                     data-testid="lobby-dialog"
-                    role="dialog"
+                    onClose={handleModalClose}
+                    size="xl"
+                    title="Multiplayer Lobby"
                 >
                     {error ? (
                         <div className={styles['error']} data-testid="lobby-error" role="alert">
@@ -324,16 +384,22 @@ export default function LobbyPage() {
                         </div>
                     ) : null}
 
+                    {/* Referenced by the footer Leave action's aria-describedby;
+                        rendered at page level so it exists for the engine-default
+                        panel and game-provided screens alike. */}
+                    {lobbyState ? (
+                        <span className={styles['sr-only']} id="leave-warning">
+                            This will disconnect you from the current lobby
+                        </span>
+                    ) : null}
+
                     {lobbyState ? (
                         GameLobbyScreen && lobbyScreenProps ? (
                             <GameLobbyScreen {...lobbyScreenProps} />
                         ) : (
                             <ActiveLobbyPanel
-                                canStartGame={canStartGame}
                                 lobbyState={lobbyState}
                                 localPlayerId={localPlayerId}
-                                onLeave={handleLeave}
-                                onStartGame={handleStartGame}
                                 onToggleReady={handleToggleReady}
                                 pendingAction={pendingAction}
                             />
@@ -351,45 +417,7 @@ export default function LobbyPage() {
                             onTabChange={setActiveTabId}
                         />
                     )}
-
-                    {!lobbyState ? (
-                        <div className={styles['action-bar']} data-testid="lobby-action-bar">
-                            <Button
-                                data-testid="lobby-close"
-                                onClick={handleClose}
-                                size="sm"
-                                variant="secondary"
-                            >
-                                Close
-                            </Button>
-                            {activeTabId === 'host' ? (
-                                <Button
-                                    data-testid="host-lobby"
-                                    disabled={pendingAction !== null}
-                                    onClick={() => {
-                                        void handleHost();
-                                    }}
-                                    size="sm"
-                                    variant="primary"
-                                >
-                                    {pendingAction === 'hosting' ? 'Hosting...' : 'Host Lobby'}
-                                </Button>
-                            ) : (
-                                <Button
-                                    data-testid="confirm-join"
-                                    disabled={pendingAction !== null}
-                                    onClick={() => {
-                                        void handleJoin();
-                                    }}
-                                    size="sm"
-                                    variant="primary"
-                                >
-                                    {pendingAction === 'joining' ? 'Joining...' : 'Join Lobby'}
-                                </Button>
-                            )}
-                        </div>
-                    ) : null}
-                </section>
+                </Modal>
             </main>
         </ThemeProvider>
     );

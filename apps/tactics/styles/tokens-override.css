@@ -9,9 +9,7 @@
 :root {
     --ch-color-surface: rgba(16, 16, 29, 0.9);
     --ch-color-surface-raised: rgba(26, 26, 46, 0.9);
-    /* Semi-transparent modal backdrop: the board stays visible, dimmed, behind
-       an open dialog — the game-UI overlay feel. The engine default is opaque. */
-    --ch-color-overlay-backdrop: rgba(16, 16, 29, 0.72);
+    --ch-color-overlay-backdrop: rgba(16, 16, 29, 0.12);
     --ch-color-text-primary: #e0d6c8;
     --ch-color-text-secondary: #e0d6c8;
     --ch-color-accent: #c9a84c;
