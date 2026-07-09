@@ -97,8 +97,8 @@ describe('tacticsSettingsPageDefinition', () => {
         expect(gameFieldsForTab('display')).toEqual([]);
     });
 
-    it('defines gameplay engine and Tactics-specific fields', () => {
-        expect(engineFieldsForTab('gameplay')).toEqual(['gameplay.showPerfHud']);
+    it('defines only the Tactics-specific gameplay fields (engine fields are file-edited)', () => {
+        expect(engineFieldsForTab('gameplay')).toEqual([]);
         expect(gameFieldsForTab('gameplay')).toEqual([
             'showGrid',
             'animationSpeed',

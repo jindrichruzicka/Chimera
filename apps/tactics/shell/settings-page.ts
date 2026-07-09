@@ -53,15 +53,13 @@ export const tacticsSettingsPageDefinition: GameSettingsPageDefinition = {
         {
             id: 'gameplay',
             label: 'Gameplay',
+            // A single section whose label matches the tab so no redundant caption
+            // renders. Engine gameplay fields (e.g. gameplay.showPerfHud) are not
+            // surfaced here — they are edited only via the settings file.
             sections: [
                 {
-                    id: 'engine-gameplay',
-                    label: 'Engine',
-                    items: [{ kind: 'engine-field', fieldId: 'gameplay.showPerfHud' }],
-                },
-                {
-                    id: 'tactics-gameplay',
-                    label: 'Tactics',
+                    id: 'gameplay',
+                    label: 'Gameplay',
                     items: [
                         {
                             kind: 'game-field',
