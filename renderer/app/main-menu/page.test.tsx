@@ -114,6 +114,14 @@ describe('MainMenuPage — engine fallback (no active lobby game)', () => {
         expect(screen.getByRole('button', { name: /component gallery/i })).toBeTruthy();
     });
 
+    it('renders a "?" glyph inside the component gallery icon button', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
+
+        renderMainMenuPage();
+
+        expect(screen.getByTestId('main-menu-component-gallery')).toHaveTextContent('?');
+    });
+
     it('does not render the component gallery icon button in the packaged production build', () => {
         vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '1');
 
@@ -129,6 +137,19 @@ describe('MainMenuPage — engine fallback (no active lobby game)', () => {
         fireEvent.click(screen.getByTestId('main-menu-component-gallery'));
 
         expect(mockPush).toHaveBeenCalledWith('/component-gallery');
+    });
+
+    it('carries the gameId query param when navigating to the component gallery', () => {
+        vi.stubEnv('NEXT_PUBLIC_CHIMERA_PACKAGED', '');
+        // Keep the shell load pending so the menu stays in its loading state;
+        // the gallery button renders in every menu state.
+        mockLoadRendererGameShell.mockReturnValue(new Promise(() => undefined));
+        setMainMenuUrl('?gameId=tactics');
+
+        renderMainMenuPage();
+        fireEvent.click(screen.getByTestId('main-menu-component-gallery'));
+
+        expect(mockPush).toHaveBeenCalledWith('/component-gallery?gameId=tactics');
     });
 
     it('navigates to /lobby when the play button is clicked', () => {

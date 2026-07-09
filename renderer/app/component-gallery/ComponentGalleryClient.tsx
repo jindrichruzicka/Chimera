@@ -1,6 +1,8 @@
 'use client';
 
 import React from 'react';
+import { useRouter } from 'next/navigation';
+import { resolveShellGameId, withShellGameId } from '../../shell/resolveMainMenuGameId';
 import { useToastStore, type ToastSeverity } from '../../state/toastStore';
 import { Badge } from '../../components/ui/Badge';
 import { Button } from '../../components/ui/Button';
@@ -28,6 +30,8 @@ import { Toggle } from '../../components/ui/Toggle';
 import { ToggleButton } from '../../components/ui/ToggleButton';
 import { Tooltip } from '../../components/ui/Tooltip';
 import styles from './ComponentGallery.module.css';
+
+const MAIN_MENU_ROUTE = '/main-menu';
 
 const TOAST_PANEL_ACTIONS = [
     { severity: 'info', title: 'Info toast', variant: 'primary' },
@@ -408,6 +412,7 @@ function TypographyPanel(): React.ReactElement {
 // ── Gallery root ──────────────────────────────────────────────────────────────
 
 export default function ComponentGalleryClient(): React.ReactElement {
+    const router = useRouter();
     const [modalOpen, setModalOpen] = React.useState(false);
     const [drawerOpen, setDrawerOpen] = React.useState(false);
     const [toggleChecked, setToggleChecked] = React.useState(false);
@@ -415,6 +420,30 @@ export default function ComponentGalleryClient(): React.ReactElement {
     const [numberValue, setNumberValue] = React.useState(1);
     const [textValue, setTextValue] = React.useState('Ada Lovelace');
     const [selectValue, setSelectValue] = React.useState('dark');
+
+    // Escape exits the gallery back to the main menu. The listener sits on the
+    // window *bubble* phase so it is the last stop for a keydown: the shared
+    // EscapeStack consumes Escape at window *capture* while a Modal/Drawer is
+    // open (stopImmediatePropagation), and the Popover marks its own Escape
+    // handled via preventDefault — so this fires only when no overlay claimed
+    // the key. The gameId query param is carried back so the game-selected
+    // menu shell is preserved.
+    React.useEffect(() => {
+        function handleKeyDown(event: KeyboardEvent): void {
+            if (event.key !== 'Escape' || event.defaultPrevented) return;
+            router.push(
+                withShellGameId(
+                    MAIN_MENU_ROUTE,
+                    resolveShellGameId(new URLSearchParams(window.location.search)),
+                ),
+            );
+        }
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => {
+            window.removeEventListener('keydown', handleKeyDown);
+        };
+    }, [router]);
 
     const tabs: readonly TabItem[] = [
         {

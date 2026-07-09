@@ -26,9 +26,11 @@ import galleryStyles from './ComponentGallery.module.css';
 import galleryCss from './ComponentGallery.module.css?raw';
 import ComponentGalleryPage from './page';
 
+const mockRouterPush = vi.fn();
+
 vi.mock('next/navigation', () => ({
     notFound: vi.fn(),
-    useRouter: () => ({ push: vi.fn() }),
+    useRouter: () => ({ push: mockRouterPush }),
 }));
 
 import { notFound as notFoundMock } from 'next/navigation';
@@ -58,6 +60,8 @@ function renderGalleryWithToastHost(): void {
 afterEach(() => {
     useToastStore.getState().dismissAll();
     cleanup();
+    mockRouterPush.mockReset();
+    window.history.replaceState({}, '', '/component-gallery');
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
 });
@@ -215,6 +219,68 @@ describe('ComponentGalleryClient — Select present in Forms panel (AC #6b)', ()
         fireEvent.click(screen.getByRole('tab', { name: /forms/i }));
         const comboboxes = screen.getAllByRole('combobox', { name: /colour scheme/i });
         expect(comboboxes.length).toBeGreaterThanOrEqual(1);
+    });
+});
+
+// ── Escape traverses back to the main menu ───────────────────────────────────
+//
+// A keydown is dispatched on document.body (not window) to mirror a real
+// keyboard event's propagation path: EscapeStack's window-capture handler runs
+// first, then document-level overlay handlers, then the gallery's window
+// bubble listener.
+
+describe('ComponentGalleryClient — Escape returns to the main menu', () => {
+    it('navigates to /main-menu when Escape is pressed with no overlay open', () => {
+        renderGallery();
+
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+
+        expect(mockRouterPush).toHaveBeenCalledWith('/main-menu');
+    });
+
+    it('preserves the gameId query param when navigating back to the main menu', () => {
+        window.history.replaceState({}, '', '/component-gallery?gameId=tactics');
+        renderGallery();
+
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+
+        expect(mockRouterPush).toHaveBeenCalledWith('/main-menu?gameId=tactics');
+    });
+
+    it('does not navigate on non-Escape keys', () => {
+        renderGallery();
+
+        fireEvent.keyDown(document.body, { key: 'Enter' });
+
+        expect(mockRouterPush).not.toHaveBeenCalled();
+    });
+
+    it('closes an open Modal on Escape without leaving the gallery, then exits on the next Escape', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /overlays/i }));
+        fireEvent.click(screen.getByTestId('gallery-open-modal'));
+        expect(screen.getByRole('dialog', { name: /example modal/i })).toBeTruthy();
+
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog', { name: /example modal/i })).toBeNull();
+        expect(mockRouterPush).not.toHaveBeenCalled();
+
+        fireEvent.keyDown(document.body, { key: 'Escape' });
+
+        expect(mockRouterPush).toHaveBeenCalledWith('/main-menu');
+    });
+
+    it('closes an open Popover on Escape without leaving the gallery', () => {
+        renderGallery();
+        fireEvent.click(screen.getByRole('tab', { name: /overlays/i }));
+        fireEvent.click(screen.getByTestId('gallery-popover-trigger'));
+        const popover = screen.getByRole('dialog', { name: /example popover/i });
+
+        fireEvent.keyDown(popover, { key: 'Escape' });
+
+        expect(screen.queryByRole('dialog', { name: /example popover/i })).toBeNull();
+        expect(mockRouterPush).not.toHaveBeenCalled();
     });
 });
 

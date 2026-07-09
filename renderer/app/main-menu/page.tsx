@@ -13,7 +13,11 @@ import {
     type LoadedRendererGameShell,
 } from '../../game/rendererGameRegistry';
 import { RenderMainMenuDefinition } from '../../shell/renderMainMenuDefinition';
-import { resolveMainMenuGameId } from '../../shell/resolveMainMenuGameId';
+import {
+    resolveMainMenuGameId,
+    resolveShellGameId,
+    withShellGameId,
+} from '../../shell/resolveMainMenuGameId';
 import pageStyles from './page.module.css';
 
 const COMPONENT_GALLERY_ROUTE = '/component-gallery';
@@ -70,11 +74,16 @@ function ComponentGalleryButton(): React.ReactElement | null {
                         aria-label={COMPONENT_GALLERY_LABEL}
                         data-testid="main-menu-component-gallery"
                         onClick={() => {
-                            router.push(COMPONENT_GALLERY_ROUTE);
+                            router.push(
+                                withShellGameId(
+                                    COMPONENT_GALLERY_ROUTE,
+                                    resolveShellGameId(new URLSearchParams(window.location.search)),
+                                ),
+                            );
                         }}
                     >
                         <span aria-hidden="true" className={pageStyles['component-gallery-icon']}>
-                            ▦
+                            ?
                         </span>
                     </IconButton>
                 )}

@@ -22,6 +22,7 @@
 import { test, expect } from '../fixtures/electron.fixture';
 import type { Locator } from '@playwright/test';
 import { ComponentGalleryPage } from '../pages/ComponentGalleryPage';
+import { MainMenuPage } from '../pages/MainMenuPage';
 
 // ── Shared token-match helper (mirrors theme.spec.ts pattern) ─────────────────
 
@@ -241,6 +242,41 @@ test.describe('Component Gallery', () => {
         await gallery.numberInput.fill('7');
         await gallery.numberInput.dispatchEvent('change');
         await expect(gallery.numberInput).toHaveValue('7');
+    });
+
+    test('Escape traverses back to the main menu, preserving gameId', async ({ mainWindow }) => {
+        const mainMenu = new MainMenuPage(mainWindow);
+        await mainMenu.goto({ gameId: 'tactics' });
+        await expect(mainMenu.componentGalleryButton).toBeVisible();
+        await mainMenu.openComponentGallery();
+
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await expect(gallery.root).toBeVisible();
+        await expect(mainWindow).toHaveURL(/\/component-gallery\/?\?gameId=tactics$/);
+
+        await mainWindow.keyboard.press('Escape');
+
+        await expect(mainWindow).toHaveURL(/\/main-menu\/?\?gameId=tactics$/);
+        await expect(mainMenu.menu).toBeVisible();
+    });
+
+    test('Escape closes an open overlay before exiting the gallery', async ({ mainWindow }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        await gallery.openModal();
+        await expect(gallery.modalDialog).toBeVisible();
+
+        // First Escape is consumed by the open Modal (EscapeStack top layer).
+        await mainWindow.keyboard.press('Escape');
+        await expect(gallery.modalDialog).not.toBeVisible();
+        await expect(gallery.root).toBeVisible();
+
+        // Second Escape exits the gallery to the main menu.
+        await mainWindow.keyboard.press('Escape');
+        await expect(mainWindow).toHaveURL(/\/main-menu\/?$/);
+        await expect(mainWindow.getByTestId('main-menu')).toBeVisible();
     });
 
     test('primary Button background matches --ch-color-accent token', async ({ mainWindow }) => {
