@@ -67,6 +67,18 @@
     --ch-line-height-tight: 1.1;
     --ch-line-height-relaxed: 1.6;
 
+    /*
+     * Heading treatment: gradient fill + outline for menu page titles (the
+     * shared Modal title). Engine defaults are visually inert — both gradient
+     * stops resolve to the solid primary text colour and the outline is 0px
+     * transparent — so rendering is identical to plain colour. Games opt in
+     * by overriding these tokens.
+     */
+    --ch-heading-fill-top: var(--ch-color-text-primary);
+    --ch-heading-fill-bottom: var(--ch-color-text-primary);
+    --ch-heading-outline-width: 0px;
+    --ch-heading-outline-color: var(--ch-color-transparent);
+
     --ch-button-color-primary: var(--ch-color-text-primary);
     --ch-button-color-primary-hover: var(--ch-button-color-primary);
     --ch-button-color-secondary: var(--ch-color-text-primary);

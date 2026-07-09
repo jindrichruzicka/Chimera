@@ -366,6 +366,17 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-font-size-lg: 18px;
 --ch-font-size-xl: 24px;
 
+/* ── Heading Treatment ──────────────────────────────────────
+ * Gradient fill + outline for menu page titles (the shared Modal title on the
+ * settings/lobby/saves/replays routes). Engine defaults are visually inert:
+ * both gradient stops resolve to the solid primary text colour and the
+ * outline is 0px transparent, so default rendering is identical to plain
+ * colour. Games opt in by overriding these tokens. */
+--ch-heading-fill-top: var(--ch-color-text-primary);
+--ch-heading-fill-bottom: var(--ch-color-text-primary);
+--ch-heading-outline-width: 0px;
+--ch-heading-outline-color: var(--ch-color-transparent);
+
 /* ── Shadows ─────────────────────────────────────────────── */
 --ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);
 --ch-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.36);

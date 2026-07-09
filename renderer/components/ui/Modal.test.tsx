@@ -423,6 +423,22 @@ describe('Modal motion', () => {
         );
     });
 
+    it('paints the title through the token-driven gradient fill and outline', () => {
+        // Gradient fill: background clipped to the glyphs with a transparent
+        // fill colour, top→bottom stops driven by the heading tokens.
+        expect(modalCss).toMatch(
+            /\.title\s*\{[^}]*background-image:\s*linear-gradient\(\s*to bottom,\s*var\(--ch-heading-fill-top\),\s*var\(--ch-heading-fill-bottom\)\s*\);/s,
+        );
+        expect(modalCss).toMatch(/\.title\s*\{[^}]*background-clip:\s*text;/s);
+        expect(modalCss).toMatch(/\.title\s*\{[^}]*-webkit-background-clip:\s*text;/s);
+        expect(modalCss).toMatch(/\.title\s*\{[^}]*-webkit-text-fill-color:\s*transparent;/s);
+        // Outline: engine default is 0px transparent, so the stroke only
+        // appears when a game override sets the heading outline tokens.
+        expect(modalCss).toMatch(
+            /\.title\s*\{[^}]*-webkit-text-stroke:\s*var\(--ch-heading-outline-width\)\s*var\(--ch-heading-outline-color\);/s,
+        );
+    });
+
     it('marks the overlay open and unmounts synchronously when motion is instant', () => {
         const { rerender } = render(
             <Modal open title="Settings" onClose={vi.fn()}>

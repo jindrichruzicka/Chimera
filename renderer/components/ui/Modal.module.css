@@ -90,12 +90,26 @@
     min-block-size: var(--ch-space-none);
 }
 
+/*
+ * The title paints through a glyph-clipped gradient with an optional stroke.
+ * Engine defaults keep both inert (solid-colour stops, 0px transparent
+ * stroke); a game's token override turns the effect on for every page title.
+ */
 .title {
+    background-clip: text;
+    -webkit-background-clip: text;
+    background-image: linear-gradient(
+        to bottom,
+        var(--ch-heading-fill-top),
+        var(--ch-heading-fill-bottom)
+    );
     font-size: var(--ch-font-size-xl);
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
     margin: var(--ch-space-none);
     text-align: center;
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: var(--ch-heading-outline-width) var(--ch-heading-outline-color);
 }
 
 /*
