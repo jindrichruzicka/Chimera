@@ -169,6 +169,13 @@ elements — including shell pages mounted in the same document — once the gam
 shell module has been imported. Shell pages therefore receive game theming without any explicit
 wiring.
 
+The same cascade carries the overlay **motion** tokens (`--ch-*-anim-*`, §4.35 Motion & Animation,
+invariant #109): a game may retime, disable, or reshape the shell's Modal/Drawer open-close
+animations from its `tokens-override.css` alone. The engine's keyframes load globally from
+`renderer/styles/animations.css` (imported by the root layout after `tokens.css`); because the game
+override loads later in the cascade, an override that sets literal durations must ship its own
+`@media (prefers-reduced-motion: reduce)` block.
+
 ### Scope Rules
 
 | Page              | Receives game override?                                     |
@@ -740,6 +747,7 @@ a game lobby screen), and #101 (`snapshot.setup` is public, projected verbatim).
 | #99  | Lobby match settings are host-authored; per-player attributes are owner-authored. `LobbyManager.setMatchSetting()` rejects a non-hosted session; `setPlayerAttribute()` rejects any seat but the caller's own and (for a joined client) forwards the own-seat intent to the host, which applies it to the connection-derived sender seat. The two IPC channels are the sole write path; changes broadcast to every peer. (§4.37.12) |
 | #100 | Game `LobbyScreen` components perform no privileged writes directly — they call the engine-provided `setMatchSetting` / `setPlayerAttribute` props (routed renderer API → IPC → `LobbyManager`) and never write `lobbyStore`, call `LobbyManager`, or open IPC channels themselves. (§4.37.12)                                                                                                                                      |
 | #101 | `GameSnapshot.setup` / `PlayerSnapshot.setup` is public host config passed through `StateProjector.project()` verbatim — no owner-only or per-viewer fields — so every viewer's projected snapshot carries an identical `setup`. (§4.37.12)                                                                                                                                                                                         |
+| #109 | Engine UI motion (Modal/Drawer open-close, button press) is parameterised exclusively by `--ch-*` motion tokens backed by global `ch-*` keyframes in `renderer/styles/animations.css`; games customise it only through token overrides, and all engine motion collapses to instant under `prefers-reduced-motion`. (§4.35 Motion & Animation)                                                                                       |
 
 ---
 
@@ -750,5 +758,5 @@ a game lobby screen), and #101 (`snapshot.setup` is public, projected verbatim).
 - [Renderer State Stores](renderer-state-stores.md) — store catalogue, `lobbyConfig`, `useLobbyApi()`
 - [Scene Transitions & Fade](scene-transitions-fade.md) — `TransitionOverlay`, `useFade()`
 - [Customizable Lobby Contract](customizable-lobby-contract.md) — §4.37.12 game-customizable lobby screen, host-authored match config, `snapshot.setup` projection
-- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94, #99–#101
+- [Architecture Invariants](../executive-architecture/architecture-invariants.md) — invariants #34–#36, #80, #85, #91–#94, #99–#101, #109
 - [M8 Hardening Roadmap](../roadmap-sections/m8-hardening-v0.8.0.md) — F51 game-customizable main menu, F52 game-customizable settings page, F53 customizable lobby

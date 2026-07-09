@@ -181,3 +181,107 @@ describe('Drawer', () => {
         expect(source.replace(/var\([^)]+\)/g, '')).not.toMatch(/\b\d+(?:\.\d+)?(?:px|rem)\b/);
     });
 });
+
+describe('Drawer motion', () => {
+    it('plays token-driven enter animations on the backdrop and panel', () => {
+        expect(drawerCss).toMatch(
+            /\.overlay\s*\{[^}]*animation-name:\s*var\(--ch-backdrop-anim-enter-name\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.overlay\s*\{[^}]*animation-duration:\s*var\(--ch-backdrop-anim-enter-duration\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.overlay\s*\{[^}]*animation-timing-function:\s*var\(--ch-backdrop-anim-enter-easing\);/s,
+        );
+        expect(drawerCss).toMatch(/\.overlay\s*\{[^}]*animation-fill-mode:\s*both;/s);
+        expect(drawerCss).toMatch(
+            /\.drawer\s*\{[^}]*animation-name:\s*var\(--ch-drawer-anim-enter-name\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.drawer\s*\{[^}]*animation-duration:\s*var\(--ch-drawer-anim-enter-duration\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.drawer\s*\{[^}]*animation-timing-function:\s*var\(--ch-drawer-anim-enter-easing\);/s,
+        );
+        expect(drawerCss).toMatch(/\.drawer\s*\{[^}]*animation-fill-mode:\s*both;/s);
+    });
+
+    it('switches to the exit animations and blocks pointer input while closing', () => {
+        expect(drawerCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s*\{[^}]*animation-name:\s*var\(--ch-backdrop-anim-exit-name\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s*\{[^}]*pointer-events:\s*none;/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s+\.drawer\s*\{[^}]*animation-name:\s*var\(--ch-drawer-anim-exit-name\);/s,
+        );
+    });
+
+    it('drives the slide direction per placement through private offset properties', () => {
+        expect(drawerCss).toMatch(
+            /\.drawer\.right\s*\{[^}]*--_ch-drawer-slide-x:\s*var\(--ch-drawer-slide-distance\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.drawer\.left\s*\{[^}]*--_ch-drawer-slide-x:\s*calc\(-1 \* var\(--ch-drawer-slide-distance\)\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.drawer\.top\s*\{[^}]*--_ch-drawer-slide-y:\s*calc\(-1 \* var\(--ch-drawer-slide-distance\)\);/s,
+        );
+        expect(drawerCss).toMatch(
+            /\.drawer\.bottom\s*\{[^}]*--_ch-drawer-slide-y:\s*var\(--ch-drawer-slide-distance\);/s,
+        );
+    });
+
+    it('marks the overlay open and unmounts synchronously when motion is instant', () => {
+        const { rerender } = render(
+            <Drawer open title="Inventory" onClose={vi.fn()}>
+                Supplies
+            </Drawer>,
+        );
+
+        expect(screen.getByRole('dialog').parentElement).toHaveAttribute('data-ch-state', 'open');
+
+        // jsdom computes no animation — closing must collapse to an immediate
+        // unmount inside the same act flush (the reduced-motion contract).
+        rerender(
+            <Drawer open={false} title="Inventory" onClose={vi.fn()}>
+                Supplies
+            </Drawer>,
+        );
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('stays mounted inert in the closing state until its exit animations finish', () => {
+        vi.spyOn(window, 'getComputedStyle').mockImplementation(
+            () =>
+                ({
+                    animationDuration: '120ms',
+                    animationDelay: '0s',
+                }) as CSSStyleDeclaration,
+        );
+        const { rerender } = render(
+            <Drawer open title="Inventory" onClose={vi.fn()}>
+                Supplies
+            </Drawer>,
+        );
+        const panel = screen.getByRole('dialog');
+        const overlay = panel.parentElement;
+        if (overlay === null) throw new Error('Expected the panel to render inside the overlay');
+
+        rerender(
+            <Drawer open={false} title="Inventory" onClose={vi.fn()}>
+                Supplies
+            </Drawer>,
+        );
+
+        expect(overlay).toHaveAttribute('data-ch-state', 'closing');
+        expect(overlay).toHaveAttribute('inert');
+
+        fireEvent.animationEnd(overlay);
+        fireEvent.animationEnd(panel);
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+});

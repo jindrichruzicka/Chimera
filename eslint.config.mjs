@@ -549,6 +549,7 @@ export default tseslint.config(
     {
         files: [
             'renderer/styles/tokens.css',
+            'renderer/styles/animations.css',
             'renderer/**/*.module.css',
             'apps/*/screens/**/*.module.css',
         ],

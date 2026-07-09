@@ -36,6 +36,7 @@ describe('copyRendererCss', () => {
         await writeFile(path.join(rendererRoot, 'dist', 'stale.module.css'), '.stale{}');
         await writeFile(path.join(rendererRoot, 'styles', 'tokens.css'), ':root{}');
         await writeFile(path.join(rendererRoot, 'styles', 'globals.css'), 'body{}');
+        await writeFile(path.join(rendererRoot, 'styles', 'animations.css'), '@keyframes k{}');
     });
 
     afterEach(async () => {
@@ -62,6 +63,7 @@ describe('copyRendererCss', () => {
         await copyRendererCss({ rendererRoot });
         expect(await exists(path.join('styles', 'tokens.css'))).toBe(true);
         expect(await exists(path.join('styles', 'globals.css'))).toBe(true);
+        expect(await exists(path.join('styles', 'animations.css'))).toBe(true);
     });
 
     it('does not copy non-css sources or re-scan the dist output dir', async () => {
@@ -79,6 +81,7 @@ describe('copyRendererCss', () => {
                 path.join('app', 'lobby', 'page.module.css'),
                 path.join('components', 'chat', 'ChatPanel.module.css'),
                 path.join('components', 'ui', 'Button.module.css'),
+                path.join('styles', 'animations.css'),
                 path.join('styles', 'globals.css'),
                 path.join('styles', 'tokens.css'),
             ].sort(),

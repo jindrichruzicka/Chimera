@@ -412,9 +412,11 @@ Each entry notes the existing anchor point in the 1.0.0 architecture and the bro
 
 **Gap:** 1.0.0 has no accessibility settings.
 
+**Shipped:** all shell CSS motion (component transitions and the Modal/Drawer open-close animations, §4.35 Motion & Animation / invariant #109) already collapses to instant under the OS-level `prefers-reduced-motion` preference via the token-level reduced-motion block in `renderer/styles/tokens.css`.
+
 **Planned approach:**
 
-- Add `settings.display.reducedMotion: boolean` — when `true`, `useFadeTransition` and `useTween` resolve instantly, and `<ToastHost>` disables slide animations.
+- Add `settings.display.reducedMotion: boolean` — when `true`, `useFadeTransition` and `useTween` resolve instantly, and `<ToastHost>` disables slide animations (the CSS motion tokens already honour the OS preference; the setting adds an in-app override).
 - Add `settings.display.highContrast: boolean` — game stylesheets expose a contrast-friendly theme variant.
 - Add `settings.display.fontScale: number` — `1.0 = default`, `[0.75, 2.0]` range; applied via a CSS custom property at the root.
 - Add keyboard-navigation affordances: focus rings, skip-to-content, ARIA labels on all shell components.

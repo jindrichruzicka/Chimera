@@ -233,6 +233,25 @@ const expectedTokens = [
     '--ch-duration-normal',
     '--ch-duration-slow',
     '--ch-easing-standard',
+    '--ch-backdrop-anim-enter-name',
+    '--ch-backdrop-anim-enter-duration',
+    '--ch-backdrop-anim-enter-easing',
+    '--ch-backdrop-anim-exit-name',
+    '--ch-backdrop-anim-exit-duration',
+    '--ch-backdrop-anim-exit-easing',
+    '--ch-modal-anim-enter-name',
+    '--ch-modal-anim-enter-duration',
+    '--ch-modal-anim-enter-easing',
+    '--ch-modal-anim-exit-name',
+    '--ch-modal-anim-exit-duration',
+    '--ch-modal-anim-exit-easing',
+    '--ch-drawer-anim-enter-name',
+    '--ch-drawer-anim-enter-duration',
+    '--ch-drawer-anim-enter-easing',
+    '--ch-drawer-anim-exit-name',
+    '--ch-drawer-anim-exit-duration',
+    '--ch-drawer-anim-exit-easing',
+    '--ch-drawer-slide-distance',
 ] as const;
 
 describe('renderer design tokens', () => {
@@ -250,6 +269,35 @@ describe('renderer design tokens', () => {
         expect(css).toContain('--ch-duration-normal: 0ms;');
         expect(css).toContain('--ch-duration-slow: 0ms;');
         expect(css).toContain('--ch-easing-standard: linear;');
+    });
+
+    it('parameterises overlay motion through the shared duration and easing primitives', () => {
+        const css = readTokensCss();
+
+        for (const component of ['backdrop', 'modal', 'drawer'] as const) {
+            expect(extractTokenValue(css, `--ch-${component}-anim-enter-name`)).toBe(
+                `ch-${component}-enter`,
+            );
+            expect(extractTokenValue(css, `--ch-${component}-anim-exit-name`)).toBe(
+                `ch-${component}-exit`,
+            );
+            // Enter is deliberate, exit is quick; both collapse to 0ms under
+            // the reduced-motion block because they reference the primitives.
+            expect(extractTokenValue(css, `--ch-${component}-anim-enter-duration`)).toBe(
+                'var(--ch-duration-normal)',
+            );
+            expect(extractTokenValue(css, `--ch-${component}-anim-exit-duration`)).toBe(
+                'var(--ch-duration-fast)',
+            );
+            expect(extractTokenValue(css, `--ch-${component}-anim-enter-easing`)).toBe(
+                'var(--ch-easing-standard)',
+            );
+            expect(extractTokenValue(css, `--ch-${component}-anim-exit-easing`)).toBe(
+                'var(--ch-easing-standard)',
+            );
+        }
+
+        expect(extractTokenValue(css, '--ch-drawer-slide-distance')).toBe('100%');
     });
 
     it('uses a neutral engine shell palette for the default theme tokens', () => {

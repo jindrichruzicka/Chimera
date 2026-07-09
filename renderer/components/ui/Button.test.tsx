@@ -138,6 +138,20 @@ describe('Button', () => {
         expect(css).toContain('transform: var(--ch-button-transform-hover);');
     });
 
+    it('uses the dedicated active transform token for pressed feedback', () => {
+        const css = buttonCss;
+
+        expect(css).toContain('.button:not(:disabled):active');
+        expect(css).toMatch(
+            /\.button:not\(:disabled\):active\s*{[^}]*transform:\s*var\(--ch-button-transform-active\);/s,
+        );
+        // Source order: the :active rule must come after :hover so the press
+        // transform wins at equal specificity while the pointer is down.
+        expect(css.indexOf('.button:not(:disabled):active')).toBeGreaterThan(
+            css.indexOf('.button:not(:disabled):hover'),
+        );
+    });
+
     it('maps each size class to tokenized typography and spacing', () => {
         const css = buttonCss;
 

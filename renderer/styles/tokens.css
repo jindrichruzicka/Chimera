@@ -190,6 +190,34 @@
     --ch-duration-normal: 250ms;
     --ch-duration-slow: 400ms;
     --ch-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+    /* ── Overlay motion ──
+     * Open/close animations for the shared Modal and Drawer. The *-name tokens
+     * point at global keyframes declared in styles/animations.css; games may
+     * retarget them to their own game-namespaced keyframes. Durations reference
+     * the duration primitives so the reduced-motion block below collapses all
+     * overlay motion to instant. */
+    --ch-backdrop-anim-enter-name: ch-backdrop-enter;
+    --ch-backdrop-anim-enter-duration: var(--ch-duration-normal);
+    --ch-backdrop-anim-enter-easing: var(--ch-easing-standard);
+    --ch-backdrop-anim-exit-name: ch-backdrop-exit;
+    --ch-backdrop-anim-exit-duration: var(--ch-duration-fast);
+    --ch-backdrop-anim-exit-easing: var(--ch-easing-standard);
+
+    --ch-modal-anim-enter-name: ch-modal-enter;
+    --ch-modal-anim-enter-duration: var(--ch-duration-normal);
+    --ch-modal-anim-enter-easing: var(--ch-easing-standard);
+    --ch-modal-anim-exit-name: ch-modal-exit;
+    --ch-modal-anim-exit-duration: var(--ch-duration-fast);
+    --ch-modal-anim-exit-easing: var(--ch-easing-standard);
+
+    --ch-drawer-anim-enter-name: ch-drawer-enter;
+    --ch-drawer-anim-enter-duration: var(--ch-duration-normal);
+    --ch-drawer-anim-enter-easing: var(--ch-easing-standard);
+    --ch-drawer-anim-exit-name: ch-drawer-exit;
+    --ch-drawer-anim-exit-duration: var(--ch-duration-fast);
+    --ch-drawer-anim-exit-easing: var(--ch-easing-standard);
+    --ch-drawer-slide-distance: 100%;
 }
 
 @media (prefers-reduced-motion: reduce) {

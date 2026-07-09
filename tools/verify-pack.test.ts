@@ -241,8 +241,10 @@ describe('buildProbeScript', () => {
         expect(script).toContain('@chimera-engine/renderer/game');
     });
 
-    it('asserts the renderer CSS subpath ships via files', () => {
-        expect(buildProbeScript()).toContain('@chimera-engine/renderer/styles/tokens.css');
+    it('asserts the renderer CSS subpaths ship via files', () => {
+        const script = buildProbeScript();
+        expect(script).toContain('@chimera-engine/renderer/styles/tokens.css');
+        expect(script).toContain('@chimera-engine/renderer/styles/animations.css');
     });
 
     it('asserts the electron public surface (main + preload api) resolves from the tarball', () => {

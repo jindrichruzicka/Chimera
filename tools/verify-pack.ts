@@ -103,6 +103,7 @@ const PROBE_SUBPATHS = [
     '@chimera-engine/renderer/shell/layout',
     '@chimera-engine/renderer/shell/main-menu/page',
     '@chimera-engine/renderer/styles/tokens.css',
+    '@chimera-engine/renderer/styles/animations.css',
     '@chimera-engine/electron/main',
     '@chimera-engine/electron/preload/api',
     '@chimera-engine/electron/preload/api-types',

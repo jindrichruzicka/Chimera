@@ -1,5 +1,9 @@
 .overlay {
     align-items: center;
+    animation-duration: var(--ch-backdrop-anim-enter-duration);
+    animation-fill-mode: both;
+    animation-name: var(--ch-backdrop-anim-enter-name);
+    animation-timing-function: var(--ch-backdrop-anim-enter-easing);
     background-color: var(--ch-color-overlay-backdrop);
     display: flex;
     inset: var(--ch-space-none);
@@ -15,6 +19,10 @@
  * height threshold, then hands overflow to the scrolling body below.
  */
 .dialog {
+    animation-duration: var(--ch-modal-anim-enter-duration);
+    animation-fill-mode: both;
+    animation-name: var(--ch-modal-anim-enter-name);
+    animation-timing-function: var(--ch-modal-anim-enter-easing);
     color: var(--ch-color-text-primary);
     display: flex;
     flex-direction: column;
@@ -24,6 +32,25 @@
     max-block-size: calc(var(--ch-space-xl) * 16);
     max-inline-size: calc(var(--ch-space-xl) * 20);
     padding: var(--ch-space-lg);
+}
+
+/*
+ * Closing phase (data-ch-state flips via useExitPresence): both layers swap to
+ * their exit keyframes and the overlay stops accepting pointer input while the
+ * animation plays out. The panel keyframes are transform-only — the backdrop
+ * fade owns opacity for the whole overlay.
+ */
+.overlay[data-ch-state='closing'] {
+    animation-duration: var(--ch-backdrop-anim-exit-duration);
+    animation-name: var(--ch-backdrop-anim-exit-name);
+    animation-timing-function: var(--ch-backdrop-anim-exit-easing);
+    pointer-events: none;
+}
+
+.overlay[data-ch-state='closing'] .dialog {
+    animation-duration: var(--ch-modal-anim-exit-duration);
+    animation-name: var(--ch-modal-anim-exit-name);
+    animation-timing-function: var(--ch-modal-anim-exit-easing);
 }
 
 /*

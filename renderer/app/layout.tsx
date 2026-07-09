@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 import type { Metadata } from 'next';
 import React from 'react';
 import '../styles/tokens.css';
+import '../styles/animations.css';
 import '../styles/globals.css';
 import { AppShell } from './AppShell';
 

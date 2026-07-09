@@ -6,6 +6,7 @@ import type { ButtonVariant } from '../../theme/types';
 import { useEscapeLayer } from '../shell/EscapeStack';
 import { Button } from './Button';
 import styles from './Modal.module.css';
+import { useExitPresence } from './useExitPresence';
 
 /**
  * A single control button in a {@link Modal}'s right-aligned action row.
@@ -98,6 +99,11 @@ export function Modal({
 }: ModalProps): React.ReactElement | null {
     const titleId = useId();
     const dialogRef = useRef<HTMLDivElement | null>(null);
+    const overlayRef = useRef<HTMLDivElement | null>(null);
+
+    // Delayed unmount while the CSS exit animations play; collapses to a
+    // synchronous unmount when motion is instant (reduced motion, jsdom).
+    const { mounted, closing } = useExitPresence(open, [overlayRef, dialogRef]);
 
     // Escape-to-close is routed through the shared overlay stack so a single
     // keydown is handled exactly once and an open overlay consumes Escape before
@@ -154,7 +160,7 @@ export function Modal({
         };
     }, [open, escapeLayer]);
 
-    if (!open) return null;
+    if (!mounted) return null;
 
     const classNames = [styles['overlay'], className].filter(Boolean).join(' ');
     const dialogClassNames = [
@@ -186,7 +192,14 @@ export function Modal({
     };
 
     return (
-        <div className={classNames}>
+        <div
+            className={classNames}
+            data-ch-state={closing ? 'closing' : 'open'}
+            // A closing overlay is already past the point of interaction: inert
+            // drops it from the a11y tree and releases focus while it fades.
+            inert={closing || undefined}
+            ref={overlayRef}
+        >
             <div
                 {...dialogProps}
                 aria-labelledby={titleId}

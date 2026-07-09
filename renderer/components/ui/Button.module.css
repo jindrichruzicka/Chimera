@@ -31,6 +31,10 @@
     transform: var(--ch-button-transform-hover);
 }
 
+.button:not(:disabled):active {
+    transform: var(--ch-button-transform-active);
+}
+
 .button:disabled {
     border-color: var(--ch-color-border);
     color: var(--ch-color-text-disabled);

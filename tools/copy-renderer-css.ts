@@ -19,7 +19,11 @@ import { fileURLToPath } from 'node:url';
 const SKIP_DIRS = new Set(['dist', 'node_modules', 'out', '.next']);
 
 /** Individual CSS files shipped verbatim (loaded by the shell layout / at `:root`). */
-const EXTRA_CSS_FILES = ['styles/tokens.css', 'styles/globals.css'] as const;
+const EXTRA_CSS_FILES = [
+    'styles/tokens.css',
+    'styles/globals.css',
+    'styles/animations.css',
+] as const;
 
 export interface CopyRendererCssOptions {
     /** Absolute path to the renderer package root. */

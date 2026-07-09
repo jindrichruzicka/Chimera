@@ -1,0 +1,74 @@
+/*
+ * renderer/styles/animations.css
+ *
+ * Engine-default overlay keyframes. These names are GLOBAL on purpose — the
+ * --ch-*-anim-*-name tokens in tokens.css reference them, and games may
+ * retarget those tokens to their own game-namespaced keyframes (declared in
+ * the game's override CSS). Keyframes must never move into a *.module.css:
+ * CSS Modules hash keyframe names, which would break the token indirection.
+ *
+ * The modal panel keyframes are transform-only; the overlay's backdrop fade
+ * owns opacity, otherwise parent x child opacity double-fades the panel.
+ * The drawer keyframes read private per-placement offsets set by the
+ * Drawer.module.css placement classes.
+ */
+
+@keyframes ch-backdrop-enter {
+    from {
+        opacity: 0;
+    }
+
+    to {
+        opacity: var(--ch-opacity-full);
+    }
+}
+
+@keyframes ch-backdrop-exit {
+    from {
+        opacity: var(--ch-opacity-full);
+    }
+
+    to {
+        opacity: 0;
+    }
+}
+
+@keyframes ch-modal-enter {
+    from {
+        transform: scale(0.96);
+    }
+
+    to {
+        transform: scale(1);
+    }
+}
+
+@keyframes ch-modal-exit {
+    from {
+        transform: scale(1);
+    }
+
+    to {
+        transform: scale(0.96);
+    }
+}
+
+@keyframes ch-drawer-enter {
+    from {
+        transform: translate(var(--_ch-drawer-slide-x, 0%), var(--_ch-drawer-slide-y, 0%));
+    }
+
+    to {
+        transform: translate(0%, 0%);
+    }
+}
+
+@keyframes ch-drawer-exit {
+    from {
+        transform: translate(0%, 0%);
+    }
+
+    to {
+        transform: translate(var(--_ch-drawer-slide-x, 0%), var(--_ch-drawer-slide-y, 0%));
+    }
+}

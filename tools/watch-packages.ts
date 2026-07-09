@@ -60,13 +60,15 @@ export function spawnTscWatch(spawnFn: SpawnFn): ReturnType<SpawnFn> {
 
 /**
  * Renderer source locations whose changes require a `dist/` CSS re-copy: the two
- * public component barrels (their `*.module.css`) plus the design-token sheet.
- * Mirrors the inputs of [`copy-renderer-css.ts`](./copy-renderer-css.ts).
+ * public component barrels (their `*.module.css`) plus the design-token and
+ * overlay-animation sheets. Mirrors the inputs of
+ * [`copy-renderer-css.ts`](./copy-renderer-css.ts).
  */
 export const RENDERER_CSS_WATCH_PATHS = [
     'renderer/components/ui',
     'renderer/components/chat',
     'renderer/styles/tokens.css',
+    'renderer/styles/animations.css',
 ] as const;
 
 /**

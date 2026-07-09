@@ -6,6 +6,7 @@ import React from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EscapeStackProvider, useEscapeLayer } from '../shell/EscapeStack';
 import { Modal } from './Modal';
+import modalCss from './Modal.module.css?raw';
 
 // Simulates a non-Modal overlay layer (key-capture, Drawer, …) registered above
 // the Modal on the shared escape stack. Must mount after the Modal so its layer
@@ -383,5 +384,94 @@ describe('Modal', () => {
         fireEvent.keyDown(document, { key: 'Tab' });
         expect(first).not.toHaveFocus();
         expect(second).toHaveFocus();
+    });
+});
+
+describe('Modal motion', () => {
+    it('plays token-driven enter animations on the backdrop and dialog', () => {
+        expect(modalCss).toMatch(
+            /\.overlay\s*\{[^}]*animation-name:\s*var\(--ch-backdrop-anim-enter-name\);/s,
+        );
+        expect(modalCss).toMatch(
+            /\.overlay\s*\{[^}]*animation-duration:\s*var\(--ch-backdrop-anim-enter-duration\);/s,
+        );
+        expect(modalCss).toMatch(
+            /\.overlay\s*\{[^}]*animation-timing-function:\s*var\(--ch-backdrop-anim-enter-easing\);/s,
+        );
+        expect(modalCss).toMatch(/\.overlay\s*\{[^}]*animation-fill-mode:\s*both;/s);
+        expect(modalCss).toMatch(
+            /\.dialog\s*\{[^}]*animation-name:\s*var\(--ch-modal-anim-enter-name\);/s,
+        );
+        expect(modalCss).toMatch(
+            /\.dialog\s*\{[^}]*animation-duration:\s*var\(--ch-modal-anim-enter-duration\);/s,
+        );
+        expect(modalCss).toMatch(
+            /\.dialog\s*\{[^}]*animation-timing-function:\s*var\(--ch-modal-anim-enter-easing\);/s,
+        );
+        expect(modalCss).toMatch(/\.dialog\s*\{[^}]*animation-fill-mode:\s*both;/s);
+    });
+
+    it('switches to the exit animations and blocks pointer input while closing', () => {
+        expect(modalCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s*\{[^}]*animation-name:\s*var\(--ch-backdrop-anim-exit-name\);/s,
+        );
+        expect(modalCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s*\{[^}]*pointer-events:\s*none;/s,
+        );
+        expect(modalCss).toMatch(
+            /\.overlay\[data-ch-state='closing'\]\s+\.dialog\s*\{[^}]*animation-name:\s*var\(--ch-modal-anim-exit-name\);/s,
+        );
+    });
+
+    it('marks the overlay open and unmounts synchronously when motion is instant', () => {
+        const { rerender } = render(
+            <Modal open title="Settings" onClose={vi.fn()}>
+                Modal content
+            </Modal>,
+        );
+
+        expect(screen.getByRole('dialog').parentElement).toHaveAttribute('data-ch-state', 'open');
+
+        // jsdom computes no animation — closing must collapse to an immediate
+        // unmount inside the same act flush (the reduced-motion contract).
+        rerender(
+            <Modal open={false} title="Settings" onClose={vi.fn()}>
+                Modal content
+            </Modal>,
+        );
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    });
+
+    it('stays mounted inert in the closing state until its exit animations finish', () => {
+        vi.spyOn(window, 'getComputedStyle').mockImplementation(
+            () =>
+                ({
+                    animationDuration: '120ms',
+                    animationDelay: '0s',
+                }) as CSSStyleDeclaration,
+        );
+        const { rerender } = render(
+            <Modal open title="Settings" onClose={vi.fn()}>
+                Modal content
+            </Modal>,
+        );
+        const dialog = screen.getByRole('dialog');
+        const overlay = dialog.parentElement;
+        if (overlay === null) throw new Error('Expected the dialog to render inside the overlay');
+
+        rerender(
+            <Modal open={false} title="Settings" onClose={vi.fn()}>
+                Modal content
+            </Modal>,
+        );
+
+        expect(overlay).toHaveAttribute('data-ch-state', 'closing');
+        expect(overlay).toHaveAttribute('inert');
+
+        fireEvent.animationEnd(overlay);
+        fireEvent.animationEnd(dialog);
+
+        expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
 });

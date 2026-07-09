@@ -19,3 +19,4 @@ Use this file only as the fast BLOCK/WARNING checklist:
 - Pass R3F components only the fields they render, not whole snapshots or stores.
 - Treat `AssetRef<T>` as content-driven and stable; check `useAsset()` loading before reading the asset.
 - Shell UI follows token, `<Button>`, `GameScreenRegistry`, `React.lazy`, and `Suspense` invariants.
+- UI motion flows through `--ch-*` motion tokens and the global `ch-*` keyframes in `styles/animations.css` (invariant #109); never hardcode animation values or declare token-referenced keyframes in a `*.module.css`.

@@ -310,6 +310,9 @@ owns its own positioning.
 UI primitives expose stable `data-ch-*` attributes for public visual state that
 is derived from component props, such as `data-ch-button-variant`,
 `data-ch-card-surface`, `data-ch-card-padding`, and `data-ch-card-elevation`.
+Overlay primitives (`Modal`, `Drawer`) additionally expose
+`data-ch-state="open" | "closing"` on their backdrop while mounted — the
+`closing` value drives the exit animation (see Motion & Animation below).
 Tests may assert these attributes to verify that renderer surfaces are consuming
 the shared primitive contract. These attributes are not styling escape hatches;
 visual customization still flows through tokens and component props.
@@ -391,6 +394,19 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-duration-normal: 250ms;
 --ch-duration-slow: 400ms;
 --ch-easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+
+/* ── Overlay Motion (see "Motion & Animation" below) ────────
+ * Modal/Drawer open-close animations. Per component (backdrop, modal, drawer)
+ * and per phase (enter, exit) there are -name / -duration / -easing tokens;
+ * names point at global keyframes in renderer/styles/animations.css, durations
+ * reference the duration primitives (enter = normal, exit = fast). */
+--ch-backdrop-anim-enter-name: ch-backdrop-enter;
+--ch-backdrop-anim-enter-duration: var(--ch-duration-normal);
+--ch-backdrop-anim-enter-easing: var(--ch-easing-standard);
+--ch-backdrop-anim-exit-name: ch-backdrop-exit; /* + -duration (fast) / -easing */
+--ch-modal-anim-enter-name: ch-modal-enter; /* + exit triple */
+--ch-drawer-anim-enter-name: ch-drawer-enter; /* + exit triple */
+--ch-drawer-slide-distance: 100%;
 ```
 
 ### Game Token Overrides
@@ -417,6 +433,63 @@ assets, not runtime Google Fonts URLs. For example, a game may declare local `.w
 then override `--ch-font-game` and `--ch-font-ui` to `'MyFont', serif` in
 `games/<game>/styles/tokens-override.css`.
 
+### Motion & Animation
+
+Engine UI motion comes in two layers, both fully token-parameterised (invariant #109):
+
+1. **Component transitions** — hover/press/toggle feedback on the primitives, composed from the
+   `--ch-duration-*` / `--ch-easing-*` primitives (e.g. `--ch-button-transition`; button press uses
+   `:active` → `--ch-button-transform-active`).
+2. **Overlay open-close animations** — `Modal` and `Drawer` play enter/exit animations driven by the
+   `--ch-<component>-anim-<enter|exit>-<name|duration|easing>` tokens above (the drawer slides from
+   its placement edge, the modal scales in as the shared backdrop fades).
+
+**Keyframe contract.** `renderer/styles/animations.css` (imported by the root layout after
+`tokens.css`) declares six **global** keyframes: `ch-backdrop-enter/exit` (opacity fade),
+`ch-modal-enter/exit` (transform-only scale — the backdrop owns opacity so the panel is never
+double-faded), and `ch-drawer-enter/exit` (translate). These names are global on purpose: the
+`*-anim-*-name` tokens reference them, and CSS-module keyframes are name-hashed, which would break
+that indirection — token-referenced keyframes must never live in a `*.module.css`. The drawer pair
+reads private per-placement offsets (`--_ch-drawer-slide-x/y`) that `Drawer.module.css` sets per
+placement class from the public `--ch-drawer-slide-distance` token, so all four placements share one
+keyframe pair. `--_ch`-prefixed properties are engine-private wiring — not overridable surface.
+
+**Exit presence.** Closing keeps the overlay mounted until every animated element's exit animation
+finishes (`useExitPresence`, internal to `Modal`/`Drawer` — the `open`/`onClose` API is unchanged).
+While closing, the overlay carries `data-ch-state="closing"`, is `inert`, and blocks pointer input.
+When no exit animation is computable — `prefers-reduced-motion`, a `0ms` game override, or jsdom —
+`open=false` unmounts synchronously, so tests and reduced-motion users see an instant close.
+
+**Game override recipes** (all via `tokens-override.css`, per invariants #85/#93):
+
+```css
+/* 1. Retime — make overlay motion snappier or slower. */
+--ch-modal-anim-enter-duration: var(--ch-duration-fast);
+
+/* 2. Reshape — retarget a *-name token at your own game-namespaced keyframes
+      (new keyframe names are fine; #85 polices only --ch-* property names). */
+--ch-modal-anim-enter-name: mygame-modal-enter;
+@keyframes mygame-modal-enter {
+    /* declared in the game's override CSS */
+    from {
+        transform: translateY(var(--ch-space-lg));
+    }
+    to {
+        transform: translateY(0);
+    }
+}
+
+/* 3. Disable. */
+--ch-drawer-anim-enter-duration: 0ms;
+--ch-drawer-anim-exit-duration: 0ms;
+```
+
+**Reduced motion.** Engine durations reference the `--ch-duration-*` primitives, which the
+`@media (prefers-reduced-motion: reduce)` block in `tokens.css` zeroes — all engine motion collapses
+to instant automatically. A game override that sets **literal** durations (`300ms` instead of
+`var(--ch-duration-*)`) outranks that block (game overrides load later in the cascade) and must ship
+its own reduced-motion block.
+
 ### Component API Shape
 
 ```typescript
@@ -438,6 +511,7 @@ No `theme` prop — tokens are the theming mechanism.
 ```
 renderer/
 ├── styles/
+│   ├── animations.css
 │   └── tokens.css
 └── components/
     └── ui/
@@ -451,11 +525,12 @@ renderer/
 
 ### Invariants
 
-| #   | Rule                                                                                                                                                                                                                                                                             |
-| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| #85 | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                            |
-| #86 | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                 |
-| #96 | Game renderer surfaces may import the shared component library only through its public barrels — `@chimera-engine/renderer/components/ui` (primitives) and `@chimera-engine/renderer/components/chat` (the shared chat component); all other renderer internals stay off-limits. |
+| #    | Rule                                                                                                                                                                                                                                                                                                                                                                          |
+| ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| #85  | Game token override files may only redefine tokens in `renderer/styles/tokens.css`. Introducing new `--ch-*` names in a game override is a module-boundary violation.                                                                                                                                                                                                         |
+| #86  | Engine UI components must not contain hardcoded colour, spacing, or radius values. Every visual attribute references `var(--ch-*)` or a scoped CSS Module class.                                                                                                                                                                                                              |
+| #96  | Game renderer surfaces may import the shared component library only through its public barrels — `@chimera-engine/renderer/components/ui` (primitives) and `@chimera-engine/renderer/components/chat` (the shared chat component); all other renderer internals stay off-limits.                                                                                              |
+| #109 | Engine UI motion is declared as global `ch-*` keyframes in `renderer/styles/animations.css`, parameterised exclusively by `--ch-*` motion tokens; games customise motion only by overriding those tokens (retiming, `0ms`-disabling, or retargeting `*-name` tokens at game-namespaced keyframes), and all engine motion collapses to instant under `prefers-reduced-motion`. |
 
 ---
 

@@ -5,6 +5,7 @@ import type { CSSProperties, HTMLAttributes } from 'react';
 import { useEscapeLayer } from '../shell/EscapeStack';
 import { IconButton } from './IconButton';
 import styles from './Drawer.module.css';
+import { useExitPresence } from './useExitPresence';
 
 export type DrawerPlacement = 'bottom' | 'left' | 'right' | 'top';
 
@@ -49,7 +50,14 @@ export function Drawer({
 }: DrawerProps): React.ReactElement | null {
     const titleId = useId();
     const drawerRef = useRef<HTMLDivElement | null>(null);
+    const overlayRef = useRef<HTMLDivElement | null>(null);
     const restoreFocusElementRef = useRef<HTMLElement | null>(null);
+
+    // Delayed unmount while the CSS exit animations play; collapses to a
+    // synchronous unmount when motion is instant (reduced motion, jsdom).
+    // Focus restore is unaffected: it runs in the [open] effect cleanup at the
+    // open→false commit, before the exit animation finishes.
+    const { mounted, closing } = useExitPresence(open, [overlayRef, drawerRef]);
 
     // Escape-to-close is routed through the shared overlay stack so a single
     // keydown is handled exactly once and an open overlay consumes Escape before
@@ -105,7 +113,7 @@ export function Drawer({
         };
     }, [open]);
 
-    if (!open) return null;
+    if (!mounted) return null;
 
     const placementClass = placementClassByVariant[placement];
     const overlayClassNames = [styles['overlay'], placementClass].filter(Boolean).join(' ');
@@ -119,7 +127,15 @@ export function Drawer({
     }
 
     return (
-        <div className={overlayClassNames} onClick={handleBackdropClick}>
+        <div
+            className={overlayClassNames}
+            data-ch-state={closing ? 'closing' : 'open'}
+            // A closing overlay is already past the point of interaction: inert
+            // drops it from the a11y tree and releases focus while it fades.
+            inert={closing || undefined}
+            onClick={handleBackdropClick}
+            ref={overlayRef}
+        >
             <div
                 {...drawerProps}
                 aria-labelledby={titleId}

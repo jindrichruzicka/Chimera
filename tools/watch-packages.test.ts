@@ -114,11 +114,12 @@ describe('watchRendererCss', () => {
         expect(capturedPaths).toEqual(['a', 'b', 'c']);
     });
 
-    it('defaults its watched paths to the renderer ui/chat dirs + tokens.css', () => {
+    it('defaults its watched paths to the renderer ui/chat dirs + shipped stylesheets', () => {
         expect(RENDERER_CSS_WATCH_PATHS).toEqual([
             'renderer/components/ui',
             'renderer/components/chat',
             'renderer/styles/tokens.css',
+            'renderer/styles/animations.css',
         ]);
     });
 });

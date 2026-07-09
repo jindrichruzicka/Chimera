@@ -1,4 +1,8 @@
 .overlay {
+    animation-duration: var(--ch-backdrop-anim-enter-duration);
+    animation-fill-mode: both;
+    animation-name: var(--ch-backdrop-anim-enter-name);
+    animation-timing-function: var(--ch-backdrop-anim-enter-easing);
     background-color: var(--ch-color-overlay-backdrop);
     display: flex;
     inset: var(--ch-space-none);
@@ -28,6 +32,10 @@
 }
 
 .drawer {
+    animation-duration: var(--ch-drawer-anim-enter-duration);
+    animation-fill-mode: both;
+    animation-name: var(--ch-drawer-anim-enter-name);
+    animation-timing-function: var(--ch-drawer-anim-enter-easing);
     background-color: var(--ch-color-surface-raised);
     border-color: var(--ch-color-border);
     border-radius: var(--ch-radius-md);
@@ -42,6 +50,47 @@
     max-block-size: 100%;
     max-inline-size: 100%;
     padding: var(--ch-space-lg);
+}
+
+/*
+ * Per-placement slide offsets read by the global ch-drawer-enter/exit
+ * keyframes (styles/animations.css) via private custom properties — the
+ * keyframes resolve them against this animating element, so four placements
+ * share one enter/exit keyframe pair.
+ */
+.drawer.left {
+    --_ch-drawer-slide-x: calc(-1 * var(--ch-drawer-slide-distance));
+}
+
+.drawer.right {
+    --_ch-drawer-slide-x: var(--ch-drawer-slide-distance);
+}
+
+.drawer.top {
+    --_ch-drawer-slide-y: calc(-1 * var(--ch-drawer-slide-distance));
+}
+
+.drawer.bottom {
+    --_ch-drawer-slide-y: var(--ch-drawer-slide-distance);
+}
+
+/*
+ * Closing phase (data-ch-state flips via useExitPresence): both layers swap to
+ * their exit keyframes and the overlay stops accepting pointer input while the
+ * animation plays out. The panel keyframes are transform-only — the backdrop
+ * fade owns opacity for the whole overlay.
+ */
+.overlay[data-ch-state='closing'] {
+    animation-duration: var(--ch-backdrop-anim-exit-duration);
+    animation-name: var(--ch-backdrop-anim-exit-name);
+    animation-timing-function: var(--ch-backdrop-anim-exit-easing);
+    pointer-events: none;
+}
+
+.overlay[data-ch-state='closing'] .drawer {
+    animation-duration: var(--ch-drawer-anim-exit-duration);
+    animation-name: var(--ch-drawer-anim-exit-name);
+    animation-timing-function: var(--ch-drawer-anim-exit-easing);
 }
 
 .drawer.left,
