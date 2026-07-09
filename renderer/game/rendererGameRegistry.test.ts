@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, expectTypeOf, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest';
 import type { ComponentType } from 'react';
 import type {
     GameMainMenuDefinition,
@@ -88,6 +88,70 @@ describe('rendererGameRegistry', () => {
         expect(loaded.menuCommands).toEqual({});
     });
 
+    describe('shell.preloadImages warm-up', () => {
+        class FakeImage {
+            public src = '';
+            public decode = vi.fn(async (): Promise<void> => undefined);
+
+            public constructor() {
+                constructedImages.push(this);
+            }
+        }
+        const constructedImages: FakeImage[] = [];
+
+        beforeEach(async () => {
+            constructedImages.length = 0;
+            vi.stubGlobal('Image', FakeImage);
+            const { resetWarmedGameImagesForTests } = await import('./GameImageWarmup');
+            resetWarmedGameImagesForTests();
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        it('loadRendererGameShell warms declared preload images before resolving', async () => {
+            const shell = fakeShell({ preloadImages: ['fake/images/menu-hero.png'] });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+                isDefault: true,
+            });
+
+            await loadRendererGameShell('fake');
+
+            expect(constructedImages.map((image) => image.src)).toEqual([
+                'chimera://renderer/game-assets/fake/images/menu-hero.png',
+            ]);
+            expect(constructedImages[0]?.decode).toHaveBeenCalledTimes(1);
+        });
+
+        it('loadRendererGame warms declared preload images before resolving', async () => {
+            const shell = fakeShell({ preloadImages: ['fake/images/menu-hero.png'] });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+                isDefault: true,
+            });
+
+            await loadRendererGame('fake');
+
+            expect(constructedImages.map((image) => image.src)).toEqual([
+                'chimera://renderer/game-assets/fake/images/menu-hero.png',
+            ]);
+        });
+
+        it('a shell without preloadImages warms nothing', async () => {
+            registerFake();
+
+            await loadRendererGameShell('fake');
+
+            expect(constructedImages).toHaveLength(0);
+        });
+    });
+
     it('rejects unknown game ids', async () => {
         registerFake();
 
@@ -151,6 +215,13 @@ describe('rendererGameRegistry', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['shellBackground']>().toEqualTypeOf<
                 ComponentType | undefined
+            >();
+        });
+
+        it('shell.preloadImages is typed as readonly string[] | undefined', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['preloadImages']>().toEqualTypeOf<
+                readonly string[] | undefined
             >();
         });
 

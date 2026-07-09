@@ -17,7 +17,7 @@
 // the renderer never touches Node.js APIs directly.
 
 import React, { useEffect } from 'react';
-import Image from 'next/image';
+import { PreloadedImage } from '../components/ui/PreloadedImage';
 import { logPlatformOnBoot } from './bootSmoke';
 
 export default function HomePage() {
@@ -42,7 +42,15 @@ export default function HomePage() {
                 margin: 0,
             }}
         >
-            <Image src="/chimera-logo-compact.png" alt="Chimera" width={256} height={256} />
+            {/* PreloadedImage = priority fetch (exported <head> preload) + a
+                decode gate, so the logo appears in a single fully-decoded
+                paint instead of tearing in scanline by scanline. */}
+            <PreloadedImage
+                src="/chimera-logo-compact.png"
+                alt="Chimera"
+                width={256}
+                height={256}
+            />
         </main>
     );
 }

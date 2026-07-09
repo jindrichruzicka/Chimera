@@ -1,10 +1,7 @@
-import {
-    MalformedAssetRefError,
-    parseAssetRef,
-} from '@chimera-engine/simulation/foundation/asset-ref-parse.js';
 import type { GameFontFace } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 
 import { DEFAULT_RENDERER_GAME_ASSET_BASE_URL } from '../assets/AssetResolver';
+import { resolveGameShellAssetSource } from './gameShellAssetSource';
 
 interface ResolvedGameFontFace {
     readonly definition: GameFontFace;
@@ -14,28 +11,12 @@ interface ResolvedGameFontFace {
 }
 
 const loadedFontKeys = new Set<string>();
-const urlSchemePattern = /^[A-Za-z][A-Za-z0-9+.-]*:/u;
 
 export function resolveGameFontSource(
     src: string,
     baseUrl: string = DEFAULT_RENDERER_GAME_ASSET_BASE_URL,
 ): string {
-    if (isUnsafeFontSource(src)) {
-        throw new Error(`Game font source must be a local game asset ref: ${src}`);
-    }
-
-    try {
-        const { gameId, relativePath } = parseAssetRef(src);
-        const normalisedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl;
-        const encodedGameId = encodeURIComponent(gameId);
-        const encodedRelativePath = relativePath.split('/').map(encodeURIComponent).join('/');
-        return `${normalisedBaseUrl}/${encodedGameId}/${encodedRelativePath}`;
-    } catch (error: unknown) {
-        if (error instanceof MalformedAssetRefError) {
-            throw new Error(`Game font source must be a local game asset ref: ${src}`);
-        }
-        throw error;
-    }
+    return resolveGameShellAssetSource(src, 'font', baseUrl);
 }
 
 export async function loadGameFonts(fonts: readonly GameFontFace[]): Promise<void> {
@@ -96,8 +77,4 @@ function getDocumentFontSet(): FontFaceSet | null {
         return null;
     }
     return document.fonts;
-}
-
-function isUnsafeFontSource(src: string): boolean {
-    return src.startsWith('/') || src.startsWith('//') || urlSchemePattern.test(src);
 }

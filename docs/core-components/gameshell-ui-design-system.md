@@ -230,6 +230,7 @@ renderer/audio/
 | **Forms**      | `Slider`, `Toggle`, `TextInput`, `Select`, `NumberInput` |
 | **Feedback**   | `ProgressBar`, `Spinner`, `Badge`                        |
 | **Typography** | `Heading`, `Label`, `Caption`                            |
+| **Media**      | `PreloadedImage`                                         |
 
 All components are **unstyled except for CSS tokens**. No hardcoded hex values.
 
@@ -262,6 +263,15 @@ calls `onSave(trimmedLabel)` exactly once on confirm; the label resets each time
 opens. It is a pure callback component — no stores or IPC — so a game HUD renders it only when
 it received the host-only `GameHudProps.saveGame` capability (see §4.33) and passes that
 capability through as `onSave`.
+
+**`PreloadedImage`** is the Media category's one primitive: a `next/image` wrapper that holds
+the img at `opacity: 0` until `img.decode()` settles, so the first paint of the picture is the
+complete bitmap — never a progressively streamed/decoded partial frame ("tearing"). Defaults to
+`priority` (eager fetch + exported `<head>` preload on static pages); fails open on decode
+rejection or missing `img.decode()`; preserves the caller's `style` (including custom `opacity`)
+once revealed. Pair with game-declared warm-up via `LoadedRendererGameShell.preloadImages` for
+pictures that appear after initial navigation, and keep sources near display size — see
+§4.37.13 (Game Image Preloading) in the shell pages contract.
 
 ### Game Surface Consumption
 

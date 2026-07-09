@@ -24,6 +24,8 @@ export { Panel } from './Panel';
 export type { PanelProps, PanelVariant } from './Panel';
 export { Popover } from './Popover';
 export type { PopoverAlign, PopoverPlacement, PopoverProps, PopoverTriggerProps } from './Popover';
+export { PreloadedImage } from './PreloadedImage';
+export type { PreloadedImageProps } from './PreloadedImage';
 export { ProgressBar } from './ProgressBar';
 export type { ProgressBarProps } from './ProgressBar';
 export { SaveGameButton } from './SaveGameButton';

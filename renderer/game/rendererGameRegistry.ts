@@ -10,6 +10,7 @@ import type {
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type { InputAction } from '../input/InputAction.js';
 import { loadGameFonts } from './GameFontLoader';
+import { warmGameImages } from './GameImageWarmup';
 
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
@@ -24,6 +25,15 @@ export interface LoadedRendererGameShell {
      */
     readonly LobbyScreen?: ComponentType<GameLobbyScreenProps>;
     readonly fonts?: readonly GameFontFace[];
+    /**
+     * Optional shell images to warm when the game (shell) loads — local game
+     * asset refs (`<gameId>/<relativePath>`), the same form as font `src`.
+     * Each is fetched and fully decoded before the load resolves, so shell
+     * screens (main menu heroes, backgrounds) paint them in a single frame
+     * instead of streaming them in progressively. Warm-up is best-effort: a
+     * broken ref warns and never blocks the shell.
+     */
+    readonly preloadImages?: readonly string[];
 }
 
 export interface LoadedRendererGame {
@@ -120,6 +130,9 @@ export async function loadRendererGame(gameId: string): Promise<LoadedRendererGa
     if (game.shell?.fonts !== undefined) {
         await loadGameFonts(game.shell.fonts);
     }
+    if (game.shell?.preloadImages !== undefined) {
+        await warmGameImages(game.shell.preloadImages);
+    }
     return game;
 }
 
@@ -132,6 +145,9 @@ export async function loadRendererGameShell(gameId: string): Promise<LoadedRende
     const shell = await loader();
     if (shell.fonts !== undefined) {
         await loadGameFonts(shell.fonts);
+    }
+    if (shell.preloadImages !== undefined) {
+        await warmGameImages(shell.preloadImages);
     }
     return shell;
 }

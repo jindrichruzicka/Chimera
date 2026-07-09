@@ -673,7 +673,10 @@ shared/
 └── game-shell-contract.ts     # GameMainMenuDefinition, GameSettingsPageDefinition, shell-page contracts
 renderer/
 ├── game/
-│   └── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page games/* import
+│   ├── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page games/* import
+│   ├── gameShellAssetSource.ts # Shared local-asset-ref resolver for shell fonts/images
+│   ├── GameFontLoader.ts       # Loads shell.fonts via FontFace (§4.37.7)
+│   └── GameImageWarmup.ts      # Fetches + decodes shell.preloadImages (§4.37.13)
 ├── shell/
 │   ├── renderMainMenuDefinition.tsx # Engine renderer for GameMainMenuDefinition
 │   ├── renderSettingsSectionItems.tsx # Engine renderer for SettingsSectionDefinition
@@ -727,6 +730,59 @@ projection, the registry composition points, and the Tactics adopter — lives i
 **[Customizable Lobby Contract](customizable-lobby-contract.md)**. It ratifies invariants #99
 (host-authored match settings / owner-authored player attributes), #100 (no direct privileged writes from
 a game lobby screen), and #101 (`snapshot.setup` is public, projected verbatim).
+
+---
+
+## 4.37.13 Game Image Preloading
+
+Large images paint progressively while their bytes stream in and their bitmap decodes — visible
+"tearing" scanline slices. A `<link rel="preload">` only moves the _fetch_ earlier; it cannot move
+the _decode_, so oversized artwork tears no matter how early it is requested. The engine closes the
+gap with two cooperating pieces; use them together for any shell picture (main-menu heroes,
+backgrounds, thumbnails).
+
+### `LoadedRendererGameShell.preloadImages` — game-declared warm-up
+
+Games declare shell images to warm through `LoadedRendererGameShell.preloadImages`, the image twin
+of `fonts` (§4.37.7). Sources use the same local `game-id/relative/path` asset-ref shape; absolute
+paths, protocol-relative URLs, and URL schemes are rejected (shared resolver:
+`renderer/game/gameShellAssetSource.ts`).
+
+```typescript
+export const gameShell: LoadedRendererGameShell = {
+    mainMenu,
+    preloadImages: ['<game>/images/menu-hero.png', '<game>/images/menu-backdrop.png'],
+};
+```
+
+`renderer/game/GameImageWarmup.ts` resolves each ref through the app protocol
+(`chimera://renderer/game-assets/<game>/images/menu-hero.png`), fetches it via an off-screen
+`Image`, and awaits `img.decode()` — the registry (`loadRendererGame` / `loadRendererGameShell`)
+awaits the warm-up alongside `loadGameFonts`, so every declared picture is fetched **and fully
+decoded** before the shell resolves. The loader deduplicates by resolved URL across shell loads.
+Warm-up is best-effort: a broken ref logs a warning, is dropped from the warmed set (so a later
+load retries), and never blocks the shell.
+
+Declare only images the shell shows soon after load — the registry awaits the warm-up, so an
+oversized list delays the first shell screen.
+
+### `PreloadedImage` — decode-gated rendering (§4.35 UI primitive)
+
+`PreloadedImage` (`renderer/components/ui/PreloadedImage.tsx`, exported through the
+`@chimera-engine/renderer/components/ui` barrel per invariant #96) wraps `next/image` and holds the
+img at `opacity: 0` until `img.decode()` settles, so the compositor's first paint of the picture is
+the complete bitmap — it can never tear, even on a cold cache. It defaults to `priority` (eager
+fetch; on statically exported pages Next emits the matching `<link rel="preload">` in `<head>`).
+The gate fails open: a rejected decode (broken asset) reveals the img so the failure surfaces
+visibly, and environments without `img.decode()` reveal immediately. The caller's `style` is
+preserved, including a custom `opacity`, once revealed. The engine boot-smoke page (`/`) renders
+its logo through this component.
+
+### Sizing discipline
+
+Neither piece fixes an oversized source: keep shipped shell images near their display size
+(≈2× for retina). The engine logo budget is locked by `tools/logo-asset-budget.test.ts`
+(≤512 px, ≤400 KB for a 256 px display slot); follow the same ratio for game artwork.
 
 ---
 
