@@ -156,6 +156,16 @@ describe('Drawer', () => {
         expect(drawerCss).toMatch(/\.body\s*\{[^}]*flex: 1 1 auto;/);
     });
 
+    it('scrims the backdrop with the same overlay token the modal uses', () => {
+        // Drawer and Modal must share the --ch-color-overlay-backdrop token so
+        // their overlays render identically; a game theme (e.g. Tactics) overrides
+        // only that token, so the drawer must not fall back to surface-overlay.
+        expect(drawerCss).toMatch(
+            /\.overlay\s*\{[^}]*background-color: var\(--ch-color-overlay-backdrop\);/,
+        );
+        expect(drawerCss).not.toContain('var(--ch-color-surface-overlay)');
+    });
+
     it('uses token-backed placement styles without hardcoded visual literals', () => {
         const source = drawerCss;
 

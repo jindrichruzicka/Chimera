@@ -1,5 +1,5 @@
 .overlay {
-    background-color: var(--ch-color-surface-overlay);
+    background-color: var(--ch-color-overlay-backdrop);
     display: flex;
     inset: var(--ch-space-none);
     padding: var(--ch-space-lg);
