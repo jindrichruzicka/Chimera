@@ -121,7 +121,7 @@
     --ch-button-border-primary-hover: var(--ch-button-border-primary);
     --ch-button-border-secondary: var(--ch-color-border);
     --ch-button-border-secondary-hover: var(--ch-button-border-secondary);
-    --ch-button-border-ghost: var(--ch-color-border);
+    --ch-button-border-ghost: var(--ch-color-transparent);
     --ch-button-border-ghost-hover: var(--ch-button-border-ghost);
     --ch-button-border-danger: var(--ch-color-error);
     --ch-button-border-danger-hover: var(--ch-button-border-danger);
@@ -140,6 +140,9 @@
     --ch-button-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
     --ch-button-shadow-hover: 0 25px 50px -12px rgba(128, 128, 128, 0.5);
     --ch-button-shadow-hover-danger: 0 25px 50px -12px rgba(220, 38, 38, 0.5);
+    /* Ghost is a text-only button: no elevation in either state. */
+    --ch-button-shadow-ghost: none;
+    --ch-button-shadow-hover-ghost: var(--ch-button-shadow-ghost);
     --ch-button-transform: scale(1);
     --ch-button-transform-hover: scale(1.05);
     --ch-button-transform-active: scale(0.97);

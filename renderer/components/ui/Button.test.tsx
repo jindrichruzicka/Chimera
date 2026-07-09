@@ -138,6 +138,20 @@ describe('Button', () => {
         expect(css).toContain('transform: var(--ch-button-transform-hover);');
     });
 
+    it('renders the ghost variant as plain text without panel chrome', () => {
+        const css = buttonCss;
+
+        expect(css).toMatch(
+            /\.ghost\s*{[^}]*--ch-button-shadow:\s*var\(--ch-button-shadow-ghost\);[^}]*--ch-button-shadow-hover:\s*var\(--ch-button-shadow-hover-ghost\);/s,
+        );
+        // Disabled must keep the ghost border token instead of restoring the
+        // shared grey border, so a disabled ghost stays text-only.
+        expect(css).toMatch(
+            /\.ghost:disabled\s*{[^}]*border-color:\s*var\(--ch-button-border-ghost\);/s,
+        );
+        expect(css.indexOf('.ghost:disabled')).toBeGreaterThan(css.indexOf('.button:disabled'));
+    });
+
     it('uses the dedicated active transform token for pressed feedback', () => {
         const css = buttonCss;
 

@@ -63,6 +63,8 @@
     --ch-icon-button-border-color: var(--ch-button-border-ghost);
     --ch-icon-button-border-color-hover: var(--ch-button-border-ghost-hover);
     --ch-icon-button-color: var(--ch-button-color-ghost);
+    --ch-icon-button-shadow: var(--ch-button-shadow-ghost);
+    --ch-icon-button-shadow-hover: var(--ch-button-shadow-hover-ghost);
 }
 
 .danger {

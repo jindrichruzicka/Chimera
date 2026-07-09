@@ -194,6 +194,8 @@ const expectedTokens = [
     '--ch-button-shadow',
     '--ch-button-shadow-hover',
     '--ch-button-shadow-hover-danger',
+    '--ch-button-shadow-ghost',
+    '--ch-button-shadow-hover-ghost',
     '--ch-button-transform',
     '--ch-button-transform-hover',
     '--ch-button-transform-active',
@@ -357,6 +359,25 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-button-transform-hover')).toBe('scale(1.05)');
         expect(extractTokenValue(css, '--ch-color-accent')).toBe('#3f3f46');
         expect(extractTokenValue(css, '--ch-color-error')).toBe('#dc2626');
+    });
+
+    it('keeps the ghost variant chrome-less: transparent surfaces and no elevation', () => {
+        const css = readTokensCss();
+
+        expect(extractTokenValue(css, '--ch-button-bg-ghost')).toBe('var(--ch-color-transparent)');
+        expect(extractTokenValue(css, '--ch-button-bg-ghost-hover')).toBe(
+            'var(--ch-button-bg-ghost)',
+        );
+        expect(extractTokenValue(css, '--ch-button-border-ghost')).toBe(
+            'var(--ch-color-transparent)',
+        );
+        expect(extractTokenValue(css, '--ch-button-border-ghost-hover')).toBe(
+            'var(--ch-button-border-ghost)',
+        );
+        expect(extractTokenValue(css, '--ch-button-shadow-ghost')).toBe('none');
+        expect(extractTokenValue(css, '--ch-button-shadow-hover-ghost')).toBe(
+            'var(--ch-button-shadow-ghost)',
+        );
     });
 
     it('keeps text treatment tokens visually inert and tone-aware by default', () => {

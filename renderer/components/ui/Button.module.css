@@ -68,6 +68,12 @@
     --ch-button-hover-border-color: var(--ch-button-border-ghost-hover);
     --ch-button-color: var(--ch-button-color-ghost);
     --ch-button-hover-color: var(--ch-button-color-ghost-hover);
+    --ch-button-shadow: var(--ch-button-shadow-ghost);
+    --ch-button-shadow-hover: var(--ch-button-shadow-hover-ghost);
+}
+
+.ghost:disabled {
+    border-color: var(--ch-button-border-ghost);
 }
 
 .danger {

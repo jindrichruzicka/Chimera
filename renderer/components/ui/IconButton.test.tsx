@@ -111,6 +111,12 @@ describe('IconButton', () => {
         expect(screen.getByRole('button', { name: 'Danger' }).className).toContain('danger');
     });
 
+    it('renders the ghost variant flat via the shared ghost shadow tokens', () => {
+        expect(css).toMatch(
+            /\.ghost\s*{[^}]*--ch-icon-button-shadow:\s*var\(--ch-button-shadow-ghost\);[^}]*--ch-icon-button-shadow-hover:\s*var\(--ch-button-shadow-hover-ghost\);/s,
+        );
+    });
+
     it('CSS does not contain hardcoded colour, spacing, or radius values (invariant #86)', () => {
         // No hex values
         expect(css).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);

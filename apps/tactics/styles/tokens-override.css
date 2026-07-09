@@ -36,8 +36,6 @@
     );
     --ch-button-bg-secondary: rgba(26, 26, 46, 0.9);
     --ch-button-bg-secondary-hover: rgba(201, 168, 76, 0.15);
-    --ch-button-bg-ghost: rgba(26, 26, 46, 0.9);
-    --ch-button-bg-ghost-hover: rgba(201, 168, 76, 0.15);
     --ch-button-bg-danger: rgba(26, 26, 46, 0.9);
     --ch-button-bg-danger-hover: rgba(201, 168, 76, 0.15);
 
@@ -45,8 +43,6 @@
     --ch-button-border-primary-hover: #c9a84c;
     --ch-button-border-secondary: rgba(201, 168, 76, 0.4);
     --ch-button-border-secondary-hover: #c9a84c;
-    --ch-button-border-ghost: rgba(201, 168, 76, 0.4);
-    --ch-button-border-ghost-hover: #c9a84c;
     --ch-button-border-danger: rgba(201, 168, 76, 0.4);
     --ch-button-border-danger-hover: #c9a84c;
 
