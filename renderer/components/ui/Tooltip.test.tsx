@@ -56,4 +56,27 @@ describe('Tooltip', () => {
         fireEvent.blur(trigger);
         expect(screen.queryByRole('tooltip')).not.toBeInTheDocument();
     });
+
+    it('portals the tooltip to the document body so a clipping ancestor cannot cut it off', () => {
+        render(
+            <div style={{ overflow: 'auto' }}>
+                <Tooltip content="Open settings">
+                    {(triggerProps) => (
+                        <button type="button" {...triggerProps}>
+                            Settings
+                        </button>
+                    )}
+                </Tooltip>
+            </div>,
+        );
+
+        const trigger = screen.getByRole('button', { name: 'Settings' });
+        fireEvent.mouseEnter(trigger);
+
+        const tooltip = screen.getByRole('tooltip');
+        // Lifted to <body> — outside any overflow:auto ancestor's clip region —
+        // rather than nested beside its trigger.
+        expect(tooltip.parentElement).toBe(document.body);
+        expect(tooltip).not.toContainElement(trigger);
+    });
 });

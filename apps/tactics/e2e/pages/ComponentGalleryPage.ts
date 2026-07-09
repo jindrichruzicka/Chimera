@@ -39,6 +39,15 @@ export class ComponentGalleryPage {
     /** Primary variant Button in the Actions panel (themed token assertion anchor). */
     readonly primaryButton: Locator;
 
+    /** Ghost button in the Overlays panel that reveals the example Tooltip on hover/focus. */
+    readonly tooltipTrigger: Locator;
+
+    /**
+     * The tooltip bubble itself (`role="tooltip"`). When shown it is portaled to
+     * `<body>`, so it is resolved against the whole page rather than a panel.
+     */
+    readonly tooltip: Locator;
+
     // ── Forms controls ─────────────────────────────────────────────────────────
 
     /** Volume range slider inside the Forms tab panel. */
@@ -84,6 +93,8 @@ export class ComponentGalleryPage {
         this.drawerTrigger = page.getByTestId('gallery-open-drawer');
         this.drawerDialog = page.getByTestId('gallery-drawer');
         this.primaryButton = page.getByTestId('gallery-button-primary');
+        this.tooltipTrigger = page.getByTestId('gallery-tooltip-trigger');
+        this.tooltip = page.getByRole('tooltip');
 
         this.tabActions = page.getByRole('tab', { name: /actions/i });
         this.tabOverlays = page.getByRole('tab', { name: /overlays/i });
@@ -151,5 +162,14 @@ export class ComponentGalleryPage {
     public async openDrawer(): Promise<void> {
         await this.clickTabOverlays();
         await this.drawerTrigger.click();
+    }
+
+    /**
+     * Switch to the Overlays tab and hover the Tooltip trigger to reveal the
+     * bubble. The Overlays tab must be active for the trigger to be present.
+     */
+    public async showTooltip(): Promise<void> {
+        await this.clickTabOverlays();
+        await this.tooltipTrigger.hover();
     }
 }

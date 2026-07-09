@@ -73,6 +73,11 @@ interface BrowserPageOverflowGlobalAccess {
     readonly document: BrowserPageOverflowDocumentAccess;
 }
 
+interface BrowserPortaledElement {
+    readonly parentElement: unknown;
+    readonly ownerDocument: { readonly body: unknown };
+}
+
 async function expectButtonBackgroundToMatchToken(
     button: Locator,
     tokenName: `--ch-${string}`,
@@ -167,6 +172,27 @@ test.describe('Component Gallery', () => {
         const closeBtn = gallery.modalDialog.getByRole('button', { name: /close/i });
         await closeBtn.click();
         await expect(gallery.modalDialog).not.toBeVisible();
+    });
+
+    test('Overlays tab Tooltip is lifted to <body> so the scrolling panel cannot clip it', async ({
+        mainWindow,
+    }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        await gallery.showTooltip();
+
+        await expect(gallery.tooltip).toBeVisible();
+        await expect(gallery.tooltip).toHaveText(/tooltip example/i);
+
+        // The bubble is portaled to <body>, escaping the tab panel's
+        // overflow:auto — a z-index alone cannot climb out of that clip.
+        const parentIsBody = await gallery.tooltip.evaluate((element) => {
+            const el = element as unknown as BrowserPortaledElement;
+            return el.parentElement === el.ownerDocument.body;
+        });
+        expect(parentIsBody).toBe(true);
     });
 
     test('Drawer opens and closes', async ({ mainWindow }) => {

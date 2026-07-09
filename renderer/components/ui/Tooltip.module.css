@@ -13,10 +13,14 @@
     color: var(--ch-color-text-primary);
     font-family: var(--ch-font-ui);
     font-size: var(--ch-font-size-sm);
-    inset-block-end: calc(var(--ch-space-xl) + var(--ch-space-sm));
-    inset-inline-start: var(--ch-space-none);
     padding: var(--ch-space-sm);
-    position: absolute;
+    /* Portaled to <body> and pinned to the trigger's viewport rect (top/left are
+       set inline in Tooltip.tsx). Fixed positioning in the top-level stacking
+       context keeps the tooltip above every scroll container, so an ancestor's
+       overflow:auto can no longer clip it. The transform lifts it to sit a small
+       gap above the trigger, left-aligned to it. */
+    position: fixed;
+    transform: translateY(calc(-100% - var(--ch-space-sm)));
     white-space: nowrap;
     z-index: var(--ch-z-tooltip);
 }

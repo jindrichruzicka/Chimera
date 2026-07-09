@@ -14,7 +14,7 @@
     font-family: var(--ch-font-ui);
     font-size: var(--ch-font-size-md);
     min-inline-size: calc(var(--ch-space-xl) * 4);
-    padding: var(--ch-space-md);
+    padding: var(--ch-space-sm);
     position: absolute;
     z-index: var(--ch-z-tooltip);
 }

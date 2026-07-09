@@ -182,7 +182,8 @@ describe('Popover', () => {
         const source = popoverCss;
 
         expect(source).toContain('background-color: var(--ch-color-surface-overlay);');
-        expect(source).toContain('padding: var(--ch-space-md);');
+        // Compact inner padding, matching the Tooltip's --ch-space-sm.
+        expect(source).toContain('padding: var(--ch-space-sm);');
         expect(source).toContain('z-index: var(--ch-z-tooltip);');
         expect(source).toContain('calc(100% + var(--ch-space-sm))');
         expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/);
