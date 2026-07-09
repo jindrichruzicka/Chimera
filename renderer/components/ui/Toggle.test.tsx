@@ -88,4 +88,10 @@ describe('Toggle', () => {
         expect(css).toContain('var(--ch-color-accent)');
         expect(css).toContain('var(--ch-color-text-disabled)');
     });
+
+    it('sizes the label to match the compact input-field label size', () => {
+        const labelRule = /\.label\s*\{[^}]*\}/s.exec(css)?.[0] ?? '';
+        expect(labelRule).toContain('font-size: var(--ch-font-size-sm)');
+        expect(labelRule).not.toContain('var(--ch-font-size-md)');
+    });
 });

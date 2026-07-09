@@ -91,9 +91,7 @@ function SaveSlotRow({
                     }}
                 >
                     <span>{title}</span>
-                    <Caption tone="muted">
-                        {formatSavedAt(slot.savedAt)} · tick {slot.tick}
-                    </Caption>
+                    <Caption tone="muted">{formatSavedAt(slot.savedAt)}</Caption>
                 </div>
             </button>
             <DeleteSaveButton label={`Delete ${title}`} onDelete={() => onDelete(slot.slotId)} />

@@ -53,7 +53,7 @@
 
 .action-description {
     color: var(--ch-color-text-primary);
-    font-size: var(--ch-font-size-md);
+    font-size: var(--ch-font-size-sm);
     grid-column: 1;
     line-height: var(--ch-line-height-tight);
     min-inline-size: 0;

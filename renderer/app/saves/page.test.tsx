@@ -160,17 +160,14 @@ describe('SavesPage — rows', () => {
         expect(screen.getByTestId('save-load-btn')).toHaveAccessibleName(/load slot-1/i);
     });
 
-    it('shows a muted caption with the saved-at timestamp and tick', () => {
+    it('shows a muted caption with the saved-at timestamp', () => {
         const slot = makeSlot('slot-1', { tick: 42 });
         mockSlots = [slot];
 
         renderPage();
 
         const savedAtText = new Date(slot.savedAt).toLocaleString().replace(/\s+/g, ' ');
-        expect(screen.getByText(`${savedAtText} · tick 42`)).toHaveAttribute(
-            'data-ch-caption-tone',
-            'muted',
-        );
+        expect(screen.getByText(savedAtText)).toHaveAttribute('data-ch-caption-tone', 'muted');
     });
 });
 

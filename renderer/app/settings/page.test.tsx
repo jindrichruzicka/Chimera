@@ -812,6 +812,12 @@ describe('SettingsPage — controls rebind panel (AC #6)', () => {
         expect(pageCss).toContain('--ch-button-min-width: calc(var(--ch-space-xl) * 2)');
     });
 
+    it('sizes input-action labels to the compact input-field label size', () => {
+        const actionLabelRule = /\.action-description\s*\{[^}]*\}/s.exec(pageCss)?.[0] ?? '';
+        expect(actionLabelRule).toContain('font-size: var(--ch-font-size-sm)');
+        expect(actionLabelRule).not.toContain('var(--ch-font-size-md)');
+    });
+
     it('refreshes controls when the active game context changes after initial render', async () => {
         useSettingsStore.setState({
             settings: { __engine__: makeSettings(), [GAME_ID]: makeSettings() },
