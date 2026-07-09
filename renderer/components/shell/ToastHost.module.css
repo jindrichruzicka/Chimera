@@ -34,13 +34,6 @@
     animation-name: toast-fade-in;
 }
 
-.content {
-    align-items: start;
-    display: grid;
-    gap: var(--ch-space-sm);
-    grid-template-columns: minmax(var(--ch-space-none), 1fr) max-content;
-}
-
 .copy {
     display: grid;
     gap: var(--ch-space-xs);
@@ -66,10 +59,6 @@
 .actions {
     display: flex;
     justify-content: flex-start;
-}
-
-.dismiss {
-    flex: none;
 }
 
 .info {

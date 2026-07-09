@@ -50,7 +50,7 @@
 }
 
 /* Ghost delete control that shifts to the danger tokens on hover/focus, so the
-   trash icon only reads red when the user targets it. Overriding the IconButton's
+   × delete glyph only reads red when the user targets it. Overriding the IconButton's
    local custom properties keeps this tokens-only (Invariant #91). */
 .deleteBtn {
     flex: 0 0 auto;

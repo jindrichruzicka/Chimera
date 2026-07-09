@@ -135,25 +135,6 @@ describe('ToastHost', () => {
         expect(screen.queryByText('Auto dismissed')).toBeNull();
     });
 
-    it('manual dismiss removes the toast immediately and clears its timer', () => {
-        render(<ToastHost />);
-
-        act(() => {
-            useToastStore
-                .getState()
-                .push({ severity: 'error', title: 'Save failed', durationMs: 8_000 });
-        });
-
-        fireEvent.click(screen.getByRole('button', { name: 'Dismiss Save failed' }));
-
-        expect(screen.queryByText('Save failed')).toBeNull();
-
-        act(() => {
-            vi.advanceTimersByTime(8_000);
-        });
-        expect(useToastStore.getState().queue).toEqual([]);
-    });
-
     it('renders optional body text and action button', () => {
         const onClick = vi.fn();
         render(<ToastHost />);

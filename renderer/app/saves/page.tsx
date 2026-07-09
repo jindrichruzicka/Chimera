@@ -59,7 +59,7 @@ function DeleteSaveButton({
             data-testid="save-delete-btn"
             onClick={onDelete}
         >
-            <span aria-hidden="true">🗑</span>
+            <span aria-hidden="true">&times;</span>
         </IconButton>
     );
 }

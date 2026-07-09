@@ -3,7 +3,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { TOAST_DURATION_MS_BY_SEVERITY, useToastStore, type Toast } from '../../state/toastStore';
 import { Button } from '../ui/Button';
-import { IconButton } from '../ui/IconButton';
 import styles from './ToastHost.module.css';
 
 const REDUCED_MOTION_QUERY = '(prefers-reduced-motion: reduce)';
@@ -91,7 +90,7 @@ export function ToastHost(): React.ReactElement {
             data-testid="toast-host"
         >
             {queue.map((toast) => (
-                <ToastItem key={toast.id} toast={toast} onDismiss={dismiss} />
+                <ToastItem key={toast.id} toast={toast} />
             ))}
         </section>
     );
@@ -99,10 +98,9 @@ export function ToastHost(): React.ReactElement {
 
 interface ToastItemProps {
     readonly toast: Toast;
-    readonly onDismiss: (id: string) => void;
 }
 
-function ToastItem({ toast, onDismiss }: ToastItemProps): React.ReactElement {
+function ToastItem({ toast }: ToastItemProps): React.ReactElement {
     const className = [styles['toast'], styles[toast.severity]].filter(Boolean).join(' ');
 
     return (
@@ -112,23 +110,11 @@ function ToastItem({ toast, onDismiss }: ToastItemProps): React.ReactElement {
             data-toast-severity={toast.severity}
             role="status"
         >
-            <div className={styles['content']}>
-                <div className={styles['copy']}>
-                    <strong className={styles['title']} data-testid="toast-title">
-                        {toast.title}
-                    </strong>
-                    {toast.body ? <p className={styles['body']}>{toast.body}</p> : null}
-                </div>
-                <IconButton
-                    aria-label={`Dismiss ${toast.title}`}
-                    className={styles['dismiss']}
-                    onClick={() => {
-                        onDismiss(toast.id);
-                    }}
-                    variant="ghost"
-                >
-                    &times;
-                </IconButton>
+            <div className={styles['copy']}>
+                <strong className={styles['title']} data-testid="toast-title">
+                    {toast.title}
+                </strong>
+                {toast.body ? <p className={styles['body']}>{toast.body}</p> : null}
             </div>
             {toast.action ? (
                 <div className={styles['actions']}>

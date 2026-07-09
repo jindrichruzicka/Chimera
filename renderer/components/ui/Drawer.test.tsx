@@ -98,7 +98,7 @@ describe('Drawer', () => {
         expect(closeButton).toHaveFocus();
     });
 
-    it('renders the close affordance as a danger icon button', () => {
+    it('renders the close affordance as a compact ghost icon button', () => {
         render(
             <Drawer open title="Inventory" onClose={vi.fn()}>
                 Drawer content
@@ -106,8 +106,8 @@ describe('Drawer', () => {
         );
 
         const closeButton = screen.getByRole('button', { name: /^close$/i });
-        expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'danger');
-        expect(closeButton).toHaveTextContent('X');
+        expect(closeButton).toHaveAttribute('data-ch-icon-button-variant', 'ghost');
+        expect(closeButton).toHaveTextContent('×');
         expect(closeButton).not.toHaveTextContent('Close');
     });
 

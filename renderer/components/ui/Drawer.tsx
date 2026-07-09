@@ -139,9 +139,9 @@ export function Drawer({
                         aria-label={closeLabel}
                         className={styles['closeButton']}
                         onClick={onClose}
-                        variant="danger"
+                        variant="ghost"
                     >
-                        <span aria-hidden="true">X</span>
+                        <span aria-hidden="true">&times;</span>
                     </IconButton>
                 </div>
                 <div className={styles['body']}>{children}</div>

@@ -83,7 +83,7 @@ function DeleteReplayButton({
             data-testid="replay-delete-btn"
             onClick={onDelete}
         >
-            <span aria-hidden="true">🗑</span>
+            <span aria-hidden="true">&times;</span>
         </IconButton>
     );
 }
