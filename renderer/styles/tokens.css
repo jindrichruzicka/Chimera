@@ -68,16 +68,36 @@
     --ch-line-height-relaxed: 1.6;
 
     /*
-     * Heading treatment: gradient fill + outline for menu page titles (the
-     * shared Modal title). Engine defaults are visually inert — both gradient
-     * stops resolve to the solid primary text colour and the outline is 0px
-     * transparent — so rendering is identical to plain colour. Games opt in
-     * by overriding these tokens.
+     * Text treatment: gradient fill + outline for the typography roles. The
+     * base --ch-text-* tokens feed every role; each role can also be themed
+     * independently (title = Modal/Drawer page titles, heading = Heading
+     * component, label = Label, caption = Caption). Engine defaults are
+     * visually inert — the gradient stops resolve to currentColor and the
+     * outline is 0px transparent — so every tone, state, and inline colour
+     * override keeps rendering its plain colour until a game overrides the
+     * tokens. Semantic states (disabled labels, error/success captions)
+     * always render plain even in themed games.
      */
-    --ch-heading-fill-top: var(--ch-color-text-primary);
-    --ch-heading-fill-bottom: var(--ch-color-text-primary);
-    --ch-heading-outline-width: 0px;
-    --ch-heading-outline-color: var(--ch-color-transparent);
+    --ch-text-fill-top: currentColor;
+    --ch-text-fill-bottom: currentColor;
+    --ch-text-outline-width: 0px;
+    --ch-text-outline-color: var(--ch-color-transparent);
+    --ch-title-fill-top: var(--ch-text-fill-top);
+    --ch-title-fill-bottom: var(--ch-text-fill-bottom);
+    --ch-title-outline-width: var(--ch-text-outline-width);
+    --ch-title-outline-color: var(--ch-text-outline-color);
+    --ch-heading-fill-top: var(--ch-text-fill-top);
+    --ch-heading-fill-bottom: var(--ch-text-fill-bottom);
+    --ch-heading-outline-width: var(--ch-text-outline-width);
+    --ch-heading-outline-color: var(--ch-text-outline-color);
+    --ch-label-fill-top: var(--ch-text-fill-top);
+    --ch-label-fill-bottom: var(--ch-text-fill-bottom);
+    --ch-label-outline-width: var(--ch-text-outline-width);
+    --ch-label-outline-color: var(--ch-text-outline-color);
+    --ch-caption-fill-top: var(--ch-text-fill-top);
+    --ch-caption-fill-bottom: var(--ch-text-fill-bottom);
+    --ch-caption-outline-width: var(--ch-text-outline-width);
+    --ch-caption-outline-color: var(--ch-text-outline-color);
 
     --ch-button-color-primary: var(--ch-color-text-primary);
     --ch-button-color-primary-hover: var(--ch-button-color-primary);

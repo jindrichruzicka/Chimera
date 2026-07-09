@@ -79,4 +79,26 @@ describe('Caption', () => {
         expect(css).toContain('color: var(--ch-color-error);');
         expect(css).toContain('color: var(--ch-color-success);');
     });
+
+    it('paints through the token-driven gradient fill and outline', () => {
+        expect(css).toMatch(
+            /\.caption\s*\{[^}]*background-image:\s*linear-gradient\(\s*to bottom,\s*var\(--ch-caption-fill-top\),\s*var\(--ch-caption-fill-bottom\)\s*\);/s,
+        );
+        expect(css).toMatch(/\.caption\s*\{[^}]*background-clip:\s*text;/s);
+        expect(css).toMatch(/\.caption\s*\{[^}]*-webkit-text-fill-color:\s*transparent;/s);
+        expect(css).toMatch(
+            /\.caption\s*\{[^}]*-webkit-text-stroke:\s*var\(--ch-caption-outline-width\)\s*var\(--ch-caption-outline-color\);/s,
+        );
+    });
+
+    it('keeps error and success tones plain even when the treatment is themed', () => {
+        // Validation feedback must always render its semantic colour: the
+        // decorative treatment never overrides error/success captions.
+        expect(css).toMatch(/\.error\s*\{[^}]*background-image:\s*none;/s);
+        expect(css).toMatch(/\.error\s*\{[^}]*-webkit-text-fill-color:\s*currentColor;/s);
+        expect(css).toMatch(/\.error\s*\{[^}]*-webkit-text-stroke-width:\s*0;/s);
+        expect(css).toMatch(/\.success\s*\{[^}]*background-image:\s*none;/s);
+        expect(css).toMatch(/\.success\s*\{[^}]*-webkit-text-fill-color:\s*currentColor;/s);
+        expect(css).toMatch(/\.success\s*\{[^}]*-webkit-text-stroke-width:\s*0;/s);
+    });
 });

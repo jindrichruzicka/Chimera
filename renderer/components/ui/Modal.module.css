@@ -91,17 +91,18 @@
 }
 
 /*
- * The title paints through a glyph-clipped gradient with an optional stroke.
- * Engine defaults keep both inert (solid-colour stops, 0px transparent
- * stroke); a game's token override turns the effect on for every page title.
+ * The title paints through a glyph-clipped gradient with an optional stroke
+ * (title role of the text treatment tokens). Engine defaults keep both inert
+ * (currentColor stops, 0px transparent stroke); a game's token override turns
+ * the effect on for every page title.
  */
 .title {
     background-clip: text;
     -webkit-background-clip: text;
     background-image: linear-gradient(
         to bottom,
-        var(--ch-heading-fill-top),
-        var(--ch-heading-fill-bottom)
+        var(--ch-title-fill-top),
+        var(--ch-title-fill-bottom)
     );
     font-size: var(--ch-font-size-xl);
     font-weight: var(--ch-font-weight-semibold);
@@ -109,7 +110,7 @@
     margin: var(--ch-space-none);
     text-align: center;
     -webkit-text-fill-color: transparent;
-    -webkit-text-stroke: var(--ch-heading-outline-width) var(--ch-heading-outline-color);
+    -webkit-text-stroke: var(--ch-title-outline-width) var(--ch-title-outline-color);
 }
 
 /*

@@ -366,16 +366,25 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-font-size-lg: 18px;
 --ch-font-size-xl: 24px;
 
-/* ── Heading Treatment ──────────────────────────────────────
- * Gradient fill + outline for menu page titles (the shared Modal title on the
- * settings/lobby/saves/replays routes). Engine defaults are visually inert:
- * both gradient stops resolve to the solid primary text colour and the
- * outline is 0px transparent, so default rendering is identical to plain
- * colour. Games opt in by overriding these tokens. */
---ch-heading-fill-top: var(--ch-color-text-primary);
---ch-heading-fill-bottom: var(--ch-color-text-primary);
---ch-heading-outline-width: 0px;
---ch-heading-outline-color: var(--ch-color-transparent);
+/* ── Text Treatment ─────────────────────────────────────────
+ * Gradient fill + outline for the typography roles. The base --ch-text-*
+ * tokens feed every role; each role can also be themed independently:
+ * title (Modal/Drawer page titles), heading (Heading component), label
+ * (Label), caption (Caption). Engine defaults are visually inert — gradient
+ * stops resolve to currentColor and the outline is 0px transparent — so
+ * every tone, state, and inline colour override keeps rendering its plain
+ * colour until a game overrides the tokens. Semantic states (disabled
+ * labels, error/success captions, the required/optional label markers)
+ * always render plain even in themed games: decoration never overrides
+ * feedback. */
+--ch-text-fill-top: currentColor;
+--ch-text-fill-bottom: currentColor;
+--ch-text-outline-width: 0px;
+--ch-text-outline-color: var(--ch-color-transparent);
+--ch-title-fill-top: var(--ch-text-fill-top); /* + -fill-bottom / -outline-width / -outline-color */
+--ch-heading-fill-top: var(--ch-text-fill-top); /* + same quartet */
+--ch-label-fill-top: var(--ch-text-fill-top); /* + same quartet */
+--ch-caption-fill-top: var(--ch-text-fill-top); /* + same quartet */
 
 /* ── Shadows ─────────────────────────────────────────────── */
 --ch-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.28);

@@ -1,8 +1,20 @@
+/* Caption role of the text treatment tokens: glyph-clipped gradient fill with
+ * an optional stroke, inert by default (currentColor stops). Error/success
+ * tones reset to plain colour — decoration never overrides feedback. */
 .caption {
+    background-clip: text;
+    -webkit-background-clip: text;
+    background-image: linear-gradient(
+        to bottom,
+        var(--ch-caption-fill-top),
+        var(--ch-caption-fill-bottom)
+    );
     font-family: var(--ch-font-ui);
     font-size: var(--ch-font-size-sm);
     line-height: var(--ch-line-height-relaxed);
     margin: var(--ch-space-none);
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: var(--ch-caption-outline-width) var(--ch-caption-outline-color);
 }
 
 .neutral {
@@ -14,9 +26,15 @@
 }
 
 .error {
+    background-image: none;
     color: var(--ch-color-error);
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke-width: 0;
 }
 
 .success {
+    background-image: none;
     color: var(--ch-color-success);
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke-width: 0;
 }

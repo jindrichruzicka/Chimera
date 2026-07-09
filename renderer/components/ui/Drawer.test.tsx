@@ -284,4 +284,15 @@ describe('Drawer motion', () => {
 
         expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
     });
+
+    it('paints the title through the token-driven gradient fill and outline', () => {
+        expect(drawerCss).toMatch(
+            /\.title\s*\{[^}]*background-image:\s*linear-gradient\(\s*to bottom,\s*var\(--ch-title-fill-top\),\s*var\(--ch-title-fill-bottom\)\s*\);/s,
+        );
+        expect(drawerCss).toMatch(/\.title\s*\{[^}]*background-clip:\s*text;/s);
+        expect(drawerCss).toMatch(/\.title\s*\{[^}]*-webkit-text-fill-color:\s*transparent;/s);
+        expect(drawerCss).toMatch(
+            /\.title\s*\{[^}]*-webkit-text-stroke:\s*var\(--ch-title-outline-width\)\s*var\(--ch-title-outline-color\);/s,
+        );
+    });
 });

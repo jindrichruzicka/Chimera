@@ -1,5 +1,15 @@
+/* Label role of the text treatment tokens: glyph-clipped gradient fill with
+ * an optional stroke, inert by default (currentColor stops). Semantic states
+ * below reset to plain colour — decoration never overrides feedback. */
 .label {
     align-items: baseline;
+    background-clip: text;
+    -webkit-background-clip: text;
+    background-image: linear-gradient(
+        to bottom,
+        var(--ch-label-fill-top),
+        var(--ch-label-fill-bottom)
+    );
     color: var(--ch-color-text-primary);
     display: inline-flex;
     font-family: var(--ch-font-ui);
@@ -7,22 +17,31 @@
     font-weight: var(--ch-font-weight-semibold);
     gap: var(--ch-space-xs);
     line-height: var(--ch-line-height-tight);
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: var(--ch-label-outline-width) var(--ch-label-outline-color);
 }
 
 .label[data-disabled='true'] {
+    background-image: none;
     color: var(--ch-color-text-disabled);
     cursor: var(--ch-cursor-disabled);
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke-width: 0;
 }
 
 .required::after {
     color: var(--ch-color-error);
     content: '*';
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke-width: 0;
 }
 
 .optional::after {
     color: var(--ch-color-text-secondary);
     content: 'optional';
     font-weight: var(--ch-font-weight-semibold);
+    -webkit-text-fill-color: currentColor;
+    -webkit-text-stroke-width: 0;
 }
 
 .default,

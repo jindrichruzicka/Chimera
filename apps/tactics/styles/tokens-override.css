@@ -63,12 +63,18 @@
     --ch-font-ui: 'Philosopher', serif;
     --ch-font-ui-button: 'Cinzel', serif;
 
-    /* Page titles: parchment gradient (lighter top, deeper bottom) with a
-     * faint dark-brown edge for a subtle engraved look. */
-    --ch-heading-fill-top: #f0e8d8;
-    --ch-heading-fill-bottom: #c9b891;
-    --ch-heading-outline-width: 1px;
-    --ch-heading-outline-color: rgba(38, 28, 12, 0.5);
+    /* Page titles + section headings: parchment gradient (lighter top,
+     * deeper bottom) with a faint dark-brown edge for a subtle engraved look.
+     * Outline in em (≈1px at the 24px title size) so it thins with each
+     * heading size. Labels and captions stay plain. */
+    --ch-title-fill-top: #f0e8d8;
+    --ch-title-fill-bottom: #c9b891;
+    --ch-title-outline-width: 0.042em;
+    --ch-title-outline-color: rgba(38, 28, 12, 0.5);
+    --ch-heading-fill-top: var(--ch-title-fill-top);
+    --ch-heading-fill-bottom: var(--ch-title-fill-bottom);
+    --ch-heading-outline-width: var(--ch-title-outline-width);
+    --ch-heading-outline-color: var(--ch-title-outline-color);
 
     --ch-button-font-weight: 400;
     --ch-button-font-weight-primary: 700;

@@ -136,10 +136,26 @@ const expectedTokens = [
     '--ch-font-weight-semibold',
     '--ch-line-height-relaxed',
     '--ch-line-height-tight',
+    '--ch-text-fill-top',
+    '--ch-text-fill-bottom',
+    '--ch-text-outline-width',
+    '--ch-text-outline-color',
+    '--ch-title-fill-top',
+    '--ch-title-fill-bottom',
+    '--ch-title-outline-width',
+    '--ch-title-outline-color',
     '--ch-heading-fill-top',
     '--ch-heading-fill-bottom',
     '--ch-heading-outline-width',
     '--ch-heading-outline-color',
+    '--ch-label-fill-top',
+    '--ch-label-fill-bottom',
+    '--ch-label-outline-width',
+    '--ch-label-outline-color',
+    '--ch-caption-fill-top',
+    '--ch-caption-fill-bottom',
+    '--ch-caption-outline-width',
+    '--ch-caption-outline-color',
     '--ch-button-color-primary',
     '--ch-button-color-primary-hover',
     '--ch-button-color-secondary',
@@ -343,22 +359,35 @@ describe('renderer design tokens', () => {
         expect(extractTokenValue(css, '--ch-color-error')).toBe('#dc2626');
     });
 
-    it('keeps heading treatment tokens visually inert by default', () => {
+    it('keeps text treatment tokens visually inert and tone-aware by default', () => {
         const css = readTokensCss();
 
-        // Both gradient stops resolve to the solid primary text colour and the
-        // outline is invisible, so the engine default renders identically to
-        // plain-colour headings; games opt in via token overrides.
-        expect(extractTokenValue(css, '--ch-heading-fill-top')).toBe(
-            'var(--ch-color-text-primary)',
-        );
-        expect(extractTokenValue(css, '--ch-heading-fill-bottom')).toBe(
-            'var(--ch-color-text-primary)',
-        );
-        expect(extractTokenValue(css, '--ch-heading-outline-width')).toBe('0px');
-        expect(extractTokenValue(css, '--ch-heading-outline-color')).toBe(
+        // The base gradient stops resolve to currentColor and the outline is
+        // invisible, so every typography role, tone, and state renders its
+        // plain colour until a game overrides the tokens.
+        expect(extractTokenValue(css, '--ch-text-fill-top')).toBe('currentColor');
+        expect(extractTokenValue(css, '--ch-text-fill-bottom')).toBe('currentColor');
+        expect(extractTokenValue(css, '--ch-text-outline-width')).toBe('0px');
+        expect(extractTokenValue(css, '--ch-text-outline-color')).toBe(
             'var(--ch-color-transparent)',
         );
+    });
+
+    it('feeds every typography role treatment from the base text tokens', () => {
+        const css = readTokensCss();
+
+        for (const role of ['title', 'heading', 'label', 'caption'] as const) {
+            expect(extractTokenValue(css, `--ch-${role}-fill-top`)).toBe('var(--ch-text-fill-top)');
+            expect(extractTokenValue(css, `--ch-${role}-fill-bottom`)).toBe(
+                'var(--ch-text-fill-bottom)',
+            );
+            expect(extractTokenValue(css, `--ch-${role}-outline-width`)).toBe(
+                'var(--ch-text-outline-width)',
+            );
+            expect(extractTokenValue(css, `--ch-${role}-outline-color`)).toBe(
+                'var(--ch-text-outline-color)',
+            );
+        }
     });
 
     it('wires --ch-font-ui-button to the --ch-font-ui base token', () => {

@@ -111,11 +111,22 @@
     justify-content: space-between;
 }
 
+/* Title role of the text treatment tokens: glyph-clipped gradient fill with
+ * an optional stroke, inert by default (see renderer/styles/tokens.css). */
 .title {
+    background-clip: text;
+    -webkit-background-clip: text;
+    background-image: linear-gradient(
+        to bottom,
+        var(--ch-title-fill-top),
+        var(--ch-title-fill-bottom)
+    );
     font-size: var(--ch-font-size-xl);
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
     margin: var(--ch-space-none);
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: var(--ch-title-outline-width) var(--ch-title-outline-color);
 }
 
 .closeButton {

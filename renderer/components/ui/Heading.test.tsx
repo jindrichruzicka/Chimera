@@ -76,4 +76,18 @@ describe('Heading', () => {
         expect(css).toContain('color: var(--ch-color-text-primary);');
         expect(css).toContain('color: var(--ch-color-text-secondary);');
     });
+
+    it('paints through the token-driven gradient fill and outline', () => {
+        // The heading role tokens default to currentColor stops, so every
+        // tone (and inline colour override) keeps rendering its own colour
+        // until a game overrides the heading treatment tokens.
+        expect(css).toMatch(
+            /\.heading\s*\{[^}]*background-image:\s*linear-gradient\(\s*to bottom,\s*var\(--ch-heading-fill-top\),\s*var\(--ch-heading-fill-bottom\)\s*\);/s,
+        );
+        expect(css).toMatch(/\.heading\s*\{[^}]*background-clip:\s*text;/s);
+        expect(css).toMatch(/\.heading\s*\{[^}]*-webkit-text-fill-color:\s*transparent;/s);
+        expect(css).toMatch(
+            /\.heading\s*\{[^}]*-webkit-text-stroke:\s*var\(--ch-heading-outline-width\)\s*var\(--ch-heading-outline-color\);/s,
+        );
+    });
 });

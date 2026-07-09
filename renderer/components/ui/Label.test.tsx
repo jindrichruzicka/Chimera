@@ -91,4 +91,30 @@ describe('Label', () => {
         expect(css).toContain(".label[data-disabled='true']");
         expect(css).toContain('color: var(--ch-color-text-disabled);');
     });
+
+    it('paints through the token-driven gradient fill and outline', () => {
+        expect(css).toMatch(
+            /\.label\s*\{[^}]*background-image:\s*linear-gradient\(\s*to bottom,\s*var\(--ch-label-fill-top\),\s*var\(--ch-label-fill-bottom\)\s*\);/s,
+        );
+        expect(css).toMatch(/\.label\s*\{[^}]*background-clip:\s*text;/s);
+        expect(css).toMatch(/\.label\s*\{[^}]*-webkit-text-fill-color:\s*transparent;/s);
+        expect(css).toMatch(
+            /\.label\s*\{[^}]*-webkit-text-stroke:\s*var\(--ch-label-outline-width\)\s*var\(--ch-label-outline-color\);/s,
+        );
+    });
+
+    it('keeps semantic label states plain even when the treatment is themed', () => {
+        // Disabled labels and the required/optional markers must always render
+        // their own semantic colour: the treatment is decorative and never
+        // overrides feedback states.
+        expect(css).toMatch(/\.label\[data-disabled='true'\]\s*\{[^}]*background-image:\s*none;/s);
+        expect(css).toMatch(
+            /\.label\[data-disabled='true'\]\s*\{[^}]*-webkit-text-fill-color:\s*currentColor;/s,
+        );
+        expect(css).toMatch(
+            /\.label\[data-disabled='true'\]\s*\{[^}]*-webkit-text-stroke-width:\s*0;/s,
+        );
+        expect(css).toMatch(/\.required::after\s*\{[^}]*-webkit-text-fill-color:\s*currentColor;/s);
+        expect(css).toMatch(/\.optional::after\s*\{[^}]*-webkit-text-fill-color:\s*currentColor;/s);
+    });
 });

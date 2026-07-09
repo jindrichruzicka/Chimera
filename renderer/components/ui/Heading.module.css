@@ -1,8 +1,20 @@
+/* Heading role of the text treatment tokens: glyph-clipped gradient fill with
+ * an optional stroke. Inert by default — the stops resolve to currentColor,
+ * so both tones (and inline colour overrides) render their plain colour. */
 .heading {
+    background-clip: text;
+    -webkit-background-clip: text;
+    background-image: linear-gradient(
+        to bottom,
+        var(--ch-heading-fill-top),
+        var(--ch-heading-fill-bottom)
+    );
     font-family: var(--ch-font-ui);
     font-weight: var(--ch-font-weight-semibold);
     line-height: var(--ch-line-height-tight);
     margin: var(--ch-space-none);
+    -webkit-text-fill-color: transparent;
+    -webkit-text-stroke: var(--ch-heading-outline-width) var(--ch-heading-outline-color);
 }
 
 .sm {
