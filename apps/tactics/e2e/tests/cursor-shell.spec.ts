@@ -1,5 +1,6 @@
 /**
- * Hardware-cursor E2E coverage over the shell (F69 #848).
+ * Hardware-cursor E2E coverage over the shell (F69 #848; body-cursor
+ * hotspot assertion #850).
  *
  * Verifies the game-declared cursor textures land as `--ch-cursor-*` inline
  * overrides on the document root (Invariant #85), resolve over the
@@ -33,6 +34,7 @@ interface BrowserCursorStyleAccess {
 interface BrowserGlobalAccess {
     readonly document: {
         readonly documentElement: { readonly style: BrowserInlineStyleAccess };
+        readonly body: unknown;
     };
     getComputedStyle(element: unknown): BrowserCursorStyleAccess;
 }
@@ -89,6 +91,13 @@ function computedRootCursor(page: Page): Promise<string> {
     });
 }
 
+function computedBodyCursor(page: Page): Promise<string> {
+    return page.evaluate(() => {
+        const browser = globalThis as unknown as BrowserGlobalAccess;
+        return browser.getComputedStyle(browser.document.body).cursor;
+    });
+}
+
 function computedElementCursor(locator: Locator): Promise<string> {
     return locator.evaluate((element) => {
         const browserElement = element as unknown as BrowserElementWithDocument;
@@ -121,6 +130,12 @@ test.describe('Hardware cursor over the shell', () => {
         await expect
             .poll(() => computedRootCursor(mainWindow))
             .toContain('/game-assets/tactics/cursors/default.png');
+
+        // The body inherits the root cursor; the computed value re-quotes the
+        // url and carries the declared hotspot (tactics omits it ⇒ 0 0).
+        await expect
+            .poll(() => computedBodyCursor(mainWindow), { timeout: 15_000 })
+            .toContain('url("chimera://renderer/game-assets/tactics/cursors/default.png") 0 0');
 
         // Enabled buttons consume --ch-cursor-pointer …
         await expect

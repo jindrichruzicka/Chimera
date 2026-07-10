@@ -1,5 +1,6 @@
 /**
- * Hardware-cursor E2E coverage for the in-match scene (F69 #848).
+ * Hardware-cursor E2E coverage for the in-match scene (F69 #848; canvas
+ * hotspot assertion #850).
  *
  * The engine sets `cursor` once on `:root` (`--ch-cursor-default`), and the
  * R3F canvas deliberately carries no cursor rule of its own — it inherits
@@ -66,6 +67,6 @@ test.describe('Hardware cursor in match', () => {
                     }),
                 { timeout: 15_000 },
             )
-            .toContain('/game-assets/tactics/cursors/default.png');
+            .toContain('/game-assets/tactics/cursors/default.png") 0 0');
     });
 });
