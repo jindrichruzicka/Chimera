@@ -105,6 +105,14 @@ function rawToString(raw: RawData): string {
     return raw.toString('utf8');
 }
 
+/**
+ * Cap on messages held for the first onMessage subscriber. The realistic gap
+ * is one microtask chain (connect() resolution → WsClientTransport
+ * construction), so a handful of frames; the cap only guards against a
+ * pathological pre-subscription flood.
+ */
+const MAX_PENDING_MESSAGES = 64;
+
 const TERMINAL_REJECT_REASONS: ReadonlySet<string> = new Set<DisconnectReason>([
     'kicked',
     'timeout',
@@ -153,6 +161,17 @@ export class ServerConnection {
 
     private readonly messageCbs = new Set<(msg: ServerMessage) => void>();
     private readonly disconnectedCbs = new Set<(reason: DisconnectReason) => void>();
+    /**
+     * Messages that arrived after WELCOME but before the first onMessage
+     * subscriber, delivered (in order) when that subscriber attaches. `ws`
+     * dispatches already-buffered frames back-to-back in one macrotask, so a
+     * host that answers a mid-match rejoin with WELCOME + snapshot resync in
+     * one burst would otherwise have the resync silently dropped — the
+     * consumer (WsClientTransport) is only constructed after connect()
+     * resolves, a microtask later. Bounded so a pathological pre-subscription
+     * flood cannot grow without limit.
+     */
+    private pendingMessages: ServerMessage[] = [];
 
     /** Whether the connection was closed intentionally (no reconnect). */
     private intentionalClose = false;
@@ -214,6 +233,15 @@ export class ServerConnection {
     /** Subscribe to inbound ServerMessages. Returns an Unsubscribe handle. */
     onMessage(cb: (msg: ServerMessage) => void): Unsubscribe {
         this.messageCbs.add(cb);
+        // First subscriber: flush anything that arrived in the same socket
+        // batch as WELCOME (reconnect resync), preserving arrival order.
+        if (this.pendingMessages.length > 0) {
+            const pending = this.pendingMessages;
+            this.pendingMessages = [];
+            for (const msg of pending) {
+                for (const subscriber of this.messageCbs) subscriber(msg);
+            }
+        }
         return (): void => {
             this.messageCbs.delete(cb);
         };
@@ -255,6 +283,9 @@ export class ServerConnection {
 
     /** Open one WebSocket connection and resolve with ConnectResult from WELCOME. */
     private async attemptConnect(): Promise<ConnectResult> {
+        // A new socket means a new handshake; anything buffered from a previous
+        // socket is stale (the host re-syncs after every WELCOME).
+        this.pendingMessages = [];
         const resolvedUrl = await this.resolveEndpoint(this.url);
         return new Promise<ConnectResult>((resolve, reject) => {
             const ws = this.socketFactory(resolvedUrl);
@@ -335,6 +366,17 @@ export class ServerConnection {
                         }
                         if (m.type === 'CLOSE') {
                             for (const cb of this.disconnectedCbs) cb(m.reason);
+                            return;
+                        }
+                        if (this.messageCbs.size === 0) {
+                            if (this.pendingMessages.length < MAX_PENDING_MESSAGES) {
+                                this.pendingMessages.push(m);
+                            } else {
+                                this.logger?.warn(
+                                    'pre-subscription message buffer full — dropping frame',
+                                    { type: m.type },
+                                );
+                            }
                             return;
                         }
                         for (const cb of this.messageCbs) cb(m);

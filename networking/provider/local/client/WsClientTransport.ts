@@ -44,6 +44,15 @@ export class WsClientTransport implements ClientTransport {
     private readonly latencyUpdateCbs = new Set<(latencyMs: number) => void>();
     private disconnectUnsub: Unsubscribe | null = null;
     private pingInterval: ReturnType<typeof setInterval> | null = null;
+    /**
+     * Newest snapshot routed while no snapshot subscriber existed, replayed to
+     * the first subscriber and then discarded. Covers the reconnect resync: the
+     * host answers a mid-match rejoin with a snapshot that can arrive before
+     * LobbyManager wires onSnapshotReceived, and nothing re-sends it
+     * (action-driven games have no ticker). Latest-wins is safe — snapshots
+     * are authoritative whole-state, not deltas.
+     */
+    private latchedSnapshot: { snapshot: PlayerSnapshot; checksum: number } | null = null;
 
     constructor(
         private readonly connection: ServerConnection,
@@ -107,6 +116,11 @@ export class WsClientTransport implements ClientTransport {
 
     onSnapshotReceived(cb: (snapshot: PlayerSnapshot, checksum: number) => void): Unsubscribe {
         this.snapshotCbs.add(cb);
+        if (this.latchedSnapshot !== null) {
+            const { snapshot, checksum } = this.latchedSnapshot;
+            this.latchedSnapshot = null;
+            cb(snapshot, checksum);
+        }
         return (): void => {
             this.snapshotCbs.delete(cb);
         };
@@ -169,6 +183,7 @@ export class WsClientTransport implements ClientTransport {
         this.revealCbs.clear();
         this.lobbyStateCbs.clear();
         this.latencyUpdateCbs.clear();
+        this.latchedSnapshot = null;
     }
 
     // ─── Internal routing ─────────────────────────────────────────────────────
@@ -176,6 +191,10 @@ export class WsClientTransport implements ClientTransport {
     private route(msg: ServerMessage): void {
         switch (msg.type) {
             case 'SNAPSHOT': {
+                if (this.snapshotCbs.size === 0) {
+                    this.latchedSnapshot = { snapshot: msg.snapshot, checksum: msg.checksum };
+                    break;
+                }
                 for (const cb of this.snapshotCbs) cb(msg.snapshot, msg.checksum);
                 break;
             }

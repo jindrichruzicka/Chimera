@@ -91,6 +91,11 @@ test.describe('sequential matches: the second match replay plays back without a 
         hostWindow,
         clientWindow,
     }) => {
+        // Two full matches played to game-over plus two replay playbacks: well
+        // over the 90 s budget on the ~10× slower CI runner. test.slow()
+        // triples the timeout.
+        test.slow();
+
         const hostMenu = new MainMenuPage(hostWindow);
         const hostLobby = new LobbyPage(hostWindow);
         const clientLobby = new LobbyPage(clientWindow);

@@ -692,3 +692,100 @@ describe('WsClientTransport — dispose', () => {
         expect(latencyFired).toHaveLength(0);
     });
 });
+
+// ─── Pre-subscriber snapshot latch (reconnect resync) ─────────────────────────
+
+describe('WsClientTransport — pre-subscriber snapshot latch', () => {
+    function makeCapturingStub(): {
+        stubConn: ServerConnection;
+        emit: (msg: unknown) => void;
+    } {
+        let capturedOnMessage: (msg: unknown) => void = (): void => {};
+        const stubConn = {
+            send: (): void => {},
+            onMessage: (handler: (msg: unknown) => void): (() => void) => {
+                capturedOnMessage = handler;
+                return (): void => {};
+            },
+            onDisconnected: (): (() => void) => (): void => {},
+        } as unknown as ServerConnection;
+        return { stubConn, emit: (msg) => capturedOnMessage(msg) };
+    }
+
+    it('replays a snapshot routed before any subscriber to the first onSnapshotReceived subscriber', () => {
+        // Reconnect resync: the host answers a mid-match rejoin with a snapshot
+        // that can arrive before LobbyManager wires onSnapshotReceived. Nothing
+        // re-sends it (action-driven games have no ticker), so dropping it here
+        // strands the rejoined client without a match state.
+        const { stubConn, emit } = makeCapturingStub();
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+        const snapshot = makeSnapshot(toPlayerId('p1'));
+        const checksum = crc32Json(snapshot);
+
+        emit({ type: 'SNAPSHOT', snapshot, checksum });
+
+        const received: { snapshot: PlayerSnapshot; checksum: number }[] = [];
+        transport.onSnapshotReceived((s, c) => received.push({ snapshot: s, checksum: c }));
+
+        expect(received).toEqual([{ snapshot, checksum }]);
+    });
+
+    it('consumes the latch — a second subscriber gets no replay', () => {
+        const { stubConn, emit } = makeCapturingStub();
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+        const snapshot = makeSnapshot(toPlayerId('p1'));
+
+        emit({ type: 'SNAPSHOT', snapshot, checksum: crc32Json(snapshot) });
+        transport.onSnapshotReceived(() => {});
+
+        const late: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => late.push(s));
+
+        expect(late).toEqual([]);
+    });
+
+    it('latches only the newest snapshot when several arrive before a subscriber', () => {
+        const { stubConn, emit } = makeCapturingStub();
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+        const older = makeSnapshot(toPlayerId('p1'));
+        const newer = { ...makeSnapshot(toPlayerId('p1')), tick: 11 };
+
+        emit({ type: 'SNAPSHOT', snapshot: older, checksum: crc32Json(older) });
+        emit({ type: 'SNAPSHOT', snapshot: newer, checksum: crc32Json(newer) });
+
+        const received: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => received.push(s));
+
+        expect(received).toEqual([newer]);
+    });
+
+    it('does not latch when a subscriber already exists', () => {
+        const { stubConn, emit } = makeCapturingStub();
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+        const snapshot = makeSnapshot(toPlayerId('p1'));
+
+        const first: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => first.push(s));
+        emit({ type: 'SNAPSHOT', snapshot, checksum: crc32Json(snapshot) });
+
+        const late: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => late.push(s));
+
+        expect(first).toEqual([snapshot]);
+        expect(late).toEqual([]);
+    });
+
+    it('dispose clears an unconsumed latched snapshot', () => {
+        const { stubConn, emit } = makeCapturingStub();
+        const transport = new WsClientTransport(stubConn, toPlayerId('p1'));
+        const snapshot = makeSnapshot(toPlayerId('p1'));
+
+        emit({ type: 'SNAPSHOT', snapshot, checksum: crc32Json(snapshot) });
+        transport.dispose();
+
+        const received: PlayerSnapshot[] = [];
+        transport.onSnapshotReceived((s) => received.push(s));
+
+        expect(received).toEqual([]);
+    });
+});

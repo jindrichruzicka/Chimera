@@ -21,6 +21,7 @@ import { crc32Json } from '@chimera-engine/simulation/foundation/crc32.js';
 import { LobbyServer } from '../server/LobbyServer.js';
 import { MessageRouter } from '../server/MessageRouter.js';
 import { ServerConnection, JoinRejectedError } from './ServerConnection.js';
+import type { WebSocketLike } from './ServerConnection.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -575,6 +576,154 @@ describe('ServerConnection — endpoint seam (#718)', () => {
 
         expect(factoryUrls).toEqual([real]);
         expect(playerId).toMatch(/^player-\d+$/);
+        await conn.close();
+    });
+});
+
+// ─── Same-batch delivery after WELCOME (reconnect resync) ─────────────────────
+
+describe('ServerConnection — messages batched with WELCOME', () => {
+    /**
+     * Minimal WebSocketLike double that lets a test emit inbound frames
+     * synchronously, reproducing `ws` delivering several already-buffered TCP
+     * frames back-to-back in one macrotask (the slow-CI reconnect case: the
+     * host sends WELCOME and the mid-match snapshot resync in one burst).
+     */
+    class FakeSocket implements WebSocketLike {
+        public readyState: number = WebSocket.OPEN;
+        public sent: string[] = [];
+        private openListeners: (() => void)[] = [];
+        private closeListeners: (() => void)[] = [];
+        private messageListeners = new Set<(data: Buffer) => void>();
+
+        send(data: string): void {
+            this.sent.push(data);
+        }
+
+        close(): void {
+            this.readyState = WebSocket.CLOSED;
+            for (const listener of this.closeListeners.splice(0)) listener();
+        }
+
+        on(event: 'message', listener: (data: Buffer) => void): void;
+        on(event: 'close', listener: () => void): void;
+        on(event: string, listener: ((data: Buffer) => void) | (() => void)): void {
+            if (event === 'message') this.messageListeners.add(listener);
+            if (event === 'close') this.closeListeners.push(listener as () => void);
+        }
+
+        once(event: 'open', listener: () => void): void;
+        once(event: 'error', listener: (err: Error) => void): void;
+        once(event: 'close', listener: () => void): void;
+        once(event: string, listener: (() => void) | ((err: Error) => void)): void {
+            if (event === 'open') this.openListeners.push(listener as () => void);
+            if (event === 'close') this.closeListeners.push(listener as () => void);
+        }
+
+        off(_event: 'message', listener: (data: Buffer) => void): void {
+            this.messageListeners.delete(listener);
+        }
+
+        emitOpen(): void {
+            for (const listener of this.openListeners.splice(0)) listener();
+        }
+
+        emitMessage(frame: unknown): void {
+            const data = Buffer.from(JSON.stringify(frame), 'utf8');
+            // Copy first: the WELCOME handler swaps listeners while iterating.
+            for (const listener of [...this.messageListeners]) listener(data);
+        }
+    }
+
+    /**
+     * connect() suspends on the (identity) resolveEndpoint await before it
+     * creates the socket; yield one microtask so the fake socket's listeners
+     * are wired before the test emits frames.
+     */
+    async function socketWired(): Promise<void> {
+        await Promise.resolve();
+    }
+
+    const welcomeFrame = {
+        type: 'WELCOME',
+        playerId: 'player-1',
+        lobbyState: {
+            info: { sessionId: 'session-1', hostId: 'host-1', gameId: 'test' },
+            players: [{ playerId: 'player-1', displayName: 'TestClient', ready: false }],
+        },
+    };
+
+    function snapshotFrame(): { type: 'SNAPSHOT'; snapshot: unknown; checksum: number } {
+        const snapshot = {
+            tick: 42,
+            viewerId: 'player-1',
+            players: {},
+            entities: {},
+            phase: 'tactics',
+            events: [],
+            gameResult: null,
+            undoMeta: { canUndo: false, canRedo: false },
+            isMyTurn: false,
+        };
+        return { type: 'SNAPSHOT', snapshot, checksum: crc32Json(snapshot) };
+    }
+
+    it('delivers a SNAPSHOT emitted in the same batch as WELCOME to the first onMessage subscriber', async () => {
+        const socket = new FakeSocket();
+        const conn = new ServerConnection({ maxRetries: 0, socketFactory: () => socket });
+
+        const connecting = conn.connect('ws://fake', 'token', defaultProfile);
+        await socketWired();
+        socket.emitOpen();
+        // One synchronous burst: WELCOME immediately followed by the resync
+        // SNAPSHOT, before connect()'s resolution microtask can run.
+        socket.emitMessage(welcomeFrame);
+        socket.emitMessage(snapshotFrame());
+
+        const { playerId } = await connecting;
+        expect(playerId).toBe('player-1');
+
+        const received: ServerMessage[] = [];
+        conn.onMessage((msg) => received.push(msg));
+
+        expect(received.map((msg) => msg.type)).toEqual(['SNAPSHOT']);
+        await conn.close();
+    });
+
+    it('flushes buffered messages only once — a second subscriber gets no replay', async () => {
+        const socket = new FakeSocket();
+        const conn = new ServerConnection({ maxRetries: 0, socketFactory: () => socket });
+
+        const connecting = conn.connect('ws://fake', 'token', defaultProfile);
+        await socketWired();
+        socket.emitOpen();
+        socket.emitMessage(welcomeFrame);
+        socket.emitMessage(snapshotFrame());
+        await connecting;
+
+        conn.onMessage(() => undefined);
+        const late: ServerMessage[] = [];
+        conn.onMessage((msg) => late.push(msg));
+
+        expect(late).toEqual([]);
+        await conn.close();
+    });
+
+    it('keeps live delivery untouched once a subscriber exists', async () => {
+        const socket = new FakeSocket();
+        const conn = new ServerConnection({ maxRetries: 0, socketFactory: () => socket });
+
+        const connecting = conn.connect('ws://fake', 'token', defaultProfile);
+        await socketWired();
+        socket.emitOpen();
+        socket.emitMessage(welcomeFrame);
+        await connecting;
+
+        const received: ServerMessage[] = [];
+        conn.onMessage((msg) => received.push(msg));
+        socket.emitMessage(snapshotFrame());
+
+        expect(received.map((msg) => msg.type)).toEqual(['SNAPSHOT']);
         await conn.close();
     });
 });

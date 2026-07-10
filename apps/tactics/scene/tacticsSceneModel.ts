@@ -73,7 +73,18 @@ export function gridToWorldPoint(grid: TacticsGridPoint): TacticsWorldPoint {
 }
 
 export function worldToGridPoint(world: TacticsWorldPoint): TacticsGridPoint {
-    return { x: Math.round(world.x), y: Math.round(world.z) };
+    return { x: roundGridCoordinate(world.x), y: roundGridCoordinate(world.z) };
+}
+
+/**
+ * `Math.round(-0.4)` yields `-0`, and a `-0` coordinate entering a move action
+ * diverges between transports: structured-clone IPC preserves the sign while
+ * JSON (wire frames, save files) normalises it to `0`, so two views of the
+ * same tile stop being deeply equal. Adding `+0` folds `-0` into `0` and
+ * leaves every other integer untouched.
+ */
+function roundGridCoordinate(value: number): number {
+    return Math.round(value) + 0;
 }
 
 export function classifyTacticsUnitOwnership(

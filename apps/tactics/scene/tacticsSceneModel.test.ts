@@ -135,6 +135,17 @@ describe('tacticsSceneModel', () => {
         expect(worldToGridPoint({ x: 2.4, y: 9, z: -2.6 })).toEqual({ x: 2, y: -3 });
     });
 
+    it('never emits negative zero for a click landing just off tile 0', () => {
+        // Math.round(-0.4) is -0. A -0 coordinate entering a move action diverges
+        // between transports: structured-clone IPC preserves it while JSON (wire,
+        // save files) normalises it to 0, so snapshot views of the same tile stop
+        // being deeply equal.
+        const grid = worldToGridPoint({ x: -0.4, y: 0, z: -0.4 });
+        expect(Object.is(grid.x, -0)).toBe(false);
+        expect(Object.is(grid.y, -0)).toBe(false);
+        expect(grid).toEqual({ x: 0, y: 0 });
+    });
+
     it('resolves own-unit and opponent-unit selection intents', () => {
         const units = [ownSceneUnit(), opponentSceneUnit()];
 
