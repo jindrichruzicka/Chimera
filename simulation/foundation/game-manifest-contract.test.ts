@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+    DEFAULT_CURSOR_HOTSPOT,
     DEFAULT_TICK_RATE_MS,
     DEFAULT_WINDOW_TITLE,
+    resolveGameCursor,
     resolveTickerHz,
     resolveWindowTitle,
     type GameManifest,
@@ -64,5 +66,61 @@ describe('resolveTickerHz', () => {
         expect(() =>
             resolveTickerHz(makeManifest({ realtime: true, tickRateMs: Number.NaN })),
         ).toThrow(RangeError);
+    });
+});
+
+describe('resolveGameCursor', () => {
+    it('returns undefined when there is no manifest', () => {
+        expect(resolveGameCursor(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined when the manifest declares no cursor — system cursor stays', () => {
+        expect(resolveGameCursor(makeManifest())).toBeUndefined();
+    });
+
+    it('returns undefined for an empty cursor declaration — behaviour-neutral', () => {
+        expect(resolveGameCursor(makeManifest({ cursor: {} }))).toBeUndefined();
+    });
+
+    it('resolves a full three-role declaration, preserving images and explicit hotspots', () => {
+        const manifest = makeManifest({
+            cursor: {
+                default: { image: 'cursors/default.png', hotspot: { x: 2, y: 3 } },
+                pointer: { image: 'cursors/pointer.png', hotspot: { x: 8, y: 1 } },
+                disabled: { image: 'cursors/disabled.png', hotspot: { x: 16, y: 16 } },
+            },
+        });
+        expect(resolveGameCursor(manifest)).toEqual({
+            default: { image: 'cursors/default.png', hotspot: { x: 2, y: 3 } },
+            pointer: { image: 'cursors/pointer.png', hotspot: { x: 8, y: 1 } },
+            disabled: { image: 'cursors/disabled.png', hotspot: { x: 16, y: 16 } },
+        });
+    });
+
+    it('resolves a partial declaration to only the declared roles', () => {
+        const manifest = makeManifest({
+            cursor: { pointer: { image: 'cursors/pointer.png' } },
+        });
+        const resolved = resolveGameCursor(manifest);
+        expect(resolved).toBeDefined();
+        expect(Object.keys(resolved ?? {})).toEqual(['pointer']);
+    });
+
+    it('defaults a missing hotspot to (0, 0)', () => {
+        expect(DEFAULT_CURSOR_HOTSPOT).toEqual({ x: 0, y: 0 });
+        const manifest = makeManifest({
+            cursor: { default: { image: 'cursors/default.png' } },
+        });
+        expect(resolveGameCursor(manifest)).toEqual({
+            default: { image: 'cursors/default.png', hotspot: { x: 0, y: 0 } },
+        });
+    });
+
+    it('does not mutate the manifest cursor declaration when defaulting hotspots', () => {
+        const cursor = { default: { image: 'cursors/default.png' } } as const;
+        const manifest = makeManifest({ cursor });
+        resolveGameCursor(manifest);
+        expect(manifest.cursor).toEqual({ default: { image: 'cursors/default.png' } });
+        expect(manifest.cursor?.default).not.toHaveProperty('hotspot');
     });
 });

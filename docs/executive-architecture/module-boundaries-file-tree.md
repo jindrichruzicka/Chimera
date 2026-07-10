@@ -177,7 +177,7 @@ chimera/
 │       ├── electron/                # Electron main composition root (main.ts) + build-main.ts esbuild bundler
 │       ├── e2e/                     # Playwright E2E suite (fixtures, page objects, specs)
 │       ├── asset-manifest.ts        # Declares every AssetRef this game owns + priority (critical|deferred)
-│       ├── manifest.ts              # GameManifest: displayName/window title, realtime + tickRateMs, optional icon
+│       ├── manifest.ts              # GameManifest: displayName/window title, realtime + tickRateMs, optional icon + cursor
 │       ├── settings-schema.ts       # Zod schema extending EngineSettings with game-specific fields
 │       └── package.json             # App identity + scripts; engine packages as devDependencies (#817),
 │                                    #   plus tsconfig.json / tsconfig.build.json / electron-builder.yml
@@ -268,7 +268,7 @@ chimera/
 │   ├── messages.ts                  # Typed WS message shapes (client ↔ server)
 │   ├── snapshot.ts                  # GameSnapshot (full truth) + PlayerSnapshot (projected view)
 │   ├── logging.ts                   # LogLevel, LogEntry; see §4.27
-│   ├── game-manifest-contract.ts    # GameManifest (display name, window title, realtime/tickRateMs) + resolvers (§4.2.1)
+│   ├── game-manifest-contract.ts    # GameManifest (display name, window title, realtime/tickRateMs, icon, cursor) + resolvers (§4.2.1)
 │   └── constants.ts
 │
 ├── tools/

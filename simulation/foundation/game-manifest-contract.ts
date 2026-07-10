@@ -1,12 +1,13 @@
 // shared/game-manifest-contract.ts
 //
 // Per-game manifest: the small, pure-data descriptor each game declares about
-// itself (display name, window title, real-time loop mode, optional icon).
-// Lives in `shared/` with zero platform imports so BOTH the main process
-// (window title + RealtimeTicker) and the renderer (game-shell display name)
-// read one source of truth. The host wall-clock fields (`realtime`,
-// `tickRateMs`) never enter the deterministic core — they only steer how the
-// host drives `engine:tick` (Invariant #2).
+// itself (display name, window title, real-time loop mode, optional icon and
+// hardware-cursor textures). Lives in `shared/` with zero platform imports so
+// BOTH the main process (window title + RealtimeTicker) and the renderer
+// (game-shell display name, cursor token overrides) read one source of truth.
+// The host wall-clock fields (`realtime`, `tickRateMs`) never enter the
+// deterministic core — they only steer how the host drives `engine:tick`
+// (Invariant #2).
 
 /** Window title used when no game manifest supplies one. */
 export const DEFAULT_WINDOW_TITLE = 'Chimera';
@@ -17,6 +18,34 @@ export const DEFAULT_WINDOW_TITLE = 'Chimera';
  * baseline (`TICK_BUDGET_MS = 16`, see {@link shared/perf-budget.ts}).
  */
 export const DEFAULT_TICK_RATE_MS = 50;
+
+/**
+ * Named cursor roles a game may re-texture. Mirrors the engine's
+ * `--ch-cursor-<role>` token family; additional contextual roles are a
+ * game-side token override, not a manifest concern.
+ */
+export type GameCursorRole = 'default' | 'pointer' | 'disabled';
+
+/** Cursor hotspot in image pixels, measured from the texture's top-left. */
+export interface GameCursorHotspot {
+    readonly x: number;
+    readonly y: number;
+}
+
+/** Hotspot used when a {@link GameCursorImage} declares none: the top-left corner. */
+export const DEFAULT_CURSOR_HOTSPOT: GameCursorHotspot = { x: 0, y: 0 };
+
+/** One cursor texture declaration: an image path plus an optional hotspot. */
+export interface GameCursorImage {
+    /**
+     * Game-asset-relative image path (same convention as {@link GameManifest.icon},
+     * e.g. `'cursors/default.png'`). Opaque at this layer — only the renderer
+     * resolves it, through the game-asset protocol (Invariant #20).
+     */
+    readonly image: string;
+    /** Hotspot in image pixels; defaults to {@link DEFAULT_CURSOR_HOTSPOT}. */
+    readonly hotspot?: GameCursorHotspot;
+}
 
 /** Everything a game declares about itself, independent of platform layer. */
 export interface GameManifest {
@@ -44,11 +73,19 @@ export interface GameManifest {
      */
     readonly tickRateMs?: number;
     /**
-     * Optional per-game window/app icon override (renderer-relative path).
-     * Reserved for M9 F67 (App Icon & Per-Game Branding) — not yet wired;
-     * absent ⇒ the default Chimera icon.
+     * Optional per-game window/app icon override — a game-asset-relative path
+     * resolved under the game's own asset root (F67, `resolveAppIcon`); absent
+     * ⇒ the default Chimera icon.
      */
     readonly icon?: string;
+    /**
+     * Optional hardware (texture) mouse-cursor declaration mapping cursor
+     * roles to game-asset-relative images. Absent ⇒ the plain system cursor,
+     * exactly as today. Paths are opaque strings here; only the renderer
+     * resolves them via the game-asset protocol into `--ch-cursor-*` token
+     * overrides (Invariant #20).
+     */
+    readonly cursor?: Partial<Record<GameCursorRole, GameCursorImage>>;
 }
 
 /** Resolve the OS window title for a (possibly absent) game manifest. */
@@ -75,4 +112,27 @@ export function resolveTickerHz(manifest: GameManifest | undefined): number | nu
         );
     }
     return 1000 / tickRateMs;
+}
+
+/**
+ * Resolve a manifest's hardware-cursor declaration into per-role entries with
+ * hotspots defaulted to {@link DEFAULT_CURSOR_HOTSPOT}. Returns `undefined`
+ * when there is no manifest, no `cursor` field, or an empty declaration — all
+ * behaviour-neutral: the system cursor stays. Never mutates the input.
+ */
+export function resolveGameCursor(
+    manifest: GameManifest | undefined,
+): Partial<Record<GameCursorRole, Required<GameCursorImage>>> | undefined {
+    const declared = manifest?.cursor;
+    if (declared === undefined) {
+        return undefined;
+    }
+    const resolved: Partial<Record<GameCursorRole, Required<GameCursorImage>>> = {};
+    for (const [role, image] of Object.entries(declared) as readonly (readonly [
+        GameCursorRole,
+        GameCursorImage,
+    ])[]) {
+        resolved[role] = { image: image.image, hotspot: image.hotspot ?? DEFAULT_CURSOR_HOTSPOT };
+    }
+    return Object.keys(resolved).length > 0 ? resolved : undefined;
 }
