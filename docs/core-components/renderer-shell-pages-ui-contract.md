@@ -694,9 +694,12 @@ renderer/
 │   ├── shell/
 │   │   └── ShellBackgroundHost.tsx # Persistent shell-route background host
 │   └── ui/
-│       └── Button.tsx          # Shared across shell pages and match screens
+│       ├── Button.tsx          # Shared across shell pages and match screens
+│       └── LogoVideoScreen.tsx # Boot logo video splash building block (§4.37.15)
 └── app/
     ├── layout.tsx              # Imports tokens.css globally
+    ├── logo-screen/
+    │   └── page.tsx            # Engine boot logo splash → /main-menu (§4.37.15)
     ├── main-menu/
     │   └── page.tsx            # Uses <Button variant="primary|secondary|danger" />
     ├── lobby/
@@ -827,6 +830,67 @@ token write; a texture that merely fails to decode warns and the override still 
 fallback covers it). No declaration ⇒ strict no-op: the tokens are left untouched. The injector is
 shell-internal — not exported from any renderer barrel (invariant #96); games interact with it
 only through their registration data.
+
+---
+
+## 4.37.15 Engine Logo Video Screen
+
+A game brands its packaged boot with an optional **logo screen** — a fully game-owned page shown
+before the main menu. The game declares `GameManifest.logoScreen` (§4.2.1) naming the renderer
+route of the page; when the declaration is present **and** the build is packaged
+(`app.isPackaged`), the Electron main process launches the window into that route instead of
+`/main-menu` (`resolveRendererLaunchUrl` in the composition root). No declaration ⇒ boot behaviour
+is exactly today's; dev and E2E boots are untouched either way.
+
+The engine deliberately does **not** automate the flow: the logo page owns its entire sequence
+(one logo, several `LogoVideoScreen`s chained, or a full intro movie are all just page
+implementations) and exits by navigating itself to `/main-menu` via
+`withShellGameId(..., resolveShellGameId(...))` so the shell `gameId` survives the hop.
+
+### `LogoVideoScreen` — default-screen building block (§4.35 UI primitive)
+
+`LogoVideoScreen` (`renderer/components/ui/LogoVideoScreen.tsx`, exported through the
+`@chimera-engine/renderer/components/ui` barrel per invariant #96) hard-codes the engine's default
+flow around a full-window **stretched** (`object-fit: fill`), unmuted, inline-autoplay `<video>`:
+
+```typescript
+export type LogoVideoScreenProps = Readonly<{
+    src: string;
+    durationMs?: number; // watchdog, default LOGO_VIDEO_DEFAULT_DURATION_MS (10 s)
+    onDone: () => void;
+}>;
+```
+
+The component drives the app-level `FadeControl` through `useOptionalFade()`: it snaps the screen
+fade to black before first paint (`fadeOut(0)` in a layout effect, the main-menu boot pattern),
+eases in with `fadeIn(screenFadeMs())`, then on the **first** of — watchdog timeout, video
+`ended`, any click or keydown (skip-on-input), video `error`, or an autoplay rejection — it fades
+back to black and calls `onDone` exactly once. The error and rejection triggers make the screen
+fail open: a missing or corrupt video can never brick a packaged boot. Without a mounted
+`FadeProvider` the component degrades to the same flow with no fade (unit tests render it bare).
+The watchdog is a safety net for a stalled load — `ended` is the primary exit — but it also
+hard-truncates playback, so it must exceed the shipped cut's length.
+
+### `/logo-screen` — the engine default page
+
+`renderer/app/logo-screen/page.tsx` mounts `LogoVideoScreen` with the engine brand video
+(`/chimera_logo.mp4`) and navigates to the main menu on completion. The compiled page is
+re-exportable as `@chimera-engine/renderer/shell/logo-screen/page` through the existing `./shell/*`
+wildcard export — adopting games re-export it as their declared route's page and commit their own
+`public/chimera_logo.mp4` copy; a game wanting a custom logo sequence writes its own page instead
+(and may still compose `LogoVideoScreen`).
+
+### Asset, budget, and platform notes
+
+The engine brand video ships as committed `renderer/public/` copies following the §4.37.13
+boot-logo pattern (invariant #97 keeps game-owned custom logo media on the game-asset protocol
+instead). `tools/logo-asset-budget.test.ts` locks each copy's existence, ISO-BMFF `ftyp`
+signature, byte budget (≤8 MB — the cap sizes the real brand cut, not the placeholder), and
+playback duration (parsed from the `mvhd` box, ≤ `LOGO_VIDEO_DEFAULT_DURATION_MS`, so a real cut
+can never be silently hard-truncated by the watchdog). The
+renderer CSP carries an explicit `media-src 'self'`, `.gitattributes` marks `*.mp4 binary`, and
+unmuted no-gesture autoplay works because Electron's default `autoplayPolicy` is
+`no-user-gesture-required` (an autoplay rejection elsewhere lands on the fail-open skip path).
 
 ---
 

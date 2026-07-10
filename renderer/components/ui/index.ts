@@ -16,6 +16,8 @@ export { IconButton } from './IconButton';
 export type { IconButtonProps } from './IconButton';
 export { Label } from './Label';
 export type { LabelProps, LabelState } from './Label';
+export { LOGO_VIDEO_DEFAULT_DURATION_MS, LogoVideoScreen } from './LogoVideoScreen';
+export type { LogoVideoScreenProps } from './LogoVideoScreen';
 export { Modal } from './Modal';
 export type { ModalAction, ModalProps, ModalSize } from './Modal';
 export { NumberInput } from './NumberInput';

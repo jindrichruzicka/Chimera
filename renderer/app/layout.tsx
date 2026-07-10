@@ -25,7 +25,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             <head>
                 <meta
                     httpEquiv="Content-Security-Policy"
-                    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; base-uri 'none'"
+                    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'; object-src 'none'; base-uri 'none'"
                 />
             </head>
             <body

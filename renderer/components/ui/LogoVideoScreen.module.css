@@ -1,0 +1,13 @@
+.logo-video-screen {
+    position: fixed;
+    inset: var(--ch-space-none);
+    background-color: var(--ch-color-scrim);
+}
+
+.video {
+    display: block;
+    width: 100%;
+    height: 100%;
+    /* Contract: the logo video fills the whole window stretched, not letterboxed. */
+    object-fit: fill;
+}
