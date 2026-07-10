@@ -92,7 +92,8 @@ const TACTICS_MAX_ABSENT_COLOR_PIXELS = 1;
 
 export class GamePage {
     readonly canvas: Locator;
-    private readonly tacticsCanvas: Locator;
+    /** The R3F `<canvas>` inside the game-canvas wrapper; cursor specs read its computed cursor. */
+    readonly tacticsCanvas: Locator;
     readonly undoButton: Locator;
     readonly redoButton: Locator;
     readonly endTurnButton: Locator;

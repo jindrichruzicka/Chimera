@@ -51,6 +51,14 @@ export interface E2eElectronLaunchOptions {
      * NODE_ENV=test here keeps the gate satisfiable).
      */
     readonly debugMode?: boolean;
+    /**
+     * Override the game-assets root (`CHIMERA_E2E_GAME_ASSETS_ROOT`) for this
+     * launch. Defaults to the repo `apps/` dir; the cursor overwrite spec
+     * (F69 #848) points it at a scratch copy with swapped cursor art. Must
+     * mirror the `<root>/<gameId>/assets/<relativePath>` layout — the
+     * protocol handler injects the `assets` segment itself.
+     */
+    readonly gameAssetsRoot?: string;
 }
 
 export interface E2eElectronLaunchConfig {
@@ -120,7 +128,7 @@ export function createE2eElectronLaunchConfig(
         CHIMERA_E2E: '1',
         CHIMERA_E2E_PRELOAD_PATH: preloadPath,
         CHIMERA_E2E_RENDERER_ENTRY: rendererEntry,
-        CHIMERA_E2E_GAME_ASSETS_ROOT: gameAssetsRoot,
+        CHIMERA_E2E_GAME_ASSETS_ROOT: options.gameAssetsRoot ?? gameAssetsRoot,
         NODE_ENV: 'test',
         CHIMERA_PORT: options.port,
     };
