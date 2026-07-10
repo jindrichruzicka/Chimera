@@ -452,6 +452,15 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 --ch-button-padding-md: 0.5rem 2rem;
 --ch-button-padding-lg: 0.75rem 2.5rem;
 
+/* ── Cursors ─────────────────────────────────────────────────
+ * Every engine cursor style routes through these tokens, so a game can
+ * replace the OS cursor purely via token overrides — e.g. with
+ * `url(chimera://…) <x> <y>, <fallback>` hardware-cursor values. Engine
+ * defaults keep the plain system cursor. */
+--ch-cursor-default: auto;
+--ch-cursor-pointer: pointer;
+--ch-cursor-disabled: not-allowed;
+
 /* ── Motion ──────────────────────────────────────────────── */
 --ch-duration-fast: 120ms;
 --ch-duration-normal: 250ms;

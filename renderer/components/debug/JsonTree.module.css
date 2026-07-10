@@ -43,7 +43,7 @@
     background: none;
     border: none;
     color: inherit;
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     display: inline-flex;
     font: inherit;
     gap: var(--ch-space-xs);

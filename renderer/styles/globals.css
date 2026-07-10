@@ -3,8 +3,11 @@
 
 /* Modern scrollbars: a token-backed thumb over a transparent track.
  * `scrollbar-color` is inherited, so the root rule reaches every scrollable
- * element; `scrollbar-width` is not inherited and needs the universal rule. */
+ * element; `scrollbar-width` is not inherited and needs the universal rule.
+ * `cursor` is likewise inherited, so the single root declaration carries the
+ * default cursor token to shell chrome and the R3F canvas alike. */
 :root {
+    cursor: var(--ch-cursor-default);
     scrollbar-color: var(--ch-color-border) var(--ch-color-transparent);
 }
 

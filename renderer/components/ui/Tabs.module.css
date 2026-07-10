@@ -29,7 +29,7 @@
     border-style: solid;
     border-width: var(--ch-border-width-sm);
     color: var(--ch-color-text-secondary);
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     font-family: var(--ch-font-ui);
     font-size: var(--ch-font-size-md);
     font-weight: var(--ch-font-weight-semibold);

@@ -8,7 +8,7 @@
     border-width: var(--ch-button-border-width);
     box-shadow: var(--ch-icon-button-shadow);
     color: var(--ch-icon-button-color);
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     display: inline-flex;
     font-size: var(--ch-icon-button-font-size);
     height: var(--ch-icon-button-size);

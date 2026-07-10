@@ -33,7 +33,7 @@
     background: transparent;
     border: 0;
     color: inherit;
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     display: flex;
     flex: 1;
     font: inherit;

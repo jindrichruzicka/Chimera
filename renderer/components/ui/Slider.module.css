@@ -14,7 +14,7 @@
 
 .input {
     accent-color: var(--ch-color-accent);
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     inline-size: 100%;
     min-inline-size: 0;
 }

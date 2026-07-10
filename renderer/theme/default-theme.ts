@@ -13,7 +13,7 @@ export const defaultTheme = {
                 borderStyle: 'solid',
                 borderWidth: 'var(--ch-button-border-width)',
                 boxShadow: 'var(--ch-button-shadow)',
-                cursor: 'pointer',
+                cursor: 'var(--ch-cursor-pointer, pointer)',
                 display: 'inline-flex',
                 fontFamily: 'var(--ch-font-ui)',
                 fontSize: 'var(--ch-button-font-size-md)',

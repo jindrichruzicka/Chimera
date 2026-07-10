@@ -7,7 +7,7 @@
     border-width: var(--ch-button-border-width);
     box-shadow: var(--ch-button-shadow);
     color: var(--ch-button-color);
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     display: inline-flex;
     font-family: var(--ch-font-ui-button);
     font-size: var(--ch-button-font-size);

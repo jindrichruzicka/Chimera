@@ -45,7 +45,7 @@
     border-style: solid;
     border-width: var(--ch-border-width-sm);
     box-sizing: border-box;
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     display: block;
     inline-size: 100%;
     min-inline-size: 0;

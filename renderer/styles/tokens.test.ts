@@ -244,6 +244,8 @@ const expectedTokens = [
     '--ch-select-popup-overhang-mac',
     '--ch-select-popup-shortfall-mac',
     '--ch-spinner-opacity-min',
+    '--ch-cursor-default',
+    '--ch-cursor-pointer',
     '--ch-cursor-disabled',
     '--ch-z-tooltip',
     '--ch-z-modal',

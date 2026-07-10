@@ -49,7 +49,7 @@
 }
 
 .table tbody tr {
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
 }
 
 .table tbody tr:hover td {

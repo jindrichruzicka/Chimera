@@ -216,6 +216,14 @@
     --ch-select-popup-overhang-mac: 12px;
     --ch-select-popup-shortfall-mac: 14px;
     --ch-spinner-opacity-min: 0.3;
+
+    /* ── Cursors ──
+     * Every engine cursor style routes through these tokens; games replace the
+     * OS cursor by overriding them from their token-override file (Invariant
+     * #85), e.g. with `url(chimera://…) <x> <y>, <fallback>` hardware-cursor
+     * values injected at registry init. */
+    --ch-cursor-default: auto;
+    --ch-cursor-pointer: pointer;
     --ch-cursor-disabled: not-allowed;
 
     --ch-z-tooltip: 90;

@@ -8,7 +8,7 @@
 
 .row {
     align-items: center;
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     display: flex;
     gap: var(--ch-space-md);
     justify-content: space-between;
@@ -30,7 +30,7 @@
 
 .input {
     block-size: 100%;
-    cursor: pointer;
+    cursor: var(--ch-cursor-pointer, pointer);
     inline-size: 100%;
     inset: var(--ch-space-none);
     margin: var(--ch-space-none);
