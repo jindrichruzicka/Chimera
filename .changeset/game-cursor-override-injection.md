@@ -1,0 +1,5 @@
+---
+'@chimera-engine/renderer': minor
+---
+
+Wire game cursor declarations through the renderer game registry and inject hardware-cursor token overrides (F69). `LoadedRendererGameShell` gains an optional `cursor` field — the game's `GameManifest.cursor` declaration forwarded verbatim — and `loadRendererGame`/`loadRendererGameShell` now run a shell-internal injector as a registry-init side-effect (Invariant #93): each declared texture is resolved through the game-asset protocol (`chimera://renderer/game-assets/…`, Invariant #97), pre-decoded via the existing image warm-up seam so the first paint never flashes the system cursor, and written over the engine's `--ch-cursor-<role>` tokens as `url(<resolved>) <hotspot-x> <hotspot-y>, <role-fallback>` (fallbacks: `auto`/`pointer`/`not-allowed`). Game-relative texture paths are validated against the same local-game-asset policy as font and preload-image refs — absolute paths, protocol-relative URLs, and URL schemes are rejected before the path is joined with the game id. No declaration ⇒ strict no-op; the injector stays shell-internal (no new barrel export, Invariant #96).

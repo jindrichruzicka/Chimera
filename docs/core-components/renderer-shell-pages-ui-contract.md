@@ -674,9 +674,10 @@ shared/
 renderer/
 ├── game/
 │   ├── rendererGameRegistry.ts # Dynamic game shell loading; no shell-page games/* import
-│   ├── gameShellAssetSource.ts # Shared local-asset-ref resolver for shell fonts/images
+│   ├── gameShellAssetSource.ts # Shared local-asset-ref resolver for shell fonts/images/cursors
 │   ├── GameFontLoader.ts       # Loads shell.fonts via FontFace (§4.37.7)
-│   └── GameImageWarmup.ts      # Fetches + decodes shell.preloadImages (§4.37.13)
+│   ├── GameImageWarmup.ts      # Fetches + decodes shell.preloadImages (§4.37.13)
+│   └── gameCursorStyles.ts     # Injects shell.cursor as --ch-cursor-* overrides (§4.37.14)
 ├── shell/
 │   ├── renderMainMenuDefinition.tsx # Engine renderer for GameMainMenuDefinition
 │   ├── renderSettingsSectionItems.tsx # Engine renderer for SettingsSectionDefinition
@@ -783,6 +784,49 @@ its logo through this component.
 Neither piece fixes an oversized source: keep shipped shell images near their display size
 (≈2× for retina). The engine logo budget is locked by `tools/logo-asset-budget.test.ts`
 (≤512 px, ≤400 KB for a 256 px display slot); follow the same ratio for game artwork.
+
+---
+
+## 4.37.14 Per-Game Hardware Cursor
+
+A game replaces the OS mouse cursor with its own textures by declaring
+`GameManifest.cursor` (§4.2.1) — a map from the engine cursor roles (`default`, `pointer`,
+`disabled`) to game-asset-relative image paths with optional per-role hotspots — and forwarding
+that declaration verbatim through its renderer registration as `LoadedRendererGameShell.cursor`.
+The renderer never reads `GameManifest`; the registration data is the sole carrier.
+
+```typescript
+export const gameShell: LoadedRendererGameShell = {
+    mainMenu,
+    cursor: manifest.cursor, // e.g. { default: { image: 'cursors/default.png' }, pointer: { image: 'cursors/pointer.png', hotspot: { x: 4, y: 7 } } }
+};
+```
+
+When the game (shell) loads, the registry (`loadRendererGame` / `loadRendererGameShell`) runs the
+shell-internal injector `renderer/game/gameCursorStyles.ts` as a side-effect of registry
+initialisation (invariant #93). For each declared role it resolves the texture through the
+game-asset protocol (`chimera://renderer/game-assets/<game>/cursors/default.png`, invariant #97),
+pre-decodes it through the §4.37.13 image warm-up seam (so the first paint never flashes the
+system cursor), and overrides the engine token on the document root:
+
+```
+--ch-cursor-<role>: url(<resolved-url>) <hotspot-x> <hotspot-y>, <role-fallback>
+```
+
+The hotspot defaults to the texture's top-left (`0 0`); the trailing fallback keyword is the
+role's engine default (`default` → `auto`, `pointer` → `pointer`, `disabled` → `not-allowed`), so
+a texture the OS cannot use degrades to the stock cursor. Because every engine cursor style routes
+through the `--ch-cursor-*` tokens (§4.35), one injection covers shell chrome and the R3F canvas
+alike — the overrides redefine only existing token names (invariant #85).
+
+Texture paths obey the same local-game-asset policy as font and preload-image refs
+(`gameShellAssetSource.ts`): absolute paths, protocol-relative URLs, and URL schemes are rejected
+— validated against the raw game-relative path _before_ it is joined with the game id, so a
+scheme'd value cannot hide behind the join. A malformed declaration throws before any warm-up or
+token write; a texture that merely fails to decode warns and the override still applies (the CSS
+fallback covers it). No declaration ⇒ strict no-op: the tokens are left untouched. The injector is
+shell-internal — not exported from any renderer barrel (invariant #96); games interact with it
+only through their registration data.
 
 ---
 

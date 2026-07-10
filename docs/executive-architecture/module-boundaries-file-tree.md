@@ -241,7 +241,10 @@ chimera/
 │   │   └── useAsset.ts
 │   ├── game/
 │   │   ├── rendererGameRegistry.ts  # Game shell/screen/asset registration bridge
-│   │   └── GameFontLoader.ts        # Loads GameFontFace self-hosted fonts through the renderer protocol
+│   │   ├── gameShellAssetSource.ts  # Local game-asset-ref resolver for shell fonts/images/cursors
+│   │   ├── GameFontLoader.ts        # Loads GameFontFace self-hosted fonts through the renderer protocol
+│   │   ├── GameImageWarmup.ts       # Fetch+decode warm-up for shell.preloadImages (§4.37.13)
+│   │   └── gameCursorStyles.ts      # shell.cursor → --ch-cursor-* hardware-cursor overrides (§4.37.14)
 │   ├── audio/                       # Audio playback layer (§4.25)
 │   │   ├── AudioManager.ts
 │   │   ├── AudioBus.ts

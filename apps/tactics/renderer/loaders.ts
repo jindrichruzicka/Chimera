@@ -15,6 +15,8 @@
 
 import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera-engine/renderer/game';
 
+import { tacticsManifest } from '../manifest.js';
+
 export async function loadTacticsRendererGame(): Promise<LoadedRendererGame> {
     const [screenModule, assetManifestModule, shell] = await Promise.all([
         import('../screens/index.js'),
@@ -49,5 +51,9 @@ export async function loadTacticsRendererGameShell(): Promise<LoadedRendererGame
         shellBackground: backgroundModule.TacticsShellBackground,
         LobbyScreen: lobbyScreenModule.TacticsLobbyScreen,
         fonts: fontsModule.tacticsFonts,
+        // The manifest's cursor declaration, forwarded verbatim: the renderer
+        // seam (`loadRendererGameShell`) turns it into `--ch-cursor-*` token
+        // overrides at registry init — this package never touches the DOM.
+        cursor: tacticsManifest.cursor,
     };
 }

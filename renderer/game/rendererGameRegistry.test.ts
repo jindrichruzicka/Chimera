@@ -7,6 +7,10 @@ import type {
     GameSettingsPageDefinition,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
 import type { GameLobbyScreenProps } from '@chimera-engine/simulation/foundation/game-lobby-contract.js';
+import type {
+    GameCursorImage,
+    GameCursorRole,
+} from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import {
     _resetRendererGameRegistryForTest,
     getDefaultRendererGameId,
@@ -152,6 +156,85 @@ describe('rendererGameRegistry', () => {
         });
     });
 
+    describe('shell.cursor hardware-cursor override injection (#847)', () => {
+        class FakeImage {
+            public src = '';
+            public decode = vi.fn(async (): Promise<void> => undefined);
+
+            public constructor() {
+                constructedImages.push(this);
+            }
+        }
+        const constructedImages: FakeImage[] = [];
+        const setProperty = vi.fn();
+
+        beforeEach(async () => {
+            constructedImages.length = 0;
+            setProperty.mockClear();
+            vi.stubGlobal('Image', FakeImage);
+            vi.stubGlobal('document', { documentElement: { style: { setProperty } } });
+            const { resetWarmedGameImagesForTests } = await import('./GameImageWarmup');
+            resetWarmedGameImagesForTests();
+        });
+
+        afterEach(() => {
+            vi.unstubAllGlobals();
+        });
+
+        function registerCursorShell(): void {
+            const shell = fakeShell({
+                cursor: {
+                    default: { image: 'cursors/default.png' },
+                    pointer: { image: 'cursors/pointer.png', hotspot: { x: 4, y: 7 } },
+                },
+            });
+            registerRendererGame({
+                gameId: 'fake',
+                loadGame: () => Promise.resolve(fakeGame({ shell })),
+                loadShell: () => Promise.resolve(shell),
+                isDefault: true,
+            });
+        }
+
+        it('loadRendererGameShell warms the textures and overrides the declared cursor tokens', async () => {
+            registerCursorShell();
+
+            await loadRendererGameShell('fake');
+
+            expect(constructedImages.map((image) => image.src)).toEqual([
+                'chimera://renderer/game-assets/fake/cursors/default.png',
+                'chimera://renderer/game-assets/fake/cursors/pointer.png',
+            ]);
+            expect(setProperty).toHaveBeenCalledWith(
+                '--ch-cursor-default',
+                'url(chimera://renderer/game-assets/fake/cursors/default.png) 0 0, auto',
+            );
+            expect(setProperty).toHaveBeenCalledWith(
+                '--ch-cursor-pointer',
+                'url(chimera://renderer/game-assets/fake/cursors/pointer.png) 4 7, pointer',
+            );
+        });
+
+        it('loadRendererGame injects the same overrides from game.shell', async () => {
+            registerCursorShell();
+
+            await loadRendererGame('fake');
+
+            expect(setProperty).toHaveBeenCalledWith(
+                '--ch-cursor-pointer',
+                'url(chimera://renderer/game-assets/fake/cursors/pointer.png) 4 7, pointer',
+            );
+        });
+
+        it('a shell without a cursor declaration writes no tokens', async () => {
+            registerFake();
+
+            await loadRendererGameShell('fake');
+
+            expect(setProperty).not.toHaveBeenCalled();
+        });
+    });
+
     it('rejects unknown game ids', async () => {
         registerFake();
 
@@ -229,6 +312,13 @@ describe('rendererGameRegistry', () => {
             type ShellShape = NonNullable<LoadedRendererGame['shell']>;
             expectTypeOf<ShellShape['fonts']>().toEqualTypeOf<
                 readonly GameFontFace[] | undefined
+            >();
+        });
+
+        it('shell.cursor is typed as Partial<Record<GameCursorRole, GameCursorImage>> | undefined (#847)', () => {
+            type ShellShape = NonNullable<LoadedRendererGame['shell']>;
+            expectTypeOf<ShellShape['cursor']>().toEqualTypeOf<
+                Partial<Record<GameCursorRole, GameCursorImage>> | undefined
             >();
         });
 

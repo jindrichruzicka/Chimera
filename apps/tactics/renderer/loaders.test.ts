@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import { tacticsManifest } from '../manifest.js';
 import { loadTacticsRendererGame, loadTacticsRendererGameShell } from './loaders';
 
 describe('tactics renderer loaders', () => {
@@ -51,6 +52,12 @@ describe('tactics renderer loaders', () => {
         if (loadGameBtn?.action.type === 'navigate') {
             expect(loadGameBtn.action.target).toBe('/saves');
         }
+    });
+
+    it('loadTacticsRendererGameShell forwards the manifest cursor declaration verbatim (#847)', async () => {
+        const shell = await loadTacticsRendererGameShell();
+
+        expect(shell.cursor).toBe(tacticsManifest.cursor);
     });
 
     it('loadTacticsRendererGameShell exposes the tactics font faces', async () => {

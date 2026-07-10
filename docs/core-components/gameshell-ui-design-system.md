@@ -454,9 +454,11 @@ Boundary rules (invariants [#93](../executive-architecture/architecture-invarian
 
 /* ── Cursors ─────────────────────────────────────────────────
  * Every engine cursor style routes through these tokens, so a game can
- * replace the OS cursor purely via token overrides — e.g. with
- * `url(chimera://…) <x> <y>, <fallback>` hardware-cursor values. Engine
- * defaults keep the plain system cursor. */
+ * replace the OS cursor purely via token overrides. Declaring
+ * `GameManifest.cursor` forwards through `LoadedRendererGameShell.cursor`
+ * into `renderer/game/gameCursorStyles.ts`, which injects
+ * `url(chimera://…) <x> <y>, <fallback>` values at registry init
+ * (§4.37.14). Engine defaults keep the plain system cursor. */
 --ch-cursor-default: auto;
 --ch-cursor-pointer: pointer;
 --ch-cursor-disabled: not-allowed;

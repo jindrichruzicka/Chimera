@@ -7,10 +7,15 @@ import type {
     GameMenuCommandId,
     GameSettingsPageDefinition,
 } from '@chimera-engine/simulation/foundation/game-shell-contract.js';
+import type {
+    GameCursorImage,
+    GameCursorRole,
+} from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import type { AssetManifest } from '@chimera-engine/simulation/content/AssetManifest.js';
 import type { InputAction } from '../input/InputAction.js';
 import { loadGameFonts } from './GameFontLoader';
 import { warmGameImages } from './GameImageWarmup';
+import { applyGameCursorOverrides } from './gameCursorStyles';
 
 export interface LoadedRendererGameShell {
     readonly mainMenu?: GameMainMenuDefinition;
@@ -34,6 +39,17 @@ export interface LoadedRendererGameShell {
      * broken ref warns and never blocks the shell.
      */
     readonly preloadImages?: readonly string[];
+    /**
+     * Optional hardware-cursor declaration — the game's `GameManifest.cursor`
+     * field, forwarded verbatim (game-asset-relative image paths + optional
+     * hotspots). When the game (shell) loads, each texture is resolved through
+     * the game-asset protocol, pre-decoded via the image warm-up seam, and
+     * injected over the engine's `--ch-cursor-<role>` tokens (Invariant #93).
+     * Absent ⇒ the tokens are left untouched. Explicit `undefined` is admitted
+     * so a game can forward `manifest.cursor` verbatim whether or not the
+     * manifest declares one.
+     */
+    readonly cursor?: Partial<Record<GameCursorRole, GameCursorImage>> | undefined;
 }
 
 export interface LoadedRendererGame {
@@ -133,6 +149,9 @@ export async function loadRendererGame(gameId: string): Promise<LoadedRendererGa
     if (game.shell?.preloadImages !== undefined) {
         await warmGameImages(game.shell.preloadImages);
     }
+    if (game.shell?.cursor !== undefined) {
+        await applyGameCursorOverrides(gameId, game.shell.cursor);
+    }
     return game;
 }
 
@@ -148,6 +167,9 @@ export async function loadRendererGameShell(gameId: string): Promise<LoadedRende
     }
     if (shell.preloadImages !== undefined) {
         await warmGameImages(shell.preloadImages);
+    }
+    if (shell.cursor !== undefined) {
+        await applyGameCursorOverrides(gameId, shell.cursor);
     }
     return shell;
 }
