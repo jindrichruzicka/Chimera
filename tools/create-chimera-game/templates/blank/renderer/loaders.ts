@@ -5,6 +5,8 @@
 
 import type { LoadedRendererGame, LoadedRendererGameShell } from '@chimera-engine/renderer/game';
 
+import { __gameCamel__Manifest } from '../manifest.js';
+
 export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGame> {
     const screenModule = await import('../screens/index.js');
     return {
@@ -17,5 +19,10 @@ export async function load__GamePascal__RendererGame(): Promise<LoadedRendererGa
 // and return its definitions here (`mainMenu`, `menuCommands`, `settings`,
 // `shellBackground`, `LobbyScreen`, `fonts`); every field is optional.
 export function load__GamePascal__RendererGameShell(): Promise<LoadedRendererGameShell> {
-    return Promise.resolve({});
+    return Promise.resolve({
+        // The manifest's cursor declaration, forwarded verbatim: the renderer
+        // seam turns it into `--ch-cursor-*` token overrides. Undeclared (the
+        // manifest example commented out) ⇒ undefined ⇒ strict no-op.
+        cursor: __gameCamel__Manifest.cursor,
+    });
 }

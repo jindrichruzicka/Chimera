@@ -1,4 +1,4 @@
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -149,6 +149,26 @@ describe('blank template smoke harness', () => {
         const manifest = await read('manifest.ts');
         // Renderer-relative path the F67 resolver maps to apps/<gameId>/assets/icons/icon.png.
         expect(manifest).toContain("icon: 'icons/icon.png'");
+    });
+
+    it('documents the F69 cursor declaration as a commented-out example, shipping no textures (#849)', async () => {
+        const manifest = await read('manifest.ts');
+        // The example stays commented out: absent `cursor` ⇒ the plain system cursor,
+        // so a fresh scaffold boots unchanged until the game opts in with its own art.
+        expect(manifest).toContain('// cursor: {');
+        expect(manifest).toContain('cursors/default.png');
+        expect(manifest).toContain('hotspot');
+        // Invariant #97: cursor textures are game-owned opt-ins — the template must
+        // not ship placeholder PNGs under assets/cursors/.
+        await expect(readdir(path.join(blankTemplateDir, 'assets', 'cursors'))).rejects.toThrow();
+    });
+
+    it('forwards the manifest cursor declaration through the shell loader (#849)', async () => {
+        // The injector reads `LoadedRendererGameShell.cursor`, not the manifest —
+        // without this verbatim forward (mirroring the model game's loaders),
+        // uncommenting the manifest example would never reach the renderer.
+        const loaders = await read('renderer/loaders.ts');
+        expect(loaders).toContain('cursor: __gameCamel__Manifest.cursor');
     });
 
     it('names no model game in any smoke file (tokens only)', async () => {
