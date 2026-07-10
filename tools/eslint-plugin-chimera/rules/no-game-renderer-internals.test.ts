@@ -103,6 +103,16 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
             filename: 'apps/tactics/renderer/app/layout.tsx',
             code: `export { default, metadata } from '@chimera-engine/renderer/shell/layout';`,
         },
+        {
+            // Public r3f barrel (in-Canvas engine components, e.g. PerfProbe) is
+            // allowed from a game surface.
+            filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',
+            code: `import { PerfProbe } from '@chimera-engine/renderer/components/r3f';`,
+        },
+        {
+            filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',
+            code: `import { PerfProbe } from '@chimera-engine/renderer/components/r3f/index.js';`,
+        },
     ],
     invalid: [
         {
@@ -167,6 +177,13 @@ ruleTester.run('chimera/no-game-renderer-internals', rule, {
         {
             filename: 'apps/tactics/screens/TacticsBoard.tsx',
             code: `import { GameCanvas } from '@chimera-engine/renderer/components/r3f/GameCanvas.js';`,
+            errors: [{ messageId: 'gameRendererInternalImport' }],
+        },
+        {
+            // r3f exposes only its barrel; the underlying shell/perf internals
+            // stay forbidden via deep import.
+            filename: 'apps/tactics/screens/TacticsDemoBoard.tsx',
+            code: `import { PerfProbe } from '@chimera-engine/renderer/components/shell/perf/PerfProbe.js';`,
             errors: [{ messageId: 'gameRendererInternalImport' }],
         },
         {

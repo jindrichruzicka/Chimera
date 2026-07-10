@@ -309,6 +309,66 @@ describe('perfStore — actionsPerSec rolling count', () => {
     });
 });
 
+// ── prunePerfWindows() ────────────────────────────────────────────────────────
+
+describe('perfStore.prunePerfWindows()', () => {
+    let nowMs: number;
+
+    beforeEach(() => {
+        nowMs = 1_000_000;
+        vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
+    });
+
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
+    it('decays actionsPerSec to 0 once all arrivals leave the 1 s window', () => {
+        const store = createPerfStore();
+        store.getState().recordSnapshotReceived(1, nowMs);
+        expect(store.getState().sample.actionsPerSec).toBe(1);
+        nowMs += 1500;
+        store.getState().prunePerfWindows();
+        expect(store.getState().sample.actionsPerSec).toBe(0);
+    });
+
+    it('keeps arrivals still inside the 1 s window', () => {
+        const store = createPerfStore();
+        store.getState().recordSnapshotReceived(1, nowMs - 1500); // stale
+        store.getState().recordSnapshotReceived(2, nowMs - 200); // fresh
+        nowMs += 500; // fresh stamp is now 700 ms old — still in window
+        store.getState().prunePerfWindows();
+        expect(store.getState().sample.actionsPerSec).toBe(1);
+    });
+
+    it('does not write the store when the count is unchanged', () => {
+        const store = createPerfStore();
+        store.getState().recordSnapshotReceived(1, nowMs);
+        const before = store.getState().sample;
+        store.getState().prunePerfWindows(); // stamp still in window — no change
+        expect(store.getState().sample).toBe(before);
+    });
+
+    it('is a no-op on an untouched store (stays at the initial sample)', () => {
+        const store = createPerfStore();
+        const before = store.getState().sample;
+        store.getState().prunePerfWindows();
+        expect(store.getState().sample).toBe(before);
+        expect(store.getState().sample.actionsPerSec).toBe(0);
+    });
+
+    it('does not affect other sample fields when it decays', () => {
+        const store = createPerfStore();
+        store.getState().setPerfFrame(makeFrame({ fps: 60 }));
+        store.getState().setSimTick(9);
+        store.getState().recordSnapshotReceived(1, nowMs);
+        nowMs += 1500;
+        store.getState().prunePerfWindows();
+        expect(store.getState().sample.fps).toBe(60);
+        expect(store.getState().sample.simTick).toBe(9);
+    });
+});
+
 // ── heapMb ────────────────────────────────────────────────────────────────────
 
 describe('perfStore — heapMb sampling', () => {

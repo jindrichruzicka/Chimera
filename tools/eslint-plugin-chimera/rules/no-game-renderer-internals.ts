@@ -5,7 +5,8 @@
  *
  * Allows game-owned renderer surfaces to consume the public renderer surface —
  * the UI primitive barrel (`@chimera-engine/renderer/components/ui`), the chat barrel
- * (`@chimera-engine/renderer/components/chat`), and the game-registration seam
+ * (`@chimera-engine/renderer/components/chat`), the in-Canvas component barrel
+ * (`@chimera-engine/renderer/components/r3f`), and the game-registration seam
  * (`@chimera-engine/renderer/game`, #784) — while blocking all other renderer internals
  * from games packages. Game renderer surfaces are the React screens/shell
  * components (`apps/<name>/{screens,shell}/*.{jsx,tsx}`) and the renderer
@@ -121,6 +122,17 @@ function isPublicChatBarrelImport(source: string): boolean {
     );
 }
 
+// The in-Canvas engine component barrel (Invariant #96): headless/visual R3F
+// components (e.g. PerfProbe) a game mounts inside its own <Canvas>.
+function isPublicR3fBarrelImport(source: string): boolean {
+    return (
+        source === '@chimera-engine/renderer/components/r3f' ||
+        source === '@chimera-engine/renderer/components/r3f/index' ||
+        source === '@chimera-engine/renderer/components/r3f/index.ts' ||
+        source === '@chimera-engine/renderer/components/r3f/index.js'
+    );
+}
+
 // The renderer game-registration seam (#784): the public `@chimera-engine/renderer/game`
 // export a consumer app's renderer composition root uses to register its game's
 // renderer contribution (`registerRendererGame`, `RendererGameContribution`).
@@ -159,13 +171,13 @@ const rule: Rule.RuleModule = {
         type: 'problem',
         docs: {
             description:
-                'Allow games to import only the public renderer component-library barrels (ui, chat) from renderer code.',
+                'Allow games to import only the public renderer component-library barrels (ui, chat, r3f) from renderer code.',
         },
         messages: {
             gameRendererImportOutsideSurface:
                 'Only game renderer surfaces under apps/<name>/screens/*.tsx, apps/<name>/shell/*.tsx, or apps/<name>/renderer/*.{ts,tsx} may import from the renderer package.',
             gameRendererInternalImport:
-                'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, or @chimera-engine/renderer/game barrels from renderer code. Renderer internals are forbidden in game-app packages.',
+                'Game renderer surfaces may import only the public @chimera-engine/renderer/components/ui, @chimera-engine/renderer/components/chat, @chimera-engine/renderer/components/r3f, or @chimera-engine/renderer/game barrels from renderer code. Renderer internals are forbidden in game-app packages.',
             gameRendererUiDeepImport:
                 'Game renderer surfaces must import UI primitives from the public @chimera-engine/renderer/components/ui barrel, not individual renderer component files.',
         },
@@ -190,6 +202,7 @@ const rule: Rule.RuleModule = {
             if (
                 isPublicUiBarrelImport(source) ||
                 isPublicChatBarrelImport(source) ||
+                isPublicR3fBarrelImport(source) ||
                 isPublicGameSeamImport(source)
             ) {
                 return;

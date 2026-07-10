@@ -252,6 +252,9 @@ describe('GamePage', () => {
         expect(gamePage.transitionOverlay).toBeDefined();
         expect(gamePage.postGameSummary).toBeDefined();
         expect(gamePage.perfHud).toBeDefined();
+        expect(gamePage.perfFps).toBeDefined();
+        expect(gamePage.perfDrawCalls).toBeDefined();
+        expect(gamePage.perfTriangles).toBeDefined();
         expect(gamePage.replayButton).toBeDefined();
         expect(gamePage.staminaReadout).toBeDefined();
         expect(gamePage.turnStatus).toBeDefined();
@@ -282,6 +285,9 @@ describe('GamePage', () => {
             'transition-overlay',
             'post-game-summary',
             'perf-hud',
+            'perf-fps',
+            'perf-draw-calls',
+            'perf-triangles',
             'post-game-replay-btn',
             'hud-stamina',
             'tactics-turn-status',

@@ -71,6 +71,10 @@ vi.mock('@react-three/fiber', () => ({
     },
 }));
 
+vi.mock('@chimera-engine/renderer/components/r3f', () => ({
+    PerfProbe: () => <div data-testid="perf-probe" />,
+}));
+
 vi.mock('../scene/TacticsGroundPlane.js', () => ({
     TacticsGroundPlane: ({
         color,
@@ -234,6 +238,23 @@ describe('TacticsDemoBoard', () => {
         expect(camera).toBeInstanceOf(OrthographicCamera);
         expect((camera as OrthographicCamera & { readonly manual?: boolean }).manual).toBe(true);
         expect((camera as OrthographicCamera).up.toArray()).toEqual([0, 0, 1]);
+    });
+
+    it('mounts the engine PerfProbe inside the canvas so the Perf HUD gets GL metrics', () => {
+        const localPlayerId = playerId('p1');
+        const sendAction = vi.fn();
+
+        render(
+            <TacticsDemoBoard
+                snapshot={makeSnapshot()}
+                localPlayerId={localPlayerId}
+                sendAction={sendAction}
+            />,
+        );
+
+        const canvas = screen.getByTestId('tactics-r3f-canvas');
+        const probe = screen.getByTestId('perf-probe');
+        expect(canvas).toContainElement(probe);
     });
 
     it("paints the host-configured board color and each unit's host-assigned color", () => {

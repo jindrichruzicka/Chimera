@@ -103,6 +103,9 @@ export class GamePage {
     readonly transitionOverlay: Locator;
     readonly postGameSummary: Locator;
     readonly perfHud: Locator;
+    readonly perfFps: Locator;
+    readonly perfDrawCalls: Locator;
+    readonly perfTriangles: Locator;
     readonly replayButton: Locator;
     readonly staminaReadout: Locator;
     readonly turnStatus: Locator;
@@ -129,6 +132,9 @@ export class GamePage {
         this.transitionOverlay = page.getByTestId('transition-overlay');
         this.postGameSummary = page.getByTestId('post-game-summary');
         this.perfHud = page.getByTestId('perf-hud');
+        this.perfFps = page.getByTestId('perf-fps');
+        this.perfDrawCalls = page.getByTestId('perf-draw-calls');
+        this.perfTriangles = page.getByTestId('perf-triangles');
         // Post-game summary replay action (F44 / T8). Saving moved into the replay
         // player's compact save icon — see `ReplayPlayerPage.saveButton`.
         this.replayButton = page.getByTestId('post-game-replay-btn');

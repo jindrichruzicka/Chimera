@@ -31,12 +31,13 @@ export function bootstrapPerfStore(
         }
     });
 
-    const heapIntervalId = globalThis.setInterval(() => {
+    const perfIntervalId = globalThis.setInterval(() => {
         perfStore.getState().sampleHeap();
+        perfStore.getState().prunePerfWindows();
     }, 1000);
 
     return () => {
         unsubscribeGameStore();
-        globalThis.clearInterval(heapIntervalId);
+        globalThis.clearInterval(perfIntervalId);
     };
 }

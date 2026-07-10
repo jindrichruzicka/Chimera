@@ -79,6 +79,40 @@ describe('bootstrapPerfStore()', () => {
         stop();
     });
 
+    it('decays actionsPerSec to 0 between sporadic snapshots (turn-based games)', () => {
+        let nowMs = 0;
+        vi.spyOn(performance, 'now').mockImplementation(() => nowMs);
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => nowMs);
+        gameStore.setState((state) => ({ ...state, snapshot: makeSnapshot(5) }));
+        expect(perfStore.getState().sample.actionsPerSec).toBe(1);
+
+        // Move wall-clock past the 1 s window, then let the interval fire.
+        nowMs = 1500;
+        vi.advanceTimersByTime(1000);
+
+        expect(perfStore.getState().sample.actionsPerSec).toBe(0);
+        stop();
+        vi.restoreAllMocks();
+    });
+
+    it('prunes perf windows every second and stops after cleanup', () => {
+        const gameStore = createGameStore();
+        const perfStore = createPerfStore();
+        const pruneSpy = vi.spyOn(perfStore.getState(), 'prunePerfWindows');
+
+        const stop = bootstrapPerfStore(gameStore, perfStore, () => 1000);
+
+        vi.advanceTimersByTime(2000);
+        expect(pruneSpy).toHaveBeenCalledTimes(2);
+
+        stop();
+        vi.advanceTimersByTime(2000);
+        expect(pruneSpy).toHaveBeenCalledTimes(2);
+    });
+
     it('samples heap every second and stops after cleanup', () => {
         const gameStore = createGameStore();
         const perfStore = createPerfStore();

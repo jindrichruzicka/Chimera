@@ -5,8 +5,8 @@
 // `GameScreenProps` (the projected `snapshot`, `localPlayerId`, and `sendAction`
 // to dispatch game actions); this stub ignores them and just renders. Game
 // screens may import the renderer only through its public component barrels —
-// `@chimera-engine/renderer/components/ui` and `@chimera-engine/renderer/components/chat`
-// (Invariant #96).
+// `@chimera-engine/renderer/components/ui`, `@chimera-engine/renderer/components/chat`,
+// and `@chimera-engine/renderer/components/r3f` (Invariant #96).
 
 import React from 'react';
 import { Caption, Heading, Panel } from '@chimera-engine/renderer/components/ui';

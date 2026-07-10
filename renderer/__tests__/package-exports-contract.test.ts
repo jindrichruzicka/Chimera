@@ -4,8 +4,9 @@
  * Locks the `@chimera-engine/renderer` package surface declared in `package.json`
  * (issue #772 — F61 surface contract; updated by #773 once the dist/ build landed):
  *
- *   - the public `exports` entry points are the two component barrels
- *     `./components/ui` and `./components/chat` plus the game-registration seam
+ *   - the public `exports` entry points are the three component barrels
+ *     `./components/ui`, `./components/chat`, and `./components/r3f` (in-Canvas
+ *     engine components, e.g. PerfProbe) plus the game-registration seam
  *     `./game` (#784 — the runtime injection point a consumer app populates via
  *     `registerRendererGame`) — no `.` barrel (there is intentionally no
  *     `renderer/index.ts`) and no deep internal subpath (Invariant #96, AC #2);
@@ -57,6 +58,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
         const exportsMap = manifest.exports ?? {};
         expect(Object.keys(exportsMap).sort()).toEqual([
             './components/chat',
+            './components/r3f',
             './components/ui',
             './game',
             './shell/*',
@@ -71,6 +73,10 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
         expect(exportsMap['./components/chat']).toEqual({
             types: './dist/components/chat/index.d.ts',
             default: './dist/components/chat/index.js',
+        });
+        expect(exportsMap['./components/r3f']).toEqual({
+            types: './dist/components/r3f/index.d.ts',
+            default: './dist/components/r3f/index.js',
         });
 
         // #784: the game-registration seam resolves to the built dist/ registry.
@@ -99,6 +105,7 @@ describe('@chimera-engine/renderer package surface (issue #772)', () => {
             expect(
                 key === './components/ui' ||
                     key === './components/chat' ||
+                    key === './components/r3f' ||
                     key === './game' ||
                     key === './shell/*' ||
                     key === './styles/*.css',

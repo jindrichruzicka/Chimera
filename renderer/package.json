@@ -25,6 +25,10 @@
             "types": "./dist/components/chat/index.d.ts",
             "default": "./dist/components/chat/index.js"
         },
+        "./components/r3f": {
+            "types": "./dist/components/r3f/index.d.ts",
+            "default": "./dist/components/r3f/index.js"
+        },
         "./game": {
             "types": "./dist/game/rendererGameRegistry.d.ts",
             "default": "./dist/game/rendererGameRegistry.js"

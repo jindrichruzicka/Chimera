@@ -124,6 +124,16 @@ export interface PerfStoreState {
      * @internal
      */
     sampleHeap(): void;
+
+    /**
+     * Re-prune the rolling actionsPerSec window against the current time so the
+     * count decays to 0 between snapshot arrivals (turn-based games receive
+     * snapshots sporadically, so arrival-driven recomputes alone leave the last
+     * count frozen on screen).
+     * Called by bootstrapPerfStore (not by components) on a periodic interval.
+     * @internal
+     */
+    prunePerfWindows(): void;
 }
 
 // ── Rolling-window helpers ────────────────────────────────────────────────────
@@ -248,6 +258,19 @@ export function createPerfStore(): StoreApi<PerfStoreState> {
             const heapMb = readHeapMb();
             set((state) => ({
                 sample: { ...state.sample, heapMb },
+            }));
+        },
+
+        prunePerfWindows(): void {
+            snapshotArrivalStamps = pruneStale(snapshotArrivalStamps, performance.now());
+            const actionsPerSec = snapshotArrivalStamps.length;
+            // Guarded write: skip the set() when nothing changed so idle-at-zero
+            // periods do not re-render every PerfHud subscriber each interval.
+            if (actionsPerSec === get().sample.actionsPerSec) {
+                return;
+            }
+            set((state) => ({
+                sample: { ...state.sample, actionsPerSec },
             }));
         },
     }));
