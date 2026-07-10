@@ -1,10 +1,11 @@
 // shared/game-manifest-contract.ts
 //
 // Per-game manifest: the small, pure-data descriptor each game declares about
-// itself (display name, window title, real-time loop mode, optional icon and
-// hardware-cursor textures). Lives in `shared/` with zero platform imports so
-// BOTH the main process (window title + RealtimeTicker) and the renderer
-// (game-shell display name, cursor token overrides) read one source of truth.
+// itself (display name, window title, real-time loop mode, optional icon,
+// hardware-cursor textures and logo screen). Lives in `shared/` with zero
+// platform imports so BOTH the main process (window title + RealtimeTicker)
+// and the renderer (game-shell display name, cursor token overrides) read one
+// source of truth.
 // The host wall-clock fields (`realtime`, `tickRateMs`) never enter the
 // deterministic core — they only steer how the host drives `engine:tick`
 // (Invariant #2).
@@ -47,6 +48,20 @@ export interface GameCursorImage {
     readonly hotspot?: GameCursorHotspot;
 }
 
+/**
+ * Optional game-owned logo/boot-screen declaration: the renderer route of a
+ * page the host boots into before the main menu in packaged builds.
+ */
+export interface GameLogoScreen {
+    /**
+     * Renderer route of the game-owned logo page (must start with `'/'`,
+     * e.g. `'/logo-screen'`). Opaque route data at this layer — no URL
+     * building or protocol knowledge here; only the host/renderer interpret
+     * it (Invariant #20).
+     */
+    readonly route: `/${string}`;
+}
+
 /** Everything a game declares about itself, independent of platform layer. */
 export interface GameManifest {
     /** Stable game id; must equal the game's `gameId` (e.g. `'tactics'`). */
@@ -86,6 +101,15 @@ export interface GameManifest {
      * overrides (Invariant #20).
      */
     readonly cursor?: Partial<Record<GameCursorRole, GameCursorImage>>;
+    /**
+     * Optional logo/boot screen shown only in **packaged** builds
+     * (`app.isPackaged`); dev and e2e boots are untouched. Absent ⇒ boot
+     * straight to `/main-menu`, exactly as today. The engine never automates
+     * the flow: the declared page owns its entire sequence (logos, intro
+     * movies, skip handling) and exits by navigating itself to `/main-menu`
+     * (via `withShellGameId`).
+     */
+    readonly logoScreen?: GameLogoScreen;
 }
 
 /** Resolve the OS window title for a (possibly absent) game manifest. */
@@ -135,4 +159,21 @@ export function resolveGameCursor(
         resolved[role] = { image: image.image, hotspot: image.hotspot ?? DEFAULT_CURSOR_HOTSPOT };
     }
     return Object.keys(resolved).length > 0 ? resolved : undefined;
+}
+
+/**
+ * Resolve a manifest's logo-screen declaration. Returns `undefined` when
+ * there is no manifest, no `logoScreen` field, or a malformed route (not a
+ * string starting with `'/'`) — never throws, so a bad manifest can never
+ * brick a packaged boot; the host just falls back to `/main-menu`. Never
+ * mutates the input.
+ */
+export function resolveGameLogoScreen(
+    manifest: GameManifest | undefined,
+): GameLogoScreen | undefined {
+    const route: unknown = manifest?.logoScreen?.route;
+    if (typeof route !== 'string' || !route.startsWith('/')) {
+        return undefined;
+    }
+    return { route: route as `/${string}` };
 }

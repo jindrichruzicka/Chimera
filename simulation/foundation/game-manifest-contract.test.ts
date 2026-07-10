@@ -5,8 +5,10 @@ import {
     DEFAULT_TICK_RATE_MS,
     DEFAULT_WINDOW_TITLE,
     resolveGameCursor,
+    resolveGameLogoScreen,
     resolveTickerHz,
     resolveWindowTitle,
+    type GameLogoScreen,
     type GameManifest,
 } from './game-manifest-contract.js';
 
@@ -122,5 +124,42 @@ describe('resolveGameCursor', () => {
         resolveGameCursor(manifest);
         expect(manifest.cursor).toEqual({ default: { image: 'cursors/default.png' } });
         expect(manifest.cursor?.default).not.toHaveProperty('hotspot');
+    });
+});
+
+describe('resolveGameLogoScreen', () => {
+    it('returns undefined when there is no manifest', () => {
+        expect(resolveGameLogoScreen(undefined)).toBeUndefined();
+    });
+
+    it('returns undefined when the manifest declares no logoScreen — boot goes straight to the main menu, exactly as today', () => {
+        expect(resolveGameLogoScreen(makeManifest())).toBeUndefined();
+    });
+
+    it('resolves a valid declaration, preserving the route', () => {
+        const manifest = makeManifest({ logoScreen: { route: '/logo-screen' } });
+        expect(resolveGameLogoScreen(manifest)).toEqual({ route: '/logo-screen' });
+    });
+
+    it('rejects a malformed route missing the leading slash without throwing — a bad manifest must never brick a packaged boot', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = { route: 'logo-screen' } as unknown as GameLogoScreen;
+        expect(resolveGameLogoScreen(makeManifest({ logoScreen: malformed }))).toBeUndefined();
+    });
+
+    it('rejects a non-string route without throwing', () => {
+        // Deliberately forges a declaration the types forbid, to exercise the
+        // resolver's never-throws guarantee against malformed runtime input.
+        const malformed = { route: 42 } as unknown as GameLogoScreen;
+        expect(resolveGameLogoScreen(makeManifest({ logoScreen: malformed }))).toBeUndefined();
+    });
+
+    it('does not mutate the manifest logoScreen declaration', () => {
+        const logoScreen = { route: '/logo-screen' } as const;
+        const manifest = makeManifest({ logoScreen });
+        const resolved = resolveGameLogoScreen(manifest);
+        expect(manifest.logoScreen).toEqual({ route: '/logo-screen' });
+        expect(resolved).not.toBe(logoScreen);
     });
 });
