@@ -15,6 +15,11 @@
     --ch-color-accent: #c9a84c;
     --ch-color-accent-hover: #c9a84c;
 
+    /* Keyboard focus rings in tactics gold. Safe here because the tactics
+       primary-button focus visibility comes from the hover backdrop, not the
+       border alone. */
+    --ch-focus-ring-color: var(--ch-color-accent);
+
     --ch-button-color-primary: var(--ch-color-accent-hover);
     --ch-button-color-primary-hover: var(--ch-color-accent-hover);
     --ch-button-color-secondary: var(--ch-color-text-secondary);

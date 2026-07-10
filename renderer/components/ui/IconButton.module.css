@@ -31,8 +31,11 @@
 }
 
 .icon-button:focus-visible {
-    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
+    background: var(--ch-icon-button-bg-hover);
+    border-color: var(--ch-focus-ring-color);
+    box-shadow: var(--ch-icon-button-shadow-hover);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }
 
 .icon-button:disabled {

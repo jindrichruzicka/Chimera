@@ -139,7 +139,10 @@ describe('Tabs', () => {
         const hardcodedPixelValues = css.replace(/var\([^)]+\)/g, '').match(/\b\d+px\b/g);
         expect(hardcodedPixelValues).toBeNull();
         expect(css).toContain(':focus-visible');
-        expect(css).toContain('var(--ch-focus-ring-color)');
+        expect(css).toContain('border-color: var(--ch-focus-ring-color)');
+        // The tablist is a scroll container; an offset halo ring would be
+        // clipped into a stray sliver, so nothing may paint outside the tab.
+        expect(css).not.toContain('var(--ch-focus-ring-offset)');
     });
 
     it('keeps tab bottom corners square and masks the tablist rule under active and hovered tabs', () => {

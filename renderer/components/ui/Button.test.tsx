@@ -166,6 +166,13 @@ describe('Button', () => {
         );
     });
 
+    it('shows a keyboard focus highlight using the shared focus-ring tokens', () => {
+        const css = buttonCss;
+
+        expect(css).toContain('.button:not(:disabled):focus-visible');
+        expect(css).toContain('border-color: var(--ch-focus-ring-color)');
+    });
+
     it('maps each size class to tokenized typography and spacing', () => {
         const css = buttonCss;
 

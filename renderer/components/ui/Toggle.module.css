@@ -74,8 +74,15 @@
 }
 
 .input:focus-visible ~ .track {
-    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
+    border-color: var(--ch-focus-ring-color);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
+}
+
+/* The checked track already wears the accent fill and border, so the accent
+   focus border would vanish there; swap to text-primary for contrast. */
+.root[data-checked='true'] .input:focus-visible ~ .track {
+    border-color: var(--ch-color-text-primary);
 }
 
 .input:disabled {

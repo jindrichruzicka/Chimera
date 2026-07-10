@@ -32,4 +32,11 @@ describe('Slider', () => {
         expect(sliderCss).toContain('inline-size: 100%');
         expect(sliderCss).not.toContain('width: var(--ch-button-min-width-lg)');
     });
+
+    it('draws an inset keyboard focus ring on the range input', () => {
+        expect(sliderCss).toContain('.input:focus-visible');
+        expect(sliderCss).toContain(
+            'outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color)',
+        );
+    });
 });

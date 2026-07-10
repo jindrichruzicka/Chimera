@@ -50,11 +50,13 @@
     color: var(--ch-color-text-primary);
 }
 
+/* The tablist is a scroll container, so an offset halo ring would be clipped
+   into a stray sliver; the focus indicator recolors the tab's own border and
+   keeps a transparent inset outline for forced-colors modes. */
 .tab:focus-visible {
-    outline-color: var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
-    outline-style: solid;
-    outline-width: var(--ch-focus-ring-width);
+    border-color: var(--ch-focus-ring-color);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }
 
 .tab:disabled {
@@ -98,8 +100,7 @@
 }
 
 .tabpanel:focus-visible {
-    outline-color: var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
-    outline-style: solid;
-    outline-width: var(--ch-focus-ring-width);
+    border-color: var(--ch-focus-ring-color);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }

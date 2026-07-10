@@ -19,6 +19,13 @@
     min-inline-size: 0;
 }
 
+/* The native range input has no border to recolor, so keyboard focus draws a
+   visible inset ring instead. */
+.input:focus-visible {
+    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
+}
+
 .input:disabled {
     cursor: var(--ch-cursor-disabled);
     opacity: var(--ch-opacity-disabled);

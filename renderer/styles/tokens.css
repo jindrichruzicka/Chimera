@@ -201,9 +201,13 @@
         border-color var(--ch-duration-fast) var(--ch-easing-standard),
         box-shadow var(--ch-duration-fast) var(--ch-easing-standard),
         color var(--ch-duration-fast) var(--ch-easing-standard);
+    /* Focus indicators draw at or inside the border-box (border recolor or
+       inset outline) so overflow ancestors can never clip them; there is
+       deliberately no offset token for a halo ring. The ring color must stay
+       distinct from --ch-color-accent-hover, which already paints the active
+       tab chrome and primary button border in this palette. */
     --ch-focus-ring-width: 2px;
-    --ch-focus-ring-color: var(--ch-color-accent-hover);
-    --ch-focus-ring-offset: 2px;
+    --ch-focus-ring-color: var(--ch-color-text-secondary);
     /* macOS NSMenu calibration for native <select> popups: AppKit anchors the
        menu from the element border-box, hanging ~12px past its inline-start
        edge and stopping ~14px short of its inline-end edge (measured on

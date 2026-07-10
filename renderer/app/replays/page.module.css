@@ -24,7 +24,7 @@
     background: var(--ch-color-surface-raised);
 }
 
-/* The open button fills the row; focus-visible surfaces the shared ring.
+/* The open button fills the row; focus-visible draws the shared inset ring.
    `min-inline-size: 0` lets long labels truncate instead of forcing the delete
    control off the row. */
 .row {
@@ -46,7 +46,7 @@
 
 .row:focus-visible {
     outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }
 
 /* Ghost delete control that shifts to the danger tokens on hover/focus, so the

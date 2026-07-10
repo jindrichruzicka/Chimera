@@ -42,9 +42,14 @@
     transform: var(--ch-button-transform-active);
 }
 
+/* No background here: the focus rule is declared after the pressed rules at
+   equal specificity, so a backdrop swap would visually un-press a focused
+   pressed toggle. */
 .toggle-button:focus-visible {
-    outline: var(--ch-focus-ring-width) solid var(--ch-focus-ring-color);
-    outline-offset: var(--ch-focus-ring-offset);
+    border-color: var(--ch-focus-ring-color);
+    box-shadow: var(--ch-toggle-button-shadow-hover);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
 }
 
 .toggle-button:disabled {

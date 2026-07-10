@@ -162,10 +162,13 @@ describe('ToggleButton', () => {
         expect(css).toContain('transform: var(--ch-button-transform-active);');
     });
 
-    it('has a :focus-visible outline using design-token references', () => {
+    it('has a :focus-visible border highlight using design-token references', () => {
         expect(tokensCss).toContain('--ch-focus-ring-width:');
         expect(tokensCss).toContain('--ch-focus-ring-color:');
         expect(css).toContain(':focus-visible');
-        expect(css).toContain('outline:');
+        expect(css).toContain('border-color: var(--ch-focus-ring-color)');
+        // Drawn at the border, never as an offset halo a scroll container
+        // could clip into a stray sliver.
+        expect(css).not.toContain('var(--ch-focus-ring-offset)');
     });
 });

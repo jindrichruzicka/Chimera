@@ -291,4 +291,59 @@ test.describe('Component Gallery', () => {
 
         await expectButtonBackgroundToMatchToken(gallery.primaryButton, '--ch-color-accent');
     });
+
+    test('keyboard-focused tab shows the accent focus border with no clipped halo', async ({
+        mainWindow,
+    }) => {
+        const gallery = new ComponentGalleryPage(mainWindow);
+        await gallery.goto();
+        await expect(gallery.root).toBeVisible();
+
+        // Occluded Playwright windows never advance CSS transition clocks, so
+        // the 120ms border-color transition would stay frozen at its resting
+        // value. Reduced motion collapses the app's durations to 0ms, which
+        // both stabilises the assertion and exercises that support.
+        await mainWindow.emulateMedia({ reducedMotion: 'reduce' });
+
+        // Pointer-select a neighbouring tab, then move by keyboard so the
+        // roving-tabindex focus carries :focus-visible (keyboard modality).
+        await gallery.clickTabOverlays();
+        await mainWindow.keyboard.press('ArrowLeft');
+
+        const actionsTab = mainWindow.getByRole('tab', { name: /actions/i });
+        await expect(actionsTab).toBeFocused();
+        await expect(actionsTab).toHaveAttribute('aria-selected', 'true');
+
+        const styles = await actionsTab.evaluate((element) => {
+            const browserElement = element as unknown as BrowserElementWithDocument;
+            const ownerDocument = browserElement.ownerDocument;
+            const view = ownerDocument.defaultView;
+            if (!view) throw new Error('Tab document does not have a defaultView');
+
+            const tokenValue = view
+                .getComputedStyle(ownerDocument.documentElement)
+                .getPropertyValue('--ch-focus-ring-color')
+                .trim();
+            const probe = ownerDocument.createElement('div');
+            probe.style.backgroundColor = tokenValue;
+            ownerDocument.body.appendChild(probe);
+            const expectedBorderColor = view.getComputedStyle(probe).backgroundColor;
+            probe.remove();
+
+            const computed = view.getComputedStyle(element);
+            return {
+                actualBorderColor: computed.getPropertyValue('border-top-color'),
+                expectedBorderColor,
+                outlineColor: computed.getPropertyValue('outline-color'),
+                outlineOffset: computed.getPropertyValue('outline-offset'),
+            };
+        });
+
+        // The focus indicator is the tab's own accent border; the outline is a
+        // transparent inset ring, so nothing paints outside the tab for the
+        // tablist scroll container to clip into a stray sliver.
+        expect(styles.actualBorderColor).toBe(styles.expectedBorderColor);
+        expect(styles.outlineColor).toBe('rgba(0, 0, 0, 0)');
+        expect(styles.outlineOffset).toBe('-2px');
+    });
 });

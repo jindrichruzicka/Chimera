@@ -241,7 +241,6 @@ const expectedTokens = [
     '--ch-toggle-button-transition',
     '--ch-focus-ring-width',
     '--ch-focus-ring-color',
-    '--ch-focus-ring-offset',
     '--ch-select-popup-overhang-mac',
     '--ch-select-popup-shortfall-mac',
     '--ch-spinner-opacity-min',
@@ -281,6 +280,14 @@ describe('renderer design tokens', () => {
         const declarations = extractDeclaredTokens(readTokensCss());
 
         expect(new Set(declarations)).toEqual(new Set(expectedTokens));
+    });
+
+    it('keeps the focus ring distinct from active chrome: ring color is text-secondary', () => {
+        // --ch-color-accent-hover doubles as the active tab chrome and primary
+        // button border in the engine palette, so a ring wired to it would make
+        // keyboard focus invisible on exactly those states. Games that want an
+        // accent-colored ring override --ch-focus-ring-color themselves.
+        expect(readTokensCss()).toContain('--ch-focus-ring-color: var(--ch-color-text-secondary);');
     });
 
     it('wires reduced motion preferences into instant linear motion tokens', () => {

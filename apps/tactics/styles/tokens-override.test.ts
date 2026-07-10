@@ -25,4 +25,8 @@ describe('tactics token overrides', () => {
         expect(css).toMatch(/--ch-button-color-ghost:/);
         expect(css).toMatch(/--ch-button-color-ghost-hover:/);
     });
+
+    it('themes keyboard focus with the tactics gold accent', () => {
+        expect(readOverrideCss()).toContain('--ch-focus-ring-color: var(--ch-color-accent);');
+    });
 });

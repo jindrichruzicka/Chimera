@@ -327,6 +327,39 @@ Tests may assert these attributes to verify that renderer surfaces are consuming
 the shared primitive contract. These attributes are not styling escape hatches;
 visual customization still flows through tokens and component props.
 
+### Keyboard Focus (`:focus-visible`)
+
+Every interactive primitive draws its keyboard-focus indicator **at or inside
+its border-box**, so an `overflow` ancestor (a scroll container such as the
+Tabs tablist) can never clip the indicator into a stray sliver. There is
+deliberately no offset token for an outside halo ring.
+
+Two forms, both driven by `--ch-focus-ring-width` and `--ch-focus-ring-color`.
+The engine default ring color is `--ch-color-text-secondary` — deliberately
+**not** `--ch-color-accent-hover`, which already paints the active tab chrome
+and the primary button border in the engine palette, so an accent-hover ring
+would be invisible on exactly the states keyboard users land on. Games theme
+the ring by overriding `--ch-focus-ring-color` (Tactics points it at its gold
+`--ch-color-accent`):
+
+- **Bordered components** (Tabs, Button, IconButton, ToggleButton, Toggle
+  track, TextInput, NumberInput, Select shell) recolor their existing border to
+  `var(--ch-focus-ring-color)` and add a transparent inset outline
+  (`outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+outline-offset: calc(var(--ch-focus-ring-width) * -1)`) so forced-colors
+  modes still draw an indicator.
+- **Borderless components** (Slider's range input, full-row list buttons)
+  draw the same inset outline in `var(--ch-focus-ring-color)` instead.
+
+Accent-on-accent collisions get a second cue: `Button`/`IconButton` focus also
+applies the hover backdrop (background + shadow) so primary variants — whose
+resting border already matches the focus-ring color — still light up;
+`ToggleButton` raises only the hover shadow (a backdrop swap would visually
+un-press a focused pressed toggle); the checked `Toggle` track swaps its focus
+border to `--ch-color-text-primary`.
+
+The executable contract is `renderer/components/ui/focusStyles.test.ts`.
+
 ### Component Gallery (`/component-gallery/`)
 
 `renderer/app/component-gallery/` is a **development and E2E-only** visual fixture for the §4.35 primitive library. It is gated by `isGalleryEnabled()` (active in any non-production `NODE_ENV` — i.e. `development`, `test`, or any value other than `production` — and when `NEXT_PUBLIC_CHIMERA_E2E=1` regardless of environment) and is not part of the production navigation tree.

@@ -35,6 +35,18 @@
     transform: var(--ch-button-transform-active);
 }
 
+/* Keyboard focus reads like pointer hover plus the accent border. The hover
+   backdrop is what keeps focus visible on the primary variant, whose resting
+   border already matches the focus-ring color; the transparent inset outline
+   keeps a forced-colors indicator without a clippable halo. */
+.button:not(:disabled):focus-visible {
+    background: var(--ch-button-hover-bg);
+    border-color: var(--ch-focus-ring-color);
+    box-shadow: var(--ch-button-shadow-hover);
+    outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent);
+    outline-offset: calc(var(--ch-focus-ring-width) * -1);
+}
+
 .button:disabled {
     border-color: var(--ch-color-border);
     color: var(--ch-color-text-disabled);

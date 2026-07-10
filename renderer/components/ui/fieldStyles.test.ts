@@ -68,10 +68,10 @@ describe.each(fieldModules)(
             );
         });
 
-        it('focuses with a single highlighted border instead of an offset halo ring', () => {
+        it('focuses with a single accent border instead of an offset halo ring', () => {
             const focus = extractDeclarations(css, focusSelector);
 
-            expect(focus).toContain('border-color: var(--ch-color-text-secondary)');
+            expect(focus).toContain('border-color: var(--ch-focus-ring-color)');
             expect(focus).toContain('background-color: var(--ch-color-surface-overlay)');
             expect(focus).toContain(
                 'outline: var(--ch-focus-ring-width) solid var(--ch-color-transparent)',
