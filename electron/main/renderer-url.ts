@@ -7,9 +7,17 @@ export const CHIMERA_RENDERER_URL: ChimeraRendererUrl =
  * Build the renderer launch URL for a hosted game. The production launch URL is
  * no longer a module constant — the host names no game, so `main()` builds it at
  * runtime from the injected hosted game's id (the seam F62 introduces).
+ *
+ * `route` is an opaque renderer route (Invariant #20) — by default the main
+ * menu, or a manifest-declared page such as a logo screen (F70). It is
+ * normalised to the trailing-slash form the static export serves.
  */
-export function buildRendererGameLaunchUrl(gameId: string): ChimeraRendererUrl {
-    const url = new URL(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/main-menu/`);
+export function buildRendererGameLaunchUrl(
+    gameId: string,
+    route: `/${string}` = '/main-menu',
+): ChimeraRendererUrl {
+    const path = route.endsWith('/') ? route : `${route}/`;
+    const url = new URL(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}${path}`);
     url.searchParams.set('gameId', gameId);
     return url.toString() as ChimeraRendererUrl;
 }

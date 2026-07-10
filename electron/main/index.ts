@@ -78,8 +78,10 @@ import type { ContentDatabase } from '@chimera-engine/simulation/content/index.j
 import type { GameContent } from '@chimera-engine/simulation/foundation/game-content-contract.js';
 import {
     DEFAULT_WINDOW_TITLE,
+    resolveGameLogoScreen,
     resolveTickerHz,
     resolveWindowTitle,
+    type GameManifest,
 } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 import { StateBroadcaster } from './runtime/StateBroadcaster.js';
 import { RealtimeTicker } from './runtime/RealtimeTicker.js';
@@ -948,6 +950,23 @@ function createProductionLoggerSink(logsDir: string): FlushableSink {
 }
 
 /**
+ * Select the renderer URL the main window boots into (F70). A packaged build
+ * whose hosted game declares a `logoScreen` launches into that route; every
+ * other boot (no declaration, dev, E2E) launches into the main menu exactly
+ * as before. `isPackaged` is injected (`app.isPackaged` at the call site) so
+ * the selection is a pure, unit-testable function — same pattern as
+ * {@link resolveRuntimePaths}. The route stays opaque here (Invariant #20);
+ * `createMainWindow`'s protocol/host guard remains the sole URL authority.
+ */
+export function resolveRendererLaunchUrl(
+    hostedGame: { readonly gameId: string; readonly manifest: GameManifest },
+    isPackaged: boolean,
+): ChimeraRendererUrl {
+    const logoScreen = isPackaged ? resolveGameLogoScreen(hostedGame.manifest) : undefined;
+    return buildRendererGameLaunchUrl(hostedGame.gameId, logoScreen?.route);
+}
+
+/**
  * Entry-point orchestration. Kept as a distinct function so tests can import
  * the helpers above without triggering Electron lifecycle side effects.
  *
@@ -980,7 +999,7 @@ export async function main(contributions: readonly MainGameContribution[]): Prom
         contentSchemasByGameId,
         lobbySetupByGameId,
     } = createMainGameRegistry(contributions);
-    const rendererLaunchUrl = buildRendererGameLaunchUrl(hostedGame.gameId);
+    const rendererLaunchUrl = resolveRendererLaunchUrl(hostedGame, app.isPackaged);
 
     const { preloadPath, rendererEntry, gameAssetsRoot } = resolveRuntimePaths({
         moduleDirname: __dirname,

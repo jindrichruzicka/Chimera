@@ -15,6 +15,7 @@ import type {
     PlayerId,
 } from '@chimera-engine/simulation/engine/types.js';
 import type { ChimeraRendererUrl, MainGameContribution } from './index.js';
+import type { GameManifest } from '@chimera-engine/simulation/foundation/game-manifest-contract.js';
 
 interface ProjectorOptionsForTest {
     readonly getUndoMeta?: (viewerId: PlayerId) => unknown;
@@ -547,6 +548,7 @@ const {
     registerRendererProtocolScheme,
     sanitiseE2eInitialUrl,
     buildRendererGameLaunchUrl,
+    resolveRendererLaunchUrl,
     CHIMERA_RENDERER_URL,
     createDefaultPlayerProfile,
     ensureActiveProfile,
@@ -1586,6 +1588,38 @@ describe('registerClientRevealForwarding', () => {
         callbacks[0]?.(reveal);
 
         expect(win.webContents.send).toHaveBeenCalledWith(GAME_REVEAL_CHANNEL, reveal);
+    });
+});
+
+describe('resolveRendererLaunchUrl', () => {
+    const declaredManifest: GameManifest = {
+        gameId: 'demo',
+        displayName: 'Demo',
+        realtime: false,
+        logoScreen: { route: '/logo-screen' },
+    };
+    const undeclaredManifest: GameManifest = {
+        gameId: 'demo',
+        displayName: 'Demo',
+        realtime: false,
+    };
+
+    it('launches a packaged build into the declared logo-screen route', () => {
+        expect(resolveRendererLaunchUrl({ gameId: 'demo', manifest: declaredManifest }, true)).toBe(
+            'chimera://renderer/logo-screen/?gameId=demo',
+        );
+    });
+
+    it('launches a packaged build without a declaration into the main menu, exactly as today', () => {
+        expect(
+            resolveRendererLaunchUrl({ gameId: 'demo', manifest: undeclaredManifest }, true),
+        ).toBe(buildRendererGameLaunchUrl('demo'));
+    });
+
+    it('ignores the declaration outside packaged builds — dev and E2E boots land on the main menu', () => {
+        expect(
+            resolveRendererLaunchUrl({ gameId: 'demo', manifest: declaredManifest }, false),
+        ).toBe(buildRendererGameLaunchUrl('demo'));
     });
 });
 
@@ -2650,6 +2684,28 @@ describe('main', () => {
 
         const [win] = browserWindowInstances;
         expect(win?.loadURL).toHaveBeenCalledWith(buildRendererGameLaunchUrl(TACTICS_GAME_ID));
+    });
+
+    it('launches into the declared logo-screen route when packaged and the manifest declares one', async () => {
+        // The suite's electron mock reports app.isPackaged === true, so a
+        // contribution whose manifest declares logoScreen must boot into it.
+        const contributions = makeTestContributions().map((contribution) => ({
+            ...contribution,
+            manifest: { ...contribution.manifest, logoScreen: { route: '/logo-screen' as const } },
+        }));
+        const origEnv = process.env;
+        const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
+        process.env = { ...envWithoutE2e };
+        try {
+            await main(contributions);
+        } finally {
+            process.env = origEnv;
+        }
+
+        const [win] = browserWindowInstances;
+        expect(win?.loadURL).toHaveBeenCalledWith(
+            `chimera://renderer/logo-screen/?gameId=${TACTICS_GAME_ID}`,
+        );
     });
 
     it('wires the BrowserWindow preload script to electron/preload/api.js', async () => {
