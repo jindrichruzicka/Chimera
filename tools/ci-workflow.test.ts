@@ -33,6 +33,18 @@ describe('ci.yml CI workflow', () => {
         expect(content).toMatch(/pnpm build:packages/);
     });
 
+    it('installs the Electron binary before the test steps (pnpm ignores its postinstall)', () => {
+        // pnpm skips electron's install script on CI ("Ignored build scripts"),
+        // and require('electron') throws without the downloaded binary —
+        // apps/tactics electron/main.test.ts fails at collection. Mirrors the
+        // e2e.yml "Install Electron binary" step.
+        const installIndex = content.indexOf('node node_modules/electron/install.js');
+        const testIndex = content.indexOf('pnpm -r test');
+        expect(installIndex).toBeGreaterThan(-1);
+        expect(testIndex).toBeGreaterThan(-1);
+        expect(installIndex).toBeLessThan(testIndex);
+    });
+
     it('builds packages before the workspace lint step (typed lint resolves against dists)', () => {
         const buildIndex = content.indexOf('pnpm build:packages');
         const lintIndex = content.indexOf('pnpm -r lint');

@@ -41,6 +41,13 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      # pnpm skips electron's postinstall ("Ignored build scripts"), and
+      # require('electron') throws without the downloaded binary — the
+      # apps/tactics electron/main.test.ts suite fails at collection.
+      # Mirrors the same step in e2e.yml.
+      - name: Install Electron binary
+        run: node node_modules/electron/install.js
+
       - name: Format check
         run: pnpm format:check
 
