@@ -1,0 +1,89 @@
+/**
+ * §4.37.15 logo-screen.spec.ts
+ * Issue #858 — Write Playwright E2E coverage for the game logo screen
+ * Part of: #852 F70 — Game Logo Screen
+ *
+ * The packaged-only boot gate (`app.isPackaged && resolveGameLogoScreen(manifest)`
+ * in electron/main/index.ts) keeps `/logo-screen` out of every default E2E boot,
+ * so this spec drives the route directly instead of relying on boot routing.
+ *
+ * Assertions are limited to presence, skip, and navigation per the issue's
+ * scope — no video playback frames, audio, or real-timeout timing.
+ *
+ * Invariant #96: the spec exercises the engine page only through the app's
+ * `apps/tactics/renderer/app/logo-screen/page.tsx` shell re-export — it never
+ * imports renderer internals directly.
+ */
+
+import { test, expect } from '../fixtures/electron.fixture';
+import {
+    CHIMERA_RENDERER_HOST,
+    CHIMERA_RENDERER_PROTOCOL,
+} from '../../../../electron/main/renderer-url';
+import { MainMenuPage } from '../pages/MainMenuPage';
+
+const NAV_TIMEOUT_MS = 20_000;
+const SHELL_LOAD_TIMEOUT_MS = 15_000;
+
+function logoScreenUrl(gameId: string): string {
+    const url = new URL(`${CHIMERA_RENDERER_PROTOCOL}://${CHIMERA_RENDERER_HOST}/logo-screen/`);
+    url.searchParams.set('gameId', gameId);
+    return url.toString();
+}
+
+test.describe('Game logo screen (§4.37 / #858)', () => {
+    test('logo route mounts the brand video sourced from /chimera_logo.mp4', async ({
+        mainWindow,
+    }) => {
+        // Scope is presence + source only (per the issue's "must NOT" list): no
+        // playback-frame, audio, or real-timeout assertions.
+        await mainWindow.goto(logoScreenUrl('tactics'));
+
+        await expect(mainWindow.getByTestId('logo-video-screen')).toBeVisible({
+            timeout: NAV_TIMEOUT_MS,
+        });
+
+        const video = mainWindow.getByTestId('logo-video');
+        await expect(video).toBeVisible();
+        await expect(video).toHaveAttribute('src', '/chimera_logo.mp4');
+    });
+
+    test('skip on input navigates to the main menu with gameId preserved', async ({
+        mainWindow,
+    }) => {
+        await mainWindow.goto(logoScreenUrl('tactics'));
+        await expect(mainWindow.getByTestId('logo-video-screen')).toBeVisible({
+            timeout: NAV_TIMEOUT_MS,
+        });
+
+        // Any click is a skip input (LogoVideoScreen wires window 'click').
+        await mainWindow.getByTestId('logo-video-screen').click();
+
+        await expect(mainWindow).toHaveURL(/\/main-menu\/?\?gameId=tactics$/, {
+            timeout: NAV_TIMEOUT_MS,
+        });
+
+        const menu = new MainMenuPage(mainWindow);
+        await expect
+            .poll(() => menu.getButtonLabels(), { timeout: SHELL_LOAD_TIMEOUT_MS })
+            .toContain('New Game');
+    });
+
+    test('unpackaged boot never lands on the logo route; the main menu resolves directly', async ({
+        mainWindow,
+    }) => {
+        // The `mainWindow` fixture is the pristine, unnavigated default boot.
+        // Under CHIMERA_E2E=1 the packaged-only boot gate (electron/main/
+        // index.ts) never applies, so the window must not open on /logo-screen —
+        // it boots to the root splash exactly as it did before F70.
+        expect(mainWindow.url()).not.toContain('logo-screen');
+
+        // And main-menu navigation still resolves straight to /main-menu.
+        const menu = new MainMenuPage(mainWindow);
+        await menu.goto();
+
+        await expect(menu.menu).toBeVisible({ timeout: NAV_TIMEOUT_MS });
+        expect(mainWindow.url()).not.toContain('logo-screen');
+        await expect(mainWindow).toHaveURL(/\/main-menu\/?$/);
+    });
+});
