@@ -15,6 +15,7 @@
  * imports renderer internals directly.
  */
 
+import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures/electron.fixture';
 import {
     CHIMERA_RENDERER_HOST,
@@ -31,12 +32,63 @@ function logoScreenUrl(gameId: string): string {
     return url.toString();
 }
 
+/**
+ * Installs a pre-load init script that stops LogoVideoScreen from auto-advancing
+ * off the media exit triggers, so the screen stays mounted for a presence/source
+ * assertion instead of racing a fast decode `error`. Patches `HTMLMediaElement`
+ * before any page script runs (so it lands before React attaches listeners):
+ * `addEventListener` drops `ended`/`error` registrations, and `play()` resolves
+ * so the autoplay-rejection skip path never fires. The e2e tsconfig ships no DOM
+ * lib, so the browser globals are reached through a structural cast.
+ */
+async function freezeLogoVideoAutoAdvance(page: Page): Promise<void> {
+    await page.addInitScript(() => {
+        const browser = globalThis as unknown as {
+            HTMLMediaElement?: {
+                prototype: {
+                    addEventListener: (type: string, ...rest: unknown[]) => void;
+                    play: () => Promise<void>;
+                };
+            };
+        };
+        const proto = browser.HTMLMediaElement?.prototype;
+        if (proto === undefined) {
+            return;
+        }
+        const originalAddEventListener = proto.addEventListener;
+        proto.addEventListener = function patchedAddEventListener(
+            type: string,
+            ...rest: unknown[]
+        ): void {
+            if (type === 'ended' || type === 'error') {
+                return;
+            }
+            originalAddEventListener.call(this, type, ...rest);
+        };
+        proto.play = function patchedPlay(): Promise<void> {
+            return Promise.resolve();
+        };
+    });
+}
+
 test.describe('Game logo screen (§4.37 / #858)', () => {
     test('logo route mounts the brand video sourced from /chimera_logo.mp4', async ({
         mainWindow,
     }) => {
         // Scope is presence + source only (per the issue's "must NOT" list): no
         // playback-frame, audio, or real-timeout assertions.
+        //
+        // The logo screen is inherently transient: LogoVideoScreen auto-advances
+        // (unmounting the element) on the video's `ended`/`error` events or a
+        // rejected `play()`. The real 6s brand video usually leaves ample time,
+        // but an intermittent decode `error` in headless Electron fires
+        // `beginExit` in under a second — detaching the element before the
+        // assertions run. Neutralise the media exit triggers before the page
+        // loads so the screen stays mounted long enough to observe: drop the
+        // element-level `ended`/`error` listeners React wires, and resolve
+        // `play()` so the autoplay-rejection path stays silent. Only the 10s
+        // watchdog timeout remains, well beyond these millisecond reads.
+        await freezeLogoVideoAutoAdvance(mainWindow);
         await mainWindow.goto(logoScreenUrl('tactics'));
 
         await expect(mainWindow.getByTestId('logo-video-screen')).toBeVisible({
