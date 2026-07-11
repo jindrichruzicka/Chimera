@@ -164,15 +164,22 @@ export function resolveGameCursor(
 /**
  * Resolve a manifest's logo-screen declaration. Returns `undefined` when
  * there is no manifest, no `logoScreen` field, or a malformed route (not a
- * string starting with `'/'`) — never throws, so a bad manifest can never
- * brick a packaged boot; the host just falls back to `/main-menu`. Never
- * mutates the input.
+ * string starting with `'/'`, or one carrying a `?` query / `#` fragment —
+ * the host's trailing-slash normalisation would land the slash inside the
+ * query and 404 the static export) — never throws, so a bad manifest can
+ * never brick a packaged boot; the host just falls back to `/main-menu`.
+ * Never mutates the input.
  */
 export function resolveGameLogoScreen(
     manifest: GameManifest | undefined,
 ): GameLogoScreen | undefined {
     const route: unknown = manifest?.logoScreen?.route;
-    if (typeof route !== 'string' || !route.startsWith('/')) {
+    if (
+        typeof route !== 'string' ||
+        !route.startsWith('/') ||
+        route.includes('?') ||
+        route.includes('#')
+    ) {
         return undefined;
     }
     return { route: route as `/${string}` };

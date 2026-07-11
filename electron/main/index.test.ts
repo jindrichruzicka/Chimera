@@ -2683,21 +2683,23 @@ describe('main', () => {
         }
 
         const [win] = browserWindowInstances;
-        expect(win?.loadURL).toHaveBeenCalledWith(buildRendererGameLaunchUrl(TACTICS_GAME_ID));
+        // The suite's electron mock reports app.isPackaged === true and the
+        // real tactics manifest declares logoScreen, so the packaged boot
+        // resolves to the logo-screen route, not the main menu.
+        expect(win?.loadURL).toHaveBeenCalledWith(
+            `chimera://renderer/logo-screen/?gameId=${TACTICS_GAME_ID}`,
+        );
     });
 
     it('launches into the declared logo-screen route when packaged and the manifest declares one', async () => {
-        // The suite's electron mock reports app.isPackaged === true, so a
-        // contribution whose manifest declares logoScreen must boot into it.
-        const contributions = makeTestContributions().map((contribution) => ({
-            ...contribution,
-            manifest: { ...contribution.manifest, logoScreen: { route: '/logo-screen' as const } },
-        }));
+        // The suite's electron mock reports app.isPackaged === true and the
+        // REAL tactics manifest declares logoScreen (#856), so the packaged
+        // boot must land on it — no synthetic manifest override needed.
         const origEnv = process.env;
         const { CHIMERA_E2E: _removed, ...envWithoutE2e } = origEnv;
         process.env = { ...envWithoutE2e };
         try {
-            await main(contributions);
+            await main(makeTestContributions());
         } finally {
             process.env = origEnv;
         }

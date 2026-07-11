@@ -11,6 +11,10 @@ import { TACTICS_GAME_ID } from './simulation/constants.js';
  * The cursor textures under `assets/cursors/` are 32×32 solid-white
  * placeholders (F69): deliberate stand-ins meant to be overwritten with real
  * art later. Hotspots are omitted ⇒ top-left (0,0) until the art defines them.
+ *
+ * `logoScreen` (F70) points a packaged boot at `renderer/app/logo-screen/`,
+ * a thin re-export of the engine default logo page; dev boots skip it and go
+ * straight to the main menu.
  */
 export const tacticsManifest: GameManifest = {
     gameId: TACTICS_GAME_ID,
@@ -21,4 +25,5 @@ export const tacticsManifest: GameManifest = {
         pointer: { image: 'cursors/pointer.png' },
         disabled: { image: 'cursors/disabled.png' },
     },
+    logoScreen: { route: '/logo-screen' },
 };

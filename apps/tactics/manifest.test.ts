@@ -45,4 +45,18 @@ describe('tacticsManifest', () => {
             });
         },
     );
+
+    it('declares the engine default logo screen so a packaged boot lands on it (#856)', () => {
+        expect(tacticsManifest.logoScreen).toEqual({ route: '/logo-screen' });
+    });
+
+    it('re-exports the engine logo-screen page at the declared route (#856)', () => {
+        const pageSource = readFileSync(
+            fileURLToPath(new URL('./renderer/app/logo-screen/page.tsx', import.meta.url)),
+            'utf8',
+        );
+        expect(pageSource).toContain(
+            "export { default } from '@chimera-engine/renderer/shell/logo-screen/page';",
+        );
+    });
 });

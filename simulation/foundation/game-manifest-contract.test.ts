@@ -155,6 +155,16 @@ describe('resolveGameLogoScreen', () => {
         expect(resolveGameLogoScreen(makeManifest({ logoScreen: malformed }))).toBeUndefined();
     });
 
+    it('rejects a route containing a query string — the host trailing-slash normalisation would land the slash inside the query and 404 the static export', () => {
+        const manifest = makeManifest({ logoScreen: { route: '/logo-screen?autoplay=1' } });
+        expect(resolveGameLogoScreen(manifest)).toBeUndefined();
+    });
+
+    it('rejects a route containing a fragment — same static-export 404 hazard as a query string', () => {
+        const manifest = makeManifest({ logoScreen: { route: '/logo-screen#intro' } });
+        expect(resolveGameLogoScreen(manifest)).toBeUndefined();
+    });
+
     it('does not mutate the manifest logoScreen declaration', () => {
         const logoScreen = { route: '/logo-screen' } as const;
         const manifest = makeManifest({ logoScreen });

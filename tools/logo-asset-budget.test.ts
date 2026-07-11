@@ -54,9 +54,12 @@ describe.each(shippedLogoPaths)('shipped logo asset budget: %s', (relativePath) 
 // cut off mid-play on every packaged boot.
 const MAX_VIDEO_FILE_BYTES = 8_000_000;
 
-// Engine copy only for now; the tactics and blank-template copies join this
-// list when those hosts adopt the logo screen (#856/#857).
-const shippedLogoVideoPaths = ['renderer/public/chimera_logo.mp4'] as const;
+// Next serves each host's own public/, so every adopting app commits its own
+// copy: engine + tactics (#856); the blank-template copy joins under #857.
+const shippedLogoVideoPaths = [
+    'renderer/public/chimera_logo.mp4',
+    'apps/tactics/renderer/public/chimera_logo.mp4',
+] as const;
 
 /**
  * Movie duration lives in the mvhd box: after the 4-byte size, 4-byte 'mvhd'
